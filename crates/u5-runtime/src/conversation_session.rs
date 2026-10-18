@@ -317,8 +317,18 @@ impl ConversationSession {
 
     /// Whether the opening has already suspended for input, so the
     /// caller must not run the greeting on top of it.
+    ///
+    /// A Description entry that GOTOs a labelled block with a scoped prompt
+    /// (`conversation.md §7.7`) suspends it as well: the prompt belongs to
+    /// the label handler the Description stream entered, so §9 step 3's
+    /// greeting or self-introduction must not run over it and reset the
+    /// phase to the top-level loop (playtest F03, Fiona's food question).
     pub fn opening_suspended(&self) -> bool {
-        matches!(self.phase, ConversationSessionPhase::AwaitingAskWho { .. })
+        matches!(
+            self.phase,
+            ConversationSessionPhase::AwaitingAskWho { .. }
+                | ConversationSessionPhase::AwaitingScopedKeyword { .. }
+        )
     }
 
     pub fn present_greeting(&mut self, ctx: &ConversationContext<'_>) -> ConversationSessionOutput {
@@ -815,6 +825,24 @@ impl ConversationSession {
         }
     }
 
+    /// `conversation.md §7.7`: the scoped prompt reads "another free-text
+    /// answer, scan[s] the fixed reserved-word table, and then match[es]
+    /// label-scoped keywords inside the labelled block. ... This is how an
+    /// NPC can ask a follow-up question and route the answer without
+    /// returning to the top-level keyword list." Reserved words are
+    /// suppressed ("top-level reserved words such as `NAME`, `JOB`, `WORK`,
+    /// `BYE`, and `THANK` do not run their ordinary global responses"), so
+    /// they simply take part in the scoped match. Empty input "prints the
+    /// prompt's BYE line and reissues the scoped prompt".
+    ///
+    /// Engine reading of the untraced part (`OPEN-QUESTIONS.md`, "What a
+    /// label block's scoped prompt does with the records after the head"):
+    /// see [`Self::scoped_block`]. An unmatched answer runs the block's
+    /// default arm; whichever record ran, a NUL-ended response then "opens
+    /// the ordinary top-level keyword loop as the fallback path" - the next
+    /// prompt is the top-level one, unless the record itself re-entered a
+    /// label block (the shipped "ask again" arm is a lone GOTO to its own
+    /// block) or paused on ASK-WHO.
     fn submit_scoped_keyword(
         &mut self,
         label: u8,
@@ -835,98 +863,76 @@ impl ConversationSession {
             return out;
         }
 
-        if let Some(response) = self.find_scoped_label_response(label, &input_upper) {
-            self.phase = ConversationSessionPhase::AwaitingKeyword;
-            return self.run_ephemeral_stream(&response, ctx, 0);
-        }
-
         self.phase = ConversationSessionPhase::AwaitingKeyword;
-        if let Some(field_idx) = self.find_ordinary_keyword_response_index(&input_upper) {
-            return self.run_field_from(field_idx, 0, ctx, 0);
-        }
-
-        let mut out = ConversationSessionOutput::default();
-        out.set_plain_text(TLK_NO_KEYWORD_MATCH_MESSAGE);
-        out
-    }
-
-    fn has_scoped_label_records(&self, label: u8) -> bool {
-        self.fields
+        let Some(block) = self.scoped_block(label) else {
+            // No records follow the head: nothing scoped can run, so the
+            // answer goes to §7.7's top-level fallback.
+            return self.submit_keyword(line, ctx);
+        };
+        let field_idx = block
+            .keywords
             .iter()
-            .any(|bytes| find_next_label_record(bytes, label, 0).is_some())
-    }
-
-    /// The scoped keyword records a block's prompt matches against.
-    ///
-    /// u5-spec#298 Q20 settles only the head: it runs "up to the first NUL"
-    /// and "A repeated label is not a boundary", so nothing inside the
-    /// declaration's own record can be a scoped keyword/response pair - the
-    /// engine's earlier split of that record at repeated label bytes is
-    /// withdrawn. "What the scoped prompt does with the records after the
-    /// head is described ... from static reading only; `OPEN-QUESTIONS.md`
-    /// carries it" ("which arm is the default and when it falls back to the
-    /// top-level keyword loop"), so no post-head matcher is invented here:
-    /// every scoped answer takes §7.7's published fallback, "the ordinary
-    /// top-level keyword loop".
-    fn find_scoped_label_response(&self, label: u8, input_upper: &[u8]) -> Option<Vec<u8>> {
-        let _ = (label, input_upper);
-        None
-    }
-
-    fn run_ephemeral_stream(
-        &mut self,
-        bytes: &[u8],
-        ctx: &ConversationContext<'_>,
-        ask_who_response: u8,
-    ) -> ConversationSessionOutput {
-        let inputs = make_inputs(
-            ctx,
-            self.moral_standing.unwrap_or(ctx.moral_standing),
-            self.npc_slot,
-            ask_who_response,
-        );
-        let run = run_tlk_stream_from(bytes, 0, &inputs);
+            .find(|(keyword_idx, _)| {
+                let keyword = self.fields[*keyword_idx]
+                    .iter()
+                    .map(|b| b & 0x7F)
+                    .collect::<Vec<_>>();
+                tlk_keyword_matches(keyword.trim_ascii(), &input_upper)
+            })
+            .map_or(block.default_arm, |(_, response_idx)| *response_idx);
+        let response = self.run_field_from(field_idx, 0, ctx, 0);
         let mut out = ConversationSessionOutput::default();
-        self.absorb_ephemeral_run(&run, ctx, &mut out);
+        // The scoped answer is a response record like any keyword answer,
+        // so it takes §6's ordinary quote/newline framing.
+        out.push_framed_response(&response.rendered_text());
+        let text = std::mem::take(&mut out.text);
+        let glyphs = std::mem::take(&mut out.rendered_glyphs);
+        merge_session_output(&mut out, response);
+        out.text = text;
+        out.rendered_glyphs = glyphs;
         out
     }
 
-    fn absorb_ephemeral_run(
-        &mut self,
-        run: &TlkRunOutput,
-        ctx: &ConversationContext<'_>,
-        out: &mut ConversationSessionOutput,
-    ) {
-        out.text.push_str(&run.text);
-        out.rendered_glyphs.extend_from_slice(&run.rendered_glyphs);
-        out.branch_flags_set |= run.branch_flags_set;
-        out.action_grants.extend(run.action_grants.iter().copied());
-        out.gold_payments
-            .extend(run.events.iter().filter_map(|event| match event {
-                TlkRunEvent::GoldPayment { amount, accepted } => Some(ConversationGoldPayment {
-                    amount: *amount,
-                    accepted: *accepted,
-                }),
-                _ => None,
-            }));
-        out.signal_flags.extend(run.signal_flags.iter().copied());
-        out.alarm_sweeps = out.alarm_sweeps.saturating_add(tlk_run_alarm_count(run));
-        out.response_signalled_stop |= matches!(run.stop, TlkRunStop::EndOfResponse);
-        self.absorb_moral_standing(run, out);
-        self.absorb_recruit_speaker(run, ctx, out);
-        match run.stop {
-            TlkRunStop::LabelTransfer(label) => {
-                let (blob, _) = self.blob_view();
-                // A scoped response is not part of the blob, so no record
-                // it sits in can be the one being entered.
-                self.follow_label_transfer(&blob, label, 0, ctx, out);
-            }
-            TlkRunStop::GoldPaymentRefused { .. } => {
-                self.phase = ConversationSessionPhase::AwaitingGoldRefusalKeyword;
-            }
-            TlkRunStop::EndOfStream | TlkRunStop::NulTerminator => {}
-            _ => {}
+    /// Whether a GOTO to `label` opens a scoped prompt: the block must have
+    /// at least one record after its head for the prompt to match against.
+    fn has_scoped_label_records(&self, label: u8) -> bool {
+        self.scoped_block(label).is_some()
+    }
+
+    /// The records a labelled block's scoped prompt matches against.
+    ///
+    /// u5-spec#298 Q20 settles the head: it runs "up to the first NUL", and
+    /// "A repeated label is not a boundary". What follows the head is not
+    /// traced (`OPEN-QUESTIONS.md`), so the layout is read off the shipped
+    /// `.TLK` data, where every one of the 259 labelled blocks with records
+    /// after its head has an odd count of them: the record right after the
+    /// head is the arm run when no scoped keyword matches (the census's
+    /// "'ask again' arm of a yes/no question" when it is a lone GOTO to the
+    /// block's own label, otherwise a line such as "Just let me know
+    /// when."), and the rest are keyword/response pairs (`y`/`n` in the
+    /// main), up to the next record that opens with the `0x90` declaration
+    /// marker - the next block, or the blob's final `0x90 0x9F` record. An
+    /// unpaired trailing keyword record is ignored.
+    fn scoped_block(&self, label: u8) -> Option<ScopedLabelBlock> {
+        let (blob, field_starts) = self.blob_view();
+        let resume = find_label_declaration(&blob, label)?;
+        let (head_idx, _) = Self::field_at(&field_starts, resume);
+        let records_end = (head_idx + 1..self.fields.len())
+            .find(|idx| self.fields[*idx].first() == Some(&TLK_CODE_LABEL_RECORD))
+            .unwrap_or(self.fields.len());
+        let default_arm = head_idx + 1;
+        if default_arm >= records_end {
+            return None;
         }
+        let keywords = (default_arm + 1..records_end)
+            .step_by(2)
+            .filter(|keyword_idx| keyword_idx + 1 < records_end)
+            .map(|keyword_idx| (keyword_idx, keyword_idx + 1))
+            .collect();
+        Some(ScopedLabelBlock {
+            default_arm,
+            keywords,
+        })
     }
 
     /// `conversation.md §7.6`: a `0x84` RECRUIT-SPEAKER in the stream
@@ -969,6 +975,14 @@ impl ConversationSession {
             out.moral_standing = Some(standing);
         }
     }
+}
+
+/// The records after a labelled block's head, as fields of the session's
+/// blob: see [`ConversationSession::scoped_block`].
+struct ScopedLabelBlock {
+    default_arm: usize,
+    /// `(keyword record, response record)` pairs, in blob order.
+    keywords: Vec<(usize, usize)>,
 }
 
 /// Bound on nested label transfers inside one step. `conversation.md §7.7`
@@ -1018,25 +1032,6 @@ fn merge_session_output(out: &mut ConversationSessionOutput, nested: Conversatio
     out.response_signalled_stop |= nested.response_signalled_stop;
     out.end_stream_reached |= nested.end_stream_reached;
     out.ended |= nested.ended;
-}
-
-fn find_next_label_record(bytes: &[u8], label: u8, from: usize) -> Option<(usize, usize)> {
-    if !is_tlk_label_byte(label) {
-        return None;
-    }
-    let mut pos = from;
-    while pos + 1 < bytes.len() {
-        if bytes[pos] == TLK_CODE_LABEL_RECORD && bytes[pos + 1] == label {
-            let record_start = pos + 2;
-            let mut record_end = record_start;
-            while record_end < bytes.len() && bytes[record_end] != TLK_CODE_LABEL_RECORD {
-                record_end += 1;
-            }
-            return Some((record_start, record_end));
-        }
-        pos += 1;
-    }
-    None
 }
 
 fn make_inputs<'a>(
@@ -1902,53 +1897,6 @@ mod tests {
         assert_eq!(s.phase, ConversationSessionPhase::AwaitingKeyword);
     }
 
-    #[test]
-    fn label_transfer_enters_scoped_prompt_and_unmatched_answer_falls_back() {
-        let mut scoped = enc("Topic?");
-        scoped.push(0x91);
-        scoped.push(TLK_CODE_LABEL_RECORD);
-        scoped.push(0x91);
-        // u5-spec#298 Q20: the head the GOTO runs is everything up to the
-        // record's NUL, and a repeated label inside it would be a live GOTO,
-        // not a sub-record separator.
-        scoped.extend_from_slice(&enc(" Pick one."));
-        let raw = vec![
-            enc("Ada"),
-            enc("a quiet smith"),
-            enc("Greetings."),
-            enc("I mend gear."),
-            enc("Farewell."),
-            enc("ASK"),
-            scoped,
-        ];
-        let decoded = vec![
-            "Ada".to_string(),
-            "a quiet smith".to_string(),
-            "Greetings.".to_string(),
-            "I mend gear.".to_string(),
-            "Farewell.".to_string(),
-            "ASK".to_string(),
-            "Topic?".to_string(),
-        ];
-        let mut s = ConversationSession::new(raw, decoded);
-        s.present_greeting(&ctx());
-
-        let first = s.submit_keyword("ask", &ctx());
-        assert_eq!(first.text, framed_response("Topic? Pick one."));
-        assert_eq!(
-            s.phase,
-            ConversationSessionPhase::AwaitingScopedKeyword { label: 0x91 }
-        );
-        assert_eq!(s.prompt_message(), TLK_KEYWORD_PROMPT);
-
-        // §7.7: the post-head scoped matcher is not established
-        // (`OPEN-QUESTIONS.md`), so the answer takes the published fallback,
-        // the ordinary top-level keyword loop.
-        let second = s.submit_keyword("apple", &ctx());
-        assert!(second.text.starts_with(TLK_NO_KEYWORD_MATCH_MESSAGE), "{:?}", second.text);
-        assert_eq!(s.phase, ConversationSessionPhase::AwaitingKeyword);
-    }
-
     /// u5-spec#298 Q20 (`conversation.md §7.7`, "What a GOTO runs first"): a
     /// label byte inside the head "is a live GOTO at that point, including
     /// one to the block's own label, which restarts the block", as a nested
@@ -1982,36 +1930,163 @@ mod tests {
         );
     }
 
+    /// A keyword whose response GOTOs a labelled yes/no block shaped like
+    /// the shipped ones (playtest F03): the head asks the question, the
+    /// record after it is the default arm, then `y` / `n` pairs, then the
+    /// blob's final `0x90 0x9F` record.
+    fn scoped_yes_no_session() -> ConversationSession {
+        let mut head = vec![TLK_CODE_LABEL_RECORD, 0x91];
+        head.extend(enc("Shall I join thee?"));
+        let mut yes = enc("Lead on!\"");
+        yes.push(TLK_CODE_RECRUIT_SPEAKER);
+        let mut no = vec![TLK_CODE_STANDING_DOWN];
+        no.extend(enc("Pity."));
+        let mut final_marker = vec![TLK_CODE_LABEL_RECORD, TLK_LABEL_LAST];
+        final_marker.extend(enc("@"));
+        label_session(
+            vec![0x91],
+            vec![
+                enc("GRAN"),
+                enc("Top-level answer."),
+                head,
+                enc("Just say when."),
+                enc("y"),
+                yes,
+                enc("n"),
+                no,
+                final_marker,
+            ],
+        )
+    }
+
+    fn party_ctx<'a>(names: &'a [&'a [u8]]) -> ConversationContext<'a> {
+        ConversationContext {
+            party_member_names: names,
+            moral_standing: 10,
+            ..ctx()
+        }
+    }
+
+    /// Playtest F03. `conversation.md §7.7`: the scoped prompt reads
+    /// "another free-text answer ... and then match[es] label-scoped
+    /// keywords inside the labelled block. ... This is how an NPC can ask a
+    /// follow-up question and route the answer". A `y` answer runs the
+    /// block's own `y` record - here the `0x84` that recruits the speaker.
+    #[test]
+    fn scoped_prompt_matches_the_blocks_own_keyword_records() {
+        let names: [&[u8]; 1] = [b"AVATAR"];
+        let context = party_ctx(&names);
+        let mut s = scoped_yes_no_session();
+        let first = s.submit_keyword("ask", &context);
+        assert_eq!(first.text, framed_response("Shall I join thee?"));
+        assert_eq!(
+            s.phase,
+            ConversationSessionPhase::AwaitingScopedKeyword { label: 0x91 }
+        );
+        assert_eq!(s.prompt_message(), TLK_KEYWORD_PROMPT);
+
+        let yes = s.submit_keyword("y", &context);
+        assert_eq!(yes.text, framed_response("Lead on!\""));
+        assert!(yes.recruit_speaker, "the scoped `y` record's 0x84 ran");
+        assert!(s.recruit_speaker_pending());
+        // §7.7: a NUL-ended scoped response falls back to the ordinary
+        // top-level keyword loop.
+        assert_eq!(s.phase, ConversationSessionPhase::AwaitingKeyword);
+
+        let mut s = scoped_yes_no_session();
+        s.submit_keyword("ask", &context);
+        let no = s.submit_keyword("n", &context);
+        assert_eq!(no.text, framed_response("Pity."));
+        assert_eq!(no.moral_standing, Some(9));
+        assert!(!no.recruit_speaker);
+    }
+
+    /// Playtest F03, engine reading of `OPEN-QUESTIONS.md`'s untraced
+    /// default arm: an answer no scoped keyword matches runs the record
+    /// right after the head, then the top-level loop takes over - it is
+    /// not matched against the top-level keyword list.
+    #[test]
+    fn scoped_prompt_unmatched_answer_runs_the_default_arm() {
+        let mut s = scoped_yes_no_session();
+        s.submit_keyword("ask", &ctx());
+        let other = s.submit_keyword("gran", &ctx());
+        assert_eq!(other.text, framed_response("Just say when."));
+        assert_eq!(s.phase, ConversationSessionPhase::AwaitingKeyword);
+        let top = s.submit_keyword("gran", &ctx());
+        assert_eq!(top.text, framed_response("Top-level answer."));
+    }
+
+    /// The shipped "ask again" arm is a lone GOTO to the block's own label:
+    /// it re-asks the question and reopens the scoped prompt.
+    #[test]
+    fn a_default_arm_that_goes_to_its_own_block_asks_again() {
+        let mut head = vec![TLK_CODE_LABEL_RECORD, 0x91];
+        head.extend(enc("Well?"));
+        let mut s = label_session(
+            vec![0x91],
+            vec![head, vec![0x91], enc("y"), enc("Good.")],
+        );
+        s.submit_keyword("ask", &ctx());
+        let again = s.submit_keyword("maybe", &ctx());
+        assert!(again.text.contains("Well?"), "{:?}", again.text);
+        assert_eq!(
+            s.phase,
+            ConversationSessionPhase::AwaitingScopedKeyword { label: 0x91 }
+        );
+        let yes = s.submit_keyword("y", &ctx());
+        assert_eq!(yes.text, framed_response("Good."));
+    }
+
+    /// A block with nothing after its head has no records to match, so a
+    /// GOTO to it opens no scoped prompt.
+    #[test]
+    fn a_block_without_records_after_its_head_opens_no_scoped_prompt() {
+        let mut head = vec![TLK_CODE_LABEL_RECORD, 0x91];
+        head.extend(enc("Topic?"));
+        let mut s = label_session(vec![0x91], vec![head]);
+        let first = s.submit_keyword("ask", &ctx());
+        assert_eq!(first.text, framed_response("Topic?"));
+        assert_eq!(s.phase, ConversationSessionPhase::AwaitingKeyword);
+    }
+
+    /// `conversation.md §9` step 2 / §7.7: a Description entry that GOTOs a
+    /// scoped yes/no block suspends the opening on that prompt; the greeting
+    /// must not run over it and drop the answer into the top-level loop
+    /// (playtest F03, Fiona).
+    #[test]
+    fn a_description_goto_into_a_scoped_block_suspends_the_opening() {
+        let mut description = enc("a kind woman.");
+        description.push(0x91);
+        let mut head = vec![TLK_CODE_LABEL_RECORD, 0x91];
+        head.extend(enc("Art thou hungry?"));
+        let raw = vec![
+            enc("Fia"),
+            description,
+            enc("Hello."),
+            enc("I serve."),
+            enc("Bye."),
+            enc("y"),
+            enc("Top-level y."),
+            head,
+            enc("Good."),
+            enc("y"),
+            enc("Eat."),
+        ];
+        let decoded = raw
+            .iter()
+            .map(|field| field.iter().map(|b| char::from(b ^ TLK_TEXT_XOR_MASK)).collect())
+            .collect();
+        let mut s = ConversationSession::new(raw, decoded);
+        s.present_description(&ctx());
+        assert!(s.opening_suspended(), "{:?}", s.phase);
+        assert!(!s.awaiting_ask_who());
+        let yes = s.submit_keyword("y", &ctx());
+        assert_eq!(yes.text, framed_response("Eat."));
+    }
+
     #[test]
     fn scoped_prompt_empty_input_reissues_without_closing() {
-        let mut scoped = enc("Topic?");
-        scoped.push(0x91);
-        scoped.push(TLK_CODE_LABEL_RECORD);
-        scoped.push(0x91);
-        // u5-spec#298 Q20: the head the GOTO runs is everything up to the
-        // record's NUL, and a repeated label inside it would be a live GOTO,
-        // not a sub-record separator.
-        scoped.extend_from_slice(&enc(" Pick one."));
-        let raw = vec![
-            enc("Ada"),
-            enc("a quiet smith"),
-            enc("Greetings."),
-            enc("I mend gear."),
-            enc("Farewell."),
-            enc("ASK"),
-            scoped,
-        ];
-        let decoded = vec![
-            "Ada".to_string(),
-            "a quiet smith".to_string(),
-            "Greetings.".to_string(),
-            "I mend gear.".to_string(),
-            "Farewell.".to_string(),
-            "ASK".to_string(),
-            "Topic?".to_string(),
-        ];
-        let mut s = ConversationSession::new(raw, decoded);
-        s.present_greeting(&ctx());
+        let mut s = scoped_yes_no_session();
         s.submit_keyword("ask", &ctx());
 
         let empty = s.submit_keyword("", &ctx());
@@ -2024,82 +2099,23 @@ mod tests {
     }
 
     #[test]
-    fn scoped_prompt_suppresses_reserved_words_before_top_level_fallback() {
-        let mut scoped = enc("Topic?");
-        scoped.push(0x91);
-        scoped.push(TLK_CODE_LABEL_RECORD);
-        scoped.push(0x91);
-        // u5-spec#298 Q20: the head the GOTO runs is everything up to the
-        // record's NUL, and a repeated label inside it would be a live GOTO,
-        // not a sub-record separator.
-        scoped.extend_from_slice(&enc(" Pick one."));
-        let raw = vec![
-            enc("Ada"),
-            enc("a quiet smith"),
-            enc("Greetings."),
-            enc("I mend gear."),
-            enc("Farewell."),
-            enc("ASK"),
-            scoped,
-        ];
-        let decoded = vec![
-            "Ada".to_string(),
-            "a quiet smith".to_string(),
-            "Greetings.".to_string(),
-            "I mend gear.".to_string(),
-            "Farewell.".to_string(),
-            "ASK".to_string(),
-            "Topic?".to_string(),
-        ];
-        let mut s = ConversationSession::new(raw, decoded);
-        s.present_greeting(&ctx());
+    fn scoped_prompt_suppresses_reserved_words() {
+        let mut s = scoped_yes_no_session();
         s.submit_keyword("ask", &ctx());
 
+        // §7.7: `NAME` does not run the global Name response; it is just
+        // an answer no scoped keyword matches.
         let name = s.submit_keyword("name", &ctx());
-        assert_eq!(name.text, TLK_NO_KEYWORD_MATCH_MESSAGE);
+        assert_eq!(name.text, framed_response("Just say when."));
         assert!(!name.text.contains("Ada"));
         assert!(!name.ended);
-        assert_eq!(s.phase, ConversationSessionPhase::AwaitingKeyword);
-    }
-
-    #[test]
-    fn scoped_prompt_unmatched_keyword_can_fall_back_to_top_level_pair() {
-        let mut scoped = enc("Topic?");
-        scoped.push(0x91);
-        scoped.push(TLK_CODE_LABEL_RECORD);
-        scoped.push(0x91);
-        // u5-spec#298 Q20: the head the GOTO runs is everything up to the
-        // record's NUL, and a repeated label inside it would be a live GOTO,
-        // not a sub-record separator.
-        scoped.extend_from_slice(&enc(" Pick one."));
-        let raw = vec![
-            enc("Ada"),
-            enc("a quiet smith"),
-            enc("Greetings."),
-            enc("I mend gear."),
-            enc("Farewell."),
-            enc("ASK"),
-            scoped,
-            enc("GRAN"),
-            enc("Top-level answer."),
-        ];
-        let decoded = vec![
-            "Ada".to_string(),
-            "a quiet smith".to_string(),
-            "Greetings.".to_string(),
-            "I mend gear.".to_string(),
-            "Farewell.".to_string(),
-            "ASK".to_string(),
-            "Topic?".to_string(),
-            "GRAN".to_string(),
-            "Top-level answer.".to_string(),
-        ];
-        let mut s = ConversationSession::new(raw, decoded);
-        s.present_greeting(&ctx());
-        s.submit_keyword("ask", &ctx());
-
-        let fallback = s.submit_keyword("gran", &ctx());
-        assert_eq!(fallback.text, "Top-level answer.");
+        let bye = {
+            let mut s = scoped_yes_no_session();
+            s.submit_keyword("ask", &ctx());
+            s.submit_keyword("bye", &ctx())
+        };
+        assert!(!bye.ended);
+        assert!(!bye.text.contains("Farewell"));
         assert_eq!(s.phase, ConversationSessionPhase::AwaitingKeyword);
     }
 

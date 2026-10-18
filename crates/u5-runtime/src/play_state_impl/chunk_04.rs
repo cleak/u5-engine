@@ -5505,9 +5505,15 @@ impl PlayState {
 
     /// Which prompt closes the opening: `§7`'s ASK-WHO name prompt when
     /// the Description entry suspended on its `0x88`, `§6`'s keyword
-    /// prompt otherwise.
+    /// prompt otherwise - including a Description that suspended on a
+    /// label block's scoped prompt (`§7.7`), which prints the same
+    /// `Your interest?`.
     fn open_conversation_prompt(&self, suspended: bool) -> &'static str {
-        if suspended {
+        let ask_who = self
+            .active_conversation
+            .as_ref()
+            .is_some_and(|session| session.awaiting_ask_who());
+        if suspended && ask_who {
             crate::TLK_ASK_WHO_PROMPT
         } else {
             TLK_KEYWORD_PROMPT
