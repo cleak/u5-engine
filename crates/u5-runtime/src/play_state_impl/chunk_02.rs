@@ -2783,6 +2783,27 @@ impl PlayState {
     /// `Ok(None)` is reserved for "this `M` press is not a meditation at
     /// all" — wrong plane, or not standing on a shrine altar tile — so `M`
     /// still routes to Mix Reagents on ordinary terrain.
+    /// `karma.md §7`'s coordinate scan alone, for a route into the kneel
+    /// overlay that has no shrine tile under the party (the
+    /// natural-moongate midnight hook of `overworld.md §9.2`): the sidecar
+    /// table when one is present, else the published rows, and
+    /// Spirituality when no row matches.
+    pub fn shrine_virtue_by_coordinates(&self, game_dir: &Path) -> io::Result<ShrineVirtue> {
+        let (x, y) = (self.player.x, self.player.y);
+        if let Area::World { plane } = self.area
+            && let Some(entries) = load_shrine_entries(game_dir)?
+        {
+            return Ok(entries
+                .into_iter()
+                .find(|entry| entry.plane == plane && entry.x == x && entry.y == y)
+                .map_or(ShrineVirtue::Spirituality, |entry| entry.virtue));
+        }
+        Ok(published_shrine_entries()
+            .into_iter()
+            .find(|entry| entry.x == x && entry.y == y)
+            .map_or(ShrineVirtue::Spirituality, |entry| entry.virtue))
+    }
+
     pub fn current_shrine_entry(&self, game_dir: &Path) -> io::Result<Option<ShrineEntry>> {
         let Area::World { plane } = self.area else {
             return Ok(None);
