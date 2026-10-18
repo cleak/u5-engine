@@ -884,13 +884,18 @@ fn handle_active_yell_key_input(
         }
         line.push_str(suffix);
         session.buffer.push_str(&line);
-        state.message = if session.buffer.trim().is_empty() {
+        // `commands.md §5` transcript: the typed word is echoed on the
+        // prompt's own colon row - `Yell what?` / `:WORD` - and the result
+        // follows, the no-effect line under its own blank row
+        // (`[blank]` / `No effect!`), the nothing-said one directly beneath.
+        let word = PlayState::normalize_yell_word(&session.buffer);
+        state.commit_typed_prompt_line(":", &word);
+        state.message = if word.is_empty() {
             YELL_NOTHING_SAID_MESSAGE.to_string()
         } else {
             // `combat.md §8`, the `Y` row: nonempty combat Yell "reaches the
             // handler's no-effect path", whose literal is the shared one.
-            let _ = PlayState::normalize_yell_word(&session.buffer);
-            YELL_NO_EFFECT_MESSAGE.to_string()
+            format!("\n{YELL_NO_EFFECT_MESSAGE}")
         };
         state.pending_combat_actor_slot = None;
         let _ = apply_combat_committed_action_maintenance(state, actor_slot);
@@ -6190,8 +6195,20 @@ fn handle_combat_multistage_command(
         CombatCommandBranch::Yell => {
             match combat_yell_word_from_suffix(suffix) {
                 CombatInlineYell::Prompt => {
+                    // `combat.md §8`, the `Y` row: "Prints the combat Yell
+                    // label and dispatches to the shared Yell handler", and
+                    // `commands.md §11` has combat's scene `0xFF` ask "the
+                    // ordinary `Yell what?` question". The arena opened the
+                    // reader with nothing on screen - no label, no question,
+                    // no colon row (playtest F27) - so it is the world
+                    // prompt's own echo here.
+                    state.begin_command_echo_for(Command::Yell);
                     state.active_yell = Some(YellSession::new());
-                    state.message = yell_prompt_message();
+                    if state.complete_open_direction_echo("Yell ", YELL_QUESTION) {
+                        state.message = state.render_active_yell();
+                    } else {
+                        state.message = format!("Yell {YELL_QUESTION}\n:");
+                    }
                     state.pending_combat_actor_slot = Some(actor_slot);
                 }
                 CombatInlineYell::Empty => {

@@ -13115,7 +13115,19 @@ fn combat_input_dispatch_yell_prompt_keeps_same_actor_pending() {
         PlayInputDisposition::Continue
     );
 
-    assert_eq!(state.message, "");
+    // `combat.md §8`, the `Y` row: "Prints the combat Yell label and
+    // dispatches to the shared Yell handler", which asks `commands.md §11`'s
+    // "ordinary `Yell what?` question" and waits on its colon row
+    // (playtest F27: the arena printed nothing at all here).
+    assert_eq!(state.message, ":");
+    assert!(
+        state
+            .message_entries()
+            .iter()
+            .any(|entry| entry.is_command_echo && entry.text == "Yell what?"),
+        "{:?}",
+        state.message_entries()
+    );
     assert_eq!(state.pending_combat_actor_slot, Some(0));
     assert!(state.active_yell.is_some());
     assert_eq!(state.active_effect_counter, 3);
@@ -13126,9 +13138,23 @@ fn combat_input_dispatch_yell_prompt_keeps_same_actor_pending() {
     );
 
     assert!(state.active_yell.is_none());
-    assert_eq!(
-        state.message,
-        format!("{YELL_NO_EFFECT_MESSAGE}\nAvatar, armed with bare hands:\n")
+    // `commands.md §5`: `Yell what?` / `:WORD` / blank / `No effect!`.
+    let texts: Vec<&str> = state
+        .message_entries()
+        .iter()
+        .map(|entry| entry.text.as_str())
+        .collect();
+    let colon = texts
+        .iter()
+        .position(|text| *text == ":FALLAX")
+        .unwrap_or_else(|| panic!("typed word on the colon row: {texts:?}"));
+    assert_eq!(texts[colon + 1..colon + 3], ["", YELL_NO_EFFECT_MESSAGE]);
+    assert!(
+        state.message.ends_with(&format!(
+            "{YELL_NO_EFFECT_MESSAGE}\nAvatar, armed with bare hands:\n"
+        )),
+        "{:?}",
+        state.message
     );
     assert_eq!(state.active_effect_counter, 2);
     assert_eq!(state.pending_combat_actor_slot, Some(0));
