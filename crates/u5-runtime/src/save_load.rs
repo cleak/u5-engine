@@ -13,7 +13,6 @@ pub fn load_play_options_from_save(game_dir: &Path) -> io::Result<PlayOptions> {
     let mut options =
         play_options_from_save_bytes_named(&bytes, SAVED_GAM_FILENAME, "--from-save", true)?;
     refresh_saved_ool_mirrors_for_load(game_dir, needs_underworld_disk_swap)?;
-    load_world_progress_state(game_dir)?.apply_sidecar_only_to_play_options(&mut options);
     options.town_npc_mutations = load_town_npc_mutations(game_dir)?;
     options.save_template_source = SaveTemplateSource::SavedGame;
     Ok(options)
@@ -257,8 +256,10 @@ pub fn play_options_from_save_bytes_named(
         scroll_stock,
         potion_stock,
         reagents,
-        rare_reagent_harvest_days: [RARE_REAGENT_HARVEST_UNSEEN_DAY;
-            RARE_REAGENT_HARVEST_POINT_COUNT],
+        rare_reagent_harvest_days: bytes[SAVE_RARE_REAGENT_HARVEST_COOKIES_OFFSET
+            ..SAVE_RARE_REAGENT_HARVEST_COOKIES_OFFSET + RARE_REAGENT_HARVEST_POINT_COUNT]
+            .try_into()
+            .expect("fixed rare-reagent harvest cookie slice"),
         fixed_hidden_treasure_found,
         fixed_hidden_treasure_daily_day: bytes[SAVE_FIXED_HIDDEN_TREASURE_DAILY_COOKIE_OFFSET],
         dungeon_room_clear_bitmap,

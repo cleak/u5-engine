@@ -2046,9 +2046,13 @@ impl PlayState {
                     self.special_items[SPECIAL_ITEM_AMULET_LB_INDEX].max(SPECIAL_ITEM_OWNED_VALUE);
             }
             ObjectPickupKind::ShadowlordShard(index) => {
+                // `containers.md §8` class `0xB4`: "Writes the no-quantity
+                // marker `255` into the ... shard flag"; `saved-gam.md §7`
+                // agrees, and the U-Use/Z rows are then uncounted
+                // (`inventory.md §4.4`/§4.5) - playtest F53.
                 if index < SHADOWLORD_COUNT {
                     self.special_items[SPECIAL_ITEM_SHARD_FALSEHOOD_INDEX + index] =
-                        SPECIAL_ITEM_OWNED_VALUE;
+                        crate::commands::USE_PICKER_NO_QUANTITY;
                 }
             }
         }

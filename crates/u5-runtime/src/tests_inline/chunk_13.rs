@@ -19556,7 +19556,7 @@ fn endgame_flow_uses_loaded_endmsg_records_for_prompts_rite_and_refusal() {
         ENDGAME_TABLEAU_BOX_ACTOR_BYTE
     );
     run_victory_tableau_to_first_narrative_window(&mut victory);
-    assert_eq!(victory.message, "{Window one");
+    assert_eq!(victory.message, "Window one");
 }
 
 /// `endgame.md §5` step 2: "**Only a first No** asks the second question
@@ -19628,7 +19628,7 @@ fn victory_endgame_cinematic_advances_through_all_panels_then_holds_terminal_sta
 
     // The automatic tableau sequence includes the one silent fade and
     // publishes the first narrative window without consuming another key.
-    assert_eq!(state.message, "{Window one");
+    assert_eq!(state.message, "Window one");
 
     for expected in [
         "Window two",
@@ -19638,7 +19638,7 @@ fn victory_endgame_cinematic_advances_through_all_panels_then_holds_terminal_sta
         "Window six",
     ] {
         state.resolve_endgame_confirmation(true);
-        assert_eq!(state.message, format!("{{{expected}"));
+        assert_eq!(state.message, expected);
     }
     {
         // Advance the cinematic directly: routing this through
@@ -24144,9 +24144,13 @@ fn end_narrative_window_ranges_select_pages_for_cinematic() {
     endgame.advance_cinematic();
     assert_eq!(endgame.current_cinematic_text(), "");
     assert!(endgame.advance_cinematic_frame_operation());
-    assert_eq!(endgame.current_cinematic_text(), "{Window one");
+    // Playtest F58: the message slot carries the visible glyphs only;
+    // the proportional renderer gets the `{`/`_` markers separately.
+    assert_eq!(endgame.current_cinematic_text(), "Window one");
+    assert_eq!(endgame.current_narrative_layout_text().as_deref(), Some("{Window one"));
     endgame.advance_cinematic();
-    assert_eq!(endgame.current_cinematic_text(), "{Window two");
+    assert_eq!(endgame.current_cinematic_text(), "Window two");
+    assert_eq!(endgame.current_narrative_layout_text().as_deref(), Some("{Window two"));
 }
 
 #[test]

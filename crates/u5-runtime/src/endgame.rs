@@ -664,6 +664,22 @@ impl EndgameState {
             })
     }
 
+    /// The current `endgame.md §8` narrative window's `END.DAT` text with
+    /// the `{` first-line indent and `_` soft hyphen kept in place, for the
+    /// proportional page renderer that consumes them (`formats/end-dat.md
+    /// §3`). `None` outside a narrative window. Fixed-cell surfaces print
+    /// [`Self::current_cinematic_text`] instead, which has them removed.
+    pub fn current_narrative_layout_text(&self) -> Option<String> {
+        let crate::endgame_cinematic::EndgameCinematicStep::NarrativeWindow(index) =
+            self.cinematic.step
+        else {
+            return None;
+        };
+        self.final_narrative
+            .as_ref()?
+            .layout_window_by_number(index.saturating_add(1))
+    }
+
     /// Text the current cinematic beat puts on the endgame surface.
     ///
     /// `banner_label()` is a debug/pacing aid for tests; it is never a
@@ -700,9 +716,13 @@ impl EndgameState {
                 .final_narrative
                 .as_ref()
                 .and_then(|narrative| {
-                    // `formats/end-dat.md §3`/`§4`: the proportional
-                    // renderer consumes `{` and `_`, so they stay in.
-                    narrative.layout_window_by_number(index.saturating_add(1))
+                    // `formats/end-dat.md §3` / `text-output.md §8.2`: `{`
+                    // and `_` draw nothing, so the message slot - which
+                    // every fixed-cell consumer prints as-is - carries the
+                    // visible glyphs only (playtest F58). The proportional
+                    // page renderer takes the marked text from
+                    // [`Self::current_narrative_layout_text`].
+                    narrative.window_by_number(index.saturating_add(1))
                 })
                 .unwrap_or_else(|| {
                     panic!(

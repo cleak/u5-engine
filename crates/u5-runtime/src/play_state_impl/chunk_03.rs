@@ -3954,6 +3954,17 @@ impl PlayState {
         rows[4] = right(" Keys.......", u32::from(self.keys), 14);
         rows[5] = right(" Gems.......", u32::from(self.gems), 14);
         rows[6] = right(" Torches....", u32::from(self.torches), 14);
+        // `inventory.md §4.7` lists the Equipment screen as "(food, gold,
+        // keys, gems, torches, grapple)" and its label table carries
+        // `\n_Grapple` straight after `\n_Torches....`, so the row sits on
+        // the next panel row. The label has no leader and no colon, and the
+        // spec publishes no value format, so it is drawn as a bare
+        // presence row while the grapple byte (`saved-gam.md §7`, `0x0209`)
+        // is nonzero. Playtest F55; the absent-grapple case and any value
+        // after the label are open spec questions.
+        if self.climbing_gear != 0 {
+            rows[7] = " Grapple".to_string();
+        }
     }
 
     /// `inventory.md §4.7` attribute page, built from its published

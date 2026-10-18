@@ -148,7 +148,7 @@ fn town_bed_rest_burst_arrest_contact_ends_the_command_before_sleep() {
     let dir = crate::test_fixtures::debug_game_dir();
     let _ = std::fs::remove_file(dir.join(TOWN_REST_BED_TABLE_FILE));
     let mut grid = g6_open_grid();
-    grid[32 + 1] = 0x48;
+    grid[32 + 1] = 0xAB;
     let mut state = test_state(grid, 1, 1);
     state.area = Area::Town {
         scene: Scene::new(2).unwrap(),

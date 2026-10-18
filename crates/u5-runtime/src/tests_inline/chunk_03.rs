@@ -68,6 +68,7 @@ fn save_game_command_writes_supported_saved_gam_and_stages_saved_ool_mirrors() {
     state.fixed_hidden_treasure_found[0] = 0x21;
     state.fixed_hidden_treasure_found[FIXED_HIDDEN_TREASURE_FOUND_BYTES - 1] = 0x80;
     state.fixed_hidden_treasure_daily_day = 6;
+    state.rare_reagent_harvest_days = [3, 4, 5];
     // `formats/saved-gam.md` §10, record 15: "`0x0241` - the equipment
     // counter for item id `39`, the Glass Sword - is also the gate for
     // fixed hidden-treasure record 15. It is the same byte, not a
@@ -215,6 +216,14 @@ fn save_game_command_writes_supported_saved_gam_and_stages_saved_ool_mirrors() {
         &state.fixed_hidden_treasure_found
     );
     assert_eq!(saved[SAVE_FIXED_HIDDEN_TREASURE_DAILY_COOKIE_OFFSET], 6);
+    // formats/saved-gam.md §10: the rare-reagent harvest cookies are durable
+    // SAVED.GAM state at 0x02B2..0x02B4 (playtest F54).
+    assert_eq!(SAVE_RARE_REAGENT_HARVEST_COOKIES_OFFSET, 0x02b2);
+    assert_eq!(
+        &saved[SAVE_RARE_REAGENT_HARVEST_COOKIES_OFFSET
+            ..SAVE_RARE_REAGENT_HARVEST_COOKIES_OFFSET + RARE_REAGENT_HARVEST_POINT_COUNT],
+        &[3, 4, 5]
+    );
     assert_eq!(
         saved[SAVE_FIXED_HIDDEN_TREASURE_RECORD_15_GATE_OFFSET],
         0x77
@@ -902,6 +911,9 @@ fn from_save_keeps_native_hidden_treasure_state_over_sidecar_mirror() {
     save[SAVE_FIXED_HIDDEN_TREASURE_FOUND_OFFSET] = 0x05;
     save[SAVE_FIXED_HIDDEN_TREASURE_DAILY_COOKIE_OFFSET] = 0x12;
     save[SAVE_FIXED_HIDDEN_TREASURE_RECORD_15_GATE_OFFSET] = 0x34;
+    save[SAVE_RARE_REAGENT_HARVEST_COOKIES_OFFSET
+        ..SAVE_RARE_REAGENT_HARVEST_COOKIES_OFFSET + RARE_REAGENT_HARVEST_POINT_COUNT]
+        .copy_from_slice(&[2, 3, 4]);
     save[SAVE_SHADOWLORD_HIDEOUTS_OFFSET..SAVE_SHADOWLORD_HIDEOUTS_OFFSET + SHADOWLORD_COUNT]
         .copy_from_slice(&[8, SHADOWLORD_VANQUISHED, 4]);
     let stonegate_offset = SAVE_NPC_REMOVED_MASKS_OFFSET
@@ -921,7 +933,9 @@ fn from_save_keeps_native_hidden_treasure_state_over_sidecar_mirror() {
 
     let options = load_play_options_from_save(&dir).unwrap();
 
-    assert_eq!(options.rare_reagent_harvest_days, [7, 8, 9]);
+    // formats/saved-gam.md §10: SAVED.GAM 0x02B2..0x02B4 owns the harvest
+    // cookies; a stale sidecar mirror must not override them (playtest F54).
+    assert_eq!(options.rare_reagent_harvest_days, [2, 3, 4]);
     assert_eq!(options.fixed_hidden_treasure_found[0], 0x05);
     assert_eq!(options.fixed_hidden_treasure_daily_day, 0x12);
     assert_eq!(options.equipment_stock[EQUIPMENT_ID_GLASS_SWORD], 0x34);
