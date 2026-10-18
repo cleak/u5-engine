@@ -298,3 +298,41 @@ fn playtest_f32_refused_scrolls_print_their_banner_first() {
         .unwrap_or_else(|| panic!("Summon Daemon! prints outside combat: {rows:?}"));
     assert_eq!(rows.get(banner + 1).map(String::as_str), Some("Not here!"));
 }
+
+/// `inventory.md §7.1`: "A wrong destruction position adds `\n\nNo
+/// effect!\n`" directly after the shard text, and the next actor's banner
+/// (`combat.md §8.1`) belongs to the following turn. Playtest F33: the
+/// unpaced walk printed the next banner before the staged result.
+#[test]
+fn playtest_f33_a_combat_shard_result_prints_before_the_next_banner() {
+    let game_dir = std::path::Path::new("");
+    let mut state = combat_state_after_the_conflict_banner(8, 5);
+    state.special_items[SPECIAL_ITEM_SHARD_FALSEHOOD_INDEX] = 1;
+    state.ensure_pending_combat_player_turn();
+    assert!(state.pending_combat_actor_slot.is_some());
+
+    combat2b_use_row(
+        &mut state,
+        |request| matches!(request, UseItemRequest::ShadowlordShard(_)),
+        game_dir,
+    );
+    state.flush_staged_narration();
+    state.flush_message_slot();
+
+    let rows = combat2b_rows_text(&state);
+    let aloft = rows
+        .iter()
+        .rposition(|row| row.contains("Falsehood..."))
+        .unwrap_or_else(|| panic!("the aloft line: {rows:?}"));
+    let result = rows
+        .iter()
+        .rposition(|row| row.contains("No effect!"))
+        .unwrap_or_else(|| panic!("the result: {rows:?}"));
+    assert!(result > aloft, "rows: {rows:?}");
+    assert!(
+        !rows[aloft + 1..result]
+            .iter()
+            .any(|row| row.contains("armed")),
+        "no turn banner between the shard text and its result: {rows:?}"
+    );
+}
