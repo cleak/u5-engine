@@ -243,3 +243,45 @@ fn arms_entry_ignores_y_and_n_without_echo() {
         "{rows:#?}"
     );
 }
+
+/// `shops.md` §8.1 "Random draws and waits": the browser-local goodbye takes
+/// `says $.` only "If any equipment remains ... When the final carried item
+/// has been sold, the quoted goodbye still prints but this attribution is
+/// omitted." Playtest F44: the depleting sale attributed the goodbye too.
+#[test]
+fn arms_sell_goodbye_after_the_last_item_is_unattributed() {
+    let mut state = arms_sell_flow_state();
+    state.equipment_stock = [0; EQUIPMENT_COUNT];
+    state.equipment_stock[0] = 1;
+    assert_eq!(
+        state.talk_facing_with_dialogue(&HashMap::new()),
+        MoveOutcome::Talked
+    );
+    state.flush_message_slot();
+    for key in [' ', 'S', '\r', 'Y'] {
+        handle_play_key_input(&mut state, key, "", Path::new("")).unwrap();
+    }
+    let rows: Vec<String> = arms_sell_rows(&state)
+        .into_iter()
+        .map(|row| row.trim_end().to_string())
+        .collect();
+    let done = rows
+        .iter()
+        .position(|row| row == "\"Done!\"")
+        .unwrap_or_else(|| panic!("{rows:#?}"));
+    assert_eq!(rows[done + 1], "says Max.", "{rows:#?}");
+    assert_eq!(rows[done + 2], "", "{rows:#?}");
+    let goodbye = &rows[done + 3];
+    assert!(
+        goodbye.starts_with('"') && goodbye.ends_with("...\""),
+        "{rows:#?}"
+    );
+    assert!(
+        rows[done + 4..].iter().all(|row| !row.starts_with("says ")),
+        "{rows:#?}"
+    );
+
+    // An Escape while equipment remains keeps the attribution.
+    let escaped = arms_rows_after(&[' ', 'S', '\u{1b}']);
+    assert_eq!(escaped.last().map(String::as_str), Some("says Max."), "{escaped:#?}");
+}

@@ -3549,9 +3549,13 @@ fn handle_arms_shop_key_input(
             // The sale that empties the browser takes the same spacing, with
             // the local goodbye where the continuation prompt would be. Not
             // separately measured.
+            // `shops.md` §8.1: the goodbye's `says $.` follows only "If any
+            // equipment remains ... When the final carried item has been
+            // sold, the quoted goodbye still prints but this attribution is
+            // omitted." Playtest F44: the engine attributed it anyway.
             "\n\n{}\n\n{}",
             speech.attribute("\"Done!\"", "says"),
-            speech.attribute(&arms_sell_goodbye(state.random_range_u8(0, 3)), "says")
+            arms_sell_goodbye(state.random_range_u8(0, 3))
         ),
         (ArmsShopOutcome::Exited, _) if matches!(prior_state, ArmsShopState::SellPickItem(_)) => {
             // Two line feeds before the local goodbye as well. Measured
