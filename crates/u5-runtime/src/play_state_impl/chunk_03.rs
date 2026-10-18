@@ -2842,6 +2842,12 @@ impl PlayState {
             DUNGEON_DIRECTION_PROMPT,
             dungeon_look_focus_label(focus),
         );
+        // `dungeon-mode.md §12`: every completion appended to `Dir-` ends in
+        // its own line feed (`Ahead\n`, `Left\n`, ...), so the chooser's row
+        // is closed here. A `Dir-` printed under a member pick had marked the
+        // row open, and the unlit Search's leading feed was spent closing it
+        // - `You find:` lost its blank row (playtest F15).
+        self.close_message_row();
     }
 
     /// `dungeon-mode.md §11`: resolve who acts before the overlay prompts.
@@ -3171,6 +3177,8 @@ impl PlayState {
                         DUNGEON_DIRECTION_PROMPT,
                         DIRECTION_PROMPT_LABEL_PASS,
                     );
+                    // `§12`: the completion is `Pass\n`.
+                    self.close_message_row();
                     return Ok(Some(MoveOutcome::PromptDeclined));
                 }
                 if matches!(

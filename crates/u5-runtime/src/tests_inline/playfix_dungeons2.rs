@@ -233,3 +233,34 @@ fn playfix2_f17_a_party_look_closes_its_row() {
     assert!(rows.iter().any(|row| row == "You see:"), "{rows:?}");
     assert!(!state.message_row_open_mid_line, "{rows:?}");
 }
+
+/// F15: `dungeon-mode.md §8.1` - "Search, unlit | `\nYou find:\ndarkness.\n`
+/// - a *find* line, with a leading blank row", and `§12` ends every `Dir-`
+/// completion with its own line feed. Whether a member prompt ran first
+/// does not change the blank row.
+#[test]
+fn playfix2_f15_unlit_party_search_keeps_the_blank_row_before_you_find() {
+    let rows_after_dir = |party: bool| {
+        let mut state = playfix2_lit_party_state();
+        state.torch_counter = 0;
+        state.light_spell_counter = 0;
+        if !party {
+            state.party.truncate(1);
+        }
+        handle_play_key_input(&mut state, 'S', "", Path::new("")).unwrap();
+        if party {
+            handle_play_key_input(&mut state, '\r', "", Path::new("")).unwrap();
+        }
+        handle_play_key_input(&mut state, char::from(INPUT_CODE_NORTH), "", Path::new(""))
+            .unwrap();
+        let rows = playfix2_transcript_rows(&state);
+        let dir = rows
+            .iter()
+            .rposition(|row| row.starts_with("Dir-"))
+            .unwrap_or_else(|| panic!("the chooser row: {rows:?}"));
+        rows[dir + 1..].to_vec()
+    };
+    let solo = rows_after_dir(false);
+    assert_eq!(solo[..3], ["", "You find:", "darkness."], "{solo:?}");
+    assert_eq!(rows_after_dir(true), solo);
+}
