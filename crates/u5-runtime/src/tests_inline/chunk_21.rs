@@ -5734,7 +5734,7 @@ fn end_to_end_healer_mission_cure_bypasses_gold_path() {
     // Light!"`, followed by treatment effects", then the continuation.
     assert_eq!(
         state.message,
-        "\"Receive now the Light!\"\n\n\"Is there any other way in which I may\naid thee?\" "
+        "\n\n\"Receive now the Light!\"\n\n\"Is there any other way in which I may\naid thee?\" "
     );
     assert!(matches!(
         state.active_shop,
@@ -5771,7 +5771,7 @@ fn end_to_end_healer_mission_cure_bypasses_shadowlord_surcharge() {
     assert_eq!(state.party[0].status, b'G');
     assert_eq!(
         state.message,
-        "\"Receive now the Light!\"\n\n\"Is there any other way in which I may\naid thee?\" "
+        "\n\n\"Receive now the Light!\"\n\n\"Is there any other way in which I may\naid thee?\" "
     );
     assert!(!state.message.contains("Surcharge"));
 }
@@ -5802,10 +5802,11 @@ fn end_to_end_paid_healer_uses_local_fee_and_play_state_treatment() {
     assert_eq!(state.party[0].status, b'P');
     assert_eq!(state.party[0].hp, 22);
     // `shops.md §8.3`: the paid branch applies the treatment "and asks the
-    // continuation Y/N question" - no invented treatment report.
+    // continuation Y/N question" - no invented treatment report. §8.C's
+    // continuation keeps both leading feeds (playtest F47).
     assert_eq!(
         state.message,
-        "\n\"Is there any other way in which I may\naid thee?\" "
+        "\n\n\"Is there any other way in which I may\naid thee?\" "
     );
     assert!(state.active_shop.is_some());
 

@@ -1287,7 +1287,11 @@ fn handle_active_shop_key_input(
                         // one-member party is then treated without a prompt
                         // of any kind: the refusal followed the echo directly.
                         state.emit_message_line_continuing_row(healer_service_echo(treatment));
-                        state.push_explicit_blank_message_entry();
+                        // No blank of its own: §8.C's `\n\n"Who needs my aid?" `
+                        // and every result row bring their own `\n\n`, whose
+                        // first feed closes this echo's row. Pushing a blank
+                        // here as well gave three blank rows above the
+                        // question (playtest F47).
                         if state.party.len() == 1 {
                             *s = HealerShopState::PickPartyMember {
                                 service,
@@ -1452,10 +1456,11 @@ fn handle_active_shop_key_input(
                                     None
                                 };
                             *s = HealerShopState::Continuation;
-                            shop_message_ignoring_surcharge(
-                                HEALER_CONTINUATION[1..].to_string(),
-                                surcharge,
-                            )
+                            // §8.C's continuation keeps both of its feeds
+                            // here: the first closes `pay?" Yes`, the second
+                            // is the blank row. Playtest F47: dropping one ran
+                            // `"Is there any other way` straight under it.
+                            shop_message_ignoring_surcharge(HEALER_CONTINUATION.to_string(), surcharge)
                         }
                         // §8.C "Ordinary short funds | Record `173`, then the
                         // continuation question below, exactly as after a
@@ -1597,8 +1602,12 @@ fn handle_active_shop_key_input(
                             // §8.C "Rest offer | Opening quote, room record,
                             // then `\nWilt thou take\nit?" `. Records by inn
                             // row are `186, 187, 188, 188, 189, 190`."
+                            //
+                            // The capacity check's `\n\n` comes first: one
+                            // feed closes the `night?" R` row, the other is
+                            // the blank (playtest F48).
                             format!(
-                                "\n\"{}{INN_TAKE_IT_PROMPT}",
+                                "\n\n\"{}{INN_TAKE_IT_PROMPT}",
                                 render_shared_shoppe_record(
                                     game_dir,
                                     inn_room_record(inn),
@@ -1632,9 +1641,9 @@ fn handle_active_shop_key_input(
                                 inn.display_name(),
                             );
                             if record.is_empty() {
-                                format!("\n{INN_NOBODY_TO_LEAVE_REFUSAL}")
+                                format!("\n\n{INN_NOBODY_TO_LEAVE_REFUSAL}")
                             } else {
-                                format!("\n{record}")
+                                format!("\n\n{record}")
                             }
                         } else {
                             let deposit = inn_leave_companion_deposit_for_speaker(
@@ -1651,7 +1660,8 @@ fn handle_active_shop_key_input(
                             // the innkeeper asks in the message window while
                             // the *panel* becomes a framed `Select:` picker
                             // over the party rows. No deposit is quoted here.
-                            format!("\n{}", who_will_stay())
+                            // The capacity check's `\n\n`, then the question.
+                            format!("\n\n{}", who_will_stay())
                         }
                     }
                     // §8.C: "P has no separate echo."
@@ -1662,14 +1672,14 @@ fn handle_active_shop_key_input(
                             // `\n\nOne must first be left behind!\n\n`; this
                             // check precedes the no-guests check".
                             *s = InnkeeperState::Continuation { inn };
-                            format!("\nOne must first be left behind!\n\n{INN_ANYTHING_MORE_PROMPT}")
+                            format!("\n\nOne must first be left behind!\n\n{INN_ANYTHING_MORE_PROMPT}")
                         } else if guests.is_empty() {
                             // "Pickup with no guest at this inn |
                             // Token-expanded `\n\n"No one here is from thy
                             // party!"\nsays $.\n\n`".
                             *s = InnkeeperState::Continuation { inn };
                             format!(
-                                "\n\"No one here is from thy party!\"{}\n\n{INN_ANYTHING_MORE_PROMPT}",
+                                "\n\n\"No one here is from thy party!\"{}\n\n{INN_ANYTHING_MORE_PROMPT}",
                                 attribution("says")
                             )
                         } else if guests.len() == 1 {
@@ -1704,7 +1714,7 @@ fn handle_active_shop_key_input(
                             };
                             // "Multiple-guest selection | `\n\n"Who will\ncheck
                             // out?" `"; the framed register is the side panel.
-                            format!("\n{INN_WHO_WILL_CHECK_OUT_PROMPT}")
+                            format!("\n\n{INN_WHO_WILL_CHECK_OUT_PROMPT}")
                         }
                     }
                     // `shops.md §8.A` "Shared closing envelope": the ordinary
@@ -1751,8 +1761,10 @@ fn handle_active_shop_key_input(
                             // "Paid Rest | `"Have a pleasant\nnight, `,
                             // honorific, token-expanded `!"\nsays $.\n\n`, then
                             // the rest sequence."
+                            // The offer's `\n\n` after the bare echo: one
+                            // feed closes `it?" Yes`, one is the blank.
                             let mut message = format!(
-                                "\n\"Have a pleasant\nnight, {honorific}!\"{}\n\n",
+                                "\n\n\"Have a pleasant\nnight, {honorific}!\"{}\n\n",
                                 attribution("says")
                             );
                             message.push_str(&apply_paid_inn_rest(
@@ -1778,7 +1790,7 @@ fn handle_active_shop_key_input(
                         // "Accepted Rest, short funds | `"Highwaymen!\nCheap,
                         // at that!\nOUT!" `, then token-expanded `screams\n$.\n`".
                         Err(err) => format!(
-                            "\n{}{}",
+                            "\n\n{}{}",
                             format_inn_error(err, speaker_is_female),
                             innkeeper_name
                                 .map(|name| format!("screams\n{name}."))
@@ -1805,7 +1817,7 @@ fn handle_active_shop_key_input(
                 (InnkeeperState::PickLeaveCompanion { inn, .. }, _, _, _) if key_byte == 0x1b => {
                     state.emit_message_line_continuing_row("Nobody");
                     *s = InnkeeperState::Continuation { inn };
-                    format!("\n{INN_ANYTHING_MORE_PROMPT}")
+                    format!("\n\n{INN_ANYTHING_MORE_PROMPT}")
                 }
                 // "A valid party digit moves the highlight; Return or Space
                 // commits the indicated member", which starts on Avatar. "The
@@ -1848,7 +1860,7 @@ fn handle_active_shop_key_input(
                         // not leave thee!\n\n`; repeat the target question".
                         let plural = if state.party.len() > 2 { "s" } else { "" };
                         format!(
-                            "\nThy friend{plural} will not leave thee!\n\n{}",
+                            "\n\nThy friend{plural} will not leave thee!\n\n{}",
                             who_will_stay()
                         )
                     } else if state.party[party_index].status == b'D' {
@@ -1857,7 +1869,7 @@ fn handle_active_shop_key_input(
                         // ordinary farewell".
                         *s = InnkeeperState::Exited;
                         format!(
-                            "\n{}",
+                            "\n\n{}",
                             render_shared_shoppe_record(
                                 game_dir,
                                 INN_DEAD_COMPANION_RECORD,
@@ -1876,8 +1888,10 @@ fn handle_active_shop_key_input(
                         // comfortable room will be `, token-expanded `% gold
                         // per month, due at check-out.`, then `\nWilt thou
                         // take\nit?" `."
+                        // Playtest F48: with one feed the rate ran straight
+                        // under `stay?" `.
                         format!(
-                            "\n\"The rate for\nour most comfortable room will be {deposit} gold per month, due at check-out.{INN_TAKE_IT_PROMPT}"
+                            "\n\n\"The rate for\nour most comfortable room will be {deposit} gold per month, due at check-out.{INN_TAKE_IT_PROMPT}"
                         )
                     }
                 }
@@ -1899,13 +1913,14 @@ fn handle_active_shop_key_input(
                         // thee."\nsays $.\n\n`", then the inn's continuation.
                         Ok(_) => {
                             state.arms_transaction_completed = true;
+                            // "Leave rate | ... bare echo, then `\n\n`".
                             format!(
-                                "\n{INN_THANKS_LINE}{}\n\n{INN_ANYTHING_MORE_PROMPT}",
+                                "\n\n{INN_THANKS_LINE}{}\n\n{INN_ANYTHING_MORE_PROMPT}",
                                 attribution("says")
                             )
                         }
                         Err(err) => format!(
-                            "\n{}{INN_ANYTHING_MORE_PROMPT}",
+                            "\n\n{}{INN_ANYTHING_MORE_PROMPT}",
                             format_inn_error(err, speaker_is_female)
                         ),
                     }
@@ -1913,14 +1928,14 @@ fn handle_active_shop_key_input(
                 (InnkeeperState::ConfirmLeaveCompanion { inn, .. }, _, true, _) => {
                     state.emit_message_line_continuing_row("No");
                     *s = InnkeeperState::Continuation { inn };
-                    format!("\n{INN_ANYTHING_MORE_PROMPT}")
+                    format!("\n\n{INN_ANYTHING_MORE_PROMPT}")
                 }
                 // "Cancel guest selection | Escape prints `No one\n\n`;
                 // Space/Return instead select the highlighted guest".
                 (InnkeeperState::PickUpCompanion { inn, .. }, _, _, _) if key_byte == 0x1b => {
                     state.emit_message_line_continuing_row("No one");
                     *s = InnkeeperState::Continuation { inn };
-                    format!("\n{INN_ANYTHING_MORE_PROMPT}")
+                    format!("\n\n{INN_ANYTHING_MORE_PROMPT}")
                 }
                 (
                     InnkeeperState::PickUpCompanion {
@@ -1954,7 +1969,9 @@ fn handle_active_shop_key_input(
                 (InnkeeperState::Continuation { inn }, true, _, _) => {
                     state.emit_message_line_continuing_row("Yes");
                     *s = InnkeeperState::ServiceMenu { inn };
-                    format!("\n{}", service_question())
+                    // §8.B's `Yes` then `\n\n$ asks,`: the echo row closes
+                    // and one blank follows, as at entry.
+                    format!("\n\n{}", service_question())
                 }
                 (InnkeeperState::Continuation { .. }, _, _, _) if no || key_byte == b' ' => {
                     state.emit_message_line_continuing_row("No");
@@ -2762,6 +2779,14 @@ fn handle_active_shop_key_input(
                 }
                 _ => {}
             }
+            // `§8.C` "Shipwrights": "Invalid service keys redraw record
+            // `119`". The redraw is the same text the menu already printed,
+            // so leaving it in the slot was indistinguishable from no write
+            // and the flush dropped it (playtest F50). Emit it outright; the
+            // record's own leading feeds close the open `see?" ` row and
+            // leave one blank above the second copy.
+            let menu_redraw = matches!(prior, ShipBrokerState::Menu { .. })
+                && matches!(outcome, ShipBrokerOutcome::EnteredMenu);
             let message = match outcome {
                 // `§8.A`/`§8.C`: "Ordinary ship endings use the shared
                 // farewell", nothing-bought or purchase-completed by the visit.
@@ -2810,6 +2835,9 @@ fn handle_active_shop_key_input(
                 }
                 outcome => format_ship_broker_outcome(outcome, menu_record, offer_record),
             };
+            if menu_redraw && !message.is_empty() {
+                state.emit_message_line(message.clone());
+            }
             shop_message_ignoring_surcharge(message, surcharge)
         }
         ActiveShopSession::Guild(s) => {
@@ -3090,14 +3118,21 @@ fn healer_service_menu(name: Option<&'static str>) -> String {
 
 /// The question the service menu ends on, and the one a completed or refused
 /// treatment returns to.
-const HEALER_SERVICE_QUESTION: &str = "\"What is the nature of thy need?\"";
+///
+/// `shops.md §8.B`: `"What is the nature of thy need?" ` - the closing quote
+/// and one space are the cell the service echo lands in. Playtest F47: the
+/// engine stopped at the quote and read `need?"Curing`.
+const HEALER_SERVICE_QUESTION: &str = "\"What is the nature of thy need?\" ";
 
 /// `shops.md §8.C`'s healer result table: "Selected member is untreatable |
 /// Token-expanded `\n\n"Thou hast no need of this art!"\nsays $.`", then
 /// separately "Continuation after treatment, refusal, or member cancellation |
 /// `\n\n"Is there any other way in which I may\n`, then `aid thee?" `".
 fn healer_no_need_refusal(name: Option<&'static str>) -> String {
-    let refusal = "\"Thou hast no need of this art!\"";
+    // The leading `\n\n` is the published text's: the selector's question
+    // (or the service echo, for a sole member) leaves its row open, so the
+    // first feed closes it and the second is the one blank row. Playtest F47.
+    let refusal = "\n\n\"Thou hast no need of this art!\"";
     match name {
         Some(name) => format!("{refusal}\nsays {name}.{HEALER_CONTINUATION}"),
         None => format!("{refusal}{HEALER_CONTINUATION}"),
@@ -3109,7 +3144,7 @@ fn healer_no_need_refusal(name: Option<&'static str>) -> String {
 const HEALER_CONTINUATION: &str = "\n\n\"Is there any other way in which I may\naid thee?\" ";
 
 /// §8.C "Minoc free Cure/Heal | `\n\n"Receive now the Light!"`".
-const HEALER_RECEIVE_THE_LIGHT: &str = "\"Receive now the Light!\"";
+const HEALER_RECEIVE_THE_LIGHT: &str = "\n\n\"Receive now the Light!\"";
 
 /// §8.C "Ordinary short funds | Record `173`".
 const HEALER_SHORT_FUNDS_RECORD: usize = 173;
@@ -3144,10 +3179,13 @@ fn render_shared_shoppe_record(
 /// §8.C's three paid introductions. The fee row completes each of them.
 fn healer_paid_introduction(treatment: crate::shops::HealerTreatment) -> &'static str {
     match treatment {
-        crate::shops::HealerTreatment::Cure => "\"I can cure thy poisoned body ",
-        crate::shops::HealerTreatment::Heal => "\"I can heal thee ",
+        // Each opens with §8.C's own `\n\n`: one feed closes the open
+        // selector (or echo) row, the other is the blank above the reply.
+        // Playtest F47: the reply started on the very next row.
+        crate::shops::HealerTreatment::Cure => "\n\n\"I can cure thy poisoned body ",
+        crate::shops::HealerTreatment::Heal => "\n\n\"I can heal thee ",
         crate::shops::HealerTreatment::Resurrect => {
-            "\"I can raise this unfortunate person from the dead "
+            "\n\n\"I can raise this unfortunate person from the dead "
         }
     }
 }
@@ -3182,7 +3220,9 @@ fn healer_service_echo(treatment: crate::shops::HealerTreatment) -> &'static str
     match treatment {
         crate::shops::HealerTreatment::Cure => "Curing",
         crate::shops::HealerTreatment::Heal => "Healing",
-        crate::shops::HealerTreatment::Resurrect => "Resurrecting",
+        // §8.C: "C/H/R echo `Curing`, `Healing`, or `Resurrect`". Playtest
+        // F45: the engine invented `Resurrecting`.
+        crate::shops::HealerTreatment::Resurrect => "Resurrect",
     }
 }
 
@@ -3700,9 +3740,13 @@ fn handle_arms_shop_key_input(
             // The sale that empties the browser takes the same spacing, with
             // the local goodbye where the continuation prompt would be. Not
             // separately measured.
+            // `shops.md` §8.1: the goodbye's `says $.` follows only "If any
+            // equipment remains ... When the final carried item has been
+            // sold, the quoted goodbye still prints but this attribution is
+            // omitted." Playtest F44: the engine attributed it anyway.
             "\n\n{}\n\n{}",
             speech.attribute("\"Done!\"", "says"),
-            speech.attribute(&arms_sell_goodbye(state.random_range_u8(0, 3)), "says")
+            arms_sell_goodbye(state.random_range_u8(0, 3))
         ),
         (ArmsShopOutcome::Exited, _) if matches!(prior_state, ArmsShopState::SellPickItem(_)) => {
             // Two line feeds before the local goodbye as well. Measured
@@ -3932,6 +3976,24 @@ fn arms_buy_menu_heading(affirmation_roll: u8, introduction_roll: u8) -> String 
     )
 }
 
+/// `shops.md §8.1`: the buy-list display name "is the canonical equipment name
+/// from `catalogs/item-list.md`, *except* that a canonical name of thirteen
+/// characters or more is replaced by that item's shorter panel label, so the
+/// entry fits the shop's list column". `catalogs/item-list.md §5.1.2` owns the
+/// label row. The engine printed the canonical name unconditionally, so
+/// `Ring of Regeneration` wrapped and `Amulet/Turning` broke mid-word.
+fn arms_buy_list_name(item_id: usize) -> &'static str {
+    let canonical = equipment_name(item_id);
+    if canonical.len() >= 13 {
+        crate::EQUIPMENT_SHORT_LABELS
+            .get(item_id)
+            .copied()
+            .unwrap_or(canonical)
+    } else {
+        canonical
+    }
+}
+
 /// The stock rows read `a...Dagger` - the separator is three ASCII full stops,
 /// read back by glyph index rather than guessed from the blank-cell filler.
 fn format_arms_stock_buy_menu(
@@ -3949,7 +4011,7 @@ fn format_arms_stock_buy_menu(
     for index in 0..table.len() {
         let item = table.item_ids[index] as usize;
         let letter = (b'a' + index as u8) as char;
-        rows.push_str(&format!("{letter}...{}\n", equipment_name(item)));
+        rows.push_str(&format!("{letter}...{}\n", arms_buy_list_name(item)));
     }
     // `shops.md §8.B`: "These two draws occur once per accepted Buy entry.
     // Repeated item listings do not redraw either heading." The engine drew a
@@ -4366,7 +4428,7 @@ const fn inn_room_record(inn: crate::shops::Inn) -> usize {
 /// question.
 fn return_inn_capacity_refusal(honorific: &str) -> String {
     format!(
-        "\n\"I am sorry,\n{honorific}, but we\nhave no room\navailable.\"\n\n{INN_ANYTHING_MORE_PROMPT}"
+        "\n\n\"I am sorry,\n{honorific}, but we\nhave no room\navailable.\"\n\n{INN_ANYTHING_MORE_PROMPT}"
     )
 }
 
@@ -4395,7 +4457,7 @@ fn inn_pickup_selected_guest(
         .unwrap_or(0);
     // "Pickup bill | Token-expanded `\n\n"That will be % gold,
     // please."\n\n"`".
-    let bill_line = format!("\n\"That will be {bill} gold, please.\"\n\n\"");
+    let bill_line = format!("\n\n\"That will be {bill} gold, please.\"\n\n\"");
     let attribution = innkeeper_name
         .map(|name| format!("says {name}.\n\n"))
         .unwrap_or_else(|| "\n".to_string());
@@ -5189,8 +5251,10 @@ fn format_reagent_outcome(
             let quantity = crate::shops::herbalist_reagent_bundle_quantity(herbalist, reagent)
                 .map(u16::from)
                 .unwrap_or_default();
+            // The question's row is open, so §8.C's two leading feeds close
+            // it and leave one blank row (playtest F46).
             format!(
-                "\n\"{} Is this thy need?\"",
+                "\n\n\"{} Is this thy need?\" ",
                 render(REAGENT_OFFER_RECORD_FIRST + ordinal, price, quantity)
             )
         }
@@ -5204,8 +5268,10 @@ fn format_reagent_outcome(
             let attribution = vendor_name
                 .map(|name| format!("\nsays {name}."))
                 .unwrap_or_default();
+            // `Yes\n` then `\n"I thank thee!"`: the echo row closes and one
+            // blank follows (playtest F46).
             format!(
-                "\n\"I thank thee!\"{attribution}\n\"Anything else?\n\n{}",
+                "\n\n\"I thank thee!\"{attribution}\n\"Anything else?\n\n{}",
                 reagent_stock_menu(herbalist)
             )
         }
@@ -5213,7 +5279,7 @@ fn format_reagent_outcome(
         RefusedShortFunds { cost } => render(REAGENT_SHORT_FUNDS_RECORD, cost, 0),
         // "Decline | `No\n\n"What else?\n\n`, then stock".
         Declined { herbalist } => format!(
-            "\n\"What else?\n\n{}",
+            "\n\n\"What else?\n\n{}",
             reagent_stock_menu(herbalist)
         ),
         // Closing barks are rendered by the caller through the shared
@@ -5226,7 +5292,9 @@ fn format_reagent_outcome(
 }
 
 const REAGENT_MENU_HEADING: &str = "\"Fine! We sell:";
-const REAGENT_MENU_QUESTION: &str = "Thy interest?\"";
+/// §8.C: `\nThy interest?" ` - the closing quote and one space. Playtest
+/// F46: without the space the cursor abutted the quote.
+const REAGENT_MENU_QUESTION: &str = "Thy interest?\" ";
 
 /// `shops.md §8.6`, the horse trader's one placement refusal.
 const HORSE_TRADER_CLOSED_REFUSAL: &str = "The stables are closed.\n";
@@ -5401,9 +5469,12 @@ fn format_ship_broker_outcome(
 /// leader so that letter, dots and name occupy fourteen columns, right
 /// aligning the names.
 const GUILD_MENU_HEADING: &str = "\"We sell:";
-const GUILD_MENU_QUESTION: &str = "Thy concern?\"";
+/// §8.C: the menu ends `Thy concern?" ` and the offer `\n\nInterested?" ` -
+/// each with the space the next echo lands after. Playtest F46 read
+/// `Thy concern?"a` and `Interested?"No`.
+const GUILD_MENU_QUESTION: &str = "Thy concern?\" ";
 /// The prompt a quoted commodity ends on.
-const GUILD_QUOTE_PROMPT: &str = "Interested?\"";
+const GUILD_QUOTE_PROMPT: &str = "Interested?\" ";
 /// The heading the list takes when a declined quote redraws it.
 const GUILD_MENU_AGAIN_HEADING: &str = "\"What else, then?";
 const GUILD_MENU_ROW_WIDTH: usize = 14;
@@ -5478,7 +5549,9 @@ fn format_guild_outcome(
             commodity,
             price,
         } => format!(
-            "\n\"{}\n\n{GUILD_QUOTE_PROMPT}",
+            // After the letter echo on the open `Thy concern?" ` row: one
+            // feed closes it, one is the blank (playtest F46).
+            "\n\n\"{}\n\n{GUILD_QUOTE_PROMPT}",
             render(guild_offer_record(commodity), Some(shop), price)
         ),
         // "D renders record `164`, then redraws the stock menu."
@@ -5495,7 +5568,7 @@ fn format_guild_outcome(
                 .map(|name| format!("\nsays {name}."))
                 .unwrap_or_default();
             format!(
-                "\n\"Sold!\"{attribution}\n\n\"What else, \n{}?\n\n{}",
+                "\n\n\"Sold!\"{attribution}\n\n\"What else, \n{}?\n\n{}",
                 if speaker_is_female { "m'lady" } else { "m'lord" },
                 guild_stock_menu()
             )
@@ -5503,7 +5576,7 @@ fn format_guild_outcome(
         // "Short funds | Record `163`; visit ends without ordinary farewell".
         RefusedShortFunds { cost } => render(GUILD_SHORT_FUNDS_RECORD, None, cost),
         // "Decline | `No\n\n"What else, then?\n\n`, then stock menu".
-        Declined => format!("\n{GUILD_MENU_AGAIN_HEADING}\n\n{}", guild_stock_menu()),
+        Declined => format!("\n\n{GUILD_MENU_AGAIN_HEADING}\n\n{}", guild_stock_menu()),
         // Closing barks are rendered by the caller through the shared
         // envelope; these are the silent arms.
         DeclinedEntry | LeftMenu | Exited => String::new(),
@@ -7681,6 +7754,28 @@ mod arms_shop_resident_literal_tests {
                 arms_stock_call_for_roll(roll % 4)
             );
         }
+    }
+
+    /// `shops.md §8.1` / `catalogs/item-list.md §5.1.2`: canonical names of
+    /// thirteen or more characters swap to their short label in the buy list,
+    /// and shorter names keep the canonical spelling. Playtest F43: the
+    /// Shattered Shield list wrapped `Ring of Regeneration` and broke
+    /// `Amulet/Turning` mid-word.
+    #[test]
+    fn arms_buy_list_swaps_long_names_for_their_short_labels() {
+        let rows = format_arms_stock_buy_menu(
+            crate::shops::ArmsStockTable::new([7, 32, 36, 27, 31, 44, 45, 0], 7),
+            None,
+        );
+        assert_eq!(
+            rows,
+            "a...Magic Shield\nb...2H Axe\nc...Magic Bow\nd...Arrows\n\
+             e...2H Hammer\nf...Regen Ring\ng...Am/Turning\n"
+        );
+        let swapped: Vec<usize> = (0..crate::EQUIPMENT_COUNT)
+            .filter(|&id| arms_buy_list_name(id) != equipment_name(id))
+            .collect();
+        assert_eq!(swapped, vec![6, 10, 15, 35, 40, 42, 43, 44, 45, 46]);
     }
 
     /// Put a stocked arms shop in front of the player, already at its

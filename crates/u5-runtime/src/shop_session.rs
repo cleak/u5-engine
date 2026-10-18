@@ -94,7 +94,11 @@ impl ActiveShopSession {
                     | HealerShopState::Continuation,
                 _
             ) | Self::Innkeeper(
-                InnkeeperState::ConfirmRest { .. }
+                // The service question `night?" ` takes the same shape, and
+                // its `L`/`R` echo continues that row - playtest F48 had it
+                // drop to a row of its own because nothing stated it open.
+                InnkeeperState::ServiceMenu { .. }
+                    | InnkeeperState::ConfirmRest { .. }
                     | InnkeeperState::ConfirmLeaveCompanion { .. }
                     | InnkeeperState::Continuation { .. }
             ) | Self::Reagent(
@@ -112,6 +116,25 @@ impl ActiveShopSession {
         // (`bd-shipwright-20261016-215905`, beat `frigate`), the original's
         // cursor sits after `take it?" ` and `N` echoes there, where this
         // engine drew a fresh command row under the question.
+        // The shared member selector the healer and inn Leave use, and the
+        // inn's multi-guest register: `inventory.md §4.3` leaves "the message
+        // window ... untouched apart from the caller's prompt itself", and
+        // each caller's prompt - `"Who needs my aid?" `, `"Who will\nstay?" `,
+        // `"Who will\ncheck out?" ` (`shops.md §8.C`) - ends on a closing
+        // quote and one space. So the cursor waits on that row and no command
+        // row opens beneath it; the cancel echo (`No one`, `Nobody`) and the
+        // next reply's leading `\n\n` both work against the open row.
+        // Playtest F49 found a `>` command row under all three.
+        if matches!(
+            self,
+            Self::Healer(HealerShopState::PickPartyMember { .. }, _)
+                | Self::Innkeeper(
+                    InnkeeperState::PickLeaveCompanion { .. }
+                        | InnkeeperState::PickUpCompanion { .. }
+                )
+        ) {
+            return true;
+        }
         if matches!(
             self,
             Self::ShipBroker(

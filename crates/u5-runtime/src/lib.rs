@@ -1169,4 +1169,5 @@ mod tests {
     include!("tests_inline/playfix_dungeons2.rs");
     include!("tests_inline/playfix_over2.rs");
     include!("tests_inline/playtest_combat2b_fixes.rs");
+    include!("tests_inline/playfix2_shops.rs");
 }
