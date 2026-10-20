@@ -570,10 +570,15 @@ impl PlayState {
         // only climbable adjacent target is a pile of rocks (`0x4C`) with no
         // object on it. The town command's wooden-fence targets
         // (`0xCA`/`0xCB`) are not climbable in an arena. A direction toward
-        // any other cell prints `What?\n` and re-prompts at no cost."
+        // any other cell prints `What?\n` and re-prompts at no cost." A loose
+        // object (a chest or other drop) on the rocks is an object too, so it
+        // refuses the same way as an actor there.
         if self
             .combat_actor_slot_at(x as u8, y as u8, actor_slot)
             .is_some()
+            || self
+                .combat_loose_object_slot_at(x, y, usize::from(actor.active_object_slot))
+                .is_some()
             || self.combat_terrain[y][x] != COMBAT_GARGOYLE_DEATH_TERRAIN_TILE
         {
             self.message = DUNGEON_KLIMB_WHAT_REFUSAL.trim_end().to_string();

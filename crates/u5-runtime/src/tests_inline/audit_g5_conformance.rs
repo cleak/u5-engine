@@ -954,6 +954,27 @@ fn q6_failed_challenge_vector_runs_the_published_command_list() {
     assert_eq!(cell(&vm, BlackthornCutsceneActor::LeftGuard), Some((1, 5)));
     assert_eq!(cell(&vm, BlackthornCutsceneActor::RightGuard), Some((9, 9)));
 
+    // Rows 1-8 (the commands before row 9's clear): slot 1 is dragged to the
+    // pendulum cell `(5,7)` and slot 6 stands at `(6,6)`.
+    let mut dragged = BlackthornCutsceneVm::new(vm.tile_buffer.clone());
+    dragged.actors = vm.actors;
+    dragged.visible_actors = vm.actors;
+    let commands =
+        blackthorn_cutscene_beat_commands(BlackthornCutsceneBeat::FailedChallengeReaction);
+    let clear_at = commands
+        .iter()
+        .position(|command| {
+            matches!(
+                command,
+                BlackthornCutsceneCommand::ClearActor(BlackthornCutsceneActor::SecondPartyMember)
+            )
+        })
+        .expect("row 9 clears slot 1");
+    dragged.run(&commands[..clear_at]);
+    assert_eq!(cell(&dragged, BlackthornCutsceneActor::SecondPartyMember), Some((5, 7)));
+    assert_eq!(cell(&dragged, BlackthornCutsceneActor::LeftGuard), Some((6, 6)));
+    assert_eq!(dragged.stinger_count, 12);
+
     let failed = next_beat(&vm, BlackthornCutsceneBeat::FailedChallengeReaction);
     assert_eq!(failed.stinger_count, 24);
     assert_eq!(failed.world_ticks, 86);

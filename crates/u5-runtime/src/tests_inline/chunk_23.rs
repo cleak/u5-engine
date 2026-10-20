@@ -11140,6 +11140,22 @@ fn combat_klimb_refuses_non_rock_targets_and_resolves_ladders_in_any_arena() {
         assert_eq!((state.combat_actors[0].x, state.combat_actors[0].y), (5, 5));
     }
 
+    // A rock pile holding a loose object is refused the same way.
+    let mut state = combat_player_command_state(10, 10);
+    state.combat_terrain[4][5] = COMBAT_GARGOYLE_DEATH_TERRAIN_TILE;
+    state.active_objects[1] = ActiveObject {
+        type_byte: 0x02,
+        tile: 0x02,
+        x: 5,
+        y: 4,
+        aux1: 7,
+        ..ActiveObject::empty()
+    };
+    handle_play_key_input(&mut state, 'K', "8", game_dir).unwrap();
+    assert_eq!(state.message, DUNGEON_KLIMB_WHAT_REFUSAL.trim_end());
+    assert_eq!(state.pending_combat_actor_slot, Some(0));
+    assert_eq!((state.combat_actors[0].x, state.combat_actors[0].y), (5, 5));
+
     let mut state = combat_player_command_state(10, 10);
     state.combat_terrain[5][5] = TOWN_KLIMB_DESCEND_TILE;
     assert_eq!(
