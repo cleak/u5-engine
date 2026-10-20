@@ -6684,6 +6684,17 @@ impl PlayState {
         // The withdrawn reading - "spun forward until the hour reads 06:00"
         // - stepped whole hours here, which kept the entry minute instead of
         // landing at 06:00-06:08.
+        //
+        // The spin runs in the castle scene: "Each hour crossed also runs the
+        // ordinary hour-change bundle for the castle scene", and the midnight
+        // reroll's "party-scene rejection is inert, because the scene is
+        // already the castle" (u5-spec#299 Q28). So the scene is written
+        // before the spin, and the reroll no longer rejects the town the
+        // party was wiped in; the floor itself is loaded below, at the spun
+        // hour. §7 step 11: "on logical floor one" - the signed floor `+1`.
+        let scene = Scene::new(BLACKTHORN_RESCUE_HANDOFF_SCENE)?;
+        let floor = crate::blackthorn::BLACKTHORN_RESCUE_HANDOFF_FLOOR;
+        self.area = Area::Town { scene, floor };
         while self.clock.hour != crate::blackthorn::BLACKTHORN_RESCUE_HANDOFF_HOUR {
             self.advance_clock_half(crate::blackthorn::BLACKTHORN_RESCUE_CLOCK_STEP_MINUTES);
         }
@@ -6695,9 +6706,6 @@ impl PlayState {
         if self.food == 0 {
             self.food = 63;
         }
-        let scene = Scene::new(BLACKTHORN_RESCUE_HANDOFF_SCENE)?;
-        // §7 step 11: "on logical floor one" - the signed floor byte `+1`.
-        let floor = crate::blackthorn::BLACKTHORN_RESCUE_HANDOFF_FLOOR;
         let (grid, beacon_sources) =
             load_town_runtime_floor_with_beacon_sources(game_dir, scene, floor, self.clock.hour)?;
         self.grid = grid;

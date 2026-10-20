@@ -43,6 +43,40 @@ fn spec299_q17_rescue_clock_spins_in_nine_minute_steps_to_hour_six() {
     }
 }
 
+/// u5-spec#299 Q17/Q28, `blackthorn.md §7` step 11: a midnight-crossing spin
+/// runs "the Shadowlord hideout reroll ... with its random draws (its
+/// party-scene rejection is inert, because the scene is already the
+/// castle ...)", and each hour runs the bundle "for the castle scene". A party
+/// wiped in a hideout town must therefore not have that town rejected.
+#[test]
+fn spec299_q17_rescue_spin_reroll_does_not_reject_the_wipe_town() {
+    const WIPE_TOWN: u8 = 3;
+    let mut landed = Vec::new();
+    for seed in 0..48u16 {
+        let dir = debug_game_dir();
+        let mut state = test_state(open_grid(), 1, 1);
+        state.clock = GameClock::with_date(139, 4, 9, 23, 55).unwrap();
+        state.party[0].status = b'D';
+        state.party[0].hp = 0;
+        state.shadowlord_hideouts = [SHADOWLORD_VANQUISHED, SHADOWLORD_VANQUISHED, 0];
+        state.apply_blackthorn_rescue_refuge(&dir).unwrap();
+        state.area = Area::Town {
+            scene: Scene::new(WIPE_TOWN).unwrap(),
+            floor: 0,
+        };
+        state.prng_state = 0x1000u16.wrapping_add(seed.wrapping_mul(0x0101)) as _;
+        state.run_blackthorn_rescue_to_handoff(&dir).unwrap();
+        assert!(
+            matches!(state.area, Area::Town { scene, .. } if scene.byte == BLACKTHORN_RESCUE_HANDOFF_SCENE)
+        );
+        let slot = state.shadowlord_hideouts[2];
+        assert!((SHADOWLORD_HIDEOUT_MIN..=SHADOWLORD_HIDEOUT_MAX).contains(&slot), "{slot}");
+        landed.push(slot);
+        let _ = fs::remove_dir_all(dir);
+    }
+    assert!(landed.contains(&WIPE_TOWN), "{landed:?}");
+}
+
 /// u5-spec#299 Q16, `shops.md §8.5` "A negative quantity" and `input.md §8`:
 /// "The reader keeps a leading `-`, and the sign uses one of its two
 /// positions, so `-1` is the only practical negative entry: `-99` echoes `-9`
