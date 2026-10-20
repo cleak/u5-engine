@@ -884,32 +884,7 @@ impl ConversationSession {
     }
 
     fn find_ordinary_keyword_response_index(&self, input_upper: &[u8]) -> Option<usize> {
-        // `conversation.md §4` (issue #299 Q22, `RETRACTIONS.md` R582): pairs
-        // are found by record position alone - keyword k is record 2k+5, its
-        // response record 2k+6 - and continue only up to the blob's first
-        // label declaration; nothing inside or after a labelled block is
-        // tested at the top-level prompt (§6 step 5), so a scoped `y` typed
-        // here gets the cannot-help line. A keyword record just before the
-        // declaration keeps the declaration record as its response: that is
-        // `TOWNE.TLK` id 23's `Don't ask!` (§7.7, R583). The declaration
-        // record itself, when it falls in a keyword position, never matches,
-        // so stopping before it loses nothing.
-        let first_declaration = (TLK_LEADING_ENTRY_COUNT..self.fields.len())
-            .find(|idx| self.fields[*idx].first() == Some(&TLK_CODE_LABEL_RECORD))
-            .unwrap_or(self.fields.len());
-        let mut idx = TLK_LEADING_ENTRY_COUNT;
-        if idx % 2 == 0 {
-            idx += 1;
-        }
-        while idx < first_declaration && idx + 1 < self.decoded_fields.len() {
-            let keyword_field = &self.decoded_fields[idx];
-            let keyword = keyword_field.trim().as_bytes();
-            if tlk_keyword_matches(keyword, input_upper) {
-                return Some(idx + 1);
-            }
-            idx += 2;
-        }
-        None
+        tlk_ordinary_keyword_response_index(Some(&self.fields), &self.decoded_fields, input_upper)
     }
 
     fn run_field_from(
@@ -1512,6 +1487,87 @@ fn make_inputs<'a>(
 /// `conversation.md §6` step 2 caps the line at fifteen characters; §7.6:
 /// "a line containing only a space is *not* empty", so the typed bytes are
 /// kept as typed rather than trimmed - only a line terminator is dropped.
+/// What `conversation.md §6` steps 3 to 5 select for one typed line at the
+/// top-level keyword prompt, before anything runs.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum TlkKeywordLookup {
+    /// Step 3: an empty line takes the shortcut to the Bye entry.
+    EmptyLine,
+    /// Step 4: a rebuke word from the fixed table.
+    Rebuke,
+    /// The record that answers: the Name (0), Job (3) or Bye (4) entry for a
+    /// functional reserved word, otherwise an ordinary keyword's response.
+    Field(usize),
+    /// Step 7: neither scan matched; `I cannot help thee with that.`
+    NoMatch,
+}
+
+/// `conversation.md §6` steps 2 to 5 as one lookup: the line is capped at
+/// the reader's fifteen characters, the reserved table is scanned first,
+/// then the ordinary pairs up to the first label declaration, all with the
+/// shared word-start matcher ([`tlk_keyword_matches`], §6 step 5 and §7.7).
+/// This is the session's own top-level matcher; the inline `T<keyword>`
+/// route asks it too, so both answer the same lines. `raw_fields` locates
+/// the declarations; without it (a string-only blob) the pair walk runs to
+/// the end of the blob.
+pub fn tlk_keyword_lookup(
+    raw_fields: Option<&[Vec<u8>]>,
+    decoded_fields: &[String],
+    line: &str,
+) -> TlkKeywordLookup {
+    let input_upper: Vec<u8> = capped_tlk_input_bytes(line)
+        .iter()
+        .map(|b| (*b & 0x7F).to_ascii_uppercase())
+        .collect();
+    match tlk_player_input_kind(&input_upper) {
+        TlkPlayerInputKind::EmptyByeShortcut => TlkKeywordLookup::EmptyLine,
+        TlkPlayerInputKind::ReservedRebuke { .. } => TlkKeywordLookup::Rebuke,
+        TlkPlayerInputKind::Reserved(ReservedKeywordEffect::NameEntry) => TlkKeywordLookup::Field(0),
+        TlkPlayerInputKind::Reserved(ReservedKeywordEffect::JobEntry) => TlkKeywordLookup::Field(3),
+        TlkPlayerInputKind::Reserved(ReservedKeywordEffect::ByePath) => TlkKeywordLookup::Field(4),
+        TlkPlayerInputKind::OrdinaryKeywordScan => {
+            tlk_ordinary_keyword_response_index(raw_fields, decoded_fields, &input_upper)
+                .map_or(TlkKeywordLookup::NoMatch, TlkKeywordLookup::Field)
+        }
+    }
+}
+
+/// `conversation.md §6` step 5's ordinary pair walk: the response record of
+/// the first keyword accepted, or `None`.
+fn tlk_ordinary_keyword_response_index(
+    raw_fields: Option<&[Vec<u8>]>,
+    decoded_fields: &[String],
+    input_upper: &[u8],
+) -> Option<usize> {
+    let raw_len = raw_fields.map_or(decoded_fields.len(), <[Vec<u8>]>::len);
+    // `conversation.md §4` (issue #299 Q22, `RETRACTIONS.md` R582): pairs
+    // are found by record position alone - keyword k is record 2k+5, its
+    // response record 2k+6 - and continue only up to the blob's first
+    // label declaration; nothing inside or after a labelled block is
+    // tested at the top-level prompt (§6 step 5), so a scoped `y` typed
+    // here gets the cannot-help line. A keyword record just before the
+    // declaration keeps the declaration record as its response: that is
+    // `TOWNE.TLK` id 23's `Don't ask!` (§7.7, R583). The declaration
+    // record itself, when it falls in a keyword position, never matches,
+    // so stopping before it loses nothing.
+    let first_declaration = (TLK_LEADING_ENTRY_COUNT..raw_len)
+        .find(|idx| raw_fields.and_then(|raw| raw[*idx].first()) == Some(&TLK_CODE_LABEL_RECORD))
+        .unwrap_or(raw_len);
+    let mut idx = TLK_LEADING_ENTRY_COUNT;
+    if idx % 2 == 0 {
+        idx += 1;
+    }
+    while idx < first_declaration && idx + 1 < decoded_fields.len() {
+        let keyword_field = &decoded_fields[idx];
+        let keyword = keyword_field.trim().as_bytes();
+        if tlk_keyword_matches(keyword, input_upper) {
+            return Some(idx + 1);
+        }
+        idx += 2;
+    }
+    None
+}
+
 fn capped_tlk_input_bytes(line: &str) -> Vec<u8> {
     line.trim_end_matches(['\r', '\n'])
         .as_bytes()

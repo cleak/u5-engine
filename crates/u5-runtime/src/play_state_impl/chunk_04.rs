@@ -4925,9 +4925,17 @@ impl PlayState {
                 self.message = format!("Dialogue id {dialog_id} has no complete talk envelope."); // audit: not a player-facing line
                 return MoveOutcome::Talked;
             }
-            let response = talk_keyword_response(fields, keyword)
-                .filter(|response| !response.is_empty())
-                .unwrap_or(TLK_NO_KEYWORD_MATCH_MESSAGE);
+            // The session's own top-level matcher (`conversation.md §6`):
+            // a rebuke word answers the rebuke, not an NPC keyword.
+            let response = if crate::conversation_session::tlk_keyword_lookup(None, fields, keyword)
+                == crate::conversation_session::TlkKeywordLookup::Rebuke
+            {
+                crate::TLK_RESERVED_REBUKE_MESSAGE
+            } else {
+                talk_keyword_response(fields, keyword)
+                    .filter(|response| !response.is_empty())
+                    .unwrap_or(TLK_NO_KEYWORD_MATCH_MESSAGE)
+            };
             let (response, actions) = talk_response_text_and_actions(response);
             self.apply_talk_action_grants(&actions);
             // The same shape the production path prints: the reply alone.
@@ -5231,8 +5239,22 @@ impl PlayState {
                 self.message = format!("Dialogue id {dialog_id} has no complete talk envelope."); // audit: not a player-facing line
                 return MoveOutcome::Talked;
             }
-            let response_field_index = resolve_keyword_response_field_index(fields, keyword);
-            let response_text = if let Some(idx) = response_field_index {
+            // `conversation.md §6` steps 3 to 5 through the conversation
+            // session's own matcher, raw records included, so the walk stops
+            // at the first label declaration exactly as the interactive
+            // prompt's does (§6 step 5, u5-spec#299 Q20 / Q22).
+            let lookup = crate::conversation_session::tlk_keyword_lookup(
+                raw_fields.map(Vec::as_slice),
+                fields,
+                keyword,
+            );
+            let response_field_index = match lookup {
+                crate::conversation_session::TlkKeywordLookup::Field(idx) => Some(idx),
+                _ => None,
+            };
+            let response_text = if lookup == crate::conversation_session::TlkKeywordLookup::Rebuke {
+                crate::TLK_RESERVED_REBUKE_MESSAGE.to_string()
+            } else if let Some(idx) = response_field_index {
                 if let Some(output) = run_field(idx) {
                     applied_grants.extend(output.action_grants.iter().copied());
                     applied_signal_flags.extend(output.signal_flags.iter().copied());

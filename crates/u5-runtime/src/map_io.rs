@@ -199,42 +199,25 @@ pub fn non_empty_talk_keyword(keyword: &str) -> Option<&str> {
 /// into the blob (0-based). Used by callers that need the raw bytes for
 /// the byte-runner rather than the decoded string. Returns the index of
 /// the response field, not the keyword field.
+///
+/// The lookup is the conversation session's own top-level matcher
+/// ([`crate::conversation_session::tlk_keyword_lookup`], `conversation.md
+/// §6` steps 3 to 5), on a string-only blob: a rebuke word or a miss gives
+/// `None`. Callers holding the raw records call that matcher directly, so
+/// the pair walk also stops at the first label declaration.
 pub fn resolve_keyword_response_field_index(fields: &[String], keyword: &str) -> Option<usize> {
-    if talk_keyword_matches("NAME", keyword) {
-        return Some(0);
+    use crate::conversation_session::{TlkKeywordLookup, tlk_keyword_lookup};
+    match tlk_keyword_lookup(None, fields, keyword.trim_start()) {
+        TlkKeywordLookup::Field(idx) => Some(idx),
+        TlkKeywordLookup::EmptyLine => Some(4),
+        TlkKeywordLookup::Rebuke | TlkKeywordLookup::NoMatch => None,
     }
-    if talk_keyword_matches("JOB", keyword) || talk_keyword_matches("WORK", keyword) {
-        return Some(3);
-    }
-    if talk_keyword_matches("BYE", keyword) || talk_keyword_matches("THANK", keyword) {
-        return Some(4);
-    }
-    fields
-        .get(5..)
-        .unwrap_or_default()
-        .chunks_exact(2)
-        .enumerate()
-        .find_map(|(pair_idx, pair)| {
-            talk_keyword_matches(&pair[0], keyword).then_some(5 + pair_idx * 2 + 1)
-        })
 }
 
 pub fn talk_keyword_response<'a>(fields: &'a [String], keyword: &str) -> Option<&'a str> {
-    if talk_keyword_matches("NAME", keyword) {
-        return fields.first().map(String::as_str);
-    }
-    if talk_keyword_matches("JOB", keyword) || talk_keyword_matches("WORK", keyword) {
-        return fields.get(3).map(String::as_str);
-    }
-    if talk_keyword_matches("BYE", keyword) || talk_keyword_matches("THANK", keyword) {
-        return fields.get(4).map(String::as_str);
-    }
-
-    fields
-        .get(5..)
-        .unwrap_or_default()
-        .chunks_exact(2)
-        .find_map(|pair| talk_keyword_matches(&pair[0], keyword).then_some(pair[1].as_str()))
+    resolve_keyword_response_field_index(fields, keyword)
+        .and_then(|idx| fields.get(idx))
+        .map(String::as_str)
 }
 
 /// The inline `T<keyword>` lookup's compare: `conversation.md §6` steps 4

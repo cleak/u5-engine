@@ -1172,6 +1172,7 @@ mod tests {
     include!("tests_inline/playfix_systems2.rs");
     include!("tests_inline/playtest_dungeons.rs");
     include!("tests_inline/rc2_residuals.rs");
+    include!("tests_inline/rc4_residuals.rs");
     include!("tests_inline/playfix_dungeons2.rs");
     include!("tests_inline/playfix_over2.rs");
     include!("tests_inline/playtest_combat2b_fixes.rs");
