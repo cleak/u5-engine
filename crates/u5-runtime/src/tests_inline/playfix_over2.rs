@@ -87,7 +87,20 @@ fn playfix_f23_closing_reply_is_not_rejoined_onto_the_conflict_banner() {
             1,
             "{key}: {rows:?}"
         );
-        assert_eq!(rows.last().copied(), Some(banner.as_str()), "{key}: {rows:?}");
+        // Nothing of the closing reply comes back after the banner. Since
+        // F35 (`combat.md §8.1`) the first actor's turn banner follows it,
+        // and that is all that does.
+        let conflict = rows
+            .iter()
+            .position(|row| *row == banner.as_str())
+            .unwrap_or_else(|| panic!("{key}: {rows:?}"));
+        let after: Vec<&str> = rows[conflict + 1..]
+            .iter()
+            .copied()
+            .filter(|row| !row.is_empty())
+            .collect();
+        assert_eq!(after.len(), 1, "{key}: {rows:?}");
+        assert!(after[0].contains(", armed with "), "{key}: {rows:?}");
         let _ = fs::remove_dir_all(dir);
     }
 }
