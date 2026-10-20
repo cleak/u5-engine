@@ -3506,12 +3506,15 @@ fn active_conversation_recruit_speaker_runs_inline_without_a_name_prompt() {
     );
 
     // `conversation.md §7.6`: `0x84` has "no player prompt and no
-    // input read", so the whole response emits in one turn and the
-    // loop returns straight to the keyword prompt.
+    // input read", so the response emits in one turn. No reserve roster
+    // record matches the speaker, and u5-spec#299 Q20: "The no-match
+    // diagnostic stops" - the rest of the stream does not run and the
+    // conversation is over.
     handle_play_key_input(&mut state, 'J', "OIN", Path::new("")).unwrap();
-    assert!(transcript_has(&state, "I shall come. Accepted."));
-    assert_eq!(state.message, TLK_KEYWORD_PROMPT);
-    assert!(state.active_conversation.is_some());
+    assert!(transcript_has(&state, "I shall come."));
+    assert!(!transcript_has(&state, "Accepted."));
+    assert_ne!(state.message, TLK_KEYWORD_PROMPT);
+    assert!(state.active_conversation.is_none());
 }
 
 #[test]
@@ -3690,10 +3693,14 @@ fn conversation_join_adds_inactive_roster_companion() {
     // turn as the response text; nothing asks the player for a name.
     let (text, ended) = state.submit_active_conversation_keyword("JOIN");
 
-    assert!(text.contains("Accepted."));
+    assert!(text.contains("I shall come."));
+    // u5-spec#299 Q20, §7.6's `0x84` row: "A successful recruit reports a
+    // stop: the conversation ends at once with no `BYE` and no Bye entry".
+    assert!(!text.contains("Accepted."), "{text:?}");
+    assert!(!text.contains("Farewell"), "{text:?}");
     // §7.6 publishes no success line for `0x84` (playtest F06).
     assert!(!text.contains("joined."), "{text:?}");
-    assert!(!ended);
+    assert!(ended);
     assert_eq!(state.party.len(), 2);
     assert_eq!(state.party_names[1], *b"GWENNO\0\0\0");
 }
@@ -3762,10 +3769,13 @@ fn conversation_join_is_triggered_by_the_control_byte_not_the_join_keyword() {
     // response emits `0x84` recruits, not just the word JOIN.
     let (text, ended) = state.submit_active_conversation_keyword("help");
 
-    assert!(text.contains("Accepted."));
+    assert!(text.contains("I shall come."));
+    // u5-spec#299 Q20: a successful recruit stops the stream and ends the
+    // conversation.
+    assert!(!text.contains("Accepted."), "{text:?}");
     // §7.6 publishes no success line for `0x84` (playtest F06).
     assert!(!text.contains("joined."), "{text:?}");
-    assert!(!ended);
+    assert!(ended);
     assert_eq!(state.party.len(), 2);
     assert_eq!(state.party_names[1], *b"GWENNO\0\0\0");
 }
@@ -3827,11 +3837,13 @@ fn conversation_recruit_speaker_for_non_roster_npc_recruits_nobody() {
     state.talk_facing_with_dialogue_and_keyword_raw(&dialogue, &raw, None);
 
     // §7.6: "If no reserve record matches the speaker's name the
-    // engine ... recruits nobody."
+    // engine ... recruits nobody", and (u5-spec#299 Q20) "The no-match
+    // diagnostic stops". The diagnostic's text is not published, so none
+    // is printed.
     let (text, ended) = state.submit_active_conversation_keyword("help");
 
-    assert_eq!(text, conversation_framed_response("I shall come. Accepted."));
-    assert!(!ended);
+    assert_eq!(text, conversation_framed_response("I shall come."));
+    assert!(ended);
     assert_eq!(state.party.len(), 1);
     assert_eq!(state.active_conversation_join_candidate, None);
 }

@@ -834,6 +834,22 @@ impl ConversationSession {
                     self.follow_label_transfer(&blob, label, run.consumed, ctx, &mut out);
                     break;
                 }
+                TlkRunStop::RecruitingSpeaker(resume) => {
+                    // `conversation.md §7.6`'s `0x84` row (u5-spec#299 Q20):
+                    // "The party-full refusal does **not** stop; the stream
+                    // runs on to its NUL" - `absorb_recruit_speaker` has
+                    // printed it. Otherwise the recruit "reports a stop: the
+                    // conversation ends at once with no `BYE` and no Bye
+                    // entry"; so does the no-match diagnostic, whose text is
+                    // not published (the caller prints none).
+                    if !out.recruit_speaker {
+                        cursor = resume;
+                        continue;
+                    }
+                    self.phase = ConversationSessionPhase::PresentingBye;
+                    out.ended = true;
+                    break;
+                }
                 _ => break,
             }
         }
@@ -1391,11 +1407,16 @@ mod tests {
         s.present_greeting(&context);
 
         let out = s.submit_keyword("join", &context);
-        assert_eq!(out.text, framed_response("I shall come. Lead on."));
         assert!(out.recruit_speaker);
         assert!(s.recruit_speaker_pending());
-        assert_eq!(s.phase, ConversationSessionPhase::AwaitingKeyword);
-        assert_eq!(s.prompt_message(), TLK_KEYWORD_PROMPT);
+        // u5-spec#299 Q20, §7.6's `0x84` row: "A successful recruit reports
+        // a stop: the conversation ends at once with no `BYE` and no Bye
+        // entry" - the rest of the stream does not run.
+        assert_eq!(out.text, framed_response("I shall come."));
+        assert!(out.ended);
+        assert!(!out.text.contains("Farewell"));
+        assert_eq!(s.phase, ConversationSessionPhase::PresentingBye);
+        assert_eq!(s.prompt_message(), "");
     }
 
     #[test]
@@ -1422,6 +1443,11 @@ mod tests {
         assert!(!out.recruit_speaker);
         assert_eq!(out.asked_party_name, None);
         assert!(!s.recruit_speaker_pending());
+        // u5-spec#299 Q20: "The party-full refusal does **not** stop; the
+        // stream runs on" and the conversation goes on.
+        assert!(out.text.contains(" Lead on."), "{:?}", out.text);
+        assert!(!out.ended);
+        assert_eq!(s.phase, ConversationSessionPhase::AwaitingKeyword);
         // §6's framing closes its quote against the text, so a refusal
         // whose own literal carries trailing line feeds is split by the
         // closing quote. Match the body.
@@ -1442,6 +1468,7 @@ mod tests {
         let mut s = ConversationSession::new(raw, decoded);
         s.present_greeting(&context);
         assert!(s.submit_keyword("join", &context).recruit_speaker);
+        // The recruit ended the conversation; a later step reports nothing.
         assert!(!s.submit_keyword("job", &context).recruit_speaker);
         assert!(!s.recruit_speaker_pending());
     }
@@ -2273,9 +2300,11 @@ mod tests {
         assert_eq!(yes.text, framed_response("Lead on!\""));
         assert!(yes.recruit_speaker, "the scoped `y` record's 0x84 ran");
         assert!(s.recruit_speaker_pending());
-        // §7.7: a NUL-ended scoped response falls back to the ordinary
-        // top-level keyword loop.
-        assert_eq!(s.phase, ConversationSessionPhase::AwaitingKeyword);
+        // u5-spec#299 Q20 (§7.7, "Recruitment inside a scoped answer"): "A
+        // successful `0x84` stops: the conversation ends at once with no
+        // `BYE` and no Bye entry".
+        assert!(yes.ended);
+        assert_eq!(s.phase, ConversationSessionPhase::PresentingBye);
 
         let mut s = scoped_yes_no_session();
         s.submit_keyword("ask", &context);
