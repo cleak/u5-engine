@@ -668,51 +668,86 @@ pub const BLACKTHORN_CUTSCENE_AUDIENCE_EXIT: [BlackthornCutsceneCommand; 40] = [
     BlackthornCutsceneCommand::End,
 ];
 
-pub const BLACKTHORN_CUTSCENE_FAILED_CHALLENGE_REACTION: [BlackthornCutsceneCommand; 21] = [
+/// `blackthorn.md §6.3`, "Failed-challenge vector, full command list"
+/// (u5-spec#299 Q6): every step animated, each repetition one sting plus a
+/// two-tick quiet redraw. From slot 1 `(7,5)`, slot 6 `(1,5)` and slot 7
+/// `(9,9)` the 16 rows give 24 stings, 86 world ticks and 85 one-BIOS-tick
+/// delays, no text, and end with slot 6 back at `(1,5)`, slot 7 at `(9,9)`
+/// and slot 1 cleared at the pendulum cell. Row numbers are the spec
+/// table's. The previous list was built from the published checkpoints only
+/// (the guard walked east five and south three, dragging the member).
+pub const BLACKTHORN_CUTSCENE_FAILED_CHALLENGE_REACTION: [BlackthornCutsceneCommand; 23] = [
+    // Row 1.
     BlackthornCutsceneCommand::QuietRedrawPause(22),
-    BlackthornCutsceneCommand::SetRepeat(5),
+    // Row 2.
+    BlackthornCutsceneCommand::MoveActor {
+        actor: BlackthornCutsceneActor::LeftGuard,
+        direction: crate::Direction::South,
+    },
+    // Row 3.
+    BlackthornCutsceneCommand::SetRepeat(7),
     BlackthornCutsceneCommand::MoveActor {
         actor: BlackthornCutsceneActor::LeftGuard,
         direction: crate::Direction::East,
     },
-    BlackthornCutsceneCommand::SetRepeat(3),
-    BlackthornCutsceneCommand::SetPairedMovement {
+    // Row 4.
+    BlackthornCutsceneCommand::MoveActor {
         actor: BlackthornCutsceneActor::SecondPartyMember,
         direction: crate::Direction::South,
     },
+    // Row 5.
+    BlackthornCutsceneCommand::SetRepeat(2),
+    BlackthornCutsceneCommand::SetPairedMovement {
+        actor: BlackthornCutsceneActor::SecondPartyMember,
+        direction: crate::Direction::West,
+    },
     BlackthornCutsceneCommand::MoveActor {
         actor: BlackthornCutsceneActor::LeftGuard,
+        direction: crate::Direction::West,
+    },
+    // Row 6.
+    BlackthornCutsceneCommand::MoveActor {
+        actor: BlackthornCutsceneActor::SecondPartyMember,
         direction: crate::Direction::South,
     },
+    // Row 7.
     BlackthornCutsceneCommand::QuietRedrawPause(3),
+    // Row 8.
     BlackthornCutsceneCommand::WriteTerrain {
         x: 5,
         y: 7,
         tile: BLACKTHORN_PENDULUM_TILE,
     },
+    // Row 9.
     BlackthornCutsceneCommand::ClearActor(BlackthornCutsceneActor::SecondPartyMember),
+    // Row 10.
     BlackthornCutsceneCommand::ExplicitRedraw,
-    BlackthornCutsceneCommand::SetRepeat(3),
-    BlackthornCutsceneCommand::MoveActor {
-        actor: BlackthornCutsceneActor::LeftGuard,
-        direction: crate::Direction::North,
-    },
+    // Row 11.
     BlackthornCutsceneCommand::SetRepeat(5),
     BlackthornCutsceneCommand::MoveActor {
         actor: BlackthornCutsceneActor::LeftGuard,
         direction: crate::Direction::West,
     },
+    // Row 12.
+    BlackthornCutsceneCommand::MoveActor {
+        actor: BlackthornCutsceneActor::LeftGuard,
+        direction: crate::Direction::North,
+    },
+    // Row 13.
     BlackthornCutsceneCommand::QuietRedrawPause(12),
+    // Row 14.
     BlackthornCutsceneCommand::SetRepeat(3),
     BlackthornCutsceneCommand::MoveActor {
         actor: BlackthornCutsceneActor::RightGuard,
         direction: crate::Direction::West,
     },
+    // Row 15.
     BlackthornCutsceneCommand::WriteTerrain {
         x: 5,
         y: 9,
         tile: BLACKTHORN_HOURGLASS_TILE,
     },
+    // Row 16.
     BlackthornCutsceneCommand::SetRepeat(3),
     BlackthornCutsceneCommand::MoveActor {
         actor: BlackthornCutsceneActor::RightGuard,

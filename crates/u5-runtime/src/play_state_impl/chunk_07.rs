@@ -368,6 +368,13 @@ impl PlayState {
                 two_way_centre,
             );
         }
+        // u5-spec#299 Q4 (`combat.md §8.4`): the ladder cases test no arena
+        // kind, so a town or overworld arena's `0xC8`/`0xC9` departs the same
+        // way. What those callers then do with exit code 5 or 6 is not
+        // established (`OPEN-QUESTIONS.md`); no stock arena can produce one.
+        if matches!(tile, TOWN_KLIMB_ASCEND_TILE | TOWN_KLIMB_DESCEND_TILE) {
+            return self.klimb_dungeon_arena_departure(actor_slot, tile, intent, false, false);
+        }
         if !combat_klimb_tile_accepts_vertical(tile, intent) {
             self.message = DUNGEON_KLIMB_WHAT_REFUSAL.trim_end().to_string();
             return MoveOutcome::Blocked;
@@ -427,12 +434,18 @@ impl PlayState {
     /// one of these cases reaches "the ordinary adjacent-climb branch", which
     /// waits for the cardinal input.
     ///
-    /// Scoped to dungeon arenas: the per-cell codes are what Q1 settles
-    /// (`dungeon-mode.md §14.1`); the town and overworld arenas keep the
-    /// adjacent-climb prompt.
+    /// u5-spec#299 Q4 (`combat.md §8.4`, "Current-cell cases, in order, in
+    /// every arena kind"): the two-way `U/D-` form needs the dungeon
+    /// encounter mode and the two-way-ladder flag; "`0xC8` gives `Up!` and
+    /// `0xC9` gives `Down!`. Neither case tests the arena kind or the
+    /// scene"; `0x86` counts as `Down!` only in a dungeon-room encounter;
+    /// otherwise K goes to the adjacent-climb prompt. No stock town or
+    /// overworld arena has a `0xC8`/`0xC9` cell.
     pub fn combat_klimb_current_cell(&self, actor_slot: usize) -> Option<CombatKlimbCurrentCell> {
         let actor = self.live_combat_party_actor(actor_slot)?;
-        let (room_encounter, two_way_centre) = self.combat_dungeon_arena_klimb_context(&actor)?;
+        let (room_encounter, two_way_centre) = self
+            .combat_dungeon_arena_klimb_context(&actor)
+            .unwrap_or((false, false));
         let tile = *self
             .combat_terrain
             .get(actor.y as usize)?
@@ -553,10 +566,20 @@ impl PlayState {
         }
         let x = x as usize;
         let y = y as usize;
+        // u5-spec#299 Q4 (`combat.md §8.4`, "Adjacent-climb prompt"): "The
+        // only climbable adjacent target is a pile of rocks (`0x4C`) with no
+        // object on it. The town command's wooden-fence targets
+        // (`0xCA`/`0xCB`) are not climbable in an arena. A direction toward
+        // any other cell prints `What?\n` and re-prompts at no cost." A loose
+        // object (a chest or other drop) on the rocks is an object too, so it
+        // refuses the same way as an actor there.
         if self
             .combat_actor_slot_at(x as u8, y as u8, actor_slot)
             .is_some()
-            || !is_probe_walkable(self.combat_terrain[y][x])
+            || self
+                .combat_loose_object_slot_at(x, y, usize::from(actor.active_object_slot))
+                .is_some()
+            || self.combat_terrain[y][x] != COMBAT_GARGOYLE_DEATH_TERRAIN_TILE
         {
             self.message = DUNGEON_KLIMB_WHAT_REFUSAL.trim_end().to_string();
             return MoveOutcome::Blocked;
@@ -572,6 +595,10 @@ impl PlayState {
             return MoveOutcome::Blocked;
         };
         self.mark_visibility_dirty();
+        // `combat.md §8.4` (u5-spec#299 Q4): an applied climb "prints nothing
+        // after the direction name. It also runs the ordinary step-on
+        // ambush/camp reveal check", which may redraw the arena.
+        let _ = self.apply_combat_ambush_reveal_for_actor_position(actor_slot);
         // Unpublished (`cleak/u5-spec#262`). `commands.md §5.2` gives the
         // dungeon Klimb forms; an applied town/overworld Klimb has none.
         self.diagnostics.push(format!(
@@ -938,6 +965,38 @@ impl PlayState {
         self.message.push_str(DUNGEON_CHEST_GET_CONTENTS);
         self.message.push_str(note);
         MoveOutcome::ContainerOpened
+    }
+
+    /// `overworld.md §8.1` step 1: the whirlpool swallow banner, with its
+    /// leading line feed.
+    ///
+    /// u5-spec#299 Q8 (`text-output.md §10.2`): after a hoisted step that
+    /// echoed nothing the cursor waits at column 25 of the bare marker row,
+    /// and "a literal that begins with a line feed, such as ... `WHIRLPOOL!`,
+    /// moves to the row below and leaves the marker row holding only the
+    /// marker" - the feed ends the marker row rather than leaving a blank one
+    /// under it.
+    pub(crate) fn emit_overworld_whirlpool_banner(&mut self) {
+        self.flush_message_slot();
+        if self
+            .message_transcript
+            .last()
+            .is_some_and(|entry| entry.bare_marker)
+        {
+            let banner = OVERWORLD_WHIRLPOOL_BANNER.trim_start_matches('\n');
+            self.emit_message_line(banner);
+            let row = banner.trim_end_matches('\n');
+            if let Some(entry) = self
+                .message_transcript
+                .iter_mut()
+                .rev()
+                .find(|entry| entry.text == row)
+            {
+                entry.starts_fresh_row = true;
+            }
+        } else {
+            self.emit_message_line(OVERWORLD_WHIRLPOOL_BANNER);
+        }
     }
 
     pub fn board_vehicle(&mut self) -> MoveOutcome {
@@ -3866,7 +3925,7 @@ impl PlayState {
         // Step 1: the banner, with its leading line feed - one blank row.
         // "There is **no advance warning line**: the swallow banner ... is the
         // first and only text."
-        self.emit_message_line(OVERWORLD_WHIRLPOOL_BANNER);
+        self.emit_overworld_whirlpool_banner();
         // Step 2: the slot is cleared and the party marker is replaced by the
         // whirlpool sprite.
         let whirlpool_tile = self.active_objects[whirlpool_slot].tile;
@@ -6967,7 +7026,14 @@ impl PlayState {
     /// level; the one way in with a different one is a load, which the
     /// setup table makes a *reuse* that "preserves the whole active record",
     /// and §14's step "runs over the current 8-by-8 level" with no level
-    /// test. Measured 2026-10-16 (`dungeon-chest-jimmy`, `dungeon-two-way-
+    /// test. Now published (u5-spec#299 Q3, §4.1 and §6.9's `z` row): "Reuse
+    /// validates nothing except activity" - the class byte against `0xFF` -
+    /// "The stamped level is never compared with the party's level on reuse,
+    /// and no dungeon-mode behaviour depends on it", and the all-zero record
+    /// "shows the Giant Rat sprite bank ... and on contact or A-Attack fights
+    /// as combat class 0" (family 0 is the rat; combat class 0 is Mages,
+    /// R567). Static reading only for a mismatched level
+    /// (`OPEN-QUESTIONS.md`). First measured 2026-10-16 (`dungeon-chest-jimmy`, `dungeon-two-way-
     /// ladder`): from saves whose record is all zeros - live, level 0, at
     /// `(0,0)` - the original's monster walked level 3 and attacked "from
     /// the west" in 8 of 22 runs, and this engine, gating on the level,

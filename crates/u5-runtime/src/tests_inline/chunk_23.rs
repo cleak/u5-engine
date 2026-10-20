@@ -11090,10 +11090,12 @@ fn combat_input_dispatch_inline_push_suffix_pushes_immediately() {
 
 #[test]
 fn combat_klimb_cardinal_suffix_moves_actor_inside_arena() {
+    // u5-spec#299 Q4 (`combat.md §8.4`): "The only climbable adjacent target
+    // is a pile of rocks (`0x4C`) with no object on it."
     let game_dir = std::path::Path::new(".");
     let mut state = combat_player_command_state(10, 10);
     state.visibility_dirty = false;
-    state.combat_terrain[4][5] = 0x04;
+    state.combat_terrain[4][5] = COMBAT_GARGOYLE_DEATH_TERRAIN_TILE;
 
     assert_eq!(
         handle_play_key_input(&mut state, 'K', "8", game_dir).unwrap(),
@@ -11116,6 +11118,65 @@ fn combat_klimb_cardinal_suffix_moves_actor_inside_arena() {
     );
     assert!(state.visibility_dirty);
     assert!(state.combat_active);
+}
+
+/// u5-spec#299 Q4 (`combat.md §8.4`): only an object-free rock pile is an
+/// adjacent climb target - an ordinary floor cell or a wooden fence answers
+/// `What?` at no cost - and the current-cell ladder cases test no arena kind,
+/// so a town arena's `0xC9` under the actor departs with `Down!` at once.
+#[test]
+fn combat_klimb_refuses_non_rock_targets_and_resolves_ladders_in_any_arena() {
+    let game_dir = std::path::Path::new(".");
+    for target in [0x04u8, 0x05, 0xca, 0xcb] {
+        let mut state = combat_player_command_state(10, 10);
+        state.combat_terrain[4][5] = target;
+        handle_play_key_input(&mut state, 'K', "8", game_dir).unwrap();
+        assert_eq!(
+            state.message,
+            DUNGEON_KLIMB_WHAT_REFUSAL.trim_end(),
+            "{target:#x}"
+        );
+        assert_eq!(state.pending_combat_actor_slot, Some(0), "{target:#x}");
+        assert_eq!((state.combat_actors[0].x, state.combat_actors[0].y), (5, 5));
+    }
+
+    // A rock pile holding a loose object is refused the same way.
+    let mut state = combat_player_command_state(10, 10);
+    state.combat_terrain[4][5] = COMBAT_GARGOYLE_DEATH_TERRAIN_TILE;
+    state.active_objects[1] = ActiveObject {
+        type_byte: 0x02,
+        tile: 0x02,
+        x: 5,
+        y: 4,
+        aux1: 7,
+        ..ActiveObject::empty()
+    };
+    handle_play_key_input(&mut state, 'K', "8", game_dir).unwrap();
+    assert_eq!(state.message, DUNGEON_KLIMB_WHAT_REFUSAL.trim_end());
+    assert_eq!(state.pending_combat_actor_slot, Some(0));
+    assert_eq!((state.combat_actors[0].x, state.combat_actors[0].y), (5, 5));
+
+    let mut state = combat_player_command_state(10, 10);
+    state.combat_terrain[5][5] = TOWN_KLIMB_DESCEND_TILE;
+    assert_eq!(
+        state.combat_klimb_current_cell(0),
+        Some(CombatKlimbCurrentCell::Down)
+    );
+    handle_play_key_input(&mut state, 'K', "", game_dir).unwrap();
+    assert!(state.active_direction_prompt.is_none(), "no key is read");
+    let texts: Vec<_> = state
+        .message_transcript
+        .iter()
+        .map(|entry| entry.text.as_str())
+        .collect();
+    assert!(
+        texts.iter().any(|text| text.trim() == "Klimb-Down!"),
+        "{texts:?}"
+    );
+    // A grate is a ladder only in a dungeon-room encounter.
+    let mut state = combat_player_command_state(10, 10);
+    state.combat_terrain[5][5] = TOWN_KLIMB_DESCEND_GRATE_TILE;
+    assert_eq!(state.combat_klimb_current_cell(0), None);
 }
 
 #[test]
@@ -11157,14 +11218,11 @@ fn combat_klimb_prompt_cancel_commits_but_blocked_direction_reprompts() {
         prompted.active_direction_prompt.map(|session| session.kind),
         Some(DirectionPromptKind::CombatKlimb { actor_slot: 0 })
     ));
-
-    assert_eq!(
-        handle_play_key_input(&mut prompted, '>', "", game_dir).unwrap(),
-        PlayInputDisposition::Continue
-    );
-    assert!(prompted.diagnostics.iter().any(|n| n.contains("klimbed down from combat")), "{:?}", prompted.diagnostics);
-        assert!(prompted.message.is_empty(), "message: {}", prompted.message);
-    assert!(!prompted.combat_active);
+    // u5-spec#299 Q4 (`combat.md §8.4`): the adjacent-climb prompt takes a
+    // direction or Space; `>` is not one of its keys and is re-read.
+    handle_play_key_input(&mut prompted, '>', "", game_dir).unwrap();
+    assert!(prompted.active_direction_prompt.is_some());
+    assert!(prompted.combat_active);
 
     let mut cancelled = combat_player_command_state(10, 10);
     cancelled.active_effect_tag = Some(PROTECTION_ACTIVE_EFFECT_TAG);
@@ -15950,9 +16008,10 @@ fn combat_monster_gazer_death_writes_eye_burst_marker() {
 }
 
 #[test]
-fn combat_monster_gargoyle_death_stamps_lava_and_releases_slot_without_marker() {
+fn combat_monster_gargoyle_death_stamps_rock_pile_and_releases_slot_without_marker() {
     // `combat.md §6.3` Gargoyle row + "Gargoyle does not fall through to
-    // the ordinary path": the branch writes `0x4C` into the arena terrain
+    // the ordinary path": the branch writes `0x4C` (the pile of rocks, not
+    // lava - u5-spec#299 Q4, R565) into the arena terrain
     // cell under the actor, writes **no** tile byte into the active-object
     // record, runs no drop rolls, and releases the slot. The earlier
     // engine reading — lava plus a verbatim copy of the default
@@ -21822,9 +21881,13 @@ fn dungeon_arena_two_way_centre_raises_u_d_and_waits_for_up_or_down() {
     // and waits for up or down, down counting as the `0xC9` case; that is the
     // only place the two-way prompt can appear in combat."
     let game_dir = std::path::Path::new(".");
+    // u5-spec#299 Q4 (`combat.md §8.4`): the prompt "accepts only four keys:
+    // `U` or the North direction key for up, `D` or the South direction key
+    // for down. Space, Escape and every other key are ignored with no
+    // output ... no `Pass` is printed and no action is spent."
     for (key, level_after, row) in [
-        ('<', 1u8, "Klimb-U/D-Up!"),
-        ('>', 3, "Klimb-U/D-Down!"),
+        ('U', 1u8, "Klimb-U/D-Up!"),
+        ('D', 3, "Klimb-U/D-Down!"),
     ] {
         let mut state =
             dungeon_post_combat_state(2, DungeonPostCombatApplier::MovementApplier, 5, 5, false);
@@ -21839,10 +21902,21 @@ fn dungeon_arena_two_way_centre_raises_u_d_and_waits_for_up_or_down() {
         assert!(state.combat_active, "the prompt waits");
         assert_eq!(state.render_active_direction_prompt(), "Klimb-U/D-");
 
-        // A key that is neither up nor down is re-read.
-        handle_play_key_input(&mut state, 'x', "", game_dir).unwrap();
-        assert!(state.combat_active);
-        assert!(state.active_direction_prompt.is_some());
+        // A key that is neither up nor down is re-read - Space, Escape and
+        // the old `<`/`>` included.
+        for ignored in ['x', ' ', '\u{1b}', '<', '>'] {
+            handle_play_key_input(&mut state, ignored, "", game_dir).unwrap();
+            assert!(state.combat_active);
+            assert!(state.active_direction_prompt.is_some(), "{ignored:?}");
+            assert_eq!(state.pending_combat_actor_slot, Some(0), "{ignored:?}");
+        }
+        assert!(
+            !state
+                .message_transcript
+                .iter()
+                .any(|entry| entry.text.contains(DIRECTION_PROMPT_LABEL_PASS)),
+            "no Pass"
+        );
 
         handle_play_key_input(&mut state, key, "", game_dir).unwrap();
         assert!(!state.combat_active, "{key}");

@@ -210,3 +210,48 @@ fn an_encounter_after_a_bare_marker_row_starts_the_row_below_it() {
         "{rows:?}"
     );
 }
+
+/// u5-spec#299 Q8 (`text-output.md §10.2`, "Held passes and where the next
+/// line lands"): after a hoisted direction that echoes nothing, "a literal
+/// that begins with a line feed, such as `Attacked!` (both copies) or
+/// `WHIRLPOOL!`, moves to the row below and leaves the marker row holding
+/// only the marker", and "a literal with no leading line feed, such as
+/// `BREAKING UP!`, `COLLISION!`, `Docked!` or a pirate's `* BOOOM! *`, is
+/// written on the marker row itself".
+#[test]
+fn the_literal_after_a_bare_marker_row_lands_by_its_own_leading_feed() {
+    let mut state = bare_marker_frigate(WindState::West, 40, "Head West");
+    state.push_overworld_bare_marker_entry(state.message_entries().len());
+    state.emit_overworld_whirlpool_banner();
+    state.flush_message_slot();
+    let rows = bare_marker_layout(&state);
+    let head = rows
+        .iter()
+        .position(|row| row.1 == "Head West")
+        .unwrap_or_else(|| panic!("{rows:?}"));
+    assert_eq!(rows[head + 2], (true, String::new()), "{rows:?}");
+    assert_eq!(
+        rows[head + 3],
+        (false, "WHIRLPOOL!".to_string()),
+        "the banner's leading feed takes it to the row below, no blank: {rows:?}"
+    );
+
+    for line in ["COLLISION!", "Docked!"] {
+        let mut state = bare_marker_frigate(WindState::West, 40, "Head West");
+        state.push_overworld_bare_marker_entry(state.message_entries().len());
+        state.emit_message_line(line);
+        let rows = bare_marker_layout(&state);
+        assert!(rows.contains(&(true, line.to_string())), "{line}: {rows:?}");
+    }
+
+    let mut state = bare_marker_frigate(WindState::West, 40, "Head West");
+    state.push_overworld_bare_marker_entry(state.message_entries().len());
+    // `push_impact_line`, the broadside's emitter, is `emit_message_line`.
+    state.emit_message_line("* BOOOM! *");
+    state.flush_message_slot();
+    let rows = bare_marker_layout(&state);
+    assert!(
+        rows.contains(&(true, "* BOOOM! *".to_string())),
+        "the broadside continues the marker row: {rows:?}"
+    );
+}

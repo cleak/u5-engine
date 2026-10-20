@@ -279,7 +279,10 @@ pub const COMBAT_DEFAULT_DEATH_MARKER_TILE: u8 = COMBAT_DEFAULT_DEATH_DROP_TILE;
 pub const COMBAT_VANISH_DEATH_MARKER_TILE: u8 = 0x16;
 /// `combat.md` death-marker table: Gazer eye-burst marker.
 pub const COMBAT_GAZER_DEATH_MARKER_TILE: u8 = 0x1F;
-/// `combat.md` death-marker table: Gargoyle lava terrain tile.
+/// `combat.md §6.3` death-marker table: the terrain byte a Gargoyle's death
+/// writes under it - the **pile of rocks** (`catalogs/tile-catalog.md`), not
+/// lava: no fire hazard, and a valid arena K-Klimb target (`combat.md §8.4`).
+/// u5-spec#299 Q4 retracts the "lava pool" name, R565.
 pub const COMBAT_GARGOYLE_DEATH_TERRAIN_TILE: u8 = 0x4C;
 /// `catalogs/spell-list.md §5` Magic Missile raw damage roll cap.
 /// Anchored to [`crate::MAGIC_MISSILE_RAW_DAMAGE_MAX`] so the

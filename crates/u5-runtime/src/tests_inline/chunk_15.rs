@@ -2793,9 +2793,11 @@
         state.begin_blackthorn_audience_capture(&dir).unwrap();
         let vm = state.run_blackthorn_cutscene_beat(BlackthornCutsceneBeat::FailedChallengeReaction);
 
-        assert_eq!(vm.world_ticks, 82);
-        assert_eq!(vm.bios_ticks, 81);
-        assert_eq!(vm.stinger_count, 22);
+        // `blackthorn.md §6.3` failed-challenge vector totals (u5-spec#299
+        // Q6): 24 stings, 86 world ticks, 85 one-BIOS-tick delays.
+        assert_eq!(vm.world_ticks, 86);
+        assert_eq!(vm.bios_ticks, 85);
+        assert_eq!(vm.stinger_count, 24);
         assert!(state.active_objects[BlackthornCutsceneActor::SecondPartyMember.slot_index() as usize]
             .is_empty());
         assert_eq!(

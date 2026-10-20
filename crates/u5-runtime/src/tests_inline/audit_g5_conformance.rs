@@ -932,6 +932,75 @@ fn q8_wrong_answers_past_the_first_each_cost_two_minutes() {
     let _ = fs::remove_dir_all(dir);
 }
 
+/// u5-spec#299 Q6. `blackthorn.md §6.3`, "Failed-challenge vector, full
+/// command list": from slot 1 `(7,5)`, slot 6 `(1,5)` and slot 7 `(9,9)` the
+/// vector runs 24 stings, 86 world ticks and 85 one-BIOS-tick delays, buffers
+/// the pendulum at `(5,7)` and the hourglass at `(5,9)`, clears slot 1 at the
+/// pendulum cell, and leaves slot 6 at `(1,5)` and slot 7 at `(9,9)`.
+#[test]
+fn q6_failed_challenge_vector_runs_the_published_command_list() {
+    let next_beat = |from: &BlackthornCutsceneVm, beat| {
+        let mut vm = BlackthornCutsceneVm::new(from.tile_buffer.clone());
+        vm.actors = from.actors;
+        vm.visible_actors = from.actors;
+        vm.run(blackthorn_cutscene_beat_commands(beat));
+        vm
+    };
+    let setup = BlackthornCutsceneVm::with_audience_setup(vec![0; 32 * 11]);
+    let approach = next_beat(&setup, BlackthornCutsceneBeat::AudienceThroneApproach);
+    let vm = next_beat(&approach, BlackthornCutsceneBeat::GuardReleaseRoute);
+    let cell = |vm: &BlackthornCutsceneVm, actor| vm.actor(actor).map(|a| (a.x, a.y));
+    assert_eq!(cell(&vm, BlackthornCutsceneActor::SecondPartyMember), Some((7, 5)));
+    assert_eq!(cell(&vm, BlackthornCutsceneActor::LeftGuard), Some((1, 5)));
+    assert_eq!(cell(&vm, BlackthornCutsceneActor::RightGuard), Some((9, 9)));
+
+    // Rows 1-8 (the commands before row 9's clear): slot 1 is dragged to the
+    // pendulum cell `(5,7)` and slot 6 stands at `(6,6)`.
+    let mut dragged = BlackthornCutsceneVm::new(vm.tile_buffer.clone());
+    dragged.actors = vm.actors;
+    dragged.visible_actors = vm.actors;
+    let commands =
+        blackthorn_cutscene_beat_commands(BlackthornCutsceneBeat::FailedChallengeReaction);
+    let clear_at = commands
+        .iter()
+        .position(|command| {
+            matches!(
+                command,
+                BlackthornCutsceneCommand::ClearActor(BlackthornCutsceneActor::SecondPartyMember)
+            )
+        })
+        .expect("row 9 clears slot 1");
+    dragged.run(&commands[..clear_at]);
+    assert_eq!(cell(&dragged, BlackthornCutsceneActor::SecondPartyMember), Some((5, 7)));
+    assert_eq!(cell(&dragged, BlackthornCutsceneActor::LeftGuard), Some((6, 6)));
+    assert_eq!(dragged.stinger_count, 12);
+
+    let failed = next_beat(&vm, BlackthornCutsceneBeat::FailedChallengeReaction);
+    assert_eq!(failed.stinger_count, 24);
+    assert_eq!(failed.world_ticks, 86);
+    assert_eq!(failed.bios_ticks, 85);
+    assert_eq!(cell(&failed, BlackthornCutsceneActor::SecondPartyMember), None);
+    assert_eq!(cell(&failed, BlackthornCutsceneActor::LeftGuard), Some((1, 5)));
+    assert_eq!(cell(&failed, BlackthornCutsceneActor::RightGuard), Some((9, 9)));
+    let buffered: Vec<_> = failed
+        .presentation_events
+        .iter()
+        .filter_map(|event| match event {
+            BlackthornCutscenePresentationEvent::TerrainBuffered { x, y, tile } => {
+                Some((*x, *y, *tile))
+            }
+            _ => None,
+        })
+        .collect();
+    assert_eq!(
+        buffered,
+        vec![
+            (5, 7, BLACKTHORN_PENDULUM_TILE),
+            (5, 9, BLACKTHORN_HOURGLASS_TILE)
+        ]
+    );
+}
+
 /// u5-spec#298 Q9. `blackthorn.md §6.3`, "Audience exit vector, full command
 /// list": the actors start every exit beat from slot 0 `(3,5)`, slot 6
 /// `(1,5)`, slot 7 `(9,9)` and slot 8 `(5,5)`; the door write is exposed after

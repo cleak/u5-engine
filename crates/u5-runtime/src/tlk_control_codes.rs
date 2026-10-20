@@ -546,6 +546,11 @@ pub const TLK_DOUBLE_QUOTE_ENCODED: u8 = b'"' ^ TLK_TEXT_XOR_MASK;
 
 // §7.2 player-name and stream-control codes
 pub const TLK_CODE_PRINT_AVATAR_NAME: u8 = 0x81;
+/// `conversation.md §7.2` END-STREAM: the plain **stop**. It ends the
+/// stream without flushing the pending word, and every level treats a stop
+/// as the end of the whole conversation (u5-spec#299 Q1; "used to terminate
+/// the fixed leading entries ... without ending the whole conversation" is
+/// retracted, R560).
 pub const TLK_CODE_END_STREAM: u8 = 0x82;
 
 // §7.3 pause and key-wait codes
@@ -688,9 +693,11 @@ pub const TLK_ASK_WHO_AFFIRMATIVE_LINE: &str = "A pleasure!";
 pub const TLK_CODE_IF_ELSE: u8 = 0x8C;
 /// `conversation.md §7.6`: the reserved `0x8C` argument. Every other
 /// argument value names a branch target label; this one, on the set arm,
-/// "ends the response and returns to the keyword prompt". It is the guard
-/// that fronts the shipped introduce-yourself idiom, usually in the NPC's
-/// Name or Greeting entry.
+/// opens a fresh keyword prompt nested at that point without flushing the
+/// pending word, and leaving that prompt ends the conversation (§7.2;
+/// u5-spec#299 Q1 retracts "ends the response and returns to the keyword
+/// prompt", R562). It is the guard that fronts the shipped
+/// introduce-yourself idiom, usually in the NPC's Name or Greeting entry.
 pub const TLK_IF_ELSE_END_RESPONSE_ARGUMENT: u8 = 0xFF;
 pub const TLK_CODE_IF_ELSE_ALT: u8 = 0xFE;
 
@@ -724,6 +731,11 @@ pub const TLK_LABEL_FIRST: u8 = 0x91;
 /// content `0x9F` is conventionally the blob's final record marker,
 /// which is why it is the second-most common label byte.
 pub const TLK_LABEL_LAST: u8 = 0x9F;
+/// `conversation.md §7.2` END-OF-RESPONSE: flush the pending word and open
+/// a fresh keyword prompt nested where the stream stands; leaving it prints
+/// `BYE`, runs the Bye entry and ends the conversation. Not a stop
+/// (u5-spec#299 Q1; "return control to the keyword input loop" is
+/// retracted, R561).
 pub const TLK_CODE_END_OF_RESPONSE: u8 = 0xFF;
 
 /// `conversation.md §6` keyword-input loop prompt. The conversation
@@ -838,7 +850,8 @@ pub enum TlkByteRunnerClass {
     /// IF/ELSE.
     IfElseAlias,
     /// `0xFF` — end-of-response. The runner flushes the pending word
-    /// buffer and signals the keyword input loop to prompt again.
+    /// buffer and opens a nested keyword prompt (`conversation.md §7.2`,
+    /// u5-spec#299 Q1, R561).
     EndOfResponse,
     /// `0x00` — null byte. Not a dispatcher class in the published
     /// classification; appears as a blob terminator/skip-byte at the
