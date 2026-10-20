@@ -247,3 +247,129 @@ fn rc3_endgame_narrative_text_frames_use_the_full_screen_window() {
     let viewport = state.render_text_frame(5);
     assert!(viewport.contains("narrative window 1"), "{viewport}");
 }
+
+fn rc3_count(rows: &[String], wanted: &str) -> usize {
+    rows.iter().filter(|row| row.as_str() == wanted).count()
+}
+
+/// `inventory.md §7.1`: "Cancelling the picker prints `None!\n` after the
+/// open `Item:_` prompt." When `Item: ` is only the live row - the picker
+/// opened and was cancelled before a composition boundary logged it - the
+/// completed `Item: None!` row still reaches the transcript, once, and its
+/// feed closes the row.
+#[test]
+fn rc3_use_picker_escape_logs_item_none_when_the_prompt_was_only_live() {
+    let mut state = test_state(open_grid(), 5, 5);
+    state.special_items[SPECIAL_ITEM_POCKET_WATCH_INDEX] = 1;
+    state.message_row_open_mid_line = true;
+    assert_eq!(state.start_use_item(), MoveOutcome::Observed);
+    assert!(state.step_active_use('\u{1b}', "", Path::new("")).unwrap());
+    assert!(state.active_use.is_none());
+    let rows = rc3_rows(&state);
+    assert_eq!(rc3_count(&rows, "Item: None!"), 1, "{rows:#?}");
+    assert!(!state.message_row_open_mid_line);
+    assert!(!state.flush_message_slot());
+    assert_eq!(rc3_count(&rc3_rows(&state), "Item: None!"), 1);
+}
+
+/// `inventory.md §7.1`: an accepted row completes the same `Item:_` prompt
+/// with its family word (`Scroll\n\n`). From a live-only prompt the
+/// completed row is logged before the handler's own line.
+#[test]
+fn rc3_use_picker_family_echo_logs_item_scroll_when_the_prompt_was_only_live() {
+    let mut state = test_state(open_grid(), 5, 5);
+    state.scroll_stock[SCROLL_LIGHT_INDEX] = 1;
+    assert_eq!(state.start_use_item(), MoveOutcome::Observed);
+    assert!(state.step_active_use('\r', "", Path::new("")).unwrap());
+    state.flush_message_slot();
+    let rows = rc3_rows(&state);
+    let item = rows
+        .iter()
+        .position(|row| row == "Item: Scroll")
+        .unwrap_or_else(|| panic!("Item: Scroll row: {rows:#?}"));
+    assert!(
+        rows[item + 1..].iter().any(|row| row == "Light!"),
+        "{rows:#?}"
+    );
+    assert_eq!(rc3_count(&rows, "Item: Scroll"), 1, "{rows:#?}");
+    assert!(!rows.iter().any(|row| row == "Item:"), "{rows:#?}");
+}
+
+/// `inventory.md §7.1`: "cancellation completes [the `On who:_` line] with
+/// `None!`". The potion's prompt can be live-only too; the cancel still logs
+/// one `On who: None!` row and closes it.
+#[test]
+fn rc3_use_potion_target_escape_logs_on_who_none_when_the_prompt_was_only_live() {
+    let mut state = test_state(open_grid(), 5, 5);
+    state.party[0].hp = 4;
+    state.party[0].max_hp = 25;
+    state.potion_stock[POTION_YELLOW_INDEX] = 1;
+    assert_eq!(state.start_use_item(), MoveOutcome::Observed);
+    assert!(state.step_active_use('\r', "", Path::new("")).unwrap());
+    assert!(state.active_use.is_some());
+    state.message_row_open_mid_line = true;
+    assert!(state.step_active_use('\u{1b}', "", Path::new("")).unwrap());
+    let rows = rc3_rows(&state);
+    assert_eq!(rc3_count(&rows, "On who: None!"), 1, "{rows:#?}");
+    assert_eq!(rc3_count(&rows, "Item: Potion"), 1, "{rows:#?}");
+    assert!(!state.message_row_open_mid_line);
+    assert!(!state.flush_message_slot());
+}
+
+/// `magic.md §5.1` healing effects: "Cancelling either target prompt adds no
+/// effect or generic result after `On who: None!`" - the spell's party
+/// target shares the potion's prompt, so its Escape completes that row
+/// rather than printing a bare `None!` row under it.
+#[test]
+fn rc3_spell_target_escape_completes_the_on_who_row() {
+    let mut state = test_state(open_grid(), 5, 5);
+    state.party = vec![
+        PartyMember {
+            slot: 0,
+            class_byte: b'M',
+            status: b'G',
+            climb_stat: DEFAULT_CLIMB_STAT,
+            mana: 30,
+            hp: 20,
+            max_hp: 20,
+            level: 8,
+        },
+        PartyMember {
+            slot: 1,
+            class_byte: b'B',
+            status: b'G',
+            climb_stat: DEFAULT_CLIMB_STAT,
+            mana: 0,
+            hp: 3,
+            max_hp: 20,
+            level: 1,
+        },
+    ];
+    state.spell_charges[HEAL_SPELL_INDEX] = 1;
+    state.active_player = Some(0);
+    assert_eq!(state.start_cast_spell_prompt(), MoveOutcome::Observed);
+    assert!(
+        state
+            .step_active_cast('M', "", Path::new(""))
+            .unwrap()
+            .is_none()
+    );
+    assert!(
+        state
+            .step_active_cast(' ', "", Path::new(""))
+            .unwrap()
+            .is_none()
+    );
+    assert_eq!(state.message, USE_POTION_TARGET_PROMPT);
+    assert!(
+        state
+            .step_active_cast_followup('\u{1b}', "", Path::new(""))
+            .unwrap()
+            .is_none()
+    );
+    state.flush_message_slot();
+    let rows = rc3_rows(&state);
+    assert_eq!(rc3_count(&rows, "On who: None!"), 1, "{rows:#?}");
+    assert!(!rows.iter().any(|row| row == "None!"), "{rows:#?}");
+    assert!(!state.message_row_open_mid_line);
+}

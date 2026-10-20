@@ -1717,7 +1717,15 @@ impl PlayState {
                     // `What`; measured 2026-09-10 (`cast-results/cure` and
                     // `/wake`), where the original shows no such line.
                     if ch == '\u{1b}' || ch == '0' {
-                        self.message = "None!".to_string();
+                        // `magic.md §5.1`: cancelling the shared target
+                        // prompt leaves `On who: None!` - the cancel
+                        // completes the prompt's own row (closed by its
+                        // feed), it is not a bare `None!` row under it.
+                        self.commit_live_prompt_reply(
+                            USE_POTION_TARGET_PROMPT,
+                            SELECTION_CANCELLED_LITERAL,
+                            false,
+                        );
                         return Ok(None);
                     }
                     let highlight = session.buffer.parse::<usize>().unwrap_or(1).max(1);
@@ -1729,7 +1737,9 @@ impl PlayState {
                         crate::play_state_impl::chunk_04::UseTargetStep::Waiting => continue,
                         crate::play_state_impl::chunk_04::UseTargetStep::Committed(target) => {
                             let name = self.party_member_display_name(target);
-                            self.commit_prompt_reply(USE_POTION_TARGET_PROMPT, &name);
+                            // `magic.md §5.1`: the chosen name completes the
+                            // shared prompt's row, which its feed closes.
+                            self.commit_live_prompt_reply(USE_POTION_TARGET_PROMPT, &name, false);
                             return self.finish_active_cast_followup(
                                 session,
                                 &(target + 1).to_string(),

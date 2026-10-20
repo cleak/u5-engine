@@ -590,7 +590,16 @@ impl PlayState {
                 let turn_before = self.turn;
                 // The reply lands on the prompt's own row: `Item: None!` -
                 // or at its column on the row a strip scroll left it on.
-                self.commit_prompt_reply(&session.item_prompt_literal(), ITEM_PICKER_ESCAPE_MESSAGE);
+                // `Item: ` may be only the live row (the picker opened and
+                // was cancelled before a boundary logged it), so the
+                // completed row is logged here rather than left in the slot.
+                // `inventory.md §7.1`'s literal is `None!\n`: its feed
+                // closes the row.
+                self.commit_live_prompt_reply(
+                    &session.item_prompt_literal(),
+                    ITEM_PICKER_ESCAPE_MESSAGE,
+                    false,
+                );
                 self.ensure_use_action_turn(turn_before);
                 self.apply_post_turn_effects_after_outcome(
                     turn_before,
@@ -655,8 +664,13 @@ impl PlayState {
                 // The accepted row completes the open `Item: ` line before
                 // the handler runs; see [`Self::use_item_echo_family`].
                 let prompt = session.item_prompt_literal();
+                // `inventory.md §7.1`'s completion table: every family word
+                // ends its row with a feed except `Moonstone_`, which is
+                // "followed immediately by its outcome" on the same row. The
+                // prompt may be only the live row, so the live commit logs it.
                 let echoed = Self::use_item_echo_family(row.request).inspect(|family| {
-                    self.commit_prompt_reply(&prompt, family);
+                    let row_open_after = *family == USE_ITEM_ECHO_MOONSTONE;
+                    self.commit_live_prompt_reply(&prompt, family, row_open_after);
                 });
                 // `inventory.md §7.1`: "Combat potion use binds the current
                 // party combatant without this prompt" - the `On who:_`
@@ -820,7 +834,12 @@ impl PlayState {
         if key == '\u{1b}' && !direction_prompt {
             let turn_before = self.turn;
             let prompt = self.render_pending_use_action(pending);
-            self.commit_prompt_reply(&prompt, SELECTION_CANCELLED_LITERAL);
+            // `inventory.md §7.1`: cancellation completes the `On who:_`
+            // line with `None!`, and "A line feed follows only if the cursor
+            // is not already at column zero" - the row is closed either way.
+            // The prompt may be only the live row (it rides in the slot under
+            // its scroll banner until a boundary flushes it).
+            self.commit_live_prompt_reply(&prompt, SELECTION_CANCELLED_LITERAL, false);
             self.ensure_use_action_turn(turn_before);
             self.apply_post_turn_effects_after_outcome(turn_before, game_dir, MoveOutcome::Used)?;
             return Ok(true);
@@ -879,7 +898,10 @@ impl PlayState {
                     UseTargetStep::Committed(target) => {
                         // The answer completes the prompt's own row.
                         let name = self.party_member_display_name(target);
-                        self.commit_prompt_reply(USE_POTION_TARGET_PROMPT, &name);
+                        // `inventory.md §7.1`: "The selected member's name
+                        // completes that line"; the line feed after it closes
+                        // the row. The prompt may be only the live row.
+                        self.commit_live_prompt_reply(USE_POTION_TARGET_PROMPT, &name, false);
                         self.use_potion_consumed_target(index, target)
                     }
                 }
@@ -915,7 +937,10 @@ impl PlayState {
                     }
                     UseTargetStep::Committed(target) => {
                         let name = self.party_member_display_name(target);
-                        self.commit_prompt_reply(USE_POTION_TARGET_PROMPT, &name);
+                        // `inventory.md §7.1`: "The selected member's name
+                        // completes that line"; the line feed after it closes
+                        // the row. The prompt may be only the live row.
+                        self.commit_live_prompt_reply(USE_POTION_TARGET_PROMPT, &name, false);
                         self.use_resurrection_scroll_consumed_target(index, target)
                     }
                 }
