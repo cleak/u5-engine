@@ -402,3 +402,159 @@ fn spec299_q19_controlled_monster_shape_a_refusal_rows() {
         assert_eq!(state.sound_effect_serial, sounds_before, "{key}: no tone");
     }
 }
+
+/// u5-spec#299 Q13, `combat.md §8.4` "Adjacent-climb prompt": "The only
+/// climbable adjacent target is a pile of rocks (`0x4C`) with no object on
+/// it. ... A direction toward any other cell prints `What?\n` and re-prompts
+/// at no cost." "The refusal's rows are the `Klimb-` row completed by the
+/// direction name and its newline, then `What?` on its own row with its
+/// newline. No tone plays. The parser then takes the short re-prompt ... On
+/// screen: `Klimb-North`, `What?`, a blank row, and the next keystroke's echo
+/// on the row after it. The same actor is still to act, and the
+/// committed-action tail (worn-ring hook, timed-magic aging) does not run."
+#[test]
+fn spec299_q13_arena_klimb_toward_a_non_rock_cell_prints_what_and_reprompts() {
+    let game_dir = std::path::Path::new(".");
+    let north = char::from(crate::INPUT_CODE_NORTH);
+    // Grass, a wooden fence the town command could climb, and a rock pile
+    // holding an object.
+    for (tile, object_on_it) in [(0x04u8, false), (0xca, false), (TOWN_KLIMB_ROCKS_TILE, true)] {
+        let mut state = combat_player_command_state(10, 10);
+        state.combat_terrain[4][5] = tile;
+        if object_on_it {
+            state.active_objects[1] = ActiveObject {
+                type_byte: 0x02,
+                tile: 0x02,
+                x: 5,
+                y: 4,
+                aux1: 7,
+                ..ActiveObject::empty()
+            };
+        }
+        state.active_effect_tag = Some(PROTECTION_ACTIVE_EFFECT_TAG);
+        state.active_effect_counter = 3;
+        state.open_pending_combat_player_turn(Some(0));
+        state.flush_message_slot();
+        let before = playtest_transcript_rows(&state).len();
+        let sounds_before = state.sound_effect_serial;
+        let round_before = state.combat_round_counter;
+
+        handle_play_key_input(&mut state, 'K', "", game_dir).unwrap();
+        handle_play_key_input(&mut state, north, "", game_dir).unwrap();
+        state.flush_message_slot();
+
+        assert_eq!(
+            (state.combat_actors[0].x, state.combat_actors[0].y),
+            (5, 5),
+            "{tile:#x}: no climb"
+        );
+        assert_eq!(state.pending_combat_actor_slot, Some(0), "{tile:#x}");
+        assert!(state.active_direction_prompt.is_none(), "{tile:#x}");
+        assert_eq!(state.active_effect_counter, 3, "{tile:#x}: no aging");
+        assert_eq!(state.combat_round_counter, round_before, "{tile:#x}");
+        assert_eq!(
+            state.sound_effects_after(sounds_before),
+            [],
+            "{tile:#x}: no tone"
+        );
+        let printed = playtest_transcript_rows(&state)[before..]
+            .iter()
+            .map(|row| row.trim_end().to_string())
+            .collect::<Vec<_>>();
+        assert_eq!(printed, ["Klimb-North", "What?"], "{tile:#x}");
+        // The next keystroke's echo lands after a blank row, with no banner.
+        handle_play_key_input(&mut state, 'K', "", game_dir).unwrap();
+        state.flush_message_slot();
+        let rows = combat_message_window_rows(&state);
+        let at = rows
+            .iter()
+            .position(|row| row.trim_start_matches('>').trim_end() == "Klimb-North")
+            .unwrap_or_else(|| panic!("{tile:#x}: {rows:?}"));
+        assert_eq!(rows[at + 1].trim_end(), "What?", "{tile:#x}: {rows:?}");
+        assert_eq!(rows[at + 2], "", "{tile:#x}: {rows:?}");
+        assert_eq!(
+            rows[at + 3].trim_start_matches('>').trim_end(),
+            "Klimb-",
+            "{tile:#x}: {rows:?}"
+        );
+    }
+}
+
+/// u5-spec#299 Q13, `combat.md §8.4`: "An applied climb moves the actor onto
+/// the rock cell and prints nothing after the direction name", and an
+/// applied rock climb spends the action.
+#[test]
+fn spec299_q13_arena_klimb_onto_a_bare_rock_pile_moves_the_actor() {
+    let game_dir = std::path::Path::new(".");
+    let mut state = combat_player_command_state(10, 10);
+    state.combat_terrain[4][5] = TOWN_KLIMB_ROCKS_TILE;
+    state.active_effect_tag = Some(PROTECTION_ACTIVE_EFFECT_TAG);
+    state.active_effect_counter = 3;
+    state.open_pending_combat_player_turn(Some(0));
+    state.flush_message_slot();
+    let before = playtest_transcript_rows(&state).len();
+
+    handle_play_key_input(&mut state, 'K', "", game_dir).unwrap();
+    handle_play_key_input(&mut state, char::from(crate::INPUT_CODE_NORTH), "", game_dir)
+        .unwrap();
+    state.flush_message_slot();
+
+    assert_eq!((state.combat_actors[0].x, state.combat_actors[0].y), (5, 4));
+    assert_eq!(state.active_effect_counter, 2, "the action is spent");
+    let rows = playtest_transcript_rows(&state);
+    assert_eq!(rows[before].trim_end(), "Klimb-North", "{:?}", &rows[before..]);
+    assert!(
+        !rows[before + 1..].iter().any(|row| row.contains("What?")),
+        "{rows:?}"
+    );
+}
+
+/// u5-spec#299 Q13, `combat.md §8.4` "Turn cost": "Free: `What?` and a
+/// refused Up/Down departure." "**Shared-exit refusal.** In a dungeon-room
+/// encounter ... a party-side actor whose ladder direction differs from the
+/// party's first stored departure prints the ladder line, a blank row, then
+/// `All must use the same exit!` with its newline, and plays the 165 Hz /
+/// 200-unit bump tone. The short re-prompt's newline then leaves a blank row".
+#[test]
+fn spec299_q13_refused_ladder_departure_is_free_with_a_blank_row() {
+    let game_dir = std::path::Path::new(".");
+    let mut state =
+        dungeon_post_combat_state(2, DungeonPostCombatApplier::MovementApplier, 4, 4, true);
+    state.combat_terrain[4][4] = 0xc9;
+    if let Some(snapshot) = &mut state.combat_frame_snapshot {
+        snapshot.established_exit_direction_code = Some(5);
+    }
+    state.active_effect_tag = Some(PROTECTION_ACTIVE_EFFECT_TAG);
+    state.active_effect_counter = 3;
+    state.flush_message_slot();
+    let before = playtest_transcript_rows(&state).len();
+    let sounds_before = state.sound_effect_serial;
+
+    handle_play_key_input(&mut state, 'K', "", game_dir).unwrap();
+    state.flush_message_slot();
+
+    assert!(state.combat_active);
+    assert_eq!(state.pending_combat_actor_slot, Some(0), "the same actor acts");
+    assert_eq!(state.active_effect_counter, 3, "free: no committed-action tail");
+    let effects = state.sound_effects_after(sounds_before);
+    assert_eq!(effects, [SoundEffect::BlockedStep]);
+    let rows = playtest_transcript_rows(&state);
+    let printed = rows[before..]
+        .iter()
+        .map(|row| row.trim_end().to_string())
+        .collect::<Vec<_>>();
+    assert_eq!(
+        printed,
+        ["Klimb-Down!", "", "All must use the same exit!"],
+        "{rows:?}"
+    );
+    // "The short re-prompt's newline then leaves a blank row": the waiting
+    // marker row sits under a blank, with no banner reprinted.
+    let rows = combat_message_window_rows(&state);
+    let at = rows
+        .iter()
+        .position(|row| row.trim_end() == "same exit!")
+        .unwrap_or_else(|| panic!("{rows:?}"));
+    assert_eq!(rows[at + 1], "", "{rows:?}");
+    assert!(rows[at + 2].starts_with('>'), "{rows:?}");
+}

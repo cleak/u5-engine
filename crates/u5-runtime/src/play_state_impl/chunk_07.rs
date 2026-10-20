@@ -497,7 +497,12 @@ impl PlayState {
         }
         self.message.clear();
         if party_side && room_encounter && record.is_some_and(|stored| stored != code) {
-            self.emit_message_line(COMBAT_ALL_MUST_USE_SAME_EXIT_LINE);
+            // `combat.md §8.4` "Turn cost" (u5-spec#299 Q13): the shared-exit
+            // refusal "prints the ladder line, a blank row, then `All must use
+            // the same exit!` with its newline, and plays the 165 Hz /
+            // 200-unit bump tone", as the edge helper does for a direction
+            // key; the refusal is free (the caller re-prompts on `Blocked`).
+            self.emit_message_line(format!("\n{COMBAT_ALL_MUST_USE_SAME_EXIT_LINE}"));
             self.emit_sound_effect(SoundEffect::BlockedStep);
             return MoveOutcome::Blocked;
         }
@@ -540,7 +545,7 @@ impl PlayState {
             return MoveOutcome::Blocked;
         };
         if !direction.is_cardinal() {
-            self.message = DUNGEON_KLIMB_WHAT_REFUSAL.trim_end().to_string();
+            self.message = crate::commands::COMBAT_KLIMB_ADJACENT_REFUSAL.to_string();
             return MoveOutcome::Blocked;
         }
 
@@ -548,17 +553,32 @@ impl PlayState {
         let x = actor.x as isize + dx;
         let y = actor.y as isize + dy;
         if !combat_arena_coordinate_in_bounds(x as i16, y as i16) {
-            self.message = DUNGEON_KLIMB_WHAT_REFUSAL.trim_end().to_string();
+            self.message = crate::commands::COMBAT_KLIMB_ADJACENT_REFUSAL.to_string();
             return MoveOutcome::Blocked;
         }
         let x = x as usize;
         let y = y as usize;
-        if self
-            .combat_actor_slot_at(x as u8, y as u8, actor_slot)
-            .is_some()
-            || !is_probe_walkable(self.combat_terrain[y][x])
+        // `combat.md §8.4` "Adjacent-climb prompt" (u5-spec#299 Q13): "The
+        // only climbable adjacent target is a pile of rocks (`0x4C`) with no
+        // object on it. The town command's wooden-fence targets
+        // (`0xCA`/`0xCB`) are not climbable in an arena. A direction toward
+        // any other cell prints `What?\n` and re-prompts at no cost." This
+        // used to climb onto any walkable cell (playtest E39).
+        let actor_object_slot = usize::from(actor.active_object_slot);
+        let object_on_target = self
+            .active_objects
+            .iter()
+            .enumerate()
+            .any(|(slot, object)| {
+                slot != actor_object_slot && !object.is_empty() && object.x == x && object.y == y
+            });
+        if self.combat_terrain[y][x] != TOWN_KLIMB_ROCKS_TILE
+            || object_on_target
+            || self
+                .combat_actor_slot_at(x as u8, y as u8, actor_slot)
+                .is_some()
         {
-            self.message = DUNGEON_KLIMB_WHAT_REFUSAL.trim_end().to_string();
+            self.message = crate::commands::COMBAT_KLIMB_ADJACENT_REFUSAL.to_string();
             return MoveOutcome::Blocked;
         }
 
@@ -572,8 +592,12 @@ impl PlayState {
             return MoveOutcome::Blocked;
         };
         self.mark_visibility_dirty();
-        // Unpublished (`cleak/u5-spec#262`). `commands.md §5.2` gives the
-        // dungeon Klimb forms; an applied town/overworld Klimb has none.
+        // `combat.md §8.4`: the applied climb "also runs the ordinary step-on
+        // ambush/camp reveal check (Section 5, \"Ambush and camp reveal
+        // slots\"), which prints nothing but may redraw the arena".
+        let _ = self.apply_combat_ambush_reveal_for_actor_position(actor_slot);
+        // `combat.md §8.4`: an applied climb "prints nothing after the
+        // direction name".
         self.diagnostics.push(format!(
             "klimbed {} to ({}, {})",
             direction.name(),

@@ -1054,8 +1054,13 @@ fn handle_active_direction_prompt_key_input(
         if let Some(actor_slot) = combat_push_actor {
             if combat_klimb && matches!(outcome, MoveOutcome::Blocked) {
                 // `combat.md §8`: blocked Klimb is one of the parser's
-                // exhaustive free re-prompt cases.
+                // exhaustive free re-prompt cases. `§8.4` (u5-spec#299 Q13):
+                // it takes "the short re-prompt of Section 8.1: one newline,
+                // so a blank row follows `What?`, then a prompt-window refresh
+                // and another key read, with no banner" - the next echo keeps
+                // `text-output.md §10.4`'s derived blank.
                 state.pending_combat_actor_slot = Some(actor_slot);
+                state.combat_prompt_row_opened_by_banner = false;
             } else if state.combat_active {
                 // Push and the live-actor-gated SJOG verbs commit once their
                 // letter has been accepted, including a canceled shared
@@ -6573,7 +6578,11 @@ fn handle_combat_multistage_command(
                 state.emit_combat_command_echo_line(DUNGEON_KLIMB_PROMPT_ONE);
                 let outcome = state.klimb_combat_actor_vertical(actor_slot, intent);
                 if matches!(outcome, MoveOutcome::Blocked) {
+                    // `combat.md §8.4` "Turn cost" (u5-spec#299 Q13): a
+                    // refused Up/Down departure is free and "the parser takes
+                    // the short re-prompt with no banner".
                     state.pending_combat_actor_slot = Some(actor_slot);
+                    state.combat_prompt_row_opened_by_banner = false;
                 } else if state.combat_active {
                     let _ = apply_combat_committed_action_maintenance(state, actor_slot);
                     advance_combat_round_after_actor_and_append_message(state, actor_slot);
