@@ -5983,6 +5983,8 @@ impl PlayState {
                 strength: AVATAR_STAT_MAX,
                 intelligence: AVATAR_STAT_MAX,
                 equipment: [EQUIPMENT_EMPTY; EQUIPMENT_SLOT_COUNT],
+                defense: 0,
+                inn_marker: crate::INN_REGISTRY_EMPTY_MARKER,
             });
         }
 
@@ -5993,6 +5995,18 @@ impl PlayState {
             let mut member = self.party[index];
             member.slot = index as u8;
             let previous = roster.get(index).cloned();
+            // `formats/saved-gam.md §3.3` (u5-spec#299 Q14): the defense byte
+            // and the inn marker move with their character, so they are
+            // carried by member identity exactly as the gender byte is.
+            let carried = crate::party::party_roster_record_for_active_slot(
+                &self.party_roster,
+                index,
+                self.party_names.get(index),
+            );
+            let defense = carried.map_or(0, |record| record.defense);
+            let inn_marker = carried.map_or(crate::INN_REGISTRY_EMPTY_MARKER, |record| {
+                record.inn_marker
+            });
             roster[index] = PartyRosterRecord {
                 member,
                 // `formats/saved-gam.md §3.1`: the gender byte has no parallel
@@ -6055,6 +6069,8 @@ impl PlayState {
                     .copied()
                     .or_else(|| previous.as_ref().map(|record| record.equipment))
                     .unwrap_or([EQUIPMENT_EMPTY; EQUIPMENT_SLOT_COUNT]),
+                defense,
+                inn_marker,
             };
         }
         roster
@@ -6142,12 +6158,11 @@ impl PlayState {
             // Lodged guests are whole roster records; the reserve records
             // this rotation shifts carry their registry slots with them.
             self.shift_inn_registry_for_roster_move(target_index, active_len);
-            // §7.6: "that record's inn-lodging marker is cleared". This engine
-            // keeps the shifted inn-guest view of `formats/saved-gam.md` §9 as
-            // its own registry, so the marker to clear is the scene marker of
-            // the guest slot holding this character — the same clear that
-            // `systems/shops.md` §8.4 pickup performs when a lodged companion
-            // returns to the active roster.
+            // §7.6: "that record's inn-lodging marker is cleared" - the
+            // record's own byte `0x1F` (`formats/saved-gam.md` §3.3), which
+            // this engine also mirrors in its registry entry for the
+            // character - the same clear that `systems/shops.md` §8.4 pickup
+            // performs when a lodged companion returns to the party.
             self.clear_inn_lodging_marker_for_name(&joining_name);
             self.sync_active_party_from_roster_len(active_len + 1);
             // §7.6: "the engine then removes the NPC from the live scene."
@@ -6180,17 +6195,21 @@ impl PlayState {
     }
 
     /// `conversation.md §7.6`: a `0x84` recruit clears the joined record's
-    /// inn-lodging marker. `formats/saved-gam.md` §9 describes the inn-guest
-    /// registry as a shifted view over the same sixteen character records whose
-    /// "leading byte of each registry slot is an inn-scene marker"; clearing it
-    /// to zero is the same de-lodging write `systems/shops.md` §8.4 pickup
-    /// performs ("clears the returned slot's marker to zero after moving the
-    /// guest back into the active roster"). Nothing else about the guest slot
-    /// is touched here.
+    /// inn-lodging marker. `formats/saved-gam.md` §3.3 (u5-spec#299 Q14,
+    /// `RETRACTIONS.md` R569) makes that marker the record's own last byte
+    /// (`+0x1F`); clearing it to zero is the same de-lodging write
+    /// `systems/shops.md` §8.4 pickup performs ("clears the returned record's
+    /// marker to zero after moving the guest back into the travelling
+    /// party"). Nothing else about the record is touched here.
     fn clear_inn_lodging_marker_for_name(&mut self, name: &[u8; SAVE_CHARACTER_NAME_LEN]) {
         for guest in self.inn_registry.iter_mut() {
             if guest.name == *name {
                 guest.scene_marker = 0;
+            }
+        }
+        for record in self.party_roster.iter_mut() {
+            if record.name == *name {
+                record.inn_marker = crate::INN_REGISTRY_EMPTY_MARKER;
             }
         }
     }

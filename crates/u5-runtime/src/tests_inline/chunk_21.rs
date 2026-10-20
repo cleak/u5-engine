@@ -3621,6 +3621,8 @@ fn conversation_test_roster_record(
         strength: 15 + slot,
         intelligence: 18 + slot,
         equipment: [EQUIPMENT_EMPTY; EQUIPMENT_SLOT_COUNT],
+        defense: 0,
+        inn_marker: 0,
     }
 }
 

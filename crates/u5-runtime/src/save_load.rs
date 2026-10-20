@@ -514,28 +514,35 @@ pub fn decode_party_roster(bytes: &[u8]) -> Vec<PartyRosterRecord> {
                 strength: bytes[record + SAVE_CHARACTER_STR_OFFSET],
                 intelligence: bytes[record + SAVE_CHARACTER_INT_OFFSET],
                 equipment,
+                defense: bytes[record + crate::SAVE_CHARACTER_DEFENSE_BYTE_OFFSET],
+                inn_marker: bytes[record + SAVE_CHARACTER_INN_MARKER_OFFSET],
             }
         })
         .collect()
 }
 
-/// `formats/saved-gam.md` §3.1: the byte at record offset `0x1F` is the
-/// "Inn-registry marker byte when this record is viewed through the shifted
-/// inn guest table; zero for an empty/cleared guest marker. Opaque padding for
-/// ordinary active-character behaviour."
+/// `formats/saved-gam.md` §3.1: the byte at record offset `0x1F` is "This
+/// record's own inn-lodging marker: the scene number of the inn where the
+/// character is lodged, or zero when it is not lodged" (u5-spec#299 Q14; the
+/// earlier "marker byte when this record is viewed through the shifted inn
+/// guest table" is `RETRACTIONS.md` R569).
 pub const INN_REGISTRY_EMPTY_MARKER: u8 = 0;
+
+/// `formats/saved-gam.md` §3.1/§3.3: the inn-lodging marker is each roster
+/// record's own last byte, `+0x1F`.
+pub const SAVE_CHARACTER_INN_MARKER_OFFSET: usize = SAVE_CHARACTER_RECORD_LEN - 1;
 
 /// **Conservative, not published.** `systems/shops.md` §8.4 publishes the
 /// occupied test only as a comparison against the *current* inn scene: "the
-/// engine walks the 16 slots and compares each slot's leading scene marker
-/// with the current scene", and "guest enumeration treats any nonmatching
-/// marker as 'not a guest at this inn'". It publishes no standalone
-/// "is this slot occupied at all" predicate beyond zero meaning empty.
+/// engine compares all sixteen markers with the current scene", and "guest
+/// enumeration treats any nonmatching marker as 'not a guest at this inn'".
+/// It publishes no standalone "is this record lodged at all" predicate beyond
+/// zero meaning not lodged.
 ///
 /// `0xFF` is not a matchable scene: [`crate::Scene::new`] rejects it, so no
 /// inn can ever select a slot carrying it. Both the factory seed and every
-/// shipped save carry `0xFF` in that byte for ordinary roster records, where
-/// §3.1 calls it opaque padding. Decoding those as guests invented thirteen
+/// shipped save carry `0xFF` in that byte for ordinary roster records that
+/// are not lodged anywhere. Decoding those as guests invented thirteen
 /// phantom lodgers on the shipped image. Treating `0xFF` as "not a guest" is
 /// therefore the conservative reading: it can only drop records no published
 /// consumer can reach. (`systems/blackthorn.md` §5's executed-companion
@@ -544,7 +551,7 @@ pub const INN_REGISTRY_EMPTY_MARKER: u8 = 0;
 /// ordinary registry record that no inn's scene matches.)
 pub const INN_REGISTRY_UNMATCHABLE_MARKER: u8 = 0xff;
 
-/// Whether a registry slot's leading marker byte denotes a lodged guest.
+/// Whether a record's inn-lodging marker (`+0x1F`) denotes a lodged guest.
 ///
 /// Published part: zero is empty/cleared (`formats/saved-gam.md` §3.1).
 /// Conservative part: [`INN_REGISTRY_UNMATCHABLE_MARKER`] is also treated as
@@ -555,28 +562,26 @@ pub const fn inn_registry_marker_is_guest(marker: u8) -> bool {
 
 /// Roster record that holds the guest of registry slot `slot`.
 ///
-/// `formats/saved-gam.md` §3.1 puts the inn-registry marker at a record's own
-/// byte `0x1F`, and `systems/karma.md` §8 / `systems/blackthorn.md` §5 read
-/// that same byte as "the save record's" whereabouts. §3.3 keeps the guest's
-/// stay counter in "that shared character counter" the time system ages on
-/// every record. So the guest of slot `N` *is* roster record `N`, intact; the
-/// shifted view only places that record's tail byte at the head of slot `N`.
-/// Reading the guest's fields relative to the slot head instead shifted every
-/// lodged record one byte into its neighbour (playtest E43).
+/// `formats/saved-gam.md` §3.3 (u5-spec#299 Q14): "There is no separate guest
+/// table. A companion lodged at an inn is an ordinary roster record outside
+/// the travelling party. What marks it as lodged is the record's own last
+/// byte, `+0x1F`". So the guest of slot `N` *is* roster record `N`, intact.
+/// Reading the guest's fields relative to the marker byte instead shifted
+/// every lodged record one byte into its neighbour (playtest E43).
 pub const fn inn_registry_guest_record_offset(slot: usize) -> usize {
     SAVE_ROSTER_OFFSET + slot * SAVE_CHARACTER_RECORD_LEN
 }
 
-/// Byte holding registry slot `slot`'s leading scene marker: the head of the
-/// shifted view's slot, which is the tail byte (`0x1F`) of roster record
-/// `slot`.
+/// Byte holding roster record `slot`'s own inn-lodging marker, its last byte
+/// (`+0x1F`, `formats/saved-gam.md` §3.3). The withdrawn "leading marker of a
+/// shifted registry slot" (`RETRACTIONS.md` R569) named the same byte.
 pub const fn inn_registry_marker_offset(slot: usize) -> usize {
     SAVE_INN_REGISTRY_OFFSET + slot * SAVE_CHARACTER_RECORD_LEN
 }
 
-/// The travelling-party prefix of the roster. `formats/saved-gam.md` §3.1
-/// calls byte `0x1F` "opaque padding for ordinary active-character
-/// behaviour", so a travelling record is never read as a lodged guest.
+/// The travelling-party prefix of the roster. `formats/saved-gam.md` §3.1:
+/// the marker "has no meaning for a travelling member", so a travelling
+/// record is never read as a lodged guest.
 fn inn_registry_active_prefix(bytes: &[u8]) -> usize {
     match bytes[SAVE_PARTY_SIZE_OFFSET] {
         size @ 1..=SAVE_PARTY_SIZE_MAX => usize::from(size),
@@ -632,13 +637,11 @@ pub fn decode_inn_registry(bytes: &[u8]) -> Vec<InnGuestRecord> {
 
 /// Write the inn-guest registry back into the save image.
 ///
-/// The registry is a *shifted view*: `formats/saved-gam.md` §3.3 and
-/// `systems/shops.md` §8.4 both state it is "a shifted legacy view over the
-/// save image rather than an independent post-roster block", and §3.3 says the
-/// range is preserved unless the inn flow is deliberately changing it.
-/// Registry slot `N` starts at byte `0x1F` of roster record `N`, and its guest
-/// is roster record `N` itself (see [`inn_registry_guest_record_offset`]), so
-/// a write at the wrong slot lands on another character record.
+/// `formats/saved-gam.md` §3.3 (u5-spec#299 Q14, `RETRACTIONS.md` R569/R570):
+/// the registry is the roster itself - each lodged guest is roster record `N`
+/// with its own marker in that record's byte `0x1F` (see
+/// [`inn_registry_guest_record_offset`]), so a write at the wrong slot lands
+/// on another character record. No inventory byte belongs to it.
 ///
 /// Two rules follow, and both are load-bearing:
 ///
@@ -646,11 +649,11 @@ pub fn decode_inn_registry(bytes: &[u8]) -> Vec<InnGuestRecord> {
 ///    [`InnGuestRecord::registry_slot`], the slot it was decoded from or
 ///    allocated into, never at its position in the guest list. Repacking from
 ///    slot zero shifted whole roster records and destroyed companions.
-/// 2. **Never blanket-clear.** Slots that hold no guest are left exactly as
-///    the loaded image had them, so the opaque padding of §3.1 survives. The
-///    one exception is a slot whose stale marker still names a real inn scene
-///    while no guest occupies it — that is a slot the inn flow vacated, and
-///    §8.4 pickup requires the returned slot's marker be "cleared to zero".
+/// 2. **Never blanket-clear.** Records that hold no guest keep the marker the
+///    roster writer stored for them (the record's own byte, which travels
+///    with it). The one exception is a record whose marker still names a real
+///    inn scene while no guest occupies it - a guest the inn flow returned,
+///    and §8.4 pickup "clears the returned record's marker to zero".
 pub fn encode_inn_registry(bytes: &mut [u8], registry: &[InnGuestRecord]) {
     let mut occupied = [false; SAVE_INN_REGISTRY_COUNT];
     let active = inn_registry_active_prefix(bytes);
@@ -706,10 +709,9 @@ pub fn encode_inn_registry(bytes: &mut [u8], registry: &[InnGuestRecord]) {
     }
 }
 
-/// Lowest registry slot not already claimed by a guest, per
-/// `systems/shops.md` §8.4 Leave: "the chosen member's 32-byte slot record ...
-/// is moved into the inn registry view". The spec publishes no allocation
-/// order, so the lowest free slot is used.
+/// Lowest registry slot not already claimed by a guest. Inn Leave does not
+/// use it: `systems/shops.md` §8.4 (u5-spec#299 Q14) moves the leaving record
+/// to slot 15. It remains the fallback of the Blackthorn park.
 pub fn free_inn_registry_slot(registry: &[InnGuestRecord]) -> Option<u8> {
     (0..SAVE_INN_REGISTRY_COUNT as u8)
         .find(|slot| !registry.iter().any(|guest| guest.registry_slot == *slot))

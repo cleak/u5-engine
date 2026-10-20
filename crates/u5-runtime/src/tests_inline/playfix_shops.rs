@@ -5,31 +5,42 @@ fn roster_record_bytes(bytes: &[u8], slot: usize) -> &[u8] {
     &bytes[record..record + SAVE_CHARACTER_RECORD_LEN]
 }
 
-/// Playtest E43. `systems/shops.md` §8.4: Leave moves the companion into the
-/// inn registry, "the active roster is compacted, and the party-size byte is
-/// decremented", and "a player can leave a companion at an inn, save, reload
-/// weeks later, and pick up the companion". `formats/saved-gam.md` §3.1 puts
-/// the guest marker at the record's own byte `0x1F`.
+/// Playtest E43 and u5-spec#299 Q14 (`RETRACTIONS.md` R569). `systems/shops.md`
+/// §8.4 `L`: the leaving record "has its own inn marker (`+0x1F`) set to the
+/// current inn scene and its stay counter cleared to zero. The record is then
+/// moved, whole, to the last roster slot (slot 15), every record after it
+/// moves down one slot". `P`: "The guest's whole record moves into the first
+/// slot after the travelling party, and the records that lay between shift up
+/// one slot each ... Every byte of every moved record travels with its record,
+/// the defense byte and the markers of other lodged guests included."
 ///
-/// The regression: the guest was written one byte into the next roster record
-/// (Shamino saved as `hamino` over the compacted Iolo), so the reload lost Iolo
-/// and the pickup garbled the roster further.
+/// The E43 regression wrote the guest one byte into the next roster record
+/// (Shamino saved as `hamino` over the compacted Iolo). The withdrawn reading
+/// after it parked the guest in the old last travelling slot and left the
+/// defense byte with the slot.
 #[test]
 fn inn_leave_save_reload_pickup_round_trips_every_roster_record() {
     const INN_SCENE: u8 = 20;
+    const OTHER_INN_SCENE: u8 = 7;
     let mut template = saved_game_seed_bytes(0, 0, 15, 15);
     write_shipped_roster_layout(&mut template);
     template[SAVE_PARTY_SIZE_OFFSET] = 3;
-    // A distinguishable gender on the departing record, so the test sees
-    // whether the byte travels with it.
+    // A distinguishable gender on the departing record, and a distinct
+    // defense byte on every record, so the test sees whether they travel.
     template[SAVE_ROSTER_OFFSET + SAVE_CHARACTER_RECORD_LEN + SAVE_CHARACTER_GENDER_OFFSET] =
         SAVE_GENDER_FEMALE_BYTE;
+    for slot in 0..SAVE_ROSTER_SLOT_COUNT {
+        template[save_character_field_offset(slot, SAVE_CHARACTER_DEFENSE_BYTE_OFFSET)] =
+            0x40 + slot as u8;
+    }
+    // Another companion is already lodged at a different inn.
+    template[inn_registry_marker_offset(5)] = OTHER_INN_SCENE;
     let dir = shipped_layout_save_dir(&template);
 
     let options = load_play_options_from_save(&dir).unwrap();
     let mut state = PlayState::load_scene(&dir, options).unwrap();
     let outcome = state.leave_inn_companion(INN_SCENE, 1, 0).unwrap();
-    assert_eq!(outcome.guest.registry_slot, 2);
+    assert_eq!(outcome.guest.registry_slot, 15);
     assert_eq!(
         state.save_game_command(&dir, Some(true)).unwrap(),
         MoveOutcome::Saved
@@ -42,16 +53,57 @@ fn inn_leave_save_reload_pickup_round_trips_every_roster_record() {
         roster_record_bytes(&saved, 0),
         roster_record_bytes(&template, 0)
     );
-    // The compacted active roster: Iolo moved up, whole.
-    assert_eq!(
-        &roster_record_bytes(&saved, 1)[..tail],
-        &roster_record_bytes(&template, 2)[..tail]
-    );
-    // Shamino is intact in the vacated record, with the stay counter cleared
-    // and the inn's scene in the record's own marker byte.
+    // Every record after the leaving one moved down one slot, whole: its
+    // defense byte, and the other guest's marker, with it.
+    for slot in 2..SAVE_ROSTER_SLOT_COUNT {
+        assert_eq!(
+            roster_record_bytes(&saved, slot - 1),
+            roster_record_bytes(&template, slot),
+            "template record {slot} now at {}",
+            slot - 1
+        );
+    }
+    // Shamino is intact in slot 15, with the stay counter cleared and the
+    // inn's scene in the record's own marker byte.
     let mut lodged = roster_record_bytes(&template, 1).to_vec();
     lodged[SAVE_CHARACTER_STAY_COUNTER_OFFSET] = 0;
     lodged[tail] = INN_SCENE;
+    assert_eq!(roster_record_bytes(&saved, 15), &lodged[..]);
+
+    // Reload: the party is Avatar and Iolo, Shamino is lodged in record 15
+    // and the other guest in record 4.
+    let options = load_play_options_from_save(&dir).unwrap();
+    let mut registry = options
+        .inn_registry
+        .iter()
+        .map(|guest| (guest.registry_slot, guest.scene_marker))
+        .collect::<Vec<_>>();
+    registry.sort();
+    assert_eq!(registry, [(4, OTHER_INN_SCENE), (15, INN_SCENE)]);
+    let shamino = options
+        .inn_registry
+        .iter()
+        .position(|guest| guest.registry_slot == 15)
+        .unwrap();
+    assert_eq!(&options.inn_registry[shamino].name[..7], b"Shamino");
+    let mut state = PlayState::load_scene(&dir, options).unwrap();
+    assert_eq!(state.party.len(), 2);
+    assert_eq!(&state.party_names[1][..4], b"Iolo");
+
+    state.pickup_inn_guest(INN_SCENE, shamino, 0).unwrap();
+    assert_eq!(
+        state.save_game_command(&dir, Some(true)).unwrap(),
+        MoveOutcome::Saved
+    );
+    let saved = fs::read(dir.join(SAVED_GAM_FILENAME)).unwrap();
+    assert_eq!(saved[SAVE_PARTY_SIZE_OFFSET], 3);
+    assert_eq!(
+        roster_record_bytes(&saved, 1),
+        roster_record_bytes(&template, 2)
+    );
+    // Shamino returned to the first slot after the party, its marker cleared
+    // to zero, and the records between shifted back up.
+    lodged[tail] = INN_REGISTRY_EMPTY_MARKER;
     assert_eq!(roster_record_bytes(&saved, 2), &lodged[..]);
     for slot in 3..SAVE_ROSTER_SLOT_COUNT {
         assert_eq!(
@@ -60,38 +112,19 @@ fn inn_leave_save_reload_pickup_round_trips_every_roster_record() {
             "roster record {slot}"
         );
     }
-
-    // Reload: the party is Avatar and Iolo, Shamino is the lodged guest.
-    let options = load_play_options_from_save(&dir).unwrap();
-    assert_eq!(options.inn_registry.len(), 1);
-    assert_eq!(options.inn_registry[0].registry_slot, 2);
-    assert_eq!(&options.inn_registry[0].name[..7], b"Shamino");
-    let mut state = PlayState::load_scene(&dir, options).unwrap();
-    assert_eq!(state.party.len(), 2);
-    assert_eq!(&state.party_names[1][..4], b"Iolo");
-
-    state.pickup_inn_guest(INN_SCENE, 0, 0).unwrap();
+    let registry = decode_inn_registry(&saved);
+    assert_eq!(registry.len(), 1);
     assert_eq!(
-        state.save_game_command(&dir, Some(true)).unwrap(),
-        MoveOutcome::Saved
+        (registry[0].registry_slot, registry[0].scene_marker),
+        (5, OTHER_INN_SCENE)
     );
-    let saved = fs::read(dir.join(SAVED_GAM_FILENAME)).unwrap();
-    assert_eq!(saved[SAVE_PARTY_SIZE_OFFSET], 3);
-    assert_eq!(
-        &roster_record_bytes(&saved, 1)[..tail],
-        &roster_record_bytes(&template, 2)[..tail]
-    );
-    // Pickup clears the returned record's marker to zero.
-    lodged[tail] = INN_REGISTRY_EMPTY_MARKER;
-    assert_eq!(roster_record_bytes(&saved, 2), &lodged[..]);
-    assert!(decode_inn_registry(&saved).is_empty());
     let _ = fs::remove_dir_all(dir);
 }
 
 /// Playtest E43, pickup half: a guest parked beyond the next active slot is
 /// rotated into it, and the records between move up whole with any guest
-/// slots they carry (`systems/shops.md` §8.4 "the registry view is compacted
-/// as needed").
+/// markers they carry (`systems/shops.md` §8.4, u5-spec#299 Q14: "the records
+/// that lay between shift up one slot each").
 #[test]
 fn inn_pickup_from_a_far_slot_rotates_records_and_registry_slots() {
     let mut template = saved_game_seed_bytes(0, 0, 15, 15);

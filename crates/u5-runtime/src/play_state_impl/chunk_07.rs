@@ -6030,15 +6030,18 @@ impl PlayState {
         // a shorter modelled roster parks at its own last slot.
         if let Some(record) = lifted {
             let park_slot = (SAVE_ROSTER_SLOT_COUNT - 1).min(roster.len());
-            roster.insert(park_slot, record.clone());
+            // The roster record carries its own marker byte now (u5-spec#299
+            // Q14), so the parked record is written with the whereabouts too.
+            let mut parked = record.clone();
+            parked.inn_marker = Self::BLACKTHORN_EXECUTED_WHEREABOUTS;
+            roster.insert(park_slot, parked);
             // Lodged guests are whole roster records, so the records the
             // park shifts down carry their registry slots with them.
             self.shift_inn_registry_for_roster_move(index, park_slot);
-            // The whereabouts byte lives in the shifted inn-guest view that
-            // overlaps the roster (`formats/saved-gam.md`: the registry starts
-            // one record-length minus one past the roster, so guest slot `k`'s
-            // leading marker is the tail byte of roster record `k`). Writing
-            // an unmatchable marker there is what makes the record
+            // The whereabouts byte is the record's own inn-lodging marker,
+            // its last byte `0x1F` (`formats/saved-gam.md` §3.3, u5-spec#299
+            // Q14; the "shifted inn-guest view" is `RETRACTIONS.md` R569).
+            // Writing an unmatchable marker there is what makes the record
             // unretrievable by any inn while still surviving save/reload.
             if self.inn_registry.len() < INN_REGISTRY_CAP {
                 // Registry slot `k`'s marker is roster record `k`'s byte

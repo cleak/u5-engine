@@ -94,6 +94,17 @@ pub struct PartyRosterRecord {
     pub strength: u8,
     pub intelligence: u8,
     pub equipment: [u8; EQUIPMENT_SLOT_COUNT],
+    /// `formats/saved-gam.md §3.1` byte `0x18`, the combat defense byte.
+    /// u5-spec#299 Q14: "Every byte (`+0x18`, equipment, stay counter,
+    /// marker) moves with its character; no byte stays with a slot", so it
+    /// is carried on the record rather than left in the save template.
+    pub defense: u8,
+    /// `formats/saved-gam.md §3.1`/§3.3 byte `0x1F`: "This record's own
+    /// inn-lodging marker: the scene number of the inn where the character
+    /// is lodged, or zero when it is not lodged. It travels with the record
+    /// whenever New Order, Leave or Pickup moves records" (u5-spec#299 Q14,
+    /// `RETRACTIONS.md` R569).
+    pub inn_marker: u8,
 }
 
 impl PartyRosterRecord {
@@ -108,9 +119,9 @@ impl PartyRosterRecord {
 
     /// The record's bytes from the name field through the per-character
     /// month counter (`formats/saved-gam.md §3.1`, offsets `0x00..=0x17`),
-    /// laid out as the save writer lays out a non-Avatar record. The combat
-    /// defense byte at `0x18` and what follows are template bytes this
-    /// record does not model, so they are not included.
+    /// laid out as the save writer lays out a non-Avatar record. The defense
+    /// byte at `0x18`, the equipment and the inn marker are carried in their
+    /// own fields and are not included.
     pub fn leading_record_bytes(&self) -> [u8; SAVE_CHARACTER_LEVEL_OFFSET + 2] {
         let mut bytes = [0u8; SAVE_CHARACTER_LEVEL_OFFSET + 2];
         bytes[..SAVE_CHARACTER_NAME_LEN].copy_from_slice(&self.name);
@@ -306,6 +317,10 @@ pub fn party_roster_from_active(
                 .get(index)
                 .copied()
                 .unwrap_or([EQUIPMENT_EMPTY; EQUIPMENT_SLOT_COUNT]),
+            // Synthesised with no save byte behind it; the save writer only
+            // stores these two bytes for a roster that came from a save.
+            defense: 0,
+            inn_marker: INN_REGISTRY_EMPTY_MARKER,
         })
         .collect()
 }
