@@ -10,6 +10,87 @@ fn rc4_decoded(raw: &[Vec<u8>]) -> Vec<String> {
         .collect()
 }
 
+/// A blob whose Description ends in an IF-ELSE on the speaker's branch-flag
+/// bit followed by a bare GOTO (`conversation.md §9` step 2's census shape:
+/// "either a bare GOTO or an IF-ELSE followed by one"). The taken arm goes
+/// to block `0x92`, the fall-through to block `0x91`.
+fn rc4_description_goto_blob(head_91: Vec<u8>, head_92: Vec<u8>) -> Vec<Vec<u8>> {
+    let mut description = rc4_enc("a stern lord.");
+    description.extend([TLK_CODE_IF_ELSE, 0x92, 0x91]);
+    let mut block_91 = vec![TLK_CODE_LABEL_RECORD, 0x91];
+    block_91.extend(head_91);
+    let mut block_92 = vec![TLK_CODE_LABEL_RECORD, 0x92];
+    block_92.extend(head_92);
+    vec![
+        rc4_enc("Lord"),
+        description,
+        rc4_enc("Hail, friend."),
+        rc4_enc("I rule."),
+        rc4_enc("Farewell."),
+        rc4_enc("RULE"),
+        rc4_enc("I rule well."),
+        block_91,
+        rc4_enc("Pity."),
+        rc4_enc("y"),
+        rc4_enc("Good."),
+        block_92,
+        rc4_enc("Pity."),
+        rc4_enc("y"),
+        rc4_enc("Good."),
+        vec![TLK_CODE_LABEL_RECORD, TLK_LABEL_LAST],
+    ]
+}
+
+/// u5-spec#299 Q22(d), `conversation.md §9` step 2: "26 Descriptions end
+/// with a live GOTO as their last byte ... None of those NPCs ever prints its
+/// Greeting or introduces itself, whatever the acquaintance bit ... no
+/// Greeting, no host-clock read, reseed or coin flip, and the opener returns
+/// a stop." Every way the jumped-to block can leave the opener - a scoped
+/// prompt, a nested `0xFF` prompt, an ASK-WHO, a `0x82` stop - is checked
+/// with the bit clear and set.
+#[test]
+fn rc4_a_description_goto_always_stops_the_opener_with_no_greeting_or_reseed() {
+    let mut ask_who_head = rc4_enc("Thy name?");
+    ask_who_head.push(TLK_CODE_ASK_WHO);
+    ask_who_head.extend(rc4_enc("Hm."));
+    let mut stop_head = rc4_enc("Begone.");
+    stop_head.push(TLK_CODE_END_STREAM);
+    let mut nested_head = rc4_enc("Speak.\"\n\n");
+    nested_head.push(TLK_CODE_END_OF_RESPONSE);
+    let heads: [(&str, Vec<u8>); 4] = [
+        ("scoped prompt", rc4_enc("Art thou loyal?")),
+        ("nested 0xFF prompt", nested_head),
+        ("ASK-WHO", ask_who_head),
+        ("0x82 stop", stop_head),
+    ];
+    for (shape, head) in heads {
+        for knows_party in [false, true] {
+            let raw = rc4_description_goto_blob(head.clone(), head.clone());
+            let decoded = rc4_decoded(&raw);
+            let mut state = test_state(open_grid(), 1, 1);
+            state.active_conversation_npc_slot = Some(1);
+            if knows_party {
+                state.set_active_talk_branch_flag(1);
+            }
+            let mut session = crate::conversation_session::ConversationSession::new(raw, decoded);
+            session.set_npc_slot(Some(1));
+            state.active_conversation = Some(Box::new(session));
+            state.prng_state = 0x0aaa;
+
+            let opening = state.active_conversation_greeting_rendered_with_host_seed(0x0456);
+            let label = format!("{shape}, knows_party={knows_party}");
+            assert!(!opening.text.contains("Hail"), "{label}: {:?}", opening.text);
+            assert!(!opening.text.contains("I am called"), "{label}: {:?}", opening.text);
+            assert_eq!(state.prng_state, 0x0aaa, "{label}: no reseed or coin flip");
+            let session = state.active_conversation.as_ref().unwrap();
+            assert!(
+                session.opening_suspended() || session.has_ended(),
+                "{label}: the opener returns"
+            );
+        }
+    }
+}
+
 fn rc4_conversation_ctx<'a>() -> crate::conversation_session::ConversationContext<'a> {
     crate::conversation_session::ConversationContext {
         avatar_name: "Avatar",
