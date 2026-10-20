@@ -18038,13 +18038,12 @@ fn write_rgba_png(out: &Path, width: u32, height: u32, rgba: Vec<u8>) -> io::Res
     Ok(())
 }
 
+/// `chargen.md §6` virtue draws from the game-logic generator, seeded from
+/// the host clock the way the intro seeds it (`prng.md §3`).
 fn visual_chargen_rng_pool() -> Vec<u8> {
-    let seed = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .expect("visual chargen RNG requires system time after UNIX_EPOCH")
-        .as_nanos() as u64;
-    let offset = seed.to_le_bytes()[0] & 0x07;
-    (0u8..128).map(|byte| byte.wrapping_add(offset)).collect()
+    u5_runtime::chargen::chargen_rng_pool_from_prng_state(
+        u5_runtime::prng::host_clock_prng_seed_now(),
+    )
 }
 
 fn display_name_bytes(name: &[u8]) -> String {

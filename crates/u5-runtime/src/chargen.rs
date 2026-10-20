@@ -675,6 +675,34 @@ pub fn run_chargen_tournament(
     })
 }
 
+/// How many virtue draws [`chargen_rng_pool_from_prng_state`] pre-computes.
+/// Over every 16-bit state the questionnaire's rejection sampling consumes at
+/// most 149 draws, so 256 never runs dry for a state whose stream terminates
+/// at all. The one state that does not is the generator's fixed point
+/// (`u5_prng_advance_state(20) == 20`): every draw repeats one index, the
+/// picker would roll forever, and the session's "RNG exhausted" expectation
+/// fires instead.
+pub const CHARGEN_RNG_POOL_LEN: usize = 256;
+
+/// `chargen.md §6`: "The random virtue-picker is rejection-sampled - it draws
+/// a random index in zero through seven and rolls again if the chosen virtue
+/// is flagged", drawn from the shared game-logic generator (`prng.md §2`),
+/// whose state the intro seeds from the host clock (`prng.md §3`). Each pool
+/// byte is one `random(0, 7)` from `state` onward, in draw order, so
+/// [`draw_virtue`] consumes the stream the picker would.
+///
+/// This replaces a stand-in pool that walked `0..128` from a clock-chosen
+/// offset. That had eight outcomes, two of which commit Strength 21 for
+/// all-`A` answers (a quarter of runs), where the generator gives it for
+/// about 1.2% of seeds - so the engine readied the Dagger the stock refuses
+/// in `hut-ready-refusals` and `hut-ready-picker`.
+pub fn chargen_rng_pool_from_prng_state(state: u16) -> Vec<u8> {
+    let mut prng = crate::prng::U5Prng::new(state);
+    (0..CHARGEN_RNG_POOL_LEN)
+        .map(|_| prng.next_range_u8(0, 7))
+        .collect()
+}
+
 fn draw_virtue(
     rng_bytes: &[u8],
     cursor: &mut usize,
@@ -908,6 +936,38 @@ mod tests {
         assert_eq!(result.tournament.questions.len(), CHARGEN_QUESTION_COUNT);
         assert_eq!(result.tournament.stats.strength, CHARGEN_STR_FLOOR);
         assert_eq!(session.phase, ChargenSessionPhase::Completed);
+    }
+
+    #[test]
+    fn prng_pool_draws_random_zero_to_seven_from_the_seeded_state() {
+        let pool = chargen_rng_pool_from_prng_state(0x093D);
+        assert_eq!(pool.len(), CHARGEN_RNG_POOL_LEN);
+        let mut prng = crate::prng::U5Prng::new(0x093D);
+        for (index, byte) in pool.iter().enumerate() {
+            assert_eq!(*byte, prng.next_range_u8(0, 7), "draw {index}");
+        }
+    }
+
+    #[test]
+    fn prng_pool_makes_all_a_strength_above_the_floor_a_rare_draw() {
+        // `hut-ready-refusals`: every all-`A` questionnaire over the 4,096
+        // host-clock seeds (`prng.md §3`) finishes inside the pool, and only a
+        // small minority commit Strength above the floor of 20 - the stock
+        // refused the Dagger in every capture, where the old offset pool
+        // gave Strength 21 for two of its eight outcomes.
+        let mut above_floor = 0usize;
+        for seed in 0u16..=crate::prng::PRNG_HOST_CLOCK_MASK {
+            let pool = chargen_rng_pool_from_prng_state(seed);
+            let Ok(outcome) = run_chargen_tournament(&pool, &always_a()) else {
+                assert_eq!(seed, 20, "only the generator's fixed point runs dry");
+                continue;
+            };
+            if outcome.stats.strength > CHARGEN_STR_FLOOR {
+                above_floor += 1;
+            }
+        }
+        assert!(above_floor * 50 < 4096, "{above_floor} of 4096 seeds above the floor");
+        assert!(above_floor > 0);
     }
 
     #[test]

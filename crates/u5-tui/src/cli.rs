@@ -1019,18 +1019,12 @@ fn prompt_continue() -> io::Result<()> {
     Ok(())
 }
 
+/// `chargen.md §6` virtue draws from the game-logic generator, seeded from
+/// the host clock (`prng.md §3`), as the visual shell draws them.
 pub fn chargen_interactive_rng_pool() -> Vec<u8> {
-    let nanos = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map(|duration| duration.as_nanos() as u64)
-        .unwrap_or(0x5eed_1234);
-    let mut state = nanos ^ 0xa5a5_1f2e_3d4c_5b6a;
-    let mut bytes = Vec::with_capacity(128);
-    for _ in 0..128 {
-        state = state.wrapping_mul(6364136223846793005).wrapping_add(1);
-        bytes.push((state >> 32) as u8);
-    }
-    bytes
+    u5_runtime::chargen::chargen_rng_pool_from_prng_state(
+        u5_runtime::prng::host_clock_prng_seed_now(),
+    )
 }
 
 pub fn parse_start_arg(value: &str) -> io::Result<(usize, usize)> {

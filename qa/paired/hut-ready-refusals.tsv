@@ -1,6 +1,19 @@
 # Ready a weapon and then a second one, to measure the R-Ready refusal for a
 # slot that is already filled - `inventory.md` section 5 describes the
 # hand-occupancy branch but publishes none of its lines (cleak/u5-spec#225).
+#
+# Character-creation Strength draw, as in `hut-ready-picker`. Seven `a`
+# answers do not fix the Avatar's Strength: the tournament pairs are drawn at
+# random (`chargen.md` §6) and the Dagger readies only above the floor of 20.
+# In all 34 captures that reached the beat the stock refused it; the engine readied it
+# silently in four (20260906-235815, 20261016-152647, -194215, rc4 sweep
+# 20261020-131233), which is what put all three beats out of step. That was
+# an engine bug, not the dice: its visual chargen drew virtues from a pool
+# that walked `0..128` from a clock offset - eight outcomes, two of them
+# Strength 21 for all-`A` answers - instead of the game-logic generator
+# (`prng.md` §2, §3), which gives Strength 21 for 51 of the 4,096 host-clock
+# seeds. Fixed on rc4; each side still draws Strength 21 about one run in 80,
+# so a run whose first beat shows one side readying the Dagger is a re-run.
 both	wait	15000
 both	key	space
 both	wait	4000

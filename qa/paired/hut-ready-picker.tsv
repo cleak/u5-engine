@@ -16,6 +16,9 @@
 # headless repro of the same keys at Str=20 still refuses. `picker` and
 # `arms` do not depend on the draw and stay compared. The scenario wants a
 # seeded save with fixed attributes to measure the readied glyph reliably.
+# (rc4: the engine's own chargen draw was skewed - a quarter of its runs
+# drew Strength 21 - and now uses the game-logic generator; see
+# `hut-ready-refusals`. The beats stay dice at the residual ~1-in-80.)
 # dice-beats: dagger shield reopened
 both	wait	15000
 both	key	space
