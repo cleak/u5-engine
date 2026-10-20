@@ -241,6 +241,41 @@ impl ConversationSessionOutput {
         }
     }
 
+    /// The closing half of [`Self::push_framed_response`] - the closing
+    /// quote hugging the text, then `§6`'s blank row before the reprompt -
+    /// applied to text this output already holds. An ASK-WHO resume prints
+    /// its acknowledgement with an opening quote and no closing one
+    /// (`conversation.md §7.6`, "What ASK-WHO prints"); when the resumed
+    /// stream then reaches a prompt that the keyword path would have framed,
+    /// this gives it the same frame.
+    fn close_framed_tail(&mut self) {
+        let is_hold = |byte: u8| crate::text_hold::TextHoldKind::from_marker(byte).is_some();
+        let body_len = self
+            .text
+            .bytes()
+            .rposition(|byte| byte != b'\n' && !is_hold(byte))
+            .map_or(0, |index| index + 1);
+        // `conversation.md §9`: "The renderer drops a quote that would
+        // immediately follow another quote".
+        let mut tail_start = body_len;
+        if !self.text[..body_len].ends_with('"') {
+            self.text.insert(body_len, '"');
+            let quote = crate::ordinary_glyphs_from_engine_text("\"");
+            let at = body_len.min(self.rendered_glyphs.len());
+            self.rendered_glyphs.splice(at..at, quote);
+            tail_start += 1;
+        }
+        let tail_feeds = self.text.as_bytes()[tail_start..]
+            .iter()
+            .filter(|byte| **byte == b'\n')
+            .count();
+        if tail_feeds < 2 || !self.text.ends_with(|c: char| is_hold(c as u8)) {
+            while !self.text.ends_with("\n\n") {
+                self.push_plain_text("\n");
+            }
+        }
+    }
+
     /// [`Self::push_framed_response`] for a fixed engine literal.
     fn set_framed_text(&mut self, text: &str) {
         self.text.clear();
@@ -294,6 +329,12 @@ pub struct ConversationSession {
     /// §9` step 2, "If the Description entry signals a stop, the opener
     /// returns and nothing further is printed."
     opening_ask_who: bool,
+    /// The pending `0x88` ASK-WHO was reached by a stranger's
+    /// self-introduction (`conversation.md §9` step 3), which "runs the
+    /// **Name** entry ... then closes the quote". The close - and the two row
+    /// breaks the opener prints after it - is owed once the resumed Name
+    /// entry finishes without signalling a stop (playtest F04).
+    introduction_ask_who: bool,
 }
 
 impl ConversationSession {
@@ -310,6 +351,7 @@ impl ConversationSession {
             recruit_speaker_pending: false,
             label_records_running: Vec::new(),
             opening_ask_who: false,
+            introduction_ask_who: false,
         }
     }
 
@@ -378,6 +420,7 @@ impl ConversationSession {
             return ConversationSessionOutput::default();
         }
         let mut output = self.run_field_from(0, 0, ctx, 0);
+        self.introduction_ask_who = self.awaiting_ask_who();
         let mut rendered = TlkRenderedText::plain("I am called ");
         rendered.push_rendered(&output.rendered_text());
         output.text = rendered.text;
@@ -404,6 +447,7 @@ impl ConversationSession {
                 let input = capped_tlk_input_bytes(line);
                 let slot = tlk_ask_who_match(&input, ctx.party_member_names);
                 let from_opening = std::mem::take(&mut self.opening_ask_who);
+                let from_introduction = std::mem::take(&mut self.introduction_ask_who);
                 self.phase = ConversationSessionPhase::AwaitingKeyword;
                 // §7.6: on a match ASK-WHO "sets the active scene's
                 // branch-flag bit for the NPC currently speaking". The
@@ -444,6 +488,31 @@ impl ConversationSession {
                 out.text = rendered.text;
                 out.rendered_glyphs = rendered.glyphs;
                 out.asked_who = Some(slot);
+                let stopped =
+                    out.response_signalled_stop || out.end_stream_reached || out.ended;
+                if from_introduction && self.awaiting_ask_who() {
+                    // A second ASK-WHO in the same Name entry: the close is
+                    // still owed after it.
+                    self.introduction_ask_who = true;
+                } else if !stopped
+                    && (from_introduction
+                        || matches!(
+                            self.phase,
+                            ConversationSessionPhase::AwaitingScopedKeyword { .. }
+                        ))
+                {
+                    // `conversation.md §9` step 3: the self-introduction's
+                    // Name entry ran to its end, so the opener "closes the
+                    // quote" and prints its two row breaks - skipped only
+                    // "when the entry that ran signals a stop" (playtest F04).
+                    //
+                    // `§7.7`: a resumed stream that GOTOs a block whose head
+                    // opens a scoped prompt reaches `Your interest?` the same
+                    // way a keyword response does, and `§6`'s response
+                    // framing closes the quote and leaves a blank row before
+                    // it (Fenelon `wond`, Anthony `reci`, Sutek, Dryden).
+                    out.close_framed_tail();
+                }
                 // `conversation.md §9` step 2: "If the Description entry
                 // signals a stop, the opener returns and nothing further is
                 // printed", and §7.7 has a label head that "reaches a
@@ -1477,6 +1546,92 @@ mod tests {
         let missed = s.submit_keyword("nobody", &context);
         assert!(missed.text.contains("Indeed."), "{:?}", missed.text);
         assert_eq!(missed.moral_standing, None);
+    }
+
+    /// rc3 residual (Fenelon `wond`, Anthony `reci`, Sutek, Dryden):
+    /// an ASK-WHO answer that resumes into a GOTO whose labelled head opens a
+    /// scoped prompt reaches `Your interest?` the way a keyword response
+    /// does, so `conversation.md §6`'s framing closes the quote and leaves a
+    /// blank row before the prompt (`§7.7`).
+    #[test]
+    fn ask_who_resuming_into_a_scoped_head_frames_it_like_a_keyword_response() {
+        let mut response = enc("Who?");
+        response.push(TLK_CODE_ASK_WHO);
+        response.extend([TLK_CODE_LITERAL_NEWLINE, TLK_CODE_LITERAL_NEWLINE, 0x91]);
+        let mut head = vec![TLK_CODE_LABEL_RECORD, 0x91];
+        head.extend(enc("Wilt thou learn?"));
+        let names: [&[u8]; 1] = [b"AVATAR"];
+        let context = party_ctx(&names);
+        let mut s = label_session(
+            response,
+            vec![head, enc("Later then."), enc("y"), enc("Listen.")],
+        );
+        s.submit_keyword("ask", &context);
+        assert!(s.awaiting_ask_who());
+        let answered = s.submit_keyword("Avatar", &context);
+        assert_eq!(
+            s.phase,
+            ConversationSessionPhase::AwaitingScopedKeyword { label: 0x91 }
+        );
+        assert_eq!(
+            answered.text,
+            format!(
+                "\n\"{}\n\nWilt thou learn?\"\n\n",
+                crate::TLK_ASK_WHO_AFFIRMATIVE_LINE
+            )
+        );
+        assert_eq!(answered.rendered_text().glyphs.len(), answered.text.len());
+
+        // An ASK-WHO resume that simply returns to the top-level loop keeps
+        // §7.6's contract: the stream supplies what follows.
+        let mut plain = enc("Who?");
+        plain.push(TLK_CODE_ASK_WHO);
+        plain.extend(enc(" Done."));
+        let mut s = label_session(plain, Vec::new());
+        s.submit_keyword("ask", &context);
+        let answered = s.submit_keyword("Avatar", &context);
+        assert_eq!(
+            answered.text,
+            format!("\n\"{} Done.", crate::TLK_ASK_WHO_AFFIRMATIVE_LINE)
+        );
+    }
+
+    /// Playtest F04 follow-up. `conversation.md §9` step 3: the stranger
+    /// "runs the **Name** entry ... then closes the quote", and the closing
+    /// quote "and its two row breaks are skipped [only] when the entry that
+    /// ran signals a stop". A Name entry that pauses on ASK-WHO owes them
+    /// once the answer resumes it to its end.
+    #[test]
+    fn a_self_introduction_ask_who_answer_closes_the_introduction() {
+        let mut name = enc("Grum\"");
+        name.extend([
+            TLK_CODE_LITERAL_NEWLINE,
+            TLK_CODE_LITERAL_NEWLINE,
+            TLK_CODE_IF_ELSE,
+            0xFF,
+            TLK_CODE_ASK_WHO,
+        ]);
+        let raw = vec![
+            name,
+            enc("a knight."),
+            enc("Well met."),
+            enc("I guard."),
+            enc("Farewell."),
+        ];
+        let decoded = raw
+            .iter()
+            .map(|field| field.iter().map(|b| char::from(b ^ TLK_TEXT_XOR_MASK)).collect())
+            .collect();
+        let mut s = ConversationSession::new(raw, decoded);
+        s.set_npc_slot(Some(1));
+        s.present_stranger_opening(&ctx(), true);
+        assert!(s.awaiting_ask_who());
+        let answered = s.submit_keyword("nobody", &ctx());
+        assert_eq!(
+            answered.text,
+            format!("\n\"{}\"\n\n", crate::TLK_ASK_WHO_DISMISSIVE_LINE)
+        );
+        assert_eq!(s.phase, ConversationSessionPhase::AwaitingKeyword);
     }
 
     /// Playtest F05. `conversation.md §7.6` "What ASK-WHO prints": the
