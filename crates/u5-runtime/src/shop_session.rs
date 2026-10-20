@@ -112,10 +112,13 @@ impl ActiveShopSession {
         // `shops.md §8.B`/`§8.C`: record `119`, the dock-space record `125`
         // and the continuation's `?" ` all leave their row open on a closing
         // quote and a space, as the entry greeting does. The ordinary offer's
-        // record `126` ends the same way: measured 2026-10-16
-        // (`bd-shipwright-20261016-215905`, beat `frigate`), the original's
-        // cursor sits after `take it?" ` and `N` echoes there, where this
-        // engine drew a fresh command row under the question.
+        // record `126` ends the same way, now published (`shops.md §8.C`,
+        // u5-spec#299 Q2): it "ends with its closing quote and one space and
+        // no line feed, and the Y/N wait prints nothing ..., so the accepted
+        // echo is appended to the record's last row". First measured
+        // 2026-10-16 (`bd-shipwright-20261016-215905`, beat `frigate`): the
+        // original's cursor sits after `take it?" ` and `N` echoes there,
+        // where this engine drew a fresh command row under the question.
         // The shared member selector the healer and inn Leave use, and the
         // inn's multi-guest register: `inventory.md §4.3` leaves "the message
         // window ... untouched apart from the caller's prompt itself", and
