@@ -30016,7 +30016,10 @@ mod tests {
 
     /// F58 remainder: the headless `--save-screen` composer takes its
     /// narrative page from `u5_runtime::endgame_narrative_frame`, and it is
-    /// only an oracle for this shell while the two pages are identical.
+    /// only an oracle for this shell while the two pages agree. They are
+    /// compared as palette indices: the runtime resolves them through the
+    /// specification's enhanced-display palette, this shell through the
+    /// period 200-line one, which differ at register `0x06` only.
     #[test]
     #[cfg(feature = "original-asset-tests")]
     fn endgame_narrative_window_matches_the_shared_headless_composer() {
@@ -30029,7 +30032,7 @@ mod tests {
         let mut state = test_state(open_grid(), 1, 1);
         state.message = "The Avatar returns to the circle of stones.".to_string();
         for window_index in 0..6usize {
-            let shell = render_endgame_narrative_window_framebuffer(
+            let shell: Vec<u8> = render_endgame_narrative_window_framebuffer(
                 &state,
                 window_index,
                 PlayFrameContext {
@@ -30038,16 +30041,25 @@ mod tests {
                     game_dir,
                     cursor_frame: 0,
                 },
-            );
+            )
+            .chunks_exact(4)
+            .map(ega_palette_index_from_rgba)
+            .collect();
             let headless =
-                u5_runtime::endgame_narrative_frame::compose_endgame_narrative_window_rgba(
+                u5_runtime::endgame_narrative_frame::compose_endgame_narrative_window_indices(
                     &state,
                     game_dir,
                     window_index,
                 )
                 .expect("shared narrative composer");
-            assert!(
-                shell == headless,
+            let differing = shell
+                .iter()
+                .zip(&headless)
+                .filter(|(a, b)| a != b)
+                .count();
+            assert_eq!(
+                (shell.len(), differing),
+                (headless.len(), 0),
                 "window {} differs between the shell and the shared composer",
                 window_index + 1
             );
