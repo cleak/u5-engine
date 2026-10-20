@@ -17138,10 +17138,11 @@ fn lord_british_camp_event_helpers_match_spec() {
 #[test]
 fn rest_status_predicates_match_spec_tables() {
     // rest-and-camp.md §5
-    // Rest-with-watch participation.
+    // Rest-with-watch participation: "Good or Poisoned" (`dungeon-mode.md
+    // §11`, u5-spec#299 Q18).
     assert!(rest_with_watch_participates(CharacterStatus::Good));
     assert!(rest_with_watch_participates(CharacterStatus::Poisoned));
-    assert!(rest_with_watch_participates(CharacterStatus::Sleeping));
+    assert!(!rest_with_watch_participates(CharacterStatus::Sleeping));
     assert!(!rest_with_watch_participates(CharacterStatus::Charmed));
     assert!(!rest_with_watch_participates(CharacterStatus::Dead));
     assert!(!rest_with_watch_participates(CharacterStatus::Ashes));

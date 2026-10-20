@@ -128,3 +128,99 @@ fn spec299_q16_negative_provision_quantity_buys_until_gold_or_ceiling() {
     assert!(matches!(f, 3 | 4), "table scraps: {f}");
     assert_eq!(g, 0);
 }
+
+/// u5-spec#299 Q18, `dungeon-mode.md §11`: `For how many hours? (1-9) ` is
+/// "printed once, after which the reader waits in the cell just after the
+/// prompt's trailing space. Every key other than a digit or Space is
+/// discarded silently - no echo, no reprint, no line feed, no message, no
+/// cursor movement - and Escape does not cancel." Modifier-held top-row
+/// digits arrive as direction codes and "are discarded the same way". "The
+/// rows are therefore `Hole up & camp!`, a blank row, then `For how many
+/// hours? (1-9) N`", and "The wait never advances the clock".
+#[test]
+fn spec299_q18_hours_prompt_discards_invalid_keys_without_reprinting() {
+    let mut state = dungeon_state(open_dungeon_record(), 0, 1, 1);
+    handle_play_key_input(&mut state, 'h', "", Path::new("")).unwrap();
+    assert!(state.active_rest.is_some());
+    state.flush_message_slot();
+    let rows_at_prompt = playtest_transcript_rows(&state);
+    let clock_at_prompt = state.clock;
+    let turn_at_prompt = state.turn;
+
+    for key in [
+        'x',
+        'Q',
+        '\u{1b}',
+        '\r',
+        char::from(crate::INPUT_CODE_NORTH),
+        char::from(crate::INPUT_CODE_WEST),
+        char::from(crate::INPUT_CODE_NORTHEAST),
+    ] {
+        handle_play_key_input(&mut state, key, "", Path::new("")).unwrap();
+        assert!(state.active_rest.is_some(), "{key:?} must not end the prompt");
+        state.flush_message_slot();
+        assert_eq!(
+            playtest_transcript_rows(&state),
+            rows_at_prompt,
+            "{key:?} must leave the window untouched"
+        );
+        assert_eq!(state.clock, clock_at_prompt, "{key:?} advanced the clock");
+        assert_eq!(state.turn, turn_at_prompt, "{key:?} spent a turn");
+    }
+
+    handle_play_key_input(&mut state, '0', "", Path::new("")).unwrap();
+    assert!(state.active_rest.is_none(), "`0` aborts");
+    let rows = playtest_transcript_rows(&state);
+    assert_eq!(
+        rows.iter()
+            .filter(|row| row.contains(REST_HOURS_PROMPT.trim_end()))
+            .count(),
+        1,
+        "the prompt is printed once: {rows:?}"
+    );
+    assert_eq!(
+        rows.last().map(String::as_str),
+        Some(format!("{REST_HOURS_PROMPT}0").as_str()),
+        "{rows:?}"
+    );
+}
+
+/// u5-spec#299 Q18, `dungeon-mode.md §11`: "when two or more members are
+/// Good or Poisoned, `\nWilt thou set a watch? `, answered `No\n\n` or
+/// `Yes\n\n` (every other key at that prompt is discarded the same silent
+/// way; with only one eligible member the question is skipped and camp starts
+/// directly after the hours row's line feed)".
+#[test]
+fn spec299_q18_watch_question_takes_only_y_or_n_and_counts_good_or_poisoned() {
+    let mut state = dungeon_state(open_dungeon_record(), 0, 1, 1);
+    state.party.push(audit_g5_companion(1));
+    state.party.push(audit_g5_companion(2));
+    state.party[2].status = b'P';
+    for key in ['h', '3'] {
+        handle_play_key_input(&mut state, key, "", Path::new("")).unwrap();
+    }
+    assert_eq!(state.message, REST_WATCH_PROMPT);
+    for key in ['\u{1b}', ' ', '0', '\r', '\n', 'q', '1'] {
+        handle_play_key_input(&mut state, key, "", Path::new("")).unwrap();
+        assert!(state.active_rest.is_some(), "{key:?} must be discarded");
+        assert_eq!(state.turn, 0, "{key:?} started the camp");
+        assert!(
+            !playtest_transcript_rows(&state)
+                .iter()
+                .any(|row| row.contains(REST_WATCH_NO_LITERAL.trim_end())),
+            "{key:?} answered the question"
+        );
+    }
+
+    // A Sleeping member is neither Good nor Poisoned: with only one
+    // eligible member left the question is skipped.
+    let mut sleepy = dungeon_state(open_dungeon_record(), 0, 1, 1);
+    sleepy.party.push(audit_g5_companion(1));
+    sleepy.party[1].status = b'S';
+    handle_play_key_input(&mut sleepy, 'h', "", Path::new("")).unwrap();
+    // The camp itself needs the shipped data files this fixture lacks, so
+    // only the skipped question is checked, not the camp's result.
+    let _ = handle_play_key_input(&mut sleepy, '3', "", Path::new(""));
+    assert!(sleepy.active_rest.is_none(), "no watch question");
+    assert_ne!(sleepy.message, REST_WATCH_PROMPT);
+}

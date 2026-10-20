@@ -518,6 +518,8 @@ fn playfix_e31_hours_prompt_zero_echoes_and_escape_is_read_past() {
 
     let mut state = world_state(open_world_grid(), 5, 5);
     assert_eq!(state.start_rest_prompt(), MoveOutcome::Observed);
+    let prompt = state.message.clone();
+    assert!(prompt.ends_with(REST_HOURS_PROMPT));
     assert_eq!(state.step_active_rest('\u{1b}', "", &dir).unwrap(), None);
     assert!(
         matches!(
@@ -526,6 +528,8 @@ fn playfix_e31_hours_prompt_zero_echoes_and_escape_is_read_past() {
         ),
         "Escape leaves the hours prompt waiting"
     );
-    assert_eq!(state.message, REST_HOURS_PROMPT);
+    // `dungeon-mode.md §11` (u5-spec#299 Q18): a discarded key gets "no
+    // reprint", so the prompt the camp printed is left as it was.
+    assert_eq!(state.message, prompt);
     let _ = fs::remove_dir_all(dir);
 }

@@ -98,6 +98,11 @@ impl PlayState {
         let Some(mut session) = self.active_rest.take() else {
             return Ok(None);
         };
+        // `dungeon-mode.md §11` (u5-spec#299 Q18): each prompt is "printed
+        // once", and a discarded key gets "no echo, no reprint, no line feed,
+        // no message, no cursor movement". Only a key that moves the session
+        // to another prompt prints that prompt.
+        let phase_on_entry = session.phase;
         for ch in std::iter::once(key).chain(suffix.chars()) {
             match session.phase {
                 RestPhase::Hours => {
@@ -152,6 +157,10 @@ impl PlayState {
                         RestDurationInput::Discard => {}
                     }
                 }
+                // `dungeon-mode.md §11` (u5-spec#299 Q18): the watch question
+                // is "answered `No\n\n` or `Yes\n\n` (every other key at that
+                // prompt is discarded the same silent way". Escape, Space,
+                // `0` and Return used to answer No.
                 RestPhase::WatchYesNo => match ch.to_ascii_uppercase() {
                     'Y' => {
                         // `commands.md §5.5` / `dungeon-mode.md §11`: the
@@ -166,7 +175,7 @@ impl PlayState {
                         self.message = self.render_active_rest();
                         return Ok(None);
                     }
-                    'N' | '\u{1b}' | ' ' | '0' | '\r' | '\n' => {
+                    'N' => {
                         // As `Yes` above: `No\n\n` lands on `watch? `.
                         self.open_message_row();
                         self.emit_message_line_continuing_row(REST_WATCH_NO_LITERAL);
@@ -209,8 +218,11 @@ impl PlayState {
                 }
             }
         }
+        let reprompt = session.phase != phase_on_entry;
         self.active_rest = Some(session);
-        self.message = self.render_active_rest();
+        if reprompt {
+            self.message = self.render_active_rest();
+        }
         Ok(None)
     }
 

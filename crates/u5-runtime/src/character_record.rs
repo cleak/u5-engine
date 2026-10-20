@@ -149,15 +149,12 @@ pub const fn save_character_field_offset(slot: usize, field_offset: usize) -> us
     0x0002 + slot * SAVE_CHARACTER_RECORD_LEN + field_offset
 }
 
-/// `rest-and-camp.md §5` rest-with-watch participation classification.
-/// Good, Poisoned, and Sleeping members participate in the watch
-/// path; Charmed, Dead, and Ashes members are skipped and have no
-/// dedicated H-Hole-up status transition.
+/// `rest-and-camp.md §5` rest-with-watch participation classification:
+/// the watch question is asked "when two or more members are Good or
+/// Poisoned" (`dungeon-mode.md §11`, u5-spec#299 Q18). Sleeping, Charmed,
+/// Dead, and Ashes members are not counted.
 pub const fn rest_with_watch_participates(status: CharacterStatus) -> bool {
-    matches!(
-        status,
-        CharacterStatus::Good | CharacterStatus::Poisoned | CharacterStatus::Sleeping,
-    )
+    matches!(status, CharacterStatus::Good | CharacterStatus::Poisoned)
 }
 
 /// `rest-and-camp.md §5` town-hours rest pass: only Good members are
