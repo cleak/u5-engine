@@ -367,6 +367,88 @@
         let _ = fs::remove_dir_all(dir);
     }
 
+    /// rc3 residual: a post-turn whirlpool swallow that ends the turn in a
+    /// plane transition keeps the command's result and the effect's lines
+    /// as separate rows (`overworld.md §8.1`, `text-output.md §11`), never
+    /// one space-joined sentence in the slot.
+    #[test]
+    fn post_turn_whirlpool_swallow_keeps_command_and_banner_on_separate_rows() {
+        let dir = debug_game_dir();
+        let mut state = world_state(open_world_grid(), 5, 5);
+        state.area = Area::World {
+            plane: WorldPlane::Britannia,
+        };
+        state.active_objects[0].z = WorldPlane::Britannia.save_floor();
+        state.player.transport = TransportState::Ship {
+            type_byte: 168,
+            tile: 168,
+            sails_hoisted: false,
+            hull: 100,
+            skiffs: 2,
+        };
+        state.sync_player_object();
+        state.party = six_member_party(40);
+        state.turn = 1;
+        state.message = "South".to_string();
+        state.message_flushed.clear();
+        state.message_row_open_mid_line = true;
+        state.active_objects.push(ActiveObject {
+            type_byte: 0xec,
+            tile: 0xec,
+            x: 5,
+            y: 4,
+            z: WorldPlane::Britannia.save_floor(),
+            phase: STEADY_PHASE,
+            aux1: 0,
+            aux3: 0,
+        });
+        state.pending_outdoor_reaction_slots.push(1);
+        state.world_walkers_ran_this_turn = true;
+
+        let outcome = state
+            .apply_world_post_turn_effects_after_turn(0, &dir)
+            .expect("whirlpool reaction should not require optional data");
+
+        assert!(matches!(outcome, Some(MoveOutcome::Transition(_))));
+        assert!(
+            !state.message.starts_with("South "),
+            "the effect was joined onto the command's row: {:?}",
+            state.message
+        );
+        let lines: Vec<&str> = state
+            .message_entries()
+            .iter()
+            .map(|entry| entry.text.as_str())
+            .collect();
+        let south = lines.iter().position(|line| *line == "South");
+        let banner = lines.iter().position(|line| *line == "WHIRLPOOL!");
+        assert!(
+            matches!((south, banner), (Some(s), Some(b)) if s < b),
+            "command row then banner row: {lines:?}"
+        );
+        assert_eq!(lines.iter().filter(|line| **line == "South").count(), 1);
+        // Nothing is left in the slot for a later flush to print again.
+        assert!(!state.flush_message_slot());
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    /// The silent arm: an effect that prints nothing (or only clears the
+    /// slot) leaves the command's row and the row state the command set.
+    #[test]
+    fn a_silent_post_turn_transition_keeps_the_command_row_and_its_row_state() {
+        let mut state = world_state(open_world_grid(), 5, 5);
+        state.message.clear();
+        state.message_row_open_mid_line = false;
+        state.keep_post_turn_effect_rows_separate("Klimb-", true);
+        assert_eq!(state.message, "Klimb-");
+        assert!(state.message_row_open_mid_line);
+
+        state.message_row_open_mid_line = false;
+        state.keep_post_turn_effect_rows_separate("Klimb-", true);
+        assert_eq!(state.message, "Klimb-");
+        assert!(state.message_row_open_mid_line);
+    }
+
     #[test]
     fn ship_broadside_skips_whirlpool_family_without_depletion() {
         let mut state = world_state(open_world_grid(), 0, 0);

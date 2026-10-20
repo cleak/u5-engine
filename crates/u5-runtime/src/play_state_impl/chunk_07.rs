@@ -3656,18 +3656,10 @@ impl PlayState {
                 return Ok(Some(MoveOutcome::Transition(transition)));
             }
         }
+        let pre_effect_row_open = self.message_row_open_mid_line;
         if let Some(transition) = self.apply_world_underfoot_plane_transition(game_dir, plane)? {
             self.pending_world_object_walker_pass = false;
-            let transition_message = self.message.clone();
-            // The command that consumed the turn may have printed nothing
-            // (`Pass`, an accepted step), so the separator only belongs here
-            // when there is something to separate - as the sibling branches
-            // below already do.
-            self.message = if pre_effect_message.is_empty() {
-                transition_message
-            } else {
-                format!("{pre_effect_message} {transition_message}")
-            };
+            self.keep_post_turn_effect_rows_separate(&pre_effect_message, pre_effect_row_open);
             return Ok(Some(MoveOutcome::Transition(transition)));
         }
         let object_epilogue_runs = self.world_object_epilogue_runs_for_turn(turn_before);
@@ -3702,15 +3694,14 @@ impl PlayState {
         // active-objects.md §8: adjacent whirlpool engagement is a
         // plane-transition effect when the party is not on foot.
         let pre_effect_message = self.message.clone();
+        let pre_effect_row_open = self.message_row_open_mid_line;
         if object_epilogue_runs {
             if let Some(outcome) = self.apply_pending_outdoor_reactions(game_dir, plane)? {
                 if outcome.is_transition() {
-                    let transition_message = self.message.clone();
-                    self.message = if pre_effect_message.is_empty() {
-                        transition_message
-                    } else {
-                        format!("{pre_effect_message} {transition_message}")
-                    };
+                    self.keep_post_turn_effect_rows_separate(
+                        &pre_effect_message,
+                        pre_effect_row_open,
+                    );
                 } else if self.combat_active {
                     // `combat.md §4.1`: the engagement's `Attacked!`, group
                     // name and `*** CONFLICT ***` went to the transcript as
@@ -3745,6 +3736,43 @@ impl PlayState {
             }
         }
         Ok(nonterminal_outcome)
+    }
+
+    /// The row model for a post-turn effect that ends the turn in a plane
+    /// transition (`overworld.md §8.1`): the command's own result and the
+    /// effect's lines are separate rows, never one sentence. Joining them
+    /// with a space (`"{command} {effect}"`) put a new, unflushed line in the
+    /// slot that the next flush printed under rows already logged.
+    ///
+    /// - The effect printed nothing - the underfoot plane write "carries no
+    ///   narration of its own" - so the slot keeps the command's row exactly
+    ///   as it was, and the cursor stands where the command left it: the row
+    ///   state is restored to `pre_effect_row_open`, the value the command
+    ///   set.
+    /// - The effect printed - the whirlpool's `\nWHIRLPOOL!\n` and the impact
+    ///   payload's lines go through [`Self::emit_message_line`], which flushes
+    ///   the command's row first, logs each line as its own row and sets the
+    ///   row state from its literal. Anything the effect left in the slot
+    ///   unlogged is flushed here as its own row
+    ///   too. The row state is left exactly as the effect's own emitter set
+    ///   it explicitly; it is never re-derived from the slot's text.
+    /// - The effect only cleared the slot: that is not a print, so the
+    ///   command's row comes back with the row state the command set.
+    pub(crate) fn keep_post_turn_effect_rows_separate(
+        &mut self,
+        pre_effect_message: &str,
+        pre_effect_row_open: bool,
+    ) {
+        if self.message == pre_effect_message || self.message.is_empty() {
+            if self.message.is_empty() && !pre_effect_message.is_empty() {
+                self.message = pre_effect_message.to_string();
+            }
+            self.message_row_open_mid_line = pre_effect_row_open;
+            return;
+        }
+        if self.message != self.message_flushed {
+            self.flush_message_slot();
+        }
     }
 
     /// Resolve the high-to-low reaction list staged by the active-object
