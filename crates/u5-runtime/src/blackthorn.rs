@@ -1533,23 +1533,25 @@ pub const BLACKTHORN_RESCUE_WAIT_CELL_REVEAL: u16 = 17;
 /// `cleak/u5-spec#268`: the beat is "one blocking key wait followed by the
 /// cutscene vector §6.3 already published", and it "is viewport-only: it
 /// draws no text and holds no existing page frozen, it repaints the viewport
-/// 73 times. It is simultaneously a timed hold: 36 two-part stings, 72
-/// one-BIOS-tick delay requests and those 73 world ticks give a **floor of
-/// about five seconds**, and that floor excludes the cost of the 73 viewport
-/// rebuilds, so treat it as a lower bound."
+/// 73 times."
 ///
 /// Held as a wait with nothing to print, so the message window carries the
 /// record across it untouched - the answer's question 3: "No window
 /// selection, no clear, no cursor write, no string print and no character
 /// output occurs between the record and the end of the captive-cell handoff."
-/// Bracketed by measurement, since the published five seconds is a floor that
-/// "excludes the cost of the 73 viewport rebuilds, so treat it as a lower
-/// bound". Ninety-two ticks - the floor exactly - is too short for
-/// `bt-correct/after`, sampled 4 s after the key, where the original is still
-/// holding. A hundred and thirty is too long for `bt-audience/ask3`, where
-/// the original has finished the beat, read a buffered `u` as U-Use and
-/// printed its result 6 s after the key. Both measured 2026-09-12.
-pub const BLACKTHORN_AUDIENCE_EXIT_BEAT_BIOS_TICKS: u16 = 110;
+///
+/// The length is the published one (u5-spec#299 Q10, `RETRACTIONS.md` R568):
+/// "each one-tick request waits for the next timer edge ... so the sting and
+/// the first redraw run inside the tick period the first wait closes", a
+/// repetition "costs exactly two tick periods and the stings add no time",
+/// and "the floor is therefore about 72 tick periods, **about 3.95 s**, and
+/// the exit beat runs for **about 4 s** from the key to the end of the script
+/// on a fast enough host". The emulator captures agree: 110 ms (two ticks)
+/// per repetition at 3000 and 10000 cycles, 3.92 s first to last sting.
+///
+/// This was a measured 110 ticks (about 6 s), bracketed against the withdrawn
+/// "floor of roughly five seconds" that added the stings on top of the waits.
+pub const BLACKTHORN_AUDIENCE_EXIT_BEAT_BIOS_TICKS: u16 = 72;
 
 /// Where a rescue cinematic has got to.
 ///
