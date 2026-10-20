@@ -6589,12 +6589,24 @@ fn yew_wanted_poster_name_row(name: Option<&[u8; SAVE_CHARACTER_NAME_LEN]>) -> S
 /// recruit compare only as "opening characters" of a string-equality routine,
 /// so this engine keeps its conservative reading for it: `LORD` matches a
 /// roster `LORD BRITISH` but `GWEN` does not match `GWENNO`.
+///
+/// It is the speaker's *opening characters* that are compared, so a roster
+/// name that opens the speaker's longer Name entry matches as well. §7.7.1
+/// (u5-spec#299 Q20) has `KEEP.TLK` 1 recruit on the original by `SHAD`, `Y`,
+/// `Y`, and that NPC's Name entry is the name followed by a title, where the
+/// roster record holds the bare name.
 fn party_roster_name_matches(record: &PartyRosterRecord, needle: &str) -> bool {
     let speaker = conversation_name_compare_bytes(needle.as_bytes());
     if speaker.is_empty() {
         return false;
     }
     let roster = conversation_name_compare_bytes(&record.name);
+    if roster.is_empty() {
+        return false;
+    }
+    if speaker.starts_with(&roster) {
+        return true;
+    }
     if roster.len() < speaker.len() || roster[..speaker.len()] != speaker[..] {
         return false;
     }
