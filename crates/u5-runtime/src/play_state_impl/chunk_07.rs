@@ -6378,12 +6378,13 @@ impl PlayState {
     ///
     /// `blackthorn.md §6`'s explicit redraw is "one unconditional world
     /// tick", so the audience's actors go through the shared `visibility.md
-    /// §8` compositor like any world actor: the Avatar (`0x1C`) and the
-    /// second member start on the manacles `0x85` at `(3,5)` and `(7,5)`
-    /// and are drawn as "one of `0x64..0x67`" - the prisoner set. Stock
-    /// capture (`bt-correct`, every audience beat) shows exactly that
-    /// prisoner on both cells. The draw-nothing sentinel `0x16` (§6.1) still
-    /// draws nothing.
+    /// §8` compositor like any world actor: every placed party member (§3
+    /// "Party placement", class tile per member, u5-spec#299 Q11), the
+    /// Avatar at `(3,5)` and the second member at `(7,5)` included, starts
+    /// on the manacles `0x85` and is drawn as "one of `0x64..0x67`" - the
+    /// prisoner set. Stock capture (`bt-correct`, every audience beat) shows
+    /// exactly that prisoner on both cells. The draw-nothing sentinel `0x16`
+    /// (§6.1) still draws nothing.
     pub fn blackthorn_audience_actor_atlas_tile(&self, slot: usize) -> Option<usize> {
         let (_, row, object, terrain, previous, next) =
             self.blackthorn_audience_actor_cell(slot)?;
