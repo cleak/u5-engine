@@ -26676,9 +26676,19 @@ fn dungeon_mode_refuses_world_vehicle_and_entry_letters_without_turn() {
         skiffs: 0,
     };
 
-    for (key, expected) in [('B', "Not here!"), ('E', "Not here!"), ('X', "Not here!")] {
+    // `vehicles.md §4.1` (issue #299 Q25): Board's dungeon refusal is
+    // `\nNot here!\n`, on the row under the `Board` echo. The slot is
+    // cleared per key: `E` completes its own echo as `Enter what?` and
+    // leaves the slot empty, so it used to read the `B` refusal left over
+    // from the key before it.
+    for (key, expected) in [
+        ('B', BOARD_NOT_HERE_REFUSAL),
+        ('E', ""),
+        ('X', "Not here!"),
+    ] {
+        state.message.clear();
         assert!(state.handle_dungeon_key(key, Path::new("")).unwrap());
-        assert_eq!(state.message, expected);
+        assert_eq!(state.message, expected, "{key}");
         assert_eq!(
             state.player.transport,
             TransportState::Ship {
