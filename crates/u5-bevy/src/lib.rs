@@ -19923,8 +19923,8 @@ mod tests {
             .expect("intro runtime must install an Update schedule");
         assert_eq!(
             update.systems_len(),
-            9,
-            "intro runtime needs both input drivers, both animation pumps, the aspect fit, sound playback, sound cleanup, screenshots, and the diagnostic log forwarder"
+            10,
+            "intro runtime needs both input drivers, both animation pumps, the aspect fit, sound playback, sound cleanup, the camp apparition flash, screenshots, and the diagnostic log forwarder"
         );
     }
 
