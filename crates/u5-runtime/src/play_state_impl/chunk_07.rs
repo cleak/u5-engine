@@ -5040,21 +5040,47 @@ impl PlayState {
         if self.active_objects.len() < OOL_SLOTS {
             self.active_objects.resize(OOL_SLOTS, ActiveObject::empty());
         }
+        // `blackthorn.md §3` "Party placement (step 6)" (u5-spec#299 Q11):
+        // "Setup places the first *n* roster records, in roster order, into
+        // cutscene actor slots 0 to *n*-1", *n* the nondead count. "The bound
+        // is a count, not a filter": a Dead record inside the first *n* is
+        // placed like any other. Each gets "the member's class tile".
+        let nondead = self.blackthorn_eligible_party_member_count();
+        let class_tile = |party: &[crate::PartyMember], index: usize| {
+            party
+                .get(index)
+                .map(|member| crate::blackthorn::blackthorn_audience_class_tile(member.class_byte))
+        };
+        for slot in crate::blackthorn::BLACKTHORN_AUDIENCE_FURTHER_PARTY_SLOTS {
+            let placed = crate::blackthorn::blackthorn_audience_party_cell(nondead, slot)
+                .zip(class_tile(&self.party, slot));
+            self.active_objects[slot] = match placed {
+                Some(((x, y), tile)) => ActiveObject {
+                    type_byte: tile,
+                    tile,
+                    x,
+                    y,
+                    z: 0,
+                    phase: STEADY_PHASE,
+                    aux1: slot as u8,
+                    aux3: BLACKTHORN_CUTSCENE_AUX3_ROLE_MARKER,
+                },
+                None => ActiveObject::empty(),
+            };
+        }
         for placement in BLACKTHORN_AUDIENCE_ACTOR_PLACEMENTS {
             if placement.actor == BlackthornCutsceneActor::SecondPartyMember
-                && self.party.len() <= BLACKTHORN_FAILURE_VICTIM_SLOT
+                && (nondead <= BLACKTHORN_FAILURE_VICTIM_SLOT
+                    || self.party.len() <= BLACKTHORN_FAILURE_VICTIM_SLOT)
             {
                 continue;
             }
             let slot = placement.actor.slot_index() as usize;
-            let actor_byte = if placement.actor == BlackthornCutsceneActor::SecondPartyMember {
-                self.party
-                    .get(BLACKTHORN_FAILURE_VICTIM_SLOT)
-                    .map(|member| combat_party_actor_byte(member.class_byte))
-                    .filter(|byte| *byte != 0)
-                    .unwrap_or(crate::PLAYER_TILE)
-            } else {
-                placement.tile
+            let actor_byte = match placement.actor {
+                BlackthornCutsceneActor::Avatar | BlackthornCutsceneActor::SecondPartyMember => {
+                    class_tile(&self.party, slot).unwrap_or(placement.tile)
+                }
+                _ => placement.tile,
             };
             self.active_objects[slot] = ActiveObject {
                 type_byte: actor_byte,
@@ -6334,7 +6360,10 @@ impl PlayState {
         let object = *self.active_objects.get(slot)?;
         if object.is_empty()
             || object.aux3 != BLACKTHORN_CUTSCENE_AUX3_ROLE_MARKER
-            || crate::blackthorn::blackthorn_cutscene_actor(slot as u8).is_none()
+            // `blackthorn.md §3` (u5-spec#299 Q11): the further party
+            // prisoners in slots 2 to 5 are drawn like the named actors.
+            || (crate::blackthorn::blackthorn_cutscene_actor(slot as u8).is_none()
+                && !crate::blackthorn::BLACKTHORN_AUDIENCE_FURTHER_PARTY_SLOTS.contains(&slot))
         {
             return None;
         }

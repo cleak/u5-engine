@@ -2709,6 +2709,9 @@
                 _ => (placement.x, placement.y),
             };
             let expected_actor_byte = match placement.actor {
+                // `blackthorn.md §3` step 6 (u5-spec#299 Q11): each placed
+                // party actor carries its member's class tile.
+                BlackthornCutsceneActor::Avatar => 0x4C,
                 BlackthornCutsceneActor::SecondPartyMember => 0x48,
                 BlackthornCutsceneActor::SeatedBlackthorn => 0x78,
                 _ => placement.tile,

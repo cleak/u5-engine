@@ -403,6 +403,57 @@ pub const BLACKTHORN_AUDIENCE_ACTOR_PLACEMENTS: [BlackthornCutsceneActorPlacemen
     },
 ];
 
+/// `blackthorn.md §3` "Party placement (step 6)" (u5-spec#299 Q11): the
+/// party actor slots the placement table fills beyond slots 0 and 1. "Slots 2
+/// to 5 are never moved or cleared by any audience script".
+pub const BLACKTHORN_AUDIENCE_FURTHER_PARTY_SLOTS: std::ops::RangeInclusive<usize> = 2..=5;
+
+/// `blackthorn.md §3` "Party placement (step 6)" (u5-spec#299 Q11): the cell
+/// of party actor `slot` when the nondead count is `nondead`, or `None` when
+/// that slot is not placed. "The cell for each slot depends only on *n*":
+///
+/// | *n* | Slot 0 | Slot 1 | Slot 2 | Slot 3 | Slot 4 | Slot 5 |
+/// |---|---|---|---|---|---|---|
+/// | 1 | (3,5) | | | | | |
+/// | 2 | (3,5) | (7,5) | | | | |
+/// | 3 | (3,5) | (7,5) | (0,1) | | | |
+/// | 4 | (3,5) | (7,5) | (10,1) | (0,1) | | |
+/// | 5 | (3,5) | (7,5) | (9,1) | (1,1) | (0,1) | |
+/// | 6 | (3,5) | (7,5) | (10,1) | (9,1) | (1,1) | (0,1) |
+pub const fn blackthorn_audience_party_cell(nondead: usize, slot: usize) -> Option<(usize, usize)> {
+    if slot >= nondead || nondead > 6 {
+        return None;
+    }
+    Some(match (nondead, slot) {
+        (_, 0) => (3, 5),
+        (_, 1) => (7, 5),
+        (3, 2) => (0, 1),
+        (4, 2) => (10, 1),
+        (4, 3) => (0, 1),
+        (5, 2) => (9, 1),
+        (5, 3) => (1, 1),
+        (5, 4) => (0, 1),
+        (6, 2) => (10, 1),
+        (6, 3) => (9, 1),
+        (6, 4) => (1, 1),
+        (6, 5) => (0, 1),
+        _ => return None,
+    })
+}
+
+/// `blackthorn.md §3` step 6 (u5-spec#299 Q11): "Each placed actor gets the
+/// member's class tile, taken from the same class-letter table as
+/// `systems/rest-and-camp.md` Section 7.2": Mage `0x40`, Bard `0x44`,
+/// Fighter `0x48`, and `0x4C` for the Avatar and every other class.
+pub const fn blackthorn_audience_class_tile(class_byte: u8) -> u8 {
+    match class_byte.to_ascii_uppercase() {
+        b'M' => 0x40,
+        b'B' => 0x44,
+        b'F' => 0x48,
+        _ => 0x4C,
+    }
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct BlackthornCutsceneActorState {
     pub x: usize,

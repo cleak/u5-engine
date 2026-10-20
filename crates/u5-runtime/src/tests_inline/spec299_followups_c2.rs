@@ -57,3 +57,94 @@ fn spec299_q9_merciful_exit_beat_opens_no_command_row() {
     );
     let _ = fs::remove_dir_all(dir);
 }
+
+/// u5-spec#299 Q11, `blackthorn.md §3` "Party placement (step 6)": with three
+/// nondead members the third roster record is placed in slot 2 at `(0,1)`, a
+/// manacle cell, so it is drawn as a prisoner like the first two ("Every
+/// placed member, the Avatar included, therefore appears as a manacled
+/// prisoner").
+#[test]
+fn spec299_q11_third_member_stands_manacled_at_zero_one() {
+    let mut state = test_state(open_grid(), 12, 20);
+    state.party.push(audit_g5_companion(1));
+    state.party.push(audit_g5_companion(2));
+    state.blackthorn_audience_map = Some(blackthorn_audience_fixture_map());
+    state.install_blackthorn_audience_actors();
+
+    let third = state.active_objects[2];
+    assert!(!third.is_empty(), "slot 2 holds the third member");
+    assert_eq!((third.x, third.y), (0, 1));
+    // "Each placed actor gets the member's class tile" (rest-and-camp §7.2).
+    assert_eq!(third.tile, 0x48, "a Fighter");
+    assert_eq!(state.active_objects[0].tile, 0x4C, "the Avatar's class tile");
+    assert!(state.active_objects[3].is_empty(), "n = 3 places three slots");
+    let prisoner = 0x164..=0x167usize;
+    for slot in 0..3 {
+        let tile = state.blackthorn_audience_actor_atlas_tile(slot).unwrap();
+        assert!(prisoner.contains(&tile), "slot {slot} drew {tile:#x}");
+    }
+}
+
+/// u5-spec#299 Q11: the published cell table, and "The bound is a count, not
+/// a filter: a Dead record that falls inside the first *n* is placed like any
+/// other, and the last nondead record is then left out."
+#[test]
+fn spec299_q11_placement_follows_the_nondead_count_table() {
+    use crate::blackthorn::blackthorn_audience_party_cell as cell;
+    assert_eq!(cell(1, 1), None);
+    assert_eq!(cell(4, 2), Some((10, 1)));
+    assert_eq!(cell(4, 3), Some((0, 1)));
+    assert_eq!(cell(5, 2), Some((9, 1)));
+    assert_eq!(cell(5, 3), Some((1, 1)));
+    assert_eq!(cell(5, 4), Some((0, 1)));
+    assert_eq!(
+        (2..6).map(|slot| cell(6, slot)).collect::<Vec<_>>(),
+        vec![Some((10, 1)), Some((9, 1)), Some((1, 1)), Some((0, 1))]
+    );
+
+    let mut state = test_state(open_grid(), 12, 20);
+    let mut dead = audit_g5_companion(1);
+    dead.status = b'D';
+    dead.hp = 0;
+    state.party.push(dead);
+    state.party.push(audit_g5_companion(2));
+    state.install_blackthorn_audience_actors();
+    // n = 2: slots 0 and 1, the Dead record in slot 1; record 2 is left out.
+    assert_eq!(
+        (state.active_objects[1].x, state.active_objects[1].y),
+        (7, 5)
+    );
+    assert!(state.active_objects[2].is_empty());
+}
+
+/// u5-spec#299 Q11: "Slots 2 to 5 are never moved or cleared by any audience
+/// script ... the (0,1) prisoner, slot 2, survived the exit beat."
+#[test]
+fn spec299_q11_third_prisoner_survives_the_exit_beat() {
+    let dir = debug_game_dir();
+    let mut state = test_state(open_grid(), 5, 5);
+    state.party.push(audit_g5_companion(1));
+    state.party.push(audit_g5_companion(2));
+    state.repaint_stats_panel();
+    state.begin_blackthorn_audience_capture(&dir).unwrap();
+    assert_eq!((state.active_objects[2].x, state.active_objects[2].y), (0, 1));
+    while state.active_blackthorn.as_ref().is_some_and(|c| c.current_prompt().is_none()) {
+        state.submit_blackthorn_audience_answer("", &dir).unwrap();
+    }
+    state.submit_blackthorn_audience_answer("Ahm", &dir).unwrap();
+    state.flush_staged_narration();
+    state.submit_blackthorn_audience_answer("", &dir).unwrap();
+    assert!(state.pending_blackthorn_audience_exit);
+    let third = state.active_objects[2];
+    assert_eq!((third.x, third.y), (0, 1), "the exit vector leaves slot 2 alone");
+    assert_eq!(third.aux3, BLACKTHORN_CUTSCENE_AUX3_ROLE_MARKER);
+    // "They go at the captive-cell handoff, because the town entry it
+    // triggers clears actor slots 1 to 31".
+    state.run_blackthorn_audience_exit_to_handoff(&dir).unwrap();
+    assert!(state
+        .active_objects
+        .iter()
+        .skip(1)
+        .all(|object| object.aux3 != BLACKTHORN_CUTSCENE_AUX3_ROLE_MARKER || object.is_empty()));
+    let _ = fs::remove_dir_all(dir);
+}
