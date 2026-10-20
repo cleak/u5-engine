@@ -670,6 +670,17 @@ pub fn run_tlk_stream_from(bytes: &[u8], start: usize, inputs: &TlkRunInputs) ->
                         from: TLK_CODE_IF_ELSE,
                         to: target_label,
                     });
+                    if inputs.yield_on_ask {
+                        // `conversation.md §7.7` (u5-spec#299 Q20): "IF/ELSE
+                        // branches reuse the same machinery" - a taken
+                        // transfer enters the label handler like a GOTO, and
+                        // for the stream it leaves it is a stop ("an IF-ELSE
+                        // that transfers"). The interactive wrapper owns that
+                        // handler and the target block's scoped prompt.
+                        out.stop = TlkRunStop::LabelTransfer(target_label);
+                        out.consumed = pos;
+                        return out;
+                    }
                     pos = target_pos;
                 }
             }
@@ -699,6 +710,13 @@ pub fn run_tlk_stream_from(bytes: &[u8], start: usize, inputs: &TlkRunInputs) ->
                             from: TLK_CODE_IF_ELSE_ALT,
                             to: target_label,
                         });
+                        if inputs.yield_on_ask {
+                            // As `0x8C` above: the transfer is the label
+                            // handler's (`conversation.md §7.7`).
+                            out.stop = TlkRunStop::LabelTransfer(target_label);
+                            out.consumed = pos;
+                            return out;
+                        }
                         pos = target_pos;
                     } else {
                         out.stop = TlkRunStop::UnresolvedGotoLabel(target_label);

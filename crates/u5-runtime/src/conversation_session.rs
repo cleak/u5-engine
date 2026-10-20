@@ -2903,8 +2903,13 @@ mod tests {
     fn taken_if_else_lands_in_a_labelled_record_elsewhere_in_the_blob() {
         let mut response = vec![TLK_CODE_IF_ELSE, 0x92];
         response.extend(enc_with_stop("Who art thou?", TLK_CODE_END_OF_RESPONSE));
+        // §7.2: a stream ending in `0xFF` "must carry its own" closing quote
+        // and row breaks; shipped streams do.
         let mut record = vec![TLK_CODE_LABEL_RECORD, 0x92];
-        record.extend(enc_with_stop("Welcome back, friend.", TLK_CODE_END_OF_RESPONSE));
+        record.extend(enc_with_stop(
+            "Welcome back, friend.\"",
+            TLK_CODE_END_OF_RESPONSE,
+        ));
         let mut s = label_session(response, vec![enc("OTHER"), record]);
 
         let known = ConversationContext {
@@ -2912,11 +2917,73 @@ mod tests {
             ..ctx()
         };
         let out = s.submit_keyword("ask", &known);
-        assert_eq!(out.text, framed_response("Welcome back, friend."));
+        assert_eq!(out.text, framed_response("Welcome back, friend.\""));
         assert_eq!(s.phase, ConversationSessionPhase::AwaitingKeyword);
 
         let stranger = s.submit_keyword("ask", &ctx());
         assert_eq!(stranger.text, framed_response("Who art thou?"));
+    }
+
+    /// u5-spec#299 Q20, §7.7: "IF/ELSE branches reuse the same machinery",
+    /// and for the head it leaves "an IF-ELSE that transfers" is a stop. The
+    /// shipped stranger blocks (Q21) ask ASK-WHO and then `0x8C` to another
+    /// block: a match must run *that* block's head and open *its* scoped
+    /// prompt, not the first block's.
+    #[test]
+    fn a_taken_if_else_in_a_head_runs_the_target_block_and_its_prompt() {
+        let mut first = vec![TLK_CODE_LABEL_RECORD, 0x91];
+        first.extend(enc("Thy name?\""));
+        // The shipped shape: ASK-WHO, the quote it discards, two feeds, then
+        // the IF-ELSE (`DWELLING.TLK` id 10).
+        first.push(TLK_CODE_ASK_WHO);
+        first.extend(enc("\""));
+        first.extend([
+            TLK_CODE_LITERAL_NEWLINE,
+            TLK_CODE_LITERAL_NEWLINE,
+            TLK_CODE_IF_ELSE,
+            0x92,
+            TLK_CODE_END_STREAM,
+        ]);
+        let mut second = vec![TLK_CODE_LABEL_RECORD, 0x92];
+        second.extend(enc("Art thou the Avatar?"));
+        let names: [&[u8]; 1] = [b"AVATAR"];
+        let context = party_ctx(&names);
+        let session = || {
+            label_session(
+                vec![0x91],
+                vec![
+                    first.clone(),
+                    enc("First default."),
+                    second.clone(),
+                    enc("Second default."),
+                    enc("y"),
+                    enc("Second yes."),
+                ],
+            )
+        };
+        let mut s = session();
+        s.submit_keyword("ask", &context);
+        assert!(s.awaiting_ask_who());
+        let matched = s.submit_keyword("avatar", &context);
+        assert_eq!(
+            matched.text,
+            format!(
+                "\n\"{}\n\n\"Art thou the Avatar?\"\n\n",
+                crate::TLK_ASK_WHO_AFFIRMATIVE_LINE
+            )
+        );
+        assert_eq!(
+            s.phase,
+            ConversationSessionPhase::AwaitingScopedKeyword { label: 0x92 }
+        );
+        let yes = s.submit_keyword("y", &context);
+        assert_eq!(yes.text, framed_response("Second yes."));
+
+        // No match: the IF-ELSE falls through to `0x82`, which ends it.
+        let mut s = session();
+        s.submit_keyword("ask", &context);
+        let missed = s.submit_keyword("nobody", &context);
+        assert!(missed.ended);
     }
 
     /// Audit A074. §7.7: a GOTO "rewinds ... and enters the label handler",
