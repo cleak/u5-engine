@@ -37,8 +37,9 @@ pub enum ConversationSessionPhase {
     Opened,
     /// Greeting was presented; keyword input loop is active.
     AwaitingKeyword,
-    /// A labelled block opened a scoped `Your interest?` prompt. Top-level
-    /// reserved responses are suppressed while this phase is active.
+    /// A labelled block's head reached its NUL and opened the scoped
+    /// `You respond-` prompt (`conversation.md §7.7` step 2). The five
+    /// functional reserved words are inert while this phase is active.
     AwaitingScopedKeyword { label: u8 },
     /// A TLK `0x88` ASK-WHO prompt is waiting for a free-text party-member
     /// name, then resumes the response at `cursor`.
@@ -653,8 +654,10 @@ impl ConversationSession {
     pub fn prompt_message(&self) -> String {
         match self.phase {
             ConversationSessionPhase::AwaitingKeyword => TLK_KEYWORD_PROMPT.to_string(),
+            // `conversation.md §7.7` step 2 (u5-spec#299 Q20, R573): the
+            // scoped prompt is `You respond-`, "**not** `Your interest?`".
             ConversationSessionPhase::AwaitingScopedKeyword { .. } => {
-                TLK_KEYWORD_PROMPT.to_string()
+                TLK_SCOPED_PROMPT.to_string()
             }
             ConversationSessionPhase::AwaitingAskWho { .. } => {
                 crate::TLK_ASK_WHO_PROMPT.to_string()
@@ -673,6 +676,16 @@ impl ConversationSession {
     /// acknowledgement instead.
     pub fn awaiting_ask_who(&self) -> bool {
         matches!(self.phase, ConversationSessionPhase::AwaitingAskWho { .. })
+    }
+
+    /// Whether the next typed line answers a labelled block's scoped
+    /// `You respond-` prompt. `conversation.md §7.7` step 2: an empty line
+    /// there only re-asks; it never reaches §6's `BYE` shortcut.
+    pub fn awaiting_scoped_keyword(&self) -> bool {
+        matches!(
+            self.phase,
+            ConversationSessionPhase::AwaitingScopedKeyword { .. }
+        )
     }
 
     /// Caller has finished presenting the Bye response; close the
@@ -976,8 +989,13 @@ impl ConversationSession {
             .collect();
 
         if input_upper.is_empty() {
+            // `conversation.md §7.7` step 2 (u5-spec#299 Q20, R575): "print
+            // two row breaks, `"What didst thou say?` ..., and two row
+            // breaks, then repeat PROMPT. The head is **not** re-run, nothing
+            // ends, and no `BYE` is printed." The first break closes the
+            // `:` row the caller already committed.
             let mut out = ConversationSessionOutput::default();
-            out.set_plain_text(TLK_EMPTY_INPUT_BYE_MESSAGE);
+            out.set_plain_text(&format!("\n{TLK_SCOPED_EMPTY_INPUT_LINE}\n\n"));
             self.phase = ConversationSessionPhase::AwaitingScopedKeyword { label };
             return out;
         }
@@ -2294,7 +2312,8 @@ mod tests {
             s.phase,
             ConversationSessionPhase::AwaitingScopedKeyword { label: 0x91 }
         );
-        assert_eq!(s.prompt_message(), TLK_KEYWORD_PROMPT);
+        // u5-spec#299 Q20 (R573): `You respond-`, not `Your interest?`.
+        assert_eq!(s.prompt_message(), TLK_SCOPED_PROMPT);
 
         let yes = s.submit_keyword("y", &context);
         assert_eq!(yes.text, framed_response("Lead on!\""));
@@ -2397,14 +2416,20 @@ mod tests {
         assert_eq!(yes.text, framed_response("Eat."));
     }
 
+    /// u5-spec#299 Q20 (R575): an empty line at the scoped prompt prints
+    /// `"What didst thou say?` between two pairs of row breaks and re-asks
+    /// `You respond-` without the head; no `BYE`.
     #[test]
     fn scoped_prompt_empty_input_reissues_without_closing() {
         let mut s = scoped_yes_no_session();
         s.submit_keyword("ask", &ctx());
 
         let empty = s.submit_keyword("", &ctx());
-        assert_eq!(empty.text, TLK_EMPTY_INPUT_BYE_MESSAGE);
+        assert_eq!(empty.text, "\n\"What didst thou say?\n\n");
+        assert!(!empty.text.contains("BYE"));
+        assert!(!empty.text.contains("Shall I join thee?"));
         assert!(!empty.ended);
+        assert_eq!(s.prompt_message(), "You respond-\n:");
         assert_eq!(
             s.phase,
             ConversationSessionPhase::AwaitingScopedKeyword { label: 0x91 }

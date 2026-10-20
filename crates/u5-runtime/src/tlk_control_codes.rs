@@ -734,6 +734,18 @@ pub const TLK_CODE_END_OF_RESPONSE: u8 = 0xFF;
 /// handling may strip the embedded newline.
 pub const TLK_KEYWORD_PROMPT: &str = "Your interest?\n:";
 
+/// `conversation.md §7.7` step 2 (u5-spec#299 Q20): a labelled block's
+/// scoped prompt prints "`You respond-`, a row break and `:`" - "This is
+/// **not** `Your interest?`" (R573). Its `:` row stays open for input like
+/// [`TLK_KEYWORD_PROMPT_OPEN_LINE`].
+pub const TLK_SCOPED_PROMPT: &str = "You respond-\n:";
+
+/// `conversation.md §7.7` step 2 (u5-spec#299 Q20, R575): an empty line at
+/// the scoped prompt prints "two row breaks, `\"What didst thou say?` (an
+/// opening quote and no closing one), and two row breaks, then repeat[s]
+/// PROMPT". This is the line between those breaks.
+pub const TLK_SCOPED_EMPTY_INPUT_LINE: &str = "\"What didst thou say?";
+
 /// The row of [`TLK_KEYWORD_PROMPT`] that stays open for input.
 ///
 /// The prompt logs two rows; the second is the one being edited, so it

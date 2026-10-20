@@ -3517,6 +3517,92 @@ fn active_conversation_recruit_speaker_runs_inline_without_a_name_prompt() {
     assert!(state.active_conversation.is_none());
 }
 
+/// A Talk session whose `JOIN` answer GOTOs a labelled yes/no block shaped
+/// like the shipped recruit blocks (`conversation.md §7.7.1`, Julia).
+fn scoped_join_talk_state() -> PlayState {
+    let enc = |s: &str| s.bytes().map(|b| b ^ 0x80).collect::<Vec<u8>>();
+    let mut head = vec![TLK_CODE_LABEL_RECORD, 0x91];
+    head.extend(enc("Shall I join thee now?"));
+    let mut yes = enc("At last!\"");
+    yes.push(TLK_CODE_RECRUIT_SPEAKER);
+    let raw_fields = vec![
+        enc("Gwenno"),
+        enc("a bard"),
+        enc("Greetings"),
+        enc("I sing"),
+        enc("Farewell"),
+        enc("JOIN"),
+        vec![0x91],
+        head,
+        enc("Just let me know."),
+        enc("y"),
+        yes,
+        vec![TLK_CODE_LABEL_RECORD, TLK_LABEL_LAST, 0xC0],
+    ];
+    let decoded: Vec<String> = raw_fields
+        .iter()
+        .map(|field| field.iter().map(|b| char::from(b ^ 0x80)).collect())
+        .collect();
+    let mut dialogue: HashMap<u16, Vec<String>> = HashMap::new();
+    dialogue.insert(0x10, decoded);
+    let mut raw: HashMap<u16, Vec<Vec<u8>>> = HashMap::new();
+    raw.insert(0x10, raw_fields);
+
+    let mut state = test_state(open_grid(), 1, 1);
+    state.party_roster = vec![
+        conversation_test_roster_record(0, b"AVATAR\0\0\0", b'A'),
+        conversation_test_roster_record(1, b"GWENNO\0\0\0", b'B'),
+    ];
+    state.player.facing = Direction::East;
+    state.load_scheduled_npcs(&[
+        NpcSlot {
+            slot: 0,
+            type_byte: 0,
+            dialog_id: 0,
+            schedule: [0; 16],
+            name: None,
+        },
+        NpcSlot {
+            slot: 1,
+            type_byte: 1,
+            dialog_id: 0x10,
+            schedule: [0, 0, 0, 2, 2, 2, 1, 1, 1, 0, 0, 0, 0, 8, 16, 20],
+            name: None,
+        },
+    ]);
+    assert_eq!(
+        state.talk_facing_with_dialogue_and_keyword_raw(&dialogue, &raw, None),
+        MoveOutcome::Talked
+    );
+    state
+}
+
+/// u5-spec#299 Q20, `conversation.md §7.7` step 2: the scoped prompt is
+/// `You respond-` (R573), and an empty line there prints `"What didst thou
+/// say?` and re-asks - no `BYE` echo, no Bye entry, nothing ends (R575).
+#[test]
+fn a_scoped_prompt_reads_you_respond_and_an_empty_line_only_re_asks() {
+    let mut state = scoped_join_talk_state();
+    handle_play_key_input(&mut state, 'J', "OIN", Path::new("")).unwrap();
+    assert!(transcript_has(&state, "Shall I join thee now?"));
+    assert_eq!(state.message, "You respond-\n:");
+
+    handle_play_key_input(&mut state, '\r', "", Path::new("")).unwrap();
+    assert!(transcript_has(&state, "\"What didst thou say?"));
+    assert!(!transcript_has(&state, "BYE"));
+    assert!(!transcript_has(&state, "Farewell"));
+    assert!(state.active_conversation.is_some());
+    assert_eq!(state.message, "You respond-\n:");
+
+    // §7.7.1: `Y` at the scoped prompt runs the recruit, which ends the
+    // conversation with no `BYE` and no Bye entry.
+    handle_play_key_input(&mut state, 'Y', "", Path::new("")).unwrap();
+    assert!(transcript_has(&state, "At last!"));
+    assert!(!transcript_has(&state, "Farewell"));
+    assert!(state.active_conversation.is_none());
+    assert_eq!(state.party.len(), 2);
+}
+
 #[test]
 fn active_conversation_ask_who_consumes_next_line_as_answer() {
     let mut dialogue: HashMap<u16, Vec<String>> = HashMap::new();

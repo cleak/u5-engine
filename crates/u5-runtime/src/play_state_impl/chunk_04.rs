@@ -5629,17 +5629,23 @@ impl PlayState {
     }
 
     /// Which prompt closes the opening: `§7`'s ASK-WHO name prompt when
-    /// the Description entry suspended on its `0x88`, `§6`'s keyword
-    /// prompt otherwise - including a Description that suspended on a
-    /// label block's scoped prompt (`§7.7`), which prints the same
-    /// `Your interest?`.
+    /// the Description entry suspended on its `0x88`, a label block's
+    /// scoped `You respond-` prompt when a Description or Greeting GOTO's
+    /// head reached its NUL (`§7.7` step 2, u5-spec#299 Q20: "This is
+    /// **not** `Your interest?`"), `§6`'s keyword prompt otherwise.
     fn open_conversation_prompt(&self, suspended: bool) -> &'static str {
         let ask_who = self
             .active_conversation
             .as_ref()
             .is_some_and(|session| session.awaiting_ask_who());
+        let scoped = self
+            .active_conversation
+            .as_ref()
+            .is_some_and(|session| session.awaiting_scoped_keyword());
         if suspended && ask_who {
             crate::TLK_ASK_WHO_PROMPT
+        } else if scoped {
+            crate::tlk_control_codes::TLK_SCOPED_PROMPT
         } else {
             TLK_KEYWORD_PROMPT
         }
@@ -5855,11 +5861,14 @@ impl PlayState {
         // neither the `BYE` echo nor the spent-feed strip applies there.
         // Only a truly empty line is empty; a lone space is typed input
         // (`conversation.md §7.6`).
+        //
+        // `conversation.md §7.7` step 2 (u5-spec#299 Q20, R575): the scoped
+        // `You respond-` prompt is not that prompt either - an empty line
+        // there re-asks with `"What didst thou say?` and prints no `BYE`.
         let empty_line = line.is_empty()
-            && !self
-                .active_conversation
-                .as_ref()
-                .is_some_and(|session| session.awaiting_ask_who());
+            && !self.active_conversation.as_ref().is_some_and(|session| {
+                session.awaiting_ask_who() || session.awaiting_scoped_keyword()
+            });
         if let Some(prompt) = open_prompt.as_deref() {
             // §6's capture shows the keyword echoed in capitals.
             let echo = if empty_line {
