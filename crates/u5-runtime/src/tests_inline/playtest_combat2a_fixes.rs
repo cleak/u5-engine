@@ -296,13 +296,15 @@ fn playtest_f38_victory_after_a_cast_kill_keeps_its_leading_blank_row() {
     let _ = game_dir;
 }
 
-/// `combat.md §14`: `BATTLE IS LOST!` "begins with a newline and has no
-/// trailing newline", and `text-output.md §10.4`: for a result that does not
-/// end in a feed "the next poll's leading feed closes the open row and no
-/// blank row appears". Playtest F41: the world prompt took a blank row under
-/// the arena's last line.
+/// `combat.md §14` says `BATTLE IS LOST!` "has no trailing newline", and
+/// playtest F41 read that as the world prompt following the loss line
+/// directly. The stock capture says otherwise:
+/// `qa/paired/combat-escape-ordinary.tsv` (edge, stepped-out and after beats)
+/// shows a blank row between `BATTLE IS LOST!` and the world prompt, both
+/// while it waits and once the next key is echoed. Marking the row open
+/// regressed that scenario in rc3 after it matched in rc2.
 #[test]
-fn playtest_f41_the_world_prompt_follows_the_battle_lost_line_directly() {
+fn edge_defeat_battle_lost_line_keeps_the_blank_row_before_the_world_prompt() {
     let game_dir = std::path::Path::new(".");
     let mut state = combat_player_command_state(8, 0);
     state.combat_actors[0].y = 0;
@@ -315,7 +317,7 @@ fn playtest_f41_the_world_prompt_follows_the_battle_lost_line_directly() {
     assert!(!state.combat_active, "the edge exit ended the fight");
     let last = state.message_entries().last().expect("a transcript");
     assert_eq!(last.text, "BATTLE IS LOST!");
-    assert!(last.leaves_row_open, "the loss line leaves its row open");
+    assert!(!last.leaves_row_open, "the loss line's row is closed");
     let mut log = message_log_from_entries(state.message_entries(), |text| {
         (!text.trim().is_empty()).then(|| text.to_string())
     });
@@ -326,15 +328,17 @@ fn playtest_f41_the_world_prompt_follows_the_battle_lost_line_directly() {
         .iter()
         .position(|row| *row == "BATTLE IS LOST!")
         .unwrap_or_else(|| panic!("the loss line is drawn: {rows:?}"));
-    assert_eq!(layout.rows[lost + 1].row, layout.rows[lost].row + 1);
-    assert!(
-        layout.rows[lost + 1].prefixed,
-        "the prompt marker: {rows:?}"
+    let prompt = layout.rows[lost + 1..]
+        .iter()
+        .find(|row| row.prefixed)
+        .unwrap_or_else(|| panic!("the prompt marker: {rows:?}"));
+    assert_eq!(
+        prompt.row,
+        layout.rows[lost].row + 2,
+        "one blank row under the loss line: {rows:?}"
     );
 
-    // The echo of the next world key lands on that same row: the leading
-    // feed that closes the open row derives no blank, so the prompt does not
-    // drop a row once the key is typed.
+    // The echo of the next world key keeps that blank row.
     handle_play_key_input(&mut state, ' ', "", game_dir).unwrap();
     let mut log = message_log_from_entries(state.message_entries(), |text| {
         (!text.trim().is_empty()).then(|| text.to_string())
@@ -346,14 +350,14 @@ fn playtest_f41_the_world_prompt_follows_the_battle_lost_line_directly() {
         .iter()
         .rposition(|row| *row == "BATTLE IS LOST!")
         .unwrap_or_else(|| panic!("the loss line is drawn: {rows:?}"));
+    let echo = layout.rows[lost + 1..]
+        .iter()
+        .find(|row| row.prefixed && !row.text.is_empty())
+        .unwrap_or_else(|| panic!("the next key's echo: {rows:?}"));
     assert_eq!(
-        layout.rows[lost + 1].row,
-        layout.rows[lost].row + 1,
-        "the echo follows the loss line directly: {rows:?}"
-    );
-    assert!(
-        layout.rows[lost + 1].prefixed && !layout.rows[lost + 1].text.is_empty(),
-        "the next key's echo: {rows:?}"
+        echo.row,
+        layout.rows[lost].row + 2,
+        "the echo sits one blank row under the loss line: {rows:?}"
     );
 }
 

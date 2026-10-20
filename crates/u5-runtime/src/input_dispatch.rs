@@ -6243,10 +6243,15 @@ fn handle_combat_key_input(state: &mut PlayState, key: char, suffix: &str) -> Pl
             // The edge-exit echo is already on the transcript, so the defeat
             // line is its own print on the row below it.
             state.emit_combat_print("\nBATTLE IS LOST!");
-            // `combat.md §14`: the stored string "begins with a newline and
-            // has no trailing newline", so the world prompt that follows
-            // closes its row and takes no blank (playtest F41).
-            state.leave_last_transcript_row_open();
+            // The row is NOT left open for the world prompt. `combat.md §14`
+            // says the stored string "has no trailing newline", and playtest
+            // F41 read that as "the prompt follows directly" - but the stock
+            // capture shows a blank row between `BATTLE IS LOST!` and the
+            // world prompt (`qa/paired/combat-escape-ordinary.tsv`, edge,
+            // stepped-out and after beats; matched in rc2, broke when F41
+            // marked this row open). Whatever the framer prints on the way
+            // back to the world closes it, so the ordinary
+            // `text-output.md §10.4` blank applies.
         } else {
             state.apply_combat_round_loop_exit(exit);
             // `combat.md §14`: the accepted Escape key "appends the character
