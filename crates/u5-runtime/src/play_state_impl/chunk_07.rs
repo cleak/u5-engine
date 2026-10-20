@@ -1012,28 +1012,45 @@ impl PlayState {
     }
 
     pub fn board_vehicle(&mut self) -> MoveOutcome {
+        // `vehicles.md §4.1` (issue #299 Q25): every outcome is the text the
+        // handler adds after the dispatcher's `Board_` prefix. The slot holds
+        // it without the closing line feed, as X-it's do.
         if matches!(self.area, Area::Dungeon { .. }) {
-            self.message = "Not here!".to_string();
+            // "Dungeon scene | `\nNot here!\n` | `Board`, then `Not here!`".
+            self.message = BOARD_NOT_HERE_REFUSAL.to_string();
+            self.message_row_open_mid_line = false;
             return MoveOutcome::Blocked;
         }
 
         let Some(candidate) = self.boardable_vehicle_slot() else {
+            // "Nothing boardable under the party | `What?\n` | `Board What?`".
             self.message = "What?".to_string();
+            self.message_row_open_mid_line = false;
             return MoveOutcome::Blocked;
         };
         let transport = candidate.transport;
         let starting_transport_marker = self.player.transport.save_marker();
-        if !self.player.transport.can_board(transport) {
-            // `vehicles.md §4`: "the stock \"On foot\" refusal", which
-            // `commands.md §5.5` publishes as `On_foot!\n` (playtest F21).
-            self.message = "On foot!".to_string();
-            return MoveOutcome::Blocked;
-        }
+        let boarding_from_skiff = matches!(self.player.transport, TransportState::Skiff { .. });
+        // `vehicles.md §4`, Horse: the availability check "is made
+        // **before** the on-foot check, so a party in such a scene that is
+        // not on foot and tries to board an occupied horse gets `"Nay!"`,
+        // not `On foot`" (issue #299 Q25); §4.1 prints it double quotes
+        // included.
         if matches!(self.area, Area::Town { .. })
             && transport.is_horse()
             && candidate.blocked_by_occupant
         {
-            self.message = "Nay!".to_string();
+            self.message = BOARD_HORSE_NAY_REFUSAL.to_string();
+            self.message_row_open_mid_line = false;
+            return MoveOutcome::Blocked;
+        }
+        if !self.player.transport.can_board(transport) {
+            // `vehicles.md §4.1`: "`\nOn foot\n` | `Board`, then `On foot`,
+            // with no `!`" - Board's own refusal, not the `On_foot!\n` the
+            // Attack-family and dungeon-entry refusals share
+            // (`commands.md §5.5`).
+            self.message = BOARD_ON_FOOT_REFUSAL.to_string();
+            self.message_row_open_mid_line = false;
             return MoveOutcome::Blocked;
         }
 
@@ -1041,24 +1058,44 @@ impl PlayState {
         // skiff/carpet-count changes are deferred.
         self.stats_panel_command_refresh = crate::stats_panel::PanelRefreshMode::Deferred;
         self.free_active_object_slot(candidate.slot);
+        // `vehicles.md §4.1`: "The order on a ship boarding is fixed: the
+        // ship line, the hull test, the carpet stow when it applies, the
+        // skiff-count adjustment, then the skiff test."
+        let mut message = transport.board_line().to_string();
+        let mut transport = transport;
+        if let TransportState::Ship { hull, .. } = transport
+            && hull < 10
+        {
+            message.push('\n');
+            message.push('\n');
+            message.push_str(SHIP_BADLY_DAMAGED_WARNING);
+        }
         if matches!(transport, TransportState::Ship { .. })
             && ship_boarding_stows_carpet(starting_transport_marker)
         {
             let slot = &mut self.special_items[SPECIAL_ITEM_MAGIC_CARPET_INDEX];
             *slot = slot.saturating_add(1).min(PARTY_BYTE_STOCK_CAP);
         }
+        if let TransportState::Ship { skiffs, .. } = &mut transport {
+            // `vehicles.md §4` Ship (issue #299 Q25, `RETRACTIONS.md` R581):
+            // the carried-skiff count is "the ship object's byte `+7`, **plus
+            // one when the party boards from a skiff** (that skiff is taken
+            // aboard)", and the warning tests that resulting count.
+            if boarding_from_skiff {
+                *skiffs = skiffs.saturating_add(1);
+            }
+            if *skiffs == 0 {
+                message.push('\n');
+                message.push('\n');
+                message.push_str(SHIP_NO_SKIFFS_WARNING);
+            }
+        }
         self.player.transport = transport;
         self.sync_player_object();
         self.mark_visibility_dirty();
         self.advance_turn();
-        // Spec gap (playtest F21): `vehicles.md §4` says only that each
-        // family "prints the horse/carpet/skiff/ship line" and that the ship
-        // "warns if hull condition is below ten, warns if no skiffs are
-        // aboard"; none of the four literals is published. This wording is a
-        // placeholder until the spec gives them.
-        let mut message = format!("Boarded {}.", transport.kind_name());
-        transport.append_ship_auxiliary_warnings(&mut message);
         self.message = message;
+        self.message_row_open_mid_line = false;
         MoveOutcome::Boarded
     }
 
@@ -6775,7 +6812,9 @@ impl PlayState {
         // each step and the minute is never reset." The timed-effect slot was
         // cleared just above, "so Quickness and Negate Time never alter a
         // step: every step is exactly nine minutes". An entry hour of 6 makes
-        // no step; 7 to 23 crosses midnight into the next day.
+        // no step; 7 to 23 crosses midnight into the next day. §7.1: "Once the
+        // clock has been spun forward it also zeroes both light counters";
+        // §8.1 puts the food repair after the spin.
         //
         // The ordinary clock half carries the rest of the step: "A midnight
         // crossing runs the ordinary day rollover once, which repaints the
@@ -6784,6 +6823,23 @@ impl PlayState {
         // the Shadowlord relocation roll", the month-boundary events, and the
         // hour-change bundle per hour crossed. It runs no provision pass and
         // no world tick, and §8.1 preserves every nonzero food word.
+        //
+        // Issue #299 Q28 publishes what each step does: the spin is made of
+        // ordinary clock advances, so it runs "the clock advance's midnight
+        // work once, and nothing beyond it" - the Shadowlord hideout reroll
+        // with its random draws, the day advance, the month-boundary bundle
+        // when the day passes 28, then "the single panel repaint". "Each hour
+        // crossed also lowers the camp cooldown by one, floored at zero ...
+        // and rewrites the cached twelve-hour value", each step recomputes
+        // daylight in the castle, and "After a spin that stepped, the shared
+        // previous-hour snapshot ... reads 5 against hour 6". "The spin does
+        // not run the party status and provision pass ..., the world tick or
+        // active objects, NPC schedule work, natural-moongate work or
+        // encounters", and "An entry hour of 6 runs none of this work". That
+        // is exactly this engine's clock half of a turn
+        // ([`Self::advance_clock_half`]), stepped nine minutes at a time.
+        // Its light-counter decay is moot: both counters are zeroed straight
+        // after.
         //
         // The withdrawn reading - "spun forward until the hour reads 06:00"
         // - stepped whole hours here, which kept the entry minute instead of
@@ -6872,6 +6928,29 @@ impl PlayState {
         let Area::Dungeon { scene, level } = self.area else {
             return Ok(None);
         };
+        // `dungeon-mode.md §4` step 6 (issue #299 Q23): the post-action
+        // helper's "first act is the dungeon wake roll: each Sleeping member
+        // independently wakes (becomes Good) with probability 1 in 16 (a
+        // uniform roll over the inclusive range 0..63, waking below 4), and
+        // the stats panel is repainted if anyone woke." It is the dungeon's
+        // only per-turn wake rule and needs an acted command, so the
+        // all-asleep cycle of step 7 never reaches it.
+        let mut woke = false;
+        for index in 0..self.party.len() {
+            if self.party[index].status == b'S'
+                && u5_prng_range_u16(
+                    &mut self.prng_state,
+                    0,
+                    u16::from(DUNGEON_SLEEP_WAKE_ROLL_MAX),
+                ) < u16::from(DUNGEON_SLEEP_WAKE_BELOW)
+            {
+                self.party[index].status = b'G';
+                woke = true;
+            }
+        }
+        if woke {
+            self.repaint_stats_panel();
+        }
         let x = self.player.x;
         let y = self.player.y;
         let tile = self.dungeon_cell(level, x, y);

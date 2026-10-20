@@ -12,16 +12,15 @@ struct TlkHeaderEntry {
     blob_offset: usize,
 }
 
-/// `formats/tlk.md §7`: "Shipped blobs carry between two and twenty-six
-/// keyword/response pairs", after the five mandatory leading entries - so a
-/// full blob is fifty-seven NUL-terminated fields, and the runtime bound is
-/// the 1,024-byte window rather than any field count.
-///
-/// The parser used to stop at **forty** fields, which truncated every NPC with
-/// more than seventeen pairs: 42 of the 135 shipped records hit that cap, and
-/// their later keywords - the quest vocabulary lives at the end of a long
-/// blob - were unreachable.
-pub const TLK_BLOB_FIELD_CAP: usize = 5 + 26 * 2;
+/// `formats/tlk.md §7`: "runtime behavior is governed by the fixed loaded
+/// window" of 1,024 bytes, and no record count bounds a blob. The parser
+/// used to stop at fifty-seven fields, sized from "Shipped blobs carry
+/// between two and twenty-six keyword/response pairs" - a count taken to the
+/// end of the blob, which issue #299 Q22 withdrew (`RETRACTIONS.md` R582:
+/// ordinary pairs end at the first label declaration, 0 to 24 per shipped
+/// NPC). Counted to the end of the window, `TOWNE.TLK` id 33 has
+/// fifty-nine records, so that cap cut off its last labelled block and final
+/// marker. Every record in the window is kept now.
 
 pub fn parse_tlk(path: &Path) -> io::Result<HashMap<u16, Vec<String>>> {
     let bytes = read(path)?;
@@ -48,7 +47,7 @@ pub fn parse_tlk_blob_fields_raw(bytes: &[u8]) -> io::Result<HashMap<u16, Vec<Ve
         let mut fields: Vec<Vec<u8>> = Vec::new();
         let mut pos = entry.blob_offset;
         let mut current: Vec<u8> = Vec::new();
-        while pos < end && fields.len() < TLK_BLOB_FIELD_CAP {
+        while pos < end {
             let byte = bytes[pos];
             pos += 1;
             if byte == 0 {
@@ -88,7 +87,7 @@ pub fn parse_tlk_bytes(bytes: &[u8]) -> io::Result<HashMap<u16, Vec<String>>> {
         let end = nominal_end.min(entry.blob_offset.saturating_add(1024));
         let mut fields = Vec::new();
         let mut pos = entry.blob_offset;
-        while pos < end && fields.len() < TLK_BLOB_FIELD_CAP {
+        while pos < end {
             let (field, next) = decode_tlk_field(&bytes, pos, end);
             fields.push(field);
             pos = next;

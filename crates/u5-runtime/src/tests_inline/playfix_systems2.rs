@@ -52,6 +52,62 @@ fn playfix_f57_blackthorn_rescue_spin_across_midnight_repaints_the_panel_date() 
     let _ = fs::remove_dir_all(dir);
 }
 
+/// `blackthorn.md §7` step 11 (issue #299 Q28): the rescue spin "runs the
+/// clock advance's midnight work once" - the hideout reroll, the day advance
+/// and, past day 28, the month bundle - lowers the camp cooldown once per
+/// hour crossed, rewrites the twelve-hour value, and leaves the previous-hour
+/// snapshot at 5 against hour 6. "An entry hour of 6 runs none of this
+/// work".
+#[test]
+fn blackthorn_rescue_spin_runs_the_published_midnight_and_hour_work() {
+    let dir = debug_game_dir();
+    let mut state = test_state(open_grid(), 1, 1);
+    state.clock = GameClock::new(23, 0).unwrap();
+    state.clock.day = 28;
+    let month_before = state.clock.month;
+    state.party[0].status = b'D';
+    state.party[0].hp = 0;
+    state.shadowlord_hideouts = [1, 2, 3];
+    state.fortunes_of_war = 5;
+    state.camp_cooldown = 10;
+    state.party_stay_counters = vec![3; state.party.len()];
+
+    state.apply_blackthorn_rescue_refuge(&dir).unwrap();
+    state.run_blackthorn_rescue_to_handoff(&dir).unwrap();
+
+    // Nine-minute steps (§7 step 11, R571): 23:00 plus 47 x 9 minutes.
+    assert_eq!(
+        (state.clock.hour, state.clock.minute, state.clock.day),
+        (6, 3, 1)
+    );
+    assert_ne!(state.clock.month, month_before);
+    // A rerolled slot never keeps a value any slot held.
+    assert!(state.shadowlord_hideouts.iter().all(|id| ![1, 2, 3].contains(id)));
+    assert_eq!(state.fortunes_of_war, 0, "month-boundary bundle");
+    assert!(state.party_stay_counters.iter().all(|counter| *counter == 4));
+    // 23:00 -> 06:00 crosses seven hours.
+    assert_eq!(state.camp_cooldown, 3);
+    assert_eq!(state.twelve_hour_audio_repeats, 6);
+    assert_eq!(state.cleanup_previous_hour, 5);
+    let _ = fs::remove_dir_all(dir);
+
+    let dir = debug_game_dir();
+    let mut state = test_state(open_grid(), 1, 1);
+    state.clock = GameClock::new(6, 30).unwrap();
+    state.party[0].status = b'D';
+    state.party[0].hp = 0;
+    state.shadowlord_hideouts = [1, 2, 3];
+    state.camp_cooldown = 10;
+    state.cleanup_previous_hour = 4;
+    state.apply_blackthorn_rescue_refuge(&dir).unwrap();
+    state.run_blackthorn_rescue_to_handoff(&dir).unwrap();
+    assert_eq!((state.clock.hour, state.clock.minute), (6, 30));
+    assert_eq!(state.shadowlord_hideouts, [1, 2, 3]);
+    assert_eq!(state.camp_cooldown, 10);
+    assert_eq!(state.cleanup_previous_hour, 4);
+    let _ = fs::remove_dir_all(dir);
+}
+
 /// F58: `formats/end-dat.md §3` - "`_` Soft hyphen: draws nothing" - and
 /// `text-output.md §8.2` make the soft hyphen and the `{` indent invisible.
 /// The message slot that the headless frames and the composed screen print
@@ -87,4 +143,33 @@ fn playfix_f58_endgame_narrative_message_slot_drops_end_dat_markers() {
         endgame.current_narrative_layout_text().as_deref(),
         Some("{\"In_stead, famil_iar furn_i_ture")
     );
+}
+
+/// `inventory.md §4.7` (issue #299 Q27): "Food and Gold are printed
+/// right-justified in a four-cell field padded with spaces. Keys, Gems and
+/// Torches are printed right-justified in a two-cell field padded with
+/// spaces, starting at that thirteenth cell, so a single digit sits in the
+/// fourteenth cell; a zero count prints `0` and those three rows are always
+/// shown." Every nonzero grapple byte prints the same bare label.
+#[test]
+fn z_stats_counters_page_uses_the_published_field_widths() {
+    let mut state = world_state(open_world_grid(), 5, 5);
+    let session = ZStatsSession {
+        selected_party_index: 0,
+        page: ZStatsPage::Counters,
+        inventory_cursor: 0,
+    };
+    state.food = 63;
+    state.gold = 1234;
+    state.keys = 0;
+    state.gems = 7;
+    state.torches = 12;
+    state.climbing_gear = 0x80;
+    let rows = state.z_stats_panel_rows(&session);
+    assert_eq!(rows[1], " Food:   63");
+    assert_eq!(rows[2], " Gold: 1234");
+    assert_eq!(rows[4], " Keys....... 0");
+    assert_eq!(rows[5], " Gems....... 7");
+    assert_eq!(rows[6], " Torches....12");
+    assert_eq!(rows[7], " Grapple");
 }

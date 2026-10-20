@@ -2908,10 +2908,17 @@ impl PlayState {
         let prior_sound_serial = self.sound_effect_serial;
         self.cache_current_world_overlay();
         let previous_turn = self.turn;
-        let arrival_transport = if matches!(target, PlayTarget::World(_)) {
-            self.player.transport
-        } else {
+        // `overworld.md §9.2` (issue #299 Q26): "Transport therefore
+        // survives a transit unchanged. The vehicle in use is not a separate
+        // object - it is the party's transport marker - so a party on a horse
+        // or a magic carpet arrives mounted or airborne", a town destination
+        // included, after which `town-mode.md §15.1` governs the visit as it
+        // does an `E`-Enter entry. "A dungeon destination cannot arise"; a
+        // dungeon target keeps this engine's on-foot interior.
+        let arrival_transport = if matches!(target, PlayTarget::Dungeon(_)) {
             TransportState::Foot
+        } else {
+            self.player.transport
         };
         let mut options = PlayOptions {
             target,
@@ -3010,7 +3017,7 @@ impl PlayState {
         if matches!(target, PlayTarget::World(_)) {
             next.cache_current_world_overlay();
         }
-        if !matches!(target, PlayTarget::World(_)) {
+        if matches!(target, PlayTarget::Dungeon(_)) {
             next.force_foot_transport();
         }
         next.sync_player_object();

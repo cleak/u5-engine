@@ -235,8 +235,11 @@ impl PlayState {
                 self.message = "Funny, no response!".to_string();
                 handled!();
             }
+            // `vehicles.md §4.1` (issue #299 Q25): "Dungeon scene |
+            // `\nNot here!\n` | `Board`, then `Not here!`".
             'b' => {
-                self.message = "Not here!".to_string();
+                self.message = BOARD_NOT_HERE_REFUSAL.to_string();
+                self.message_row_open_mid_line = false;
                 handled!();
             }
             // `commands.md §7` / `active-objects.md §10`: X-it reaches its

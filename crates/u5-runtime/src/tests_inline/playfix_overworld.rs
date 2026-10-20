@@ -135,7 +135,9 @@ fn playfix_e22_frigate_left_by_skiff_can_be_reboarded() {
     assert_eq!(state.board_vehicle(), MoveOutcome::Boarded);
     assert!(matches!(
         state.player.transport,
-        TransportState::Ship { hull: 77, skiffs: 1, .. }
+        // `vehicles.md §4` (`RETRACTIONS.md` R581): boarding from the skiff
+        // takes it aboard again, so the count is back to two.
+        TransportState::Ship { hull: 77, skiffs: 2, .. }
     ));
 }
 

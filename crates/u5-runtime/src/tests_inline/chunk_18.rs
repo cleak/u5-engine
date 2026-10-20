@@ -1070,6 +1070,48 @@
         let _ = fs::remove_dir_all(dir);
     }
 
+    /// `overworld.md §9.2` (issue #299 Q26): "Transport therefore survives a
+    /// transit unchanged ... a party on a horse or a magic carpet arrives
+    /// mounted or airborne", a town destination included; `magic.md §8`'s
+    /// Gate travel row: "A party on a horse or carpet teleports mounted".
+    #[test]
+    fn gate_travel_into_a_town_keeps_the_horse_and_the_carpet() {
+        for transport in [
+            TransportState::Horse {
+                type_byte: HORSE_MOUNTED_FIRST,
+                tile: FIRST_PLAYABLE_HORSE_TILE,
+            },
+            TransportState::Carpet {
+                type_byte: TRANSPORT_MARKER_MAGIC_CARPET_FIRST,
+                tile: FIRST_PLAYABLE_MAGIC_CARPET_TILE,
+            },
+        ] {
+            let dir = debug_game_dir();
+            let mut state = britannia_state(open_world_grid(), 5, 5);
+            state.player.transport = transport;
+            state.sync_player_object();
+            state.spell_charges[GATE_TRAVEL_SPELL_INDEX] = 1;
+            state.party[0].mana = 9;
+            state.party[0].level = 8;
+            state.moonstone_slots[1] = MoonstoneGateSlot {
+                // Scene 17: the first CASTLE-family location, which the
+                // synthetic game directory carries.
+                scene: 17,
+                x: 6,
+                y: 7,
+                z: 0,
+            };
+
+            handle_play_key_input(&mut state, 'C', "1PRV2", &dir).unwrap();
+
+            assert!(matches!(state.area, Area::Town { .. }), "{:?}", state.area);
+            assert_eq!((state.player.x, state.player.y), (6, 7));
+            assert_eq!(state.player.transport, transport);
+            assert_eq!(state.active_objects[0].type_byte, transport.save_marker());
+            let _ = fs::remove_dir_all(dir);
+        }
+    }
+
     #[test]
     fn gate_travel_destination_does_not_retrigger_underfoot_plane_transition_same_cast() {
         let dir = debug_game_dir();

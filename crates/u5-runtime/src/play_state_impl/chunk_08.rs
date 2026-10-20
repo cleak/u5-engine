@@ -2239,11 +2239,15 @@ impl PlayState {
             // the shrine of` prefix, which belongs to the E handler. Its
             // virtue comes from `karma.md §7`'s coordinate scan, and a gate
             // cell matches no mapped shrine, so it resolves to Spirituality.
-            // `OPEN-QUESTIONS.md` (the Spirituality row) leaves open where the
-            // route puts the party; this engine keeps it on the gate cell,
-            // as the ordinary shrine overlay does (playtest F22). The old
-            // path required a shrine tile underfoot and so dropped the
-            // dispatch silently.
+            // Issue #299 Q29 settles where the route leaves the party: "That
+            // route does not relocate the party ... it never changes the
+            // party's coordinates, plane or transport. The party is left on
+            // the overworld on the former gate cell, which step 4 has already
+            // rewritten to grass, still mounted or airborne if it was" - as
+            // this overlay already did (playtest F22). The presentation runs
+            // no ordinary turn, so the gate refresh cannot re-raise the gate
+            // under the party until the visit is over. The old path required
+            // a shrine tile underfoot and so dropped the dispatch silently.
             let virtue = self.shrine_virtue_by_coordinates(game_dir)?;
             return self
                 .begin_shrine_kneel_presentation(game_dir, virtue)

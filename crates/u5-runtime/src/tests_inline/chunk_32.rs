@@ -74,9 +74,9 @@ fn dungeon_sleep_gate_advances_no_time_and_skips_underfoot_post_action() {
         state.apply_exploration_turn_gate(&dir).unwrap(),
         ExplorationTurnGateOutcome::Slept { transition: None }
     );
-    // Measured, pending `cleak/u5-spec#299` Q23
-    // (`qa/paired/asleep-dungeon-clock.tsv`): the dungeon's asleep passes
-    // never reach the loop head's clock.
+    // `dungeon-mode.md §15` (issue #299 Q23): one minute per iteration "not
+    // during the all-asleep cycle of Section 4 step 7, which never reaches
+    // the advance" (first measured on `qa/paired/asleep-dungeon-clock.tsv`).
     assert_eq!(state.turn, 0);
     assert_eq!((state.clock.hour, state.clock.minute), (8, 0));
     assert_eq!(state.message, PARTY_SLEEP_LINE);
@@ -85,11 +85,49 @@ fn dungeon_sleep_gate_advances_no_time_and_skips_underfoot_post_action() {
     let _ = fs::remove_dir_all(dir);
 }
 
-/// F14 (`cleak/u5-engine#47`). **Measured** 2026-10-17, pending
-/// `cleak/u5-spec#299` Q23 (`qa/paired/asleep-dungeon.tsv`): an all-asleep
-/// dungeon party is never woken - no turn count, hour or roll ended it in a
-/// five-minute capture, keys included - and every pass prints a fresh
-/// marker-carrying `Zzzzzz...` row with no command row under it.
+/// `dungeon-mode.md §4` step 6 (issue #299 Q23): after an acted command the
+/// post-action helper's first act wakes each Sleeping member with a uniform
+/// roll over 0..63 that is below 4, and repaints the panel if anyone woke.
+#[test]
+fn dungeon_post_action_wake_roll_wakes_a_sleeper_below_four_of_sixty_four() {
+    let dir = debug_game_dir();
+    let roll_of = |seed: u16| {
+        let mut candidate = seed;
+        u5_prng_range_u16(&mut candidate, 0, u16::from(DUNGEON_SLEEP_WAKE_ROLL_MAX))
+    };
+    let waking_seed = (0..=u16::MAX)
+        .find(|seed| roll_of(*seed) < u16::from(DUNGEON_SLEEP_WAKE_BELOW))
+        .expect("a seed that wakes");
+    // A roll the town's 0..15 "zero wakes" rule would also have read as a
+    // miss, but which is not below 4 either.
+    let staying_seed = (0..=u16::MAX)
+        .find(|seed| (4..=63).contains(&roll_of(*seed)))
+        .expect("a seed that does not wake");
+
+    for (seed, wakes) in [(waking_seed, true), (staying_seed, false)] {
+        let mut state = dungeon_state(open_dungeon_record(), 0, 1, 1);
+        state.party = vec![default_party()[0]; 2];
+        state.party[1].status = b'S';
+        state.repaint_stats_panel();
+        state.prng_state = seed;
+        state.turn = 1;
+        state
+            .apply_dungeon_post_turn_effects_after_turn(0, &dir)
+            .unwrap();
+        let expected = if wakes { b'G' } else { b'S' };
+        assert_eq!(state.party[1].status, expected, "seed {seed:#06x}");
+        assert_eq!(state.stats_panel.statuses[1], Some(expected));
+    }
+    let _ = fs::remove_dir_all(dir);
+}
+
+/// F14 (`cleak/u5-engine#47`). `dungeon-mode.md §4` step 7 (issue #299 Q23,
+/// `RETRACTIONS.md` R580), first measured on `qa/paired/asleep-dungeon.tsv`:
+/// an all-asleep dungeon party is never woken - "a party in which nobody is
+/// Good or Poisoned and at least one member is Sleeping never wakes: the
+/// original prints the sleep line forever, each on its own row after its
+/// marker" - and every pass prints a fresh marker-carrying `Zzzzzz...` row
+/// with no command row under it.
 #[test]
 fn dungeon_all_asleep_passes_never_wake_and_each_prints_its_own_sleep_row() {
     let dir = debug_game_dir();

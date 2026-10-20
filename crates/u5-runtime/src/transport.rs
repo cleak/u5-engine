@@ -601,18 +601,13 @@ impl TransportState {
         })
     }
 
-    pub fn append_ship_auxiliary_warnings(self, message: &mut String) {
-        // vehicles.md §4: ship boarding warns when hull condition is below
-        // ten and when no skiffs are aboard.
-        if let Self::Ship { hull, .. } = self {
-            if hull < 10 {
-                message.push(' ');
-                message.push_str(SHIP_BADLY_DAMAGED_WARNING);
-            }
-        }
-        if let Self::Ship { skiffs: 0, .. } = self {
-            message.push(' ');
-            message.push_str(SHIP_NO_SKIFFS_WARNING);
+    /// `vehicles.md §4.1` (issue #299 Q25): the B-Board success line after
+    /// the dispatcher's `Board_` prefix - `horse`, `carpet`, `skiff`, and
+    /// `Ship` with a "capital `S` unlike the other three".
+    pub fn board_line(self) -> &'static str {
+        match self {
+            Self::Ship { .. } => "Ship",
+            other => other.kind_name(),
         }
     }
 }

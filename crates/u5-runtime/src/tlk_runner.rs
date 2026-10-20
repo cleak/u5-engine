@@ -1996,8 +1996,9 @@ mod tests {
         // reached. The last one to arrive was `CASTLE.TLK` npc 18's second,
         // at field index 41 - past the parser's old forty-field cap, which
         // this expectation was pinned at 15 to record. `formats/tlk.md §7`
-        // puts the real bound at twenty-six keyword/response pairs inside a
-        // 1,024-byte window, so the cap is gone and the count is 16.
+        // puts the real bound at the 1,024-byte window (its old "twenty-six
+        // keyword/response pairs" is withdrawn, R582), so the cap is gone
+        // and the count is 16.
         let counts: Vec<(&str, usize)> = per_file
             .iter()
             .map(|(file, (dispatched, _))| (*file, *dispatched))

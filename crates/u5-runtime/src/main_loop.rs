@@ -25,6 +25,15 @@ pub const PARTY_SLEEP_LINE: &str = "Zzzzzz...";
 /// independent 1-in-16 wake roll. Roll zero wakes the member to Good.
 pub const TOWN_SLEEP_WAKE_ROLL_MAX: u8 = 15;
 
+/// `dungeon-mode.md §4` step 6 (issue #299 Q23): the dungeon post-action
+/// helper's wake roll is "a uniform roll over the inclusive range 0..63,
+/// waking below 4" - chance 1 in 16 per Sleeping member.
+pub const DUNGEON_SLEEP_WAKE_ROLL_MAX: u8 = 63;
+
+/// `dungeon-mode.md §4` step 6: a dungeon wake roll strictly below this wakes
+/// the member.
+pub const DUNGEON_SLEEP_WAKE_BELOW: u8 = 4;
+
 pub fn party_capability(party: &[PartyMember]) -> PartyCapability {
     let mut sleeping = false;
     for (member_index, member) in party.iter().enumerate() {

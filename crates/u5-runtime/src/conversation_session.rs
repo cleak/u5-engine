@@ -884,27 +884,24 @@ impl ConversationSession {
     }
 
     fn find_ordinary_keyword_response_index(&self, input_upper: &[u8]) -> Option<usize> {
-        // Pairs start at field index 5: (keyword, response, keyword,
-        // response, ...). Scan keyword positions; the response is the
-        // next index.
+        // `conversation.md §4` (issue #299 Q22, `RETRACTIONS.md` R582): pairs
+        // are found by record position alone - keyword k is record 2k+5, its
+        // response record 2k+6 - and continue only up to the blob's first
+        // label declaration; nothing inside or after a labelled block is
+        // tested at the top-level prompt (§6 step 5), so a scoped `y` typed
+        // here gets the cannot-help line. A keyword record just before the
+        // declaration keeps the declaration record as its response: that is
+        // `TOWNE.TLK` id 23's `Don't ask!` (§7.7, R583). The declaration
+        // record itself, when it falls in a keyword position, never matches,
+        // so stopping before it loses nothing.
+        let first_declaration = (TLK_LEADING_ENTRY_COUNT..self.fields.len())
+            .find(|idx| self.fields[*idx].first() == Some(&TLK_CODE_LABEL_RECORD))
+            .unwrap_or(self.fields.len());
         let mut idx = TLK_LEADING_ENTRY_COUNT;
         if idx % 2 == 0 {
             idx += 1;
         }
-        // `conversation.md §6` step 5: "The walk is by record position ...
-        // and ends at the blob's first label declaration" - "A keyword that
-        // lives inside a labelled block, such as a scoped `y`, gets `I cannot
-        // help thee with that.` at this prompt". With the word-start match
-        // (u5-spec#299 Q20, R577) a scoped `n` would otherwise answer `NEWS`.
-        // A keyword-position record before the declaration keeps its
-        // response even when that response is the declaration record (§7.7,
-        // `TOWNE.TLK` id 23).
-        let first_declaration = self
-            .fields
-            .iter()
-            .position(|field| field.first() == Some(&TLK_CODE_LABEL_RECORD))
-            .unwrap_or(self.fields.len());
-        while idx + 1 < self.decoded_fields.len() && idx < first_declaration {
+        while idx < first_declaration && idx + 1 < self.decoded_fields.len() {
             let keyword_field = &self.decoded_fields[idx];
             let keyword = keyword_field.trim().as_bytes();
             if tlk_keyword_matches(keyword, input_upper) {
@@ -3002,6 +2999,61 @@ mod tests {
         assert_eq!(s.phase, ConversationSessionPhase::AwaitingKeyword);
         let job = s.submit_keyword("job", &ctx());
         assert_eq!(job.text, framed_response("I jest."));
+    }
+
+    /// `conversation.md §4` and §6 step 5 (issue #299 Q22, `RETRACTIONS.md`
+    /// R582): the top-level walk ends at the blob's first label declaration,
+    /// so "a keyword that lives inside a labelled block, such as a scoped
+    /// `y`, gets `I cannot help thee with that.` at this prompt".
+    #[test]
+    fn a_scoped_keyword_typed_at_the_top_level_prompt_gets_the_cannot_help_line() {
+        let mut s = scoped_yes_no_session();
+        let out = s.submit_keyword("y", &ctx());
+        assert!(out.text.contains("I cannot help thee with that."), "{:?}", out.text);
+        assert!(!out.recruit_speaker, "the scoped `y` record must not run");
+        assert_eq!(s.phase, ConversationSessionPhase::AwaitingKeyword);
+    }
+
+    /// `conversation.md §7.7` (issue #299 Q22, `RETRACTIONS.md` R583): the
+    /// `TOWNE.TLK` id 23 shape. One extra record before the first
+    /// declaration shifts every later pair, so `caug` and `tort` sit in
+    /// response positions and never match, and the last keyword-position
+    /// record, `Don't ask!`, takes the declaration record as its response:
+    /// the marker prints as codepoint `0x10` and the label byte after it is
+    /// a live GOTO into block 1, whose head opens its scoped prompt.
+    #[test]
+    fn an_odd_record_count_shifts_the_pairs_and_dont_ask_runs_the_declaration() {
+        let mut head = vec![TLK_CODE_LABEL_RECORD, 0x91];
+        head.extend(enc("Hmph."));
+        let mut final_marker = vec![TLK_CODE_LABEL_RECORD, TLK_LABEL_LAST];
+        final_marker.extend(enc("@"));
+        let records = vec![
+            enc("An extra line."),
+            enc("CAUG"),
+            enc("Caught answer."),
+            enc("TORT"),
+            enc("Don't ask!"),
+            head,
+            enc("Well."),
+            enc("y"),
+            enc("Yes."),
+            final_marker,
+        ];
+        let mut s = label_session(enc("Asked."), records.clone());
+        for dead in ["caug", "tort"] {
+            let out = s.submit_keyword(dead, &ctx());
+            assert!(out.text.contains("I cannot help thee with that."), "{dead}: {:?}", out.text);
+        }
+        let out = s.submit_keyword("DON'T ASK!", &ctx());
+        assert!(
+            out.text.contains("\u{10}Hmph."),
+            "the marker glyph, then block 1's head: {:?}",
+            out.text
+        );
+        assert_eq!(
+            s.phase,
+            ConversationSessionPhase::AwaitingScopedKeyword { label: 0x91 }
+        );
     }
 
     /// The shipped "ask again" arm is a lone GOTO to the block's own label:
