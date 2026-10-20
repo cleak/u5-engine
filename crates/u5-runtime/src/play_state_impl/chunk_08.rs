@@ -556,13 +556,19 @@ impl PlayState {
         //
         // Not implemented, and not established by §7.1/§7.2: where the class
         // tile lands ("not fully established"; in an outdoor camp, by static
-        // reading, the party's own map record), the inversion's highlight pen
-        // and whether the world-tick pauses repaint it. The per-member
-        // viewport inversion is left out with them: "No paired restoring
-        // inversion is issued", but how long each one stays on screen turns
-        // on that unestablished repaint, so the engine draws none rather than
-        // guess its lifetime. The old man's two converges are driver-side
-        // blits, like the summon flashes.
+        // reading, the party's own map record).
+        //
+        // The per-member viewport inversion is now published (u5-spec#299
+        // Q5, static reading only; R566 withdraws "each later living member's
+        // inversion toggles the viewport back"): an exclusive-or rectangle in
+        // the accent pen, UI colour slot 1 (palette 15 on the sixteen-colour
+        // drivers, so every pixel inverts), and each world-tick pause
+        // repaints the whole viewport, so "Each living member gets one
+        // separate flash that lasts for the long envelope; flashes do not
+        // accumulate". It is still not drawn: the frontend has no
+        // presentation hook timed to one queued envelope, and the camp
+        // apparition has no capture to pair against. The old man's two
+        // converges are driver-side blits, like the summon flashes.
         let wait_key = crate::text_hold::TextHoldKind::WaitKey.marker_str();
         let mut text = String::from(LORD_BRITISH_CAMP_APPARITION_LINE);
         let mut sounds: Vec<(usize, SoundEffect)> = Vec::new();
