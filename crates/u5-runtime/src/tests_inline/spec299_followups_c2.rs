@@ -29,3 +29,31 @@ fn spec299_q10_audience_exit_beat_holds_seventy_two_tick_periods() {
     );
     let _ = fs::remove_dir_all(dir);
 }
+
+/// u5-spec#299 Q9, `blackthorn.md §5` "Rows on the correct-answer arm" with
+/// §4.2's "no print, character, window or input event between the record and
+/// the end of the handoff": once step 9's feed has closed record `5`'s rows
+/// the window ends on a blank row, not an open one, and the exit beat that
+/// the key starts still opens no command row under it.
+#[test]
+fn spec299_q9_merciful_exit_beat_opens_no_command_row() {
+    let dir = debug_game_dir();
+    let mut state = test_state(open_grid(), 5, 5);
+    state.party.push(audit_g5_companion(1));
+    state.party.push(audit_g5_companion(2));
+    state.repaint_stats_panel();
+    state.begin_blackthorn_audience_capture(&dir).unwrap();
+    while state.active_blackthorn.as_ref().is_some_and(|c| c.current_prompt().is_none()) {
+        state.submit_blackthorn_audience_answer("", &dir).unwrap();
+    }
+    state.submit_blackthorn_audience_answer("Ahm", &dir).unwrap();
+    state.flush_staged_narration();
+    assert!(!state.message_row_open_mid_line, "step 9 left the cursor at column 0");
+    state.submit_blackthorn_audience_answer("", &dir).unwrap();
+    assert!(state.pending_blackthorn_audience_exit, "the key starts the exit beat");
+    assert!(
+        state.message_window_live_row_suppressed(),
+        "the exit beat draws no command row"
+    );
+    let _ = fs::remove_dir_all(dir);
+}

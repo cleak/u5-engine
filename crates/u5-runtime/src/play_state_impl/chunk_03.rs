@@ -351,6 +351,12 @@ impl PlayState {
                 .as_ref()
                 .is_some_and(|session| session.phase == MixPhase::Quantity)
             || self.active_blackthorn_guard_demand.is_some()
+            // `blackthorn.md §4.2`: "no print, character, window or input
+            // event between the record and the end of the handoff", so the
+            // exit beat opens no command row. After record `5` the window
+            // ends on step 9's blank row rather than an open one, which the
+            // staged-hold arm above does not cover (u5-spec#299 Q9).
+            || self.pending_blackthorn_audience_exit
             || self.pending_town_arrest.is_some()
             // `main-loop.md §6`: the all-asleep arm "passes the turn without
             // reading a command", so no command row is ever open for a key.

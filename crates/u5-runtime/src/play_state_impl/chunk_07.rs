@@ -4975,9 +4975,11 @@ impl PlayState {
     /// Print a closing record and wait for its acknowledgement.
     ///
     /// No line feed follows here. `blackthorn.md §5`'s executions "finish
-    /// with one line feed"; the correct-answer arm's caller prints it right
-    /// after record `5`, where the stock capture shows it (during the blade
-    /// hold), and the wrong-answer arm's comes after record `6`. The two branches that
+    /// with one line feed"; the correct-answer arm's is printed after the
+    /// blade hold's roster edit by [`Self::release_blackthorn_execution_hold`]
+    /// (the blank row seen during the hold is record `5`'s own row-filling
+    /// wrap, u5-spec#299 Q9), and the wrong-answer arm's comes after record
+    /// `6`. The two branches that
     /// execute nobody, records `9` and `10`, end on "acknowledgement and the
     /// closing scene beat" with no such row: `bt-audience`'s `ask3` beat has
     /// the next command echo directly under `thee!"`.
@@ -5380,17 +5382,30 @@ impl PlayState {
                 // the blade-and-impact hold", before the exit beat's key wait
                 // begins. The engine previously deferred the lift to that key
                 // after a stock capture taken with a key sent during the hold.
-                let outcome = self.hold_blackthorn_closing(challenge, reward)?;
+                let outcome = self.hold_blackthorn_closing(challenge, reward.clone())?;
                 if executes {
-                    // §5: the correct-answer execution "also finishes with one
-                    // line feed". The stock capture puts that feed on screen
-                    // *during* the blade hold: `bt-correct`'s `right` beat
-                    // (2026-10-17, artifact bt-correct-20261017-004820) shows
-                    // the blank row under `merciful death!"` while the panel
-                    // still lists the whole party and no key-wait cursor is
-                    // drawn. Stock wins over §5's step order here, so the
-                    // row is fed with the record, not at the hold's end.
-                    self.push_explicit_blank_message_entry();
+                    // §5 "Rows on the correct-answer arm" (u5-spec#299 Q9):
+                    // record `5` starts at column 0 and its last wrapped row,
+                    // `merciful death!"`, "fills all sixteen cells, so the
+                    // printer's own wrap leaves the cursor at column 0 of the
+                    // next row as the record finishes". "That empty row under
+                    // the record is the advance a capture sees through the
+                    // whole blade hold" (`bt-correct`'s `right` beat). It is
+                    // the record's own wrap, not step 9's feed, which still
+                    // follows the roster edit
+                    // ([`Self::release_blackthorn_execution_hold`]).
+                    let fills_last_row = crate::wrap_text(
+                        &reward,
+                        crate::message_window::MESSAGE_WINDOW_WIDTH,
+                        0,
+                    )
+                    .last()
+                    .is_some_and(|row| {
+                        row.chars().count() == crate::message_window::MESSAGE_WINDOW_WIDTH
+                    });
+                    if fills_last_row {
+                        self.push_explicit_blank_message_entry();
+                    }
                     self.pending_blackthorn_merciful_death = true;
                     self.stage_blackthorn_execution_hold(None);
                 }
@@ -5725,9 +5740,21 @@ impl PlayState {
                 .unwrap_or_else(|| "no companion remains to punish".to_string())
         };
         self.repaint_stats_panel();
-        // The correct-answer arm's closing feed was already printed with
-        // record `5` (the stock capture shows it during the hold); the
-        // wrong-answer arm's follows record `6`.
+        // §5 step 9 on the correct-answer arm (u5-spec#299 Q9): "Step 9's
+        // line feed is a separate emit, so it always costs one more row. It
+        // appears together with the reduced panel and leaves one blank row
+        // between the record's last row and the exit beat's key-wait cursor
+        // ... Do not move it ahead of the roster edit." After a row-filling
+        // record the cursor is already at column 0, so the feed leaves a
+        // blank row; after one that stopped mid-row it only closes that row.
+        // The wrong-answer arm's feed follows record `6`.
+        if merciful {
+            if self.message_row_open_mid_line {
+                self.close_message_row();
+            } else {
+                self.push_explicit_blank_message_entry();
+            }
+        }
         self.push_diagnostic(format!(
             "Blackthorn execution at the end of the blade hold (impact at {impact:?}): {report}."
         ));
