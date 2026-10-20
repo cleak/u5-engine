@@ -1977,13 +1977,17 @@ fn talk_shop_trigger_maps_public_shop_roles() {
     assert_eq!(talk_shop_trigger(0xff), None);
 }
 
+/// `conversation.md §6` steps 4 and 5 (u5-spec#299 Q20, R577 / R578): a
+/// word-start first occurrence with nothing after it checked.
 #[test]
-fn talk_keyword_match_respects_space_boundary() {
+fn talk_keyword_match_is_the_word_start_rule() {
     assert!(talk_keyword_matches("JOB", "job"));
     assert!(talk_keyword_matches("JOB", "job news"));
-    assert!(!talk_keyword_matches("JOB", "jobber"));
+    assert!(talk_keyword_matches("JOB", "jobber"));
+    assert!(talk_keyword_matches("JOB", "my job"));
+    assert!(!talk_keyword_matches("JOB", "nojob"));
     assert!(talk_keyword_matches("WHO ART THOU", "who art thou friend"));
-    assert!(!talk_keyword_matches("WHO", "whom"));
+    assert!(talk_keyword_matches("WHO", "whom"));
 }
 
 #[test]
@@ -2005,15 +2009,18 @@ fn talk_keyword_response_resolves_reserved_aliases_and_pairs() {
     assert_eq!(talk_keyword_response(&fields, "work"), Some("I mend gear"));
     assert_eq!(talk_keyword_response(&fields, "bye"), Some("Farewell"));
     assert_eq!(talk_keyword_response(&fields, "thank"), Some("Farewell"));
+    // u5-spec#299 Q20 (R577): `grandpa` matches `gran`, and the earlier
+    // keyword wins.
     assert_eq!(
         talk_keyword_response(&fields, "grandpa"),
-        Some("Long answer")
+        Some("Short answer")
     );
     assert_eq!(
         talk_keyword_response(&fields, "gran news"),
         Some("Short answer")
     );
-    assert_eq!(talk_keyword_response(&fields, "granite"), None);
+    assert_eq!(talk_keyword_response(&fields, "granite"), Some("Short answer"));
+    assert_eq!(talk_keyword_response(&fields, "migrant"), None);
 }
 
 #[test]
@@ -2050,9 +2057,10 @@ fn resolve_keyword_response_field_index_matches_reserved_and_pair_keywords() {
         resolve_keyword_response_field_index(&fields, "thank"),
         Some(4)
     );
+    // u5-spec#299 Q20 (R577): the earlier `gran` answers `grandpa`.
     assert_eq!(
         resolve_keyword_response_field_index(&fields, "grandpa"),
-        Some(8)
+        Some(6)
     );
     assert_eq!(
         resolve_keyword_response_field_index(&fields, "gran news"),
@@ -2060,6 +2068,10 @@ fn resolve_keyword_response_field_index_matches_reserved_and_pair_keywords() {
     );
     assert_eq!(
         resolve_keyword_response_field_index(&fields, "granite"),
+        Some(6)
+    );
+    assert_eq!(
+        resolve_keyword_response_field_index(&fields, "migrant"),
         None
     );
 }
