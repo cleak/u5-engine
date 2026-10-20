@@ -2901,6 +2901,19 @@ fn handle_active_shop_key_input(
                     game_dir,
                 ),
             };
+            // `§8.C` D: record `164` prints straight after `Thy concern?" `,
+            // on the row that prompt left open (the prompt waits with its row
+            // open - `keeps_cursor_inline`), so it is emitted continuing that
+            // row rather than left in the slot, whose flush starts a fresh
+            // row. The emitter states the row the menu leaves open.
+            // Without a readable record there is nothing to continue the row with,
+            // and the redrawn menu takes its ordinary fresh row.
+            if matches!(outcome, GuildShopOutcome::Described { .. })
+                && message.len() > guild_stock_menu().len()
+            {
+                state.open_message_row();
+                state.emit_message_line_continuing_row(message.clone());
+            }
             message
         }
     };
@@ -5251,12 +5264,7 @@ fn format_reagent_outcome(
             let quantity = crate::shops::herbalist_reagent_bundle_quantity(herbalist, reagent)
                 .map(u16::from)
                 .unwrap_or_default();
-            // The question's row is open, so §8.C's two leading feeds close
-            // it and leave one blank row (playtest F46).
-            format!(
-                "\n\n\"{} Is this thy need?\" ",
-                render(REAGENT_OFFER_RECORD_FIRST + ordinal, price, quantity)
-            )
+            reagent_offer_text(&render(REAGENT_OFFER_RECORD_FIRST + ordinal, price, quantity))
         }
         // "Already carrying 99 | `\n\n"Thou canst not carry any more!"\n\n`;
         // consume one command key, then redraw stock".
@@ -5290,6 +5298,33 @@ fn format_reagent_outcome(
         InvalidInput => String::new(),
     }
 }
+
+/// `shops.md §8.C` reagent "Offer": `\n\n"`, then the offer record, then
+/// ` Is this thy need?" `. "If the resulting local column exceeds 12, append
+/// `\n:`." The question's row is open, so the two leading feeds close it and
+/// leave one blank row (playtest F46).
+///
+/// The column is the window-local cursor column after the question's
+/// trailing space: the cells the wrapped final row holds through the closing
+/// quote, plus that space ([`crate::wrapped_final_row_columns`] trims a
+/// trailing space, so it is added back here).
+pub(crate) fn reagent_offer_text(record: &str) -> String {
+    let question = format!("\n\n\"{record}{REAGENT_OFFER_QUESTION}");
+    let column = crate::wrapped_final_row_columns(&question) + 1;
+    if column > REAGENT_OFFER_COLON_COLUMN {
+        format!("{question} {REAGENT_OFFER_COLON_CONTINUATION}")
+    } else {
+        format!("{question} ")
+    }
+}
+
+/// The offer question through its closing quote; [`reagent_offer_text`]
+/// adds the space after it.
+const REAGENT_OFFER_QUESTION: &str = " Is this thy need?\"";
+/// `shops.md §8.C`: the column the offer's cursor must exceed for the colon.
+const REAGENT_OFFER_COLON_COLUMN: usize = 12;
+/// `shops.md §8.C`: what a past-12 offer appends.
+const REAGENT_OFFER_COLON_CONTINUATION: &str = "\n:";
 
 const REAGENT_MENU_HEADING: &str = "\"Fine! We sell:";
 /// §8.C: `\nThy interest?" ` - the closing quote and one space. Playtest
@@ -5510,6 +5545,16 @@ fn guild_offer_record(commodity: crate::shops::GuildCommodity) -> usize {
         }
 }
 
+/// `shops.md §8.C`: "D renders record `164`, then redraws the stock menu."
+/// Nothing else: there is no echo of the key and no spacing of the
+/// engine's own between the two. The record carries both - it opens with
+/// the text that lands after `Thy concern?" ` on the prompt's open row and
+/// ends with the feeds that leave one blank row above the menu - so adding
+/// a `\n\n` here left three blank rows (rc3 residual, CASTLE:5 NPC 0x86).
+pub(crate) fn guild_described_text(record: &str) -> String {
+    format!("{record}{}", guild_stock_menu())
+}
+
 fn guild_stock_menu() -> String {
     format!("{}\n{GUILD_MENU_QUESTION}", guild_menu_rows())
 }
@@ -5555,11 +5600,9 @@ fn format_guild_outcome(
             render(guild_offer_record(commodity), Some(shop), price)
         ),
         // "D renders record `164`, then redraws the stock menu."
-        Described { shop } => format!(
-            "{}\n\n{}",
-            render(GUILD_DESCRIBE_RECORD, Some(shop), 0),
-            guild_stock_menu()
-        ),
+        Described { shop } => {
+            guild_described_text(&render(GUILD_DESCRIBE_RECORD, Some(shop), 0))
+        }
         // "Paid | Token-expanded `\n"Sold!"\nsays $.\n\n"What else, \n`, then
         // `m'lady` for a female speaking member or `m'lord` otherwise, then
         // `?\n\n`, then stock menu".
