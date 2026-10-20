@@ -173,8 +173,14 @@ impl PlayState {
         // Anything the previous turn left in the slot prints above this row.
         self.flush_message_slot();
         self.emit_command_echo_line(PARTY_SLEEP_LINE);
-        // The literal ends with its own line feed (`Zzzzzz...\n`).
-        self.close_message_row();
+        // The literal ends with its own line feed (`Zzzzzz...\n`), and the
+        // pass then waits with the cursor on the fresh row that feed opened.
+        // Measured 2026-10-20 (`asleep-dungeon`, idle beats): the stock
+        // window between passes ends `Zzzzzz...` on the second-to-last row
+        // with the bottom row blank; this engine left the sleep line on the
+        // bottom row. The row is the blank the next pass's leading feed
+        // would otherwise derive, so the next command row adds none.
+        self.push_explicit_blank_message_entry();
     }
 
     /// `overworld.md` capability gate (spec HEAD d3863ef): defeat writes the

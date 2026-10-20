@@ -113,9 +113,11 @@ fn dungeon_all_asleep_passes_never_wake_and_each_prints_its_own_sleep_row() {
         // The same literal again is still a new row, not an already-flushed
         // slot.
         assert_ne!(state.message_transcript_revision, revision_before);
-        let newest = state.message_transcript.last().unwrap();
-        assert_eq!(newest.text, PARTY_SLEEP_LINE);
-        assert!(newest.is_command_echo);
+        // The sleep row, then the fresh row its trailing feed opened.
+        let rows = &state.message_transcript[state.message_transcript.len() - 2..];
+        assert_eq!(rows[0].text, PARTY_SLEEP_LINE);
+        assert!(rows[0].is_command_echo);
+        assert!(rows[1].explicit_blank);
     }
     assert!(state.party.iter().all(|member| member.status == b'S'));
     assert_eq!((state.clock.hour, state.clock.minute), (8, 0));
@@ -123,7 +125,7 @@ fn dungeon_all_asleep_passes_never_wake_and_each_prints_its_own_sleep_row() {
         .message_transcript
         .iter()
         .rev()
-        .take(10)
+        .take(20)
         .filter(|entry| entry.text == PARTY_SLEEP_LINE)
         .count();
     assert_eq!(window, 10);
@@ -131,24 +133,25 @@ fn dungeon_all_asleep_passes_never_wake_and_each_prints_its_own_sleep_row() {
     assert!(state.message_window_live_row_suppressed());
     assert!(state.message_window_cursor_suppressed());
     // The stock window: `>Zzzzzz...` on every other row, a blank between,
-    // and no live command row under the last one.
+    // the bottom row left blank, and no live command row.
     let log = message_log_from_entries(state.message_transcript.iter(), |text| {
         (!text.trim().is_empty()).then(|| text.to_string())
     });
     let layout = layout_message_window(&log, None);
-    let last = layout.rows.iter().map(|row| row.row).max().unwrap();
+    // Screen rows 11..=23: the newest sleep row sits on 22, so the bottom
+    // row 23 is the blank its trailing feed opened.
     let tail: Vec<_> = layout
         .rows
         .iter()
-        .filter(|row| row.row + 6 > last)
+        .filter(|row| row.row >= 18)
         .map(|row| (row.row, row.text.as_str(), row.prefixed))
         .collect();
     assert_eq!(
         tail,
         vec![
-            (last - 4, PARTY_SLEEP_LINE, true),
-            (last - 2, PARTY_SLEEP_LINE, true),
-            (last, PARTY_SLEEP_LINE, true),
+            (18, PARTY_SLEEP_LINE, true),
+            (20, PARTY_SLEEP_LINE, true),
+            (22, PARTY_SLEEP_LINE, true),
         ]
     );
 
