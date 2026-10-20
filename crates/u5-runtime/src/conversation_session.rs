@@ -347,6 +347,12 @@ pub struct ConversationSession {
     /// breaks the opener prints after it - is owed once the resumed Name
     /// entry finishes without signalling a stop (playtest F04).
     introduction_ask_who: bool,
+    /// `conversation.md §7.7` step 1 / `formats/tlk.md §9.2`: a label head
+    /// is running and has emitted nothing since its own HEAD quote. The
+    /// head's stream output starts empty, so a GOTO it meets at once must
+    /// read the quote from here: the sentinel "suppresses a quote when the
+    /// previous printable byte was also a quote".
+    head_quote_open: bool,
 }
 
 impl ConversationSession {
@@ -366,6 +372,7 @@ impl ConversationSession {
             opening_goto: false,
             opening_ask_who: false,
             introduction_ask_who: false,
+            head_quote_open: false,
         }
     }
 
@@ -900,7 +907,10 @@ impl ConversationSession {
                     let (alias_field, _) = Self::field_at(&field_starts, resume.saturating_sub(1));
                     let alias_target = alias_field + TLK_KEYWORD_ALIAS_RECORD_SKIP;
                     if alias_target < self.fields.len() {
+                        let outer_head_quote_open = self.head_quote_open;
+                        self.head_quote_open &= out.text.is_empty();
                         let (nested, nested_end) = self.run_field_tracked(alias_target, 0, ctx, 0);
+                        self.head_quote_open = outer_head_quote_open;
                         // "If the nested stream signals stop, the outer
                         // stream stops too; otherwise the saved position is
                         // restored."
@@ -990,12 +1000,22 @@ impl ConversationSession {
         }
         // u5-spec#299 Q20, §7.7 step 1 (HEAD): "Emit the quote, then run the
         // head through the byte runner." The quote is the ordinary sentinel
-        // (`formats/tlk.md §9.2`), dropped after another quote.
-        if !out.text.ends_with('"') {
+        // (`formats/tlk.md §9.2`), dropped after another quote. `out` holds
+        // only the calling stream's own text: when that is empty and the
+        // caller is itself a head that jumped at once, the quote before it
+        // is that head's (Gorn's block 3 head jumps straight to block 4).
+        let after_quote = if out.text.is_empty() {
+            self.head_quote_open
+        } else {
+            out.text.ends_with('"')
+        };
+        if !after_quote {
             out.push_plain_text("\"");
         }
         self.label_records_running.push((label, resume));
+        let outer_head_quote_open = std::mem::replace(&mut self.head_quote_open, true);
         let (nested, end) = self.run_blob_from(resume, ctx, 0);
+        self.head_quote_open = outer_head_quote_open;
         self.label_records_running.pop();
         merge_session_output(out, nested);
         match end {
@@ -2598,6 +2618,40 @@ mod tests {
             assert_eq!(s.phase, ConversationSessionPhase::AwaitingKeyword, "{line}");
             assert_eq!(s.prompt_message(), TLK_KEYWORD_PROMPT, "{line}");
         }
+    }
+
+    /// u5-spec#299 Q20, §7.7 step 1 with `formats/tlk.md §9.2`: each HEAD
+    /// emits the quote sentinel, which is dropped after another quote. A
+    /// head that jumps at once (Gorn's block 3 head "jumps straight to block
+    /// 4", §7.7.1) prints nothing between its quote and the next head's, so
+    /// one quote shows, not `""`.
+    #[test]
+    fn a_head_that_jumps_at_once_shows_a_single_quote() {
+        let mut first = vec![TLK_CODE_LABEL_RECORD, 0x91];
+        first.extend(enc("Art thou ready?"));
+        let second = vec![TLK_CODE_LABEL_RECORD, 0x92, 0x93];
+        let mut third = vec![TLK_CODE_LABEL_RECORD, 0x93];
+        third.extend(enc("Then come."));
+        let mut s = label_session(
+            vec![0x91],
+            vec![
+                first,
+                enc("Pity."),
+                enc("y"),
+                vec![0x92],
+                second,
+                enc("Unreached."),
+                third,
+                enc("Pity."),
+            ],
+        );
+        s.submit_keyword("ask", &ctx());
+        let yes = s.submit_keyword("y", &ctx());
+        assert_eq!(yes.text, framed_response("Then come."));
+        assert_eq!(
+            s.phase,
+            ConversationSessionPhase::AwaitingScopedKeyword { label: 0x93 }
+        );
     }
 
     /// u5-spec#299 Q20, §7.7 step 4: "If the record that ran stops, the block
