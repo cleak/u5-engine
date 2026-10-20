@@ -5955,8 +5955,13 @@ fn handle_combat_cast_key_input(
         CombatCommandPartySideGate::RefusedMonsterSide
     ) {
         state.message.clear();
+        // `combat.md §8.4` (u5-spec#299 Q19): "Cast's own copy of the test
+        // prints `Cast...` and its newline, then `Can't!` on the next row",
+        // and the refusal is `Can't!\n` - its feed closes the row, so the
+        // full re-prompt's leading newline leaves a blank row before the
+        // banner. This printed `Cast...Can't!` on one row with no blank.
         state.emit_combat_command_echo_line(&format!(
-            "{COMBAT_CAST_COMMAND_LABEL}{COMBAT_PARTY_SIDE_REFUSAL}"
+            "{COMBAT_CAST_COMMAND_LABEL}\n{COMBAT_PARTY_SIDE_REFUSAL}\n"
         ));
         // `§8.1`: every `Can't!` refusal takes the full re-prompt, "the whole
         // banner reprinted from its leading newline".
@@ -6855,13 +6860,20 @@ fn combat_player_command_message(
             // party-side arms below print before their delegates. Without
             // them a controlled monster's `R`/`U` printed a bare `Can't!`
             // (playtest E38).
+            //
+            // `combat.md §8.4` (u5-spec#299 Q19): the refusal is `Can't!\n`
+            // in every row - R gives `Ready...`, a blank row, `Can't!`, a
+            // blank row, then the reprinted banner. Its feed closes the
+            // refusal's row, so the full re-prompt's leading newline leaves
+            // that blank row; without it the banner ran straight under
+            // `Can't!`. Cast prints `Cast...` "and its newline".
             let label = match branch {
-                CombatCommandBranch::CastSpell => Some(COMBAT_CAST_COMMAND_LABEL),
+                CombatCommandBranch::CastSpell => Some("Cast...\n"),
                 CombatCommandBranch::Ready => Some("Ready...\n\n"),
                 CombatCommandBranch::UseItem => Some("Use item\n\n"),
                 _ => combat_command_branch_published_label(*branch),
             };
-            format!("{}{COMBAT_PARTY_SIDE_REFUSAL}", label.unwrap_or(""))
+            format!("{}{COMBAT_PARTY_SIDE_REFUSAL}\n", label.unwrap_or(""))
         }
         CombatPlayerCommandAction::Branch { branch, .. } => combat_command_branch_message(*branch),
     }

@@ -352,3 +352,53 @@ fn spec299_q15_guest_register_escape_picks_no_one() {
         playtest_transcript_rows(&state)
     );
 }
+
+/// u5-spec#299 Q19, `combat.md §8.4`: for a monster acting under player
+/// control, "Starting from the turn banner, R gives `Orc:`, `Ready...`, a
+/// blank row, `Can't!`, a blank row, `Orc:`; U is the same with `Use item`."
+/// "The dash labels of G, J, O and S carry no newline, so the refusal shares
+/// their row (`Get-Can't!` ...). Cast's own copy of the test prints `Cast...`
+/// and its newline, then `Can't!` on the next row." No tone; the refusal is
+/// free.
+#[test]
+fn spec299_q19_controlled_monster_shape_a_refusal_rows() {
+    let game_dir = std::path::Path::new(".");
+    for (key, expected) in [
+        ('R', &["Ready...", "", "Can't!", ""][..]),
+        ('U', &["Use item", "", "Can't!", ""][..]),
+        ('G', &["Get-Can't!", ""][..]),
+        ('J', &["Jimmy-Can't!", ""][..]),
+        ('O', &["Open-Can't!", ""][..]),
+        ('S', &["Search-Can't!", ""][..]),
+        ('C', &["Cast...", "Can't!", ""][..]),
+    ] {
+        let mut state = combat_player_command_state(10, 10);
+        state.keys = 1;
+        state.combat_actors[8].flags |= COMBAT_ACTOR_FLAG_CONTROLLED;
+        state.open_pending_combat_player_turn(Some(8));
+        let banner = state
+            .combat_turn_banner_for_actor(8)
+            .expect("a controlled monster gets the reduced banner");
+        let banner_row = banner.trim_matches('\n').to_string();
+        state.flush_message_slot();
+        let before = playtest_transcript_rows(&state);
+        assert_eq!(before.last(), Some(&banner_row), "{key}: {before:?}");
+        let round_before = state.combat_round_counter;
+        let sounds_before = state.sound_effect_serial;
+
+        handle_play_key_input(&mut state, key, "", game_dir).unwrap();
+        state.flush_message_slot();
+
+        let rows = playtest_transcript_rows(&state);
+        let printed = rows[before.len()..]
+            .iter()
+            .map(|row| row.trim_end().to_string())
+            .collect::<Vec<_>>();
+        let mut want = expected.iter().map(|row| row.to_string()).collect::<Vec<_>>();
+        want.push(banner_row.clone());
+        assert_eq!(printed, want, "{key}");
+        assert_eq!(state.combat_round_counter, round_before, "{key} is free");
+        assert_eq!(state.pending_combat_actor_slot, Some(8), "{key}");
+        assert_eq!(state.sound_effect_serial, sounds_before, "{key}: no tone");
+    }
+}
