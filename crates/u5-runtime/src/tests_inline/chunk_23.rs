@@ -15950,9 +15950,10 @@ fn combat_monster_gazer_death_writes_eye_burst_marker() {
 }
 
 #[test]
-fn combat_monster_gargoyle_death_stamps_lava_and_releases_slot_without_marker() {
+fn combat_monster_gargoyle_death_stamps_rock_pile_and_releases_slot_without_marker() {
     // `combat.md §6.3` Gargoyle row + "Gargoyle does not fall through to
-    // the ordinary path": the branch writes `0x4C` into the arena terrain
+    // the ordinary path": the branch writes `0x4C` (the pile of rocks, not
+    // lava - u5-spec#299 Q4, R565) into the arena terrain
     // cell under the actor, writes **no** tile byte into the active-object
     // record, runs no drop rolls, and releases the slot. The earlier
     // engine reading — lava plus a verbatim copy of the default
