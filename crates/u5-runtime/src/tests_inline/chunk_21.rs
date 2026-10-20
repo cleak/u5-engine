@@ -1516,6 +1516,23 @@ fn parsed_tlk_caps_each_blob_to_runtime_window() {
     assert_eq!(dialogue[&2][0].len(), 1024);
 }
 
+/// `formats/tlk.md §7`: the loaded 1,024-byte window bounds a blob, not a
+/// record count. The withdrawn "between two and twenty-six keyword/response
+/// pairs" (issue #299 Q22, `RETRACTIONS.md` R582) sized a fifty-seven-field
+/// cap that cut off the labelled blocks at the end of a long blob.
+#[test]
+fn parsed_tlk_keeps_every_record_inside_the_window() {
+    let names: Vec<String> = (0..60).map(|index| format!("R{index}")).collect();
+    let fields: Vec<&str> = names.iter().map(String::as_str).collect();
+    let bytes = tlk_bytes(&[(2, &fields)]);
+
+    let decoded = parse_tlk_bytes(&bytes).unwrap();
+    let raw = parse_tlk_blob_fields_raw(&bytes).unwrap();
+    assert_eq!(decoded[&2].len(), 60);
+    assert_eq!(decoded[&2][59], "R59");
+    assert_eq!(raw[&2].len(), 60);
+}
+
 #[test]
 fn shipped_tlk_corpus_parses_and_runner_smokes_sanitized_fields() {
     let Some(game_dir) = crate::test_fixtures::configured_original_asset_dir() else {
