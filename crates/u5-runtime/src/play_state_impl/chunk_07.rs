@@ -5034,9 +5034,11 @@ impl PlayState {
     /// Print a closing record and wait for its acknowledgement.
     ///
     /// No line feed follows here. `blackthorn.md §5`'s executions "finish
-    /// with one line feed"; the correct-answer arm's caller prints it right
-    /// after record `5`, where the stock capture shows it (during the blade
-    /// hold), and the wrong-answer arm's comes after record `6`. The two branches that
+    /// with one line feed"; the correct-answer arm's is printed after the
+    /// blade hold's roster edit by [`Self::release_blackthorn_execution_hold`]
+    /// (the blank row seen during the hold is record `5`'s own row-filling
+    /// wrap, u5-spec#299 Q9), and the wrong-answer arm's comes after record
+    /// `6`. The two branches that
     /// execute nobody, records `9` and `10`, end on "acknowledgement and the
     /// closing scene beat" with no such row: `bt-audience`'s `ask3` beat has
     /// the next command echo directly under `thee!"`.
@@ -5097,21 +5099,47 @@ impl PlayState {
         if self.active_objects.len() < OOL_SLOTS {
             self.active_objects.resize(OOL_SLOTS, ActiveObject::empty());
         }
+        // `blackthorn.md §3` "Party placement (step 6)" (u5-spec#299 Q11):
+        // "Setup places the first *n* roster records, in roster order, into
+        // cutscene actor slots 0 to *n*-1", *n* the nondead count. "The bound
+        // is a count, not a filter": a Dead record inside the first *n* is
+        // placed like any other. Each gets "the member's class tile".
+        let nondead = self.blackthorn_eligible_party_member_count();
+        let class_tile = |party: &[crate::PartyMember], index: usize| {
+            party
+                .get(index)
+                .map(|member| crate::blackthorn::blackthorn_audience_class_tile(member.class_byte))
+        };
+        for slot in crate::blackthorn::BLACKTHORN_AUDIENCE_FURTHER_PARTY_SLOTS {
+            let placed = crate::blackthorn::blackthorn_audience_party_cell(nondead, slot)
+                .zip(class_tile(&self.party, slot));
+            self.active_objects[slot] = match placed {
+                Some(((x, y), tile)) => ActiveObject {
+                    type_byte: tile,
+                    tile,
+                    x,
+                    y,
+                    z: 0,
+                    phase: STEADY_PHASE,
+                    aux1: slot as u8,
+                    aux3: BLACKTHORN_CUTSCENE_AUX3_ROLE_MARKER,
+                },
+                None => ActiveObject::empty(),
+            };
+        }
         for placement in BLACKTHORN_AUDIENCE_ACTOR_PLACEMENTS {
             if placement.actor == BlackthornCutsceneActor::SecondPartyMember
-                && self.party.len() <= BLACKTHORN_FAILURE_VICTIM_SLOT
+                && (nondead <= BLACKTHORN_FAILURE_VICTIM_SLOT
+                    || self.party.len() <= BLACKTHORN_FAILURE_VICTIM_SLOT)
             {
                 continue;
             }
             let slot = placement.actor.slot_index() as usize;
-            let actor_byte = if placement.actor == BlackthornCutsceneActor::SecondPartyMember {
-                self.party
-                    .get(BLACKTHORN_FAILURE_VICTIM_SLOT)
-                    .map(|member| combat_party_actor_byte(member.class_byte))
-                    .filter(|byte| *byte != 0)
-                    .unwrap_or(crate::PLAYER_TILE)
-            } else {
-                placement.tile
+            let actor_byte = match placement.actor {
+                BlackthornCutsceneActor::Avatar | BlackthornCutsceneActor::SecondPartyMember => {
+                    class_tile(&self.party, slot).unwrap_or(placement.tile)
+                }
+                _ => placement.tile,
             };
             self.active_objects[slot] = ActiveObject {
                 type_byte: actor_byte,
@@ -5278,8 +5306,8 @@ impl PlayState {
             // §4.2: "After the key, the beat hands the exit vector to the
             // cutscene script VM" - §6.3's audience-exit row, whose stingers
             // are emitted and whose final frame clears the tableau slot. The
-            // hold itself stays the measured one below, since §4.2's five
-            // seconds is only a floor.
+            // hold is §4.2's published "about 72 tick periods" (u5-spec#299
+            // Q10, R568).
             let vm = self.run_blackthorn_cutscene_beat(BlackthornCutsceneBeat::AudienceExit);
             self.push_diagnostic(format!(
                 "Blackthorn audience exit beat: {} stings, {} world ticks.",
@@ -5439,17 +5467,30 @@ impl PlayState {
                 // the blade-and-impact hold", before the exit beat's key wait
                 // begins. The engine previously deferred the lift to that key
                 // after a stock capture taken with a key sent during the hold.
-                let outcome = self.hold_blackthorn_closing(challenge, reward)?;
+                let outcome = self.hold_blackthorn_closing(challenge, reward.clone())?;
                 if executes {
-                    // §5: the correct-answer execution "also finishes with one
-                    // line feed". The stock capture puts that feed on screen
-                    // *during* the blade hold: `bt-correct`'s `right` beat
-                    // (2026-10-17, artifact bt-correct-20261017-004820) shows
-                    // the blank row under `merciful death!"` while the panel
-                    // still lists the whole party and no key-wait cursor is
-                    // drawn. Stock wins over §5's step order here, so the
-                    // row is fed with the record, not at the hold's end.
-                    self.push_explicit_blank_message_entry();
+                    // §5 "Rows on the correct-answer arm" (u5-spec#299 Q9):
+                    // record `5` starts at column 0 and its last wrapped row,
+                    // `merciful death!"`, "fills all sixteen cells, so the
+                    // printer's own wrap leaves the cursor at column 0 of the
+                    // next row as the record finishes". "That empty row under
+                    // the record is the advance a capture sees through the
+                    // whole blade hold" (`bt-correct`'s `right` beat). It is
+                    // the record's own wrap, not step 9's feed, which still
+                    // follows the roster edit
+                    // ([`Self::release_blackthorn_execution_hold`]).
+                    let fills_last_row = crate::wrap_text(
+                        &reward,
+                        crate::message_window::MESSAGE_WINDOW_WIDTH,
+                        0,
+                    )
+                    .last()
+                    .is_some_and(|row| {
+                        row.chars().count() == crate::message_window::MESSAGE_WINDOW_WIDTH
+                    });
+                    if fills_last_row {
+                        self.push_explicit_blank_message_entry();
+                    }
                     self.pending_blackthorn_merciful_death = true;
                     self.stage_blackthorn_execution_hold(None);
                 }
@@ -5784,9 +5825,21 @@ impl PlayState {
                 .unwrap_or_else(|| "no companion remains to punish".to_string())
         };
         self.repaint_stats_panel();
-        // The correct-answer arm's closing feed was already printed with
-        // record `5` (the stock capture shows it during the hold); the
-        // wrong-answer arm's follows record `6`.
+        // §5 step 9 on the correct-answer arm (u5-spec#299 Q9): "Step 9's
+        // line feed is a separate emit, so it always costs one more row. It
+        // appears together with the reduced panel and leaves one blank row
+        // between the record's last row and the exit beat's key-wait cursor
+        // ... Do not move it ahead of the roster edit." After a row-filling
+        // record the cursor is already at column 0, so the feed leaves a
+        // blank row; after one that stopped mid-row it only closes that row.
+        // The wrong-answer arm's feed follows record `6`.
+        if merciful {
+            if self.message_row_open_mid_line {
+                self.close_message_row();
+            } else {
+                self.push_explicit_blank_message_entry();
+            }
+        }
         self.push_diagnostic(format!(
             "Blackthorn execution at the end of the blade hold (impact at {impact:?}): {report}."
         ));
@@ -6366,7 +6419,10 @@ impl PlayState {
         let object = *self.active_objects.get(slot)?;
         if object.is_empty()
             || object.aux3 != BLACKTHORN_CUTSCENE_AUX3_ROLE_MARKER
-            || crate::blackthorn::blackthorn_cutscene_actor(slot as u8).is_none()
+            // `blackthorn.md §3` (u5-spec#299 Q11): the further party
+            // prisoners in slots 2 to 5 are drawn like the named actors.
+            || (crate::blackthorn::blackthorn_cutscene_actor(slot as u8).is_none()
+                && !crate::blackthorn::BLACKTHORN_AUDIENCE_FURTHER_PARTY_SLOTS.contains(&slot))
         {
             return None;
         }
@@ -6381,12 +6437,13 @@ impl PlayState {
     ///
     /// `blackthorn.md §6`'s explicit redraw is "one unconditional world
     /// tick", so the audience's actors go through the shared `visibility.md
-    /// §8` compositor like any world actor: the Avatar (`0x1C`) and the
-    /// second member start on the manacles `0x85` at `(3,5)` and `(7,5)`
-    /// and are drawn as "one of `0x64..0x67`" - the prisoner set. Stock
-    /// capture (`bt-correct`, every audience beat) shows exactly that
-    /// prisoner on both cells. The draw-nothing sentinel `0x16` (§6.1) still
-    /// draws nothing.
+    /// §8` compositor like any world actor: every placed party member (§3
+    /// "Party placement", class tile per member, u5-spec#299 Q11), the
+    /// Avatar at `(3,5)` and the second member at `(7,5)` included, starts
+    /// on the manacles `0x85` and is drawn as "one of `0x64..0x67`" - the
+    /// prisoner set. Stock capture (`bt-correct`, every audience beat) shows
+    /// exactly that prisoner on both cells. The draw-nothing sentinel `0x16`
+    /// (§6.1) still draws nothing.
     pub fn blackthorn_audience_actor_atlas_tile(&self, slot: usize) -> Option<usize> {
         let (_, row, object, terrain, previous, next) =
             self.blackthorn_audience_actor_cell(slot)?;

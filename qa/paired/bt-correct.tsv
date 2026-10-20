@@ -53,8 +53,10 @@
 # hold also ran past the Space in the later two, so the key was buffered and
 # the beat started at the hold's end. Nothing stable is measured there, so the
 # beat is skipped by name; `ask`, `typed` and `right` carry the comparison.
-# §4.2 gives the exit beat a floor of roughly five seconds; the two stock
-# handoffs here came in under four, which is a question for the spec.
+# §4.2 now gives the exit beat about 72 tick periods, about 4 s, on a fast
+# enough host (u5-spec#299 Q10; the earlier "roughly five seconds" floor is
+# withdrawn as R568), which is why the stock handoffs here land either side
+# of the 4 s sample.
 # dice-beats: after
 both	wait	15000
 both	key	space

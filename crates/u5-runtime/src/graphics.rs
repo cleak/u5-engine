@@ -437,9 +437,24 @@ pub fn render_text_window_rgba_with_runes(
                 } else {
                     cap_body_mask(cell.byte & 0x7f, glyph_y)
                 };
+                // `display-driver.md` "Bracket end-caps" (u5-spec#299 Q12):
+                // "Step 2's glyph is an ordinary text emission and is subject
+                // to the active window's inverse and underline styles; step
+                // 3's strokes are line draws and are not." Under the stats
+                // panel's leaked inverse the triangle comes out black and the
+                // rest of the cell chrome, while "the accent strokes are
+                // unchanged" - so they are painted after the inversion, in the
+                // pen they take when not inverted.
+                let cap_strokes = if cell.inverse && cap_body != 0 {
+                    !cap_body
+                } else {
+                    0
+                };
                 for glyph_x in 0..CH_CELL_SIDE {
                     let bit = 1 << (7 - glyph_x);
-                    let color = if row_bits & bit != 0 {
+                    let color = if cap_strokes & bit != 0 {
+                        foreground
+                    } else if row_bits & bit != 0 {
                         if cap_body & bit != 0 {
                             EGA_PALETTE_RGB[usize::from(crate::CHROME_RIBBON_INDEX)]
                         } else {

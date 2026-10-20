@@ -1152,10 +1152,10 @@ pub fn picker_panel_opaque_cells(state: &PlayState) -> Vec<(u8, u8)> {
 }
 
 /// The divider-band cell carrying the timed-effect tag, when the panel
-/// window's inverse bit is set and a tag is shown. `inventory.md §4.4` left
-/// open "whether the separator band between the panel's boxes shows inverted
-/// cells"; stock `use-specials` (2026-10-17, beat `sceptre`) answers it for
-/// the tag: with the leak set, the crown is drawn dark on a light cell. A
+/// window's inverse bit is set and a tag is shown. `inventory.md §4.4`
+/// (u5-spec#299 Q12): "The effect letter or pictogram comes out black on an
+/// accent-coloured cell"; stock `use-specials` (2026-10-17, beat `sceptre`)
+/// shows the crown drawn dark on a light cell. A
 /// frontend that lets chrome show through a glyph's black pixels must paint
 /// this cell opaque, or the inverted tag vanishes into its own background.
 pub fn stats_panel_opaque_effect_cell(state: &PlayState) -> Option<(u8, u8)> {
@@ -1169,6 +1169,27 @@ pub fn stats_panel_opaque_effect_cell(state: &PlayState) -> Option<(u8, u8)> {
         STATS_PANEL_TEXT_LEFT + STATS_PANEL_TIMED_EFFECT_LOCAL_COLUMN + 1,
         STATS_PANEL_TEXT_TOP + STATS_PANEL_TIMED_EFFECT_LOCAL_ROW,
     ))
+}
+
+/// The timed-effect slot's two end-cap cells on the upper divider band, when
+/// the panel window's inverse bit is set and a tag is shown.
+///
+/// `inventory.md §4.4` (u5-spec#299 Q12): "With an effect running, all three
+/// slot cells (columns 30 to 32) are text glyphs and are drawn inverted. In
+/// each end cap the source triangle comes out black and the rest of the cell,
+/// its top and bottom scanlines included, comes out in chrome; the cap's two
+/// accent strokes ... stay exactly as they are". The black triangle is part of
+/// the inverted text cell, so a frontend that lets the chrome band show
+/// through a glyph's black pixels must paint these cells opaque too, or the
+/// plain cap beneath shows through. With no effect running "the band looks
+/// normal", so nothing is reported.
+pub fn stats_panel_opaque_effect_cap_cells(state: &PlayState) -> Vec<(u8, u8)> {
+    if stats_panel_opaque_effect_cell(state).is_none() {
+        return Vec::new();
+    }
+    let row = STATS_PANEL_TEXT_TOP + STATS_PANEL_TIMED_EFFECT_LOCAL_ROW;
+    let left = STATS_PANEL_TEXT_LEFT + STATS_PANEL_TIMED_EFFECT_LOCAL_COLUMN;
+    vec![(left, row), (left + 2, row)]
 }
 
 /// The live U-Use or R-Ready picker, if one owns the panel.

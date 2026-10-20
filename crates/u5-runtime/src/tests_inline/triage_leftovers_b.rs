@@ -32,11 +32,12 @@ fn triage_b_outdoor_walker_leaves_the_animator_phase_byte_alone() {
     assert_eq!(state.active_objects[1].phase, 0x23);
 }
 
-/// `blackthorn.md §5`: the correct-answer execution "also finishes with one
-/// line feed". Stock capture (`bt-correct` beat `right`, 2026-10-17) shows
-/// that feed - the blank row under record `5` - already on screen during the
-/// blade hold, while the panel still lists the whole party. The roster edit
-/// still waits for the hold's end, and no second feed follows it.
+/// `blackthorn.md §5` "Rows on the correct-answer arm" (u5-spec#299 Q9): the
+/// blank row under record `5` during the blade hold (stock `bt-correct` beat
+/// `right`, 2026-10-17) is the record's own row-filling wrap, shown while the
+/// panel still lists the whole party. Step 9's line feed "is a separate emit,
+/// so it always costs one more row. It appears together with the reduced
+/// panel", leaving the key-wait row two rows below the record's last row.
 #[test]
 fn triage_b_merciful_death_closing_feed_is_on_screen_during_the_blade_hold() {
     let dir = debug_game_dir();
@@ -55,7 +56,7 @@ fn triage_b_merciful_death_closing_feed_is_on_screen_during_the_blade_hold() {
     assert_eq!(state.party.len(), 3, "the panel still lists the whole party");
     let held = state.message_entries();
     let last = held.last().expect("record 5 is on screen").clone();
-    assert!(last.text.is_empty(), "the closing feed is already printed: {last:?}");
+    assert!(last.text.is_empty(), "the record's wrap row is on screen: {last:?}");
     let record_tail = held[held.len() - 2].clone();
     assert!(
         record_tail.text.contains("death!"),
@@ -66,8 +67,15 @@ fn triage_b_merciful_death_closing_feed_is_on_screen_during_the_blade_hold() {
     state.flush_staged_narration();
     assert_eq!(state.party.len(), 2, "the hold's end lifts the companion");
     let entries = state.message_entries();
-    assert_eq!(entries.len(), held_len, "the hold's end prints no second feed");
-    assert!(entries.last().unwrap().text.is_empty());
+    assert_eq!(
+        entries.len(),
+        held_len + 1,
+        "step 9's feed follows the roster edit and costs one more row"
+    );
+    assert!(entries[entries.len() - 1].text.is_empty());
+    assert!(entries[entries.len() - 2].text.is_empty());
+    assert!(entries[entries.len() - 3].text.contains("death!"));
+    assert!(!state.message_row_open_mid_line);
     let _ = fs::remove_dir_all(dir);
 }
 
