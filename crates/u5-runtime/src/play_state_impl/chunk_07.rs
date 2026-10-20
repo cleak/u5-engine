@@ -6673,26 +6673,34 @@ impl PlayState {
         self.blackthorn_rescue_animation_tick = None;
         self.moral_standing = blackthorn_rescue_post_print_standing(self.moral_standing);
         self.clear_active_effect_slot();
+        let scene = Scene::new(BLACKTHORN_RESCUE_HANDOFF_SCENE)?;
+        // §7 step 11: "on logical floor one" - the signed floor byte `+1`.
+        let floor = crate::blackthorn::BLACKTHORN_RESCUE_HANDOFF_FLOOR;
         // `blackthorn.md §7` step 11 / §7.1: the handoff comes "with the
         // clock spun forward until the hour reads 06:00", and "Once the clock
         // has been spun forward it also zeroes both light counters"; §8.1 puts
-        // the food repair "after the wait to 06:00". The section publishes no
-        // per-turn work for the spin, and §8.1 preserves every nonzero food
-        // word "exactly", so this is a bare clock spin: no provision pass and
-        // no gameplay-PRNG draws beyond the flashes §7.1 counts.
+        // the food repair "after the wait to 06:00".
+        //
+        // Issue #299 Q28 publishes what each step does: the spin is made of
+        // ordinary clock advances, so it runs "the clock advance's midnight
+        // work once, and nothing beyond it" - the Shadowlord hideout reroll
+        // with its random draws ("its party-scene rejection is inert,
+        // because the scene is already the castle"), the day advance, the
+        // month-boundary bundle when the day passes 28, then "the single
+        // panel repaint". "Each hour crossed also lowers the camp cooldown
+        // by one, floored at zero ... and rewrites the cached twelve-hour
+        // value", each step recomputes daylight in the castle, and "After a
+        // spin that stepped, the shared previous-hour snapshot ... reads 5
+        // against hour 6". "The spin does not run the party status and
+        // provision pass ..., the world tick or active objects, NPC schedule
+        // work, natural-moongate work or encounters", and "An entry hour of
+        // 6 runs none of this work". That is exactly this engine's clock
+        // half of a turn ([`Self::advance_clock_half`]), stepped an hour at a
+        // time with the castle already the scene. Its light-counter decay is
+        // moot: both counters are zeroed straight after.
+        self.area = Area::Town { scene, floor };
         while self.clock.hour != crate::blackthorn::BLACKTHORN_RESCUE_HANDOFF_HOUR {
-            let previous_day = self.clock.day;
-            self.clock.advance_hour();
-            // `time.md §7` / `stats-panel.md §2.4`: "The day rollover also
-            // repaints the stats panel ... it fires exactly once per in-game
-            // day boundary", and the u5-spec#299 Q17 answer has the panel
-            // date advance when this spin crosses midnight. The cinematic
-            // runs outside the command dispatcher's snapshot test, so
-            // nothing else repainted it and the date row kept the old day
-            // for the rest of the run (playtest F57).
-            if self.clock.day != previous_day {
-                self.repaint_stats_panel();
-            }
+            self.advance_clock_half(60);
         }
         self.torch_counter = 0;
         self.light_spell_counter = 0;
@@ -6702,9 +6710,6 @@ impl PlayState {
         if self.food == 0 {
             self.food = 63;
         }
-        let scene = Scene::new(BLACKTHORN_RESCUE_HANDOFF_SCENE)?;
-        // §7 step 11: "on logical floor one" - the signed floor byte `+1`.
-        let floor = crate::blackthorn::BLACKTHORN_RESCUE_HANDOFF_FLOOR;
         let (grid, beacon_sources) =
             load_town_runtime_floor_with_beacon_sources(game_dir, scene, floor, self.clock.hour)?;
         self.grid = grid;

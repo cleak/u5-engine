@@ -2875,6 +2875,11 @@
         state.torch_counter = 20;
         state.light_spell_counter = 30;
         state.food = 0;
+        // Entry hour 6: the spin to 06:00 runs no work, so the only gameplay
+        // draws are the flashes counted below. A spin across midnight also
+        // draws for the hideout reroll (issue #299 Q28); that is pinned by
+        // `blackthorn_rescue_spin_runs_the_published_midnight_and_hour_work`.
+        state.clock = GameClock::new(6, 0).unwrap();
         let prng_before = state.prng_state;
         let sound_serial_before = state.sound_effect_serial;
 
