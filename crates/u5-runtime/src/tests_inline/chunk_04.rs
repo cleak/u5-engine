@@ -446,7 +446,7 @@ fn board_vehicle_uses_underfoot_active_object_and_clears_parked_slot() {
     assert!(state.active_objects[1].is_empty());
     assert!(state.world_object_at(0, 0).is_none());
     assert_eq!(state.turn, 1);
-    assert_eq!(state.message, "Boarded ship.");
+    assert_eq!(state.message, "Ship");
     // `stats-panel.md §2.2.1` row 11: Board defers the panel refresh.
     assert_eq!(
         state.stats_panel_command_refresh,
@@ -598,7 +598,10 @@ fn board_ship_accepts_waterborne_transport_state() {
             tile: FIRST_PLAYABLE_FRIGATE_TILE,
             sails_hoisted: false,
             hull: 0,
-            skiffs: 0,
+            // `vehicles.md §4` (issue #299 Q25, `RETRACTIONS.md` R581): the
+            // stored count "**plus one when the party boards from a
+            // skiff**".
+            skiffs: 1,
         }
     );
     assert_eq!(state.active_objects.len(), 2);
@@ -615,7 +618,9 @@ fn board_ship_accepts_waterborne_transport_state() {
     assert_eq!(state.turn, 1);
     assert_eq!(
         state.message,
-        format!("Boarded ship. {SHIP_BADLY_DAMAGED_WARNING} {SHIP_NO_SKIFFS_WARNING}")
+        // `vehicles.md §4.1`: the skiff warning "never happens when boarding
+        // from a skiff".
+        format!("Ship\n\n{SHIP_BADLY_DAMAGED_WARNING}")
     );
 }
 
@@ -714,7 +719,7 @@ fn board_ship_accepts_carpet_north_east_and_stows_carpet() {
             state.player.transport,
             TransportState::Ship { .. }
         ));
-        assert_eq!(state.message, "Boarded ship.");
+        assert_eq!(state.message, "Ship");
     }
 }
 
@@ -774,7 +779,7 @@ fn board_ship_with_zero_hull_reports_badly_damaged_warning() {
     );
     assert_eq!(
         state.message,
-        format!("Boarded ship. {SHIP_BADLY_DAMAGED_WARNING}")
+        format!("Ship\n\n{SHIP_BADLY_DAMAGED_WARNING}")
     );
     assert_eq!(state.turn, 1);
 }
@@ -1035,10 +1040,85 @@ fn board_town_horse_refuses_occupied_object_with_nay_without_turn() {
     assert_eq!(state.board_vehicle(), MoveOutcome::Blocked);
 
     assert_eq!(state.player.transport, TransportState::Foot);
-    assert_eq!(state.message, "Nay!");
+    assert_eq!(state.message, BOARD_HORSE_NAY_REFUSAL);
     assert_eq!(state.turn, 0);
     assert!(!state.active_objects[1].is_empty());
     assert!(!state.active_objects[2].is_empty());
+}
+
+/// `vehicles.md §4` Horse (issue #299 Q25): the availability check "is made
+/// **before** the on-foot check, so a party in such a scene that is not on
+/// foot and tries to board an occupied horse gets `"Nay!"`, not `On foot`".
+#[test]
+fn board_town_occupied_horse_says_nay_before_the_on_foot_check() {
+    let mut state = test_state(vec![5; 32 * 32], 0, 0);
+    state.player.transport = TransportState::Carpet {
+        type_byte: TRANSPORT_MARKER_MAGIC_CARPET_FIRST,
+        tile: FIRST_PLAYABLE_MAGIC_CARPET_TILE,
+    };
+    state.sync_player_object();
+    for type_byte in [192, HORSE_PARKED_FIRST] {
+        state.active_objects.push(ActiveObject {
+            type_byte,
+            tile: type_byte,
+            x: 0,
+            y: 0,
+            z: 0,
+            phase: STEADY_PHASE,
+            aux1: 0,
+            aux3: 0,
+        });
+    }
+
+    assert_eq!(state.board_vehicle(), MoveOutcome::Blocked);
+    assert_eq!(state.message, BOARD_HORSE_NAY_REFUSAL);
+}
+
+/// `vehicles.md §4.1` (issue #299 Q25) through the key path: a frigate with
+/// hull `5` and no carried skiffs boarded on foot shows "`Board Ship`, a
+/// blank row, the damage warning, a blank row, the skiff warning", and a
+/// dungeon Board is `Board`, then `Not here!`.
+#[test]
+fn board_key_prints_the_published_ship_line_and_both_warnings() {
+    let mut state = world_state(open_world_grid(), 5, 5);
+    state.active_objects.push(ActiveObject {
+        type_byte: SHIP_PARKED_FIRST,
+        tile: SHIP_PARKED_FIRST,
+        x: 5,
+        y: 5,
+        z: WorldPlane::Underworld.save_floor(),
+        phase: STEADY_PHASE,
+        aux1: 5,
+        aux3: 0,
+    });
+    crate::input_dispatch::handle_play_key_input(&mut state, 'B', "", Path::new("")).unwrap();
+    assert!(matches!(state.player.transport, TransportState::Ship { hull: 5, skiffs: 0, .. }));
+    let rows: Vec<&str> = state
+        .message_entries()
+        .iter()
+        .map(|entry| entry.text.as_str())
+        .collect();
+    assert!(
+        rows.ends_with(&[
+            "Board Ship",
+            "",
+            SHIP_BADLY_DAMAGED_WARNING,
+            "",
+            SHIP_NO_SKIFFS_WARNING,
+        ]),
+        "{rows:?}"
+    );
+    assert!(!state.message_row_open_mid_line);
+
+    let mut dungeon = dungeon_state(open_dungeon_record(), 0, 1, 1);
+    crate::input_dispatch::handle_play_key_input(&mut dungeon, 'B', "", Path::new("")).unwrap();
+    let rows: Vec<&str> = dungeon
+        .message_entries()
+        .iter()
+        .map(|entry| entry.text.as_str())
+        .collect();
+    // The echo row keeps the prefix's trailing space (`Board_`).
+    assert!(rows.ends_with(&["Board ", "Not here!"]), "{rows:?}");
 }
 
 #[test]

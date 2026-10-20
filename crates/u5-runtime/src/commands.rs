@@ -999,6 +999,17 @@ pub const XIT_NO_LAND_NEARBY_REFUSAL: &str = "\nNo land nearby!\n";
 /// place of the completed `X-it ship!` row and its refusal.
 pub const XIT_NO_SKIFFS_REFUSAL: &str = "\nNo skiffs on board!\n";
 
+/// `vehicles.md §4.1` (issue #299 Q25), the B-Board refusals after the
+/// dispatcher's `Board_` prefix: "Dungeon scene | `\nNot here!\n`".
+pub const BOARD_NOT_HERE_REFUSAL: &str = "\nNot here!\n";
+/// `vehicles.md §4.1`: "Horse, carpet or skiff while not on foot, or a ship
+/// from a state outside its boarding gate | `\nOn foot\n` | `Board`, then
+/// `On foot`, with no `!`".
+pub const BOARD_ON_FOOT_REFUSAL: &str = "\nOn foot\n";
+/// `vehicles.md §4.1`: the occupied-horse refusal, "`Board \"Nay!\"`,
+/// double quotes included".
+pub const BOARD_HORSE_NAY_REFUSAL: &str = "\"Nay!\"";
+
 /// `inventory.md §7.1`, the Shadowlord destruction: "The later actual
 /// Shadowlord destruction adds `\nThe doom of the Shadowlord_`, the
 /// matching name Faulinei, Astaroth or Nosfentor, then `_is wrought!\n`."

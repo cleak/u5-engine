@@ -223,8 +223,8 @@ fn playfix_f19_each_under_sail_collision_prints_its_own_line() {
 }
 
 /// F21: `vehicles.md §4` - a mounted party over a skiff gets "the stock
-/// \"On foot\" refusal", and `commands.md §5.5` publishes that stock
-/// literal as `On_foot!\n`, not `On foot.`.
+/// \"On foot\" refusal", which §4.1 (issue #299 Q25) publishes as Board's
+/// own `\nOn foot\n` - not the `On_foot!\n` of `commands.md §5.5`.
 #[test]
 fn playfix_f21_board_refusal_is_the_stock_on_foot_literal() {
     let mut state = world_state(open_world_grid(), 5, 5);
@@ -244,7 +244,9 @@ fn playfix_f21_board_refusal_is_the_stock_on_foot_literal() {
         aux3: 0,
     });
     assert_eq!(state.board_vehicle(), MoveOutcome::Blocked);
-    assert_eq!(state.message, "On foot!");
+    // `vehicles.md §4.1` (issue #299 Q25): Board's own `\nOn foot\n`, with
+    // no `!`.
+    assert_eq!(state.message, BOARD_ON_FOOT_REFUSAL);
 }
 
 /// F22: `overworld.md §9.2` - in hour `0` with the minute below `10` the
