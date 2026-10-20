@@ -5,6 +5,16 @@
 # Measured 2026-10-17: the stock party never wakes. It prints a fresh
 # `>Zzzzzz...` row (blank row between) on every pass for the whole capture,
 # ignores the Space presses, and the panel stays `S`.
+#
+# Every beat samples the endless sleep loop, and the stock repeats it on its
+# own host-clock cadence, so a shot lands at whatever point of a pass the stock
+# is in while the engine is shot between passes. The rc3 sweep
+# (20261020-011718) read fourteen beats one row adrift and nothing else. The
+# declaration below lets that one-row scroll phase agree on these beats and
+# nothing more: the rows themselves (one marker and one sleep row per pass,
+# a blank between passes, no `Pass` echo for the ignored Space presses) and
+# the roster panel (every member still `S`) are compared on every beat.
+# sleep-phase-beats: arrival idle1 idle2 idle3 idle4 idle5 idle6 idle7 idle8 idle9 pass1 pass2 pass3 pass4 pass5 pass6 pass7 pass8 pass9 pass10 pass11 pass12
 # requires-seed: the party in a Deceit corridor with every active member's status Sleeping
 both	wait	15000
 both	key	space

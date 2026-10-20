@@ -960,6 +960,99 @@ def dice_beats(scenario: str) -> frozenset[str]:
     return frozenset(beats)
 
 
+def _declared_beats(scenario: str, marker: str) -> frozenset[str]:
+    """The beats a `# <marker>: beat beat ...` header line names."""
+    path = SCENARIOS / f"{scenario}.tsv"
+    try:
+        lines = path.read_text().splitlines()
+    except OSError:
+        return frozenset()
+    beats: set[str] = set()
+    for line in lines:
+        if line.lower().startswith(marker):
+            beats.update(line[len(marker):].split())
+    return frozenset(beats)
+
+
+# Beats that sample a continuous sleep loop mid-pass, one by one:
+#
+#     # sleep-phase-beats: idle1 idle2 ...
+#
+# The all-asleep dungeon arm (`dungeon-mode.md §4` step 7) prints a
+# feed-and-marker pair and a sleep row over and over with no key read, and the
+# stock repeats it on its own host-clock cadence. A shot catches the stock at
+# whatever point of a pass it happens to be in - before the feed, after the
+# marker, after the row - while the engine is shot in its between-pass state,
+# so the same stream of rows reads one row adrift on roughly half the beats
+# (`asleep-dungeon`, rc3 sweep `20261020-011718`: fourteen `offset-1` beats and
+# nothing else). On a declared beat that one-row scroll phase - and nothing
+# else - counts as agreeing: the rows must still be the same rows in the same
+# order (a missing blank between passes, a missing marker or a wake echo still
+# differs), and the roster panel and viewport are compared as usual, so a wake
+# (`S` -> `G`) or a clock advance in the date row still reports.
+SLEEP_PHASE_MARKER = "# sleep-phase-beats:"
+SLEEP_PHASE_KINDS = frozenset({"offset-1", "offset+1"})
+
+
+def sleep_phase_beats(scenario: str) -> frozenset[str]:
+    return _declared_beats(scenario, SLEEP_PHASE_MARKER)
+
+
+# Beats whose only varying quantity is how many passes of a sleep loop ran
+# before a random wake, one by one:
+#
+#     # sleep-count-beats: arrival idle1 ...
+#
+# The town all-asleep arm passes the turn, and the post-action pass wakes each
+# sleeper with chance 1 in 16 (`main-loop.md §6`, `dungeon-mode.md §4` step 6
+# for the roll), so the number of sleep rows printed before the party wakes is
+# a draw: the rc3 sweep's stock woke after three, the engine after five, and
+# every beat that still showed those rows differed by that count alone. On a
+# declared beat the window is compared after dropping the leading blank rows
+# (how far the stream has scrolled) and collapsing a repeated `row, blank`
+# unit into one. Everything else is still compared row for row: the shape of
+# each pass (its marker, its row and the blank after it), the rows printed
+# after the wake (each `Pass` echo has no blank under it, so those are never
+# collapsed and their count still matters), and the roster panel, which is
+# how a town wake roll that repaints the panel would still report.
+SLEEP_COUNT_MARKER = "# sleep-count-beats:"
+
+
+def sleep_count_beats(scenario: str) -> frozenset[str]:
+    return _declared_beats(scenario, SLEEP_COUNT_MARKER)
+
+
+def collapse_repeated_units(rows: list[str]) -> list[str]:
+    """`rows` with leading blanks dropped and each repeated `row, blank` unit
+    folded into its first occurrence.
+
+    A unit at the very bottom of the window may have no blank under it yet;
+    it still folds into an identical unit just above it.
+    """
+    rows = [row.rstrip() for row in rows]
+    while rows and not rows[0]:
+        rows.pop(0)
+    folded: list[str] = []
+    index = 0
+    while index < len(rows):
+        row = rows[index]
+        closes_unit = index + 1 == len(rows) or not rows[index + 1]
+        if (
+            row
+            and closes_unit
+            and len(folded) >= 2
+            and folded[-1] == ""
+            and folded[-2] == row
+        ):
+            index += 2
+            continue
+        folded.append(row)
+        index += 1
+    while folded and not folded[-1]:
+        folded.pop()
+    return folded
+
+
 def is_probe(scenario: str) -> bool:
     """Is this scenario a probe rather than a comparison?
 
@@ -1091,6 +1184,18 @@ def compare(artifact: pathlib.Path) -> tuple[int, int, int, int, int]:
             if kind in IDLE_KINDS:
                 idle += 1
                 print(f"  idle   {scenario}/{label}: {kind}, re-run needed")
+                continue
+            # A declared sleep-loop beat: see `SLEEP_PHASE_MARKER` and
+            # `SLEEP_COUNT_MARKER`. Only the loop's own timing is excused.
+            if label in sleep_phase_beats(scenario) and kind in SLEEP_PHASE_KINDS:
+                same += 1
+                print(f"  phase  {scenario}/{label}: {kind}, sleep-loop scroll phase, counted as agreeing")
+                continue
+            if label in sleep_count_beats(scenario) and collapse_repeated_units(
+                [row_text(row) for row in left]
+            ) == collapse_repeated_units([row_text(row) for row in right]):
+                same += 1
+                print(f"  count  {scenario}/{label}: {kind}, sleep-pass count only, counted as agreeing")
                 continue
             # A `variant` beat agrees. `classify` reaches that verdict only
             # after tokenising every published pool and finding the two

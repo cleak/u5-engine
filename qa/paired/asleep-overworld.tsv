@@ -7,6 +7,19 @@
 # one - the stock panel turns a member `G` the moment the 1-in-16 roll wakes
 # it mid-fight. The encounter itself is random, so beats are not expected to
 # agree frame for frame.
+#
+# This scenario is a lottery, and no re-seed can make it otherwise. Tried
+# 2026-10-20: the same party at 12:00 (hour and snapshot bytes 12), where
+# `encounters.md §3` gives the party's tile (0x14 at 81,106) threshold 1 and
+# so no encounter. Neither side wakes on the overworld, and the slept passes
+# run back to back with the clock advancing: the stock was already in the dark
+# at the arrival shot six seconds after the load, and both sides showed the
+# next day (4-6) at idle1 - and both then drew an encounter in the night hours.
+# §3 gives every surface tile a threshold of at least 3 at hours 0..4 (2 in 30
+# per probe) and the underworld 3 at every hour, so a slept overworld party
+# always reaches a night and an encounter within seconds; only how soon, and
+# which creatures, varies. The beats compare the combat asleep arm after that
+# draw, and a run that does not agree has measured nothing and must be re-run.
 # requires-seed: the party on the Britannia overworld with every active member's status Sleeping
 both	wait	15000
 both	key	space

@@ -2,6 +2,14 @@
 # 12:01. Measures whether the dungeon's no-input asleep passes advance the
 # clock at all: if they do, the date in the stats panel rolls over within a
 # few passes. For cleak/u5-spec#299 Q23. No key is sent after the load.
+#
+# Every beat samples the endless sleep loop at a host-clock point of a pass,
+# so the stock reads one row adrift of the engine on about half the beats (rc3
+# sweep 20261020-012358: eleven `offset-1` beats and nothing else). The
+# declaration below excuses that scroll phase only. The date row of the stats
+# panel is still compared on every beat, and it is what this scenario
+# measures: a clock advance would roll 23:55 past midnight within a few passes.
+# sleep-phase-beats: arrival t3 t6 t9 t12 t15 t18 t21 t24 t27 t30 long1 long2 long3 long4
 # requires-seed: the asleep-dungeon party with the clock set to 23:55
 both	wait	15000
 both	key	space
