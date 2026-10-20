@@ -4025,11 +4025,12 @@ impl PlayState {
         // `inventory.md §4.7` lists the Equipment screen as "(food, gold,
         // keys, gems, torches, grapple)" and its label table carries
         // `\n_Grapple` straight after `\n_Torches....`, so the row sits on
-        // the next panel row. The label has no leader and no colon, and the
-        // spec publishes no value format, so it is drawn as a bare
-        // presence row while the grapple byte (`saved-gam.md §7`, `0x0209`)
-        // is nonzero. Playtest F55; the absent-grapple case and any value
-        // after the label are open spec questions.
+        // the next panel row. Issue #299 Q27 publishes the format: "The
+        // Grapple row has no value: it is the bare label, printed only when
+        // the Grapple / legacy magic-powder byte (`formats/saved-gam.md`) is
+        // nonzero ... When the byte is zero the row is left out and the page
+        // ends after the Torches row, with no blank line in its place."
+        // Playtest F55.
         if self.climbing_gear != 0 {
             rows[7] = " Grapple".to_string();
         }

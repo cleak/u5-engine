@@ -88,3 +88,32 @@ fn playfix_f58_endgame_narrative_message_slot_drops_end_dat_markers() {
         Some("{\"In_stead, famil_iar furn_i_ture")
     );
 }
+
+/// `inventory.md §4.7` (issue #299 Q27): "Food and Gold are printed
+/// right-justified in a four-cell field padded with spaces. Keys, Gems and
+/// Torches are printed right-justified in a two-cell field padded with
+/// spaces, starting at that thirteenth cell, so a single digit sits in the
+/// fourteenth cell; a zero count prints `0` and those three rows are always
+/// shown." Every nonzero grapple byte prints the same bare label.
+#[test]
+fn z_stats_counters_page_uses_the_published_field_widths() {
+    let mut state = world_state(open_world_grid(), 5, 5);
+    let session = ZStatsSession {
+        selected_party_index: 0,
+        page: ZStatsPage::Counters,
+        inventory_cursor: 0,
+    };
+    state.food = 63;
+    state.gold = 1234;
+    state.keys = 0;
+    state.gems = 7;
+    state.torches = 12;
+    state.climbing_gear = 0x80;
+    let rows = state.z_stats_panel_rows(&session);
+    assert_eq!(rows[1], " Food:   63");
+    assert_eq!(rows[2], " Gold: 1234");
+    assert_eq!(rows[4], " Keys....... 0");
+    assert_eq!(rows[5], " Gems....... 7");
+    assert_eq!(rows[6], " Torches....12");
+    assert_eq!(rows[7], " Grapple");
+}
