@@ -42,3 +42,89 @@ fn spec299_q17_rescue_clock_spins_in_nine_minute_steps_to_hour_six() {
         let _ = fs::remove_dir_all(dir);
     }
 }
+
+/// u5-spec#299 Q16, `shops.md §8.5` "A negative quantity" and `input.md §8`:
+/// "The reader keeps a leading `-`, and the sign uses one of its two
+/// positions, so `-1` is the only practical negative entry: `-99` echoes `-9`
+/// and drops the last key, and `-0` or a bare `-` reads as zero (the
+/// `Hrumph.` path). A leading `+` is accepted and ignored, so `+5` buys five."
+#[test]
+fn spec299_q16_provision_reader_sign_uses_one_of_two_positions() {
+    fn typed(keys: &str) -> crate::shop_runtime::TypedQuantityEntry {
+        let mut entry = crate::shop_runtime::TypedQuantityEntry::default();
+        for byte in keys.bytes() {
+            assert!(!entry.apply(byte));
+        }
+        entry
+    }
+    assert_eq!(typed("-99").as_str(), "-9");
+    assert_eq!(typed("99").as_str(), "99");
+    assert_eq!(typed("999").as_str(), "99");
+    assert_eq!(typed("+5").quantity(), 5);
+    assert_eq!(typed("+55").as_str(), "+5");
+    assert_eq!(typed("-0").quantity(), 0);
+    assert_eq!(typed("-").quantity(), 0);
+    assert_eq!(typed("-1").quantity(), u16::MAX);
+}
+
+/// u5-spec#299 Q16, `shops.md §8.5`: the worked vectors "at a unit price of
+/// 14" for a `-1` entry. "Each pass pays for one pack and adds its 25
+/// servings **before** the loop tests the 9999 food stop"; "Food reaches
+/// 9999 ... takes the completed-purchase tail"; "Gold runs out first ...
+/// `"Thou canst\nafford only `, the number of packs actually bought"; "Not
+/// one pack affordable ... the two nothing-served rows above apply".
+#[test]
+fn spec299_q16_negative_provision_quantity_buys_until_gold_or_ceiling() {
+    use crate::shops::{
+        ProvisionPurchaseCompletion, ProvisionPurchaseError, Tavern,
+        apply_provision_purchase_at_unit_price,
+    };
+    let minus_one = u16::MAX;
+    for (gold, food, packs, gold_after, food_after, completion) in [
+        (100, 100, 7, 2, 275, ProvisionPurchaseCompletion::GoldExhausted),
+        (9999, 100, 396, 4455, 9999, ProvisionPurchaseCompletion::Completed),
+        (9999, 9990, 1, 9985, 9999, ProvisionPurchaseCompletion::Completed),
+        (100, 9999, 1, 86, 9999, ProvisionPurchaseCompletion::Completed),
+        (14, 9990, 1, 0, 9999, ProvisionPurchaseCompletion::Completed),
+    ] {
+        let (mut g, mut f) = (gold, food);
+        let outcome = apply_provision_purchase_at_unit_price(
+            &mut g,
+            &mut f,
+            Tavern::TheHonestMeal,
+            minus_one,
+            14,
+        )
+        .unwrap_or_else(|err| panic!("{gold}/{food}: {err:?}"));
+        assert_eq!(outcome.purchased_quantity, packs, "{gold}/{food}");
+        assert_eq!((g, f), (gold_after, food_after), "{gold}/{food}");
+        assert_eq!(outcome.completion, completion, "{gold}/{food}");
+    }
+    for (gold, food) in [(13u16, 9999u16), (0, 100)] {
+        let (mut g, mut f) = (gold, food);
+        assert_eq!(
+            apply_provision_purchase_at_unit_price(
+                &mut g,
+                &mut f,
+                Tavern::TheHonestMeal,
+                minus_one,
+                14
+            )
+            .unwrap_err(),
+            ProvisionPurchaseError::NoNeed
+        );
+        assert_eq!((g, f), (gold, food));
+    }
+    let (mut g, mut f) = (0u16, 2u16);
+    let scraps = apply_provision_purchase_at_unit_price(
+        &mut g,
+        &mut f,
+        Tavern::TheHonestMeal,
+        minus_one,
+        14,
+    )
+    .unwrap();
+    assert_eq!(scraps.completion, ProvisionPurchaseCompletion::Charity);
+    assert!(matches!(f, 3 | 4), "table scraps: {f}");
+    assert_eq!(g, 0);
+}
