@@ -6967,7 +6967,14 @@ impl PlayState {
     /// level; the one way in with a different one is a load, which the
     /// setup table makes a *reuse* that "preserves the whole active record",
     /// and §14's step "runs over the current 8-by-8 level" with no level
-    /// test. Measured 2026-10-16 (`dungeon-chest-jimmy`, `dungeon-two-way-
+    /// test. Now published (u5-spec#299 Q3, §4.1 and §6.9's `z` row): "Reuse
+    /// validates nothing except activity" - the class byte against `0xFF` -
+    /// "The stamped level is never compared with the party's level on reuse,
+    /// and no dungeon-mode behaviour depends on it", and the all-zero record
+    /// "shows the Giant Rat sprite bank ... and on contact or A-Attack fights
+    /// as combat class 0" (family 0 is the rat; combat class 0 is Mages,
+    /// R567). Static reading only for a mismatched level
+    /// (`OPEN-QUESTIONS.md`). First measured 2026-10-16 (`dungeon-chest-jimmy`, `dungeon-two-way-
     /// ladder`): from saves whose record is all zeros - live, level 0, at
     /// `(0,0)` - the original's monster walked level 3 and attacked "from
     /// the west" in 8 of 22 runs, and this engine, gating on the level,
