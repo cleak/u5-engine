@@ -11135,7 +11135,7 @@ fn combat_klimb_refuses_non_rock_targets_and_resolves_ladders_in_any_arena() {
         handle_play_key_input(&mut state, 'K', "8", game_dir).unwrap();
         assert_eq!(
             state.message,
-            DUNGEON_KLIMB_WHAT_REFUSAL.trim_end(),
+            crate::commands::COMBAT_KLIMB_ADJACENT_REFUSAL,
             "{target:#x}"
         );
         assert_eq!(state.pending_combat_actor_slot, Some(0), "{target:#x}");
@@ -11154,7 +11154,7 @@ fn combat_klimb_refuses_non_rock_targets_and_resolves_ladders_in_any_arena() {
         ..ActiveObject::empty()
     };
     handle_play_key_input(&mut state, 'K', "8", game_dir).unwrap();
-    assert_eq!(state.message, DUNGEON_KLIMB_WHAT_REFUSAL.trim_end());
+    assert_eq!(state.message, crate::commands::COMBAT_KLIMB_ADJACENT_REFUSAL);
     assert_eq!(state.pending_combat_actor_slot, Some(0));
     assert_eq!((state.combat_actors[0].x, state.combat_actors[0].y), (5, 5));
 
