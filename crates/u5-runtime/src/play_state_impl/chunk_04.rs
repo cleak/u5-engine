@@ -6571,16 +6571,15 @@ fn yew_wanted_poster_name_row(name: Option<&[u8; SAVE_CHARACTER_NAME_LEN]>) -> S
 /// speaker's "opening characters — case-insensitively, with bit 7 stripped —
 /// against the reserve portion of the sixteen-slot character roster". §11's
 /// derivation note names it as "the case-insensitive bit-7-stripping
-/// string-equality routine used by the JOIN-name compare", which is the same
-/// routine §6 step 5 uses for keywords: "The compare strips bit 7 from both
-/// sides ... and folds both sides to upper case. A match requires the keyword
-/// to end cleanly and the typed input either to end at the same point or to
-/// have a literal space there; there is no substring search or fuzzy matching."
+/// string-equality routine used by the JOIN-name compare".
 ///
-/// Here the speaker's name plays the keyword's role: it supplies the opening
-/// characters, and the roster record must either end at that point or carry a
-/// literal space there. So `LORD` matches a roster `LORD BRITISH` but `GWEN`
-/// does not match `GWENNO`.
+/// The end boundary below - the roster record must either end where the
+/// speaker's name ends or carry a literal space there - was taken from §6 step
+/// 5's keyword rule, which u5-spec#299 Q20 retracts for keywords (R577: the
+/// keyword match is the shared text matcher with no end check). §7.6 gives the
+/// recruit compare only as "opening characters" of a string-equality routine,
+/// so this engine keeps its conservative reading for it: `LORD` matches a
+/// roster `LORD BRITISH` but `GWEN` does not match `GWENNO`.
 fn party_roster_name_matches(record: &PartyRosterRecord, needle: &str) -> bool {
     let speaker = conversation_name_compare_bytes(needle.as_bytes());
     if speaker.is_empty() {

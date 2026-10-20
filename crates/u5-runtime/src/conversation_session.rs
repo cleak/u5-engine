@@ -1453,7 +1453,7 @@ mod tests {
             enc("Greetings."),
             enc("I mend gear."),
             enc("Farewell."),
-            enc("NAMES"),
+            enc("WHOM"),
             {
                 let mut bytes = enc("Who art thou?");
                 bytes.push(TLK_CODE_ASK_WHO);
@@ -1468,7 +1468,7 @@ mod tests {
             "Greetings.".to_string(),
             "I mend gear.".to_string(),
             "Farewell.".to_string(),
-            "NAMES".to_string(),
+            "WHOM".to_string(),
             "Who art thou?".to_string(),
         ];
         (raw, decoded)
@@ -1489,7 +1489,7 @@ mod tests {
         s.set_npc_slot(Some(6));
         s.present_greeting(&context);
 
-        let first = s.submit_keyword("names", &context);
+        let first = s.submit_keyword("whom", &context);
         assert_eq!(first.text, framed_response("Who art thou?"));
         assert!(matches!(
             s.phase,
@@ -1667,7 +1667,7 @@ mod tests {
         let mut s = ConversationSession::new(raw, decoded);
         s.set_npc_slot(Some(6));
         s.present_greeting(&context);
-        s.submit_keyword("names", &context);
+        s.submit_keyword("whom", &context);
 
         let second = s.submit_keyword("triolo", &context);
         assert_eq!(second.asked_who, Some(0));
@@ -1685,7 +1685,7 @@ mod tests {
         let mut s = ConversationSession::new(raw, decoded);
         s.set_npc_slot(Some(6));
         s.present_greeting(&context);
-        s.submit_keyword("names", &context);
+        s.submit_keyword("whom", &context);
 
         let second = s.submit_keyword("   ", &context);
         assert_eq!(second.asked_who, Some(0));
@@ -1702,7 +1702,7 @@ mod tests {
         };
         let mut s = ConversationSession::new(raw, decoded);
         s.present_greeting(&context);
-        s.submit_keyword("names", &context);
+        s.submit_keyword("whom", &context);
 
         let second = s.submit_keyword("ABCDEFGHIJKLMNOEXTRA", &context);
         assert_eq!(second.asked_who, Some(1));
@@ -1933,8 +1933,23 @@ mod tests {
     fn ordinary_keyword_returns_matched_response() {
         let mut s = baseline_session();
         s.present_greeting(&ctx());
+        let out = s.submit_keyword("i want grandpa", &ctx());
+        assert!(out.text.contains("Short"));
+    }
+
+    /// u5-spec#299 Q20 (R577): "A typed `grandpa` matches a `gran` keyword,
+    /// so when an NPC has both `gran` and `grandpa`, which of them answers is
+    /// decided by their order in the blob: the earlier one wins for any line
+    /// it matches."
+    #[test]
+    fn the_earlier_keyword_wins_for_any_line_it_matches() {
+        let mut s = baseline_session();
+        s.present_greeting(&ctx());
         let out = s.submit_keyword("grandpa", &ctx());
-        assert!(out.text.contains("Long"));
+        assert_eq!(out.text, framed_response("Short answer."));
+        // `JOBS` runs the Job entry (R578).
+        let job = s.submit_keyword("jobs", &ctx());
+        assert_eq!(job.text, framed_response("I mend gear."));
     }
 
     #[test]
@@ -1979,9 +1994,8 @@ mod tests {
     fn ordinary_keyword_short_match_picks_first_match() {
         let mut s = baseline_session();
         s.present_greeting(&ctx());
-        // "GRAN" is a prefix-keyword; "gran news" should match it
-        // before "grandpa" (which never matches because of the space
-        // boundary).
+        // "GRAN" comes first in the blob, so it answers every line it
+        // matches (`conversation.md §6`, u5-spec#299 Q20).
         let out = s.submit_keyword("gran news", &ctx());
         assert!(out.text.contains("Short"));
     }
@@ -2373,10 +2387,11 @@ mod tests {
         let mut s = scoped_yes_no_session();
         s.submit_keyword("ask", &ctx());
 
-        // §7.7: `NAME` does not run the global Name response; it is just
-        // an answer no scoped keyword matches.
+        // §7.7: `NAME` does not run the global Name response; the line is
+        // left intact, so it matches the scoped `n` as text (u5-spec#299
+        // Q20: "`NAME` matches a scoped keyword `n`").
         let name = s.submit_keyword("name", &ctx());
-        assert_eq!(name.text, framed_response("Just say when."));
+        assert_eq!(name.text, framed_response("Pity."));
         assert!(!name.text.contains("Ada"));
         assert!(!name.ended);
         let bye = {

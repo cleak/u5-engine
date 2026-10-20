@@ -1063,7 +1063,8 @@ pub enum ReservedKeywordEffect {
 
 /// `conversation.md §6`: classify a typed reserved-keyword input. The
 /// helper compares against the five functional words with the fixed
-/// table's space-boundary match and returns the entry to run.
+/// table's word-start match ([`tlk_keyword_matches`]) and returns the entry
+/// to run.
 pub fn reserved_keyword_effect(input: &[u8]) -> Option<ReservedKeywordEffect> {
     Some(match reserved_functional_keyword_index(input)? {
         0 => ReservedKeywordEffect::NameEntry,
@@ -1131,31 +1132,23 @@ pub fn tlk_player_input_kind(input: &[u8]) -> TlkPlayerInputKind {
     TlkPlayerInputKind::OrdinaryKeywordScan
 }
 
-/// `conversation.md §6`: NPC ordinary-keyword space-boundary match. Both
-/// keyword and input are bit-7-stripped, case-folded to upper case, and
-/// compared from the start. The keyword must end cleanly; the typed
-/// input either ends at the same point or has a literal space at that
-/// position. Returns `true` for a successful match.
+/// `conversation.md §6` steps 4 and 5 (u5-spec#299 Q20, R577 / R578): the
+/// keyword match of the reserved scan, the ordinary scan and the scoped
+/// prompt. Each keyword "is looked for in the typed line with the shared
+/// text matcher of `systems/commands.md` Section 11.3", which strips bit 7
+/// and folds case on both sides and keeps its restart rule. "The **first**
+/// occurrence the matcher finds is accepted if it starts the line or
+/// immediately follows a literal space. Nothing after the occurrence is
+/// checked. If that first occurrence is mid-word the keyword fails, even
+/// when a clean occurrence comes later in the line."
+///
+/// *Corrected:* this used to require the keyword to start the line and the
+/// input to end or have a space where the keyword ends - a reading R577 and
+/// R578 withdraw: `grandpa` matches `gran`, `JOBS` runs the Job entry and
+/// `WELL BYE` takes the BYE path.
 pub fn tlk_keyword_matches(keyword: &[u8], input: &[u8]) -> bool {
-    if keyword.is_empty() {
-        return false;
-    }
-    if input.len() < keyword.len() {
-        return false;
-    }
-    let mut idx = 0;
-    while idx < keyword.len() {
-        let k = keyword[idx] & 0x7F;
-        let i = input[idx] & 0x7F;
-        if k.eq_ignore_ascii_case(&i) == false {
-            return false;
-        }
-        idx += 1;
-    }
-    if input.len() == keyword.len() {
-        return true;
-    }
-    input[keyword.len()] == b' '
+    crate::commands::shared_text_matcher_find(input, keyword)
+        .is_some_and(|at| at == 0 || input[at - 1] & 0x7F == b' ')
 }
 
 /// Classify one `.TLK` byte through the dispatcher table per

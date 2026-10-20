@@ -82,8 +82,10 @@ fn recruit_speaker_name_compare_strips_bit_seven() {
     assert_eq!(state.party[1].class_byte, b'B');
 }
 
-/// §7.6 matches "opening characters", with §6 step 5's space boundary: the
-/// speaker's name may stop short of the roster name only at a literal space.
+/// §7.6 matches "opening characters"; this engine's conservative reading keeps
+/// a space boundary there (see `party_roster_name_matches`; the §6 step 5
+/// keyword rule it came from is retracted, R577): the speaker's name may stop
+/// short of the roster name only at a literal space.
 #[test]
 fn recruit_speaker_matches_opening_characters_at_a_space_boundary_only() {
     let mut state = test_state(open_grid(), 1, 1);
