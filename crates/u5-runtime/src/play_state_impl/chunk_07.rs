@@ -962,6 +962,38 @@ impl PlayState {
         MoveOutcome::ContainerOpened
     }
 
+    /// `overworld.md §8.1` step 1: the whirlpool swallow banner, with its
+    /// leading line feed.
+    ///
+    /// u5-spec#299 Q8 (`text-output.md §10.2`): after a hoisted step that
+    /// echoed nothing the cursor waits at column 25 of the bare marker row,
+    /// and "a literal that begins with a line feed, such as ... `WHIRLPOOL!`,
+    /// moves to the row below and leaves the marker row holding only the
+    /// marker" - the feed ends the marker row rather than leaving a blank one
+    /// under it.
+    pub(crate) fn emit_overworld_whirlpool_banner(&mut self) {
+        self.flush_message_slot();
+        if self
+            .message_transcript
+            .last()
+            .is_some_and(|entry| entry.bare_marker)
+        {
+            let banner = OVERWORLD_WHIRLPOOL_BANNER.trim_start_matches('\n');
+            self.emit_message_line(banner);
+            let row = banner.trim_end_matches('\n');
+            if let Some(entry) = self
+                .message_transcript
+                .iter_mut()
+                .rev()
+                .find(|entry| entry.text == row)
+            {
+                entry.starts_fresh_row = true;
+            }
+        } else {
+            self.emit_message_line(OVERWORLD_WHIRLPOOL_BANNER);
+        }
+    }
+
     pub fn board_vehicle(&mut self) -> MoveOutcome {
         if matches!(self.area, Area::Dungeon { .. }) {
             self.message = "Not here!".to_string();
@@ -3888,7 +3920,7 @@ impl PlayState {
         // Step 1: the banner, with its leading line feed - one blank row.
         // "There is **no advance warning line**: the swallow banner ... is the
         // first and only text."
-        self.emit_message_line(OVERWORLD_WHIRLPOOL_BANNER);
+        self.emit_overworld_whirlpool_banner();
         // Step 2: the slot is cleared and the party marker is replaced by the
         // whirlpool sprite.
         let whirlpool_tile = self.active_objects[whirlpool_slot].tile;
