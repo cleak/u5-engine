@@ -570,17 +570,18 @@ impl PlayState {
         // tile lands ("not fully established"; in an outdoor camp, by static
         // reading, the party's own map record).
         //
-        // The per-member viewport inversion is now published (u5-spec#299
-        // Q5, static reading only; R566 withdraws "each later living member's
-        // inversion toggles the viewport back"): an exclusive-or rectangle in
-        // the accent pen, UI colour slot 1 (palette 15 on the sixteen-colour
-        // drivers, so every pixel inverts), and each world-tick pause
-        // repaints the whole viewport, so "Each living member gets one
-        // separate flash that lasts for the long envelope; flashes do not
-        // accumulate". It is still not drawn: the frontend has no
-        // presentation hook timed to one queued envelope, and the camp
-        // apparition has no capture to pair against. The old man's two
-        // converges are driver-side blits, like the summon flashes.
+        // The per-member viewport inversion (u5-spec#299 Q5, static reading
+        // only; R566 withdraws "each later living member's inversion toggles
+        // the viewport back") is an exclusive-or rectangle in the accent pen,
+        // UI colour slot 1 (palette 15 on the sixteen-colour drivers, so
+        // every pixel inverts), and each world-tick pause repaints the whole
+        // viewport, so "Each living member gets one separate flash that lasts
+        // for the long envelope; flashes do not accumulate". It rides the
+        // long sting: [`SoundEffect::holds_viewport_inversion`] marks that
+        // envelope, and the frontend holds
+        // [`Self::presentation_camp_flash_inverted`] while its voice sounds.
+        // The old man's two converges are driver-side blits, like the summon
+        // flashes.
         let wait_key = crate::text_hold::TextHoldKind::WaitKey.marker_str();
         let mut text = String::from(LORD_BRITISH_CAMP_APPARITION_LINE);
         let mut sounds: Vec<(usize, SoundEffect)> = Vec::new();
@@ -617,7 +618,10 @@ impl PlayState {
             self.party[index].status = b'G';
             // §7.1 step 4: "the envelope `(13, 200, 5000, 1, 5500)`, one
             // inversion of the whole gameplay viewport ..., the envelope
-            // `(1, 2500, 60000, 1, 5500)`", for every living member.
+            // `(1, 2500, 60000, 1, 5500)`", for every living member. The
+            // inversion is the long envelope's flash
+            // ([`SoundEffect::holds_viewport_inversion`]): one per living
+            // member, none for the dead.
             sounds.push((
                 page_of(&text),
                 SoundEffect::LordBritishCampEnvelope(

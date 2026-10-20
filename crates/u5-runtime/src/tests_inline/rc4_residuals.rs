@@ -278,3 +278,48 @@ fn rc4_the_inline_talk_keyword_route_uses_the_session_matcher() {
     assert!(talk("i want to join").starts_with("Well?"));
     assert_eq!(resolve_keyword_response_field_index(&rc4_decoded(&rc4_scoped_blob()), "ass"), None);
 }
+
+/// u5-spec#299 Q5, `rest-and-camp.md §7.1` step 4: "Each living member gets
+/// one separate flash that lasts for the long envelope" - the inversion
+/// rides each living member's long sting, after the short one, and a dead
+/// member (who "skips steps 4 and 5") gets none.
+#[test]
+fn rc4_the_camp_apparition_flashes_once_per_living_member() {
+    let mut state = britannia_state(open_world_grid(), 2, 0);
+    let member = |slot: u8, status: u8, hp: u16| PartyMember {
+        slot,
+        class_byte: b'F',
+        status,
+        climb_stat: 20,
+        mana: 0,
+        hp,
+        max_hp: 30,
+        level: 1,
+    };
+    state.party = vec![member(0, b'G', 30), member(1, b'D', 0), member(2, b'P', 4)];
+    state.party_experience = vec![0, 0, 0];
+    let (_, sounds) = state.resolve_lord_british_camp_event_paged(None).unwrap();
+    let effects: Vec<SoundEffect> = sounds.into_iter().map(|(_, effect)| effect).collect();
+    let flashes: Vec<usize> = effects
+        .iter()
+        .enumerate()
+        .filter(|(_, effect)| effect.holds_viewport_inversion())
+        .map(|(index, _)| index)
+        .collect();
+    assert_eq!(flashes.len(), 2, "two living members, two flashes: {effects:?}");
+    let short = SoundEffect::LordBritishCampEnvelope(
+        crate::lord_british_camp::LORD_BRITISH_CAMP_STING_SHORT,
+    );
+    for index in flashes {
+        assert_eq!(effects[index - 1], short, "the short sting comes first");
+    }
+    // Only the long sting carries the flash.
+    assert!(!short.holds_viewport_inversion());
+    assert!(
+        !SoundEffect::LordBritishCampEnvelope(
+            crate::lord_british_camp::LORD_BRITISH_CAMP_APPARITION_ENVELOPE
+        )
+        .holds_viewport_inversion()
+    );
+    assert!(!state.presentation_camp_flash_inverted, "the frontend owns the flash");
+}

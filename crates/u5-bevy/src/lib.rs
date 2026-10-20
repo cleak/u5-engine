@@ -488,6 +488,9 @@ struct QueuedSpeakerProgram {
     program: SpeakerProgram,
     audible: bool,
     interruptible: Option<InterruptibleSound>,
+    /// The effect holds the gameplay viewport inverted while it sounds
+    /// ([`SoundEffect::holds_viewport_inversion`]).
+    viewport_flash: bool,
 }
 
 /// The tag of an interruptible program the voice is sounding, with the
@@ -503,6 +506,13 @@ struct SpeakerVoiceInterruptible {
 /// tell "the device has not opened yet" from "this program was silent".
 #[derive(Component)]
 struct SpeakerVoiceAudible;
+
+/// Marks a voice whose effect holds the whole gameplay viewport inverted for
+/// as long as it sounds: `rest-and-camp.md §7.1` step 4's camp-apparition
+/// flash rides each living member's long sting (u5-spec#299 Q5). Muted, the
+/// voice still lives for the program's own duration, so the flash does too.
+#[derive(Component)]
+struct SpeakerVoiceViewportFlash;
 
 /// How long the voice owns the channel: exactly [`SpeakerProgram::duration`].
 ///
@@ -1425,6 +1435,7 @@ pub fn run_visual_loop(
             fit_display_to_window,
             play_speaker_effects,
             expire_speaker_voice,
+            present_camp_apparition_flash,
             screenshot_system,
             log_runtime_diagnostics,
         )
@@ -9847,6 +9858,7 @@ fn add_visual_intro_update_systems(app: &mut App) {
             fit_display_to_window,
             play_speaker_effects,
             expire_speaker_voice,
+            present_camp_apparition_flash,
             screenshot_system,
             log_runtime_diagnostics,
         )
@@ -9931,6 +9943,10 @@ fn play_speaker_effects(
         // `audio.md §3`: muting "changes output, not command or animation
         // cadence", so the program is built - and the jitter stream advanced -
         // for every effect, audible or not.
+        let viewport_flash = matches!(
+            &queued_effect.source,
+            SpeakerSource::Effect(effect) if effect.holds_viewport_inversion()
+        );
         let program = match &queued_effect.source {
             SpeakerSource::Effect(effect) => {
                 debug!(
@@ -9950,6 +9966,7 @@ fn play_speaker_effects(
             program,
             audible: queued_effect.audible,
             interruptible: queued_effect.interruptible,
+            viewport_flash,
         });
     }
     for entity in &cut_voices {
@@ -9967,6 +9984,7 @@ fn play_speaker_effects(
         program,
         audible,
         interruptible,
+        viewport_flash,
     }) = pending.0.pop_front()
     else {
         return;
@@ -9986,6 +10004,9 @@ fn play_speaker_effects(
             program: program.clone(),
             audible,
         });
+    }
+    if viewport_flash {
+        voice.insert(SpeakerVoiceViewportFlash);
     }
     if !audible {
         return;
@@ -13554,6 +13575,46 @@ fn drive_visual(
     queue_pending_speaker_effects(v, &mut speaker);
 }
 
+/// `rest-and-camp.md §7.1` step 4 (u5-spec#299 Q5, R566): show the camp
+/// apparition's per-member flash for exactly as long as its long sting
+/// sounds. The flash is drawn on while a [`SpeakerVoiceViewportFlash`] voice
+/// owns the speaker, and the frame is redrawn plain once it is gone - the
+/// published "first of the three following pauses therefore erases the
+/// inversion", since "No paired restoring inversion is issued" and each
+/// world-tick pause repaints every cell. One flash per voice, so flashes
+/// never accumulate.
+fn present_camp_apparition_flash(
+    visual: Option<ResMut<VisualState>>,
+    flashing: Query<(), With<SpeakerVoiceViewportFlash>>,
+    mut images: ResMut<Assets<Image>>,
+) {
+    let Some(mut visual) = visual else {
+        return;
+    };
+    let active = !flashing.is_empty();
+    if visual.state.presentation_camp_flash_inverted == active {
+        return;
+    }
+    let v: &mut VisualState = visual.as_mut();
+    v.state.presentation_camp_flash_inverted = active;
+    let input_line = v.input_line.clone();
+    let ctx = PlayFrameContext {
+        ibm: &v.text_font,
+        runes: &v.rune_font,
+        game_dir: &v.game_dir,
+        cursor_frame: v.prompt_cursor_frame,
+    };
+    let rgba = render_visual_play_frame_with_input_and_cursor(
+        &mut v.state,
+        &v.atlas,
+        ctx,
+        &input_line,
+        "",
+        v.prompt_cursor_visible,
+    );
+    replace_visual_image_data(&mut images, &v.image_handle, rgba, "camp apparition flash");
+}
+
 /// `dungeon-mode.md §10`: "Dungeon mode is also the one mode whose own
 /// command reader does not run the shifted-digit-to-direction translation of
 /// `input.md` Section 5. Shifted or NumLock-ed top-row digits stay ordinary
@@ -16881,6 +16942,16 @@ fn render_visual_play_frame_with_input_and_cursor(
     // (`cast-results` In Xen Mani, `cast-blink-overworld` In Por, 2026-10-17)
     // show the inverted view for most of the hold; this engine drew none.
     if state.message_window_flash_hold_active()
+        && let Some(playback) = u5_runtime::potion_flash_playback(0)
+    {
+        let _ = apply_visual_potion_flash_xor(&mut rgba, playback);
+    }
+    // `rest-and-camp.md §7.1` step 4 (u5-spec#299 Q5): the camp-apparition
+    // flash is "one inversion of the whole gameplay viewport (the square from
+    // pixel 8 to pixel 183 on both axes) in the accent pen (slot 1)" -
+    // palette index 15 on the sixteen-colour drivers, so every pixel flips,
+    // the same exclusive-or as the shared flash above.
+    if state.presentation_camp_flash_inverted
         && let Some(playback) = u5_runtime::potion_flash_playback(0)
     {
         let _ = apply_visual_potion_flash_xor(&mut rgba, playback);
@@ -30316,6 +30387,150 @@ mod tests {
             !engaged.is_empty(),
             "no walk ended in a fight with a wandering creature"
         );
+    }
+
+    /// u5-spec#299 Q5, `rest-and-camp.md §7.1` step 4: the camp apparition's
+    /// flash rides the long sting's voice - and only that one.
+    #[test]
+    fn the_camp_long_sting_voice_carries_the_viewport_flash() {
+        let flash_voices = |app: &mut App| {
+            app.world_mut()
+                .query_filtered::<Entity, With<SpeakerVoiceViewportFlash>>()
+                .iter(app.world())
+                .count()
+        };
+        let mut app = speaker_test_app();
+        queue_speaker_effect(
+            &mut app,
+            SoundEffect::LordBritishCampEnvelope(u5_runtime::lord_british_camp::LORD_BRITISH_CAMP_STING_SHORT),
+            false,
+        );
+        assert_eq!(speaker_voices(&mut app).len(), 1);
+        assert_eq!(flash_voices(&mut app), 0, "the short sting draws no flash");
+
+        let mut app = speaker_test_app();
+        queue_speaker_effect(
+            &mut app,
+            SoundEffect::LordBritishCampEnvelope(u5_runtime::lord_british_camp::LORD_BRITISH_CAMP_STING_LONG),
+            false,
+        );
+        assert_eq!(flash_voices(&mut app), 1, "muted, the long sting still flashes");
+    }
+
+    /// u5-spec#299 Q5, `rest-and-camp.md §7.1` step 4: through the shell's
+    /// own systems, the gameplay viewport (pixels 8..=183 on both axes)
+    /// stands XOR-inverted in palette index 15 while the long sting sounds,
+    /// and the frame is plain again once it has ended - one flash, no
+    /// restoring inversion.
+    #[test]
+    #[cfg(feature = "original-asset-tests")]
+    fn the_camp_apparition_flash_inverts_the_viewport_for_the_long_sting() {
+        let dir = original_asset_dir();
+        let options = PlayOptions {
+            target: PlayTarget::World(WorldPlane::Britannia),
+            start: Some((64, 12)),
+            clock: u5_runtime::GameClock::new(10, 46).unwrap(),
+            ..PlayOptions::default()
+        };
+        let state = PlayState::load_scene(&dir, options).unwrap();
+        let mut images = Assets::<Image>::default();
+        let image_handle = images.add(Image::new(
+            Extent3d {
+                width: VISUAL_PLAY_FRAME_WIDTH,
+                height: VISUAL_PLAY_FRAME_HEIGHT,
+                depth_or_array_layers: 1,
+            },
+            TextureDimension::D2,
+            vec![0; (VISUAL_PLAY_FRAME_WIDTH * VISUAL_PLAY_FRAME_HEIGHT * 4) as usize],
+            TextureFormat::Rgba8UnormSrgb,
+            RenderAssetUsages::default(),
+        ));
+        let mut app = App::new();
+        app.insert_resource(Time::<()>::default())
+            .insert_resource(images)
+            .init_resource::<Assets<VisualSoundWave>>()
+            .init_resource::<SpeakerJitter>()
+            .init_resource::<SpeakerQueue>()
+            .add_event::<SpeakerEffect>()
+            .insert_resource(VisualState {
+                game_dir: dir.to_path_buf(),
+                state,
+                atlas: load_tile_atlas(&dir, TileGraphicsDepth::Ega16).unwrap(),
+                image_handle: image_handle.clone(),
+                text_font: load_ibm_ch_font(&dir).unwrap(),
+                rune_font: load_runes_ch_font(&dir).unwrap(),
+                sound_effect_cursor: 0,
+                prompt_cursor_frame: 0,
+                input_line: String::new(),
+                prompt_cursor_visible: false,
+                potion_flash_restore_pending: None,
+                skip_animation_pump_once: false,
+                sweep_idle_redraw_pending: false,
+                held_direction_repeat: HeldDirectionRepeat::default(),
+                diagnostic_cursor: 0,
+            })
+            .add_systems(
+                Update,
+                (
+                    play_speaker_effects,
+                    expire_speaker_voice,
+                    present_camp_apparition_flash,
+                )
+                    .chain(),
+            );
+        let frame = |app: &mut App| {
+            app.world()
+                .resource::<Assets<Image>>()
+                .get(&image_handle)
+                .and_then(|image| image.data.clone())
+                .unwrap()
+        };
+        let plain = {
+            let world = app.world_mut();
+            let mut visual = world.resource_mut::<VisualState>();
+            let v: &mut VisualState = visual.as_mut();
+            let ctx = PlayFrameContext {
+                ibm: &v.text_font,
+                runes: &v.rune_font,
+                game_dir: &v.game_dir,
+                cursor_frame: v.prompt_cursor_frame,
+            };
+            render_visual_play_frame_with_input_and_cursor(&mut v.state, &v.atlas, ctx, "", "", false)
+        };
+        let long = SoundEffect::LordBritishCampEnvelope(
+            u5_runtime::lord_british_camp::LORD_BRITISH_CAMP_STING_LONG,
+        );
+        let duration = long
+            .program(&mut u5_runtime::audio::RumbleJitter::default())
+            .duration(false);
+        app.world_mut()
+            .resource_mut::<Events<SpeakerEffect>>()
+            .send(SpeakerEffect::new(long, false));
+        app.update();
+        assert!(app.world().resource::<VisualState>().state.presentation_camp_flash_inverted);
+        let flashed = frame(&mut app);
+        let width = VISUAL_PLAY_FRAME_WIDTH as usize;
+        let index_at = |rgba: &[u8], x: usize, y: usize| {
+            let offset = (y * width + x) * 4;
+            ega_palette_index_from_rgba(&rgba[offset..offset + 4])
+        };
+        for (x, y) in [(8, 8), (95, 95), (183, 183), (8, 183)] {
+            assert_eq!(index_at(&flashed, x, y), index_at(&plain, x, y) ^ 15, "({x}, {y})");
+        }
+        // Outside the viewport square nothing changes.
+        assert_eq!(index_at(&flashed, 7, 7), index_at(&plain, 7, 7));
+        assert_eq!(index_at(&flashed, 184, 100), index_at(&plain, 184, 100));
+
+        app.world_mut()
+            .resource_mut::<Time>()
+            .advance_by(duration + Duration::from_millis(1));
+        app.update();
+        app.update();
+        assert!(!app.world().resource::<VisualState>().state.presentation_camp_flash_inverted);
+        let repainted = frame(&mut app);
+        for (x, y) in [(8, 8), (95, 95), (183, 183)] {
+            assert_eq!(index_at(&repainted, x, y), index_at(&plain, x, y), "({x}, {y})");
+        }
     }
 
     #[test]

@@ -2123,6 +2123,26 @@ pub enum SoundEffect {
 }
 
 impl SoundEffect {
+    /// Whether the voice sounding this effect holds the whole gameplay
+    /// viewport XOR-inverted for as long as it sounds.
+    ///
+    /// `rest-and-camp.md §7.1` step 4 (u5-spec#299 Q5, R566): per living
+    /// member, "the envelope `(13, 200, 5000, 1, 5500)`, one inversion of the
+    /// whole gameplay viewport (the square from pixel 8 to pixel 183 on both
+    /// axes) in the accent pen (slot 1), the envelope `(1, 2500, 60000, 1,
+    /// 5500)`, and three one-tick world pauses". "No paired restoring
+    /// inversion is issued": the first of those world-tick pauses repaints
+    /// the viewport, so "Each living member gets one separate flash that
+    /// lasts for the long envelope; flashes do not accumulate". The long
+    /// sting is only ever sounded there, one per living member.
+    pub fn holds_viewport_inversion(&self) -> bool {
+        matches!(
+            self,
+            SoundEffect::LordBritishCampEnvelope(segment)
+                if *segment == crate::lord_british_camp::LORD_BRITISH_CAMP_STING_LONG
+        )
+    }
+
     /// Lower the effect to serial speaker operations.
     ///
     /// `jitter` is the sound-only stream of `audio.md §5.3`. It must never be

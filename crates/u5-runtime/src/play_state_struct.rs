@@ -838,6 +838,15 @@ pub struct PlayState {
     /// after the swell repaint over it. Set from the inversion until the
     /// swell's hold releases.
     pub presentation_viewport_inverted: bool,
+    /// `rest-and-camp.md §7.1` step 4 (u5-spec#299 Q5): a camp-apparition
+    /// flash is on screen - the whole gameplay viewport XOR-inverted in the
+    /// accent pen (UI colour slot 1; palette index 15 on the sixteen-colour
+    /// drivers) while that living member's long sting sounds
+    /// ([`crate::audio::SoundEffect::holds_viewport_inversion`]). Set and
+    /// cleared by the frontend that owns the speaker voice, since only it
+    /// knows when the envelope ends; the world-tick pause after the sting
+    /// repaints the viewport, which is when it clears.
+    pub presentation_camp_flash_inverted: bool,
     pub active_shop: Option<crate::shop_session::ActiveShopSession>,
     /// `shops.md §8.1`: the arms post-item prompt closes with `sir?`/`milady?`
     /// once a transaction has completed in this visit and with `then?` before
