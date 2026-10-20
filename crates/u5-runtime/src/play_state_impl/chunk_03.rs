@@ -457,9 +457,9 @@ impl PlayState {
             })
             // `blackthorn.md §4.1`'s acknowledgement reads a key with the
             // reaction on screen; the cursor sits inline after it.
-            || self.active_blackthorn.as_ref().is_some_and(|challenge| {
+            || (self.active_blackthorn.as_ref().is_some_and(|challenge| {
                 challenge.awaiting_acknowledgement() || challenge.awaiting_closing_acknowledgement()
-            })
+            }) && !crate::blackthorn_exit_key_wait_on_feed_row(self))
             // `shops.md §8.B`: a shop's entry question waits on `Y`, `N` or
             // Space, and its answer "appends directly after" the greeting's
             // own continuation - so the greeting keeps its row open and the
@@ -778,6 +778,11 @@ impl PlayState {
         // row, and nowhere when the line opened a fresh one. See
         // [`PlayState::message_row_open_mid_line`].
         if self.message_row_open_mid_line {
+            return false;
+        }
+        // The exit beat's key wait after record `5` is the exception: its
+        // cursor sits on the row step 9's feed opened (u5-spec#299 Q9).
+        if crate::blackthorn_exit_key_wait_on_feed_row(self) {
             return false;
         }
         self.active_blackthorn.as_ref().is_some_and(

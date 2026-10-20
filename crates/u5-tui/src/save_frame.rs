@@ -683,6 +683,10 @@ pub(crate) fn save_screen_live_row_kind(
         u5_runtime::LiveRowKind::Continuation
     } else if u5_runtime::endgame_page_row_is_key_wait(state) {
         u5_runtime::LiveRowKind::KeyWaitRow
+    } else if u5_runtime::blackthorn_exit_key_wait_on_feed_row(state) {
+        // `blackthorn.md §4.2` / §5 (u5-spec#299 Q9): the exit beat's key
+        // wait after record `5`, two rows below the record's last row.
+        u5_runtime::LiveRowKind::KeyWaitOnFeedRow
     } else {
         u5_runtime::LiveRowKind::CommandRow
     }

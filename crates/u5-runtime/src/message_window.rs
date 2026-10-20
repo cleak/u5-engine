@@ -776,6 +776,25 @@ pub fn dungeon_fountain_prompt_row_is_continuation(state: &crate::PlayState) -> 
 ///
 /// A page that left its own row open - `You reply: ` - is not this: it has
 /// an `open_prompt_line` and draws no live row at all.
+/// `blackthorn.md §4.2` / §5 (u5-spec#299 Q9): the audience exit beat's key
+/// wait on the record `5` arm. "The record is printed and the very next
+/// thing that happens is the beat's blocking key wait", and step 9's line
+/// feed has left the cursor at column 0 "two rows below the record's last
+/// row" - where the stock game draws the key-wait cursor glyph (the
+/// reader's poll "writes one animated cursor glyph into the current
+/// message-window cell", `input.md` Section 3). Records `9` and `10` leave
+/// their row open instead and keep the cursor inline; the wrong-answer
+/// execution's closing page and the blade hold before it read no exit-beat
+/// key here.
+pub fn blackthorn_exit_key_wait_on_feed_row(state: &crate::PlayState) -> bool {
+    !state.message_row_open_mid_line
+        && !state.staged_narration_active()
+        && !state.blackthorn_audience_punished
+        && state.active_blackthorn.as_ref().is_some_and(|challenge| {
+            challenge.awaiting_closing_acknowledgement() && !challenge.closing_epilogue_pending()
+        })
+}
+
 pub fn endgame_page_row_is_key_wait(state: &crate::PlayState) -> bool {
     state
         .endgame
@@ -950,6 +969,17 @@ pub enum LiveRowKind {
     /// greeting is followed by a blank row and then a bare cursor in
     /// column 24.
     KeyWaitRow,
+    /// A key wait whose cursor sits on the row the output's own last line
+    /// feed opened: no end cap, and no further line feed of its own. The
+    /// log's trailing blank row *is* that cursor row, so the layout puts the
+    /// cursor there rather than under it.
+    ///
+    /// `blackthorn.md §5` "Rows on the correct-answer arm" (u5-spec#299 Q9):
+    /// step 9's line feed "leaves one blank row between the record's last
+    /// row and the exit beat's key-wait cursor, which sits two rows below
+    /// that last row"; §4.2: "On the record `5` arm the cursor reaches the
+    /// beat at column 0, two rows below the record's last row".
+    KeyWaitOnFeedRow,
 }
 
 /// Place a log whose live row continues the block above it rather than
@@ -1005,17 +1035,31 @@ fn layout_message_window_inner(
     // §10.2`). So the live row *is* that row - end cap, cursor in column 25 -
     // not a continuation row under it.
     let trimmed;
-    let (log, live_row, live_row_follows_history) =
-        if live_input.is_some() && open_prompt.is_none() && log.ends_with_bare_marker() {
-            let mut without = log.clone();
+    let (log, live_row, live_row_follows_history) = if live_row == LiveRowKind::KeyWaitOnFeedRow {
+        // The trailing blank is the cursor's own row (see
+        // [`LiveRowKind::KeyWaitOnFeedRow`]): the live row takes its place,
+        // directly under whatever precedes it.
+        let mut without = log.clone();
+        if without.lines.last().is_some_and(|line| {
+            matches!(
+                line.kind,
+                MessageLineKind::Blank | MessageLineKind::ProducerBlank
+            )
+        }) {
             without.lines.pop();
-            trimmed = without;
-            // The marker row already took (or skipped) its blank when it was
-            // logged, so the live row follows the history directly.
-            (&trimmed, LiveRowKind::CommandRow, true)
-        } else {
-            (log, live_row, live_row_follows_history)
-        };
+        }
+        trimmed = without;
+        (&trimmed, LiveRowKind::KeyWaitRow, true)
+    } else if live_input.is_some() && open_prompt.is_none() && log.ends_with_bare_marker() {
+        let mut without = log.clone();
+        without.lines.pop();
+        trimmed = without;
+        // The marker row already took (or skipped) its blank when it was
+        // logged, so the live row follows the history directly.
+        (&trimmed, LiveRowKind::CommandRow, true)
+    } else {
+        (log, live_row, live_row_follows_history)
+    };
     let live_row_prefixed = live_row == LiveRowKind::CommandRow;
     // Only a continuation gives up the separating blank. A key-wait row is
     // unprefixed but still sits under one.

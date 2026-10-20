@@ -18506,6 +18506,11 @@ fn render_integrated_status_framebuffer(
             u5_runtime::LiveRowKind::Continuation
         } else if u5_runtime::endgame_page_row_is_key_wait(&display_state) {
             u5_runtime::LiveRowKind::KeyWaitRow
+        } else if u5_runtime::blackthorn_exit_key_wait_on_feed_row(&display_state) {
+            // `blackthorn.md §4.2` / §5 (u5-spec#299 Q9): the exit beat's key
+            // wait after record `5` draws its cursor two rows below the
+            // record's last row, on the row step 9's feed opened.
+            u5_runtime::LiveRowKind::KeyWaitOnFeedRow
         } else {
             u5_runtime::LiveRowKind::CommandRow
         };

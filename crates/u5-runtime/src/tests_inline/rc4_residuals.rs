@@ -323,3 +323,70 @@ fn rc4_the_camp_apparition_flashes_once_per_living_member() {
     );
     assert!(!state.presentation_camp_flash_inverted, "the frontend owns the flash");
 }
+
+/// The rows a frontend lays out for `state`, the way the Bevy shell and
+/// `--save-screen` assemble them.
+fn rc4_message_layout(state: &PlayState) -> crate::MessageWindowLayout {
+    let keep = |text: &str| (!text.trim().is_empty()).then(|| text.to_string());
+    let mut log = crate::message_log_from_entries(state.displayed_message_entries(), keep);
+    log.set_top_offset(usize::from(state.message_window_top_offset()));
+    if let Some(text) = state.displayed_unflushed_message().and_then(keep) {
+        log.push_output(&text);
+    }
+    let live_row = (!state.message_window_live_row_suppressed()).then_some("");
+    let kind = if crate::blackthorn_exit_key_wait_on_feed_row(state) {
+        crate::LiveRowKind::KeyWaitOnFeedRow
+    } else {
+        crate::LiveRowKind::CommandRow
+    };
+    crate::layout_message_window_with_continuation(&log, live_row, None, false, kind)
+}
+
+/// `blackthorn.md §4.2` / §5 "Rows on the correct-answer arm" (u5-spec#299
+/// Q9): after record `5` and step 9's line feed, the exit beat's key wait
+/// draws the animated key-wait cursor "at column 0, two rows below the
+/// record's last row", with one blank row between and no end cap. During
+/// the blade hold before it there is "no key-wait cursor".
+#[test]
+fn rc4_the_record_five_exit_beat_key_wait_draws_its_cursor_two_rows_down() {
+    let dir = debug_game_dir();
+    let mut state = test_state(open_grid(), 5, 5);
+    state.party.push(audit_g5_companion(1));
+    state.party.push(audit_g5_companion(2));
+    state.repaint_stats_panel();
+    state.begin_blackthorn_audience_capture(&dir).unwrap();
+    while state.active_blackthorn.as_ref().is_some_and(|c| c.current_prompt().is_none()) {
+        state.submit_blackthorn_audience_answer("", &dir).unwrap();
+    }
+    state.submit_blackthorn_audience_answer("Ahm", &dir).unwrap();
+    assert!(state.staged_narration_active(), "the blade hold");
+    assert!(!crate::blackthorn_exit_key_wait_on_feed_row(&state));
+    assert!(state.message_window_cursor_suppressed(), "no cursor during the blade hold");
+
+    state.flush_staged_narration();
+    assert!(crate::blackthorn_exit_key_wait_on_feed_row(&state));
+    assert!(!state.message_window_cursor_suppressed());
+    let layout = rc4_message_layout(&state);
+    let text = |row: &crate::MessageWindowRow| -> String {
+        row.glyphs.iter().map(|glyph| glyph.byte as char).collect()
+    };
+    let record_row = layout
+        .rows
+        .iter()
+        .rev()
+        .find(|row| text(row).contains("death!"))
+        .expect("record 5's last row")
+        .row;
+    let cursor = layout.rows.last().expect("the key-wait row");
+    assert_eq!(cursor.row, record_row + 2, "{:?}", layout.rows.iter().map(text).collect::<Vec<_>>());
+    assert!(cursor.glyphs.is_empty());
+    assert_eq!(cursor.column, crate::MESSAGE_WINDOW_LEFT, "column 0 of the window");
+    assert!(!cursor.prefixed, "a key wait, not a command row: no end cap");
+
+    // The key starts the beat, which draws no cursor and no row.
+    state.submit_blackthorn_audience_answer("", &dir).unwrap();
+    assert!(state.pending_blackthorn_audience_exit);
+    assert!(state.message_window_cursor_suppressed());
+    assert!(state.message_window_live_row_suppressed());
+    let _ = fs::remove_dir_all(dir);
+}
