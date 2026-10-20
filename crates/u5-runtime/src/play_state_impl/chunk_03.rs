@@ -3271,6 +3271,16 @@ impl PlayState {
                     self.message = SELECTION_CANCELLED_LITERAL.to_string();
                     return Ok(Some(MoveOutcome::Observed));
                 }
+                // u5-spec#299 Q4 (`combat.md §8.4`): "The combat-arena `U/D-`
+                // prompt ... Space, Escape and every other key are ignored with
+                // no output, and the prompt keeps waiting: no `Pass` is
+                // printed and no action is spent."
+                if let DirectionPromptKind::CombatKlimb { actor_slot } = session.kind
+                    && self.combat_klimb_current_cell(actor_slot)
+                        == Some(CombatKlimbCurrentCell::Both)
+                {
+                    continue;
+                }
                 if matches!(session.kind, DirectionPromptKind::Klimb) {
                     self.advance_turn();
                 }
@@ -3461,13 +3471,13 @@ impl PlayState {
             {
                 // `combat.md §8` / `dungeon-mode.md §14.1` (u5-spec#298 Q1):
                 // the two-way centre "raises `U/D-` and waits for up or
-                // down, down counting as the `0xC9` case". The keys are the
-                // exploration prompt's (`dungeon-mode.md §8.1`): the up key or
-                // the up-direction key, the down key or the down-direction
-                // key; any other key is re-read.
+                // down, down counting as the `0xC9` case". u5-spec#299 Q4
+                // (`combat.md §8.4`) names the keys: "`U` or the North
+                // direction key for up, `D` or the South direction key for
+                // down"; every other key is ignored with no output.
                 let intent = match ch {
-                    '<' => Some(ClimbIntent::Up),
-                    '>' => Some(ClimbIntent::Down),
+                    'U' | 'u' => Some(ClimbIntent::Up),
+                    'D' | 'd' => Some(ClimbIntent::Down),
                     _ => match Direction::from_play_key(ch) {
                         Some(Direction::North) => Some(ClimbIntent::Up),
                         Some(Direction::South) => Some(ClimbIntent::Down),
@@ -3479,21 +3489,6 @@ impl PlayState {
                         return Ok(Some(self.klimb_combat_actor_vertical(actor_slot, intent)));
                     }
                     None => continue,
-                }
-            }
-            if let DirectionPromptKind::CombatKlimb { actor_slot } = session.kind {
-                match ch {
-                    '<' => {
-                        return Ok(Some(
-                            self.klimb_combat_actor_vertical(actor_slot, ClimbIntent::Up),
-                        ));
-                    }
-                    '>' => {
-                        return Ok(Some(
-                            self.klimb_combat_actor_vertical(actor_slot, ClimbIntent::Down),
-                        ));
-                    }
-                    _ => {}
                 }
             }
             let Some(direction) =

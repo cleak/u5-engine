@@ -368,6 +368,13 @@ impl PlayState {
                 two_way_centre,
             );
         }
+        // u5-spec#299 Q4 (`combat.md §8.4`): the ladder cases test no arena
+        // kind, so a town or overworld arena's `0xC8`/`0xC9` departs the same
+        // way. What those callers then do with exit code 5 or 6 is not
+        // established (`OPEN-QUESTIONS.md`); no stock arena can produce one.
+        if matches!(tile, TOWN_KLIMB_ASCEND_TILE | TOWN_KLIMB_DESCEND_TILE) {
+            return self.klimb_dungeon_arena_departure(actor_slot, tile, intent, false, false);
+        }
         if !combat_klimb_tile_accepts_vertical(tile, intent) {
             self.message = DUNGEON_KLIMB_WHAT_REFUSAL.trim_end().to_string();
             return MoveOutcome::Blocked;
@@ -427,12 +434,18 @@ impl PlayState {
     /// one of these cases reaches "the ordinary adjacent-climb branch", which
     /// waits for the cardinal input.
     ///
-    /// Scoped to dungeon arenas: the per-cell codes are what Q1 settles
-    /// (`dungeon-mode.md §14.1`); the town and overworld arenas keep the
-    /// adjacent-climb prompt.
+    /// u5-spec#299 Q4 (`combat.md §8.4`, "Current-cell cases, in order, in
+    /// every arena kind"): the two-way `U/D-` form needs the dungeon
+    /// encounter mode and the two-way-ladder flag; "`0xC8` gives `Up!` and
+    /// `0xC9` gives `Down!`. Neither case tests the arena kind or the
+    /// scene"; `0x86` counts as `Down!` only in a dungeon-room encounter;
+    /// otherwise K goes to the adjacent-climb prompt. No stock town or
+    /// overworld arena has a `0xC8`/`0xC9` cell.
     pub fn combat_klimb_current_cell(&self, actor_slot: usize) -> Option<CombatKlimbCurrentCell> {
         let actor = self.live_combat_party_actor(actor_slot)?;
-        let (room_encounter, two_way_centre) = self.combat_dungeon_arena_klimb_context(&actor)?;
+        let (room_encounter, two_way_centre) = self
+            .combat_dungeon_arena_klimb_context(&actor)
+            .unwrap_or((false, false));
         let tile = *self
             .combat_terrain
             .get(actor.y as usize)?
@@ -553,10 +566,15 @@ impl PlayState {
         }
         let x = x as usize;
         let y = y as usize;
+        // u5-spec#299 Q4 (`combat.md §8.4`, "Adjacent-climb prompt"): "The
+        // only climbable adjacent target is a pile of rocks (`0x4C`) with no
+        // object on it. The town command's wooden-fence targets
+        // (`0xCA`/`0xCB`) are not climbable in an arena. A direction toward
+        // any other cell prints `What?\n` and re-prompts at no cost."
         if self
             .combat_actor_slot_at(x as u8, y as u8, actor_slot)
             .is_some()
-            || !is_probe_walkable(self.combat_terrain[y][x])
+            || self.combat_terrain[y][x] != COMBAT_GARGOYLE_DEATH_TERRAIN_TILE
         {
             self.message = DUNGEON_KLIMB_WHAT_REFUSAL.trim_end().to_string();
             return MoveOutcome::Blocked;
@@ -572,6 +590,10 @@ impl PlayState {
             return MoveOutcome::Blocked;
         };
         self.mark_visibility_dirty();
+        // `combat.md §8.4` (u5-spec#299 Q4): an applied climb "prints nothing
+        // after the direction name. It also runs the ordinary step-on
+        // ambush/camp reveal check", which may redraw the arena.
+        let _ = self.apply_combat_ambush_reveal_for_actor_position(actor_slot);
         // Unpublished (`cleak/u5-spec#262`). `commands.md §5.2` gives the
         // dungeon Klimb forms; an applied town/overworld Klimb has none.
         self.diagnostics.push(format!(
