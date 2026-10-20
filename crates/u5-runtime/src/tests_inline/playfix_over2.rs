@@ -249,6 +249,48 @@ fn playfix_f21_board_refusal_is_the_stock_on_foot_literal() {
     assert_eq!(state.message, BOARD_ON_FOOT_REFUSAL);
 }
 
+/// `overworld.md §9.2` (issue #299 Q29): the midnight route "never changes
+/// the party's coordinates, plane or transport. The party is left on the
+/// overworld on the former gate cell ... still mounted or airborne if it
+/// was", and the gate cannot rise again while the presentation runs.
+#[test]
+fn midnight_moongate_leaves_a_mounted_party_on_the_former_gate_cell() {
+    let dir = debug_game_dir();
+    let origin_idx = world_cell_index(5, 5);
+    let mut grid = open_world_grid();
+    grid[origin_idx] = NATURAL_MOONGATE_TERRAIN_TILE;
+    let mut state = britannia_state(grid, 5, 5);
+    let horse = TransportState::Horse {
+        type_byte: HORSE_MOUNTED_FIRST,
+        tile: FIRST_PLAYABLE_HORSE_TILE,
+    };
+    state.player.transport = horse;
+    state.sync_player_object();
+    state.clock = GameClock::new(0, 2).unwrap();
+    state.set_cached_moon_glyph_slots(1, 0);
+    state.moonstone_slots[1] = MoonstoneGateSlot {
+        scene: 0,
+        x: 6,
+        y: 7,
+        z: WorldPlane::Britannia.save_floor() as u8,
+    };
+
+    run_overworld_loop_head_hooks(&mut state, &dir).unwrap();
+
+    assert!(state.active_shrine.is_some());
+    assert_eq!(
+        state.area,
+        Area::World {
+            plane: WorldPlane::Britannia
+        }
+    );
+    assert_eq!((state.player.x, state.player.y), (5, 5));
+    assert_eq!(state.player.transport, horse);
+    assert_eq!(state.grid[origin_idx], NATURAL_MOONGATE_RESTORED_TERRAIN_TILE);
+    assert!(!state.natural_moongate_live_cells.contains(&origin_idx));
+    let _ = fs::remove_dir_all(dir);
+}
+
 /// F22: `overworld.md §9.2` - in hour `0` with the minute below `10` the
 /// live-gate hook "reports success to the outer loop; the outer loop then
 /// dispatches the same shrine/urn kneel overlay used by E-Enter at a
