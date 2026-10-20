@@ -845,7 +845,8 @@ pub use sky_view::*;
 pub use start_validation::*;
 pub use stat_arithmetic::{capped_add_u8, capped_add_word, floor_sub_u8, floor_sub_word};
 pub use stats_panel::{
-    picker_panel_opaque_cells, stats_panel_opaque_effect_cell, PickerPanelCells,
+    picker_panel_opaque_cells, stats_panel_opaque_effect_cap_cells, stats_panel_opaque_effect_cell,
+    PickerPanelCells,
     ARMS_SELL_BROWSER_BORDER_FIRST_ROW, ARMS_SELL_BROWSER_BORDER_LAST_ROW,
     ARMS_SELL_BROWSER_FRAME_BOTTOM, ARMS_SELL_BROWSER_FRAME_RIGHT,
     ARMS_SELL_BROWSER_INITIAL_BOTTOM, ARMS_SELL_BROWSER_INITIAL_RIGHT, ARMS_SELL_BROWSER_LEFT,

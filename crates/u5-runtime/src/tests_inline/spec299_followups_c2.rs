@@ -148,3 +148,57 @@ fn spec299_q11_third_prisoner_survives_the_exit_beat() {
         .all(|object| object.aux3 != BLACKTHORN_CUTSCENE_AUX3_ROLE_MARKER || object.is_empty()));
     let _ = fs::remove_dir_all(dir);
 }
+
+/// u5-spec#299 Q12, `inventory.md §4.4` / `stats-panel.md §8` /
+/// `display-driver.md` "Bracket end-caps": under the leaked inverse, "In each
+/// end cap the source triangle comes out black and the rest of the cell, its
+/// top and bottom scanlines included, comes out in chrome; the cap's two
+/// accent strokes are line draws and stay exactly as they are". The caps are
+/// reported opaque so the plain cap beneath cannot show through the black
+/// triangle; with no effect running the band is untouched.
+#[test]
+fn spec299_q12_inverted_slot_caps_are_black_triangles_under_unchanged_strokes() {
+    let font = chrome_test_font();
+    let render = |inverse: bool| {
+        let mut state = test_state(open_grid(), 5, 5);
+        state.active_effect_tag = Some(PROTECTION_ACTIVE_EFFECT_TAG);
+        state.active_effect_counter = 10;
+        state.stats_panel_window_inverse = inverse;
+        state.repaint_stats_panel();
+        let mut system = TextWindowSystem::new();
+        configure_play_text_windows(&mut system);
+        paint_stats_panel_text_window(&mut system, &state, state.active_player);
+        (state, render_text_window_rgba(&system, &font).unwrap())
+    };
+    let (plain_state, plain) = render(false);
+    let (state, inverted) = render(true);
+    let sprite = ribbon_cap_sprite(&font, RibbonCapDirection::Right);
+    let (x0, y0) = (30 * 8, 7 * 8);
+    for y in 0..8 {
+        for x in 0..8 {
+            let bit = 0x80u8 >> x;
+            let at = |rgba: &[u8]| chrome_index_at(rgba, x0 + x, y0 + y);
+            if sprite.white[y] & bit != 0 {
+                assert_eq!(at(&inverted), at(&plain), "stroke ({x},{y}) unchanged");
+                assert_ne!(at(&inverted), 0, "stroke ({x},{y}) still drawn");
+            } else if sprite.ribbon[y] & bit != 0 {
+                assert_eq!(at(&inverted), 0, "triangle ({x},{y}) comes out black");
+            } else {
+                assert_eq!(at(&inverted), CHROME_RIBBON_INDEX, "({x},{y}) is chrome");
+            }
+        }
+    }
+    assert_eq!(
+        crate::stats_panel::stats_panel_opaque_effect_cap_cells(&state),
+        vec![(30, 7), (32, 7)]
+    );
+    assert!(crate::stats_panel::stats_panel_opaque_effect_cap_cells(&plain_state).is_empty());
+
+    let mut idle = test_state(open_grid(), 5, 5);
+    idle.stats_panel_window_inverse = true;
+    idle.repaint_stats_panel();
+    assert!(
+        crate::stats_panel::stats_panel_opaque_effect_cap_cells(&idle).is_empty(),
+        "with no effect running the band looks normal"
+    );
+}

@@ -16952,10 +16952,12 @@ fn render_visual_play_frame_over_viewport(
     );
     overlay_nonblack_rgba(&mut rgba, &surface.rgba);
     // `inventory.md §4.4`: the picker's panel cells are whole text cells;
-    // their black pixels cover the chrome beneath them.
+    // their black pixels cover the chrome beneath them. Under the leaked
+    // inverse the timed-effect slot's caps are too (u5-spec#299 Q12).
     for (column, row) in u5_runtime::picker_panel_opaque_cells(state)
         .into_iter()
         .chain(u5_runtime::stats_panel_opaque_effect_cell(state))
+        .chain(u5_runtime::stats_panel_opaque_effect_cap_cells(state))
     {
         let (x0, y0) = (usize::from(column) * CH_CELL_SIDE, usize::from(row) * CH_CELL_SIDE);
         for y in y0..(y0 + CH_CELL_SIDE).min(height) {
