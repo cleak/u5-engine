@@ -82,8 +82,30 @@ fn recruit_speaker_name_compare_strips_bit_seven() {
     assert_eq!(state.party[1].class_byte, b'B');
 }
 
-/// §7.6 matches "opening characters", with §6 step 5's space boundary: the
-/// speaker's name may stop short of the roster name only at a literal space.
+/// u5-spec#299 Q20, §7.7.1: `KEEP.TLK` 1 recruits on the original, and its
+/// Name entry is the roster name followed by a title. §7.6 compares the
+/// speaker's "opening characters", so the bare roster name matches.
+#[test]
+fn recruit_speaker_matches_a_roster_name_that_opens_a_titled_name_entry() {
+    let mut state = test_state(open_grid(), 1, 1);
+    state.party_roster = vec![
+        roster_record(0, b"AVATAR\0\0\0", b'A'),
+        roster_record(1, b"JOHNE\0\0\0\0", b'B'),
+    ];
+
+    assert_eq!(
+        state
+            .apply_conversation_join_candidate("Johne, Captain Johne.", 0)
+            .as_deref(),
+        Some("JOHNE joined.")
+    );
+    assert_eq!(state.party.len(), 2);
+}
+
+/// §7.6 matches "opening characters"; this engine's conservative reading keeps
+/// a space boundary there (see `party_roster_name_matches`; the §6 step 5
+/// keyword rule it came from is retracted, R577): the speaker's name may stop
+/// short of the roster name only at a literal space.
 #[test]
 fn recruit_speaker_matches_opening_characters_at_a_space_boundary_only() {
     let mut state = test_state(open_grid(), 1, 1);

@@ -22132,7 +22132,17 @@ fn reserved_keyword_effect_matches_spec_words() {
     // JOIN and WHO ART THOU are not engine-reserved.
     assert_eq!(reserved_keyword_effect(b"JOIN"), None);
     assert_eq!(reserved_keyword_effect(b"WHO ART THOU"), None);
-    assert_eq!(reserved_keyword_effect(b"JOBS"), None);
+    // conversation.md §6 step 4 (u5-spec#299 Q20, R578): the reserved scan
+    // has no end check, so `JOBS` runs the Job entry and `WELL BYE` takes
+    // the BYE path.
+    assert_eq!(
+        reserved_keyword_effect(b"JOBS"),
+        Some(ReservedKeywordEffect::JobEntry)
+    );
+    assert_eq!(
+        reserved_keyword_effect(b"WELL BYE"),
+        Some(ReservedKeywordEffect::ByePath)
+    );
     // The reserved-table compare uses the same normalized matching style.
     assert_eq!(
         reserved_keyword_effect(b"name"),
@@ -22150,7 +22160,11 @@ fn reserved_rebuke_keywords_match_fixed_table_with_space_boundary() {
     for (index, keyword) in RESERVED_KEYWORD_REBUKE_WORDS.iter().enumerate() {
         assert_eq!(reserved_rebuke_keyword_index(keyword), Some(index));
     }
-    assert_eq!(reserved_rebuke_keyword_index(b"ASSIST"), None);
+    // u5-spec#299 Q20 (R578): the reserved scan accepts a word-start hit
+    // with nothing after it checked, so `ASSIST` reaches the `ASS` entry,
+    // while a mid-word first hit does not.
+    assert_eq!(reserved_rebuke_keyword_index(b"ASSIST"), Some(7));
+    assert_eq!(reserved_rebuke_keyword_index(b"PASS"), None);
     assert_eq!(reserved_rebuke_keyword_index(b"ASS HAT"), Some(7));
     assert_eq!(
         tlk_player_input_kind(b"ASS HAT"),
@@ -22163,14 +22177,23 @@ fn reserved_rebuke_keywords_match_fixed_table_with_space_boundary() {
 }
 
 #[test]
-fn tlk_keyword_match_is_space_boundary_and_bit7_strip() {
-    // conversation.md §6
-    // Exact match
+fn tlk_keyword_match_is_word_start_and_bit7_strip() {
+    // conversation.md §6 step 5 (u5-spec#299 Q20, R577): the shared matcher's
+    // first occurrence, accepted at line start or after a literal space, with
+    // nothing after it checked.
     assert!(tlk_keyword_matches(b"GRAN", b"GRAN"));
-    // Space-boundary match
     assert!(tlk_keyword_matches(b"GRAN", b"GRAN PA"));
-    // Not a substring/prefix match without a space boundary
-    assert!(!tlk_keyword_matches(b"GRAN", b"GRANDPA"));
+    // R577: `grandpa` matches `gran`.
+    assert!(tlk_keyword_matches(b"GRAN", b"GRANDPA"));
+    // The section's executed examples.
+    assert!(tlk_keyword_matches(b"JOIN", b"JOINED"));
+    assert!(tlk_keyword_matches(b"JOIN", b"I WANT TO JOIN"));
+    assert!(!tlk_keyword_matches(b"JOIN", b"REJOIN"));
+    assert!(!tlk_keyword_matches(b"JOIN", b"JO IN"));
+    // A mid-word first occurrence fails even when a clean one follows.
+    assert!(!tlk_keyword_matches(b"Y", b"MAYBE YES"));
+    assert!(tlk_keyword_matches(b"Y", b"GO YES"));
+    assert!(tlk_keyword_matches(b"N", b"NAME"));
     // Bit-7 strip on the keyword side (high-bit obfuscated)
     let obfuscated = [b'G' | 0x80, b'R' | 0x80, b'A' | 0x80, b'N' | 0x80];
     assert!(tlk_keyword_matches(&obfuscated, b"GRAN"));

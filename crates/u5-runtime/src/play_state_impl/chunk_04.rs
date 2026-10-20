@@ -5629,17 +5629,23 @@ impl PlayState {
     }
 
     /// Which prompt closes the opening: `§7`'s ASK-WHO name prompt when
-    /// the Description entry suspended on its `0x88`, `§6`'s keyword
-    /// prompt otherwise - including a Description that suspended on a
-    /// label block's scoped prompt (`§7.7`), which prints the same
-    /// `Your interest?`.
+    /// the Description entry suspended on its `0x88`, a label block's
+    /// scoped `You respond-` prompt when a Description or Greeting GOTO's
+    /// head reached its NUL (`§7.7` step 2, u5-spec#299 Q20: "This is
+    /// **not** `Your interest?`"), `§6`'s keyword prompt otherwise.
     fn open_conversation_prompt(&self, suspended: bool) -> &'static str {
         let ask_who = self
             .active_conversation
             .as_ref()
             .is_some_and(|session| session.awaiting_ask_who());
+        let scoped = self
+            .active_conversation
+            .as_ref()
+            .is_some_and(|session| session.awaiting_scoped_keyword());
         if suspended && ask_who {
             crate::TLK_ASK_WHO_PROMPT
+        } else if scoped {
+            crate::tlk_control_codes::TLK_SCOPED_PROMPT
         } else {
             TLK_KEYWORD_PROMPT
         }
@@ -5855,11 +5861,14 @@ impl PlayState {
         // neither the `BYE` echo nor the spent-feed strip applies there.
         // Only a truly empty line is empty; a lone space is typed input
         // (`conversation.md §7.6`).
+        //
+        // `conversation.md §7.7` step 2 (u5-spec#299 Q20, R575): the scoped
+        // `You respond-` prompt is not that prompt either - an empty line
+        // there re-asks with `"What didst thou say?` and prints no `BYE`.
         let empty_line = line.is_empty()
-            && !self
-                .active_conversation
-                .as_ref()
-                .is_some_and(|session| session.awaiting_ask_who());
+            && !self.active_conversation.as_ref().is_some_and(|session| {
+                session.awaiting_ask_who() || session.awaiting_scoped_keyword()
+            });
         if let Some(prompt) = open_prompt.as_deref() {
             // §6's capture shows the keyword echoed in capitals.
             let echo = if empty_line {
@@ -6571,22 +6580,33 @@ fn yew_wanted_poster_name_row(name: Option<&[u8; SAVE_CHARACTER_NAME_LEN]>) -> S
 /// speaker's "opening characters — case-insensitively, with bit 7 stripped —
 /// against the reserve portion of the sixteen-slot character roster". §11's
 /// derivation note names it as "the case-insensitive bit-7-stripping
-/// string-equality routine used by the JOIN-name compare", which is the same
-/// routine §6 step 5 uses for keywords: "The compare strips bit 7 from both
-/// sides ... and folds both sides to upper case. A match requires the keyword
-/// to end cleanly and the typed input either to end at the same point or to
-/// have a literal space there; there is no substring search or fuzzy matching."
+/// string-equality routine used by the JOIN-name compare".
 ///
-/// Here the speaker's name plays the keyword's role: it supplies the opening
-/// characters, and the roster record must either end at that point or carry a
-/// literal space there. So `LORD` matches a roster `LORD BRITISH` but `GWEN`
-/// does not match `GWENNO`.
+/// The end boundary below - the roster record must either end where the
+/// speaker's name ends or carry a literal space there - was taken from §6 step
+/// 5's keyword rule, which u5-spec#299 Q20 retracts for keywords (R577: the
+/// keyword match is the shared text matcher with no end check). §7.6 gives the
+/// recruit compare only as "opening characters" of a string-equality routine,
+/// so this engine keeps its conservative reading for it: `LORD` matches a
+/// roster `LORD BRITISH` but `GWEN` does not match `GWENNO`.
+///
+/// It is the speaker's *opening characters* that are compared, so a roster
+/// name that opens the speaker's longer Name entry matches as well. §7.7.1
+/// (u5-spec#299 Q20) has `KEEP.TLK` 1 recruit on the original by `SHAD`, `Y`,
+/// `Y`, and that NPC's Name entry is the name followed by a title, where the
+/// roster record holds the bare name.
 fn party_roster_name_matches(record: &PartyRosterRecord, needle: &str) -> bool {
     let speaker = conversation_name_compare_bytes(needle.as_bytes());
     if speaker.is_empty() {
         return false;
     }
     let roster = conversation_name_compare_bytes(&record.name);
+    if roster.is_empty() {
+        return false;
+    }
+    if speaker.starts_with(&roster) {
+        return true;
+    }
     if roster.len() < speaker.len() || roster[..speaker.len()] != speaker[..] {
         return false;
     }

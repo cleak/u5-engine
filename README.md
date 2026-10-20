@@ -297,7 +297,7 @@ scheduled NPC's dialogue id, including one-cell talk-through over table/counter
 furniture, through the matching runtime `.TLK` envelope and reports the clean
 conversation header. Inline `T<keyword>` input, such as `TJOB`,
 runs a one-shot keyword lookup against the decoded `.TLK` fields using the
-public space-boundary match rule and applies supported TLK byte-runner side
+public word-start keyword match rule and applies supported TLK byte-runner side
 effects. Bare Talk opens the interactive conversation keyword loop when raw
 `.TLK` streams are available, and Talk-triggered shopkeepers route into the
 modal shop sessions, including horse-trader purchases that place a nearby

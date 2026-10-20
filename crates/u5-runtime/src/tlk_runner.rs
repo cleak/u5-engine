@@ -63,8 +63,10 @@ pub struct TlkRunInputs<'a> {
     /// `0x88` ASK-WHO behaviour. When `true`, the runner stops
     /// immediately after the ask code so the interactive conversation
     /// wrapper can collect a free-text answer and resume the same stream
-    /// with the matched party slot. `0x84` RECRUIT-SPEAKER is *not*
-    /// governed by this flag: §7.6 gives it no prompt and no input read.
+    /// with the matched party slot. `0x84` RECRUIT-SPEAKER reads no input
+    /// (§7.6), but under this flag the runner also hands it back as
+    /// [`TlkRunStop::RecruitingSpeaker`]: whether it stops the stream
+    /// depends on the party, which only the conversation wrapper knows.
     pub yield_on_ask: bool,
 }
 
@@ -118,6 +120,14 @@ pub enum TlkRunStop {
     /// execution. The conversation session owns the labelled-record
     /// handler and any scoped prompt that follows.
     LabelTransfer(u8),
+    /// Reached `0x84` RECRUIT-SPEAKER (only when `yield_on_ask` is set).
+    /// `cursor` is just past the code. `conversation.md §7.6` (u5-spec#299
+    /// Q20): "A successful recruit reports a stop: the conversation ends at
+    /// once with no `BYE` and no Bye entry. The party-full refusal does
+    /// **not** stop; the stream runs on to its NUL ... The no-match
+    /// diagnostic stops." The wrapper knows the party, so it decides
+    /// whether to resume at `cursor`.
+    RecruitingSpeaker(usize),
 }
 
 /// One side-effect emitted while running a stream.
@@ -534,10 +544,17 @@ pub fn run_tlk_stream_from(bytes: &[u8], start: usize, inputs: &TlkRunInputs) ->
             }
             TLK_CODE_RECRUIT_SPEAKER => {
                 // §7.6: "There is no player prompt and no input read."
-                // The code consumes no argument bytes and does not stop
-                // the stream; the caller matches the speaker's own name
-                // against the reserve roster when it sees the event.
+                // The code consumes no argument bytes; the caller matches
+                // the speaker's own name against the reserve roster when it
+                // sees the event. Only a successful recruit (or the no-match
+                // diagnostic) stops the stream, and only the interactive
+                // wrapper can tell, so it gets the code back there.
                 out.events.push(TlkRunEvent::RecruitSpeaker);
+                if inputs.yield_on_ask {
+                    out.stop = TlkRunStop::RecruitingSpeaker(pos);
+                    out.consumed = pos;
+                    return out;
+                }
             }
             TLK_CODE_ASK_WHO => {
                 if inputs.yield_on_ask {
@@ -653,6 +670,17 @@ pub fn run_tlk_stream_from(bytes: &[u8], start: usize, inputs: &TlkRunInputs) ->
                         from: TLK_CODE_IF_ELSE,
                         to: target_label,
                     });
+                    if inputs.yield_on_ask {
+                        // `conversation.md §7.7` (u5-spec#299 Q20): "IF/ELSE
+                        // branches reuse the same machinery" - a taken
+                        // transfer enters the label handler like a GOTO, and
+                        // for the stream it leaves it is a stop ("an IF-ELSE
+                        // that transfers"). The interactive wrapper owns that
+                        // handler and the target block's scoped prompt.
+                        out.stop = TlkRunStop::LabelTransfer(target_label);
+                        out.consumed = pos;
+                        return out;
+                    }
                     pos = target_pos;
                 }
             }
@@ -682,6 +710,13 @@ pub fn run_tlk_stream_from(bytes: &[u8], start: usize, inputs: &TlkRunInputs) ->
                             from: TLK_CODE_IF_ELSE_ALT,
                             to: target_label,
                         });
+                        if inputs.yield_on_ask {
+                            // As `0x8C` above: the transfer is the label
+                            // handler's (`conversation.md §7.7`).
+                            out.stop = TlkRunStop::LabelTransfer(target_label);
+                            out.consumed = pos;
+                            return out;
+                        }
                         pos = target_pos;
                     } else {
                         out.stop = TlkRunStop::UnresolvedGotoLabel(target_label);
@@ -1396,22 +1431,39 @@ mod tests {
     #[test]
     fn recruit_speaker_neither_prompts_nor_stops_the_stream() {
         // §7.6: `0x84` has "no player prompt and no input read", takes no
-        // argument bytes, and the response keeps emitting around it.
+        // argument bytes, and outside the interactive wrapper the response
+        // keeps emitting around it.
         let mut bytes = enc("Aye. ");
         bytes.push(TLK_CODE_RECRUIT_SPEAKER);
         bytes.extend_from_slice(&enc("I come."));
         bytes.push(TLK_CODE_END_OF_RESPONSE);
+        let out = run_tlk_stream(&bytes, &TlkRunInputs::default());
+        assert_eq!(out.text, "Aye. I come.");
+        assert_eq!(out.stop, TlkRunStop::EndOfResponse);
+        assert!(
+            out.events
+                .iter()
+                .any(|e| matches!(e, TlkRunEvent::RecruitSpeaker))
+        );
+    }
+
+    /// u5-spec#299 Q20, `conversation.md §7.6`'s `0x84` row: a successful
+    /// recruit stops, the party-full refusal does not. The interactive
+    /// wrapper decides, so the runner hands the code back just past itself.
+    #[test]
+    fn recruit_speaker_yields_to_the_interactive_wrapper() {
+        let mut bytes = enc("Aye. ");
+        bytes.push(TLK_CODE_RECRUIT_SPEAKER);
+        bytes.extend_from_slice(&enc("I come."));
         let out = run_tlk_stream(
             &bytes,
             &TlkRunInputs {
-                // Even with the interactive ask yield armed, RECRUIT-SPEAKER
-                // must not stop: `yield_on_ask` governs `0x88` alone.
                 yield_on_ask: true,
                 ..Default::default()
             },
         );
-        assert_eq!(out.text, "Aye. I come.");
-        assert_eq!(out.stop, TlkRunStop::EndOfResponse);
+        assert_eq!(out.text, "Aye. ");
+        assert_eq!(out.stop, TlkRunStop::RecruitingSpeaker(6));
         assert!(
             out.events
                 .iter()

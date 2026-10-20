@@ -1977,13 +1977,17 @@ fn talk_shop_trigger_maps_public_shop_roles() {
     assert_eq!(talk_shop_trigger(0xff), None);
 }
 
+/// `conversation.md §6` steps 4 and 5 (u5-spec#299 Q20, R577 / R578): a
+/// word-start first occurrence with nothing after it checked.
 #[test]
-fn talk_keyword_match_respects_space_boundary() {
+fn talk_keyword_match_is_the_word_start_rule() {
     assert!(talk_keyword_matches("JOB", "job"));
     assert!(talk_keyword_matches("JOB", "job news"));
-    assert!(!talk_keyword_matches("JOB", "jobber"));
+    assert!(talk_keyword_matches("JOB", "jobber"));
+    assert!(talk_keyword_matches("JOB", "my job"));
+    assert!(!talk_keyword_matches("JOB", "nojob"));
     assert!(talk_keyword_matches("WHO ART THOU", "who art thou friend"));
-    assert!(!talk_keyword_matches("WHO", "whom"));
+    assert!(talk_keyword_matches("WHO", "whom"));
 }
 
 #[test]
@@ -2005,15 +2009,18 @@ fn talk_keyword_response_resolves_reserved_aliases_and_pairs() {
     assert_eq!(talk_keyword_response(&fields, "work"), Some("I mend gear"));
     assert_eq!(talk_keyword_response(&fields, "bye"), Some("Farewell"));
     assert_eq!(talk_keyword_response(&fields, "thank"), Some("Farewell"));
+    // u5-spec#299 Q20 (R577): `grandpa` matches `gran`, and the earlier
+    // keyword wins.
     assert_eq!(
         talk_keyword_response(&fields, "grandpa"),
-        Some("Long answer")
+        Some("Short answer")
     );
     assert_eq!(
         talk_keyword_response(&fields, "gran news"),
         Some("Short answer")
     );
-    assert_eq!(talk_keyword_response(&fields, "granite"), None);
+    assert_eq!(talk_keyword_response(&fields, "granite"), Some("Short answer"));
+    assert_eq!(talk_keyword_response(&fields, "migrant"), None);
 }
 
 #[test]
@@ -2050,9 +2057,10 @@ fn resolve_keyword_response_field_index_matches_reserved_and_pair_keywords() {
         resolve_keyword_response_field_index(&fields, "thank"),
         Some(4)
     );
+    // u5-spec#299 Q20 (R577): the earlier `gran` answers `grandpa`.
     assert_eq!(
         resolve_keyword_response_field_index(&fields, "grandpa"),
-        Some(8)
+        Some(6)
     );
     assert_eq!(
         resolve_keyword_response_field_index(&fields, "gran news"),
@@ -2060,6 +2068,10 @@ fn resolve_keyword_response_field_index_matches_reserved_and_pair_keywords() {
     );
     assert_eq!(
         resolve_keyword_response_field_index(&fields, "granite"),
+        Some(6)
+    );
+    assert_eq!(
+        resolve_keyword_response_field_index(&fields, "migrant"),
         None
     );
 }
@@ -3506,12 +3518,101 @@ fn active_conversation_recruit_speaker_runs_inline_without_a_name_prompt() {
     );
 
     // `conversation.md §7.6`: `0x84` has "no player prompt and no
-    // input read", so the whole response emits in one turn and the
-    // loop returns straight to the keyword prompt.
+    // input read", so the response emits in one turn. No reserve roster
+    // record matches the speaker, and u5-spec#299 Q20: "The no-match
+    // diagnostic stops" - the rest of the stream does not run and the
+    // conversation is over.
     handle_play_key_input(&mut state, 'J', "OIN", Path::new("")).unwrap();
-    assert!(transcript_has(&state, "I shall come. Accepted."));
-    assert_eq!(state.message, TLK_KEYWORD_PROMPT);
+    assert!(transcript_has(&state, "I shall come."));
+    assert!(!transcript_has(&state, "Accepted."));
+    assert_ne!(state.message, TLK_KEYWORD_PROMPT);
+    assert!(state.active_conversation.is_none());
+}
+
+/// A Talk session whose `JOIN` answer GOTOs a labelled yes/no block shaped
+/// like the shipped recruit blocks (`conversation.md §7.7.1`, Julia).
+fn scoped_join_talk_state() -> PlayState {
+    let enc = |s: &str| s.bytes().map(|b| b ^ 0x80).collect::<Vec<u8>>();
+    let mut head = vec![TLK_CODE_LABEL_RECORD, 0x91];
+    head.extend(enc("Shall I join thee now?"));
+    let mut yes = enc("At last!\"");
+    yes.push(TLK_CODE_RECRUIT_SPEAKER);
+    let raw_fields = vec![
+        enc("Gwenno"),
+        enc("a bard"),
+        enc("Greetings"),
+        enc("I sing"),
+        enc("Farewell"),
+        enc("JOIN"),
+        vec![0x91],
+        head,
+        enc("Just let me know."),
+        enc("y"),
+        yes,
+        vec![TLK_CODE_LABEL_RECORD, TLK_LABEL_LAST, 0xC0],
+    ];
+    let decoded: Vec<String> = raw_fields
+        .iter()
+        .map(|field| field.iter().map(|b| char::from(b ^ 0x80)).collect())
+        .collect();
+    let mut dialogue: HashMap<u16, Vec<String>> = HashMap::new();
+    dialogue.insert(0x10, decoded);
+    let mut raw: HashMap<u16, Vec<Vec<u8>>> = HashMap::new();
+    raw.insert(0x10, raw_fields);
+
+    let mut state = test_state(open_grid(), 1, 1);
+    state.party_roster = vec![
+        conversation_test_roster_record(0, b"AVATAR\0\0\0", b'A'),
+        conversation_test_roster_record(1, b"GWENNO\0\0\0", b'B'),
+    ];
+    state.player.facing = Direction::East;
+    state.load_scheduled_npcs(&[
+        NpcSlot {
+            slot: 0,
+            type_byte: 0,
+            dialog_id: 0,
+            schedule: [0; 16],
+            name: None,
+        },
+        NpcSlot {
+            slot: 1,
+            type_byte: 1,
+            dialog_id: 0x10,
+            schedule: [0, 0, 0, 2, 2, 2, 1, 1, 1, 0, 0, 0, 0, 8, 16, 20],
+            name: None,
+        },
+    ]);
+    assert_eq!(
+        state.talk_facing_with_dialogue_and_keyword_raw(&dialogue, &raw, None),
+        MoveOutcome::Talked
+    );
+    state
+}
+
+/// u5-spec#299 Q20, `conversation.md §7.7` step 2: the scoped prompt is
+/// `You respond-` (R573), and an empty line there prints `"What didst thou
+/// say?` and re-asks - no `BYE` echo, no Bye entry, nothing ends (R575).
+#[test]
+fn a_scoped_prompt_reads_you_respond_and_an_empty_line_only_re_asks() {
+    let mut state = scoped_join_talk_state();
+    handle_play_key_input(&mut state, 'J', "OIN", Path::new("")).unwrap();
+    assert!(transcript_has(&state, "Shall I join thee now?"));
+    assert_eq!(state.message, "You respond-\n:");
+
+    handle_play_key_input(&mut state, '\r', "", Path::new("")).unwrap();
+    assert!(transcript_has(&state, "\"What didst thou say?"));
+    assert!(!transcript_has(&state, "BYE"));
+    assert!(!transcript_has(&state, "Farewell"));
     assert!(state.active_conversation.is_some());
+    assert_eq!(state.message, "You respond-\n:");
+
+    // §7.7.1: `Y` at the scoped prompt runs the recruit, which ends the
+    // conversation with no `BYE` and no Bye entry.
+    handle_play_key_input(&mut state, 'Y', "", Path::new("")).unwrap();
+    assert!(transcript_has(&state, "At last!"));
+    assert!(!transcript_has(&state, "Farewell"));
+    assert!(state.active_conversation.is_none());
+    assert_eq!(state.party.len(), 2);
 }
 
 #[test]
@@ -3690,10 +3791,14 @@ fn conversation_join_adds_inactive_roster_companion() {
     // turn as the response text; nothing asks the player for a name.
     let (text, ended) = state.submit_active_conversation_keyword("JOIN");
 
-    assert!(text.contains("Accepted."));
+    assert!(text.contains("I shall come."));
+    // u5-spec#299 Q20, §7.6's `0x84` row: "A successful recruit reports a
+    // stop: the conversation ends at once with no `BYE` and no Bye entry".
+    assert!(!text.contains("Accepted."), "{text:?}");
+    assert!(!text.contains("Farewell"), "{text:?}");
     // §7.6 publishes no success line for `0x84` (playtest F06).
     assert!(!text.contains("joined."), "{text:?}");
-    assert!(!ended);
+    assert!(ended);
     assert_eq!(state.party.len(), 2);
     assert_eq!(state.party_names[1], *b"GWENNO\0\0\0");
 }
@@ -3762,10 +3867,13 @@ fn conversation_join_is_triggered_by_the_control_byte_not_the_join_keyword() {
     // response emits `0x84` recruits, not just the word JOIN.
     let (text, ended) = state.submit_active_conversation_keyword("help");
 
-    assert!(text.contains("Accepted."));
+    assert!(text.contains("I shall come."));
+    // u5-spec#299 Q20: a successful recruit stops the stream and ends the
+    // conversation.
+    assert!(!text.contains("Accepted."), "{text:?}");
     // §7.6 publishes no success line for `0x84` (playtest F06).
     assert!(!text.contains("joined."), "{text:?}");
-    assert!(!ended);
+    assert!(ended);
     assert_eq!(state.party.len(), 2);
     assert_eq!(state.party_names[1], *b"GWENNO\0\0\0");
 }
@@ -3827,11 +3935,13 @@ fn conversation_recruit_speaker_for_non_roster_npc_recruits_nobody() {
     state.talk_facing_with_dialogue_and_keyword_raw(&dialogue, &raw, None);
 
     // §7.6: "If no reserve record matches the speaker's name the
-    // engine ... recruits nobody."
+    // engine ... recruits nobody", and (u5-spec#299 Q20) "The no-match
+    // diagnostic stops". The diagnostic's text is not published, so none
+    // is printed.
     let (text, ended) = state.submit_active_conversation_keyword("help");
 
-    assert_eq!(text, conversation_framed_response("I shall come. Accepted."));
-    assert!(!ended);
+    assert_eq!(text, conversation_framed_response("I shall come."));
+    assert!(ended);
     assert_eq!(state.party.len(), 1);
     assert_eq!(state.active_conversation_join_candidate, None);
 }

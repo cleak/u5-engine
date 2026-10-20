@@ -238,17 +238,13 @@ pub fn talk_keyword_response<'a>(fields: &'a [String], keyword: &str) -> Option<
         .find_map(|pair| talk_keyword_matches(&pair[0], keyword).then_some(pair[1].as_str()))
 }
 
+/// The inline `T<keyword>` lookup's compare: `conversation.md §6` steps 4
+/// and 5's keyword rule ([`crate::tlk_keyword_matches`]), so the shortcut
+/// answers the same lines the interactive prompt does. *Corrected* with
+/// u5-spec#299 Q20: the earlier space-boundary end check is retracted (R577,
+/// R578).
 pub fn talk_keyword_matches(stored_keyword: &str, input: &str) -> bool {
-    let stored = talk_keyword_compare_text(stored_keyword.trim());
-    if stored.is_empty() {
-        return false;
-    }
-    let input = talk_keyword_compare_text(input.trim_start());
-    input.starts_with(&stored)
-        && input
-            .as_bytes()
-            .get(stored.len())
-            .is_none_or(|byte| *byte == b' ')
+    crate::tlk_keyword_matches(stored_keyword.trim().as_bytes(), input.trim_start().as_bytes())
 }
 
 pub fn talk_keyword_compare_text(value: &str) -> String {
