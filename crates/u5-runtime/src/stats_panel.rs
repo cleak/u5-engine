@@ -1100,9 +1100,20 @@ impl PickerPanelCells {
         }
     }
 
-    /// Paint the cells in `columns` into the active window.
+    /// Paint the cells in `columns` into the active window, each exactly as
+    /// its pass drew it, whatever the window's inverse bit is now; the bit is
+    /// left as it was found.
+    ///
+    /// A cell is residue: no later write reaches it, so it keeps the pixels
+    /// the pass left. Measured 2026-10-20 (`use-specials`, beats
+    /// `sceptrerow` and `sceptre`): under the leaked inverse bit the stock
+    /// panel repaint inverts the boxes and leaves the column-15 cells as the
+    /// picker drew them - the inverted `d` on screen row 7 and the plain `d`
+    /// beside `G:150` - where toggling from an assumed clear bit swapped the
+    /// two.
     pub fn paint(&self, system: &mut TextWindowSystem, columns: std::ops::Range<usize>) {
-        let mut window_inverse = false;
+        let entry_inverse = system.active_window().inverse_enabled();
+        let mut window_inverse = entry_inverse;
         for row in 0..PICKER_PANEL_ROWS {
             for column in columns.clone() {
                 let Some(cell) = self.get(column, row) else {
@@ -1120,7 +1131,7 @@ impl PickerPanelCells {
                 system.set_runic_output(false);
             }
         }
-        if window_inverse {
+        if window_inverse != entry_inverse {
             system.emit_byte(TEXT_CTRL_INVERSE_TOGGLE);
         }
     }
@@ -1696,8 +1707,10 @@ pub fn paint_stats_panel_text_window(
     // `inventory.md §4.4`: the roster repaint does not reach window column
     // 15, so whatever a picker pass left there stays (stock `use-specials`,
     // the `d` beside `G:150` after the crown and sceptre results).
-    // An inverted repaint inverts those stale cells along with the box
-    // (stock: the `d` beside `G:150` turns dark-on-light with the panel).
+    // Not even an inverted repaint touches them: each keeps the style its
+    // pass drew it in (stock `use-specials` 2026-10-20, beat `sceptre`: the
+    // `d` on row 7 stays inverted and the one beside `G:150` stays plain
+    // while the boxes invert).
     if let Some(panel) = state.use_picker_panel.as_ref() {
         panel.paint(system, PICKER_PANEL_COLUMNS - 1..PICKER_PANEL_COLUMNS);
     }

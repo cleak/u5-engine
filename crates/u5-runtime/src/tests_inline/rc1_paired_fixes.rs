@@ -264,6 +264,63 @@ fn rc1_use_picker_passes_leave_the_previous_pass_as_residue() {
     assert_eq!(next.get(5, 4), None);
 }
 
+/// `inventory.md §4.4`: no later write reaches the column-15 residue, so the
+/// leaked panel repaint inverts the boxes and leaves those cells as the
+/// picker drew them. Stock `use-specials` (2026-10-20, beats `sceptrerow` and
+/// `sceptre`): the `d` on screen row 7 stays inverted and the `d` beside
+/// `G:150` stays plain; toggling from an assumed clear bit swapped the two.
+#[test]
+fn rc4_column_fifteen_residue_keeps_its_own_style_under_the_leak() {
+    use crate::stats_panel::{PanelPickerView, PickerPanelCells};
+    let rows = vec![
+        picker_row(Some(3), "Aa"),
+        picker_row(Some(3), "Bb"),
+        picker_row(Some(3), "White"),
+        picker_row(Some(1), "Magic Crpt"),
+        picker_row(Some(1), "Amulet"),
+        picker_row(Some(1), "Crown"),
+        picker_row(Some(1), "Sceptre"),
+        picker_row(Some(1), "Shard/Falsehd"),
+        picker_row(Some(1), "Shard/Hatred"),
+        picker_row(None, "Spyglass"),
+        picker_row(None, "Sextant"),
+    ];
+    let view = |selected| PanelPickerView {
+        label: String::new(),
+        rows: rows.clone(),
+        selected,
+        ornamental_frame: true,
+    };
+    let mut panel = PickerPanelCells::with_frame(None);
+    let mut inverse = false;
+    panel.run_pass(&view(6), &mut inverse);
+    panel.run_pass(&view(7), &mut inverse);
+    assert!(inverse, "a two-line highlight leaks the inverse bit");
+    let stored = |row: usize| panel.get(15, row).map(|cell| (cell.code, cell.inverse));
+    let (row_7, row_8) = (stored(6), stored(7));
+    assert_eq!(row_7.map(|cell| cell.0), Some(b'd'));
+    assert_eq!(row_8.map(|cell| cell.0), Some(b'd'));
+    assert_ne!(row_7.map(|cell| cell.1), row_8.map(|cell| cell.1));
+
+    let mut state = test_state(open_grid(), 5, 5);
+    state.repaint_stats_panel();
+    state.use_picker_panel = Some(panel);
+    state.stats_panel_window_inverse = true;
+    let mut system = TextWindowSystem::new();
+    configure_play_text_windows(&mut system);
+    paint_stats_panel_text_window(&mut system, &state, None);
+    let window = system.window(STATS_PANEL_TEXT_WINDOW_INDEX).unwrap();
+    let screen = |row: u8| {
+        system
+            .cell(window.top_left_x + 15, window.top_left_y + row)
+            .map(|cell| (cell.byte, cell.inverse))
+    };
+    assert_eq!(screen(6), row_7, "screen row 7 keeps the pass's style");
+    assert_eq!(screen(7), row_8, "the cell beside the gold keeps its style");
+    let roster = system.cell(window.top_left_x, window.top_left_y).unwrap();
+    assert!(roster.inverse, "the boxes still draw inverted");
+}
+
 /// With the picker's inverse leak set, the divider band's timed-effect tag is
 /// drawn dark on a light cell (stock `use-specials`, beat `sceptre`); the
 /// cell is reported opaque so a frontend does not let the band show through

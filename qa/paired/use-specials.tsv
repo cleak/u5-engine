@@ -12,11 +12,14 @@
 # the wrap and a `d` in window column 15 that outlives the picker. Measured
 # 2026-10-17 on rc1; the engine paints the same residue since `fcaf8e53`.
 #
-# Open on the `sceptre` beat, screen row 7 only: with the §4.4 inverse leak
-# set, the stock divider band draws the two ribbon end caps beside the crown
-# as solid dark arrows; the engine draws its ordinary light caps. §4.4 leaves
-# "whether the separator band between the panel's boxes shows inverted cells"
-# unestablished, so this waits on the spec.
+# `sceptre`, screen row 7: with the §4.4 inverse leak set, the stock divider
+# band draws the ribbon end caps beside the crown as solid dark arrows -
+# published in §4.4 (u5-spec#299 Q12) and drawn by the engine since spec2-c2.
+# The rc4 sweep (20261020-161139) still read row 7 different, in one cell:
+# window column 15, whose residue `d` the stock leaves exactly as the picker
+# drew it (inverted on row 7, plain beside `G:150` on row 8) while the boxes
+# invert; the engine toggled those cells from an assumed clear bit and
+# swapped the two. Fixed on rc4.
 # requires-seed: profile `seed-use-specials-reseeded`, built by qa/tools/reseed.py
 both	wait	15000
 both	key	space
