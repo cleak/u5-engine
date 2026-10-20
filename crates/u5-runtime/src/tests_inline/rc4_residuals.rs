@@ -191,6 +191,51 @@ fn rc4_both_keyword_scans_use_the_published_matcher() {
     }
 }
 
+/// R579, `conversation.md §6` steps 3 and 4, §7.2 and §7.7 step 5: "A typed
+/// `BYE` or `THANK` runs the Bye entry **without** printing the `BYE` line;
+/// only the empty-line shortcut of step 3 prints it" - at the top-level
+/// prompt, at a prompt nested by `0xFF`, and at a block's fallback loop. The
+/// Bye entry runs once, and the conversation ends.
+#[test]
+fn rc4_a_typed_bye_or_thank_prints_no_bye_line_on_any_prompt() {
+    use crate::conversation_session::ConversationSession;
+    let mut nested = rc4_enc("Ask on.\"\n\n");
+    nested.push(TLK_CODE_END_OF_RESPONSE);
+    let mut raw = rc4_scoped_blob();
+    raw.splice(7..7, [rc4_enc("MORE"), nested]);
+    let decoded = rc4_decoded(&raw);
+    let ctx = rc4_conversation_ctx();
+    let bye_line = TLK_EMPTY_INPUT_BYE_MESSAGE.trim_end();
+    for leave in ["BYE", "THANK", "WELL BYE", ""] {
+        for route in ["top", "nested", "fallback"] {
+            let mut session = ConversationSession::new(raw.clone(), decoded.clone());
+            session.present_greeting(&ctx);
+            match route {
+                "nested" => {
+                    let out = session.submit_keyword("more", &ctx);
+                    assert!(!out.ended);
+                }
+                "fallback" => {
+                    session.submit_keyword("join", &ctx);
+                    let out = session.submit_keyword("y", &ctx);
+                    assert!(!out.ended && !session.awaiting_scoped_keyword());
+                }
+                _ => {}
+            }
+            let out = session.submit_keyword(leave, &ctx);
+            let label = format!("{leave:?} at {route}");
+            assert!(out.ended, "{label}");
+            assert_eq!(out.text.matches("Farewell.").count(), 1, "{label}: {:?}", out.text);
+            assert_eq!(
+                out.text.lines().any(|line| line == bye_line),
+                leave.is_empty(),
+                "{label}: {:?}",
+                out.text
+            );
+        }
+    }
+}
+
 /// The inline `T<keyword>` Talk route asks the conversation session's own
 /// matcher (`conversation.md §6` steps 3 to 5): a keyword that lives inside
 /// a labelled block is not a top-level keyword there either, and a rebuke

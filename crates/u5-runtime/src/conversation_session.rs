@@ -120,8 +120,9 @@ pub struct ConversationSessionOutput {
     /// The selected response reached `0xFF` (or a passing IF-ELSE with the
     /// reserved `0xFF` argument). `conversation.md §7.2` (u5-spec#299 Q1,
     /// R561/R562): that is **not** a stop - it opens a fresh keyword prompt
-    /// nested where the stream stands, and leaving that prompt prints `BYE`,
-    /// runs the Bye entry and ends the conversation. The session models the
+    /// nested where the stream stands, and leaving that prompt runs the Bye
+    /// entry and ends the conversation - printing the `BYE` line first only
+    /// when the player left with an empty line (R579). The session models the
     /// nested prompt as the keyword prompt itself, since every outer level
     /// does nothing after it; on the opener path it means the rest of the
     /// opener never runs.

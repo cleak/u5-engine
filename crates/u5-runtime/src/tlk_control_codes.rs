@@ -732,10 +732,11 @@ pub const TLK_LABEL_FIRST: u8 = 0x91;
 /// which is why it is the second-most common label byte.
 pub const TLK_LABEL_LAST: u8 = 0x9F;
 /// `conversation.md §7.2` END-OF-RESPONSE: flush the pending word and open
-/// a fresh keyword prompt nested where the stream stands; leaving it prints
-/// `BYE`, runs the Bye entry and ends the conversation. Not a stop
-/// (u5-spec#299 Q1; "return control to the keyword input loop" is
-/// retracted, R561).
+/// a fresh keyword prompt nested where the stream stands; leaving it runs
+/// the Bye entry and ends the conversation, printing the `BYE` line first
+/// only when the player left with an empty line (a typed `BYE` or `THANK`
+/// prints none, u5-spec#299 Q20, R579). Not a stop (u5-spec#299 Q1;
+/// "return control to the keyword input loop" is retracted, R561).
 pub const TLK_CODE_END_OF_RESPONSE: u8 = 0xFF;
 
 /// `conversation.md §6` keyword-input loop prompt. The conversation
