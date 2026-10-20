@@ -1883,3 +1883,100 @@ fn dungeon_sleep_and_poison_fields_rumble_once_per_failed_save() {
         crate::audio::random_rumble(1, 50, 3500, &mut jitter)
     });
 }
+
+/// The dungeon post-action pass uses the world path's row model: a
+/// scripted teleport's report is a row of its own under the command's
+/// result, never `"{command} {teleport}"` in one unflushed slot.
+#[test]
+fn dungeon_post_turn_teleport_keeps_the_command_row_separate() {
+    let dir = debug_game_dir();
+    fs::write(
+        dir.join(DUNGEON_TELEPORT_TABLE_FILE),
+        "DUNGEON:0 0 1 1 3 4 5 0x70\n",
+    )
+    .unwrap();
+    let mut grid = open_dungeon_record();
+    grid[dungeon_cell_index(0, 1, 1)] = 0x70;
+    let mut state = dungeon_state(grid, 0, 1, 1);
+    state.message = "Pass".to_string();
+    state.message_flushed.clear();
+    state.message_row_open_mid_line = true;
+    state.advance_turn();
+
+    let outcome = state
+        .apply_dungeon_post_turn_effects_after_turn(0, &dir)
+        .unwrap();
+
+    assert!(matches!(outcome, Some(MoveOutcome::Transition(_))));
+    assert!(
+        !state.message.starts_with("Pass "),
+        "the teleport was joined onto the command's row: {:?}",
+        state.message
+    );
+    let lines: Vec<&str> = state
+        .message_entries()
+        .iter()
+        .map(|entry| entry.text.as_str())
+        .collect();
+    let pass = lines.iter().position(|line| *line == "Pass");
+    let teleport = lines
+        .iter()
+        .position(|line| line.starts_with("Triggered scripted dungeon teleport"));
+    assert!(
+        matches!((pass, teleport), (Some(p), Some(t)) if p < t),
+        "command row then teleport row: {lines:?}"
+    );
+    assert_eq!(lines.iter().filter(|line| **line == "Pass").count(), 1);
+    assert!(!state.message_row_open_mid_line);
+    assert!(!state.flush_message_slot());
+    let _ = fs::remove_dir_all(dir);
+}
+
+/// `dungeon-mode.md §8.1`: the pit group follows the command's row as rows
+/// of their own; the slot is not rewritten to `"{command} ...splat!"`, and
+/// the row state is the one the last emitted line set.
+#[test]
+fn dungeon_post_turn_fall_trap_keeps_the_command_row_separate() {
+    let dir = debug_game_dir();
+    let mut grid = open_dungeon_record();
+    grid[dungeon_cell_index(0, 1, 1)] = DUNGEON_PIT_FALL_TRAP_VISIBLE;
+    let mut state = dungeon_state(grid, 0, 1, 1);
+    state.message = "Pass".to_string();
+    state.message_flushed.clear();
+    state.message_row_open_mid_line = true;
+    state.advance_turn();
+
+    let outcome = state
+        .apply_dungeon_post_turn_effects_after_turn(0, &dir)
+        .unwrap();
+
+    assert!(matches!(outcome, Some(MoveOutcome::Transition(_))));
+    assert!(
+        !state.message.starts_with("Pass "),
+        "the pit group was joined onto the command's row: {:?}",
+        state.message
+    );
+    let lines: Vec<&str> = state
+        .message_entries()
+        .iter()
+        .map(|entry| entry.text.as_str())
+        .collect();
+    let pass = lines.iter().position(|line| *line == "Pass");
+    let pit = lines.iter().position(|line| line.starts_with("Pit Trap!"));
+    let splat = lines.iter().position(|line| line.contains("...splat!"));
+    assert!(
+        matches!((pass, pit, splat), (Some(p), Some(t), Some(s)) if p < t && t < s),
+        "command row, then the pit group: {lines:?}"
+    );
+    assert_eq!(lines.iter().filter(|line| **line == "Pass").count(), 1);
+    assert_eq!(
+        lines
+            .iter()
+            .filter(|line| line.contains("...splat!"))
+            .count(),
+        1
+    );
+    assert!(!state.message_row_open_mid_line);
+    assert!(!state.flush_message_slot());
+    let _ = fs::remove_dir_all(dir);
+}

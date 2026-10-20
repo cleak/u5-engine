@@ -6726,18 +6726,39 @@ impl PlayState {
         let y = self.player.y;
         let tile = self.dungeon_cell(level, x, y);
         if let Some(entry) = self.dungeon_teleport_at(Some(game_dir), scene, level, x, y, tile)? {
+            // `doors-and-z-transitions.md` (dungeon level <-> dungeon
+            // level): the scripted teleport is a post-action level change,
+            // and its report is a row of its own under the command's result,
+            // never one sentence with it - the same row model as the world
+            // path's plane transitions
+            // ([`Self::keep_post_turn_effect_rows_separate`]). The teleport
+            // writes the slot directly rather than through
+            // [`Self::emit_message_line`], so the command's own row is
+            // flushed here first; otherwise the assignment would drop it.
             let pre_effect_message = self.message.clone();
+            let pre_effect_row_open = self.message_row_open_mid_line;
+            self.flush_message_slot();
             let outcome = self.apply_dungeon_teleport_after_turn(scene, entry);
-            let transition_message = self.message.clone();
-            self.message = if pre_effect_message.is_empty() {
-                transition_message
-            } else {
-                format!("{pre_effect_message} {transition_message}")
-            };
+            self.keep_post_turn_effect_rows_separate(&pre_effect_message, pre_effect_row_open);
+            if self.message != pre_effect_message && !self.message.is_empty() {
+                // The teleport's report is one complete row; nothing it
+                // printed leaves the cursor mid-line. Set explicitly - the
+                // direct slot write above sets no row state of its own.
+                self.message_row_open_mid_line = false;
+            }
             return Ok(Some(outcome));
         }
         if is_dungeon_fall_trap(tile) {
+            // `dungeon-mode.md §8.1`: the pit group (`Pit Trap!`,
+            // `Falling...`, `      ...splat!`) goes out through
+            // [`Self::emit_message_line`], which flushes the command's row
+            // first and sets the row state from each line it logs. The
+            // slot is never re-joined to the command's text; an off-bottom
+            // fall that prints nothing restores the command's row and the
+            // row state the command set.
             let pre_effect_message = self.message.clone();
+            let pre_effect_row_open = self.message_row_open_mid_line;
+            let pre_effect_revision = self.message_transcript_revision;
             let outcome = self.resolve_dungeon_fall_trap_transition(
                 scene,
                 level,
@@ -6746,12 +6767,14 @@ impl PlayState {
                 Some(game_dir),
                 false,
             )?;
-            let transition_message = self.message.clone();
-            self.message = if pre_effect_message.is_empty() {
-                transition_message
-            } else {
-                format!("{pre_effect_message} {transition_message}")
-            };
+            if self.message.is_empty() && self.message_transcript_revision != pre_effect_revision {
+                // The off-bottom handoff printed the pit group and then
+                // cleared the slot. Its first emit already flushed the
+                // command's row, so restoring it would print it a second
+                // time; the row state stays as the last emitted line set it.
+                return Ok(Some(outcome));
+            }
+            self.keep_post_turn_effect_rows_separate(&pre_effect_message, pre_effect_row_open);
             return Ok(Some(outcome));
         }
         if is_dungeon_bomb_trap(tile) {
