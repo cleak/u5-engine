@@ -7577,6 +7577,23 @@ fn conversation_opening_rendered(
         .count();
     let (body, tail) = opening_body_and_hold_tail(&opening.without_leading_bytes(leading));
     rendered.push_rendered(&body);
+    // `conversation.md §7.7` HEAD: a Description GOTO's label handler "emit[s]
+    // the quote, then run[s] the head", and a head that opens on ASK-WHO puts
+    // the handler's own opening quote straight after it - which the byte
+    // runner drops, "because the stored-text path ... does not update that
+    // record" of the last printable quote (§7.6 "Which quotes are the
+    // stream's"). So the question continues the HEAD quote on its row, with
+    // no padding between: the stream's own feeds before the GOTO already made
+    // the blank row. Only when the quote is the stream's last byte: feeds or
+    // a hold after it are the stream's own and keep the padding rules below.
+    // Measured 2026-10-20 (`town-talk-speaker`, beat `talk`,
+    // the Britain wizard of §9 step 2): the stock reads the description, a
+    // blank row, then `"What is thy`; this engine drew a lone `"` row and a
+    // blank above a second opening quote.
+    if prompt == crate::TLK_ASK_WHO_PROMPT && opening.text.ends_with('"') {
+        rendered.push_plain(prompt.strip_prefix('"').unwrap_or(prompt));
+        return rendered;
+    }
     let mut feeds = 0usize;
     for glyph in tail {
         if glyph.byte == b'\n' {
@@ -7795,6 +7812,32 @@ mod conversation_opening_hold_tests {
             )
             .text,
             "once the hold is over the window reads as it did without one"
+        );
+    }
+
+    /// `conversation.md §7.7` HEAD + §7.6: a Description GOTO into a head
+    /// that opens on ASK-WHO leaves the HEAD quote as the stream's last byte,
+    /// and the handler's own opening quote is dropped after it - one quote,
+    /// no padding (`town-talk-speaker`, beat `talk`). A quote followed by the
+    /// stream's own feeds keeps the ordinary shape.
+    #[test]
+    fn an_ask_who_after_the_head_quote_continues_it() {
+        let rendered = conversation_opening_rendered(
+            &TlkRenderedText::plain("a grave wizard.\n\n\""),
+            crate::TLK_ASK_WHO_PROMPT,
+        );
+        assert_eq!(
+            rendered.text,
+            "\nYou see a grave wizard.\n\n\"What is thy name?\"\n\nYou respond-\n:"
+        );
+        assert_eq!(rendered.glyphs.len(), rendered.text.len());
+        let fed = conversation_opening_rendered(
+            &TlkRenderedText::plain("a giant rat!\n\n\"Squeek...\"\n\n"),
+            crate::TLK_ASK_WHO_PROMPT,
+        );
+        assert_eq!(
+            fed.text,
+            format!("\nYou see a giant rat!\n\n\"Squeek...\"\n\n{}", crate::TLK_ASK_WHO_PROMPT)
         );
     }
 

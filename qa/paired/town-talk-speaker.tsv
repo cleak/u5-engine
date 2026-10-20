@@ -21,6 +21,14 @@
 # engine followed the description's transfer only from the rc1 merges onward,
 # and ran on into `Your interest?` until the fix on branch `triage-town-talk`.
 # Every beat is therefore comparable.
+#
+# rc4 sweep (20261020-154909), beat `talk`: after the spec2 conversation
+# merges the engine printed the label handler's HEAD quote (`conversation.md`
+# §7.7) as a lone `"` row and padded a blank under it before the ASK-WHO
+# question's own quote. The stock prints one quote: the head opens on ASK-WHO,
+# whose own opening quote the byte runner drops after the HEAD quote (§7.6),
+# so `"What is thy name?"` follows the description's blank row directly.
+# Fixed on rc4.
 # requires-seed: profile `seed-town-talk-speaker-reseeded`, built by qa/tools/reseed.py
 both	wait	15000
 both	key	space

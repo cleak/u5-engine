@@ -390,3 +390,30 @@ fn rc4_the_record_five_exit_beat_key_wait_draws_its_cursor_two_rows_down() {
     assert!(state.message_window_live_row_suppressed());
     let _ = fs::remove_dir_all(dir);
 }
+
+/// `conversation.md §9` step 2's Britain wizard, party unknown: the
+/// Description feeds twice, misses its IF-ELSE and GOTOs a block whose head
+/// opens on ASK-WHO. The opener's stream therefore ends on the label
+/// handler's HEAD quote (`§7.7` step 1), which the ASK-WHO question continues
+/// (see `conversation_opening_rendered`).
+#[test]
+fn rc4_a_description_goto_into_ask_who_ends_the_opening_on_the_head_quote() {
+    let mut description = rc4_enc("a grave wizard.\r\r");
+    description.extend([TLK_CODE_IF_ELSE, 0x94, 0x91]);
+    let mut head = vec![TLK_CODE_ASK_WHO];
+    head.extend(rc4_enc("\"\r\r"));
+    head.extend([TLK_CODE_IF_ELSE, 0x92]);
+    head.extend(rc4_enc("Good day!\"\r"));
+    head.push(TLK_CODE_END_STREAM);
+    let mut raw = rc4_description_goto_blob(head.clone(), head);
+    raw[1] = description;
+    let decoded = rc4_decoded(&raw);
+    let mut state = test_state(open_grid(), 1, 1);
+    state.active_conversation_npc_slot = Some(1);
+    let mut session = crate::conversation_session::ConversationSession::new(raw, decoded);
+    session.set_npc_slot(Some(1));
+    state.active_conversation = Some(Box::new(session));
+    let opening = state.active_conversation_greeting_rendered_with_host_seed(0x0456);
+    assert_eq!(opening.text, "a grave wizard.\n\n\"");
+    assert!(state.active_conversation.as_ref().unwrap().awaiting_ask_who());
+}
