@@ -157,3 +157,7 @@ dungeon-chest-jimmy	seed-dungeon-chest-jimmy	the dungeon-look party re-placed on
 dungeon-two-way-ladder	seed-dungeon-two-way-ladder	the dungeon-look party re-placed onto a Deceit two-way ladder
 sail-calm	seed-sail-calm	seed-drowning-collision with the wind byte set to Calm (0x02EC = 0)
 sail-heading-echo	seed-drowning-collision	same seed as drowning-collision, sailed west into open water
+asleep-dungeon	seed-asleep-dungeon	the dungeon-search seat grown to three (0x02B5 = 3) with all three status bytes set to S
+asleep-overworld	seed-asleep-overworld	the night-cast overworld party grown to three, all three status bytes set to S
+asleep-town	seed-asleep-town	the town-hidden-door Britain seat grown to three, all three status bytes set to S
+asleep-dungeon-clock	seed-asleep-dungeon-late	seed-asleep-dungeon with the clock set to 23:55 (0x02D9 = 0x02DA = 23, 0x02DB = 55)
