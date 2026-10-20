@@ -465,9 +465,10 @@ pub fn dungeon_look_focus_from_key(key: char) -> Option<DungeonLookFocus> {
 /// The interactive `Dir-` chooser's reading of a key: the four cardinal
 /// input codes and nothing else.
 ///
-/// `input.md §5`: "Dungeon mode is the one exception ... it does not run the
-/// digit-to-direction translation at all, so shifted or NumLock-ed top-row
-/// digits stay ordinary digits there", and `dungeon-mode.md §12` gives the
+/// The key arrives as the frontend translated it (`input.md §5`; the dungeon
+/// exception there - "does not run the digit-to-direction translation at
+/// all" - is scoped to the dungeon command reader by u5-spec#299 Q18,
+/// `RETRACTIONS.md` R572), and `dungeon-mode.md §12` gives the
 /// chooser only Up/Left/Right/Down and Space, every other key "ignored
 /// without echo". [`dungeon_look_focus_from_key`] keeps the compass digits
 /// for the harness's inline `L`/`S` operands, which are not keystrokes at

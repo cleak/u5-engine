@@ -13423,9 +13423,9 @@ fn drive_visual(
     let modal_prompt_active = visual_line_prompt_active(&visual.state)
         || visual_modal_prompt_active(&visual.state)
         || combat_targeting_cursor_owns_keyboard(&visual.state);
-    // `dungeon-mode.md §10` / `input.md §5`: the dungeon does not run the
-    // shifted-digit-to-direction translation, so Shift is not a direction
-    // modifier for the top-row digits there.
+    // `dungeon-mode.md §10` / `input.md §5`: the dungeon command reader does
+    // not run the shifted-digit-to-direction translation, so Shift is not a
+    // direction modifier for the top-row digits at its prompt.
     let digit_translation = !dungeon_skips_digit_translation(&visual.state);
     let repeat_command = held_direction_repeat_command(
         &keyboard,
@@ -13554,13 +13554,22 @@ fn drive_visual(
     queue_pending_speaker_effects(v, &mut speaker);
 }
 
-/// `dungeon-mode.md §10`: "Dungeon mode is also the one mode that does not
-/// run the shifted-digit-to-direction translation of `input.md` Section 5.
-/// Shifted or NumLock-ed top-row digits stay ordinary digits underground and
-/// select a solo party member like any other digit." Combat keeps its own
-/// parser, so a dungeon-room fight still translates.
+/// `dungeon-mode.md §10`: "Dungeon mode is also the one mode whose own
+/// command reader does not run the shifted-digit-to-direction translation of
+/// `input.md` Section 5. Shifted or NumLock-ed top-row digits stay ordinary
+/// digits at the dungeon command prompt". Combat keeps its own parser, so a
+/// dungeon-room fight still translates.
+///
+/// u5-spec#299 Q18 (`RETRACTIONS.md` R572) withdrew "does not run the
+/// translation at all": "Resident prompts reached from a dungeon read keys
+/// through the shared resident reader and do translate them (Section 11's
+/// hours prompt)". The hole-up prompts are the resident prompts §11 names,
+/// so they translate; which other dungeon prompts read through the shared
+/// reader is not enumerated, and they keep the earlier behaviour.
 fn dungeon_skips_digit_translation(state: &PlayState) -> bool {
-    matches!(state.area, u5_runtime::Area::Dungeon { .. }) && !state.combat_active
+    matches!(state.area, u5_runtime::Area::Dungeon { .. })
+        && !state.combat_active
+        && state.active_rest.is_none()
 }
 
 fn is_top_row_digit(key: KeyCode) -> bool {
@@ -19705,6 +19714,19 @@ mod tests {
                 .all(|pixel| pixel == [0x00, 0x00, 0x00, 0xff]),
             "no billboard bank is installed for the synthetic fixture, so nothing is painted"
         );
+    }
+
+    /// u5-spec#299 Q18 / `RETRACTIONS.md` R572: the dungeon command prompt
+    /// keeps shifted top-row digits as digits, but the hole-up hours prompt
+    /// is resident and "with Shift or NumLock held the top-row `1`-`4` and
+    /// `6`-`9` arrive as direction codes and are discarded".
+    #[test]
+    fn dungeon_hours_prompt_runs_the_shifted_digit_translation() {
+        let mut state = dungeon_state(open_dungeon_record(), 0, 1, 1);
+        assert!(dungeon_skips_digit_translation(&state));
+        u5_runtime::handle_play_key_input(&mut state, 'h', "", Path::new("")).unwrap();
+        assert!(state.active_rest.is_some());
+        assert!(!dungeon_skips_digit_translation(&state));
     }
 
     #[test]
