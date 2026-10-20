@@ -521,6 +521,37 @@ impl PlayState {
         }
     }
 
+    /// Write a status change that is the turn boundary's, not the
+    /// command's: the town underfoot handler's 1-in-16 wake roll
+    /// (`town-mode.md §7`), which neither repaints the panel nor raises the
+    /// request (`stats-panel.md §2.2`: "Nothing refreshes the panel at a turn
+    /// boundary"; §2.3: "Town consumes but never raises").
+    ///
+    /// The dispatcher applies the running command's panel mechanism to every
+    /// change between the command's start and its end. The command's own
+    /// changes all precede this per-turn pass, so its mechanism is settled
+    /// here first - an immediate site paints the panel as it stood before the
+    /// wake, a deferred one raises the request - and the baseline then moves
+    /// past the wake, so only changes made after it (a trapdoor's damage,
+    /// say) are still the dispatcher's to apply.
+    pub(crate) fn wake_town_sleepers_without_panel_refresh(&mut self, members: &[usize]) {
+        if crate::stats_panel::stats_panel_snapshot_of(self) != self.stats_panel_command_baseline {
+            match self.stats_panel_command_refresh {
+                crate::stats_panel::PanelRefreshMode::Immediate => self.repaint_stats_panel(),
+                crate::stats_panel::PanelRefreshMode::Deferred => {
+                    self.request_stats_panel_refresh()
+                }
+                crate::stats_panel::PanelRefreshMode::None => {}
+            }
+        }
+        for &index in members {
+            if let Some(member) = self.party.get_mut(index) {
+                member.status = b'G';
+            }
+        }
+        self.stats_panel_command_baseline = crate::stats_panel::stats_panel_snapshot_of(self);
+    }
+
     /// Raise §2.2's deferred request. A raise "does not depend on the change
     /// surviving" - it is never lowered by a rollback.
     pub fn request_stats_panel_refresh(&mut self) {

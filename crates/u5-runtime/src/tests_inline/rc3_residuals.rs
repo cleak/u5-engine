@@ -373,3 +373,146 @@ fn rc3_spell_target_escape_completes_the_on_who_row() {
     assert!(!rows.iter().any(|row| row == "None!"), "{rows:#?}");
     assert!(!state.message_row_open_mid_line);
 }
+
+/// `town-mode.md §7`'s 1-in-16 wake roll is per-turn work that neither
+/// repaints the panel nor raises the request (`stats-panel.md §2.2`:
+/// "Nothing refreshes the panel at a turn boundary"; §2.3: "Town consumes
+/// but never raises"). **Measured** 2026-10-19 (`qa/paired/asleep-town.tsv`):
+/// the stock panel keeps the woken member's `S` through many Passes. The
+/// dispatcher's end-of-command comparison used to attribute the wake to the
+/// `Pass` command and repaint `G`.
+#[test]
+fn rc3_town_wake_roll_keeps_the_sleepers_s_on_the_panel_through_passes() {
+    let dir = debug_game_dir();
+    let mut state = test_state(open_grid(), 1, 1);
+    state.party = vec![default_party()[0]; 2];
+    state.party[1].slot = 1;
+    state.party[1].status = b'S';
+    state.clock = GameClock::new(8, 0).unwrap();
+    state.repaint_stats_panel();
+    assert_eq!(state.stats_panel.statuses[1], Some(b'S'));
+
+    let mut passes = 0;
+    while state.party[1].status == b'S' {
+        passes += 1;
+        assert!(passes < 50, "no wake within 50 town passes");
+        handle_play_key_input(&mut state, ' ', "", &dir).unwrap();
+        assert_eq!(
+            state.stats_panel.statuses[1],
+            Some(b'S'),
+            "pass {passes}: the wake roll repainted the panel"
+        );
+    }
+    for _ in 0..5 {
+        handle_play_key_input(&mut state, ' ', "", &dir).unwrap();
+        assert_eq!(state.stats_panel.statuses[1], Some(b'S'));
+    }
+    assert_eq!(state.clock.hour, 8, "no hour or day boundary crossed");
+    // Any later full repaint shows the live status (§2.4: "until some
+    // unrelated event repaints the panel").
+    state.repaint_stats_panel();
+    assert_eq!(state.stats_panel.statuses[1], Some(b'G'));
+    let _ = fs::remove_dir_all(dir);
+}
+
+/// The command's own panel mechanism still applies to what the command
+/// changed before the per-turn wake: an immediate site paints the panel as
+/// it stood before the wake, and only the wake itself is left unpainted.
+#[test]
+fn rc3_town_wake_settles_the_commands_own_immediate_repaint_first() {
+    let mut state = test_state(open_grid(), 1, 1);
+    state.party = vec![default_party()[0]; 2];
+    state.party[1].slot = 1;
+    state.party[1].status = b'S';
+    state.repaint_stats_panel();
+    state.stats_panel_command_refresh = crate::stats_panel::PanelRefreshMode::Immediate;
+    state.stats_panel_command_baseline = crate::stats_panel::stats_panel_snapshot_of(&state);
+    let hp_before = state.party[0].hp;
+    state.party[0].hp = hp_before - 1;
+
+    state.wake_town_sleepers_without_panel_refresh(&[1]);
+
+    assert_eq!(state.party[1].status, b'G');
+    assert_eq!(state.stats_panel.statuses[1], Some(b'S'));
+    let painted = crate::stats_panel::stats_panel_snapshot_of(&state).rows[0].clone();
+    assert_eq!(
+        state.stats_panel.rows[0], painted,
+        "the HP change was painted"
+    );
+    assert_eq!(
+        state.stats_panel_command_baseline,
+        crate::stats_panel::stats_panel_snapshot_of(&state)
+    );
+
+    // A deferred command raises its request instead of painting.
+    let mut state = test_state(open_grid(), 1, 1);
+    state.party = vec![default_party()[0]; 2];
+    state.party[1].status = b'S';
+    state.repaint_stats_panel();
+    state.stats_panel_command_refresh = crate::stats_panel::PanelRefreshMode::Deferred;
+    state.stats_panel_command_baseline = crate::stats_panel::stats_panel_snapshot_of(&state);
+    state.party[0].hp -= 1;
+    let stale = state.stats_panel.clone();
+    state.wake_town_sleepers_without_panel_refresh(&[1]);
+    assert_eq!(state.stats_panel, stale);
+    assert!(state.stats_panel_refresh_requested);
+}
+
+/// `stats-panel.md §2.4` / `time.md §7`: "The shared per-turn clock repaints
+/// the whole panel exactly once per in-game day boundary"; a call that leaves
+/// the hour short of a day bypasses it.
+#[test]
+fn rc3_day_rollover_repaints_the_stats_panel() {
+    let mut state = test_state(open_grid(), 1, 1);
+    state.clock = GameClock::new(22, 59).unwrap();
+    state.repaint_stats_panel();
+    let painted = state.stats_panel.clone();
+    state.party[0].hp -= 1;
+
+    // An hour crossing short of a day: no repaint.
+    state.advance_turn();
+    assert_eq!(state.clock.hour, 23);
+    assert_eq!(state.stats_panel, painted);
+
+    state.clock = GameClock::new(23, 59).unwrap();
+    let day_before = state.clock.day;
+    state.advance_turn();
+    assert_ne!(state.clock.day, day_before);
+    assert_eq!(
+        state.stats_panel,
+        crate::stats_panel::stats_panel_snapshot_of(&state),
+        "the day rollover repaints the whole panel"
+    );
+    assert_ne!(state.stats_panel.date_row, painted.date_row);
+    assert_ne!(state.stats_panel.rows[0], painted.rows[0]);
+
+    // The dungeon loop-head clock half takes the same repaint.
+    let mut state = dungeon_state(open_dungeon_record(), 0, 1, 1);
+    state.clock = GameClock::new(23, 59).unwrap();
+    state.repaint_stats_panel();
+    state.party[0].hp -= 1;
+    state.advance_clock_half(1);
+    assert_eq!(
+        state.stats_panel,
+        crate::stats_panel::stats_panel_snapshot_of(&state)
+    );
+}
+
+/// The rollover repaint is the clock's own, so it runs whatever the
+/// command's mechanism is: under a command that declines its own refresh
+/// (`PanelRefreshMode::None`, the wishing well's arms) a turn across
+/// midnight still shows the new date.
+#[test]
+fn rc3_day_rollover_repaints_even_under_a_command_that_declines_its_refresh() {
+    let mut state = test_state(open_grid(), 1, 1);
+    state.clock = GameClock::new(23, 59).unwrap();
+    state.repaint_stats_panel();
+    let painted = state.stats_panel.clone();
+    state.stats_panel_command_refresh = crate::stats_panel::PanelRefreshMode::None;
+    state.advance_turn();
+    assert_ne!(state.stats_panel.date_row, painted.date_row);
+    assert_eq!(
+        state.stats_panel.date_row,
+        crate::stats_panel::stats_panel_snapshot_of(&state).date_row
+    );
+}

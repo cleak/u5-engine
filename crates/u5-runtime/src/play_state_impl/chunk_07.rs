@@ -3980,12 +3980,13 @@ impl PlayState {
         // every sleeping active member an independent 1-in-16 wake roll.
         // This intentionally precedes trapdoor damage and every other tile
         // effect, including on the automatic no-input sleep pass.
-        for member in &mut self.party {
+        let mut waking = Vec::new();
+        for (index, member) in self.party.iter().enumerate() {
             if member.status == b'S'
                 && u5_prng_range_u16(&mut self.prng_state, 0, u16::from(TOWN_SLEEP_WAKE_ROLL_MAX))
                     == 0
             {
-                member.status = b'G';
+                waking.push(index);
             }
         }
         // No panel repaint here, and no request either. **Measured**
@@ -3994,6 +3995,15 @@ impl PlayState {
         // a few passes - Space is then accepted as `Pass` - yet the panel
         // keeps showing all three members `S` through three minutes and
         // twelve Passes. The combat wake does repaint (`asleep-overworld`).
+        //
+        // The wake is per-turn work, not the command's: `stats-panel.md
+        // §2.2` "Nothing refreshes the panel at a turn boundary" and §2.3
+        // "Town consumes but never raises". The dispatcher's end-of-command
+        // comparison would otherwise attribute the status change to the
+        // command (`Pass` is an immediate site by default) and repaint `G`.
+        if !waking.is_empty() {
+            self.wake_town_sleepers_without_panel_refresh(&waking);
+        }
         let tile = self.grid[self.player.y * 32 + self.player.x];
         if !matches!(self.player.transport, TransportState::Carpet { .. }) {
             if let Some(entry) =

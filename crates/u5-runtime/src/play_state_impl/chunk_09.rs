@@ -3084,6 +3084,18 @@ impl PlayState {
     /// daylight recompute, without bumping the action counter or entering
     /// any post-action pass. `effective_minutes` is already scaled by the
     /// timed-effect clock rules.
+    /// `stats-panel.md §2.4` / `time.md §7`: "The shared per-turn clock
+    /// repaints the whole panel exactly once per in-game day boundary" - the
+    /// day-in-range, month-roll and year-roll arms all converge on it, after
+    /// the calendar cascade. A call that leaves the hour short of a day, or
+    /// advances no time, bypasses it. It is the clock's own repaint, so it
+    /// runs whatever panel mechanism the command in progress uses.
+    pub(crate) fn repaint_stats_panel_on_day_rollover(&mut self, previous_day: u8) {
+        if self.clock.day != previous_day {
+            self.repaint_stats_panel();
+        }
+    }
+
     pub(crate) fn advance_clock_half(&mut self, effective_minutes: u8) {
         let previous_day = self.clock.day;
         let previous_hour = self.clock.hour;
@@ -3110,6 +3122,7 @@ impl PlayState {
             age_stay_counters_month(&mut self.party_stay_counters);
             age_inn_registry_month(&mut self.inn_registry);
         }
+        self.repaint_stats_panel_on_day_rollover(previous_day);
         // `time.md §11` (spec `0170809`): the bundle's gate is the
         // snapshot at `0x02DA` disagreeing with the hour at `0x02D9`.
         // Inside a time-advancing pass the snapshot was taken from the
@@ -3246,6 +3259,7 @@ impl PlayState {
             age_stay_counters_month(&mut self.party_stay_counters);
             age_inn_registry_month(&mut self.inn_registry);
         }
+        self.repaint_stats_panel_on_day_rollover(previous_day);
         // `time.md §11` (spec `0170809`) / `RETRACTIONS.md` R338: the
         // hour-change bundle's gate is the **saved-hour snapshot** at
         // `0x02DA` disagreeing with the hour at `0x02D9`, "not ... a
