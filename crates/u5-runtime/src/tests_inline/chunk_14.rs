@@ -3177,6 +3177,7 @@
                 guest_indices: [0; INN_REGISTRY_CAP],
                 guest_count: 1,
                 base_lodging_charge: 22,
+                highlight: 0,
             },
         ));
 

@@ -1151,8 +1151,8 @@ fn chargen_question_count_anchors_to_questions_per_round_sum() {
 
 #[test]
 fn save_inn_registry_offset_anchors_to_roster_and_record_len() {
-    // formats/saved-gam.md §3: the inn registry view starts
-    // at the inn-marker byte of the first character record.
+    // formats/saved-gam.md §3.3: the first record's inn-lodging
+    // marker (the registry has no region of its own, R570).
     // Each character record is SAVE_CHARACTER_RECORD_LEN
     // bytes wide; the inn marker sits at the last byte of
     // the record. Anchor SAVE_INN_REGISTRY_OFFSET to
@@ -2883,11 +2883,10 @@ fn save_dungeon_room_clear_rooms_anchor_to_dungeon_room_slots_per_bank() {
 
 #[test]
 fn save_inn_registry_count_anchors_to_save_roster_slot_count() {
-    // shops.md §8.4: the inn registry is "a 16-slot, save-
-    // backed resident view... a shifted legacy view over the
-    // save image rather than an independent post-roster
-    // block" — the registry's slot count is the same sixteen
-    // slots the character roster carries. Anchor
+    // shops.md §8.4 (u5-spec#299 Q14): the inn registry is
+    // "the roster's own sixteen records, each carrying an inn
+    // marker in its last byte" — the registry's slot count is
+    // the same sixteen slots the character roster carries. Anchor
     // SAVE_INN_REGISTRY_COUNT to SAVE_ROSTER_SLOT_COUNT so
     // the registry and the roster share one source of truth.
     assert_eq!(SAVE_INN_REGISTRY_COUNT, SAVE_ROSTER_SLOT_COUNT);
@@ -3098,9 +3097,9 @@ fn shop_gold_and_food_caps_anchor_to_party_counters() {
 
 #[test]
 fn inn_registry_cap_anchors_to_save_roster_slot_count() {
-    // shops.md §8.4: the inn registry is a 16-slot shifted view
-    // over the save image's roster region — the registry cap and
-    // the save roster slot count are the same sixteen slots.
+    // shops.md §8.4 (u5-spec#299 Q14): the inn registry is the
+    // roster's own sixteen records — the registry cap and the save
+    // roster slot count are the same sixteen slots.
     assert_eq!(INN_REGISTRY_CAP, SAVE_ROSTER_SLOT_COUNT);
     assert_eq!(INN_REGISTRY_CAP, 16);
 }
@@ -17138,10 +17137,11 @@ fn lord_british_camp_event_helpers_match_spec() {
 #[test]
 fn rest_status_predicates_match_spec_tables() {
     // rest-and-camp.md §5
-    // Rest-with-watch participation.
+    // Rest-with-watch participation: "Good or Poisoned" (`dungeon-mode.md
+    // §11`, u5-spec#299 Q18).
     assert!(rest_with_watch_participates(CharacterStatus::Good));
     assert!(rest_with_watch_participates(CharacterStatus::Poisoned));
-    assert!(rest_with_watch_participates(CharacterStatus::Sleeping));
+    assert!(!rest_with_watch_participates(CharacterStatus::Sleeping));
     assert!(!rest_with_watch_participates(CharacterStatus::Charmed));
     assert!(!rest_with_watch_participates(CharacterStatus::Dead));
     assert!(!rest_with_watch_participates(CharacterStatus::Ashes));

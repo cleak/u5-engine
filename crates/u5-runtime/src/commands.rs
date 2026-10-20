@@ -2026,6 +2026,11 @@ pub const DUNGEON_KLIMB_PROMPT_BOTH: &str = "Klimb-U/D-";
 pub const DUNGEON_KLIMB_PROMPT_ONE: &str = "Klimb-";
 pub const DUNGEON_KLIMB_WITH_WHAT_REFUSAL: &str = "Klimb-\nWith What?\n";
 pub const DUNGEON_KLIMB_WHAT_REFUSAL: &str = "Klimb-what?\n";
+/// `combat.md §8.4` "Adjacent-climb prompt" (u5-spec#299 Q13): a refused
+/// arena climb target prints `What?\n` on its own row under the `Klimb-`
+/// row its direction name completed. It is not the dungeon handler's
+/// `Klimb-what?` literal above.
+pub const COMBAT_KLIMB_ADJACENT_REFUSAL: &str = "What?";
 pub const DUNGEON_KLIMB_PASS: &str = "Pass\n\n";
 /// Applying a climb prints the direction word **first**, before any test.
 pub const DUNGEON_KLIMB_UP: &str = "Up!\n";

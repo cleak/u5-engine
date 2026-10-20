@@ -797,6 +797,9 @@ pub enum InnkeeperState {
         guest_indices: [usize; INN_REGISTRY_CAP],
         guest_count: u8,
         base_lodging_charge: u16,
+        /// `shops.md §8.C` "Guest Register keys" (u5-spec#299 Q15): the
+        /// listed guest the highlight is on, starting on the topmost.
+        highlight: u8,
     },
     ConfirmPickUpCompanion {
         inn: Inn,
@@ -935,6 +938,7 @@ pub fn step_innkeeper(
                     guest_indices: [0; INN_REGISTRY_CAP],
                     guest_count: 0,
                     base_lodging_charge: inn_base_room_rate(inn),
+                    highlight: 0,
                 };
                 InnkeeperOutcome::PickUpCompanion
             }
@@ -1001,6 +1005,7 @@ pub fn step_innkeeper(
                 guest_indices,
                 guest_count,
                 base_lodging_charge,
+                ..
             },
             InnkeeperInput::GuestChoice(choice),
         ) if choice < guest_count as usize => {
@@ -1024,6 +1029,7 @@ pub fn step_innkeeper(
                 guest_indices,
                 guest_count,
                 base_lodging_charge,
+                ..
             },
             InnkeeperInput::GuestChoiceWithStay {
                 choice,
@@ -1274,10 +1280,6 @@ impl TypedQuantityEntry {
         std::str::from_utf8(&self.bytes[..usize::from(self.len)]).unwrap_or("")
     }
 
-    fn digit_count(&self) -> usize {
-        self.as_str().bytes().filter(u8::is_ascii_digit).count()
-    }
-
     /// Apply one key the reader classifies; returns `true` for Return.
     pub fn apply(&mut self, byte: u8) -> bool {
         use crate::input_codes::{NumericPromptAction, numeric_prompt_action};
@@ -1285,7 +1287,10 @@ impl TypedQuantityEntry {
             NumericPromptAction::Submit => return true,
             NumericPromptAction::ClearEcho => self.len = 0,
             NumericPromptAction::Pop => self.len = self.len.saturating_sub(1),
-            NumericPromptAction::AppendDigit(_) if self.digit_count() < Self::DIGITS => {
+            // `input.md §8` / `shops.md §8.5` (u5-spec#299 Q16): a leading
+            // sign "counts toward the cap, so at a cap of two `-99` echoes
+            // `-9`". The cap is on positions, not on digits.
+            NumericPromptAction::AppendDigit(_) if usize::from(self.len) < Self::DIGITS => {
                 self.bytes[usize::from(self.len)] = byte;
                 self.len += 1;
             }
@@ -1300,10 +1305,12 @@ impl TypedQuantityEntry {
         false
     }
 
-    /// The submitted quantity. An empty entry (or a bare sign) is zero. A
-    /// negative entry is passed on as the unsigned word the pay loop
-    /// compares - the reading `magic.md §6` publishes for the reader's other
-    /// caller; `shops.md §8.5` does not state the tavern's own.
+    /// The submitted quantity. An empty entry, a bare sign or `-0` is zero
+    /// (the `Hrumph.` path) and a leading `+` is ignored. A negative entry is
+    /// passed on as the unsigned word the pay loop counts down: `shops.md
+    /// §8.5`, "A negative quantity" (u5-spec#299 Q16) - "In effect the value
+    /// is unsigned, as in the mixer, but here the result is a purchase rather
+    /// than a retry", bounded only by gold and the 9999 food stop.
     pub fn quantity(&self) -> u16 {
         self.as_str().parse::<i16>().unwrap_or(0) as u16
     }
@@ -3108,6 +3115,7 @@ mod tests {
             guest_indices: [0; INN_REGISTRY_CAP],
             guest_count: 1,
             base_lodging_charge: 3,
+            highlight: 0,
         };
         assert_eq!(
             step_innkeeper(&mut pickup, InnkeeperInput::GuestChoice(0), high_int),
@@ -3132,6 +3140,7 @@ mod tests {
             guest_indices: [2; INN_REGISTRY_CAP],
             guest_count: 1,
             base_lodging_charge: 3,
+            highlight: 0,
         };
 
         assert_eq!(

@@ -1206,10 +1206,11 @@ pub enum ProvisionPurchaseError {
     NoNeed,
 }
 
-/// `shops.md §8.4`: the inn registry is "a 16-slot, save-backed
-/// resident view... a shifted legacy view over the save image
-/// rather than an independent post-roster block" — so the registry
-/// cap is the same 16 roster slots the save file already exposes.
+/// `shops.md §8.4` (u5-spec#299 Q14): "The inn registry is the inn's
+/// persistent state: the roster's own sixteen records, each carrying an inn
+/// marker in its last byte" - so the registry cap is the same 16 roster
+/// slots the save file already exposes. (The "shifted legacy view" wording
+/// is `RETRACTIONS.md` R569.)
 /// Anchored to [`crate::SAVE_ROSTER_SLOT_COUNT`] to keep the shop
 /// path and the save image in lockstep.
 pub const INN_REGISTRY_CAP: usize = crate::SAVE_ROSTER_SLOT_COUNT;
@@ -1456,10 +1457,11 @@ pub const fn inn_main_action(byte: u8) -> InnMainAction {
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct InnGuestRecord {
-    /// Index of this guest's slot in the sixteen-slot shifted registry view of
-    /// `formats/saved-gam.md` §3.3. The registry overlaps the character roster,
-    /// so a guest must be written back at the slot it came from; repacking the
-    /// list from slot zero shifts whole roster records.
+    /// The roster record this lodged guest is (`formats/saved-gam.md` §3.3,
+    /// u5-spec#299 Q14: "a lodged companion is an ordinary roster record
+    /// outside the travelling party"). A guest must be written back at the
+    /// record it came from; repacking the list from slot zero shifts whole
+    /// roster records.
     pub registry_slot: u8,
     pub scene_marker: u8,
     pub name: [u8; SAVE_CHARACTER_NAME_LEN],
@@ -2705,20 +2707,19 @@ pub fn apply_inn_leave_guest(
     if party[party_index].status == b'D' {
         return Err(InnError::DeadCompanion);
     }
-    // `shops.md §8.4`: the record moves into the registry view and "the
-    // active roster is compacted". The registry view's guest of slot `N` is
-    // roster record `N` itself (`crate::inn_registry_guest_record_offset`),
-    // so the departing record lands in the roster slot the compaction
-    // vacates - the old last travelling index - and no other character
-    // record is overwritten. Which slot the original picks is unpublished;
-    // this is the one choice that loses no record (playtest E43).
-    let registry_slot = (party.len() - 1) as u8;
-    if usize::from(registry_slot) >= crate::SAVE_INN_REGISTRY_COUNT
-        || registry
-            .iter()
-            .any(|guest| guest.registry_slot == registry_slot)
-    {
-        return Err(InnError::RegistryFull);
+    // `shops.md §8.4` `L` (u5-spec#299 Q14, `RETRACTIONS.md` R569): "The
+    // record is then moved, whole, to the last roster slot (slot 15), every
+    // record after it moves down one slot". A lodged guest of registry slot
+    // `N` is roster record `N` itself (`crate::inn_registry_guest_record_offset`),
+    // so the other guests' records - all after the leaving member - move down
+    // one with their markers ("other lodged guests keep their markers when
+    // their records shift"). The withdrawn reading parked the record in the
+    // old last travelling slot.
+    let registry_slot = (crate::SAVE_INN_REGISTRY_COUNT - 1) as u8;
+    for other in registry.iter_mut() {
+        if usize::from(other.registry_slot) > party_index {
+            other.registry_slot -= 1;
+        }
     }
 
     let member = party.remove(party_index);
@@ -2848,12 +2849,12 @@ pub fn apply_inn_pickup_guest_with_bill(
     let gold_before = *gold;
     *gold -= bill;
     registry.remove(registry_index);
-    // `shops.md §8.4`: "the guest's record is copied into the next active
-    // roster slot ... the registry view is compacted as needed". The returned
-    // record moves from roster slot `guest.registry_slot` to slot
-    // `party.len()`, and the records between shift up one, carrying their
-    // guests' registry slots with them (see `PlayState::pickup_inn_guest*`
-    // for the matching roster rotation).
+    // `shops.md §8.4` `P` (u5-spec#299 Q14, R569): "The guest's whole record
+    // moves into the first slot after the travelling party, and the records
+    // that lay between shift up one slot each." The returned record moves
+    // from roster slot `guest.registry_slot` to slot `party.len()`, carrying
+    // the other guests' registry slots with their records (see
+    // `PlayState::pickup_inn_guest*` for the matching roster rotation).
     let destination = party.len() as u8;
     for other in registry.iter_mut() {
         if (destination..guest.registry_slot).contains(&other.registry_slot) {
@@ -3577,6 +3578,12 @@ impl PlayState {
         party_index: usize,
         base_lodging_charge: u16,
     ) -> Result<InnLeaveOutcome, InnError> {
+        // The roster record at `party_index` must be the leaving member's own
+        // record (New Order permutes the active vectors without the roster),
+        // because it is that whole record which moves.
+        if !self.party_roster.is_empty() {
+            self.party_roster = self.synced_party_roster();
+        }
         let outcome = apply_inn_leave_guest(
             &mut self.gold,
             &mut self.inn_registry,
@@ -3591,9 +3598,22 @@ impl PlayState {
             party_index,
             base_lodging_charge,
         )?;
-        // Keep the whole-record roster in step with the compaction: the
-        // departing record is now roster record `registry_slot`.
-        self.rotate_party_roster_record(party_index, usize::from(outcome.guest.registry_slot));
+        // Keep the whole-record roster in step: the departing record is now
+        // roster record `registry_slot` (slot 15). `shops.md §8.4` `L`: its
+        // "own inn marker (`+0x1F`) set to the current inn scene and its stay
+        // counter cleared to zero".
+        let to = usize::from(outcome.guest.registry_slot);
+        if to < self.party_roster.len() {
+            self.rotate_party_roster_record(party_index, to);
+            if let Some(record) = self.party_roster.get_mut(to) {
+                record.inn_marker = scene_marker;
+                record.stay_counter = 0;
+            }
+        } else if party_index < self.party_roster.len() {
+            // A roster too short to hold slot 15 models only the travelling
+            // party; the guest lives on in the registry alone.
+            self.party_roster.remove(party_index);
+        }
         Ok(outcome)
     }
 
@@ -3606,6 +3626,14 @@ impl PlayState {
         }
         let record = self.party_roster.remove(from);
         self.party_roster.insert(to, record);
+    }
+
+    /// `shops.md §8.4` `P` (u5-spec#299 Q14): "the returned record's marker
+    /// is cleared to zero" once it has moved into the travelling party.
+    fn clear_returned_roster_inn_marker(&mut self, party_index: usize) {
+        if let Some(record) = self.party_roster.get_mut(party_index) {
+            record.inn_marker = crate::INN_REGISTRY_EMPTY_MARKER;
+        }
     }
 
     /// Keep the inn registry in step with a roster rotation that moves the
@@ -3664,6 +3692,7 @@ impl PlayState {
             usize::from(outcome.guest.registry_slot),
             outcome.party_index,
         );
+        self.clear_returned_roster_inn_marker(outcome.party_index);
         Ok(outcome)
     }
 
@@ -3691,6 +3720,7 @@ impl PlayState {
             usize::from(outcome.guest.registry_slot),
             outcome.party_index,
         );
+        self.clear_returned_roster_inn_marker(outcome.party_index);
         Ok(outcome)
     }
 }

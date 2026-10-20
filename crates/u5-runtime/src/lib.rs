@@ -1175,4 +1175,5 @@ mod tests {
     include!("tests_inline/playtest_combat2b_fixes.rs");
     include!("tests_inline/playfix2_shops.rs");
     include!("tests_inline/rc3_residuals.rs");
+    include!("tests_inline/spec299_c3.rs");
 }

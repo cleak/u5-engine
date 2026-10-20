@@ -1354,11 +1354,10 @@ fn save_load_maps_public_wind_save_values() {
 /// shipped `INIT.GAM` / `SAVED.GAM` images carry it: real names and stats, the
 /// `0xFF` unset sentinel in the per-character month counter at `+0x17`, the
 /// factory defense byte `7` at `+0x18`, the `0xFF` empty-equipment sentinel in
-/// all six slots, and `0xFF` in the opaque padding byte at `+0x1F`.
+/// all six slots, and `0xFF` in the inn-lodging marker byte at `+0x1F`.
 ///
-/// That padding byte is registry slot `N`'s leading marker in the shifted
-/// inn-guest view of §3.3, which is why the shipped layout is the case that
-/// matters for the registry codec.
+/// That byte is the record's own inn marker (§3.3, u5-spec#299 Q14), which is
+/// why the shipped layout is the case that matters for the registry codec.
 fn write_shipped_roster_layout(bytes: &mut [u8]) {
     const SEED: [(&[u8], u8, u8, u8, u8, u8, u16, u16, u8); 8] = [
         (b"BAFF", 0x0b, b'A', 21, 19, 18, 90, 90, 3),
@@ -1419,12 +1418,12 @@ fn assert_roster_records_unchanged(saved: &[u8], template: &[u8]) {
     }
 }
 
-/// `formats/saved-gam.md` §3.3: the inn-guest registry is "a shifted legacy
-/// view over the save image", so registry slot `N` overlaps roster records `N`
-/// and `N + 1`. A load followed immediately by a save performs no inn action
-/// and must therefore leave all sixteen roster records byte-for-byte intact.
+/// `formats/saved-gam.md` §3.3: the inn-guest registry is the roster itself,
+/// each record's last byte its inn marker (u5-spec#299 Q14). A load followed
+/// immediately by a save performs no inn action and must therefore leave all
+/// sixteen roster records byte-for-byte intact.
 ///
-/// The regression this pins: the decoder read the `0xFF` padding of §3.1 as an
+/// The regression this pins: the decoder read the `0xFF` marker byte as an
 /// occupied guest marker and the encoder repacked those phantom guests from
 /// slot zero, which shifted every companion record up three slots and deleted
 /// three companions outright on the first save of a shipped game.
@@ -1453,11 +1452,10 @@ fn no_action_load_and_save_preserves_every_shipped_roster_record() {
     let _ = fs::remove_dir_all(dir);
 }
 
-/// `systems/shops.md` §8.4: a lodged guest's slot "begins with a scene marker
-/// indicating *which* inn the guest is at", and enumeration "compares each
-/// slot's leading scene marker with the current scene". A guest parked at a
-/// real town scene must survive a load and save at the slot it occupies, and
-/// must not disturb the roster records its shifted view overlaps.
+/// `systems/shops.md` §8.4 (u5-spec#299 Q14): a lodged guest is a roster
+/// record whose "own inn marker (each record's last byte) matches the current
+/// inn scene". A guest parked at a real town scene must survive a load and
+/// save at the record it occupies, and must not disturb the other records.
 #[test]
 fn a_lodged_inn_guest_round_trips_at_its_own_registry_slot() {
     const GUEST_SLOT: usize = 5;

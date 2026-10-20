@@ -3724,6 +3724,8 @@ fn conversation_test_roster_record(
         strength: 15 + slot,
         intelligence: 18 + slot,
         equipment: [EQUIPMENT_EMPTY; EQUIPMENT_SLOT_COUNT],
+        defense: 0,
+        inn_marker: 0,
     }
 }
 
@@ -8007,7 +8009,14 @@ fn inn_multi_guest_pickup_bills_without_confirmation() {
 
     handle_play_key_input(&mut state, 'P', "", Path::new("")).unwrap();
     assert!(state.message.contains("\"Who will\ncheck out?\" "), "{:?}", state.message);
+    // `shops.md §8.C` "Guest Register keys" (u5-spec#299 Q15): "Digits
+    // never move the highlight and never commit"; South moves it down and
+    // Return commits.
     handle_play_key_input(&mut state, '2', "", Path::new("")).unwrap();
+    assert_eq!(state.party.len(), 1);
+    handle_play_key_input(&mut state, char::from(crate::INPUT_CODE_SOUTH), "", Path::new(""))
+        .unwrap();
+    handle_play_key_input(&mut state, '\r', "", Path::new("")).unwrap();
     assert_eq!(state.gold, 0);
     assert_eq!(state.party.len(), 2);
     assert!(state.message.contains("I hope thou hast found thy stay enjoyable,"));

@@ -767,20 +767,20 @@ pub const SAVE_ROSTER_OFFSET: usize = SAVE_LEADING_BYTES_LEN;
 /// `party-size` index hold characters who exist in Britannia but are
 /// not currently travelling with the player.
 pub const SAVE_ROSTER_SLOT_COUNT: usize = 16;
-/// `formats/saved-gam.md §3` inn registry view starts at the
-/// inn-marker byte of the first character record. Each character
-/// record is SAVE_CHARACTER_RECORD_LEN bytes wide; the inn
-/// marker sits at the last byte (offset record_len - 1) of the
-/// record. So the registry view starts at
+/// `formats/saved-gam.md §3.3`: the file offset of the first
+/// record's inn-lodging marker. The marker sits at the last byte
+/// (offset record_len - 1) of each character record, so record
+/// `N`'s marker is at this offset plus `N` record lengths:
 /// SAVE_ROSTER_OFFSET + (SAVE_CHARACTER_RECORD_LEN - 1) = 0x21.
-/// Anchored so the inn-registry offset derives from the roster
-/// layout.
+/// It is an addressing anchor only: u5-spec#299 Q14 withdrew the
+/// separate 512-byte registry region at `0x0021`-`0x0220`
+/// (`RETRACTIONS.md` R570) - "No inventory byte belongs to the
+/// registry or is ever read as a marker".
 pub const SAVE_INN_REGISTRY_OFFSET: usize = SAVE_ROSTER_OFFSET + SAVE_CHARACTER_RECORD_LEN - 1;
-/// `formats/saved-gam.md §3` / `shops.md §8.4`: the inn registry
-/// is "a 16-slot, save-backed resident view... a shifted legacy
-/// view over the save image rather than an independent
-/// post-roster block." Its slot count is the same sixteen slots
-/// the character roster carries. Anchored to
+/// `formats/saved-gam.md §3.3` / `shops.md §8.4` (u5-spec#299
+/// Q14): the inn registry is "the roster's own sixteen records,
+/// each carrying an inn marker in its last byte", so its slot
+/// count is the same sixteen slots the character roster carries. Anchored to
 /// [`SAVE_ROSTER_SLOT_COUNT`] so the registry and the roster
 /// share one source of truth.
 pub const SAVE_INN_REGISTRY_COUNT: usize = SAVE_ROSTER_SLOT_COUNT;

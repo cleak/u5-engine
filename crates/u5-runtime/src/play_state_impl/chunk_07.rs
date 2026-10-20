@@ -510,7 +510,12 @@ impl PlayState {
         }
         self.message.clear();
         if party_side && room_encounter && record.is_some_and(|stored| stored != code) {
-            self.emit_message_line(COMBAT_ALL_MUST_USE_SAME_EXIT_LINE);
+            // `combat.md §8.4` "Turn cost" (u5-spec#299 Q13): the shared-exit
+            // refusal "prints the ladder line, a blank row, then `All must use
+            // the same exit!` with its newline, and plays the 165 Hz /
+            // 200-unit bump tone", as the edge helper does for a direction
+            // key; the refusal is free (the caller re-prompts on `Blocked`).
+            self.emit_message_line(format!("\n{COMBAT_ALL_MUST_USE_SAME_EXIT_LINE}"));
             self.emit_sound_effect(SoundEffect::BlockedStep);
             return MoveOutcome::Blocked;
         }
@@ -553,7 +558,7 @@ impl PlayState {
             return MoveOutcome::Blocked;
         };
         if !direction.is_cardinal() {
-            self.message = DUNGEON_KLIMB_WHAT_REFUSAL.trim_end().to_string();
+            self.message = crate::commands::COMBAT_KLIMB_ADJACENT_REFUSAL.to_string();
             return MoveOutcome::Blocked;
         }
 
@@ -561,27 +566,34 @@ impl PlayState {
         let x = actor.x as isize + dx;
         let y = actor.y as isize + dy;
         if !combat_arena_coordinate_in_bounds(x as i16, y as i16) {
-            self.message = DUNGEON_KLIMB_WHAT_REFUSAL.trim_end().to_string();
+            self.message = crate::commands::COMBAT_KLIMB_ADJACENT_REFUSAL.to_string();
             return MoveOutcome::Blocked;
         }
         let x = x as usize;
         let y = y as usize;
-        // u5-spec#299 Q4 (`combat.md §8.4`, "Adjacent-climb prompt"): "The
+        // `combat.md §8.4` "Adjacent-climb prompt" (u5-spec#299 Q4, Q13): "The
         // only climbable adjacent target is a pile of rocks (`0x4C`) with no
         // object on it. The town command's wooden-fence targets
         // (`0xCA`/`0xCB`) are not climbable in an arena. A direction toward
-        // any other cell prints `What?\n` and re-prompts at no cost." A loose
-        // object (a chest or other drop) on the rocks is an object too, so it
-        // refuses the same way as an actor there.
-        if self
-            .combat_actor_slot_at(x as u8, y as u8, actor_slot)
-            .is_some()
+        // any other cell prints `What?\n` and re-prompts at no cost." Any
+        // object on the rocks - an actor's or a loose chest or drop - refuses
+        // the same way. This used to climb onto any walkable cell (playtest
+        // E39).
+        let actor_object_slot = usize::from(actor.active_object_slot);
+        let object_on_target = self
+            .active_objects
+            .iter()
+            .enumerate()
+            .any(|(slot, object)| {
+                slot != actor_object_slot && !object.is_empty() && object.x == x && object.y == y
+            });
+        if self.combat_terrain[y][x] != COMBAT_GARGOYLE_DEATH_TERRAIN_TILE
+            || object_on_target
             || self
-                .combat_loose_object_slot_at(x, y, usize::from(actor.active_object_slot))
+                .combat_actor_slot_at(x as u8, y as u8, actor_slot)
                 .is_some()
-            || self.combat_terrain[y][x] != COMBAT_GARGOYLE_DEATH_TERRAIN_TILE
         {
-            self.message = DUNGEON_KLIMB_WHAT_REFUSAL.trim_end().to_string();
+            self.message = crate::commands::COMBAT_KLIMB_ADJACENT_REFUSAL.to_string();
             return MoveOutcome::Blocked;
         }
 
@@ -595,12 +607,12 @@ impl PlayState {
             return MoveOutcome::Blocked;
         };
         self.mark_visibility_dirty();
-        // `combat.md §8.4` (u5-spec#299 Q4): an applied climb "prints nothing
-        // after the direction name. It also runs the ordinary step-on
-        // ambush/camp reveal check", which may redraw the arena.
+        // `combat.md §8.4`: the applied climb "also runs the ordinary step-on
+        // ambush/camp reveal check (Section 5, \"Ambush and camp reveal
+        // slots\"), which prints nothing but may redraw the arena".
         let _ = self.apply_combat_ambush_reveal_for_actor_position(actor_slot);
-        // Unpublished (`cleak/u5-spec#262`). `commands.md §5.2` gives the
-        // dungeon Klimb forms; an applied town/overworld Klimb has none.
+        // `combat.md §8.4`: an applied climb "prints nothing after the
+        // direction name".
         self.diagnostics.push(format!(
             "klimbed {} to ({}, {})",
             direction.name(),
@@ -6142,15 +6154,18 @@ impl PlayState {
         // a shorter modelled roster parks at its own last slot.
         if let Some(record) = lifted {
             let park_slot = (SAVE_ROSTER_SLOT_COUNT - 1).min(roster.len());
-            roster.insert(park_slot, record.clone());
+            // The roster record carries its own marker byte now (u5-spec#299
+            // Q14), so the parked record is written with the whereabouts too.
+            let mut parked = record.clone();
+            parked.inn_marker = Self::BLACKTHORN_EXECUTED_WHEREABOUTS;
+            roster.insert(park_slot, parked);
             // Lodged guests are whole roster records, so the records the
             // park shifts down carry their registry slots with them.
             self.shift_inn_registry_for_roster_move(index, park_slot);
-            // The whereabouts byte lives in the shifted inn-guest view that
-            // overlaps the roster (`formats/saved-gam.md`: the registry starts
-            // one record-length minus one past the roster, so guest slot `k`'s
-            // leading marker is the tail byte of roster record `k`). Writing
-            // an unmatchable marker there is what makes the record
+            // The whereabouts byte is the record's own inn-lodging marker,
+            // its last byte `0x1F` (`formats/saved-gam.md` §3.3, u5-spec#299
+            // Q14; the "shifted inn-guest view" is `RETRACTIONS.md` R569).
+            // Writing an unmatchable marker there is what makes the record
             // unretrievable by any inn while still surviving save/reload.
             if self.inn_registry.len() < INN_REGISTRY_CAP {
                 // Registry slot `k`'s marker is roster record `k`'s byte
@@ -6737,9 +6752,9 @@ impl PlayState {
 
     /// Step 25 and contract steps 9 to 12: the second dissolve, then every
     /// durable write. `blackthorn.md §7`: "The moral-standing floor,
-    /// destination scene/floor/position writes, timed-effect clear, advance
-    /// to 06:00, and light-counter clears all occur only after the second
-    /// dissolve has completed."
+    /// destination scene/floor/position writes, timed-effect clear, clock
+    /// spin to hour 6 (step 11), and light-counter clears all occur only after
+    /// the second dissolve has completed."
     fn apply_blackthorn_rescue_handoff(&mut self, game_dir: &Path) -> io::Result<MoveOutcome> {
         // Its hidden viewport is black except for the on-foot party tile at
         // the centre cell; the castle view is not this dissolve's source.
@@ -6754,26 +6769,38 @@ impl PlayState {
         self.blackthorn_rescue_animation_tick = None;
         self.moral_standing = blackthorn_rescue_post_print_standing(self.moral_standing);
         self.clear_active_effect_slot();
-        // `blackthorn.md §7` step 11 / §7.1: the handoff comes "with the
-        // clock spun forward until the hour reads 06:00", and "Once the clock
-        // has been spun forward it also zeroes both light counters"; §8.1 puts
-        // the food repair "after the wait to 06:00". The section publishes no
-        // per-turn work for the spin, and §8.1 preserves every nonzero food
-        // word "exactly", so this is a bare clock spin: no provision pass and
-        // no gameplay-PRNG draws beyond the flashes §7.1 counts.
+        // `blackthorn.md §7` step 11 (u5-spec#299 Q17, `RETRACTIONS.md`
+        // R571): "the clock then spun forward by the ordinary clock advance in
+        // nine-minute steps until the hour is 6. The hour is checked before
+        // each step and the minute is never reset." The timed-effect slot was
+        // cleared just above, "so Quickness and Negate Time never alter a
+        // step: every step is exactly nine minutes". An entry hour of 6 makes
+        // no step; 7 to 23 crosses midnight into the next day.
+        //
+        // The ordinary clock half carries the rest of the step: "A midnight
+        // crossing runs the ordinary day rollover once, which repaints the
+        // whole stats panel straight away, so the date row shows the new
+        // date" (playtest F57), "the ordinary midnight events ... including
+        // the Shadowlord relocation roll", the month-boundary events, and the
+        // hour-change bundle per hour crossed. It runs no provision pass and
+        // no world tick, and §8.1 preserves every nonzero food word.
+        //
+        // The withdrawn reading - "spun forward until the hour reads 06:00"
+        // - stepped whole hours here, which kept the entry minute instead of
+        // landing at 06:00-06:08.
+        //
+        // The spin runs in the castle scene: "Each hour crossed also runs the
+        // ordinary hour-change bundle for the castle scene", and the midnight
+        // reroll's "party-scene rejection is inert, because the scene is
+        // already the castle" (u5-spec#299 Q28). So the scene is written
+        // before the spin, and the reroll no longer rejects the town the
+        // party was wiped in; the floor itself is loaded below, at the spun
+        // hour. §7 step 11: "on logical floor one" - the signed floor `+1`.
+        let scene = Scene::new(BLACKTHORN_RESCUE_HANDOFF_SCENE)?;
+        let floor = crate::blackthorn::BLACKTHORN_RESCUE_HANDOFF_FLOOR;
+        self.area = Area::Town { scene, floor };
         while self.clock.hour != crate::blackthorn::BLACKTHORN_RESCUE_HANDOFF_HOUR {
-            let previous_day = self.clock.day;
-            self.clock.advance_hour();
-            // `time.md §7` / `stats-panel.md §2.4`: "The day rollover also
-            // repaints the stats panel ... it fires exactly once per in-game
-            // day boundary", and the u5-spec#299 Q17 answer has the panel
-            // date advance when this spin crosses midnight. The cinematic
-            // runs outside the command dispatcher's snapshot test, so
-            // nothing else repainted it and the date row kept the old day
-            // for the rest of the run (playtest F57).
-            if self.clock.day != previous_day {
-                self.repaint_stats_panel();
-            }
+            self.advance_clock_half(crate::blackthorn::BLACKTHORN_RESCUE_CLOCK_STEP_MINUTES);
         }
         self.torch_counter = 0;
         self.light_spell_counter = 0;
@@ -6783,9 +6810,6 @@ impl PlayState {
         if self.food == 0 {
             self.food = 63;
         }
-        let scene = Scene::new(BLACKTHORN_RESCUE_HANDOFF_SCENE)?;
-        // §7 step 11: "on logical floor one" - the signed floor byte `+1`.
-        let floor = crate::blackthorn::BLACKTHORN_RESCUE_HANDOFF_FLOOR;
         let (grid, beacon_sources) =
             load_town_runtime_floor_with_beacon_sources(game_dir, scene, floor, self.clock.hour)?;
         self.grid = grid;

@@ -130,6 +130,7 @@ fn every_quoted_shop_key_prompt_suppresses_the_command_row() {
             guest_indices: [0; crate::shops::INN_REGISTRY_CAP],
             guest_count: 2,
             base_lodging_charge: 3,
+            highlight: 0,
         }),
         ActiveShopSession::Healer(
             HealerShopState::PickPartyMember {

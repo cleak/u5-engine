@@ -525,6 +525,13 @@ impl PlayState {
             // came from a save carries real bytes to write.
             if !self.party_roster.is_empty() {
                 save[record + SAVE_CHARACTER_GENDER_OFFSET] = roster_record.gender;
+                // `formats/saved-gam.md §3.3` (u5-spec#299 Q14, R569): "Every
+                // byte (`+0x18`, equipment, stay counter, marker) moves with
+                // its character; no byte stays with a slot". Left to the
+                // template, the defense byte and the marker stayed with the
+                // slot when Leave or Pickup rotated the records.
+                save[record + crate::SAVE_CHARACTER_DEFENSE_BYTE_OFFSET] = roster_record.defense;
+                save[record + crate::SAVE_CHARACTER_INN_MARKER_OFFSET] = roster_record.inn_marker;
             }
             save[record + SAVE_CHARACTER_STR_OFFSET] = if party_index == 0 {
                 self.avatar_stats.strength

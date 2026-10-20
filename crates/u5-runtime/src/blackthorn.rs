@@ -201,10 +201,16 @@ pub const BLACKTHORN_RESCUE_HANDOFF_Y: u8 = 10;
 /// so this is floor `+1`, one storey above the castle's base page.
 pub const BLACKTHORN_RESCUE_HANDOFF_FLOOR: i8 = 1;
 
-/// `blackthorn.md` section 7 step 11 / 7.1 / 8.1: the handoff spins "the
-/// clock ... forward until the hour reads 06:00", after the second dissolve
-/// and before the light-counter clears and the food repair.
+/// `blackthorn.md` section 7 step 11 / 7.1 / 8.1: after the second dissolve
+/// and before the light-counter clears and the food repair, the handoff spins
+/// the clock "in nine-minute steps until the hour is 6" (u5-spec#299 Q17; the
+/// withdrawn "until the hour reads 06:00" is `RETRACTIONS.md` R571). Only the
+/// hour is the stop test: the minute lands at 06:00-06:08.
 pub const BLACKTHORN_RESCUE_HANDOFF_HOUR: u8 = 6;
+
+/// `blackthorn.md` section 7 step 11 (u5-spec#299 Q17): each step of the
+/// rescue clock spin is one ordinary clock advance of exactly nine minutes.
+pub const BLACKTHORN_RESCUE_CLOCK_STEP_MINUTES: u8 = 9;
 
 /// `blackthorn.md` section 7: the rescue path raises the shared moral-standing
 /// selector to at least this floor after printing the verdict.

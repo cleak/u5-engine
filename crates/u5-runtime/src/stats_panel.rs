@@ -282,6 +282,7 @@ pub fn paint_inn_pickup_register_text_window(system: &mut TextWindowSystem, stat
         crate::shop_runtime::InnkeeperState::PickUpCompanion {
             guest_indices,
             guest_count,
+            highlight,
             ..
         },
     )) = state.active_shop.as_ref()
@@ -327,7 +328,18 @@ pub fn paint_inn_pickup_register_text_window(system: &mut TextWindowSystem, stat
             party_name_to_string(&guest.name).unwrap_or_else(|| format!("Guest {}", row + 1));
         let line = format!("{} {}", row + 1, truncate_ascii_chars(&name, 11));
         system.set_active_cursor(1, display_row.min(u8::MAX as usize) as u8);
+        // `shops.md §8.C` "Guest Register keys" (u5-spec#299 Q15): the
+        // highlight sits on one listed guest. Its pixel layout is not
+        // captured (`OPEN-QUESTIONS.md`); the line is drawn inverted, as the
+        // arms sell browser draws its selected row.
+        let selected = row == usize::from(*highlight);
+        if selected {
+            system.emit_byte(TEXT_CTRL_INVERSE_TOGGLE);
+        }
         system.print_wrapped_string(&line);
+        if selected {
+            system.emit_byte(TEXT_CTRL_INVERSE_TOGGLE);
+        }
     }
 
     system.set_active_window(TALK_SHOP_TEXT_WINDOW_INDEX);

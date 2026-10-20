@@ -1054,8 +1054,13 @@ fn handle_active_direction_prompt_key_input(
         if let Some(actor_slot) = combat_push_actor {
             if combat_klimb && matches!(outcome, MoveOutcome::Blocked) {
                 // `combat.md §8`: blocked Klimb is one of the parser's
-                // exhaustive free re-prompt cases.
+                // exhaustive free re-prompt cases. `§8.4` (u5-spec#299 Q13):
+                // it takes "the short re-prompt of Section 8.1: one newline,
+                // so a blank row follows `What?`, then a prompt-window refresh
+                // and another key read, with no banner" - the next echo keeps
+                // `text-output.md §10.4`'s derived blank.
                 state.pending_combat_actor_slot = Some(actor_slot);
+                state.combat_prompt_row_opened_by_banner = false;
             } else if state.combat_active {
                 // Push and the live-actor-gated SJOG verbs commit once their
                 // letter has been accepted, including a canceled shared
@@ -1699,6 +1704,14 @@ fn handle_active_shop_key_input(
                                 game_dir,
                             )
                         } else {
+                            // `shops.md §8.4` (u5-spec#299 Q14): "The Guest
+                            // Register and its selection steps scan records 1
+                            // through 15", so the register lists the guests
+                            // in roster-record order.
+                            let mut guests = guests;
+                            guests.sort_by_key(|index| {
+                                state.inn_registry.get(*index).map(|guest| guest.registry_slot)
+                            });
                             let mut guest_indices = [0usize; INN_REGISTRY_CAP];
                             for (slot, registry_index) in
                                 guests.iter().copied().take(INN_REGISTRY_CAP).enumerate()
@@ -1711,6 +1724,7 @@ fn handle_active_shop_key_input(
                                 guest_indices,
                                 guest_count,
                                 base_lodging_charge: inn_base_room_rate(inn),
+                                highlight: 0,
                             };
                             // "Multiple-guest selection | `\n\n"Who will\ncheck
                             // out?" `"; the framed register is the side panel.
@@ -1937,30 +1951,62 @@ fn handle_active_shop_key_input(
                     *s = InnkeeperState::Continuation { inn };
                     format!("\n\n{INN_ANYTHING_MORE_PROMPT}")
                 }
+                // `shops.md §8.C` "Guest Register keys" (u5-spec#299 Q15):
+                // "Return or Space commits the highlighted guest", which
+                // starts on the topmost listed guest. "Digits never move the
+                // highlight and never commit"; a digit used to commit that
+                // guest at once.
+                (
+                    InnkeeperState::PickUpCompanion {
+                        inn,
+                        guest_indices,
+                        highlight,
+                        ..
+                    },
+                    _,
+                    _,
+                    _,
+                ) if matches!(key_byte, b' ' | b'\r') => inn_pickup_selected_guest(
+                    state,
+                    s,
+                    inn,
+                    scene_marker,
+                    guest_indices[usize::from(highlight)],
+                    ctx.speaker_intelligence,
+                    innkeeper_name,
+                    game_dir,
+                ),
+                // "West or North moves it up one listed guest and East or
+                // South moves it down one. There is no wrap: at either end
+                // the key does nothing." "Every other key is ignored without
+                // a redraw: the digits `0`-`9`, letters, the four diagonal
+                // codes and line feed."
                 (
                     InnkeeperState::PickUpCompanion {
                         inn,
                         guest_indices,
                         guest_count,
-                        ..
+                        base_lodging_charge,
+                        highlight,
                     },
                     _,
                     _,
-                    digit,
-                ) if matches!(key_byte, b' ' | b'\r' | b'\n')
-                    || digit.is_some_and(|d| d >= 1 && d <= guest_count) =>
-                {
-                    let choice = digit.map_or(0, |d| usize::from(d - 1));
-                    inn_pickup_selected_guest(
-                        state,
-                        s,
+                    _,
+                ) => {
+                    let last = guest_count.saturating_sub(1);
+                    let moved = match crate::z_stats::party_selector_direction_step(key) {
+                        Some(true) => highlight.saturating_add(1).min(last),
+                        Some(false) => highlight.saturating_sub(1),
+                        None => highlight,
+                    };
+                    *s = InnkeeperState::PickUpCompanion {
                         inn,
-                        scene_marker,
-                        guest_indices[choice],
-                        ctx.speaker_intelligence,
-                        innkeeper_name,
-                        game_dir,
-                    )
+                        guest_indices,
+                        guest_count,
+                        base_lodging_charge,
+                        highlight: moved,
+                    };
+                    state.message.clone()
                 }
                 // §8.C "Inn actions": "After a continuing action, print
                 // `"Is there\nanything more\nI can do for\nthee?" `; Y echoes
@@ -5914,8 +5960,13 @@ fn handle_combat_cast_key_input(
         CombatCommandPartySideGate::RefusedMonsterSide
     ) {
         state.message.clear();
+        // `combat.md §8.4` (u5-spec#299 Q19): "Cast's own copy of the test
+        // prints `Cast...` and its newline, then `Can't!` on the next row",
+        // and the refusal is `Can't!\n` - its feed closes the row, so the
+        // full re-prompt's leading newline leaves a blank row before the
+        // banner. This printed `Cast...Can't!` on one row with no blank.
         state.emit_combat_command_echo_line(&format!(
-            "{COMBAT_CAST_COMMAND_LABEL}{COMBAT_PARTY_SIDE_REFUSAL}"
+            "{COMBAT_CAST_COMMAND_LABEL}\n{COMBAT_PARTY_SIDE_REFUSAL}\n"
         ));
         // `§8.1`: every `Can't!` refusal takes the full re-prompt, "the whole
         // banner reprinted from its leading newline".
@@ -6527,7 +6578,11 @@ fn handle_combat_multistage_command(
                 state.emit_combat_command_echo_line(DUNGEON_KLIMB_PROMPT_ONE);
                 let outcome = state.klimb_combat_actor_vertical(actor_slot, intent);
                 if matches!(outcome, MoveOutcome::Blocked) {
+                    // `combat.md §8.4` "Turn cost" (u5-spec#299 Q13): a
+                    // refused Up/Down departure is free and "the parser takes
+                    // the short re-prompt with no banner".
                     state.pending_combat_actor_slot = Some(actor_slot);
+                    state.combat_prompt_row_opened_by_banner = false;
                 } else if state.combat_active {
                     let _ = apply_combat_committed_action_maintenance(state, actor_slot);
                     advance_combat_round_after_actor_and_append_message(state, actor_slot);
@@ -6545,9 +6600,19 @@ fn handle_combat_multistage_command(
                 .find_map(Direction::from_play_key)
                 .filter(|direction| direction.is_cardinal())
             {
+                // The inline form of the adjacent-climb prompt prints what the
+                // interactive one does (`combat.md §8.4`, u5-spec#299 Q13):
+                // the `Klimb-` row completed by the direction name, then any
+                // `What?` on its own row and the short re-prompt.
+                state.message.clear();
+                state.emit_combat_command_echo_line(&format!(
+                    "{DUNGEON_KLIMB_PROMPT_ONE}{}",
+                    direction.name()
+                ));
                 let outcome = state.klimb_combat_actor_direction(actor_slot, direction);
                 if matches!(outcome, MoveOutcome::Blocked) {
                     state.pending_combat_actor_slot = Some(actor_slot);
+                    state.combat_prompt_row_opened_by_banner = false;
                 } else if state.combat_active {
                     let _ = apply_combat_committed_action_maintenance(state, actor_slot);
                     advance_combat_round_after_actor_and_append_message(state, actor_slot);
@@ -6814,13 +6879,20 @@ fn combat_player_command_message(
             // party-side arms below print before their delegates. Without
             // them a controlled monster's `R`/`U` printed a bare `Can't!`
             // (playtest E38).
+            //
+            // `combat.md §8.4` (u5-spec#299 Q19): the refusal is `Can't!\n`
+            // in every row - R gives `Ready...`, a blank row, `Can't!`, a
+            // blank row, then the reprinted banner. Its feed closes the
+            // refusal's row, so the full re-prompt's leading newline leaves
+            // that blank row; without it the banner ran straight under
+            // `Can't!`. Cast prints `Cast...` "and its newline".
             let label = match branch {
-                CombatCommandBranch::CastSpell => Some(COMBAT_CAST_COMMAND_LABEL),
+                CombatCommandBranch::CastSpell => Some("Cast...\n"),
                 CombatCommandBranch::Ready => Some("Ready...\n\n"),
                 CombatCommandBranch::UseItem => Some("Use item\n\n"),
                 _ => combat_command_branch_published_label(*branch),
             };
-            format!("{}{COMBAT_PARTY_SIDE_REFUSAL}", label.unwrap_or(""))
+            format!("{}{COMBAT_PARTY_SIDE_REFUSAL}\n", label.unwrap_or(""))
         }
         CombatPlayerCommandAction::Branch { branch, .. } => combat_command_branch_message(*branch),
     }

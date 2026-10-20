@@ -3233,6 +3233,15 @@ impl PlayState {
                 // and the open verb echo and prompt session stay active.
                 continue;
             }
+            // `combat.md §8.4` (u5-spec#299 Q4/Q13): "The combat-arena `U/D-`
+            // prompt ignores Space" - "no `Pass` is printed and no action is
+            // spent", unlike the dungeon-mode Klimb `U/D-` prompt.
+            if ch == ' '
+                && let DirectionPromptKind::CombatKlimb { actor_slot } = session.kind
+                && self.combat_klimb_current_cell(actor_slot) == Some(CombatKlimbCurrentCell::Both)
+            {
+                continue;
+            }
             if ch == ' ' || ch == '\u{1b}' {
                 if matches!(
                     session.kind,
@@ -3477,16 +3486,18 @@ impl PlayState {
             {
                 // `combat.md §8` / `dungeon-mode.md §14.1` (u5-spec#298 Q1):
                 // the two-way centre "raises `U/D-` and waits for up or
-                // down, down counting as the `0xC9` case". u5-spec#299 Q4
-                // (`combat.md §8.4`) names the keys: "`U` or the North
-                // direction key for up, `D` or the South direction key for
-                // down"; every other key is ignored with no output.
+                // down, down counting as the `0xC9` case". `combat.md §8.4`
+                // (u5-spec#299 Q4, re-checked for Q13): it "accepts only four
+                // keys: `U` or the North direction key for up, `D` or the
+                // South direction key for down. Space, Escape and every other
+                // key are ignored with no output". `<`/`>` and the movement
+                // letters (`w`/`s`) used to answer it too.
                 let intent = match ch {
                     'U' | 'u' => Some(ClimbIntent::Up),
                     'D' | 'd' => Some(ClimbIntent::Down),
-                    _ => match Direction::from_play_key(ch) {
-                        Some(Direction::North) => Some(ClimbIntent::Up),
-                        Some(Direction::South) => Some(ClimbIntent::Down),
+                    _ => match u8::try_from(u32::from(ch)).ok().and_then(crate::input_code_direction) {
+                        Some(crate::InputDirection::North) => Some(ClimbIntent::Up),
+                        Some(crate::InputDirection::South) => Some(ClimbIntent::Down),
                         _ => None,
                     },
                 };
@@ -3497,6 +3508,10 @@ impl PlayState {
                     None => continue,
                 }
             }
+            // `combat.md §8.4` (u5-spec#299 Q13): the adjacent-climb prompt
+            // takes a cardinal or Space only; `<`/`>` no longer climb a
+            // ladder from it - the ladder cases are resolved on the cell
+            // under the actor before this prompt opens.
             let Some(direction) =
                 Direction::from_prompt_key(ch).filter(|direction| direction.is_cardinal())
             else {

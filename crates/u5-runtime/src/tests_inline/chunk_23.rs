@@ -11095,7 +11095,9 @@ fn combat_klimb_cardinal_suffix_moves_actor_inside_arena() {
     let game_dir = std::path::Path::new(".");
     let mut state = combat_player_command_state(10, 10);
     state.visibility_dirty = false;
-    state.combat_terrain[4][5] = COMBAT_GARGOYLE_DEATH_TERRAIN_TILE;
+    // `combat.md §8.4` (u5-spec#299 Q13): "The only climbable adjacent target
+    // is a pile of rocks (`0x4C`) with no object on it."
+    state.combat_terrain[4][5] = TOWN_KLIMB_ROCKS_TILE;
 
     assert_eq!(
         handle_play_key_input(&mut state, 'K', "8", game_dir).unwrap(),
@@ -11218,11 +11220,20 @@ fn combat_klimb_prompt_cancel_commits_but_blocked_direction_reprompts() {
         prompted.active_direction_prompt.map(|session| session.kind),
         Some(DirectionPromptKind::CombatKlimb { actor_slot: 0 })
     ));
-    // u5-spec#299 Q4 (`combat.md §8.4`): the adjacent-climb prompt takes a
-    // direction or Space; `>` is not one of its keys and is re-read.
-    handle_play_key_input(&mut prompted, '>', "", game_dir).unwrap();
-    assert!(prompted.active_direction_prompt.is_some());
+
+    // `combat.md §8.4`: the adjacent-climb branch "waits for the cardinal
+    // input ... direction name and newline, or Space's `Pass\n`"; in a town
+    // or overworld arena K "always reaches the adjacent-climb prompt"
+    // (u5-spec#299 Q13), so `>` is not a climb key there and is re-read.
+    assert_eq!(
+        handle_play_key_input(&mut prompted, '>', "", game_dir).unwrap(),
+        PlayInputDisposition::Continue
+    );
     assert!(prompted.combat_active);
+    assert!(matches!(
+        prompted.active_direction_prompt.map(|session| session.kind),
+        Some(DirectionPromptKind::CombatKlimb { actor_slot: 0 })
+    ));
 
     let mut cancelled = combat_player_command_state(10, 10);
     cancelled.active_effect_tag = Some(PROTECTION_ACTIVE_EFFECT_TAG);
@@ -11259,7 +11270,9 @@ fn combat_klimb_prompt_cancel_commits_but_blocked_direction_reprompts() {
         handle_play_key_input(&mut blocked, 'K', "8", game_dir).unwrap(),
         PlayInputDisposition::Continue
     );
-    assert_eq!(blocked.message, DUNGEON_KLIMB_WHAT_REFUSAL.trim_end());
+    // `combat.md §8.4` (u5-spec#299 Q13): `What?` on its own row, not the
+    // dungeon handler's `Klimb-what?`.
+    assert_eq!(blocked.message, crate::commands::COMBAT_KLIMB_ADJACENT_REFUSAL);
     assert_eq!(blocked.pending_combat_actor_slot, Some(0));
     assert_eq!(
         (blocked.combat_actors[8].x, blocked.combat_actors[8].y),
@@ -21881,13 +21894,16 @@ fn dungeon_arena_two_way_centre_raises_u_d_and_waits_for_up_or_down() {
     // and waits for up or down, down counting as the `0xC9` case; that is the
     // only place the two-way prompt can appear in combat."
     let game_dir = std::path::Path::new(".");
-    // u5-spec#299 Q4 (`combat.md §8.4`): the prompt "accepts only four keys:
-    // `U` or the North direction key for up, `D` or the South direction key
-    // for down. Space, Escape and every other key are ignored with no
-    // output ... no `Pass` is printed and no action is spent."
+    // `combat.md §8.4` (u5-spec#299 Q4/Q13): "The combat-arena `U/D-` prompt
+    // accepts only four keys: `U` or the North direction key for up, `D` or
+    // the South direction key for down. Space, Escape and every other key are
+    // ignored with no output ... no `Pass` is printed and no action is spent."
     for (key, level_after, row) in [
         ('U', 1u8, "Klimb-U/D-Up!"),
         ('D', 3, "Klimb-U/D-Down!"),
+        ('d', 3, "Klimb-U/D-Down!"),
+        (char::from(crate::INPUT_CODE_NORTH), 1, "Klimb-U/D-Up!"),
+        (char::from(crate::INPUT_CODE_SOUTH), 3, "Klimb-U/D-Down!"),
     ] {
         let mut state =
             dungeon_post_combat_state(2, DungeonPostCombatApplier::MovementApplier, 5, 5, false);
@@ -21902,11 +21918,11 @@ fn dungeon_arena_two_way_centre_raises_u_d_and_waits_for_up_or_down() {
         assert!(state.combat_active, "the prompt waits");
         assert_eq!(state.render_active_direction_prompt(), "Klimb-U/D-");
 
-        // A key that is neither up nor down is re-read - Space, Escape and
-        // the old `<`/`>` included.
-        for ignored in ['x', ' ', '\u{1b}', '<', '>'] {
+        // A key that is neither up nor down is re-read: Space, Escape, the
+        // old `<`/`>` keys and the movement letters among them.
+        for ignored in ['x', ' ', '\u{1b}', '<', '>', 'w', 's', '8'] {
             handle_play_key_input(&mut state, ignored, "", game_dir).unwrap();
-            assert!(state.combat_active);
+            assert!(state.combat_active, "{ignored:?}");
             assert!(state.active_direction_prompt.is_some(), "{ignored:?}");
             assert_eq!(state.pending_combat_actor_slot, Some(0), "{ignored:?}");
         }
