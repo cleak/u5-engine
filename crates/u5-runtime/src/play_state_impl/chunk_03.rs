@@ -690,6 +690,14 @@ impl PlayState {
         if self.staged_narration_active() {
             return true;
         }
+        // `main-loop.md §6`'s all-asleep arm reads no key either. Measured
+        // 2026-10-20, pending `cleak/u5-spec#299` Q23
+        // (`qa/paired/asleep-dungeon.tsv`, every idle beat): the stock window
+        // shows no cursor anywhere while the passes scroll, and this engine
+        // put the barber pole after the last `Zzzzzz...`.
+        if self.party_sleeping_without_input() {
+            return true;
+        }
         // `endgame.md §6`: the waiting branch is terminal and reads no key,
         // so - like its suppressed command row in
         // [`Self::message_window_live_row_suppressed`] - it draws no cursor

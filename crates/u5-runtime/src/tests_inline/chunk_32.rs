@@ -129,6 +129,7 @@ fn dungeon_all_asleep_passes_never_wake_and_each_prints_its_own_sleep_row() {
     assert_eq!(window, 10);
     assert!(!state.message_row_open_mid_line);
     assert!(state.message_window_live_row_suppressed());
+    assert!(state.message_window_cursor_suppressed());
     // The stock window: `>Zzzzzz...` on every other row, a blank between,
     // and no live command row under the last one.
     let log = message_log_from_entries(state.message_transcript.iter(), |text| {
