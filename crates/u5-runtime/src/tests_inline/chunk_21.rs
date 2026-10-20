@@ -3391,7 +3391,9 @@ fn town_raw_tlk_opening_runs_description_stream_before_greeting() {
     description.push(TLK_CODE_PRINT_AVATAR_NAME);
     description.push(TLK_CODE_ACTION_DISPATCH);
     description.push(6);
-    description.push(TLK_CODE_END_OF_RESPONSE);
+    // The Description runs to its NUL. It used to end on `0xFF`, but that
+    // opens the keyword prompt inside the Description and the greeting never
+    // runs (u5-spec#299 Q1, `conversation.md §7.2`, R561).
     let mut raw: HashMap<u16, Vec<Vec<u8>>> = HashMap::new();
     raw.insert(
         0x10,
@@ -4938,6 +4940,41 @@ fn conversation_opening_drops_a_quote_that_follows_the_entry_closing_quote() {
     ));
     let stranger = state.active_conversation_greeting_rendered_with_host_seed(seed);
     assert_eq!(stranger.text, "a farmer\n\n\"I am called Eb\"");
+}
+
+/// u5-spec#299 Q1 (`conversation.md §9` step 2, R560): a Description that
+/// stops on `0x82` makes the opener return - no blank rows, no reseed or
+/// coin flip, no greeting and no prompt - and the conversation is closed, so
+/// the next key is a command.
+#[test]
+fn a_description_that_stops_ends_the_conversation_at_the_opener() {
+    let enc = |s: &str| s.bytes().map(|b| b ^ 0x80).collect::<Vec<u8>>();
+    let mut description = enc("a grave wizard.");
+    description.extend([TLK_CODE_LITERAL_NEWLINE, TLK_CODE_END_STREAM]);
+    let raw = vec![
+        enc("Annon"),
+        description,
+        enc("Well met."),
+        enc("I served."),
+        enc("Good luck!"),
+    ];
+    let decoded = raw
+        .iter()
+        .map(|field| field.iter().map(|b| char::from(b ^ 0x80)).collect())
+        .collect();
+    let mut state = test_state(open_grid(), 1, 1);
+    state.active_conversation_npc_slot = Some(1);
+    state.active_conversation = Some(Box::new(
+        crate::conversation_session::ConversationSession::new(raw, decoded),
+    ));
+    state.prng_state = 0x0aaa;
+
+    let opening = state.advance_active_conversation_greeting_with_seed(Some(0x0456));
+    assert!(opening.ends_with("a grave wizard.\n"), "{opening:?}");
+    assert!(!opening.contains(TLK_KEYWORD_PROMPT), "{opening:?}");
+    assert!(!opening.contains("Well met") && !opening.contains("I am called"));
+    assert!(state.active_conversation.is_none(), "the conversation is over");
+    assert_eq!(state.prng_state, 0x0aaa, "no reseed on the stop path");
 }
 
 /// Playtest F04. `conversation.md §9` step 3: the stranger's

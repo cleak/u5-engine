@@ -71,9 +71,12 @@ pub struct TlkRunInputs<'a> {
 /// Reason the runner stopped processing the current stream.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum TlkRunStop {
-    /// Hit `0xFF` end-of-response (normal end of a keyword response).
+    /// Hit `0xFF` end-of-response, or a passing IF-ELSE with the reserved
+    /// `0xFF` argument: the caller opens a nested keyword prompt
+    /// (`conversation.md §7.2`, u5-spec#299 Q1, R561/R562).
     EndOfResponse,
-    /// Hit `0x82` end-of-stream for the current fixed entry.
+    /// Hit `0x82` END-STREAM: a stop, which ends the whole conversation on
+    /// every path (`conversation.md §7.2`, u5-spec#299 Q1, R560).
     EndOfStream,
     /// Hit a NUL byte before any explicit terminator. Treated as the
     /// current field terminator.
@@ -150,7 +153,8 @@ pub enum TlkRunEvent {
     /// flag index (the speaking NPC's roster slot), `target_label` is the
     /// code's argument byte, and `taken_else` reflects whether the bit was
     /// set — the arm that transfers to `target_label` (or, for the
-    /// reserved `0xFF`, ends the response).
+    /// reserved `0xFF`, opens a nested keyword prompt - u5-spec#299 Q1,
+    /// R562).
     IfElseBranchTaken {
         bit: u8,
         target_label: u8,
@@ -635,9 +639,11 @@ pub fn run_tlk_stream_from(bytes: &[u8], start: usize, inputs: &TlkRunInputs) ->
                 // the argument, which `pos` already names.
                 if flag_set {
                     if target_label == TLK_IF_ELSE_END_RESPONSE_ARGUMENT {
-                        // The reserved argument ends the response and
-                        // returns to the keyword prompt. This is the guard
-                        // that fronts the shipped introduce-yourself idiom.
+                        // The reserved argument opens a nested keyword prompt
+                        // here, like `0xFF` but without flushing the pending
+                        // word (§7.2, u5-spec#299 Q1, R562). This is the
+                        // guard that fronts the shipped introduce-yourself
+                        // idiom.
                         out.stop = TlkRunStop::EndOfResponse;
                         out.consumed = pos;
                         return out;
@@ -1164,9 +1170,10 @@ mod tests {
 
     #[test]
     fn if_else_reserved_ff_argument_ends_the_response() {
-        // §7.6: "or, for the reserved argument `0xFF`, end the response
-        // and return to the keyword prompt". This is the guard that fronts
-        // the shipped introduce-yourself idiom.
+        // §7.6 / §7.2 (u5-spec#299 Q1, R562): the reserved argument `0xFF`
+        // stops the stream here and the caller opens a nested keyword
+        // prompt, the same `EndOfResponse` result `0xFF` gives. This is the
+        // guard that fronts the shipped introduce-yourself idiom.
         let mut bytes = vec![TLK_CODE_IF_ELSE, TLK_IF_ELSE_END_RESPONSE_ARGUMENT];
         bytes.extend_from_slice(&enc("introduction"));
         bytes.push(TLK_CODE_END_OF_RESPONSE);
@@ -1421,7 +1428,8 @@ mod tests {
 
     /// Playtest F01: §7.6's one-time reward form tests the bit "now (that
     /// is, the prompt just matched)", so the next `0x8C` in the same run
-    /// sees the bit this run's ASK-WHO set and ends the response on `0xFF`.
+    /// sees the bit this run's ASK-WHO set and takes its `0xFF` arm (a nested
+    /// keyword prompt, u5-spec#299 Q1).
     #[test]
     fn if_else_sees_the_bit_an_earlier_ask_who_in_the_run_set() {
         let mut bytes = vec![TLK_CODE_ASK_WHO, TLK_CODE_IF_ELSE, 0xFF];

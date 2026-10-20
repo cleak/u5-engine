@@ -116,22 +116,27 @@ pub struct ConversationSessionOutput {
     /// `true` when this step ended the conversation (Bye fired or the
     /// stream ended unrecoverably).
     pub ended: bool,
-    /// The selected response returned the byte-runner's explicit stop
-    /// result (`0xFF`). Ordinary top-level responses still reprompt, but
-    /// the nested gold-refusal loop propagates this stop through the whole
-    /// conversation without synthesising a Bye line.
+    /// The selected response reached `0xFF` (or a passing IF-ELSE with the
+    /// reserved `0xFF` argument). `conversation.md §7.2` (u5-spec#299 Q1,
+    /// R561/R562): that is **not** a stop - it opens a fresh keyword prompt
+    /// nested where the stream stands, and leaving that prompt prints `BYE`,
+    /// runs the Bye entry and ends the conversation. The session models the
+    /// nested prompt as the keyword prompt itself, since every outer level
+    /// does nothing after it; on the opener path it means the rest of the
+    /// opener never runs.
     pub response_signalled_stop: bool,
     /// The step's stream ended on `0x82` END-STREAM, directly or through a
-    /// nested label head or alias. `conversation.md §7.2`: the code "Stop[s]
-    /// the current stream and signal[s] the caller 'this stream is
-    /// finished'", and §7.7 has a nested response that "reaches a
-    /// byte-runner stop condition" report stop to the label handler.
+    /// nested label head or alias. `conversation.md §7.2` (u5-spec#299 Q1,
+    /// R560): `0x82` is the plain **stop**, and "every level of the
+    /// conversation treats it the same way: the conversation is over" - on
+    /// the opener path, in a keyword answer and in a scoped answer, with no
+    /// `BYE` and no Bye entry.
     ///
-    /// `0xFF` is deliberately not counted: §7.2 has it "return control to
-    /// the keyword input loop", and the dwelling rat's Description entry,
-    /// which resumes after its ASK-WHO and ends on `0xFF`, reaches
-    /// `Your interest?` in the original (`dwelling-talk-after-entry`, beat
-    /// `name`).
+    /// `0xFF` is deliberately not counted: it opens a nested keyword prompt
+    /// instead (see [`Self::response_signalled_stop`]), and the dwelling
+    /// rat's Description entry, which resumes after its ASK-WHO and ends on
+    /// `0xFF`, reaches `Your interest?` in the original
+    /// (`dwelling-talk-after-entry`, beat `name`).
     pub end_stream_reached: bool,
     /// Shared moral-standing selector after any `0x89` / `0x8A` writes in
     /// this step's streams, or `None` when none ran. `conversation.md
@@ -276,6 +281,25 @@ impl ConversationSessionOutput {
         }
     }
 
+    /// The opening half of [`Self::push_framed_response`] for a response
+    /// that reported a `0x82` stop. `conversation.md §7.2` (u5-spec#299 Q1):
+    /// "The closing quote and the two row breaks that normally come before
+    /// the prompt are added only when a response ends at its NUL", and
+    /// inside the Bye entry "a stop only skips the closing quote and the two
+    /// row breaks". The stream's own text, trailing feeds included, is kept
+    /// as it is.
+    fn push_stopped_response(&mut self, rendered: &TlkRenderedText) {
+        let already_quoted = rendered.text.trim_start().starts_with('"');
+        if self.text.is_empty() || !self.text.ends_with('\n') {
+            self.push_plain_text("\n");
+        }
+        if !already_quoted {
+            self.push_plain_text("\"");
+        }
+        self.text.push_str(&rendered.text);
+        self.rendered_glyphs.extend(rendered.glyphs.iter().copied());
+    }
+
     /// [`Self::push_framed_response`] for a fixed engine literal.
     fn set_framed_text(&mut self, text: &str) {
         self.text.clear();
@@ -335,6 +359,12 @@ pub struct ConversationSession {
     /// breaks the opener prints after it - is owed once the resumed Name
     /// entry finishes without signalling a stop (playtest F04).
     introduction_ask_who: bool,
+    /// The Description entry reached `0xFF` (or a passing IF-ELSE `0xFF`)
+    /// without suspending: `conversation.md §7.2` (u5-spec#299 Q1, R561)
+    /// opens the keyword prompt nested there, so the rest of the opener -
+    /// the blank rows, the acquaintance test, the reseed and coin flip and
+    /// the greeting - never runs.
+    opening_prompt_opened: bool,
 }
 
 impl ConversationSession {
@@ -352,6 +382,7 @@ impl ConversationSession {
             label_records_running: Vec::new(),
             opening_ask_who: false,
             introduction_ask_who: false,
+            opening_prompt_opened: false,
         }
     }
 
@@ -379,9 +410,47 @@ impl ConversationSession {
         &mut self,
         ctx: &ConversationContext<'_>,
     ) -> ConversationSessionOutput {
-        let out = self.run_field_from(1, 0, ctx, 0);
+        let mut out = self.run_field_from(1, 0, ctx, 0);
         self.opening_ask_who = self.awaiting_ask_who();
+        if !self.opening_suspended() {
+            // `conversation.md §9` step 2 (u5-spec#299 Q1): "If the
+            // Description entry signals a stop, the opener returns and
+            // nothing further is printed" - no blank rows, acquaintance
+            // test, reseed, coin flip, greeting, keyword prompt, `BYE` or Bye
+            // entry; only the final cleanup. A `0xFF` instead opens the
+            // keyword prompt right there (§7.2), and the greeting never runs.
+            self.end_opener_on_stop(&mut out);
+            self.opening_prompt_opened = !out.ended && out.response_signalled_stop;
+            if self.opening_prompt_opened {
+                self.phase = ConversationSessionPhase::AwaitingKeyword;
+            }
+        }
         out
+    }
+
+    /// `conversation.md §7.2` / §9 (u5-spec#299 Q1, R560): a `0x82` stop
+    /// reported by an opener entry - the Description, the Greeting or the
+    /// self-introduction's Name run - makes the opener return, and the
+    /// conversation is over with only the final cleanup to run.
+    fn end_opener_on_stop(&mut self, out: &mut ConversationSessionOutput) {
+        if out.end_stream_reached
+            && matches!(
+                self.phase,
+                ConversationSessionPhase::Opened | ConversationSessionPhase::AwaitingKeyword
+            )
+        {
+            self.phase = ConversationSessionPhase::PresentingBye;
+            out.ended = true;
+        }
+    }
+
+    /// The opener has ended the conversation (`0x82` stop on the opener
+    /// path); the caller prints what ran, skips the prompt and closes.
+    pub fn has_ended(&self) -> bool {
+        matches!(
+            self.phase,
+            ConversationSessionPhase::PresentingBye | ConversationSessionPhase::Closed
+        )
     }
 
     /// Whether the opening has already suspended for input, so the
@@ -393,17 +462,20 @@ impl ConversationSession {
     /// greeting or self-introduction must not run over it and reset the
     /// phase to the top-level loop (playtest F03, Fiona's food question).
     pub fn opening_suspended(&self) -> bool {
-        matches!(
-            self.phase,
-            ConversationSessionPhase::AwaitingAskWho { .. }
-                | ConversationSessionPhase::AwaitingScopedKeyword { .. }
-        )
+        self.opening_prompt_opened
+            || matches!(
+                self.phase,
+                ConversationSessionPhase::AwaitingAskWho { .. }
+                    | ConversationSessionPhase::AwaitingScopedKeyword { .. }
+            )
     }
 
     pub fn present_greeting(&mut self, ctx: &ConversationContext<'_>) -> ConversationSessionOutput {
         self.phase = ConversationSessionPhase::AwaitingKeyword;
         self.recruit_speaker_pending = false;
-        self.run_field_from(2, 0, ctx, 0)
+        let mut out = self.run_field_from(2, 0, ctx, 0);
+        self.end_opener_on_stop(&mut out);
+        out
     }
 
     /// `conversation.md §9`: a stranger either says nothing after the
@@ -421,6 +493,7 @@ impl ConversationSession {
         }
         let mut output = self.run_field_from(0, 0, ctx, 0);
         self.introduction_ask_who = self.awaiting_ask_who();
+        self.end_opener_on_stop(&mut output);
         let mut rendered = TlkRenderedText::plain("I am called ");
         rendered.push_rendered(&output.rendered_text());
         output.text = rendered.text;
@@ -523,15 +596,18 @@ impl ConversationSession {
                 // original ends the conversation there - no Bye entry, no
                 // `Your interest?`, the command prompt on the next row -
                 // where this engine ran on into the keyword loop.
-                if from_opening {
-                    if self.awaiting_ask_who() {
-                        self.opening_ask_who = true;
-                    } else if out.end_stream_reached
-                        && matches!(self.phase, ConversationSessionPhase::AwaitingKeyword)
-                    {
-                        self.phase = ConversationSessionPhase::PresentingBye;
-                        out.ended = true;
-                    }
+                //
+                // u5-spec#299 Q1 (R560/R564) confirms the reading and widens
+                // it: a stop ends the conversation on every path, so a
+                // keyword answer's ASK-WHO whose resumed stream reaches
+                // `0x82` ends it too, with no `BYE`.
+                if from_opening && self.awaiting_ask_who() {
+                    self.opening_ask_who = true;
+                } else if out.end_stream_reached
+                    && matches!(self.phase, ConversationSessionPhase::AwaitingKeyword)
+                {
+                    self.phase = ConversationSessionPhase::PresentingBye;
+                    out.ended = true;
                 }
                 return out;
             }
@@ -539,9 +615,14 @@ impl ConversationSession {
                 // §7.6: refusal calls the ordinary keyword loop as a nested
                 // prompt. Nonterminating turns remain nested; an explicit
                 // response stop or the mandatory Bye path unwinds both loops.
+                //
+                // u5-spec#299 Q1 (R561): "A per-NPC response that signals
+                // stop" is a `0x82` stop, which the inner call already turns
+                // into `ended`; `0xFF` opens a further nested prompt, which
+                // this loop's own reprompt stands for.
                 self.phase = ConversationSessionPhase::AwaitingKeyword;
                 let mut out = self.submit_keyword(line, ctx);
-                if out.ended || out.response_signalled_stop {
+                if out.ended {
                     self.phase = ConversationSessionPhase::PresentingBye;
                     out.ended = true;
                 } else {
@@ -609,6 +690,12 @@ impl ConversationSession {
             out.push_plain_text(TLK_EMPTY_INPUT_BYE_MESSAGE);
         }
         let response = self.run_field_from(field_idx, 0, ctx, 0);
+        // `conversation.md §6` step 6 / §9 step 5 (u5-spec#299 Q1, R564): a
+        // keyword answer (or `NAME`/`JOB` response) that reports a `0x82`
+        // stop ends the conversation at once, with no `BYE`, no Bye entry
+        // and no closing quote or row breaks.
+        let stopped = response.end_stream_reached
+            && matches!(self.phase, ConversationSessionPhase::AwaitingKeyword);
         // `conversation.md` §7's reserved-keyword table: index 0, `NAME`,
         // "Run the Name entry with the **fixed name prefix**". The section
         // names the prefix but does not quote it; measured 2026-09-10
@@ -622,7 +709,13 @@ impl ConversationSession {
         ) {
             let mut rendered = TlkRenderedText::plain(TLK_NAME_KEYWORD_PREFIX);
             rendered.push_rendered(&response.rendered_text());
-            out.push_framed_response(&rendered);
+            if stopped {
+                out.push_stopped_response(&rendered);
+            } else {
+                out.push_framed_response(&rendered);
+            }
+        } else if stopped {
+            out.push_stopped_response(&response.rendered_text());
         } else {
             out.push_framed_response(&response.rendered_text());
         }
@@ -636,13 +729,17 @@ impl ConversationSession {
         out.asked_who = response.asked_who;
         out.moral_standing = response.moral_standing.or(out.moral_standing);
         out.response_signalled_stop |= response.response_signalled_stop;
+        out.end_stream_reached |= response.end_stream_reached;
         out.ended |= response.ended;
-        // Empty input or BYE/THANK closes the conversation.
-        if matches!(
-            kind,
-            TlkPlayerInputKind::EmptyByeShortcut
-                | TlkPlayerInputKind::Reserved(ReservedKeywordEffect::ByePath),
-        ) {
+        // Empty input or BYE/THANK closes the conversation, and so does a
+        // stopped answer.
+        if stopped
+            || matches!(
+                kind,
+                TlkPlayerInputKind::EmptyByeShortcut
+                    | TlkPlayerInputKind::Reserved(ReservedKeywordEffect::ByePath),
+            )
+        {
             self.phase = ConversationSessionPhase::PresentingBye;
             out.ended = true;
         }
@@ -820,7 +917,11 @@ impl ConversationSession {
                         // "If the nested stream signals stop, the outer
                         // stream stops too; otherwise the saved position is
                         // restored."
-                        let nested_signalled_stop = nested.response_signalled_stop || nested.ended;
+                        // u5-spec#299 Q1 (R560): `0x82` is the plain stop;
+                        // `0xFF`'s nested prompt also never returns to here.
+                        let nested_signalled_stop = nested.response_signalled_stop
+                            || nested.end_stream_reached
+                            || nested.ended;
                         merge_session_output(&mut out, nested);
                         if nested_signalled_stop
                             || !matches!(self.phase, ConversationSessionPhase::AwaitingKeyword)
@@ -879,7 +980,11 @@ impl ConversationSession {
             self.label_records_running.push((label, resume));
             let nested = self.run_blob_from(resume, ctx, 0);
             self.label_records_running.pop();
-            let nested_signalled_stop = nested.response_signalled_stop || nested.ended;
+            // `conversation.md §7.7` (u5-spec#299 Q1): the label handler
+            // reports a stop "when the head stops" - a head ending on `0x82`
+            // opens no scoped prompt.
+            let nested_signalled_stop =
+                nested.response_signalled_stop || nested.end_stream_reached || nested.ended;
             merge_session_output(out, nested);
             if nested_signalled_stop || self.phase != phase_before {
                 return;
@@ -984,15 +1089,28 @@ impl ConversationSession {
             })
             .map_or(block.default_arm, |(_, response_idx)| *response_idx);
         let response = self.run_field_from(field_idx, 0, ctx, 0);
+        // `conversation.md §7.2` (u5-spec#299 Q1): "if a scoped yes/no
+        // question's 'no' answer ends in `0x82`, answering 'no' puts the
+        // player straight back in the command loop" - no `BYE`, no Bye entry.
+        let stopped = response.end_stream_reached
+            && matches!(self.phase, ConversationSessionPhase::AwaitingKeyword);
         let mut out = ConversationSessionOutput::default();
         // The scoped answer is a response record like any keyword answer,
         // so it takes §6's ordinary quote/newline framing.
-        out.push_framed_response(&response.rendered_text());
+        if stopped {
+            out.push_stopped_response(&response.rendered_text());
+        } else {
+            out.push_framed_response(&response.rendered_text());
+        }
         let text = std::mem::take(&mut out.text);
         let glyphs = std::mem::take(&mut out.rendered_glyphs);
         merge_session_output(&mut out, response);
         out.text = text;
         out.rendered_glyphs = glyphs;
+        if stopped {
+            self.phase = ConversationSessionPhase::PresentingBye;
+            out.ended = true;
+        }
         out
     }
 
@@ -1228,6 +1346,23 @@ mod tests {
 
     fn enc(text: &str) -> Vec<u8> {
         text.bytes().map(|b| b ^ TLK_TEXT_XOR_MASK).collect()
+    }
+
+    /// [`enc_with_stop`] with each `\n` written as `0x8D` LITERAL-NEWLINE,
+    /// the stream's own line feed (a plain encoded `\n` is `0x8A`).
+    fn enc_nl_with_stop(text: &str, stop: u8) -> Vec<u8> {
+        let mut bytes: Vec<u8> = text
+            .bytes()
+            .map(|b| {
+                if b == b'\n' {
+                    TLK_CODE_LITERAL_NEWLINE
+                } else {
+                    b ^ TLK_TEXT_XOR_MASK
+                }
+            })
+            .collect();
+        bytes.push(stop);
+        bytes
     }
 
     fn enc_with_stop(text: &str, stop: u8) -> Vec<u8> {
@@ -1774,7 +1909,9 @@ mod tests {
                 bytes
             },
             enc("HELP"),
-            enc_with_stop("Nested response.", TLK_CODE_END_OF_RESPONSE),
+            enc_nl_with_stop("Nested response.\n", TLK_CODE_END_STREAM),
+            enc("MORE"),
+            enc_nl_with_stop("More.\"\n\n", TLK_CODE_END_OF_RESPONSE),
         ];
         let decoded = vec![
             "Ada".to_string(),
@@ -1785,7 +1922,9 @@ mod tests {
             "PAY".to_string(),
             String::new(),
             "HELP".to_string(),
-            "Nested response.".to_string(),
+            "Nested response.\n".to_string(),
+            "MORE".to_string(),
+            "More.\"\n\n".to_string(),
         ];
         let context = ConversationContext {
             gold_available: Some(10),
@@ -1833,13 +1972,21 @@ mod tests {
         assert!(nested.ended);
         assert_eq!(s.phase, ConversationSessionPhase::PresentingBye);
 
-        // A response carrying an explicit stop also unwinds immediately and
-        // receives no synthetic mandatory-Bye output.
+        // A response carrying an explicit stop (`0x82`) also unwinds
+        // immediately and receives no synthetic mandatory-Bye output.
+        // u5-spec#299 Q1 (R561): `0xFF` is not that stop - it opens a further
+        // nested prompt, so the refusal loop keeps prompting.
         let mut stopped = ConversationSession::new(raw, decoded);
         stopped.present_greeting(&context);
         stopped.submit_keyword("pay", &context);
+        let more = stopped.submit_keyword("more", &context);
+        assert!(!more.ended);
+        assert_eq!(
+            stopped.phase,
+            ConversationSessionPhase::AwaitingGoldRefusalKeyword
+        );
         let response = stopped.submit_keyword("help", &context);
-        assert_eq!(response.text, framed_response("Nested response."));
+        assert_eq!(response.text, "\n\"Nested response.\n");
         assert!(response.ended);
         assert!(!response.text.contains("Farewell"));
     }
@@ -1937,14 +2084,21 @@ mod tests {
         assert!(out.text.contains("Long"));
     }
 
+    /// `conversation.md §7.2` / §6 step 6 / §9 step 5 (u5-spec#299 Q1,
+    /// R560/R564): `0x82` is a stop and "every level of the conversation
+    /// treats it the same way: the conversation is over". A keyword answer
+    /// that stops ends it with no `BYE`, no Bye entry and no closing quote
+    /// or row breaks; one that reaches its NUL reprompts. This test pinned
+    /// the withdrawn "terminate the fixed leading entries without ending the
+    /// whole conversation" reading.
     #[test]
-    fn end_stream_and_nul_terminate_current_entry_without_closing_conversation() {
+    fn end_stream_ends_the_conversation_and_nul_reprompts() {
         let raw = vec![
-            enc_with_stop("Ada", TLK_CODE_END_STREAM),
-            enc_with_stop("a quiet smith", TLK_CODE_END_STREAM),
-            enc_with_stop("Greetings.", TLK_CODE_END_STREAM),
-            enc_with_stop("I mend gear.", TLK_CODE_END_STREAM),
-            enc_with_stop("Farewell.", TLK_CODE_END_STREAM),
+            enc("Ada"),
+            enc("a quiet smith"),
+            enc("Greetings."),
+            enc_nl_with_stop("I mend gear.\n", TLK_CODE_END_STREAM),
+            enc("Farewell."),
             enc("TRADE"),
             enc_with_stop("Bring iron.", 0),
         ];
@@ -1964,15 +2118,95 @@ mod tests {
         assert!(!greeting.ended);
         assert_eq!(s.phase, ConversationSessionPhase::AwaitingKeyword);
 
-        let job = s.submit_keyword("job", &ctx());
-        assert!(job.text.contains("I mend gear."));
-        assert!(!job.ended);
-        assert_eq!(s.phase, ConversationSessionPhase::AwaitingKeyword);
-
         let ordinary = s.submit_keyword("trade", &ctx());
         assert!(ordinary.text.contains("Bring iron."));
         assert!(!ordinary.ended);
         assert_eq!(s.phase, ConversationSessionPhase::AwaitingKeyword);
+
+        let job = s.submit_keyword("job", &ctx());
+        assert_eq!(job.text, "\n\"I mend gear.\n", "no closing quote or row breaks");
+        assert!(job.ended);
+        assert!(!job.text.contains("BYE") && !job.text.contains("Farewell"));
+        assert_eq!(s.phase, ConversationSessionPhase::PresentingBye);
+    }
+
+    /// `conversation.md §9` step 2 (u5-spec#299 Q1): after an opener stop
+    /// the opener returns; a Description that reaches `0x82` ends the
+    /// conversation, and one that reaches `0xFF` opens the keyword prompt
+    /// right there so the greeting never runs.
+    #[test]
+    fn a_description_stop_ends_the_opener_and_its_ff_opens_the_prompt() {
+        let session = |description: Vec<u8>| {
+            let raw = vec![
+                enc("Ada"),
+                description,
+                enc("Greetings."),
+                enc("I mend gear."),
+                enc("Farewell."),
+            ];
+            let decoded = raw
+                .iter()
+                .map(|field| field.iter().map(|b| char::from(b ^ TLK_TEXT_XOR_MASK)).collect())
+                .collect();
+            ConversationSession::new(raw, decoded)
+        };
+
+        let mut stopped = session(enc_nl_with_stop("a rat.\n", TLK_CODE_END_STREAM));
+        let out = stopped.present_description(&ctx());
+        assert!(out.ended);
+        assert!(stopped.has_ended());
+
+        let mut nested = session(enc_nl_with_stop("a rat.\n\n", TLK_CODE_END_OF_RESPONSE));
+        let out = nested.present_description(&ctx());
+        assert!(!out.ended);
+        assert!(nested.opening_suspended(), "the greeting must not run");
+        assert_eq!(nested.phase, ConversationSessionPhase::AwaitingKeyword);
+        assert_eq!(nested.prompt_message(), TLK_KEYWORD_PROMPT);
+        let bye = nested.submit_keyword("", &ctx());
+        assert!(bye.ended && bye.text.contains("Farewell."));
+
+        let mut plain = session(enc("a rat."));
+        plain.present_description(&ctx());
+        assert!(!plain.opening_suspended() && !plain.has_ended());
+    }
+
+    /// `conversation.md §7.2` (u5-spec#299 Q1): a scoped answer ending in
+    /// `0x82` "puts the player straight back in the command loop", and a
+    /// labelled block whose head stops opens no scoped prompt (§7.7, "when
+    /// the head stops").
+    #[test]
+    fn a_stopped_scoped_answer_or_head_ends_the_conversation() {
+        let mut head = vec![TLK_CODE_LABEL_RECORD, 0x91];
+        head.extend(enc("Art thou sure?"));
+        let mut s = label_session(
+            vec![0x91],
+            vec![
+                head,
+                enc("Hm."),
+                enc("N"),
+                enc_nl_with_stop("Then go.\n", TLK_CODE_END_STREAM),
+            ],
+        );
+        s.submit_keyword("ask", &ctx());
+        assert_eq!(
+            s.phase,
+            ConversationSessionPhase::AwaitingScopedKeyword { label: 0x91 }
+        );
+        let no = s.submit_keyword("n", &ctx());
+        assert!(no.ended, "{:?}", no.text);
+        assert!(no.text.ends_with("Then go.\n"), "{:?}", no.text);
+        assert!(!no.text.contains("Farewell") && !no.text.contains("BYE"));
+        assert_eq!(s.phase, ConversationSessionPhase::PresentingBye);
+
+        let mut stopped_head = vec![TLK_CODE_LABEL_RECORD, 0x91];
+        stopped_head.extend(enc_nl_with_stop("Begone!\n", TLK_CODE_END_STREAM));
+        let mut s = label_session(
+            vec![0x91],
+            vec![stopped_head, enc("Hm."), enc("N"), enc("Then go.")],
+        );
+        let out = s.submit_keyword("ask", &ctx());
+        assert!(out.ended, "{:?}", s.phase);
+        assert_eq!(s.phase, ConversationSessionPhase::PresentingBye);
     }
 
     #[test]
@@ -2544,19 +2778,23 @@ mod tests {
         let mut s = opening_ask_who_session(enc_with_stop("Squeek...", TLK_CODE_END_OF_RESPONSE));
         s.present_description(&ctx());
         let answer = s.submit_keyword("NAME", &ctx());
-        assert!(!answer.ended, "0xFF returns to the keyword loop");
+        assert!(!answer.ended, "0xFF opens a nested keyword prompt");
         assert_eq!(s.phase, ConversationSessionPhase::AwaitingKeyword);
     }
 
+    /// u5-spec#299 Q1 (R560/R564): a stop ends the conversation on every
+    /// path, not only on the opener's. This test pinned the withdrawn
+    /// reprompt.
     #[test]
-    fn a_keyword_ask_who_whose_stream_ends_on_end_stream_reprompts() {
+    fn a_keyword_ask_who_whose_stream_ends_on_end_stream_ends_the_conversation() {
         let mut head = vec![TLK_CODE_LABEL_RECORD, 0x91, TLK_CODE_ASK_WHO];
         head.extend(enc_with_stop("Good day!", TLK_CODE_END_STREAM));
         let mut s = label_session(vec![0x91], vec![enc("OTHER"), enc("x"), head]);
         s.submit_keyword("ask", &ctx());
         assert!(s.awaiting_ask_who(), "{:?}", s.phase);
         let answer = s.submit_keyword("NAME", &ctx());
-        assert!(!answer.ended, "only the opener's stop ends the conversation");
+        assert!(answer.ended, "a stop ends the conversation");
+        assert_eq!(s.phase, ConversationSessionPhase::PresentingBye);
     }
 
     #[test]

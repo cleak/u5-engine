@@ -5164,10 +5164,7 @@ impl PlayState {
                     session.set_npc_slot(npc_slot);
                 }
                 let (rendered, suspended) = self.active_conversation_opening_rendered();
-                let opening = conversation_opening_rendered(
-                    &rendered,
-                    self.open_conversation_prompt(suspended),
-                );
+                let opening = self.finish_conversation_opening(&rendered, suspended);
                 self.emit_tlk_message(opening);
                 return MoveOutcome::Talked;
             }
@@ -5600,8 +5597,7 @@ impl PlayState {
             session.set_npc_slot(npc_slot);
         }
         let (rendered, suspended) = self.active_conversation_opening_rendered();
-        let opening =
-            conversation_opening_rendered(&rendered, self.open_conversation_prompt(suspended));
+        let opening = self.finish_conversation_opening(&rendered, suspended);
         let text = opening.text.clone();
         self.emit_tlk_message(opening);
         Some(text)
@@ -5621,11 +5617,45 @@ impl PlayState {
     ) -> String {
         let (rendered, suspended) =
             self.active_conversation_opening_rendered_with_seed(stranger_host_seed);
-        let opening =
-            conversation_opening_rendered(&rendered, self.open_conversation_prompt(suspended));
+        let opening = self.finish_conversation_opening(&rendered, suspended);
         let text = opening.text.clone();
         self.emit_tlk_message(opening);
         text
+    }
+
+    /// Close the opening: the prompt that follows it, or - when an opener
+    /// entry reported a `0x82` stop - nothing at all. `conversation.md §9`
+    /// step 2 (u5-spec#299 Q1, R560): after an opener stop "the conversation
+    /// skips the keyword prompt, `BYE` and the Bye entry, and runs only the
+    /// final cleanup"; the Britain wizard's stranger branch leaves the cursor
+    /// at the start of the row after `Good day!"` and the next key is a
+    /// command. The same close the keyword path runs on `ended`.
+    fn finish_conversation_opening(
+        &mut self,
+        rendered: &crate::tlk_runner::TlkRenderedText,
+        suspended: bool,
+    ) -> crate::tlk_runner::TlkRenderedText {
+        let ended = self
+            .active_conversation
+            .as_ref()
+            .is_some_and(|session| session.has_ended());
+        if !ended {
+            let prompt = self.open_conversation_prompt(suspended);
+            return conversation_opening_rendered(rendered, prompt);
+        }
+        if let Some(session) = self.active_conversation.as_mut() {
+            session.acknowledge_close();
+        }
+        self.active_conversation = None;
+        self.active_conversation_npc_slot = None;
+        let mut opening = conversation_opening_stopped_rendered(rendered);
+        if let Some(cleanup) = self.run_final_conversation_cleanup() {
+            if !opening.text.is_empty() {
+                opening.push_plain(" ");
+            }
+            opening.push_plain(&cleanup);
+        }
+        opening
     }
 
     /// Which prompt closes the opening: `§7`'s ASK-WHO name prompt when
@@ -5707,7 +5737,11 @@ impl PlayState {
         if let Some(session) = self.active_conversation.as_mut() {
             let output = session.present_description(&ctx);
             description = output.rendered_text();
-            suspended = session.opening_suspended();
+            // u5-spec#299 Q1: a Description that stops (`0x82`) ends the
+            // conversation and one that reaches `0xFF` opens the keyword
+            // prompt there; either way the acquaintance test, reseed, coin
+            // flip and greeting below never run (`conversation.md §9` step 2).
+            suspended = session.opening_suspended() || session.has_ended();
             self.apply_tlk_action_grants(&output.action_grants);
             self.apply_tlk_gold_payments(&output.gold_payments);
             self.apply_tlk_moral_standing(output.moral_standing);
@@ -7492,6 +7526,24 @@ fn conversation_opening_rendered(
         rendered.push_plain("\n");
     }
     rendered.push_plain(prompt);
+    rendered
+}
+
+/// An opening whose entry reported a `0x82` stop (u5-spec#299 Q1): the same
+/// lead-in as [`conversation_opening_rendered`], then the stream exactly as
+/// it stopped - no padding to a blank row and no prompt, because the opener
+/// "returns and nothing further is printed" (`conversation.md §9` step 2).
+fn conversation_opening_stopped_rendered(
+    opening: &crate::tlk_runner::TlkRenderedText,
+) -> crate::tlk_runner::TlkRenderedText {
+    let mut rendered = crate::tlk_runner::TlkRenderedText::plain("\n");
+    rendered.push_plain(TLK_OPENING_DESCRIPTION_PREFIX);
+    let leading = opening
+        .glyphs
+        .iter()
+        .take_while(|glyph| glyph.byte.is_ascii_whitespace())
+        .count();
+    rendered.push_rendered(&opening.without_leading_bytes(leading));
     rendered
 }
 
