@@ -23,6 +23,7 @@ fn town_sleep_gate_passes_without_input_and_wakes_before_tile_effects() {
     let dir = debug_game_dir();
     let mut state = test_state(open_grid(), 1, 1);
     state.party[0].status = b'S';
+    state.repaint_stats_panel();
     state.clock = GameClock::new(8, 0).unwrap();
     state.prng_state = (0..=u16::MAX)
         .find(|seed| {
@@ -43,6 +44,9 @@ fn town_sleep_gate_passes_without_input_and_wakes_before_tile_effects() {
     assert_eq!((state.clock.hour, state.clock.minute), (8, 1));
     assert_eq!(state.message, PARTY_SLEEP_LINE);
     assert_eq!(state.party[0].status, b'G');
+    // Measured on `asleep-town`, pending `cleak/u5-spec#299` Q23: the town
+    // wake leaves the panel showing `S`.
+    assert_eq!(state.stats_panel.statuses[0], Some(b'S'));
     assert_eq!(state.active_player, None);
 
     assert_eq!(
@@ -58,7 +62,7 @@ fn town_sleep_gate_passes_without_input_and_wakes_before_tile_effects() {
 }
 
 #[test]
-fn dungeon_sleep_gate_advances_cleanup_but_skips_underfoot_post_action() {
+fn dungeon_sleep_gate_advances_no_time_and_skips_underfoot_post_action() {
     let dir = debug_game_dir();
     let mut grid = open_dungeon_record();
     grid[dungeon_cell_index(0, 1, 1)] = DUNGEON_PIT_FALL_TRAP_VISIBLE;
@@ -70,11 +74,90 @@ fn dungeon_sleep_gate_advances_cleanup_but_skips_underfoot_post_action() {
         state.apply_exploration_turn_gate(&dir).unwrap(),
         ExplorationTurnGateOutcome::Slept { transition: None }
     );
-    assert_eq!(state.turn, 1);
-    assert_eq!((state.clock.hour, state.clock.minute), (8, 1));
+    // Measured, pending `cleak/u5-spec#299` Q23
+    // (`qa/paired/asleep-dungeon-clock.tsv`): the dungeon's asleep passes
+    // never reach the loop head's clock.
+    assert_eq!(state.turn, 0);
+    assert_eq!((state.clock.hour, state.clock.minute), (8, 0));
     assert_eq!(state.message, PARTY_SLEEP_LINE);
     assert!(matches!(state.area, Area::Dungeon { level: 0, .. }));
     assert_eq!((state.player.x, state.player.y), (1, 1));
+    let _ = fs::remove_dir_all(dir);
+}
+
+/// F14 (`cleak/u5-engine#47`). **Measured** 2026-10-17, pending
+/// `cleak/u5-spec#299` Q23 (`qa/paired/asleep-dungeon.tsv`): an all-asleep
+/// dungeon party is never woken - no turn count, hour or roll ended it in a
+/// five-minute capture, keys included - and every pass prints a fresh
+/// marker-carrying `Zzzzzz...` row with no command row under it.
+#[test]
+fn dungeon_all_asleep_passes_never_wake_and_each_prints_its_own_sleep_row() {
+    let dir = debug_game_dir();
+    let mut state = dungeon_state(open_dungeon_record(), 0, 1, 1);
+    state.party = vec![default_party()[0]; 3];
+    for member in &mut state.party {
+        member.status = b'S';
+    }
+    state.clock = GameClock::new(8, 0).unwrap();
+    assert!(state.party_sleeping_without_input());
+    assert!(state.message_window_live_row_suppressed());
+
+    // Long past any plausible turn-count or hour rule: the capture ran
+    // hundreds of passes and crossed no wake.
+    for _ in 0..300 {
+        let revision_before = state.message_transcript_revision;
+        assert_eq!(
+            state.apply_exploration_turn_gate(&dir).unwrap(),
+            ExplorationTurnGateOutcome::Slept { transition: None }
+        );
+        // The same literal again is still a new row, not an already-flushed
+        // slot.
+        assert_ne!(state.message_transcript_revision, revision_before);
+        let newest = state.message_transcript.last().unwrap();
+        assert_eq!(newest.text, PARTY_SLEEP_LINE);
+        assert!(newest.is_command_echo);
+    }
+    assert!(state.party.iter().all(|member| member.status == b'S'));
+    assert_eq!((state.clock.hour, state.clock.minute), (8, 0));
+    let window = state
+        .message_transcript
+        .iter()
+        .rev()
+        .take(10)
+        .filter(|entry| entry.text == PARTY_SLEEP_LINE)
+        .count();
+    assert_eq!(window, 10);
+    assert!(!state.message_row_open_mid_line);
+    assert!(state.message_window_live_row_suppressed());
+    // The stock window: `>Zzzzzz...` on every other row, a blank between,
+    // and no live command row under the last one.
+    let log = message_log_from_entries(state.message_transcript.iter(), |text| {
+        (!text.trim().is_empty()).then(|| text.to_string())
+    });
+    let layout = layout_message_window(&log, None);
+    let last = layout.rows.iter().map(|row| row.row).max().unwrap();
+    let tail: Vec<_> = layout
+        .rows
+        .iter()
+        .filter(|row| row.row + 6 > last)
+        .map(|row| (row.row, row.text.as_str(), row.prefixed))
+        .collect();
+    assert_eq!(
+        tail,
+        vec![
+            (last - 4, PARTY_SLEEP_LINE, true),
+            (last - 2, PARTY_SLEEP_LINE, true),
+            (last, PARTY_SLEEP_LINE, true),
+        ]
+    );
+
+    // Awakened by other means, the loop reads commands again.
+    state.party[1].status = b'G';
+    assert!(!state.party_sleeping_without_input());
+    assert_eq!(
+        state.apply_exploration_turn_gate(&dir).unwrap(),
+        ExplorationTurnGateOutcome::Ready { member_index: 1 }
+    );
     let _ = fs::remove_dir_all(dir);
 }
 

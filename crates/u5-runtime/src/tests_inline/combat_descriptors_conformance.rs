@@ -1179,6 +1179,9 @@
             let mut state = combat_player_command_state(8, 5);
             state.combat_actors[0].flags |= COMBAT_ACTOR_FLAG_STATUS_DISABLED;
             state.combat_actors[0].phase_counter = 1;
+            let roster_slot = state.combat_roster_slot_for_actor_slot(0).unwrap();
+            state.party[roster_slot].status = b'S';
+            state.repaint_stats_panel();
             state.message_transcript.clear();
             state.prng_state = seed;
             let mut expected_prng = seed;
@@ -1196,6 +1199,16 @@
             assert_eq!(wake.roll, if wakes { 9 } else { 200 });
             assert_eq!(state.combat_actors[0].is_status_disabled(), !wakes);
             assert_eq!(state.prng_state, expected_prng, "exactly one draw");
+            // "roster status back to Good ... stats redrawn": the panel
+            // repaints inline (`stats-panel.md §2.2.1`, the shared wake
+            // helper). Measured on `asleep-overworld`, pending
+            // `cleak/u5-spec#299` Q23.
+            let expected_status = if wakes { b'G' } else { b'S' };
+            assert_eq!(state.party[roster_slot].status, expected_status);
+            assert_eq!(
+                state.stats_panel.statuses[roster_slot],
+                Some(expected_status)
+            );
             let printed = spec_9057c0d_transcript(&state);
             assert!(
                 printed.contains(COMBAT_ASLEEP_TURN_LINE),
