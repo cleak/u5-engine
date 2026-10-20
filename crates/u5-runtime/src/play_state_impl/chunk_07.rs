@@ -952,7 +952,9 @@ impl PlayState {
         }
 
         let Some(candidate) = self.boardable_vehicle_slot() else {
+            // "Nothing boardable under the party | `What?\n` | `Board What?`".
             self.message = "What?".to_string();
+            self.message_row_open_mid_line = false;
             return MoveOutcome::Blocked;
         };
         let transport = candidate.transport;
@@ -6676,10 +6678,14 @@ impl PlayState {
         let scene = Scene::new(BLACKTHORN_RESCUE_HANDOFF_SCENE)?;
         // §7 step 11: "on logical floor one" - the signed floor byte `+1`.
         let floor = crate::blackthorn::BLACKTHORN_RESCUE_HANDOFF_FLOOR;
-        // `blackthorn.md §7` step 11 / §7.1: the handoff comes "with the
-        // clock spun forward until the hour reads 06:00", and "Once the clock
+        // `blackthorn.md §7` step 11 (u5-spec#299 Q17, `RETRACTIONS.md`
+        // R571): "the clock then spun forward by the ordinary clock advance in
+        // nine-minute steps until the hour is 6. The hour is checked before
+        // each step and the minute is never reset." The timed-effect slot was
+        // cleared just above, "so Quickness and Negate Time never alter a
+        // step: every step is exactly nine minutes". §7.1: "Once the clock
         // has been spun forward it also zeroes both light counters"; §8.1 puts
-        // the food repair "after the wait to 06:00".
+        // the food repair after the spin.
         //
         // Issue #299 Q28 publishes what each step does: the spin is made of
         // ordinary clock advances, so it runs "the clock advance's midnight
@@ -6695,12 +6701,12 @@ impl PlayState {
         // provision pass ..., the world tick or active objects, NPC schedule
         // work, natural-moongate work or encounters", and "An entry hour of
         // 6 runs none of this work". That is exactly this engine's clock
-        // half of a turn ([`Self::advance_clock_half`]), stepped an hour at a
-        // time with the castle already the scene. Its light-counter decay is
-        // moot: both counters are zeroed straight after.
+        // half of a turn ([`Self::advance_clock_half`]), stepped nine minutes
+        // at a time with the castle already the scene. Its light-counter
+        // decay is moot: both counters are zeroed straight after.
         self.area = Area::Town { scene, floor };
         while self.clock.hour != crate::blackthorn::BLACKTHORN_RESCUE_HANDOFF_HOUR {
-            self.advance_clock_half(60);
+            self.advance_clock_half(crate::blackthorn::BLACKTHORN_RESCUE_CLOCK_STEP_MINUTES);
         }
         self.torch_counter = 0;
         self.light_spell_counter = 0;

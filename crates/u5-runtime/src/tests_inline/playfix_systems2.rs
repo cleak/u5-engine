@@ -75,7 +75,11 @@ fn blackthorn_rescue_spin_runs_the_published_midnight_and_hour_work() {
     state.apply_blackthorn_rescue_refuge(&dir).unwrap();
     state.run_blackthorn_rescue_to_handoff(&dir).unwrap();
 
-    assert_eq!((state.clock.hour, state.clock.day), (6, 1));
+    // Nine-minute steps (§7 step 11, R571): 23:00 plus 47 x 9 minutes.
+    assert_eq!(
+        (state.clock.hour, state.clock.minute, state.clock.day),
+        (6, 3, 1)
+    );
     assert_ne!(state.clock.month, month_before);
     // A rerolled slot never keeps a value any slot held.
     assert!(state.shadowlord_hideouts.iter().all(|id| ![1, 2, 3].contains(id)));
