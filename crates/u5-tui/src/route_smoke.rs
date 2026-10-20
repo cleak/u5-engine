@@ -4671,6 +4671,15 @@ fn asset_backed_conversation_route_exits(case_name: &str) -> bool {
     if asset_backed_conversation_route_family(case_name) == Some("dwelling") {
         return false;
     }
+    // The towne routes talk to the town file's dialogue 2, whose Bye entry is
+    // a lone GOTO to a labelled yes/no block. `conversation.md §7.7`
+    // (u5-spec#299 Q20): the head reaches its NUL and opens the scoped
+    // `You respond-` prompt, so leaving with `BYE` or `THANK` hands the
+    // conversation to that block (§7.7.1, Gwenno's Bye entry) rather than
+    // ending it; an answer there ends it.
+    if asset_backed_conversation_route_family(case_name) == Some("towne") {
+        return false;
+    }
     case_name.ends_with("-reserved-bye") || case_name.ends_with("-reserved-thank")
 }
 
