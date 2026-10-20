@@ -104,23 +104,19 @@ impl PlayState {
                     // world turn, but its clock increment is two minutes.
                     Area::World { .. } => self.advance_turn_with_minutes(2),
                     Area::Town { .. } => self.advance_turn(),
-                    // `dungeon-mode.md §4` step 7: the asleep result "re-runs
-                    // the check without reading a command, repeating for as
-                    // long as that result holds", so the loop head that owns
-                    // the indoor clock advance is never reached and nothing
-                    // in this arm can wake anybody.
+                    // `dungeon-mode.md §4` step 7 (issue #299 Q23,
+                    // `RETRACTIONS.md` R580): the asleep arm "runs the check
+                    // again at once. It reads no command, runs no post-action
+                    // helper and does not return to the head of the
+                    // iteration, so the world-clock advance of Section 15
+                    // does not run either"; the only per-turn wake rule
+                    // (step 6) needs an acted command, so the party "never
+                    // wakes ... (a softlock in the original game)".
                     //
-                    // **Measured** 2026-10-19, pending `cleak/u5-spec#299`
-                    // Q23 (`qa/paired/asleep-dungeon-clock.tsv`): the
-                    // asleep-dungeon party loaded at 23:55 still shows
-                    // `4-5-139` after 150 s of continuous passes, so the day
-                    // rollover's panel repaint (`stats-panel.md §2.4`) never
-                    // ran - the passes advance no time. With no clock there is
-                    // no hour, turn count or upkeep roll to wake on, and
-                    // `asleep-dungeon` confirms none fires: the stock party
-                    // stays `S` through five minutes and twelve Space presses.
-                    // An all-asleep dungeon party is a softlock in the
-                    // original too.
+                    // First measured 2026-10-19 (`qa/paired/asleep-dungeon-
+                    // clock.tsv`, `asleep-dungeon`): the stock party loaded
+                    // at 23:55 kept `4-5-139` and status `S` through five
+                    // minutes of passes and twelve Space presses.
                     Area::Dungeon { .. } => {}
                 }
                 self.emit_party_sleep_line();
@@ -182,14 +178,13 @@ impl PlayState {
 
     /// Print one pass's sleep line as a row of its own.
     ///
-    /// `main-loop.md §6` has town and overworld emit the prompt's
-    /// line-feed-and-marker pair before the sleep line, "so a slept-through
-    /// turn advances the message window exactly as a polled turn would", and
-    /// `dungeon-mode.md §4` step 7 has the dungeon emit its own line feed
-    /// before `Zzzzzz...\n` on every repeat.
+    /// `main-loop.md §6` has town, the overworld and (issue #299 Q23, R580)
+    /// the dungeon emit the prompt's line-feed-and-marker pair before the
+    /// sleep line, "so a slept-through turn advances the message window
+    /// exactly as a polled turn would"; `dungeon-mode.md §4` step 7 prints it
+    /// "each on its own row after its marker" on every repeat.
     ///
-    /// **Measured** 2026-10-17, pending `cleak/u5-spec#299` Q23
-    /// (`qa/paired/asleep-dungeon.tsv`, artifact
+    /// First measured 2026-10-17 (`qa/paired/asleep-dungeon.tsv`, artifact
     /// `asleep-dungeon-20261017-221915`): with every member Sleeping in a
     /// dungeon the stock game prints a fresh `>Zzzzzz...` row - end-cap
     /// marker on it, one blank row between repeats - on every pass, and the

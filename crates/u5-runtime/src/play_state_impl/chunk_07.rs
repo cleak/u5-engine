@@ -6732,6 +6732,29 @@ impl PlayState {
         let Area::Dungeon { scene, level } = self.area else {
             return Ok(None);
         };
+        // `dungeon-mode.md §4` step 6 (issue #299 Q23): the post-action
+        // helper's "first act is the dungeon wake roll: each Sleeping member
+        // independently wakes (becomes Good) with probability 1 in 16 (a
+        // uniform roll over the inclusive range 0..63, waking below 4), and
+        // the stats panel is repainted if anyone woke." It is the dungeon's
+        // only per-turn wake rule and needs an acted command, so the
+        // all-asleep cycle of step 7 never reaches it.
+        let mut woke = false;
+        for index in 0..self.party.len() {
+            if self.party[index].status == b'S'
+                && u5_prng_range_u16(
+                    &mut self.prng_state,
+                    0,
+                    u16::from(DUNGEON_SLEEP_WAKE_ROLL_MAX),
+                ) < u16::from(DUNGEON_SLEEP_WAKE_BELOW)
+            {
+                self.party[index].status = b'G';
+                woke = true;
+            }
+        }
+        if woke {
+            self.repaint_stats_panel();
+        }
         let x = self.player.x;
         let y = self.player.y;
         let tile = self.dungeon_cell(level, x, y);
