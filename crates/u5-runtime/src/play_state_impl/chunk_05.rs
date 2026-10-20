@@ -210,7 +210,10 @@ impl PlayState {
         if advance_turn {
             self.advance_turn();
         }
-        self.message = if let Some(direction) = direction {
+        // The scripted teleport table is a harness affordance with no
+        // published narration, so its report is a diagnostic, never screen
+        // text.
+        let report = if let Some(direction) = direction {
             format!(
                 "Moved {} onto scripted dungeon teleport at ({}, {}) on {} level {}; changed to level {} at ({}, {}).",
                 direction.name(),
@@ -234,6 +237,7 @@ impl PlayState {
                 entry.to_y
             )
         };
+        self.push_diagnostic(report);
         MoveOutcome::Transition(AreaTransition::ChangedDungeonLevel {
             scene,
             level: entry.to_level,
