@@ -46,6 +46,11 @@
 # engine difference; a `heading`/`sailing` difference whose stock side shows
 # an encounter line is that draw, and the run should simply be repeated. The
 # two beats stay compared because they carry the prompt-row contract.
+# `sailing` is deterministic only while neither side has been hit. When both
+# sides sink by it (rc4 sweep 20261020-142358), the stock reads `BREAKING UP!`
+# / `Ship sunk!` and then the blank row `Ship sunk!\n` opened, held through
+# the drowning descent (`overworld.md` §6.3 step 6); the engine left
+# `Ship sunk!` open as the bottom row (`offset-1`). Fixed on rc4.
 # dice-beats: sailing-more same-key
 # requires-seed: profile `seed-drowning-collision` (frigate west of a coast)
 both	wait	15000

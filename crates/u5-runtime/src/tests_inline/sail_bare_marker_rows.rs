@@ -255,3 +255,85 @@ fn the_literal_after_a_bare_marker_row_lands_by_its_own_leading_feed() {
         "the broadside continues the marker row: {rows:?}"
     );
 }
+
+/// The window during the drowning descent, as the Bevy shell lays it out: the
+/// live row is drawn unless a staged presentation stopped part-way along a
+/// row, and it continues the block above it (no blank, no end cap) while the
+/// prompt pair is suppressed.
+fn drowning_layout(state: &PlayState) -> Vec<(bool, String)> {
+    let log = message_log_from_entries(state.message_entries(), |text| {
+        (!text.trim().is_empty()).then(|| text.to_string())
+    });
+    let live = (!state.message_window_live_row_suppressed()).then_some("");
+    let layout = layout_message_window_with_continuation(
+        &log,
+        live,
+        None,
+        false,
+        LiveRowKind::Continuation,
+    );
+    let mut rows = Vec::new();
+    let mut next_row = None;
+    for row in layout.rows {
+        if let Some(expected) = next_row {
+            for _ in expected..row.row {
+                rows.push((false, String::new()));
+            }
+        }
+        next_row = Some(row.row + 1);
+        rows.push((row.prefixed, row.text));
+    }
+    rows
+}
+
+/// `overworld.md §6.3` step 6: the impact payload "may add `Ship sunk!\n` and
+/// then either `Abandon ship!\n` or `DROWNING!!!\n`", and `audio.md §8.9`
+/// puts the long descent between the first and the last. Measured
+/// 2026-10-20 (`sail-heading-echo`, rc4 sweep `20261020-142358`, beats
+/// `sailing` and `sailing-more`, both sides sunk): through the descent the
+/// stock window reads `Ship sunk!` and then the blank row its feed opened,
+/// where this engine left `Ship sunk!` as the bottom row (`offset-1`).
+#[test]
+fn ship_sunk_closes_its_row_before_the_drowning_descent() {
+    let mut state = bare_marker_frigate(WindState::West, 40, "Head West");
+    if let TransportState::Ship { hull, skiffs, .. } = &mut state.player.transport {
+        *hull = 1;
+        *skiffs = 0;
+    }
+    state.special_items[SPECIAL_ITEM_MAGIC_CARPET_INDEX] = 0;
+    state.push_overworld_bare_marker_entry(state.message_entries().len());
+    state.emit_message_line("BREAKING UP!");
+    let OutdoorImpactAbsorption::ShipDestroyed { fallback, .. } = state.apply_outdoor_impact()
+    else {
+        panic!("hull one is always destroyed");
+    };
+    assert_eq!(fallback, ShipLossFallback::Drown);
+    assert!(state.staged_narration_active());
+    // The shell's live-row kind for a staged hold (no end cap, no blank).
+    assert!(shop_pause_row_is_continuation(&state));
+    state.flush_message_slot();
+
+    let rows = drowning_layout(&state);
+    let sunk = rows
+        .iter()
+        .position(|row| row.1 == SHIP_SUNK_MESSAGE)
+        .unwrap_or_else(|| panic!("{rows:?}"));
+    assert_eq!(
+        &rows[sunk + 1..],
+        &[(false, String::new())],
+        "the descent holds the row `Ship sunk!`'s feed opened: {rows:?}"
+    );
+
+    state.flush_staged_narration();
+    state.flush_message_slot();
+    let rows = drowning_layout(&state);
+    let sunk = rows
+        .iter()
+        .position(|row| row.1 == SHIP_SUNK_MESSAGE)
+        .unwrap_or_else(|| panic!("{rows:?}"));
+    assert_eq!(
+        rows[sunk + 1],
+        (false, DROWNING_MESSAGE.to_string()),
+        "`DROWNING!!!` is printed on that row, no blank between: {rows:?}"
+    );
+}

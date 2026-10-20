@@ -5399,6 +5399,13 @@ impl PlayState {
                 // runs exactly as published there."
                 OutdoorImpactHullOutcome::ShipDestroyed => {
                     self.push_impact_line(SHIP_SUNK_MESSAGE);
+                    // `overworld.md §6.3` step 6: the payload prints
+                    // `Ship sunk!\n`, so the cursor stands at column 0 of the
+                    // row below through the drowning descent. Measured
+                    // 2026-10-20 (`sail-heading-echo`, beat `sailing`): the
+                    // stock window holds that blank row under `Ship sunk!`
+                    // until `DROWNING!!!` is printed on it.
+                    self.close_message_row();
                     let (fallback, drowning) = self.apply_ship_loss_ladder();
                     OutdoorImpactAbsorption::ShipDestroyed {
                         roll,
