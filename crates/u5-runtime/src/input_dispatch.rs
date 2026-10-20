@@ -6600,9 +6600,19 @@ fn handle_combat_multistage_command(
                 .find_map(Direction::from_play_key)
                 .filter(|direction| direction.is_cardinal())
             {
+                // The inline form of the adjacent-climb prompt prints what the
+                // interactive one does (`combat.md §8.4`, u5-spec#299 Q13):
+                // the `Klimb-` row completed by the direction name, then any
+                // `What?` on its own row and the short re-prompt.
+                state.message.clear();
+                state.emit_combat_command_echo_line(&format!(
+                    "{DUNGEON_KLIMB_PROMPT_ONE}{}",
+                    direction.name()
+                ));
                 let outcome = state.klimb_combat_actor_direction(actor_slot, direction);
                 if matches!(outcome, MoveOutcome::Blocked) {
                     state.pending_combat_actor_slot = Some(actor_slot);
+                    state.combat_prompt_row_opened_by_banner = false;
                 } else if state.combat_active {
                     let _ = apply_combat_committed_action_maintenance(state, actor_slot);
                     advance_combat_round_after_actor_and_append_message(state, actor_slot);

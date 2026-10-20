@@ -558,3 +558,26 @@ fn spec299_q13_refused_ladder_departure_is_free_with_a_blank_row() {
     assert_eq!(rows[at + 1], "", "{rows:?}");
     assert!(rows[at + 2].starts_with('>'), "{rows:?}");
 }
+
+/// u5-spec#299 Q13: the harness's inline `K<dir>` form prints the same rows
+/// as the interactive prompt - `Klimb-North`, then `What?` on its own row.
+#[test]
+fn spec299_q13_inline_arena_klimb_refusal_prints_the_published_rows() {
+    let game_dir = std::path::Path::new(".");
+    let mut state = combat_player_command_state(10, 10);
+    state.combat_terrain[4][5] = 0x04;
+    state.open_pending_combat_player_turn(Some(0));
+    state.flush_message_slot();
+    let before = playtest_transcript_rows(&state).len();
+
+    handle_play_key_input(&mut state, 'K', "8", game_dir).unwrap();
+    state.flush_message_slot();
+
+    let printed = playtest_transcript_rows(&state)[before..]
+        .iter()
+        .map(|row| row.trim_end().to_string())
+        .collect::<Vec<_>>();
+    assert_eq!(printed, ["Klimb-North", "What?"]);
+    assert_eq!(state.pending_combat_actor_slot, Some(0));
+    assert!(!state.combat_prompt_row_opened_by_banner);
+}
