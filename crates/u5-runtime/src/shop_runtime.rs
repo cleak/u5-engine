@@ -797,6 +797,9 @@ pub enum InnkeeperState {
         guest_indices: [usize; INN_REGISTRY_CAP],
         guest_count: u8,
         base_lodging_charge: u16,
+        /// `shops.md §8.C` "Guest Register keys" (u5-spec#299 Q15): the
+        /// listed guest the highlight is on, starting on the topmost.
+        highlight: u8,
     },
     ConfirmPickUpCompanion {
         inn: Inn,
@@ -935,6 +938,7 @@ pub fn step_innkeeper(
                     guest_indices: [0; INN_REGISTRY_CAP],
                     guest_count: 0,
                     base_lodging_charge: inn_base_room_rate(inn),
+                    highlight: 0,
                 };
                 InnkeeperOutcome::PickUpCompanion
             }
@@ -1001,6 +1005,7 @@ pub fn step_innkeeper(
                 guest_indices,
                 guest_count,
                 base_lodging_charge,
+                ..
             },
             InnkeeperInput::GuestChoice(choice),
         ) if choice < guest_count as usize => {
@@ -1024,6 +1029,7 @@ pub fn step_innkeeper(
                 guest_indices,
                 guest_count,
                 base_lodging_charge,
+                ..
             },
             InnkeeperInput::GuestChoiceWithStay {
                 choice,
@@ -3109,6 +3115,7 @@ mod tests {
             guest_indices: [0; INN_REGISTRY_CAP],
             guest_count: 1,
             base_lodging_charge: 3,
+            highlight: 0,
         };
         assert_eq!(
             step_innkeeper(&mut pickup, InnkeeperInput::GuestChoice(0), high_int),
@@ -3133,6 +3140,7 @@ mod tests {
             guest_indices: [2; INN_REGISTRY_CAP],
             guest_count: 1,
             base_lodging_charge: 3,
+            highlight: 0,
         };
 
         assert_eq!(

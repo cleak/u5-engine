@@ -224,3 +224,131 @@ fn spec299_q18_watch_question_takes_only_y_or_n_and_counts_good_or_poisoned() {
     assert!(sleepy.active_rest.is_none(), "no watch question");
     assert_ne!(sleepy.message, REST_WATCH_PROMPT);
 }
+
+fn spec299_inn_guest(registry_slot: u8, scene_marker: u8, name: &[u8]) -> InnGuestRecord {
+    let mut padded = [0u8; SAVE_CHARACTER_NAME_LEN];
+    padded[..name.len()].copy_from_slice(name);
+    InnGuestRecord {
+        registry_slot,
+        scene_marker,
+        name: padded,
+        member: PartyMember {
+            slot: registry_slot,
+            class_byte: b'F',
+            status: b'G',
+            climb_stat: 10,
+            mana: 0,
+            hp: 30,
+            max_hp: 30,
+            level: 2,
+        },
+        strength: 15,
+        intelligence: 12,
+        experience: 0,
+        equipment: [EQUIPMENT_EMPTY; EQUIPMENT_SLOT_COUNT],
+        stay_counter: 0,
+    }
+}
+
+fn spec299_register_state() -> PlayState {
+    use crate::shop_runtime::InnkeeperState;
+    use crate::shop_session::ActiveShopSession;
+    let mut state = test_state(open_grid(), 1, 1);
+    state.area = Area::Town {
+        scene: Scene::new(2).unwrap(),
+        floor: 0,
+    };
+    // Three guests at this inn and one at another, listed out of roster
+    // order in the engine's guest list.
+    state.inn_registry = vec![
+        spec299_inn_guest(8, 2, b"CHARLIE"),
+        spec299_inn_guest(6, 2, b"ALICE"),
+        spec299_inn_guest(9, 3, b"FOREIGN"),
+        spec299_inn_guest(7, 2, b"BOB"),
+    ];
+    state.gold = 999;
+    state.active_shop = Some(ActiveShopSession::Innkeeper(InnkeeperState::ServiceMenu {
+        inn: Inn::TheWayfarerInn,
+    }));
+    handle_play_key_input(&mut state, 'P', "", Path::new("")).unwrap();
+    assert!(state.message.contains("\"Who will\ncheck out?\" "), "{:?}", state.message);
+    state
+}
+
+fn spec299_register_highlight(state: &PlayState) -> Option<u8> {
+    use crate::shop_runtime::InnkeeperState;
+    use crate::shop_session::ActiveShopSession;
+    match state.active_shop {
+        Some(ActiveShopSession::Innkeeper(InnkeeperState::PickUpCompanion {
+            highlight, ..
+        })) => Some(highlight),
+        _ => None,
+    }
+}
+
+/// u5-spec#299 Q15, `shops.md §8.C` "Guest Register keys": "The highlight
+/// starts on the topmost listed guest. West or North moves it up one listed
+/// guest and East or South moves it down one. There is no wrap: at either end
+/// the key does nothing. Return or Space commits the highlighted guest."
+/// "Every other key is ignored without a redraw: the digits `0`-`9`, letters,
+/// the four diagonal codes and line feed. Digits never move the highlight and
+/// never commit." `§8.4` (Q14): the register scans "records 1 through 15".
+#[test]
+fn spec299_q15_guest_register_moves_by_direction_and_commits_on_space() {
+    let mut state = spec299_register_state();
+    let north = char::from(crate::INPUT_CODE_NORTH);
+    let south = char::from(crate::INPUT_CODE_SOUTH);
+    let east = char::from(crate::INPUT_CODE_EAST);
+    let west = char::from(crate::INPUT_CODE_WEST);
+    assert_eq!(spec299_register_highlight(&state), Some(0));
+    state.flush_message_slot();
+    let rows = playtest_transcript_rows(&state);
+    for (key, expected) in [
+        ('1', 0),
+        ('2', 0),
+        ('3', 0),
+        ('0', 0),
+        ('x', 0),
+        ('\n', 0),
+        (char::from(crate::INPUT_CODE_SOUTHEAST), 0),
+        (north, 0),
+        (west, 0),
+        (south, 1),
+        (east, 2),
+        (south, 2),
+        ('2', 2),
+        (west, 1),
+    ] {
+        handle_play_key_input(&mut state, key, "", Path::new("")).unwrap();
+        assert_eq!(
+            spec299_register_highlight(&state),
+            Some(expected),
+            "after {key:?}"
+        );
+        assert_eq!(state.party.len(), 1, "{key:?} committed a guest");
+        state.flush_message_slot();
+        assert_eq!(playtest_transcript_rows(&state), rows, "{key:?} redrew");
+    }
+    handle_play_key_input(&mut state, ' ', "", Path::new("")).unwrap();
+    assert_eq!(state.party.len(), 2);
+    assert_eq!(&state.party_names[1][..3], b"BOB", "the second record in roster order");
+}
+
+/// u5-spec#299 Q15: "Escape prints `No one\n\n` and picks no one, leaving the
+/// party, the inn markers and gold unchanged."
+#[test]
+fn spec299_q15_guest_register_escape_picks_no_one() {
+    let mut state = spec299_register_state();
+    let registry = state.inn_registry.clone();
+    handle_play_key_input(&mut state, char::from(crate::INPUT_CODE_SOUTH), "", Path::new(""))
+        .unwrap();
+    handle_play_key_input(&mut state, '\u{1b}', "", Path::new("")).unwrap();
+    assert_eq!(state.party.len(), 1);
+    assert_eq!(state.gold, 999);
+    assert_eq!(state.inn_registry, registry);
+    assert!(
+        playtest_transcript_rows(&state).iter().any(|row| row.ends_with("No one")),
+        "{:?}",
+        playtest_transcript_rows(&state)
+    );
+}

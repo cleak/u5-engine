@@ -1699,6 +1699,14 @@ fn handle_active_shop_key_input(
                                 game_dir,
                             )
                         } else {
+                            // `shops.md §8.4` (u5-spec#299 Q14): "The Guest
+                            // Register and its selection steps scan records 1
+                            // through 15", so the register lists the guests
+                            // in roster-record order.
+                            let mut guests = guests;
+                            guests.sort_by_key(|index| {
+                                state.inn_registry.get(*index).map(|guest| guest.registry_slot)
+                            });
                             let mut guest_indices = [0usize; INN_REGISTRY_CAP];
                             for (slot, registry_index) in
                                 guests.iter().copied().take(INN_REGISTRY_CAP).enumerate()
@@ -1711,6 +1719,7 @@ fn handle_active_shop_key_input(
                                 guest_indices,
                                 guest_count,
                                 base_lodging_charge: inn_base_room_rate(inn),
+                                highlight: 0,
                             };
                             // "Multiple-guest selection | `\n\n"Who will\ncheck
                             // out?" `"; the framed register is the side panel.
@@ -1937,30 +1946,62 @@ fn handle_active_shop_key_input(
                     *s = InnkeeperState::Continuation { inn };
                     format!("\n\n{INN_ANYTHING_MORE_PROMPT}")
                 }
+                // `shops.md §8.C` "Guest Register keys" (u5-spec#299 Q15):
+                // "Return or Space commits the highlighted guest", which
+                // starts on the topmost listed guest. "Digits never move the
+                // highlight and never commit"; a digit used to commit that
+                // guest at once.
+                (
+                    InnkeeperState::PickUpCompanion {
+                        inn,
+                        guest_indices,
+                        highlight,
+                        ..
+                    },
+                    _,
+                    _,
+                    _,
+                ) if matches!(key_byte, b' ' | b'\r') => inn_pickup_selected_guest(
+                    state,
+                    s,
+                    inn,
+                    scene_marker,
+                    guest_indices[usize::from(highlight)],
+                    ctx.speaker_intelligence,
+                    innkeeper_name,
+                    game_dir,
+                ),
+                // "West or North moves it up one listed guest and East or
+                // South moves it down one. There is no wrap: at either end
+                // the key does nothing." "Every other key is ignored without
+                // a redraw: the digits `0`-`9`, letters, the four diagonal
+                // codes and line feed."
                 (
                     InnkeeperState::PickUpCompanion {
                         inn,
                         guest_indices,
                         guest_count,
-                        ..
+                        base_lodging_charge,
+                        highlight,
                     },
                     _,
                     _,
-                    digit,
-                ) if matches!(key_byte, b' ' | b'\r' | b'\n')
-                    || digit.is_some_and(|d| d >= 1 && d <= guest_count) =>
-                {
-                    let choice = digit.map_or(0, |d| usize::from(d - 1));
-                    inn_pickup_selected_guest(
-                        state,
-                        s,
+                    _,
+                ) => {
+                    let last = guest_count.saturating_sub(1);
+                    let moved = match crate::z_stats::party_selector_direction_step(key) {
+                        Some(true) => highlight.saturating_add(1).min(last),
+                        Some(false) => highlight.saturating_sub(1),
+                        None => highlight,
+                    };
+                    *s = InnkeeperState::PickUpCompanion {
                         inn,
-                        scene_marker,
-                        guest_indices[choice],
-                        ctx.speaker_intelligence,
-                        innkeeper_name,
-                        game_dir,
-                    )
+                        guest_indices,
+                        guest_count,
+                        base_lodging_charge,
+                        highlight: moved,
+                    };
+                    state.message.clone()
                 }
                 // §8.C "Inn actions": "After a continuing action, print
                 // `"Is there\nanything more\nI can do for\nthee?" `; Y echoes
