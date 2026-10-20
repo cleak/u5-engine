@@ -3351,31 +3351,35 @@ impl PlayState {
                 }
                 return Ok(Some(MoveOutcome::PromptDeclined));
             }
+            if matches!(session.kind, DirectionPromptKind::Klimb)
+                && matches!(self.area, Area::Dungeon { .. })
+            {
+                // `dungeon-mode.md §13.1` (issue #299 Q24): the
+                // `Klimb-U/D-` chooser accepts "`U` (either case) or the
+                // up-direction code for up; `D` (either case) or the
+                // down-direction code for down; Space for pass" (handled
+                // above). The direction codes are the shared reader's: the
+                // Up and Down arrows, keypad 8 and 2, and top-row `8`/`2`
+                // with Shift or NumLock - the frontends deliver all of those
+                // as [`INPUT_CODE_NORTH`]/[`INPUT_CODE_SOUTH`]. "Every other
+                // key is ignored and read again with no echo and no tone,
+                // including `<`, `>`, Esc, Enter, the period, the Left and
+                // Right arrows, the other letters" - so a bare top-row digit
+                // and the `w`/`s` movement letters are re-read too.
+                match u8::try_from(u32::from(ch)).ok() {
+                    Some(b'U' | b'u' | INPUT_CODE_NORTH) => {
+                        return self.climb(game_dir, ClimbIntent::Up).map(Some);
+                    }
+                    Some(b'D' | b'd' | INPUT_CODE_SOUTH) => {
+                        return self.climb(game_dir, ClimbIntent::Down).map(Some);
+                    }
+                    _ => continue,
+                }
+            }
             if matches!(session.kind, DirectionPromptKind::Klimb) {
                 match ch {
                     '<' => return self.climb(game_dir, ClimbIntent::Up).map(Some),
                     '>' => return self.climb(game_dir, ClimbIntent::Down).map(Some),
-                    // `dungeon-mode.md §8.1`, the both-directions Klimb
-                    // row: "the up key or the **up-direction key** gives
-                    // `Up!\n`, the down key or the **down-direction key**
-                    // gives `Down!\n` ... and any other key is re-read."
-                    // Only `<` and `>` were accepted, so the arrows the
-                    // player reaches for left the prompt open. Measured
-                    // 2026-09-19 (`qa/paired/dungeon-two-way-ladder.tsv`,
-                    // beats `down` and `up`), where the original climbs and
-                    // this engine sat on the prompt.
-                    _ if matches!(self.area, Area::Dungeon { .. }) => {
-                        match Direction::from_play_key(ch) {
-                            Some(Direction::North) => {
-                                return self.climb(game_dir, ClimbIntent::Up).map(Some);
-                            }
-                            Some(Direction::South) => {
-                                return self.climb(game_dir, ClimbIntent::Down).map(Some);
-                            }
-                            // "any other key is re-read"
-                            _ => continue,
-                        }
-                    }
                     _ => {}
                 }
             }

@@ -13559,8 +13559,17 @@ fn drive_visual(
 /// Shifted or NumLock-ed top-row digits stay ordinary digits underground and
 /// select a solo party member like any other digit." Combat keeps its own
 /// parser, so a dungeon-room fight still translates.
+///
+/// The `Klimb-U/D-` chooser reads through the shared key reader instead, so
+/// it does translate: `dungeon-mode.md §13.1` (issue #299 Q24) takes "while
+/// Shift or NumLock is held, the digits `8` and `2` from the top row" as the
+/// up- and down-direction codes there.
 fn dungeon_skips_digit_translation(state: &PlayState) -> bool {
-    matches!(state.area, u5_runtime::Area::Dungeon { .. }) && !state.combat_active
+    matches!(state.area, u5_runtime::Area::Dungeon { .. })
+        && !state.combat_active
+        && !state.active_direction_prompt.as_ref().is_some_and(|session| {
+            matches!(session.kind, u5_runtime::DirectionPromptKind::Klimb)
+        })
 }
 
 fn is_top_row_digit(key: KeyCode) -> bool {
@@ -19704,6 +19713,24 @@ mod tests {
             rgba.chunks_exact(4)
                 .all(|pixel| pixel == [0x00, 0x00, 0x00, 0xff]),
             "no billboard bank is installed for the synthetic fixture, so nothing is painted"
+        );
+    }
+
+    /// `dungeon-mode.md §10` keeps shifted top-row digits as digits in the
+    /// dungeon command loop, but the `Klimb-U/D-` chooser (§13.1, issue #299
+    /// Q24) reads them through the shared reader's translation.
+    #[test]
+    fn dungeon_klimb_chooser_translates_shifted_top_row_digits() {
+        let mut grid = open_dungeon_record();
+        grid[u5_runtime::dungeon_cell_index(2, 1, 1)] = 0x30;
+        let mut state = dungeon_state(grid, 2, 1, 1);
+        assert!(dungeon_skips_digit_translation(&state));
+        handle_play_key_input(&mut state, 'K', "", Path::new("")).unwrap();
+        assert!(state.active_direction_prompt.is_some());
+        assert!(!dungeon_skips_digit_translation(&state));
+        assert_eq!(
+            key_code_to_command_char(KeyCode::Digit8, true, false),
+            Some(char::from(u5_runtime::INPUT_CODE_NORTH))
         );
     }
 

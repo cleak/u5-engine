@@ -549,6 +549,32 @@
         assert!(sideways.active_direction_prompt.is_some());
     }
 
+    /// `dungeon-mode.md §13.1` (issue #299 Q24): at the `Klimb-U/D-`
+    /// chooser "Every other key is ignored and read again with no echo and
+    /// no tone, including `<`, `>`, Esc, Enter, the period, the Left and
+    /// Right arrows, the other letters ... There is no cancel key". A bare
+    /// top-row digit is no direction code either (only with Shift or
+    /// NumLock, which the frontends translate to one).
+    #[test]
+    fn dungeon_two_way_ladder_ignores_every_key_but_u_d_the_codes_and_space() {
+        let scene = DungeonScene::new(33).unwrap();
+        let mut grid = open_dungeon_record();
+        grid[dungeon_cell_index(2, 1, 1)] = 0x30;
+        let mut state = dungeon_state(grid, 2, 1, 1);
+        assert!(state.handle_dungeon_key('k', Path::new("")).unwrap());
+        let transcript_len = state.message_transcript.len();
+        for key in ['<', '>', '\u{1b}', '\r', '.', 'w', 's', 'x', '8', '2', 'K'] {
+            handle_play_key_input(&mut state, key, "", Path::new("")).unwrap();
+            assert_eq!(state.area, Area::Dungeon { scene, level: 2 }, "{key:?}");
+            assert!(state.active_direction_prompt.is_some(), "{key:?} re-read");
+            assert_eq!(state.message, DUNGEON_KLIMB_PROMPT_BOTH, "{key:?} no echo");
+        }
+        assert_eq!(state.message_transcript.len(), transcript_len);
+        assert_eq!(state.turn, 0);
+        handle_play_key_input(&mut state, 'u', "", Path::new("")).unwrap();
+        assert_eq!(state.area, Area::Dungeon { scene, level: 1 });
+    }
+
     /// `dungeon-mode.md §8.1`, the both-directions Klimb row: "the pass
     /// key gives `Pass\n\n` and changes no level". The word completes the
     /// open `Klimb-U/D-` row and the second feed leaves a blank under it.
@@ -611,8 +637,10 @@
             Some(DirectionPromptKind::Klimb)
         );
 
+        // `dungeon-mode.md §13.1` (issue #299 Q24): `U` in either case is
+        // up and `D` down; `<` and `>` are ignored keys at this chooser.
         assert_eq!(
-            handle_play_key_input(&mut up, '<', "", Path::new("")).unwrap(),
+            handle_play_key_input(&mut up, 'U', "", Path::new("")).unwrap(),
             PlayInputDisposition::Continue
         );
 
@@ -632,7 +660,7 @@
             Some(DirectionPromptKind::Klimb)
         );
         assert_eq!(
-            handle_play_key_input(&mut down, '>', "", Path::new("")).unwrap(),
+            handle_play_key_input(&mut down, 'd', "", Path::new("")).unwrap(),
             PlayInputDisposition::Continue
         );
 

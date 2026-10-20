@@ -63,7 +63,7 @@ fn playtest_e08_klimb_onto_a_room_cell_enters_it_at_once() {
     grid[dungeon_cell_index(2, 1, 1)] = 0x30;
     let mut two_way = dungeon_state(grid, 2, 1, 1);
     handle_play_key_input(&mut two_way, 'k', "", Path::new("")).unwrap();
-    handle_play_key_input(&mut two_way, '<', "", Path::new("")).unwrap();
+    handle_play_key_input(&mut two_way, 'U', "", Path::new("")).unwrap();
     assert_eq!(two_way.area, Area::Dungeon { scene, level: 1 });
     assert_eq!(two_way.message, DUNGEON_ROOM_ENTRY_NARRATION);
     assert_eq!(two_way.dungeon_cell(1, 1, 1), 0xA2, "the room helper ran");
