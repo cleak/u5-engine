@@ -529,6 +529,13 @@ impl PlayState {
         if let Some(overlay) = self.active_view_overlay.as_ref() {
             return format!("{}:\n{}", overlay.title, overlay.text_map);
         }
+        // `endgame.md §8.3`: the narrative windows own the whole page; there
+        // is no viewport under them to transcribe (F58).
+        if let Some(window) =
+            crate::endgame_narrative_frame::endgame_narrative_window_on_screen(self)
+        {
+            return format!("Endgame narrative window {} (full screen).", window + 1);
+        }
         self.sync_player_object();
         let frame = self.render_text_view(radius);
         self.visibility_dirty = false;

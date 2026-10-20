@@ -642,6 +642,37 @@ impl PlayState {
         self.message_flushed = line;
     }
 
+    /// [`Self::commit_prompt_reply`] for a prompt that may only be a *live*
+    /// row - one the shell draws from the open session (`Item: ` while the
+    /// R-Ready picker waits) rather than a transcript entry. When the
+    /// transcript's last row is the prompt the reply continues it, exactly as
+    /// `commit_prompt_reply` does; otherwise the completed row is logged as
+    /// its own entry, so the reply reaches the transcript instead of living
+    /// only in the slot. The caller states the row the reply leaves:
+    /// `row_open_after` is written to the row flag as given.
+    pub(crate) fn commit_live_prompt_reply(
+        &mut self,
+        prompt: &str,
+        reply: &str,
+        row_open_after: bool,
+    ) {
+        self.flush_message_slot();
+        let line = format!("{prompt}{reply}");
+        let continues_logged_prompt = self
+            .message_transcript
+            .last()
+            .is_some_and(|entry| !entry.explicit_blank && entry.text == prompt);
+        if continues_logged_prompt {
+            self.commit_typed_prompt_line(prompt, reply);
+            self.message_transcript_revision = self.message_transcript_revision.wrapping_add(1);
+        } else {
+            self.push_message_entry(line.clone(), false);
+        }
+        self.message = line.clone();
+        self.message_flushed = line;
+        self.message_row_open_mid_line = row_open_after;
+    }
+
     /// One message-window strip scroll under the open prompt `prompt`, with
     /// the cursor still on it. Returns the open row's new literal - the
     /// prompt's width in spaces - or `None` when `prompt` is not the open

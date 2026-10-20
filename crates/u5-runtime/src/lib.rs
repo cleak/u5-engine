@@ -40,6 +40,7 @@ pub mod dungeon_view;
 pub mod end_io;
 pub mod endgame;
 pub mod endgame_cinematic;
+pub mod endgame_narrative_frame;
 pub mod endmsg_io;
 pub mod equipment;
 pub mod fire_flicker;
@@ -1171,4 +1172,5 @@ mod tests {
     include!("tests_inline/playfix_over2.rs");
     include!("tests_inline/playtest_combat2b_fixes.rs");
     include!("tests_inline/playfix2_shops.rs");
+    include!("tests_inline/rc3_residuals.rs");
 }

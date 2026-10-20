@@ -3848,6 +3848,13 @@ impl PlayState {
     }
 
     pub fn render_text_window_frame(&mut self, input_echo: Option<&str>) -> String {
+        // `endgame.md §8.3`: a narrative window is a hard cut onto the
+        // full-screen window - no message window, panel or viewport (F58).
+        if let Some(rows) =
+            crate::endgame_narrative_frame::endgame_narrative_full_screen_text_rows(self)
+        {
+            return rows.join("\n");
+        }
         let active_cursor = self.active_player;
         let frame = render_play_text_window_ascii(self, active_cursor, input_echo);
         if stats_panel_active_cursor_resets(self, active_cursor) {
@@ -4407,7 +4414,14 @@ impl PlayState {
                     self.active_ready = Some(session);
                 }
                 PartyTargetSelectorAction::Cancel => {
-                    self.commit_prompt_reply(ITEM_SELECTION_PROMPT, ITEM_PICKER_ESCAPE_MESSAGE);
+                    // `inventory.md §5.1`: `None!` belongs to the shared
+                    // picker's *other* caller and R-Ready "never" prints it,
+                    // and `Done` is only the item picker's Escape - no `Item: `
+                    // has been shown yet. `§4.3`: "Cancellation returns to
+                    // that caller, which supplies its own response"; the spec
+                    // publishes none for R-Ready, so the `Player: ` row is
+                    // left as printed and closed, with nothing added.
+                    self.commit_live_prompt_reply(PARTY_SELECTION_PROMPT, "", false);
                 }
                 PartyTargetSelectorAction::Discard => {
                     self.message = self.render_ready_session(&session);
@@ -4420,8 +4434,16 @@ impl PlayState {
         let action = ready_input_action(key);
         if matches!(action, ReadyInputAction::Exit) {
             // A capture reads `Item: Done` on one row: the reply lands on
-            // the prompt's own row (`cleak/u5-engine#5`).
-            self.commit_prompt_reply(ITEM_SELECTION_PROMPT, READY_PICKER_ESCAPE_MESSAGE);
+            // the prompt's own row (`cleak/u5-engine#5`). `Item: ` is often
+            // only the live row, so the completed row is logged here rather
+            // than left in the slot, where it never reached the transcript.
+            // `inventory.md §5.1`'s literal is `Done\n`: its feed closes the
+            // row.
+            self.commit_live_prompt_reply(
+                ITEM_SELECTION_PROMPT,
+                READY_PICKER_ESCAPE_MESSAGE,
+                false,
+            );
             return true;
         }
 

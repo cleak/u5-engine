@@ -1003,7 +1003,7 @@ pub fn run_save_screen(
     complete_headless_blocking_presentations(&mut state, Some(&atlas))?;
     let ibm = load_ibm_ch_font(game_dir)?;
     let runes = load_runes_ch_font(game_dir)?;
-    let rgba = compose_gameplay_screen(&mut state, &atlas, &ibm, &runes)?;
+    let rgba = compose_gameplay_screen(&mut state, game_dir, &atlas, &ibm, &runes)?;
     write_rgba_png(
         out,
         TEXT_WINDOW_RENDER_WIDTH as u32,
@@ -1040,15 +1040,30 @@ fn paint_save_screen_panel_windows(
     }
 }
 
+use u5_runtime::endgame_narrative_frame::{
+    compose_endgame_narrative_window_rgba, endgame_narrative_window_on_screen,
+};
+
 /// Compose the full gameplay screen into a fresh RGBA buffer.
+///
+/// `endgame.md §8.3`: while a final narrative window is up the screen is
+/// that window's full page instead, taken from the same composer the
+/// visual shell's page agrees with.
 pub fn compose_gameplay_screen(
     state: &mut PlayState,
+    game_dir: &Path,
     atlas: &u5_runtime::TileAtlas,
     ibm: &FixedCellFont,
     runes: &FixedCellFont,
 ) -> io::Result<Vec<u8>> {
     let width = TEXT_WINDOW_RENDER_WIDTH;
     let height = TEXT_WINDOW_RENDER_HEIGHT;
+    // `endgame.md §8.3`: a final narrative window is a hard cut onto the
+    // full-screen window, composed exactly as the visual shell composes it -
+    // none of the gameplay layout below survives onto it (playtest F58).
+    if let Some(window) = endgame_narrative_window_on_screen(state) {
+        return compose_endgame_narrative_window_rgba(state, game_dir, window);
+    }
     let mut rgba = vec![0u8; width * height * 4];
     for pixel in rgba.chunks_exact_mut(4) {
         pixel.copy_from_slice(&[0, 0, 0, 0xff]);

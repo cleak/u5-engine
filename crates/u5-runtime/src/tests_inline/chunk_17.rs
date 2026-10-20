@@ -3175,7 +3175,10 @@
         handle_play_key_input(&mut member_cancel, 'R', "", Path::new("")).unwrap();
         handle_play_key_input(&mut member_cancel, '\u{1b}', "", Path::new("")).unwrap();
         assert!(member_cancel.active_ready.is_none());
-        assert_eq!(member_cancel.message, format!("{ITEM_SELECTION_PROMPT}{ITEM_PICKER_ESCAPE_MESSAGE}"));
+        // `inventory.md §5.1`: R-Ready never prints `None!`, and no `Item: `
+        // has been shown at the member stage.
+        assert_eq!(member_cancel.message, PARTY_SELECTION_PROMPT);
+        assert!(!member_cancel.message.contains(ITEM_PICKER_ESCAPE_MESSAGE));
 
         let mut picker_exit = test_state(open_grid(), 1, 1);
         picker_exit.equipment_stock[EQUIPMENT_ID_BOW] = 1;

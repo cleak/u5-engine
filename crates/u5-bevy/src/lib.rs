@@ -30014,6 +30014,46 @@ mod tests {
         }
     }
 
+    /// F58 remainder: the headless `--save-screen` composer takes its
+    /// narrative page from `u5_runtime::endgame_narrative_frame`, and it is
+    /// only an oracle for this shell while the two pages are identical.
+    #[test]
+    #[cfg(feature = "original-asset-tests")]
+    fn endgame_narrative_window_matches_the_shared_headless_composer() {
+        let game_dir = original_asset_dir();
+        if !game_dir.join("END1.16").exists() {
+            eprintln!("skipping: local clean assets are not installed");
+            return;
+        }
+        let font = blank_fixed_cell_font();
+        let mut state = test_state(open_grid(), 1, 1);
+        state.message = "The Avatar returns to the circle of stones.".to_string();
+        for window_index in 0..6usize {
+            let shell = render_endgame_narrative_window_framebuffer(
+                &state,
+                window_index,
+                PlayFrameContext {
+                    ibm: &font,
+                    runes: &font,
+                    game_dir,
+                    cursor_frame: 0,
+                },
+            );
+            let headless =
+                u5_runtime::endgame_narrative_frame::compose_endgame_narrative_window_rgba(
+                    &state,
+                    game_dir,
+                    window_index,
+                )
+                .expect("shared narrative composer");
+            assert!(
+                shell == headless,
+                "window {} differs between the shell and the shared composer",
+                window_index + 1
+            );
+        }
+    }
+
     /// Copy the original asset set into a scratch directory the walk may
     /// write to (combat entry writes the plane mirrors), so the read-only
     /// install is never touched.
