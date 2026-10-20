@@ -2847,6 +2847,11 @@
         state.torch_counter = 20;
         state.light_spell_counter = 30;
         state.food = 0;
+        // `blackthorn.md §7` step 11 (u5-spec#299 Q17): a spin that crosses
+        // midnight runs "the Shadowlord relocation roll and its use of the
+        // random generator". From 04:00 the spin stays on the same day, so the
+        // flashes are the only draws this test counts.
+        state.clock = GameClock::new(4, 0).unwrap();
         let prng_before = state.prng_state;
         let sound_serial_before = state.sound_effect_serial;
 
