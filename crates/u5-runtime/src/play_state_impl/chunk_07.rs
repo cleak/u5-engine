@@ -3988,6 +3988,12 @@ impl PlayState {
                 member.status = b'G';
             }
         }
+        // No panel repaint here, and no request either. **Measured**
+        // 2026-10-19, pending `cleak/u5-spec#299` Q23
+        // (`qa/paired/asleep-town.tsv`): the stock town party wakes within
+        // a few passes - Space is then accepted as `Pass` - yet the panel
+        // keeps showing all three members `S` through three minutes and
+        // twelve Passes. The combat wake does repaint (`asleep-overworld`).
         let tile = self.grid[self.player.y * 32 + self.player.x];
         if !matches!(self.player.transport, TransportState::Carpet { .. }) {
             if let Some(entry) =

@@ -1,0 +1,39 @@
+# F14 (u5-engine#47): the asleep-dungeon party loaded at 23:55 instead of
+# 12:01. Measures whether the dungeon's no-input asleep passes advance the
+# clock at all: if they do, the date in the stats panel rolls over within a
+# few passes. For cleak/u5-spec#299 Q23. No key is sent after the load.
+# requires-seed: the asleep-dungeon party with the clock set to 23:55
+both	wait	15000
+both	key	space
+both	wait	4000
+both	key	j
+both	wait	6000
+both	shot	arrival	Loaded asleep at 23:55
+both	wait	3000
+both	shot	t3	No key, 3 s after arrival
+both	wait	3000
+both	shot	t6	No key, 6 s after arrival
+both	wait	3000
+both	shot	t9	No key, 9 s after arrival
+both	wait	3000
+both	shot	t12	No key, 12 s after arrival
+both	wait	3000
+both	shot	t15	No key, 15 s after arrival
+both	wait	3000
+both	shot	t18	No key, 18 s after arrival
+both	wait	3000
+both	shot	t21	No key, 21 s after arrival
+both	wait	3000
+both	shot	t24	No key, 24 s after arrival
+both	wait	3000
+both	shot	t27	No key, 27 s after arrival
+both	wait	3000
+both	shot	t30	No key, 30 s after arrival
+both	wait	30000
+both	shot	long1	No key, 60 s after arrival
+both	wait	30000
+both	shot	long2	No key, 90 s after arrival
+both	wait	30000
+both	shot	long3	No key, 120 s after arrival
+both	wait	30000
+both	shot	long4	No key, 150 s after arrival

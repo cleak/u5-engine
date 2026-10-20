@@ -1579,6 +1579,14 @@ impl PlayState {
                     member.status = b'G';
                 }
             }
+            // `combat.md §8.1`: the wake is "roster status back to Good ...
+            // stats redrawn", and `stats-panel.md §2.2.1` puts the shared
+            // wake-from-sleep helper on the immediate side. **Measured**
+            // 2026-10-19, pending `cleak/u5-spec#299` Q23
+            // (`qa/paired/asleep-overworld.tsv`): the stock panel shows `G`
+            // as soon as a sleeper wakes mid-fight, while this engine kept
+            // drawing `S` beside a member it was already prompting.
+            self.repaint_stats_panel();
             if let Some(object) = self.active_objects.get_mut(active_object_slot) {
                 object.tile = if hidden {
                     COMBAT_POTION_INVISIBLE_WAKE_DISPLAY_TILE

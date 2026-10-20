@@ -98,15 +98,32 @@ impl PlayState {
             }
             PartyCapability::Sleeping => {
                 let turn_before = self.turn;
-                if matches!(self.area, Area::World { .. }) {
+                match self.area {
                     // `overworld.md` capability gate (spec HEAD d3863ef):
                     // the no-input sleeping branch is an ordinary consumed
                     // world turn, but its clock increment is two minutes.
-                    self.advance_turn_with_minutes(2);
-                } else {
-                    self.advance_turn();
+                    Area::World { .. } => self.advance_turn_with_minutes(2),
+                    Area::Town { .. } => self.advance_turn(),
+                    // `dungeon-mode.md §4` step 7: the asleep result "re-runs
+                    // the check without reading a command, repeating for as
+                    // long as that result holds", so the loop head that owns
+                    // the indoor clock advance is never reached and nothing
+                    // in this arm can wake anybody.
+                    //
+                    // **Measured** 2026-10-19, pending `cleak/u5-spec#299`
+                    // Q23 (`qa/paired/asleep-dungeon-clock.tsv`): the
+                    // asleep-dungeon party loaded at 23:55 still shows
+                    // `4-5-139` after 150 s of continuous passes, so the day
+                    // rollover's panel repaint (`stats-panel.md §2.4`) never
+                    // ran - the passes advance no time. With no clock there is
+                    // no hour, turn count or upkeep roll to wake on, and
+                    // `asleep-dungeon` confirms none fires: the stock party
+                    // stays `S` through five minutes and twelve Space presses.
+                    // An all-asleep dungeon party is a softlock in the
+                    // original too.
+                    Area::Dungeon { .. } => {}
                 }
-                self.message = PARTY_SLEEP_LINE.to_string();
+                self.emit_party_sleep_line();
                 let transition = match self.area {
                     Area::Town { .. } => {
                         self.apply_town_post_turn_effects_after_turn(turn_before, game_dir)?
@@ -121,12 +138,9 @@ impl PlayState {
                         self.apply_top_down_post_turn_effects_after_turn(turn_before, game_dir)?
                     }
                     // `dungeon-mode.md §4`: sleeping repeats without the
-                    // dungeon post-action helper; the next loop head still
-                    // pays the ordinary one-minute cleanup.
-                    Area::Dungeon { .. } => {
-                        self.append_pending_hourly_status_message();
-                        None
-                    }
+                    // dungeon post-action helper, and (above) without the
+                    // loop head's clock.
+                    Area::Dungeon { .. } => None,
                 };
                 Ok(ExplorationTurnGateOutcome::Slept { transition })
             }
@@ -155,6 +169,47 @@ impl PlayState {
                 Ok(ExplorationTurnGateOutcome::Rescued { transition: None })
             }
         }
+    }
+
+    /// Whether an exploration loop is sitting in its all-asleep arm: every
+    /// member unable to act, at least one Sleeping, no combat arena and no
+    /// rescue running. That arm reads no command (`main-loop.md §6`).
+    pub fn party_sleeping_without_input(&self) -> bool {
+        !self.combat_active
+            && self.pending_blackthorn_rescue.is_none()
+            && self.party_capability() == PartyCapability::Sleeping
+    }
+
+    /// Print one pass's sleep line as a row of its own.
+    ///
+    /// `main-loop.md §6` has town and overworld emit the prompt's
+    /// line-feed-and-marker pair before the sleep line, "so a slept-through
+    /// turn advances the message window exactly as a polled turn would", and
+    /// `dungeon-mode.md §4` step 7 has the dungeon emit its own line feed
+    /// before `Zzzzzz...\n` on every repeat.
+    ///
+    /// **Measured** 2026-10-17, pending `cleak/u5-spec#299` Q23
+    /// (`qa/paired/asleep-dungeon.tsv`, artifact
+    /// `asleep-dungeon-20261017-221915`): with every member Sleeping in a
+    /// dungeon the stock game prints a fresh `>Zzzzzz...` row - end-cap
+    /// marker on it, one blank row between repeats - on every pass, and the
+    /// window keeps scrolling for the whole five-minute capture. This engine
+    /// assigned the same literal to the message slot each pass, which the
+    /// slot flush skips as already printed, so it showed a single
+    /// `Zzzzzz...` under a live command row and looked frozen (`F14`,
+    /// `cleak/u5-engine#47`). Each pass is its own emission now.
+    pub(crate) fn emit_party_sleep_line(&mut self) {
+        // Anything the previous turn left in the slot prints above this row.
+        self.flush_message_slot();
+        self.emit_command_echo_line(PARTY_SLEEP_LINE);
+        // The literal ends with its own line feed (`Zzzzzz...\n`), and the
+        // pass then waits with the cursor on the fresh row that feed opened.
+        // Measured 2026-10-20 (`asleep-dungeon`, idle beats): the stock
+        // window between passes ends `Zzzzzz...` on the second-to-last row
+        // with the bottom row blank; this engine left the sleep line on the
+        // bottom row. The row is the blank the next pass's leading feed
+        // would otherwise derive, so the next command row adds none.
+        self.push_explicit_blank_message_entry();
     }
 
     /// `overworld.md` capability gate (spec HEAD d3863ef): defeat writes the

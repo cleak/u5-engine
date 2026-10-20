@@ -352,6 +352,14 @@ impl PlayState {
                 .is_some_and(|session| session.phase == MixPhase::Quantity)
             || self.active_blackthorn_guard_demand.is_some()
             || self.pending_town_arrest.is_some()
+            // `main-loop.md §6`: the all-asleep arm "passes the turn without
+            // reading a command", so no command row is ever open for a key.
+            // **Measured** 2026-10-17, pending `cleak/u5-spec#299` Q23
+            // (`qa/paired/asleep-dungeon.tsv`): between passes the stock
+            // window's last row is the blank the sleep line's own trailing
+            // feed opened - no end cap, no cursor - while this engine drew a
+            // live command row under the single `Zzzzzz...` it showed.
+            || self.party_sleeping_without_input()
             // `doors-and-z-transitions.md §12.1`: the boundary exit's
             // `\nDost thou wish to leave? ` has "trailing space, no line
             // feed" and its reader "does **not** echo", so the cursor waits
@@ -690,6 +698,14 @@ impl PlayState {
         // and loses its cursor the moment `blackthorn.md §4.2`'s exit beat
         // starts.
         if self.staged_narration_active() {
+            return true;
+        }
+        // `main-loop.md §6`'s all-asleep arm reads no key either. Measured
+        // 2026-10-20, pending `cleak/u5-spec#299` Q23
+        // (`qa/paired/asleep-dungeon.tsv`, every idle beat): the stock window
+        // shows no cursor anywhere while the passes scroll, and this engine
+        // put the barber pole after the last `Zzzzzz...`.
+        if self.party_sleeping_without_input() {
             return true;
         }
         // `endgame.md §6`: the waiting branch is terminal and reads no key,

@@ -1,0 +1,68 @@
+# F14 (u5-engine#47): a party loaded with every member asleep (status 'S'),
+# then left alone. Measures whether, when and how the stock wakes it - turn
+# count, hour, random roll or a key - for cleak/u5-spec#299 Q23. The first
+# three minutes send no key at all; Space (Pass) presses follow after that.
+# Measured 2026-10-19: the stock party wakes within a few passes (Space then
+# echoes `Pass`), but the panel keeps showing every member `S` - the town wake
+# roll repaints nothing.
+# requires-seed: the party in Britain with every active member's status Sleeping
+both	wait	15000
+both	key	space
+both	wait	4000
+both	key	j
+both	wait	6000
+both	shot	arrival	Loaded asleep
+both	wait	20000
+both	shot	idle1	No key, 20 s after arrival
+both	wait	20000
+both	shot	idle2	No key, 40 s after arrival
+both	wait	20000
+both	shot	idle3	No key, 60 s after arrival
+both	wait	20000
+both	shot	idle4	No key, 80 s after arrival
+both	wait	20000
+both	shot	idle5	No key, 100 s after arrival
+both	wait	20000
+both	shot	idle6	No key, 120 s after arrival
+both	wait	20000
+both	shot	idle7	No key, 140 s after arrival
+both	wait	20000
+both	shot	idle8	No key, 160 s after arrival
+both	wait	20000
+both	shot	idle9	No key, 180 s after arrival
+both	key	space
+both	wait	10000
+both	shot	pass1	After Space 1
+both	key	space
+both	wait	10000
+both	shot	pass2	After Space 2
+both	key	space
+both	wait	10000
+both	shot	pass3	After Space 3
+both	key	space
+both	wait	10000
+both	shot	pass4	After Space 4
+both	key	space
+both	wait	10000
+both	shot	pass5	After Space 5
+both	key	space
+both	wait	10000
+both	shot	pass6	After Space 6
+both	key	space
+both	wait	10000
+both	shot	pass7	After Space 7
+both	key	space
+both	wait	10000
+both	shot	pass8	After Space 8
+both	key	space
+both	wait	10000
+both	shot	pass9	After Space 9
+both	key	space
+both	wait	10000
+both	shot	pass10	After Space 10
+both	key	space
+both	wait	10000
+both	shot	pass11	After Space 11
+both	key	space
+both	wait	10000
+both	shot	pass12	After Space 12
