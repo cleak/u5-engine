@@ -25,8 +25,8 @@ fn playfix_f55_z_stats_equipment_page_lists_the_owned_grapple() {
     assert_eq!(rows[7], " Grapple");
 }
 
-/// F57: `blackthorn.md §7` step 11 spins the clock to 06:00, and from noon
-/// that crosses midnight. `time.md §7` / `stats-panel.md §2.4`: "The day
+/// F57: `blackthorn.md §7` step 11 spins the clock in nine-minute steps until
+/// the hour is 6 (u5-spec#299 Q17, R571), and from noon that crosses midnight. `time.md §7` / `stats-panel.md §2.4`: "The day
 /// rollover also repaints the stats panel ... exactly once per in-game day
 /// boundary", so the panel's date row must show the new day after the
 /// handoff, not the day of the wipe.

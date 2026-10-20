@@ -6621,9 +6621,9 @@ impl PlayState {
 
     /// Step 25 and contract steps 9 to 12: the second dissolve, then every
     /// durable write. `blackthorn.md §7`: "The moral-standing floor,
-    /// destination scene/floor/position writes, timed-effect clear, advance
-    /// to 06:00, and light-counter clears all occur only after the second
-    /// dissolve has completed."
+    /// destination scene/floor/position writes, timed-effect clear, clock
+    /// spin to hour 6 (step 11), and light-counter clears all occur only after
+    /// the second dissolve has completed."
     fn apply_blackthorn_rescue_handoff(&mut self, game_dir: &Path) -> io::Result<MoveOutcome> {
         // Its hidden viewport is black except for the on-foot party tile at
         // the centre cell; the castle view is not this dissolve's source.
@@ -6638,26 +6638,27 @@ impl PlayState {
         self.blackthorn_rescue_animation_tick = None;
         self.moral_standing = blackthorn_rescue_post_print_standing(self.moral_standing);
         self.clear_active_effect_slot();
-        // `blackthorn.md §7` step 11 / §7.1: the handoff comes "with the
-        // clock spun forward until the hour reads 06:00", and "Once the clock
-        // has been spun forward it also zeroes both light counters"; §8.1 puts
-        // the food repair "after the wait to 06:00". The section publishes no
-        // per-turn work for the spin, and §8.1 preserves every nonzero food
-        // word "exactly", so this is a bare clock spin: no provision pass and
-        // no gameplay-PRNG draws beyond the flashes §7.1 counts.
+        // `blackthorn.md §7` step 11 (u5-spec#299 Q17, `RETRACTIONS.md`
+        // R571): "the clock then spun forward by the ordinary clock advance in
+        // nine-minute steps until the hour is 6. The hour is checked before
+        // each step and the minute is never reset." The timed-effect slot was
+        // cleared just above, "so Quickness and Negate Time never alter a
+        // step: every step is exactly nine minutes". An entry hour of 6 makes
+        // no step; 7 to 23 crosses midnight into the next day.
+        //
+        // The ordinary clock half carries the rest of the step: "A midnight
+        // crossing runs the ordinary day rollover once, which repaints the
+        // whole stats panel straight away, so the date row shows the new
+        // date" (playtest F57), "the ordinary midnight events ... including
+        // the Shadowlord relocation roll", the month-boundary events, and the
+        // hour-change bundle per hour crossed. It runs no provision pass and
+        // no world tick, and §8.1 preserves every nonzero food word.
+        //
+        // The withdrawn reading - "spun forward until the hour reads 06:00"
+        // - stepped whole hours here, which kept the entry minute instead of
+        // landing at 06:00-06:08.
         while self.clock.hour != crate::blackthorn::BLACKTHORN_RESCUE_HANDOFF_HOUR {
-            let previous_day = self.clock.day;
-            self.clock.advance_hour();
-            // `time.md §7` / `stats-panel.md §2.4`: "The day rollover also
-            // repaints the stats panel ... it fires exactly once per in-game
-            // day boundary", and the u5-spec#299 Q17 answer has the panel
-            // date advance when this spin crosses midnight. The cinematic
-            // runs outside the command dispatcher's snapshot test, so
-            // nothing else repainted it and the date row kept the old day
-            // for the rest of the run (playtest F57).
-            if self.clock.day != previous_day {
-                self.repaint_stats_panel();
-            }
+            self.advance_clock_half(crate::blackthorn::BLACKTHORN_RESCUE_CLOCK_STEP_MINUTES);
         }
         self.torch_counter = 0;
         self.light_spell_counter = 0;
