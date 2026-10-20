@@ -2050,10 +2050,15 @@ impl PlayState {
                 // marker `255` into the ... shard flag"; `saved-gam.md §7`
                 // agrees, and the U-Use/Z rows are then uncounted
                 // (`inventory.md §4.4`/§4.5) - playtest F53.
-                if index < SHADOWLORD_COUNT {
-                    self.special_items[SPECIAL_ITEM_SHARD_FALSEHOOD_INDEX + index] =
-                        crate::commands::USE_PICKER_NO_QUANTITY;
-                }
+                //
+                // "The flag written and the line printed are driven by the
+                // same masked index" (`catalogs/item-list.md §8`): `0..2` are
+                // the three shard flags at `0x0210..0x0212`, and `3` is
+                // `0x0213`, the unused byte after them, which no picker row
+                // reads - so it grants nothing usable.
+                let masked = index & usize::from(SHADOWLORD_SHARD_SUBTYPE_MASK);
+                self.special_items[SPECIAL_ITEM_SHARD_FALSEHOOD_INDEX + masked] =
+                    crate::commands::USE_PICKER_NO_QUANTITY;
             }
         }
     }
@@ -3684,8 +3689,13 @@ fn native_object_pickup_grant(object: ActiveObject) -> Option<ObjectPickupGrant>
             kind: ObjectPickupKind::MagicCarpet,
             amount: 1,
         },
+        // `containers.md §8` class `0xB4`: the subtype "is **masked to two
+        // bits**, not validated" - `4` grants a real Shard of Falsehood and
+        // anything congruent to 3 lands on the unused byte (playtest F53).
         InventoryAddClass::ShadowlordShard => ObjectPickupGrant {
-            kind: ObjectPickupKind::ShadowlordShard(subtype as usize),
+            kind: ObjectPickupKind::ShadowlordShard(
+                (subtype & SHADOWLORD_SHARD_SUBTYPE_MASK) as usize,
+            ),
             amount: 1,
         },
         InventoryAddClass::CrownOfLordBritish => ObjectPickupGrant {

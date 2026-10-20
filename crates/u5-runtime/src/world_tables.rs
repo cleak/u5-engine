@@ -362,12 +362,15 @@ impl ObjectPickupKind {
             Self::CrownOfLordBritish => "The Crown of Lord British!".to_string(),
             Self::SceptreOfLordBritish => "The Sceptre of Lord British!".to_string(),
             Self::AmuletOfLordBritish => "The Amulet of Lord British!".to_string(),
+            // `containers.md §8` class `0xB4`: the masked subtype picks the
+            // line, and the unused fourth value "print[s] the Cowardice line
+            // while granting nothing usable".
             Self::ShadowlordShard(index) => format!(
                 "The Shard of\n{}!",
-                match index {
+                match index & usize::from(crate::SHADOWLORD_SHARD_SUBTYPE_MASK) {
+                    0 => "Falsehood",
                     1 => "Hatred",
-                    2 => "Cowardice",
-                    _ => "Falsehood",
+                    _ => "Cowardice",
                 }
             ),
         }

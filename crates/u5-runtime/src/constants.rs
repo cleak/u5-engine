@@ -1055,6 +1055,13 @@ pub const SPECIAL_ITEM_SCEPTRE_LB_INDEX: usize = 0x05;
 pub const SPECIAL_ITEM_SHARD_FALSEHOOD_INDEX: usize = 0x06;
 pub const SPECIAL_ITEM_SHARD_HATRED_INDEX: usize = SPECIAL_ITEM_SHARD_FALSEHOOD_INDEX + 1;
 pub const SPECIAL_ITEM_SHARD_COWARDICE_INDEX: usize = SPECIAL_ITEM_SHARD_HATRED_INDEX + 1;
+/// `formats/saved-gam.md §7`: `0x0213`, the byte immediately after the third
+/// shard flag, which "reach[es] no picker entry at all" - the byte an
+/// out-of-range shard grant writes (`systems/containers.md §8`).
+pub const SPECIAL_ITEM_UNUSED_AFTER_SHARDS_INDEX: usize = SPECIAL_ITEM_SHARD_COWARDICE_INDEX + 1;
+/// `systems/containers.md §8` class `0xB4`: "The subtype is **masked to two
+/// bits**, not validated" (`catalogs/item-list.md §8`).
+pub const SHADOWLORD_SHARD_SUBTYPE_MASK: u8 = 0x03;
 pub const SPECIAL_ITEM_SPYGLASS_INDEX: usize = 0x0a;
 pub const SPECIAL_ITEM_HMS_CAPE_PLANS_INDEX: usize = 0x0b;
 pub const SPECIAL_ITEM_SEXTANT_INDEX: usize = 0x0c;
