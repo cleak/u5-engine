@@ -3039,15 +3039,20 @@ mod tests {
             enc("Yes."),
             final_marker,
         ];
+        // The helper's leading `ASK` keyword would answer `DON'T ASK!` under
+        // the word-start matcher (§6 step 5, R577: `ASK` follows a literal
+        // space), so this blob's first keyword is one the line cannot hit.
         let mut s = label_session(enc("Asked."), records.clone());
+        s.fields[TLK_LEADING_ENTRY_COUNT] = enc("QQQ");
+        s.decoded_fields[TLK_LEADING_ENTRY_COUNT] = "QQQ".to_string();
         for dead in ["caug", "tort"] {
             let out = s.submit_keyword(dead, &ctx());
             assert!(out.text.contains("I cannot help thee with that."), "{dead}: {:?}", out.text);
         }
         let out = s.submit_keyword("DON'T ASK!", &ctx());
         assert!(
-            out.text.contains("\u{10}Hmph."),
-            "the marker glyph, then block 1's head: {:?}",
+            out.text.contains("\u{10}\"Hmph."),
+            "the marker glyph, then block 1's HEAD quote (§7.7 step 1) and head: {:?}",
             out.text
         );
         assert_eq!(
