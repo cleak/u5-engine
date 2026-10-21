@@ -17039,21 +17039,37 @@ fn render_visual_play_frame_over_viewport(
         ctx,
         prompt_cursor_visible,
     );
+    let opaque_cells: Vec<(u8, u8)> = u5_runtime::picker_panel_opaque_cells(state)
+        .into_iter()
+        .chain(u5_runtime::stats_panel_opaque_effect_cell(state))
+        .chain(u5_runtime::stats_panel_opaque_effect_cap_cells(state))
+        .collect();
+    // The chrome a residue cell leaves to the band (see
+    // `picker_residue_cell_chrome_columns`), saved before the surface lands.
+    let kept_chrome: Vec<(usize, [u8; 4])> = opaque_cells
+        .iter()
+        .flat_map(|&(column, row)| {
+            let (x0, y0) = (usize::from(column) * CH_CELL_SIDE, usize::from(row) * CH_CELL_SIDE);
+            let keep = u5_runtime::picker_residue_cell_chrome_columns(state, column, row);
+            (y0..(y0 + CH_CELL_SIDE).min(height))
+                .flat_map(move |y| (x0..(x0 + keep).min(width)).map(move |x| (y * width + x) * 4))
+        })
+        .map(|at| (at, [rgba[at], rgba[at + 1], rgba[at + 2], rgba[at + 3]]))
+        .collect();
     overlay_nonblack_rgba(&mut rgba, &surface.rgba);
     // `inventory.md §4.4`: the picker's panel cells are whole text cells;
     // their black pixels cover the chrome beneath them. Under the leaked
     // inverse the timed-effect slot's caps are too (u5-spec#299 Q12).
-    for (column, row) in u5_runtime::picker_panel_opaque_cells(state)
-        .into_iter()
-        .chain(u5_runtime::stats_panel_opaque_effect_cell(state))
-        .chain(u5_runtime::stats_panel_opaque_effect_cap_cells(state))
-    {
+    for (column, row) in opaque_cells {
         let (x0, y0) = (usize::from(column) * CH_CELL_SIDE, usize::from(row) * CH_CELL_SIDE);
         for y in y0..(y0 + CH_CELL_SIDE).min(height) {
             let start = (y * width + x0) * 4;
             let end = (y * width + (x0 + CH_CELL_SIDE).min(width)) * 4;
             rgba[start..end].copy_from_slice(&surface.rgba[start..end]);
         }
+    }
+    for (at, pixel) in kept_chrome {
+        rgba[at..at + 4].copy_from_slice(&pixel);
     }
     paint_message_window_rows(&mut rgba, width, height, ctx, &surface.message_rows);
 

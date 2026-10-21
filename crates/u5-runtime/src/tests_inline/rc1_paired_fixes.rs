@@ -319,6 +319,9 @@ fn rc4_column_fifteen_residue_keeps_its_own_style_under_the_leak() {
     assert_eq!(screen(7), row_8, "the cell beside the gold keeps its style");
     let roster = system.cell(window.top_left_x, window.top_left_y).unwrap();
     assert!(roster.inverse, "the boxes still draw inverted");
+    // The band keeps the residue cell's leftmost pixel column on row 7 only.
+    assert_eq!(crate::stats_panel::picker_residue_cell_chrome_columns(&state, 39, 7), 1);
+    assert_eq!(crate::stats_panel::picker_residue_cell_chrome_columns(&state, 39, 8), 0);
 }
 
 /// With the picker's inverse leak set, the divider band's timed-effect tag is

@@ -19,7 +19,9 @@
 # window column 15, whose residue `d` the stock leaves exactly as the picker
 # drew it (inverted on row 7, plain beside `G:150` on row 8) while the boxes
 # invert; the engine toggled those cells from an assumed clear bit and
-# swapped the two. Fixed on rc4.
+# swapped the two. A re-capture after that fix (20261020-170851) differed in
+# six pixels only: the cell's leftmost pixel column, which the stock band
+# repaint covers with its fill and rules. Both fixed on rc4.
 # requires-seed: profile `seed-use-specials-reseeded`, built by qa/tools/reseed.py
 both	wait	15000
 both	key	space

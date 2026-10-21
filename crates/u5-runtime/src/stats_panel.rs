@@ -1174,6 +1174,23 @@ pub fn picker_panel_opaque_cells(state: &PlayState) -> Vec<(u8, u8)> {
     cells
 }
 
+/// How many leading pixel columns of an opaque cell from
+/// [`picker_panel_opaque_cells`] the chrome beneath keeps.
+///
+/// The upper divider band (screen row 7) runs one pixel into window column
+/// 15: its fill and rules reach the cell's leftmost pixel column, and the
+/// repaint after the picker closes redraws them over the residue there.
+/// Measured 2026-10-20 (`use-specials`, beat `sceptre`, after the residue
+/// fix): the stock cell holds the inverted `d` in pixel columns 1-7 and the
+/// band's blue fill, white rules at top and bottom, in column 0; every other
+/// residue cell (row 8 beside `G:150`) is wholly the glyph's.
+pub fn picker_residue_cell_chrome_columns(state: &PlayState, column: u8, row: u8) -> usize {
+    let picker_shown = state.active_use.is_some() && active_panel_picker(state).is_some();
+    let band_row = STATS_PANEL_TEXT_TOP + STATS_PANEL_TIMED_EFFECT_LOCAL_ROW;
+    let residue_column = STATS_PANEL_TEXT_LEFT + (PICKER_PANEL_COLUMNS - 1) as u8;
+    usize::from(!picker_shown && row == band_row && column == residue_column)
+}
+
 /// The divider-band cell carrying the timed-effect tag, when the panel
 /// window's inverse bit is set and a tag is shown. `inventory.md §4.4`
 /// (u5-spec#299 Q12): "The effect letter or pictogram comes out black on an
