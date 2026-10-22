@@ -126,8 +126,13 @@ impl PlayState {
                             // until a digit or Space and echoes the key plus a
                             // line feed", so the digit completes the prompt's
                             // own row. A paired capture reads
-                            // `hours? (1-9) 3`.
-                            self.commit_prompt_reply(REST_HOURS_PROMPT, &ch.to_string());
+                            // `hours? (1-9) 3`. The town-bed prompt shares
+                            // its row with the `Hole up- ` verb echo
+                            // (`town-mode.md §12`: the digit is "accepted
+                            // and echoed with a line feed"), so the logged
+                            // row is the echo plus the prompt (playtest W2).
+                            let logged_prompt = self.rest_hours_logged_prompt();
+                            self.commit_prompt_reply(&logged_prompt, &ch.to_string());
                             if !matches!(self.area, Area::Town { .. })
                                 && self.rest_watch_prompt_needed()
                             {
@@ -145,13 +150,15 @@ impl PlayState {
                         // The generic `None!` belongs to the selection
                         // prompts (`commands.md §5.6`), not this one
                         // (playtest E31).
-                        RestDurationInput::Cancel if camp => {
-                            self.commit_prompt_reply(REST_HOURS_PROMPT, &ch.to_string());
-                            self.message_row_open_mid_line = false;
-                            return Ok(None);
-                        }
+                        // `rest-and-camp.md §4`: the resident handler
+                        // "accepts the same visible duration shape as the
+                        // town-hours path: Space and `0` cancel", so the
+                        // town bed takes the same echo-and-abort; no
+                        // `None!` is published for either (playtest W2).
                         RestDurationInput::Cancel => {
-                            self.message = "None!".to_string();
+                            let logged_prompt = self.rest_hours_logged_prompt();
+                            self.commit_prompt_reply(&logged_prompt, &ch.to_string());
+                            self.message_row_open_mid_line = false;
                             return Ok(None);
                         }
                         RestDurationInput::Discard => {}
@@ -224,6 +231,16 @@ impl PlayState {
             self.message = self.render_active_rest();
         }
         Ok(None)
+    }
+
+    /// The transcript row the hours prompt was logged on. The land/dungeon
+    /// camp logs `For how many hours? (1-9) ` as its own row; the town bed
+    /// logs it after the `Hole up- ` verb echo on one row.
+    fn rest_hours_logged_prompt(&self) -> String {
+        self.message_transcript
+            .last()
+            .filter(|entry| !entry.explicit_blank && entry.text.ends_with(REST_HOURS_PROMPT))
+            .map_or_else(|| REST_HOURS_PROMPT.to_string(), |entry| entry.text.clone())
     }
 
     fn finish_active_rest(
