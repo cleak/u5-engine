@@ -5450,7 +5450,16 @@ impl PlayState {
                         self.open_message_row();
                         format!("\n\n{demand}\n\n{BLACKTHORN_INPUT_PROMPT}")
                     } else {
-                        format!("{demand}\n\n{BLACKTHORN_INPUT_PROMPT}")
+                        // §4.1, first wrong answer: the threat, then
+                        // "acknowledgement, then `\n\n` before the second
+                        // ask" (§5 likewise). The threat ends in an open row
+                        // after `die!" `, so the first feed closes it and the
+                        // second leaves the blank row above `"Now tell me,`
+                        // - the same shape as the preamble above (playtest
+                        // H40).
+                        self.flush_message_slot();
+                        self.open_message_row();
+                        format!("\n\n{demand}\n\n{BLACKTHORN_INPUT_PROMPT}")
                     }
                 }
                 _ => String::new(),
