@@ -1687,7 +1687,9 @@ impl PlayState {
         }
 
         let mut response = String::new();
-        if !matches!(key, '\r' | '\n') && !key.is_control() {
+        // `input.md §8`: a byte that is not printable ASCII - a function
+        // key included (`§5`) - is discarded, not taken as a typed line.
+        if !matches!(key, '\r' | '\n') && key.is_ascii() && !key.is_control() {
             response.push(key);
         }
         response.push_str(suffix);

@@ -149,7 +149,19 @@ pub fn run_interactive_play_loop<R: BufRead>(
             if input_reader.read_line(&mut input)? == 0 {
                 break;
             }
-            if play_state_typeahead_setting_in_force(state) {
+            if play_state_whole_line_reader(state) {
+                match free_text_line_input(&input) {
+                    FreeTextLineInput::Submit(key, suffix) => (key, suffix),
+                    FreeTextLineInput::Discard => continue,
+                    FreeTextLineInput::Key => match play_input_key_and_suffix(&input) {
+                        Some((key, suffix)) => (key, suffix),
+                        None => {
+                            handle_empty_play_input(state, game_dir)?;
+                            continue;
+                        }
+                    },
+                }
+            } else if play_state_typeahead_setting_in_force(state) {
                 if let Some(keys) = play_input_typeahead_chars(&input) {
                     let mut keys = keys.into_iter();
                     let key = keys.next().expect("typeahead input is non-empty");
@@ -434,6 +446,83 @@ pub fn play_input_typeahead_chars(input: &str) -> Option<Vec<char>> {
     }
 }
 
+/// The prompts whose session takes one typed token as the whole line the
+/// free-text reader returns on Enter: the conversation keyword and ASK-WHO
+/// prompts and the Yell prompt. Their handlers concatenate `key` and
+/// `suffix` into the submitted line and leave the line editing to the shell
+/// (`handle_active_conversation_key_input`: "The shell clears its own line
+/// buffer").
+pub fn play_state_whole_line_reader(state: &PlayState) -> bool {
+    state.active_conversation.is_some() || state.active_yell.is_some()
+}
+
+/// How the shell hands one input token to a whole-line reader.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum FreeTextLineInput {
+    /// A typed line ended by Enter, as the session's `key` and `suffix`.
+    Submit(char, String),
+    /// Only keys the reader discards were typed; no Enter was pressed, so
+    /// the prompt keeps waiting.
+    Discard,
+    /// Not typed text: Return, an empty line, or a bare Escape, which the
+    /// session handles as a key.
+    Key,
+}
+
+/// `input.md §8`, the free-text reader's byte rules applied to one token.
+///
+/// The token is a typed line: "A printable ASCII character - appended to the
+/// buffer", "A backspace - pops the most recent character", Escape "clears
+/// the whole current line but does **not** submit or terminate it", and
+/// "Any other byte (function key, direction code, etc.) - discarded". Enter
+/// "terminates the prompt, returning the accumulated string" - every
+/// character of the word, never one line per character (playtest G01, G21).
+///
+/// A token that names a single non-text key - an arrow or function-key
+/// sequence, the type-ahead, music or Exit-to-DOS chords - is a key the
+/// reader discards (`§5`: a typed Control character reaches no prompt), so
+/// the prompt keeps waiting.
+pub fn free_text_line_input(input: &str) -> FreeTextLineInput {
+    let input = input.trim_end_matches(['\r', '\n']);
+    if input.is_empty() || input == "\x1b" || is_return_token(input) {
+        return FreeTextLineInput::Key;
+    }
+    if is_typeahead_toggle_token(input)
+        || is_music_toggle_token(input)
+        || is_program_exit_token(input)
+        || ansi_navigation_key(input).is_some()
+        || ansi_function_key(input).is_some()
+        || unclassified_escape_sequence(input)
+    {
+        return FreeTextLineInput::Discard;
+    }
+    let mut line = String::new();
+    let mut typed_text = false;
+    for ch in input.chars() {
+        match ch {
+            '\u{08}' => {
+                line.pop();
+            }
+            '\u{1b}' => line.clear(),
+            ' '..='~' => {
+                typed_text = true;
+                line.push(ch);
+            }
+            _ => {}
+        }
+    }
+    if !typed_text {
+        return FreeTextLineInput::Discard;
+    }
+    let mut chars = line.chars();
+    match chars.next() {
+        Some(key) => FreeTextLineInput::Submit(key, chars.collect()),
+        // Everything typed was erased; Enter "then submits whatever remains,
+        // including an empty buffer".
+        None => FreeTextLineInput::Submit('\r', String::new()),
+    }
+}
+
 pub fn is_simple_typeahead_key(key: char) -> bool {
     Direction::from_play_key(key).is_some() || matches!(key, '.' | ' ')
 }
@@ -585,7 +674,15 @@ pub fn handle_play_script_command(
         }
         return Ok(PlayInputDisposition::Continue);
     }
-    if play_state_typeahead_setting_in_force(state) {
+    if play_state_whole_line_reader(state) {
+        match free_text_line_input(command) {
+            FreeTextLineInput::Submit(key, suffix) => {
+                return handle_play_key_input(state, key, &suffix, game_dir);
+            }
+            FreeTextLineInput::Discard => return Ok(PlayInputDisposition::Continue),
+            FreeTextLineInput::Key => {}
+        }
+    } else if play_state_typeahead_setting_in_force(state) {
         if let Some(keys) = play_input_typeahead_chars(command) {
             for key in keys {
                 if !play_state_honours_typeahead_queue(state) {

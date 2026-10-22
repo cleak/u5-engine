@@ -236,7 +236,10 @@ fn active_ship_cadence_counter_is_record_byte_seven() {
     let mut state = ship_state(WindState::North, 0x2c, 0);
     state.advance_outdoor_active_objects();
     assert_eq!(state.active_objects[1].phase, 0x00, "byte 6 plays no part");
-    assert_eq!(state.active_objects[1].aux3, 1, "one move of the 2-of-3 cycle spent");
+    assert_eq!(
+        state.active_objects[1].aux3, 1,
+        "one move of the 2-of-3 cycle spent"
+    );
     assert_eq!(state.active_objects[1].aux1, 100, "hull untouched");
     state.advance_outdoor_active_objects();
     assert_eq!(state.active_objects[1].aux3, 2);
@@ -244,19 +247,28 @@ fn active_ship_cadence_counter_is_record_byte_seven() {
     let before = (state.active_objects[1].x, state.active_objects[1].y);
     state.advance_outdoor_active_objects();
     assert_eq!(state.active_objects[1].aux3, 0);
-    assert_eq!((state.active_objects[1].x, state.active_objects[1].y), before);
+    assert_eq!(
+        (state.active_objects[1].x, state.active_objects[1].y),
+        before
+    );
 
     // An inherited value at or above the cap skips and resets.
     let mut state = ship_state(WindState::North, 0x2c, 7);
     state.advance_outdoor_active_objects();
     assert_eq!(state.active_objects[1].aux3, 0);
-    assert_eq!((state.active_objects[1].x, state.active_objects[1].y), (100, 100));
+    assert_eq!(
+        (state.active_objects[1].x, state.active_objects[1].y),
+        (100, 100)
+    );
 
     // "An inherited 255 wraps to 0, so the ship moves on that pass."
     let mut state = ship_state(WindState::North, 0x2c, 255);
     state.advance_outdoor_active_objects();
     assert_eq!(state.active_objects[1].aux3, 0);
-    assert_eq!((state.active_objects[1].x, state.active_objects[1].y), (100, 99));
+    assert_eq!(
+        (state.active_objects[1].x, state.active_objects[1].y),
+        (100, 99)
+    );
 
     // Calm and "every turn" leave the counter alone.
     let mut state = ship_state(WindState::Calm, 0x2c, 1);
@@ -265,7 +277,10 @@ fn active_ship_cadence_counter_is_record_byte_seven() {
     let mut state = ship_state(WindState::North, 0x2d, 1);
     state.advance_outdoor_active_objects();
     assert_eq!(state.active_objects[1].aux3, 1);
-    assert_eq!((state.active_objects[1].x, state.active_objects[1].y), (101, 100));
+    assert_eq!(
+        (state.active_objects[1].x, state.active_objects[1].y),
+        (101, 100)
+    );
 }
 
 /// Issue #298 Q32: once the cadence permits movement the ship takes the
@@ -279,7 +294,10 @@ fn active_ship_step_rewrites_both_tile_bytes_to_its_heading() {
     state.player.x = 60;
     state.player.y = 100;
     state.advance_outdoor_active_objects();
-    assert_eq!((state.active_objects[1].x, state.active_objects[1].y), (99, 100));
+    assert_eq!(
+        (state.active_objects[1].x, state.active_objects[1].y),
+        (99, 100)
+    );
     assert_eq!(state.active_objects[1].type_byte, 0x2f);
     assert_eq!(state.active_objects[1].tile, 0x2f);
 }
@@ -1236,4 +1254,181 @@ fn a_presentation_sweep_leaves_every_actor_coordinate_unchanged() {
         u32::from(state.animation.frame) > 0,
         "`§13.5`: a presentation that pumps the world redraw still pays the tile layers"
     );
+}
+
+// ---------------------------------------------------------------------------
+// `systems/input.md §5` — function keys reach no prompt (playtest G13).
+// ---------------------------------------------------------------------------
+
+/// `input.md §5`: the function-key block is consumed by "no mode loop, no
+/// letter dispatcher, no prompt, and no panel"; `commands.md §9` Control+E:
+/// "Y leaves the game; every other returned key prints `N\n` on the
+/// prompt's own row and continues". An F1 at `Exit to DOS?` is such a key,
+/// so the prompt closes on `N` and a following `Y` is an ordinary command.
+#[test]
+fn function_key_at_exit_to_dos_answers_no_instead_of_what() {
+    let mut state = test_state(open_grid(), 5, 5);
+    handle_play_key_input(
+        &mut state,
+        PLAY_EXIT_TO_DOS_KEY,
+        "",
+        std::path::Path::new(""),
+    )
+    .unwrap();
+    assert!(state.active_yes_no_prompt.is_some());
+
+    let f1 = char::from(INPUT_CODE_F1);
+    assert_eq!(
+        handle_play_key_input(&mut state, f1, "", std::path::Path::new("")).unwrap(),
+        PlayInputDisposition::Continue
+    );
+
+    assert!(state.active_yes_no_prompt.is_none());
+    assert_ne!(state.message, unassigned_refusal_echo(0));
+    assert_ne!(
+        handle_play_key_input(&mut state, 'Y', "", std::path::Path::new("")).unwrap(),
+        PlayInputDisposition::Quit
+    );
+}
+
+/// `input.md §10`: at the adjacent-tile prompt "function keys ... are
+/// ignored and cause the prompt to read again". No top-level `What?`.
+#[test]
+fn function_key_at_a_direction_prompt_leaves_the_prompt_waiting() {
+    let mut state = test_state(open_grid(), 5, 5);
+    state.start_get_direction_prompt();
+    let prompt = state.message.clone();
+
+    handle_play_key_input(
+        &mut state,
+        char::from(INPUT_CODE_F1),
+        "",
+        std::path::Path::new(""),
+    )
+    .unwrap();
+
+    assert!(state.active_direction_prompt.is_some());
+    assert_eq!(state.message, prompt);
+}
+
+/// The command prompt still answers an F-key with the resident `What?`.
+#[test]
+fn function_key_at_the_command_prompt_still_answers_what() {
+    let mut state = test_state(open_grid(), 5, 5);
+    handle_play_key_input(
+        &mut state,
+        char::from(INPUT_CODE_F1),
+        "",
+        std::path::Path::new(""),
+    )
+    .unwrap();
+    assert_eq!(state.message, unassigned_refusal_echo(0));
+}
+
+// ---------------------------------------------------------------------------
+// `systems/karma.md §7` — shrine answer editing (playtest G19).
+// ---------------------------------------------------------------------------
+
+fn shrine_session(phase: z_stats::ShrinePhase) -> z_stats::ShrineSession {
+    z_stats::ShrineSession {
+        virtue: shrine_virtue::ShrineVirtue::Honesty,
+        phase,
+        mantra_buffer: String::new(),
+        virtue_buffer: String::new(),
+        mantra_asks_remaining: z_stats::SHRINE_MANTRA_ASK_COUNT,
+        answers_matched: true,
+    }
+}
+
+/// "Backspace or Left erases the last character; Escape erases the whole
+/// current answer and keeps the same prompt open" - at each mantra prompt
+/// as well as at the virtue prompt.
+#[test]
+fn shrine_mantra_escape_clears_and_left_erases() {
+    let mut state = test_state(open_grid(), 5, 5);
+    state.active_shrine = Some(shrine_session(z_stats::ShrinePhase::Mantra));
+    let dir = std::path::Path::new("");
+
+    state.step_active_shrine('x', "yz", dir).unwrap();
+    state.step_active_shrine('\u{1b}', "", dir).unwrap();
+    state.step_active_shrine('a', "hmq", dir).unwrap();
+    state
+        .step_active_shrine(char::from(INPUT_CODE_WEST), "", dir)
+        .unwrap();
+
+    let session = state.active_shrine.as_ref().expect("prompt stays open");
+    assert_eq!(session.phase, z_stats::ShrinePhase::Mantra);
+    assert_eq!(session.mantra_buffer, "ahm");
+}
+
+#[test]
+fn shrine_virtue_left_erases_the_last_character() {
+    let mut state = test_state(open_grid(), 5, 5);
+    state.active_shrine = Some(shrine_session(z_stats::ShrinePhase::Virtue));
+    let dir = std::path::Path::new("");
+
+    state.step_active_shrine('h', "one", dir).unwrap();
+    state
+        .step_active_shrine(char::from(INPUT_CODE_WEST), "", dir)
+        .unwrap();
+
+    assert_eq!(state.active_shrine.as_ref().unwrap().virtue_buffer, "hon");
+}
+
+/// Playtest G13: now that a function key reaches the open prompt, the
+/// shrine answers must discard it (`input.md §8`: "Any other byte
+/// (function key, ...) - discarded") rather than store its code.
+#[test]
+fn function_key_at_a_shrine_answer_is_discarded() {
+    let mut state = test_state(open_grid(), 5, 5);
+    state.active_shrine = Some(shrine_session(z_stats::ShrinePhase::Mantra));
+    let f1 = char::from(INPUT_CODE_F1);
+
+    handle_play_key_input(&mut state, 'a', "h", std::path::Path::new("")).unwrap();
+    handle_play_key_input(&mut state, f1, "", std::path::Path::new("")).unwrap();
+    handle_play_key_input(&mut state, 'm', "", std::path::Path::new("")).unwrap();
+
+    assert_eq!(state.active_shrine.as_ref().unwrap().mantra_buffer, "ahm");
+}
+
+/// Review follow-up to G13: with the `What?` confined to the command prompt,
+/// a function key reaches the open prompt - and a free-text line reader must
+/// discard it (`input.md §8`) rather than take its code as the typed word.
+#[test]
+fn function_key_at_the_yell_prompt_is_discarded() {
+    let mut state = test_state(open_grid(), 5, 5);
+    state.start_yell_prompt();
+    assert!(state.active_yell.is_some());
+
+    handle_play_key_input(
+        &mut state,
+        char::from(INPUT_CODE_F1),
+        "",
+        std::path::Path::new(""),
+    )
+    .unwrap();
+
+    let session = state.active_yell.as_ref().expect("the prompt keeps waiting");
+    assert!(session.buffer.is_empty());
+}
+
+#[test]
+fn function_key_at_the_wishing_well_wish_is_discarded() {
+    let mut state = test_state(open_grid(), 5, 5);
+    state.active_wishing_well = Some(z_stats::WishingWellSession {
+        direction: Direction::East,
+        coin_accepted: true,
+    });
+    let message = state.message.clone();
+
+    handle_play_key_input(
+        &mut state,
+        char::from(INPUT_CODE_F1),
+        "",
+        std::path::Path::new(""),
+    )
+    .unwrap();
+
+    assert!(state.active_wishing_well.is_some(), "the wish is still waiting");
+    assert_eq!(state.message, message);
 }

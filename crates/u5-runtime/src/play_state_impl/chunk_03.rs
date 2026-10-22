@@ -1803,8 +1803,13 @@ impl PlayState {
                     // and a successful `To phase: 2` (playtest F34). A key
                     // with no printable glyph (Escape, Return) echoes
                     // nothing visible; the line feed still closes the row.
+                    // `input.md §6` folds a letter to upper case before any
+                    // caller sees it, so `a` echoes `A` (playtest G20).
                     if ch.is_ascii_graphic() {
-                        self.commit_prompt_reply(GATE_TRAVEL_PHASE_PROMPT, &ch.to_string());
+                        self.commit_prompt_reply(
+                            GATE_TRAVEL_PHASE_PROMPT,
+                            &ch.to_ascii_uppercase().to_string(),
+                        );
                     }
                     self.message_row_open_mid_line = false;
                     let digit = ch

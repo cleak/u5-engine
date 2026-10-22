@@ -734,6 +734,31 @@
         assert!(state.diagnostics.iter().any(|d| d.starts_with("Healed party member 2")));
     }
 
+    /// Playtest G20: `magic.md §8` "echoes the typed key", and `input.md §6`
+    /// folds lowercase to upper case before the caller sees it.
+    #[test]
+    fn gate_phase_prompt_echoes_a_typed_letter_in_upper_case() {
+        let mut state = britannia_state(open_world_grid(), 1, 1);
+        state.spell_charges[GATE_TRAVEL_SPELL_INDEX] = 1;
+        state.party[0].mana = GATE_TRAVEL_COST;
+        state.party[0].level = GATE_TRAVEL_COST;
+        state.active_player = Some(0);
+        assert_eq!(state.start_cast_spell_prompt(), MoveOutcome::Observed);
+        assert!(state.step_active_cast('P', "RV", Path::new("")).unwrap().is_none());
+        assert!(state.step_active_cast(' ', "", Path::new("")).unwrap().is_none());
+        state.flush_message_slot();
+
+        let _ = state.step_active_cast_followup('a', "", Path::new("")).unwrap();
+
+        let rows: Vec<&str> = state
+            .message_transcript
+            .iter()
+            .map(|entry| entry.text.as_str())
+            .collect();
+        assert!(rows.contains(&"To phase: A"), "{rows:?}");
+        assert!(!rows.contains(&"To phase: a"), "{rows:?}");
+    }
+
     #[test]
     fn active_cast_gate_phase_followup_collects_moon_phase() {
         let mut state = britannia_state(open_world_grid(), 1, 1);
