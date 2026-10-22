@@ -2090,7 +2090,9 @@ impl PlayState {
                     '\u{8}' | '\u{7f}' | WEST_DIRECTION_CODE => {
                         session.virtue_buffer.pop();
                     }
-                    ch if !ch.is_control() && session.virtue_buffer.len() < 12 => {
+                    // Printable ASCII only: a function key (`input.md §5`)
+                    // or any other byte is discarded.
+                    ch if (' '..='~').contains(&ch) && session.virtue_buffer.len() < 12 => {
                         session.virtue_buffer.push(ch);
                     }
                     _ => {}
@@ -2113,7 +2115,7 @@ impl PlayState {
                         '\u{8}' | '\u{7f}' | WEST_DIRECTION_CODE => {
                             session.mantra_buffer.pop();
                         }
-                        ch if !ch.is_control()
+                        ch if (' '..='~').contains(&ch)
                             && session.mantra_buffer.len() < SHRINE_MANTRA_INPUT_LIMIT =>
                         {
                             session.mantra_buffer.push(ch);

@@ -1374,3 +1374,19 @@ fn shrine_virtue_left_erases_the_last_character() {
 
     assert_eq!(state.active_shrine.as_ref().unwrap().virtue_buffer, "hon");
 }
+
+/// Playtest G13: now that a function key reaches the open prompt, the
+/// shrine answers must discard it (`input.md §8`: "Any other byte
+/// (function key, ...) - discarded") rather than store its code.
+#[test]
+fn function_key_at_a_shrine_answer_is_discarded() {
+    let mut state = test_state(open_grid(), 5, 5);
+    state.active_shrine = Some(shrine_session(z_stats::ShrinePhase::Mantra));
+    let f1 = char::from(INPUT_CODE_F1);
+
+    handle_play_key_input(&mut state, 'a', "h", std::path::Path::new("")).unwrap();
+    handle_play_key_input(&mut state, f1, "", std::path::Path::new("")).unwrap();
+    handle_play_key_input(&mut state, 'm', "", std::path::Path::new("")).unwrap();
+
+    assert_eq!(state.active_shrine.as_ref().unwrap().mantra_buffer, "ahm");
+}
