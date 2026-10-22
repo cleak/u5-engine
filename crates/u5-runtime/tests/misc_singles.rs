@@ -1324,3 +1324,53 @@ fn function_key_at_the_command_prompt_still_answers_what() {
     .unwrap();
     assert_eq!(state.message, unassigned_refusal_echo(0));
 }
+
+// ---------------------------------------------------------------------------
+// `systems/karma.md §7` — shrine answer editing (playtest G19).
+// ---------------------------------------------------------------------------
+
+fn shrine_session(phase: z_stats::ShrinePhase) -> z_stats::ShrineSession {
+    z_stats::ShrineSession {
+        virtue: shrine_virtue::ShrineVirtue::Honesty,
+        phase,
+        mantra_buffer: String::new(),
+        virtue_buffer: String::new(),
+        mantra_asks_remaining: z_stats::SHRINE_MANTRA_ASK_COUNT,
+        answers_matched: true,
+    }
+}
+
+/// "Backspace or Left erases the last character; Escape erases the whole
+/// current answer and keeps the same prompt open" - at each mantra prompt
+/// as well as at the virtue prompt.
+#[test]
+fn shrine_mantra_escape_clears_and_left_erases() {
+    let mut state = test_state(open_grid(), 5, 5);
+    state.active_shrine = Some(shrine_session(z_stats::ShrinePhase::Mantra));
+    let dir = std::path::Path::new("");
+
+    state.step_active_shrine('x', "yz", dir).unwrap();
+    state.step_active_shrine('\u{1b}', "", dir).unwrap();
+    state.step_active_shrine('a', "hmq", dir).unwrap();
+    state
+        .step_active_shrine(char::from(INPUT_CODE_WEST), "", dir)
+        .unwrap();
+
+    let session = state.active_shrine.as_ref().expect("prompt stays open");
+    assert_eq!(session.phase, z_stats::ShrinePhase::Mantra);
+    assert_eq!(session.mantra_buffer, "ahm");
+}
+
+#[test]
+fn shrine_virtue_left_erases_the_last_character() {
+    let mut state = test_state(open_grid(), 5, 5);
+    state.active_shrine = Some(shrine_session(z_stats::ShrinePhase::Virtue));
+    let dir = std::path::Path::new("");
+
+    state.step_active_shrine('h', "one", dir).unwrap();
+    state
+        .step_active_shrine(char::from(INPUT_CODE_WEST), "", dir)
+        .unwrap();
+
+    assert_eq!(state.active_shrine.as_ref().unwrap().virtue_buffer, "hon");
+}

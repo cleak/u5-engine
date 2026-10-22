@@ -7,6 +7,9 @@ use crate::*;
 /// shared viewport flash/rumble effects" before page-turn record `40`.
 const CODEX_COMPLETION_MAJOR_FLASHES: usize = 3;
 
+/// The west direction code as a key: the shrine answers' Left erase.
+const WEST_DIRECTION_CODE: char = INPUT_CODE_WEST as char;
+
 impl PlayState {
     pub fn step_non_town(
         &mut self,
@@ -2082,7 +2085,9 @@ impl PlayState {
                             String::new(),
                         );
                     }
-                    '\u{8}' | '\u{7f}' => {
+                    // "Backspace or Left erases the last character"; Left
+                    // is the west direction code (`input.md §5`).
+                    '\u{8}' | '\u{7f}' | WEST_DIRECTION_CODE => {
                         session.virtue_buffer.pop();
                     }
                     ch if !ch.is_control() && session.virtue_buffer.len() < 12 => {
@@ -2091,16 +2096,21 @@ impl PlayState {
                     _ => {}
                 },
                 ShrinePhase::Mantra => {
-                    // Measured 2026-09-07 (`qa/paired/shrine-flow.tsv`):
-                    // Escape at the mantra row changes nothing at all - the
-                    // window is byte-identical before and after it - so the
-                    // key is simply not read here. An empty Return is what
-                    // closes the prompt.
+                    // `karma.md §7`: the same editing as the virtue answer,
+                    // for "each of the three mantra prompts": "Escape erases
+                    // the whole current answer and keeps the same prompt
+                    // open. At an empty answer, Escape changes nothing
+                    // visible" - which is all the 2026-09-07 measurement
+                    // (`qa/paired/shrine-flow.tsv`) saw. An empty Return is
+                    // what closes the prompt (playtest G19).
                     match ch {
                         '\r' | '\n' => {
                             return self.complete_active_shrine_mantra(session);
                         }
-                        '\u{8}' | '\u{7f}' => {
+                        '\u{1b}' => {
+                            session.mantra_buffer.clear();
+                        }
+                        '\u{8}' | '\u{7f}' | WEST_DIRECTION_CODE => {
                             session.mantra_buffer.pop();
                         }
                         ch if !ch.is_control()
