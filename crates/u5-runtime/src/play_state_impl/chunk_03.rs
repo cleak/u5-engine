@@ -1514,7 +1514,19 @@ impl PlayState {
     /// capture of the original casting an out-of-scene spell shows
     /// `:GRAV POR` and `Not here!` on consecutive rows.
     fn commit_cast_spell_echo(&mut self, buffer: &str) {
-        self.emit_message_line(format!(":{}", rune_echo_for_buffer(buffer)));
+        // The live echo ends in the last syllable's space, but the submitted
+        // row is closed (below), so the logged row must not carry it: the
+        // message log reads a trailing space as a row still open and drops
+        // `text-output.md §10.4`'s derived blank under it (playtest H31).
+        let echo = format!(":{}", rune_echo_for_buffer(buffer));
+        self.emit_message_line(echo.trim_end());
+        // `magic.md §5.1`: "submitting the name advances to the next row
+        // before any result/refusal is printed", so the row is closed. Set
+        // explicitly for this caller: `emit_message_line` infers "open" from
+        // the missing feed, and that stale flag outlived the command - every
+        // later Look/Get/Search spent its leading feed closing a row that was
+        // already closed and lost its blank row (playtest H25).
+        self.message_row_open_mid_line = false;
         // `magic.md §5.1`: "submitting the name advances to the next row
         // before any result/refusal is printed". In the arena the open-row
         // flag the next arena print reads still described the `Cast...`
@@ -4574,8 +4586,26 @@ impl PlayState {
                     // has been shown yet. `§4.3`: "Cancellation returns to
                     // that caller, which supplies its own response"; the spec
                     // publishes none for R-Ready, so the `Player: ` row is
-                    // left as printed and closed, with nothing added.
+                    // left as printed, with nothing added.
                     self.commit_live_prompt_reply(PARTY_SELECTION_PROMPT, "", false);
+                    // Nothing printed means no feed closed that row, so
+                    // `text-output.md §10.4`'s next poll closes it instead and
+                    // the marker lands directly beneath: "A result that does
+                    // not end in a feed ... no blank row appears". The log
+                    // already ran the next echo directly under it (the row
+                    // ends in the prompt's space); the waiting frame read the
+                    // row as closed, drew a blank, and lost it when a key was
+                    // typed (playtest H31). Only the row is marked: the world
+                    // flag stays as the next command's own echo expects.
+                    if let Some(last) = self
+                        .message_transcript
+                        .last_mut()
+                        .filter(|entry| !entry.explicit_blank && entry.text == PARTY_SELECTION_PROMPT)
+                    {
+                        last.leaves_row_open = true;
+                        self.message_transcript_revision =
+                            self.message_transcript_revision.wrapping_add(1);
+                    }
                 }
                 PartyTargetSelectorAction::Discard => {
                     self.message = self.render_ready_session(&session);
