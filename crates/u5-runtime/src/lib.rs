@@ -41,6 +41,7 @@ pub mod end_io;
 pub mod endgame;
 pub mod endgame_cinematic;
 pub mod endgame_narrative_frame;
+pub mod endgame_tableau_frame;
 pub mod endmsg_io;
 pub mod equipment;
 pub mod fire_flicker;

@@ -788,6 +788,37 @@ mod tests {
         let _ = fs::remove_dir_all(dir);
     }
 
+    /// Playtest G32: `endgame.md §3.1` - "The throne-room tableau is the
+    /// ordinary eleven-by-eleven world viewport". Entered from the Doom
+    /// final room, the `--save-screen` viewport kept drawing the dungeon the
+    /// party left; it now draws the tableau, as the visual shell does.
+    #[test]
+    fn save_screen_draws_the_endgame_tableau_not_the_dungeon_left_behind() {
+        use u5_runtime::endgame_tableau_frame::{
+            endgame_frame_shows_tableau, render_endgame_tableau_viewport,
+        };
+        use u5_runtime::test_fixtures::{dungeon_state, open_dungeon_record, synthetic_tile_atlas};
+        let mut state = dungeon_state(open_dungeon_record(), 0, 1, 1);
+        state.party_names = vec![*b"Avatar\0\0\0"];
+        state.enter_endgame_with_messages(None);
+        state.endgame_entry_redraw_pending = true;
+        for _ in 0..500 {
+            if !state.advance_endgame_display_frame() {
+                break;
+            }
+        }
+        assert!(endgame_frame_shows_tableau(&state));
+        assert!(state.endgame_absorption_arena_view().is_none());
+        let atlas = synthetic_tile_atlas(u5_runtime::TileGraphicsDepth::Ega16);
+
+        let drawn = save_screen_viewport(&mut state, &atlas)
+            .unwrap()
+            .expect("the tableau fills the viewport");
+        let tableau = render_endgame_tableau_viewport(&state, &atlas).unwrap();
+        assert_eq!((drawn.cells_wide, drawn.cells_high), (11, 11));
+        assert!(drawn.pixels == tableau.pixels);
+    }
+
     /// Playtest F49: the tavern's provision quantity question keeps the
     /// cursor on its own row (`text-output.md §10.6`), so the oracle places
     /// no live command row under it - the Bevy shell's rule.
@@ -1179,7 +1210,7 @@ pub fn compose_gameplay_screen(
         );
     }
 
-    if let Some(viewport) = state.render_top_down_frame(VIEWPORT_RADIUS, atlas)? {
+    if let Some(viewport) = save_screen_viewport(state, atlas)? {
         blit_rgba(
             &mut rgba,
             width,
@@ -1192,4 +1223,29 @@ pub fn compose_gameplay_screen(
         );
     }
     Ok(rgba)
+}
+
+/// The raster that fills the gameplay viewport, chosen as the visual shell
+/// chooses it. `endgame.md §3.1`: "The throne-room tableau is the ordinary
+/// eleven-by-eleven world viewport", so during the endgame's tableau phase
+/// it replaces the dungeon the party left (playtest G32); through the
+/// absorption hold the held final room stands in for it.
+fn save_screen_viewport(
+    state: &mut PlayState,
+    atlas: &u5_runtime::TileAtlas,
+) -> io::Result<Option<u5_runtime::TileViewport>> {
+    use u5_runtime::endgame_tableau_frame::{
+        endgame_frame_shows_tableau, render_endgame_tableau_viewport,
+    };
+    if !endgame_frame_shows_tableau(state) {
+        return state.render_top_down_frame(VIEWPORT_RADIUS, atlas);
+    }
+    if state.endgame_absorption_arena_view().is_some()
+        && let Some(mut arena) = state.endgame_absorption_arena.take()
+    {
+        let viewport = arena.render_top_down_frame(VIEWPORT_RADIUS, atlas);
+        state.endgame_absorption_arena = Some(arena);
+        return viewport;
+    }
+    render_endgame_tableau_viewport(state, atlas).map(Some)
 }
