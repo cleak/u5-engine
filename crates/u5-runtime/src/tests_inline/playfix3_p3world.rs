@@ -141,3 +141,21 @@ fn p3w_w4_town_bed_rest_across_dusk_leaves_the_gate_in_day_form() {
     assert_eq!(state.grid[5 * 32 + 5], 0x44 ^ 0xdd);
     let _ = std::fs::remove_dir_all(dir);
 }
+
+#[test]
+fn p3w_w5_ignite_turn_spends_its_own_light_unit() {
+    // `lighting.md §8`: "Outside dungeon scenes, it sets the torch counter to
+    // 240 counter units", and "normal dungeon and town turns spend one unit
+    // and normal overworld turns spend two". The Ignite turn's cleanup runs
+    // after the command (`town-mode.md §7` step 4), so it spends from the
+    // new torch.
+    let mut town = test_state(open_grid(), 1, 1);
+    town.torches = 1;
+    assert_eq!(town.ignite_torch(), MoveOutcome::Ignited);
+    assert_eq!(town.torch_counter, SURFACE_TORCH_DURATION - 1);
+
+    let mut world = world_state(open_world_grid(), 1, 1);
+    world.torches = 1;
+    assert_eq!(world.ignite_torch(), MoveOutcome::Ignited);
+    assert_eq!(world.torch_counter, SURFACE_TORCH_DURATION - 2);
+}

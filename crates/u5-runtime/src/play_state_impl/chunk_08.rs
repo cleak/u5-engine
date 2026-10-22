@@ -1170,6 +1170,15 @@ impl PlayState {
         }
 
         self.torches = self.torches.saturating_sub(1);
+        // `lighting.md §8` sets the surface counter to 240 in the command;
+        // the turn's own cleanup (`time.md §4`, the town epilogue of
+        // `town-mode.md §7` step 4) then spends this turn's unit from it,
+        // leaving 239 in town and 238 outdoors (playtest W5). The dungeon
+        // charged its minute at the loop head, before the command, so its
+        // added duration is not decayed this turn.
+        if !matches!(self.area, Area::Dungeon { .. }) {
+            self.torch_counter = SURFACE_TORCH_DURATION;
+        }
         self.advance_turn();
         match self.area {
             Area::Dungeon { .. } => {
@@ -1181,7 +1190,6 @@ impl PlayState {
                 self.message = String::new();
             }
             _ => {
-                self.torch_counter = SURFACE_TORCH_DURATION;
                 self.recompute_daylight();
                 self.message = String::new();
             }

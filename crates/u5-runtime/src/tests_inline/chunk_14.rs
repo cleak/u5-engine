@@ -1921,7 +1921,9 @@
         assert_eq!(state.ignite_torch(), MoveOutcome::Ignited);
 
         assert_eq!(state.torches, 0);
-        assert_eq!(state.torch_counter, SURFACE_TORCH_DURATION);
+        // `lighting.md §8` sets 240; the Ignite turn's own town cleanup then
+        // spends one unit (playtest W5).
+        assert_eq!(state.torch_counter, SURFACE_TORCH_DURATION - 1);
         assert_eq!(state.turn, 1);
         assert_eq!(state.clock, GameClock::new(12, 1).unwrap());
     }
