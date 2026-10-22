@@ -239,6 +239,26 @@ fn function_key_reaches_the_command_dispatcher(state: &PlayState) -> bool {
         && state.active_combat_targeting.is_none()
 }
 
+/// Whether an open prompt reads a typed line through the free-text reader
+/// (`input.md §8`) and takes each key it is handed as text: the conversation
+/// keyword and ASK-WHO prompts, Yell, the Blackthorn answer row, the wishing
+/// well's wish and the sage's topic. The shrine answers filter their own keys.
+fn free_text_line_reader_open(state: &PlayState) -> bool {
+    state.active_conversation.is_some()
+        || state.active_yell.is_some()
+        || state.blackthorn_prompt_echo().is_some()
+        || state
+            .active_wishing_well
+            .as_ref()
+            .is_some_and(|session| session.coin_accepted)
+        || matches!(
+            state.active_shop.as_ref(),
+            Some(crate::shop_session::ActiveShopSession::Sage(
+                crate::shop_runtime::SageState::Prompt { .. }
+            ))
+        )
+}
+
 /// The overworld loop's head, between one command and the next key read.
 ///
 /// `overworld.md §9.2`: "The overworld command loop has a live-gate entry
@@ -360,6 +380,16 @@ fn handle_play_key_input_inner(
             // where the original draws `?What?` and this engine drew a bare
             // `What?` with no separating row.
             state.emit_command_echo_line(unassigned_refusal_echo(0));
+            return Ok(PlayInputDisposition::Continue);
+        }
+        // `input.md §8`: the free-text reader discards "Any other byte
+        // (function key, direction code, etc.)". These readers build their
+        // line from whatever key they are handed, so the code would
+        // otherwise be taken as typed text - a yelled or wished-for word, a
+        // conversation keyword, a Blackthorn answer.
+        if matches!(input_byte_class(byte), InputByteClass::FunctionKey)
+            && free_text_line_reader_open(state)
+        {
             return Ok(PlayInputDisposition::Continue);
         }
     }

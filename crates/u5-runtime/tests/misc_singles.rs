@@ -1390,3 +1390,45 @@ fn function_key_at_a_shrine_answer_is_discarded() {
 
     assert_eq!(state.active_shrine.as_ref().unwrap().mantra_buffer, "ahm");
 }
+
+/// Review follow-up to G13: with the `What?` confined to the command prompt,
+/// a function key reaches the open prompt - and a free-text line reader must
+/// discard it (`input.md §8`) rather than take its code as the typed word.
+#[test]
+fn function_key_at_the_yell_prompt_is_discarded() {
+    let mut state = test_state(open_grid(), 5, 5);
+    state.start_yell_prompt();
+    assert!(state.active_yell.is_some());
+
+    handle_play_key_input(
+        &mut state,
+        char::from(INPUT_CODE_F1),
+        "",
+        std::path::Path::new(""),
+    )
+    .unwrap();
+
+    let session = state.active_yell.as_ref().expect("the prompt keeps waiting");
+    assert!(session.buffer.is_empty());
+}
+
+#[test]
+fn function_key_at_the_wishing_well_wish_is_discarded() {
+    let mut state = test_state(open_grid(), 5, 5);
+    state.active_wishing_well = Some(z_stats::WishingWellSession {
+        direction: Direction::East,
+        coin_accepted: true,
+    });
+    let message = state.message.clone();
+
+    handle_play_key_input(
+        &mut state,
+        char::from(INPUT_CODE_F1),
+        "",
+        std::path::Path::new(""),
+    )
+    .unwrap();
+
+    assert!(state.active_wishing_well.is_some(), "the wish is still waiting");
+    assert_eq!(state.message, message);
+}
