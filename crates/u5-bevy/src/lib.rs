@@ -1471,6 +1471,7 @@ pub fn run_visual_loop(
             drive_visual,
             animate_static_tiles,
             fit_display_to_window,
+            queue_frame_speaker_effects,
             play_speaker_effects,
             expire_speaker_voice,
             present_camp_apparition_flash,
@@ -9894,6 +9895,7 @@ fn add_visual_intro_update_systems(app: &mut App) {
             // Onward this is the resident idle wait-loop redraw tick.
             animate_static_tiles,
             fit_display_to_window,
+            queue_frame_speaker_effects,
             play_speaker_effects,
             expire_speaker_voice,
             present_camp_apparition_flash,
@@ -13433,15 +13435,41 @@ fn visual_intro_empty_save_message() -> String {
     .join("\n")
 }
 
+/// Send the effects the runtime recorded since the last call to the speaker,
+/// returning whether there were any.
 fn queue_pending_speaker_effects(
     visual: &mut VisualState,
     speaker: &mut EventWriter<SpeakerEffect>,
-) {
+) -> bool {
     let serial = visual.sound_effect_cursor;
     visual.sound_effect_cursor = visual.state.sound_effect_serial;
+    let mut queued_any = false;
     for queued in speaker_effects_after(serial, visual.state.music_enabled, &visual.state) {
         speaker.write(queued);
+        queued_any = true;
     }
+    queued_any
+}
+
+/// Send what the animation pump recorded this frame to the speaker in the
+/// same frame.
+///
+/// `audio.md §2`: "Most effects own the calling thread until they finish, so
+/// gameplay and command input do not continue underneath them". The pump
+/// ([`animate_static_tiles`]) runs after [`drive_visual`], so an ambient
+/// effect its idle world step emitted (`audio.md §8.10`) used to wait for the
+/// next frame's [`drive_visual`] to be sent, and that frame's speaker-busy
+/// gate - which reads the queue and the live voice - could not see it yet.
+/// Sending it here, ahead of [`play_speaker_effects`], starts the voice in
+/// the frame that emitted it.
+fn queue_frame_speaker_effects(
+    visual: Option<ResMut<VisualState>>,
+    mut speaker: EventWriter<SpeakerEffect>,
+) {
+    let Some(mut visual) = visual else {
+        return;
+    };
+    queue_pending_speaker_effects(&mut visual, &mut speaker);
 }
 
 /// The runtime's harness diagnostics recorded since `cursor`, which is
@@ -13567,7 +13595,7 @@ fn drive_visual(
             shift: shift_pressed,
             control: control_pressed,
         }));
-    queue_pending_speaker_effects(&mut visual, &mut speaker);
+    let effects_queued_now = queue_pending_speaker_effects(&mut visual, &mut speaker);
     // `audio.md §2`: "Most effects own the calling thread until they finish,
     // so gameplay and command input do not continue underneath them" - and
     // `§7.2` has the potion "blocking, polls no input". While the one voice
@@ -13575,9 +13603,14 @@ fn drive_visual(
     // the queue. Reading through the sound let a held key pile up ten seconds
     // of beeps behind a wall, and a key typed during a potion answer `What?`
     // at once (playtest H11).
-    let speaker_busy = speaker_queue
-        .as_deref()
-        .is_some_and(|queue| !queue.0.is_empty())
+    //
+    // An effect sent just now has not reached the queue yet - the speaker
+    // system that starts it runs later in this frame - but it owns the
+    // thread from this point all the same, so it counts as busy here.
+    let speaker_busy = effects_queued_now
+        || speaker_queue
+            .as_deref()
+            .is_some_and(|queue| !queue.0.is_empty())
         || !speaker_voices.is_empty();
     if speaker_busy {
         return;
@@ -20028,8 +20061,8 @@ mod tests {
             .expect("intro runtime must install an Update schedule");
         assert_eq!(
             update.systems_len(),
-            10,
-            "intro runtime needs both input drivers, both animation pumps, the aspect fit, sound playback, sound cleanup, the camp apparition flash, screenshots, and the diagnostic log forwarder"
+            11,
+            "intro runtime needs both input drivers, both animation pumps, the aspect fit, the pump's speaker hand-off, sound playback, sound cleanup, the camp apparition flash, screenshots, and the diagnostic log forwarder"
         );
     }
 
@@ -30771,6 +30804,7 @@ mod tests {
                 (
                     drive_visual,
                     animate_static_tiles,
+                    queue_frame_speaker_effects,
                     play_speaker_effects,
                     expire_speaker_voice,
                     present_camp_apparition_flash,
@@ -31303,5 +31337,46 @@ mod tests {
             4,
             "the waiting key runs once the voice has ended"
         );
+    }
+
+    /// `audio.md §2`: an effect owns the calling thread, so the shell reads no
+    /// key while one sounds. An ambient effect the animation pump's idle world
+    /// step emits (`audio.md §8.10`, a waterfall beside the party) is sent to
+    /// the speaker in the frame that emitted it, so the voice is started - and
+    /// the speaker-busy gate sees it - before the next frame's key read. It
+    /// used to be sent only at the top of the next frame's input driver, after
+    /// that frame's gate had already read an idle speaker.
+    #[test]
+    #[cfg(feature = "original-asset-tests")]
+    fn an_ambient_effect_from_the_pump_reaches_the_speaker_in_its_own_frame() {
+        let mut shell = britannia_meadow_shell("ambient-same-frame");
+        {
+            let mut visual = shell.visual_mut();
+            let state = &mut visual.state;
+            let (x, y) = (state.player.x, state.player.y);
+            let index = u5_runtime::world_cell_index(x + 1, y);
+            state.grid[index] = 0xd4;
+            state
+                .rebuild_world_live_chunks_from_grid(WorldPlane::Britannia)
+                .unwrap();
+            assert_eq!(
+                state.ambient_scenery_source(),
+                Some(u5_runtime::audio::AmbientScenerySource::Waterfall)
+            );
+        }
+        let mut emitted_frames = 0;
+        for _ in 0..600 {
+            let before = shell.visual().state.sound_effect_serial;
+            shell.tick();
+            let visual = shell.visual();
+            assert_eq!(
+                visual.sound_effect_cursor, visual.state.sound_effect_serial,
+                "every effect recorded this frame was sent this frame"
+            );
+            if visual.state.sound_effect_serial != before {
+                emitted_frames += 1;
+            }
+        }
+        assert!(emitted_frames > 0, "the waterfall ticked at least once");
     }
 }
