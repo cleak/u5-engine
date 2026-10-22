@@ -68,3 +68,31 @@ fn playfix3_g05_cast_and_search_pickers_refuse_a_dead_or_sleeping_member() {
         }
     }
 }
+
+/// G08: `combat.md §15` - "Combat advances time at one specific point -
+/// when the round counter wraps inside a round ... The wrap fires the
+/// per-turn cleanup with a one-minute increment"; `§4`: "the only time a
+/// fight adds is its round-wrap minutes". A combat cast spent the
+/// overworld's two minutes and a turn.
+#[test]
+fn playfix3_g08_a_combat_cast_charges_no_clock_minutes_or_turn() {
+    let spell = spell_index_from_code("IS").unwrap();
+    for combat in [false, true] {
+        let mut state = world_state(open_world_grid(), 5, 5);
+        state.combat_active = combat;
+        state.party[0].mana = 50;
+        state.party[0].level = 8;
+        state.spell_charges[spell] = 1;
+        state.active_player = Some(0);
+        state.clock = GameClock::new(13, 0).unwrap();
+
+        handle_play_key_input(&mut state, 'C', "1IS", Path::new("")).unwrap();
+        assert_eq!(state.spell_charges[spell], 0, "combat {combat}: the cast resolved");
+        let elapsed = (state.clock.hour, state.clock.minute, state.turn);
+        if combat {
+            assert_eq!(elapsed, (13, 0, 0), "a fight charges no per-cast time");
+        } else {
+            assert_eq!(elapsed, (13, 2, 1), "the overworld turn is two minutes");
+        }
+    }
+}

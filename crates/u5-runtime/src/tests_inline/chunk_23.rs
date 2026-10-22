@@ -3231,7 +3231,7 @@ fn active_combat_field_followup_ignores_out_of_bounds_cursor_move() {
         .expect("confirming the moved cursor should cast the field");
 
     assert_eq!(result.0, MoveOutcome::Cast);
-    assert_eq!(state.turn, 1);
+    assert_eq!(state.turn, 0); // combat.md §15: no per-command turn in a fight (playtest G08)
     let marker = state
         .active_objects
         .iter()
@@ -8519,7 +8519,7 @@ fn combat_cast_clone_routes_resources_and_places_copy_on_legal_cell() {
     let cloned_object_slot = target_slot + 1;
     assert_eq!(state.spell_charges[spell_index], 0);
     assert_eq!(state.party[0].mana, 0);
-    assert_eq!(state.turn, 1);
+    assert_eq!(state.turn, 0); // combat.md §15: no per-command turn in a fight (playtest G08)
     assert_eq!(state.prng_state, expected_prng);
     assert_eq!(state.message, "Success!");
     assert_eq!(
@@ -8631,7 +8631,7 @@ fn combat_cast_charm_routes_resources_and_toggles_target_allegiance() {
 
     assert_eq!(state.spell_charges[spell_index], 0);
     assert_eq!(state.party[0].mana, 0);
-    assert_eq!(state.turn, 1);
+    assert_eq!(state.turn, 0); // combat.md §15: no per-command turn in a fight (playtest G08)
     // `catalogs/spell-list.md` id 34 + `combat.md §6.1a`: Charm prints its
     // own `<name> charmed!` line and suppresses the dispatcher's
     // success/failure epilogue, so the generic `Charm!` never appears.
@@ -8765,7 +8765,7 @@ fn combat_cast_conjure_routes_resources_and_places_weighted_animal() {
 
     assert_eq!(state.spell_charges[spell_index], 0);
     assert_eq!(state.party[0].mana, 0);
-    assert_eq!(state.turn, 1);
+    assert_eq!(state.turn, 0); // combat.md §15: no per-command turn in a fight (playtest G08)
     assert_eq!(state.prng_state, expected_prng);
     assert_eq!(state.message, "Success!");
     assert_eq!(
@@ -8845,7 +8845,7 @@ fn combat_cast_swarm_routes_resources_and_places_four_swarms_on_one_probe() {
 
     assert_eq!(state.spell_charges[spell_index], 0);
     assert_eq!(state.party[0].mana, 0);
-    assert_eq!(state.turn, 1);
+    assert_eq!(state.turn, 0); // combat.md §15: no per-command turn in a fight (playtest G08)
     assert_eq!(state.prng_state, expected_prng);
     assert_eq!(state.message, "Success!");
     for offset in 0..4 {
@@ -8980,7 +8980,7 @@ fn combat_cast_summon_daemon_routes_resources_and_places_daemon() {
 
     assert_eq!(state.spell_charges[spell_index], 0);
     assert_eq!(state.party[0].mana, 0);
-    assert_eq!(state.turn, 1);
+    assert_eq!(state.turn, 0); // combat.md §15: no per-command turn in a fight (playtest G08)
     assert_eq!(state.prng_state, expected_prng);
     // `magic.md §5.1`, Kal Xen Corp: "A controlled Daemon placement prints
     // `Success!`." The banner belongs to scroll dispatch (R402).
@@ -9064,7 +9064,7 @@ fn combat_cast_summon_daemon_does_not_require_direction_and_can_oops() {
     assert_eq!(state.message, "Oops...");
     assert_eq!(state.spell_charges[spell_index], 0);
     assert_eq!(state.party[0].mana, 0);
-    assert_eq!(state.turn, 1);
+    assert_eq!(state.turn, 0); // combat.md §15: no per-command turn in a fight (playtest G08)
     assert!(!state.combat_actors[COMBAT_PARTY_ACTOR_SLOTS].is_empty());
     assert!(!state.combat_actors[COMBAT_PARTY_ACTOR_SLOTS].is_controlled());
 }
@@ -16562,7 +16562,7 @@ fn combat_cast_active_target_spell_routes_resources_damage_and_xp() {
 
     assert_eq!(state.spell_charges[spell_index], 0);
     assert_eq!(state.party[0].mana, 0);
-    assert_eq!(state.turn, 1);
+    assert_eq!(state.turn, 0); // combat.md §15: no per-command turn in a fight (playtest G08)
     assert_eq!(state.prng_state, expected_prng);
     assert_eq!(state.message, "Orc critical!");
     assert_eq!(
@@ -16685,7 +16685,7 @@ fn kill_reaches_protected_special_classes_through_the_ordinary_hit_check() {
 
         assert_eq!(state.spell_charges[spell_index], 0);
         assert_eq!(state.party[0].mana, 0);
-        assert_eq!(state.turn, 1);
+        assert_eq!(state.turn, 0); // combat.md §15: no per-command turn in a fight (playtest G08)
         // `RETRACTIONS.md` R446: "Classes 14, 15 and 47 can reach Kill's
         // shared damage endpoint after an admitted hit". The engine rejected
         // them before drawing anything, on the withdrawn creature-helper
@@ -16774,7 +16774,7 @@ fn combat_cast_magic_missile_aims_with_the_arena_cursor() {
     assert_eq!(result.0, MoveOutcome::Cast);
     assert_eq!(state.spell_charges[spell_index], 0);
     assert_eq!(state.party[0].mana, 0);
-    assert_eq!(state.turn, 1);
+    assert_eq!(state.turn, 0); // combat.md §15: no per-command turn in a fight (playtest G08)
     assert_eq!(state.message, "Orc barely wounded!");
 }
 
@@ -16875,7 +16875,7 @@ fn combat_cast_repel_undead_routes_resources_and_forces_undead_to_flee() {
 
     assert_eq!(state.spell_charges[REPEL_UNDEAD_SPELL_INDEX], 0);
     assert_eq!(state.party[0].mana, 0);
-    assert_eq!(state.turn, 1);
+    assert_eq!(state.turn, 0); // combat.md §15: no per-command turn in a fight (playtest G08)
     assert_eq!(state.combat_actors[COMBAT_PARTY_ACTOR_SLOTS].hp_or_wound, 1);
     assert!(state.combat_actors[COMBAT_PARTY_ACTOR_SLOTS].is_fleeing());
     assert_eq!(
@@ -17308,7 +17308,7 @@ fn combat_cast_tremor_routes_resources_table_damage_and_xp() {
 
     assert_eq!(state.spell_charges[spell_index], 0);
     assert_eq!(state.party[0].mana, 0);
-    assert_eq!(state.turn, 1);
+    assert_eq!(state.turn, 0); // combat.md §15: no per-command turn in a fight (playtest G08)
     assert_ne!(state.prng_state, initial_prng);
     assert_eq!(state.message, "");
     assert!(state.party[0].hp < 30);
@@ -17522,7 +17522,7 @@ fn combat_cast_polymorph_routes_resources_and_replaces_hostile_creature() {
     let rat_stats = combat_class_stats(COMBAT_CLASS_GIANT_RAT).unwrap();
     assert_eq!(state.spell_charges[spell_index], 0);
     assert_eq!(state.party[0].mana, 0);
-    assert_eq!(state.turn, 1);
+    assert_eq!(state.turn, 0); // combat.md §15: no per-command turn in a fight (playtest G08)
     assert_eq!(state.message, "Success!");
     assert_eq!(
         state.combat_actors[target_slot].owner_target_class,
@@ -17674,7 +17674,7 @@ fn combat_cast_field_spell_places_arena_marker_after_coordinate_lookup() {
 
     assert_eq!(state.spell_charges[spell_index], 0);
     assert_eq!(state.party[0].mana, 0);
-    assert_eq!(state.turn, 1);
+    assert_eq!(state.turn, 0); // combat.md §15: no per-command turn in a fight (playtest G08)
     assert_eq!(state.message, "");
     assert_eq!(
         state.active_objects[1],
@@ -17754,7 +17754,7 @@ fn combat_cast_field_spell_places_marker_without_immediate_contact() {
 
     assert_eq!(state.spell_charges[spell_index], 0);
     assert_eq!(state.party[0].mana, 0);
-    assert_eq!(state.turn, 1);
+    assert_eq!(state.turn, 0); // combat.md §15: no per-command turn in a fight (playtest G08)
     assert_eq!(state.message, "");
     assert_eq!(state.party_experience, vec![123]);
     assert!(!state.combat_actors[target_slot].is_marked_dead());
@@ -17836,7 +17836,7 @@ fn combat_cast_fire_field_places_marker_without_random_gate() {
 
     assert_eq!(state.spell_charges[spell_index], 0);
     assert_eq!(state.party[0].mana, 0);
-    assert_eq!(state.turn, 1);
+    assert_eq!(state.turn, 0); // combat.md §15: no per-command turn in a fight (playtest G08)
     assert_eq!(state.message, "");
     assert!(!state.combat_actors[target_slot].is_marked_dead());
     assert_eq!(state.combat_actors[target_slot].hp_or_wound, stats.max_hp);
@@ -17889,7 +17889,7 @@ fn combat_cast_field_spell_places_marker_without_actor_contact_target() {
 
     assert_eq!(state.spell_charges[spell_index], 0);
     assert_eq!(state.party[0].mana, 0);
-    assert_eq!(state.turn, 1);
+    assert_eq!(state.turn, 0); // combat.md §15: no per-command turn in a fight (playtest G08)
     assert_eq!(state.message, "");
     assert_eq!(state.active_objects[1].type_byte, COMBAT_FIELD_KIND_POISON);
     assert_eq!(
@@ -17949,7 +17949,7 @@ fn combat_cast_dispel_field_removes_matching_arena_marker() {
 
     assert_eq!(state.spell_charges[DISPEL_FIELD_SPELL_INDEX], 0);
     assert_eq!(state.party[0].mana, 0);
-    assert_eq!(state.turn, 1);
+    assert_eq!(state.turn, 0); // combat.md §15: no per-command turn in a fight (playtest G08)
     assert_eq!(state.message, "Success!");
     assert!(state.active_objects[1].is_empty());
     assert_eq!(state.active_objects[1].tile, COMBAT_FIELD_KIND_FIRE);
@@ -17996,7 +17996,7 @@ fn combat_cast_dispel_field_without_marker_consumes_cast_and_fails() {
 
     assert_eq!(state.spell_charges[DISPEL_FIELD_SPELL_INDEX], 0);
     assert_eq!(state.party[0].mana, 0);
-    assert_eq!(state.turn, 1);
+    assert_eq!(state.turn, 0); // combat.md §15: no per-command turn in a fight (playtest G08)
     assert_eq!(state.message, "Failed!");
     assert!(
         state.active_objects[1..]

@@ -3746,7 +3746,7 @@
 
         assert_eq!(state.spell_charges[REVEAL_SPELL_INDEX], 0);
         assert_eq!(state.party[0].mana, 0);
-        assert_eq!(state.turn, 1);
+        assert_eq!(state.turn, 0); // combat.md §15: no per-command turn in a fight (playtest G08)
         assert!(!state.combat_actors[7].is_phase_suppressed());
         assert!(state.visibility_dirty);
         assert_eq!(state.message, "");
@@ -3798,7 +3798,7 @@
 
         assert_eq!(state.spell_charges[INVISIBILITY_SPELL_INDEX], 0);
         assert_eq!(state.party[0].mana, 0);
-        assert_eq!(state.turn, 1);
+        assert_eq!(state.turn, 0); // combat.md §15: no per-command turn in a fight (playtest G08)
         assert!(state.combat_actors[0].is_phase_suppressed());
         assert_eq!(state.active_objects[0].tile, COMBAT_HIDDEN_ACTIVE_OBJECT_TILE);
         assert!(state.visibility_dirty);
@@ -3889,7 +3889,7 @@
 
         assert_eq!(state.spell_charges[CAUSE_FEAR_SPELL_INDEX], 0);
         assert_eq!(state.party[0].mana, 0);
-        assert_eq!(state.turn, 1);
+        assert_eq!(state.turn, 0); // combat.md §15: no per-command turn in a fight (playtest G08)
         assert_eq!(state.combat_actors[0].hp_or_wound, 20);
         assert_eq!(
             state.combat_actors[6].hp_or_wound,
@@ -4691,8 +4691,8 @@
         assert_eq!(state.combat_terrain[5][6], 0xB8);
         assert_eq!(state.spell_charges[OPEN_SPELL_INDEX], 0);
         assert_eq!(state.party[0].mana, 0);
-        assert_eq!(state.turn, 1);
-        assert_eq!(state.clock, GameClock::new(12, 2).unwrap());
+        assert_eq!(state.turn, 0); // combat.md §15: no per-command turn in a fight (playtest G08)
+        assert_eq!(state.clock, GameClock::new(12, 0).unwrap());
         assert_eq!(state.message, "Success!");
     }
 
@@ -4733,7 +4733,7 @@
 
         assert_eq!(state.active_objects[2].aux1, 0x25);
         assert_eq!(state.message, "Success!");
-        assert_eq!(state.turn, 1);
+        assert_eq!(state.turn, 0); // combat.md §15: no per-command turn in a fight (playtest G08)
     }
 
     #[test]
@@ -4775,7 +4775,7 @@
         assert_eq!(object_state.combat_terrain[5][6], VANISH_CLEARED_TILE);
         assert_eq!(object_state.spell_charges[VANISH_SPELL_INDEX], 0);
         assert_eq!(object_state.party[0].mana, 0);
-        assert_eq!(object_state.turn, 1);
+        assert_eq!(object_state.turn, 0); // combat.md §15: no per-command turn in a fight (playtest G08)
         assert_eq!(object_state.message, "POOF!");
 
         let mut field_state = test_state(open_grid(), 5, 5);
@@ -4852,7 +4852,7 @@
         assert_eq!(state.combat_actors[1], target_before);
         assert_eq!(state.spell_charges[VANISH_SPELL_INDEX], 0);
         assert_eq!(state.party[0].mana, 0);
-        assert_eq!(state.turn, 1);
+        assert_eq!(state.turn, 0); // combat.md §15: no per-command turn in a fight (playtest G08)
         assert_eq!(state.message, "Failed!");
     }
 
@@ -5129,8 +5129,8 @@
         );
         assert_eq!(state.spell_charges[BLINK_SPELL_INDEX], 0);
         assert_eq!(state.party[0].mana, 0);
-        assert_eq!(state.turn, 1);
-        assert_eq!(state.clock, GameClock::new(12, 2).unwrap());
+        assert_eq!(state.turn, 0); // combat.md §15: no per-command turn in a fight (playtest G08)
+        assert_eq!(state.clock, GameClock::new(12, 0).unwrap());
         assert!(state.visibility_dirty);
         let line = format!("blinked to ({}, {})", landing.0, landing.1);
         assert!(state.diagnostics.iter().any(|n| n.contains(&line)), "{:?}", state.diagnostics);
@@ -5169,7 +5169,7 @@
         assert_eq!((state.active_objects[0].x, state.active_objects[0].y), (1, 1));
         assert_eq!(state.spell_charges[BLINK_SPELL_INDEX], 0);
         assert_eq!(state.party[0].mana, 0);
-        assert_eq!(state.turn, 1);
+        assert_eq!(state.turn, 0); // combat.md §15: no per-command turn in a fight (playtest G08)
         assert_eq!(state.message, "Failed!");
     }
 

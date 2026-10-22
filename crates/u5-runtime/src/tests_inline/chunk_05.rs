@@ -1188,7 +1188,7 @@ fn y_yell_shipboard_high_scene_byte_uses_the_word_prompt() {
 
     assert_eq!(state.yell_command(Some("")), MoveOutcome::Used);
     assert_eq!(state.message, YELL_NOTHING_SAID_MESSAGE);
-    assert_eq!(state.turn, 1);
+    assert_eq!(state.turn, 0); // combat.md §15: no per-command turn in a fight (playtest G08)
     assert!(!state.player.transport.is_ship_under_sail());
 }
 

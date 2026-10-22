@@ -427,8 +427,8 @@
         assert_eq!(magic_lock.combat_terrain[5][6], 0x97);
         assert_eq!(magic_lock.spell_charges[MAGIC_LOCK_SPELL_INDEX], 0);
         assert_eq!(magic_lock.party[0].mana, 0);
-        assert_eq!(magic_lock.turn, 1);
-        assert_eq!(magic_lock.clock, GameClock::new(12, 2).unwrap());
+        assert_eq!(magic_lock.turn, 0); // combat.md §15: no per-command turn in a fight (playtest G08)
+        assert_eq!(magic_lock.clock, GameClock::new(12, 0).unwrap());
         assert_eq!(magic_lock.message, "Success!");
 
         let mut unlock_magic = britannia_state(open_world_grid(), 5, 5);
@@ -459,8 +459,8 @@
         assert_eq!(unlock_magic.combat_terrain[5][6], 0xB8);
         assert_eq!(unlock_magic.spell_charges[UNLOCK_MAGIC_SPELL_INDEX], 0);
         assert_eq!(unlock_magic.party[0].mana, 0);
-        assert_eq!(unlock_magic.turn, 1);
-        assert_eq!(unlock_magic.clock, GameClock::new(12, 2).unwrap());
+        assert_eq!(unlock_magic.turn, 0); // combat.md §15: no per-command turn in a fight (playtest G08)
+        assert_eq!(unlock_magic.clock, GameClock::new(12, 0).unwrap());
         assert_eq!(unlock_magic.message, "Success!");
     }
 
