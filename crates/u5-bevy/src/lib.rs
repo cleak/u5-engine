@@ -6735,7 +6735,12 @@ fn visual_route_suite_cases() -> Vec<VisualRouteSuiteCase> {
                 target: PlayTarget::Town(castle),
                 ..PlayOptions::default()
             },
-            script: &["l6", "1"],
+            // `view.md §3` opens the shared member selector, where a digit
+            // only moves the indicator and Return accepts it
+            // (`inventory.md §4.3`, `text-output.md §10.6`). The first member
+            // is already indicated, so `1` changes nothing on screen since
+            // playtest H30 stopped it reprinting `Who will drink?`.
+            script: &["l6", "Return"],
             configure: Some(seed_visual_route_fountain),
         },
         VisualRouteSuiteCase {
@@ -6745,7 +6750,12 @@ fn visual_route_suite_cases() -> Vec<VisualRouteSuiteCase> {
                 target: PlayTarget::Town(castle),
                 ..PlayOptions::default()
             },
-            script: &["l6", "1"],
+            // `view.md §3` opens the shared member selector, where a digit
+            // only moves the indicator and Return accepts it
+            // (`inventory.md §4.3`, `text-output.md §10.6`). The first member
+            // is already indicated, so `1` changes nothing on screen since
+            // playtest H30 stopped it reprinting `Who will drink?`.
+            script: &["l6", "Return"],
             configure: Some(seed_visual_route_fountain),
         },
         VisualRouteSuiteCase {
@@ -26225,8 +26235,8 @@ mod tests {
         assert!(manifest.contains("route-shop-sage-topic-short-funds-02-y"));
         assert!(manifest.contains("route-shop-sage-topic-paid-success-route-02-y"));
         assert!(manifest.contains("route-shop-sage-topic-short-funds-route-02-y"));
-        assert!(manifest.contains("route-castle-fountain-look-02-1"));
-        assert!(manifest.contains("route-castle-surface-fountain-look-02-1"));
+        assert!(manifest.contains("route-castle-fountain-look-02-return"));
+        assert!(manifest.contains("route-castle-surface-fountain-look-02-return"));
         assert!(manifest.contains("route-yew-wanted-poster-look-01-l6"));
         assert!(manifest.contains("route-castle-town-attack-death-mask-npc-01-a6"));
         assert!(manifest.contains("route-castle-town-attack-guard-alarm-01-a6"));
