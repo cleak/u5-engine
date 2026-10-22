@@ -166,3 +166,37 @@ fn playfix3_g09_a_timed_effect_spell_takes_hold_on_its_own_casting_turn() {
         );
     }
 }
+
+/// G11: `magic.md §5.1` - "submitting the name advances to the next row
+/// before any result/refusal is printed", and `§7`: "Combat's subsequent
+/// actor banner has its own leading feed, which leaves a blank row after a
+/// completed result". In Sanct prints no result line, and a cancelled
+/// `On who:` ends on `None!`; either way one blank row stands before the
+/// next banner, as it does after `Not here!` (E40).
+#[test]
+fn playfix3_g11_a_resultless_combat_cast_leaves_a_blank_row_before_the_banner() {
+    let game_dir = std::path::Path::new(".");
+    for (keys, last_exchange_row) in [
+        (&['C', 'I', 'S', '\r'][..], ":IN SANCT"),
+        (&['C', 'M', '\r', '\u{1b}'][..], "On who: None!"),
+    ] {
+        let mut state = combat_state_after_the_conflict_banner(8, 5);
+        state.active_player = Some(0);
+        state.party[0].mana = 50;
+        state.party[0].level = 8;
+        state.spell_charges = [9; SPELL_COUNT];
+        state.ensure_pending_combat_player_turn();
+
+        for &key in keys {
+            handle_play_key_input(&mut state, key, "", game_dir).unwrap();
+        }
+
+        let rows = combat_message_window_rows(&state);
+        let exchange = rows
+            .iter()
+            .rposition(|row| row == last_exchange_row)
+            .unwrap_or_else(|| panic!("{last_exchange_row} is drawn: {rows:?}"));
+        assert_eq!(rows[exchange + 1], "", "{last_exchange_row}: {rows:?}");
+        assert_eq!(rows[exchange + 2], "Avatar, armed", "{last_exchange_row}: {rows:?}");
+    }
+}

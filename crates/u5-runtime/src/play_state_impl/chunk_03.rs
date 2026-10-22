@@ -1515,6 +1515,17 @@ impl PlayState {
     /// `:GRAV POR` and `Not here!` on consecutive rows.
     fn commit_cast_spell_echo(&mut self, buffer: &str) {
         self.emit_message_line(format!(":{}", rune_echo_for_buffer(buffer)));
+        // `magic.md §5.1`: "submitting the name advances to the next row
+        // before any result/refusal is printed". In the arena the open-row
+        // flag the next arena print reads still described the `Cast...`
+        // echo, so when the spell printed no result line (In Sanct, a
+        // cancelled `On who:`) the next banner's leading feed was spent on
+        // that row and `§7`'s blank row before it was lost (playtest G11).
+        // Set explicitly for this caller; later arena prints record their
+        // own row state.
+        if self.combat_active {
+            self.combat_transcript_row_open = false;
+        }
     }
 
     pub fn step_active_cast(
