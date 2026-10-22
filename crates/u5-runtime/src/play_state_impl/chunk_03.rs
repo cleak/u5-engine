@@ -1219,6 +1219,28 @@ impl PlayState {
             self.commit_dungeon_acting_member_pick(session, index);
             return true;
         }
+        // `commands.md §5.8`, the conditional acting-member exchange that
+        // the direction form of Search and Cast run (and the death-vision
+        // sphere, `view.md §3`): "An ineligible pick prints `Disabled!\n\n`
+        // and repeats the prompt". Eligible is Good or Poisoned
+        // (`traps.md §2.1`) - the same gate the chest, Jimmy and dungeon
+        // sites apply. A Dead or Sleeping pick used to be accepted, and
+        // the cast then aborted silently (playtest G05).
+        if matches!(
+            session.target,
+            PartySelectorTarget::Search { .. }
+                | PartySelectorTarget::Cast
+                | PartySelectorTarget::DeathVision { .. }
+        ) && !self
+            .party
+            .get(index)
+            .is_some_and(|member| acting_member_status_eligible(member.status))
+        {
+            self.emit_message_line(DUNGEON_ACTING_MEMBER_DISABLED);
+            self.active_party_selector = Some(session);
+            self.message = session.target.prompt().to_string();
+            return true;
+        }
         // `commands.md §5.6`: `Player:_` is "colon then exactly one
         // trailing space", so the chosen name lands on that same line -
         // the original shows `Player: Avatar`.
@@ -1493,6 +1515,17 @@ impl PlayState {
     /// `:GRAV POR` and `Not here!` on consecutive rows.
     fn commit_cast_spell_echo(&mut self, buffer: &str) {
         self.emit_message_line(format!(":{}", rune_echo_for_buffer(buffer)));
+        // `magic.md §5.1`: "submitting the name advances to the next row
+        // before any result/refusal is printed". In the arena the open-row
+        // flag the next arena print reads still described the `Cast...`
+        // echo, so when the spell printed no result line (In Sanct, a
+        // cancelled `On who:`) the next banner's leading feed was spent on
+        // that row and `§7`'s blank row before it was lost (playtest G11).
+        // Set explicitly for this caller; later arena prints record their
+        // own row state.
+        if self.combat_active {
+            self.combat_transcript_row_open = false;
+        }
     }
 
     pub fn step_active_cast(
@@ -5922,9 +5955,15 @@ impl PlayState {
             self.emit_sound_effect(SoundEffect::SharedVariant { variant });
         }
 
-        self.advance_turn();
+        // `main-loop.md §6`: dispatch (step 3) installs the tag before the
+        // per-turn cleanup (step 4) runs, so the casting turn's own cleanup
+        // already sees it - `§8` step 1 halves a `Q` turn - and `magic.md
+        // §8`'s aging at "the per-turn cleanup that follows command
+        // dispatch" spends the new duration's first unit. The scroll
+        // installers already ran in this order (playtest G09).
         self.active_effect_tag = Some(tag);
         self.active_effect_counter = duration;
+        self.advance_turn();
         // `magic.md §5.1`: every spell reaching this helper is in the "No
         // generic completion line" row - `In Sanct` (Protection), `Rel Tym`
         // (Quickness) and `In An` among them - and the row's prose is explicit
@@ -6881,7 +6920,6 @@ impl PlayState {
             variant: audio::spell_circle(TIME_STOP_SPELL_INDEX),
         });
 
-        self.advance_turn();
         // `magic.md §8` (added 2026-10-16, u5-spec#298 Q15): the
         // magic-absorption sentinel is any of the thirty-two active-object
         // records whose **base tile is exactly `0xFC`**; frames `0xFD..0xFF`
@@ -6895,13 +6933,18 @@ impl PlayState {
             .take(OOL_SLOTS)
             .any(|object| object.type_byte == SHADOWLORD_ACTOR_TILE)
         {
+            self.advance_turn();
             self.emit_sound_effect(SoundEffect::MagicAbsorbed);
             self.fail_committed_spell_cast();
             self.message = format!("{NEGATE_TIME_MAGIC_ABSORBED_LINE}\n{}", self.message);
             return MoveOutcome::Blocked;
         }
+        // `main-loop.md §6`/`§8` step 1: the cast turn's own cleanup sees
+        // the `T` tag dispatch just wrote and skips its minute, as the
+        // Negate Time scroll already does (playtest G09).
         self.active_effect_tag = Some(NEGATE_TIME_ACTIVE_EFFECT_TAG);
         self.active_effect_counter = TIME_STOP_DURATION;
+        self.advance_turn();
         // `magic.md §5.1`: An Tym is in the "No generic completion line" row -
         // "In particular Protection, Negate Magic, Peer and Negate Time do not
         // acquire their scroll counterparts' banners." `Negate time!` is a

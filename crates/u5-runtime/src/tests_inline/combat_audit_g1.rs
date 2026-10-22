@@ -564,9 +564,12 @@ fn an_active_target_spell_narrates_before_the_turn_advance() {
     // `magic.md §8`: a resolved Magic Missile runs "impact presentation, a
     // newline, shared damage resolution and the shared target-result
     // narrator", and that narrator takes the morale draw (`combat.md §11.1`).
-    // The turn advance comes after the resolution, so a day rollover's own
-    // draws must not slide in front of the morale draw: the target's fate is
-    // the same whether or not the advance crosses midnight.
+    // A day rollover's own draws must not slide in front of the morale
+    // draw: the target's fate is the same whether or not the clock sits at
+    // midnight. Inside a fight the cast charges no minute at all
+    // (`combat.md §15`, "the only time a fight adds is its round-wrap
+    // minutes"; playtest G08), so the day does not roll and no extra draw
+    // follows.
     let spell = spell_index_from_code("GP").unwrap();
     let max_hp = combat_class_stats(COMBAT_CLASS_DRAGON).unwrap().max_hp;
     let run = |seed: u16, cross_midnight: bool| {
@@ -595,18 +598,16 @@ fn an_active_target_spell_narrates_before_the_turn_advance() {
         )
     };
     let mut saw_flee = false;
-    let mut saw_extra_draws = false;
     for seed in (0..=u16::MAX).step_by(97) {
         let plain = run(seed, false);
         let crossing = run(seed, true);
         assert_eq!(plain.0, MoveOutcome::Cast);
-        assert_eq!(crossing.4, 4, "the advance crossed midnight");
+        assert_eq!(crossing.4, 3, "a combat cast charges no clock minute");
         assert_eq!((plain.1, plain.2), (crossing.1, crossing.2), "seed {seed}");
+        assert_eq!(plain.3, crossing.3, "no day-rollover draws: seed {seed}");
         saw_flee |= plain.2;
-        saw_extra_draws |= plain.3 != crossing.3;
     }
     assert!(saw_flee, "some seed must take the fleeing morale result");
-    assert!(saw_extra_draws, "the day rollover must draw");
 }
 
 #[test]

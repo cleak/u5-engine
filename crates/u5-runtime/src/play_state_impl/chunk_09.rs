@@ -3019,7 +3019,21 @@ impl PlayState {
         self.grid.get(TOWN_VIEWPORT_OFF_GRID_SAMPLE_INDEX).copied()
     }
 
+    /// The mode loop's ordinary per-command turn: the per-turn cleanup with
+    /// the current mode's increment.
+    ///
+    /// Combat has no such per-command call. `combat.md §15`: "Combat
+    /// advances time at one specific point - when the round counter wraps
+    /// inside a round ... The wrap fires the per-turn cleanup with a
+    /// one-minute increment", and `§4`: "the only time a fight adds is its
+    /// round-wrap minutes" ([`Self::advance_combat_round_counter`]). The
+    /// spell and item handlers combat shares with exploration end in this
+    /// call, so inside a fight it charges nothing; a cast or a U-Use used
+    /// to cost the overworld's two minutes and a turn (playtest G08).
     pub fn advance_turn(&mut self) {
+        if self.combat_active {
+            return;
+        }
         let minutes = self.turn_minute_increment();
         self.advance_turn_with_minutes(minutes);
     }

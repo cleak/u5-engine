@@ -630,7 +630,9 @@ fn negate_time_has_two_producers_with_ten_and_twenty_turn_durations() {
     spell.party[0].level = 8;
     assert_eq!(spell.cast_time_stop(0), MoveOutcome::Cast);
     assert_eq!(spell.active_effect_tag, Some(NEGATE_TIME_ACTIVE_EFFECT_TAG));
-    assert_eq!(spell.active_effect_counter, TIME_STOP_DURATION);
+    // Like the scroll below, the cast's own turn ages the new countdown
+    // (playtest G09).
+    assert_eq!(spell.active_effect_counter + 1, TIME_STOP_DURATION);
     assert!(spell.negate_time_active());
 
     let mut scroll = test_state(open_grid(), 10, 20);

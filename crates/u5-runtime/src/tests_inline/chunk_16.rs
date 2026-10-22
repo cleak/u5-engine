@@ -457,14 +457,16 @@ BRITANNIA 11 21
             assert_eq!(state.spell_charges[spell_index], 0);
             assert_eq!(state.party[0].mana, 1);
             assert_eq!(state.active_effect_tag, Some(tag));
-            assert_eq!(state.active_effect_counter, duration);
+            // `magic.md §8`: the casting turn's own post-dispatch cleanup
+            // ages the new duration (playtest G09).
+            assert_eq!(state.active_effect_counter, duration - 1);
             assert_eq!(state.turn, 1);
             assert_eq!(state.clock, GameClock::new(12, 1).unwrap());
             assert!(state.message.is_empty(), "{}", state.message);
             assert!(state.z_stats_message().contains(&format!(
                 "effect={}/{}",
                 char::from(tag),
-                duration
+                duration - 1
             )));
         }
     }

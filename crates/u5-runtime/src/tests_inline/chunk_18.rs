@@ -427,8 +427,8 @@
         assert_eq!(magic_lock.combat_terrain[5][6], 0x97);
         assert_eq!(magic_lock.spell_charges[MAGIC_LOCK_SPELL_INDEX], 0);
         assert_eq!(magic_lock.party[0].mana, 0);
-        assert_eq!(magic_lock.turn, 1);
-        assert_eq!(magic_lock.clock, GameClock::new(12, 2).unwrap());
+        assert_eq!(magic_lock.turn, 0); // combat.md §15: no per-command turn in a fight (playtest G08)
+        assert_eq!(magic_lock.clock, GameClock::new(12, 0).unwrap());
         assert_eq!(magic_lock.message, "Success!");
 
         let mut unlock_magic = britannia_state(open_world_grid(), 5, 5);
@@ -459,8 +459,8 @@
         assert_eq!(unlock_magic.combat_terrain[5][6], 0xB8);
         assert_eq!(unlock_magic.spell_charges[UNLOCK_MAGIC_SPELL_INDEX], 0);
         assert_eq!(unlock_magic.party[0].mana, 0);
-        assert_eq!(unlock_magic.turn, 1);
-        assert_eq!(unlock_magic.clock, GameClock::new(12, 2).unwrap());
+        assert_eq!(unlock_magic.turn, 0); // combat.md §15: no per-command turn in a fight (playtest G08)
+        assert_eq!(unlock_magic.clock, GameClock::new(12, 0).unwrap());
         assert_eq!(unlock_magic.message, "Success!");
     }
 
@@ -840,9 +840,12 @@
         assert_eq!(state.spell_charges[TIME_STOP_SPELL_INDEX], 0);
         assert_eq!(state.party[0].mana, 0);
         assert_eq!(state.turn, 1);
-        assert_eq!(state.clock, GameClock::new(12, 2).unwrap());
+        // `main-loop.md §8` step 1: the casting turn's own cleanup sees the
+        // `T` tag and skips its minute, and ages the new duration (playtest
+        // G09).
+        assert_eq!(state.clock, GameClock::new(12, 0).unwrap());
         assert_eq!(state.active_effect_tag, Some(NEGATE_TIME_ACTIVE_EFFECT_TAG));
-        assert_eq!(state.active_effect_counter, TIME_STOP_DURATION);
+        assert_eq!(state.active_effect_counter, TIME_STOP_DURATION - 1);
         assert_eq!(state.time_stop_counter, 0);
         // `magic.md §5.1`: An Tym takes no generic completion line and does
         // not acquire its scroll counterpart's banner (`RETRACTIONS.md` R402).

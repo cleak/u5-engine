@@ -1668,6 +1668,14 @@ impl PlayState {
         // prints its own word through `emit_message_line`. Returning it
         // instead would assign it to the slot after the resolver had already
         // pushed `ACID!` to the transcript, inverting the two.
+        //
+        // The handler already staged that same beat in the slot (step 6
+        // prints it once on every outcome), and `emit_message_line` flushes
+        // the slot before pushing - so the staged copy is dropped here and
+        // this emission is the only `Mixing...` row (playtest G06).
+        if self.message == MMIX_MIXING_MESSAGE {
+            self.message.clear();
+        }
         self.emit_message_line(format!("{MMIX_MIXING_MESSAGE}\n"));
         // What the resolver *returns* is an engine note naming the slot and
         // the damage; `finish_open_dungeon_chest` routes that to
