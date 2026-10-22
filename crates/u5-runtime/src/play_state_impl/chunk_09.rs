@@ -49,7 +49,9 @@ impl PlayState {
     /// one-byte counter. The month rollover increments it, capped at 25",
     /// and implementations "should still preserve and age it on all
     /// character records". The active party's copies, the lodged guests'
-    /// records and every other roster record age together (playtest G28).
+    /// records and every other roster record age together (playtest G28,
+    /// W6: the unrecruited companions' records otherwise kept the shipped
+    /// `0xFF`).
     pub(crate) fn age_character_month_counters(&mut self) {
         age_stay_counters_month(&mut self.party_stay_counters);
         age_inn_registry_month(&mut self.inn_registry);
@@ -3500,22 +3502,6 @@ impl PlayState {
             .iter()
             .filter(|member| !matches!(member.status, b'D' | b'A' | b'S'))
             .count() as u16
-    }
-
-    /// `time.md §8`: "Each of the sixteen character record slots carries a
-    /// one-byte counter. The month rollover increments it, capped at 25", and
-    /// implementations "should still preserve and age it on all character
-    /// records". The active party ages through `party_stay_counters` and
-    /// lodged guests through the inn registry; this ages the preserved
-    /// records behind the party prefix - the unrecruited companions - which
-    /// otherwise kept the shipped `0xFF` (playtest W6). A lodged guest's
-    /// roster copy ages too, so it agrees with the registry copy written
-    /// over it.
-    pub(crate) fn age_inactive_roster_month_counters(&mut self) {
-        let active = self.party.len();
-        for record in self.party_roster.iter_mut().skip(active) {
-            record.stay_counter = age_character_month_counter(record.stay_counter);
-        }
     }
 
     /// `time.md §5` party status/provision pass, entered once per
