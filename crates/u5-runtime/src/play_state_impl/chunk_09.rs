@@ -3496,7 +3496,20 @@ impl PlayState {
         self.apply_hourly_poison_tick();
         if hour_changed {
             if self.food == 0 {
-                self.pending_hourly_status_message = self.apply_hourly_starvation_tick();
+                // `time.md §5`: every invocation that sees an hour change
+                // with the counter at zero prints its own warning. A
+                // multi-hour town-bed rest crosses several before the slot
+                // is drained, so each crossing adds a row rather than
+                // replacing the last one (playtest W3).
+                if let Some(report) = self.apply_hourly_starvation_tick() {
+                    match self.pending_hourly_status_message.as_mut() {
+                        Some(pending) => {
+                            pending.push('\n');
+                            pending.push_str(&report);
+                        }
+                        None => self.pending_hourly_status_message = Some(report),
+                    }
+                }
             } else if is_provision_decrement_hour(self.clock.hour) {
                 self.food = self.food.saturating_sub(consumers);
             }

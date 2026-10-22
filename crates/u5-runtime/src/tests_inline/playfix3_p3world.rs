@@ -93,3 +93,25 @@ fn p3w_w2_town_bed_hours_prompt_zero_echoes_and_aborts_without_none() {
     assert_eq!(state.clock, clock, "no rest elapsed");
     let _ = std::fs::remove_dir_all(dir);
 }
+
+#[test]
+fn p3w_w3_town_bed_rest_warns_of_starvation_once_per_crossed_hour() {
+    // `rest-and-camp.md §5`: the town-bed loop "invokes the shared party
+    // status/provision pass ... once per ten-minute step", and "any hour the
+    // loop crosses applies the provision or starvation branch"; that branch
+    // (`time.md §5`) gives "the starvation warning" every time it runs.
+    let (mut state, dir) = p3w_town_bed_state();
+    state.food = 0;
+    assert_eq!(
+        state.hole_up_command(&dir, Some(3)).unwrap(),
+        MoveOutcome::Rested
+    );
+    assert_eq!(state.clock.hour, 13);
+    let pending = state.pending_hourly_status_message.clone().unwrap_or_default();
+    assert_eq!(
+        pending.split('\n').filter(|row| *row == STARVATION_WARNING).count(),
+        3,
+        "one warning per crossed hour: {pending:?}"
+    );
+    let _ = std::fs::remove_dir_all(dir);
+}
