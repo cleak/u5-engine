@@ -96,3 +96,31 @@ fn playfix3_g08_a_combat_cast_charges_no_clock_minutes_or_turn() {
         }
     }
 }
+
+/// G06: `magic.md §6` step 6 - the handler "prints `Mixing...`" once, and
+/// step 7's wrong-mix branch "then emits a line break ... and invokes the
+/// shared trap-effect resolver". Nothing prints `Mixing...` a second time.
+#[test]
+fn playfix3_g06_a_wrong_recipe_prints_the_mixing_beat_once() {
+    for suffix in ["AS/0x80/1", "IL/0x41/1"] {
+        let mut state = test_state(open_grid(), 1, 1);
+        state.reagents = [5; REAGENT_COUNT];
+        assert_eq!(state.mix_reagents_from_suffix(suffix), MoveOutcome::Blocked);
+        state.flush_message_slot();
+        let rows = p3magic_transcript_rows(&state);
+        let mixing: Vec<usize> = rows
+            .iter()
+            .enumerate()
+            .filter(|(_, row)| *row == MMIX_MIXING_MESSAGE)
+            .map(|(index, _)| index)
+            .collect();
+        assert_eq!(mixing.len(), 1, "{suffix}: {rows:?}");
+        assert!(
+            matches!(
+                rows[mixing[0] + 1].as_str(),
+                "ACID!" | "POISON!" | "BOMB!" | "GAS!"
+            ),
+            "{suffix}: the trap word follows directly: {rows:?}"
+        );
+    }
+}
