@@ -1027,7 +1027,7 @@ fn handle_active_yell_key_input(
         // follows, the no-effect line under its own blank row
         // (`[blank]` / `No effect!`), the nothing-said one directly beneath.
         let word = PlayState::normalize_yell_word(&session.buffer);
-        state.commit_typed_prompt_line(":", &word);
+        state.commit_typed_free_text_line(":", &word);
         state.message = if word.is_empty() {
             YELL_NOTHING_SAID_MESSAGE.to_string()
         } else {

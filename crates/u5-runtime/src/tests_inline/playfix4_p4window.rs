@@ -305,3 +305,29 @@ fn playfix4_h34_h45_empty_use_and_mix_refusals_keep_the_echo_blank_row() {
     assert_eq!(texts, ["Mix Reagents", "", MMIX_NO_REAGENTS_OWNED_MESSAGE]);
     let _ = fs::remove_dir_all(dir);
 }
+
+/// H38: `text-output.md §5` - the per-cell emitter wraps the cursor once a
+/// glyph fills the row's last cell; `§6` - "A line feed arriving from any
+/// **later** call is unconditional and always costs a row". A typed Yell word
+/// that fills all sixteen cells is followed by two blank rows, a shorter one
+/// by one (`commands.md §5`: `:WORD` ⏎ `[blank]` ⏎ `No effect!`).
+#[test]
+fn playfix4_h38_a_typed_answer_that_fills_its_row_is_followed_by_two_blank_rows() {
+    let dir = debug_game_dir();
+    for (word, blanks) in [("abcdefghijklmno", 2), ("abcdefghijklmn", 1)] {
+        let mut state = p4window_world_state();
+        p4window_keys(&mut state, &dir, &['Y']);
+        // The play-script runner hands a typed word over as one key plus
+        // its suffix.
+        handle_play_key_input(&mut state, word.chars().next().unwrap(), &word[1..], &dir)
+            .unwrap();
+        let echo = format!(":{}", word.to_ascii_uppercase());
+        let rows = p4window_rows(&state);
+        let tail = p4window_rows_from(&rows, &echo);
+        let mut expected = vec![echo.clone()];
+        expected.extend(std::iter::repeat_n(String::new(), blanks));
+        expected.push(YELL_NO_EFFECT_MESSAGE.to_string());
+        assert_eq!(tail[..expected.len()], expected[..], "{word}: {rows:?}");
+    }
+    let _ = fs::remove_dir_all(dir);
+}

@@ -6011,7 +6011,7 @@ impl PlayState {
             } else {
                 line.to_ascii_uppercase()
             };
-            self.commit_typed_prompt_line(prompt, &echo);
+            self.commit_typed_free_text_line(prompt, &echo);
         }
         if let Some(session) = self.active_conversation.as_mut() {
             let output = session.submit_keyword(line, &ctx);

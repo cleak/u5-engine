@@ -767,6 +767,33 @@ impl PlayState {
         rewritten
     }
 
+    /// [`Self::commit_typed_prompt_line`] for a free-text reader's typed
+    /// answer (the Yell word, a conversation keyword).
+    ///
+    /// The reader echoes each typed byte through the per-cell emitter, which
+    /// wraps the cursor to the next row the moment a glyph fills the last
+    /// cell (`text-output.md §5`). An answer that exactly fills its row has
+    /// therefore already closed it, and §6 says "A line feed arriving from any
+    /// **later** call is unconditional and always costs a row" - the input
+    /// loop's two feeds after the answer (`conversation.md §6`) then leave two
+    /// blank rows, not one. Everywhere else the first of those feeds closes
+    /// the answer row, which is the case this engine's results already model
+    /// with one leading feed, so the full row owes one extra blank row
+    /// (playtest H38).
+    pub fn commit_typed_free_text_line(&mut self, prompt: &str, typed: &str) {
+        let before = self.message_transcript.len();
+        self.commit_typed_prompt_line(prompt, typed);
+        let row_filled = self.message_transcript.len() == before
+            && !typed.trim().is_empty()
+            && self.message_transcript.last().is_some_and(|entry| {
+                entry.text == format!("{prompt}{}", typed.trim())
+                    && entry.text.chars().count() % crate::MESSAGE_WINDOW_WIDTH == 0
+            });
+        if row_filled {
+            self.push_producer_blank_message_entry();
+        }
+    }
+
     pub fn commit_typed_prompt_line(&mut self, prompt: &str, typed: &str) {
         let typed = typed.trim();
         if typed.is_empty() {
