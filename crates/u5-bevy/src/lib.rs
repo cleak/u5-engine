@@ -19166,6 +19166,11 @@ fn key_code_to_input_byte(key: KeyCode, shift_pressed: bool, control_pressed: bo
         // with `?What?`, and this engine read it as a bare `5`, opened
         // `Set Active Plr:` and answered `Invalid!` for a three-member party.
         Digit5 if numpad_flag => b'%',
+        // The same holds for the `0` key, which that rule never covers: with
+        // Shift held the keyboard sends `)`, an unmapped key and so `What?`
+        // (`commands.md §5.2`), not the `0` that opens Set Active Player
+        // (playtest H17).
+        Digit0 if shift_pressed => b')',
         Digit0 | Numpad0 => b'0',
         Digit1 => b'1',
         Digit2 => b'2',
@@ -19210,6 +19215,21 @@ fn key_code_to_input_byte(key: KeyCode, shift_pressed: bool, control_pressed: bo
                 b'.'
             }
         }
+        // `input.md §4`: printable punctuation is "Regular ASCII" and reaches
+        // the dispatcher, whose answer to an unmapped key is `What?`
+        // (`commands.md §5.2`). These keys used to produce no byte at all, so
+        // the shell said nothing where the original refuses (playtest H16).
+        Slash if shift_pressed => b'?',
+        Slash | NumpadDivide => b'/',
+        Semicolon if shift_pressed => b':',
+        Semicolon => b';',
+        Quote if shift_pressed => b'"',
+        Quote => b'\'',
+        Backquote if shift_pressed => b'~',
+        Backquote => b'`',
+        Backslash if shift_pressed => b'|',
+        Backslash => b'\\',
+        NumpadMultiply => b'*',
         KeyA => line_letter_for_shift(b'a', shift_pressed),
         KeyB => line_letter_for_shift(b'b', shift_pressed),
         KeyC => line_letter_for_shift(b'c', shift_pressed),
@@ -30965,6 +30985,70 @@ mod tests {
             type_into(&mut shrine, 21).len(),
             u5_runtime::SHRINE_MANTRA_INPUT_LIMIT
         );
+    }
+
+    /// Playtest H16, `commands.md §5.2`: "any unmapped key | `What?\n`" -
+    /// printable punctuation included (`input.md §4`). Playtest H17,
+    /// `input.md §5`: the modifier rule covers "digit `1` through `9`", so
+    /// Shift with `0` is the `)` the keyboard sends, not Set Active Player.
+    #[test]
+    fn punctuation_and_shifted_zero_are_ordinary_unmapped_bytes() {
+        use KeyCode::*;
+        for (key, shift, byte) in [
+            (Slash, false, b'/'),
+            (Slash, true, b'?'),
+            (Semicolon, false, b';'),
+            (Semicolon, true, b':'),
+            (Quote, false, b'\''),
+            (Quote, true, b'"'),
+            (Backquote, false, b'`'),
+            (Backslash, false, b'\\'),
+            (NumpadMultiply, false, b'*'),
+            (NumpadDivide, false, b'/'),
+            (Digit0, true, b')'),
+            (Digit0, false, b'0'),
+            (Numpad0, false, b'0'),
+        ] {
+            assert_eq!(
+                key_code_to_input_byte(key, shift, false),
+                Some(byte),
+                "{key:?} shift={shift}"
+            );
+        }
+    }
+
+    /// Playtest H16 and H17 through the shell: in a town, `/` and Shift with
+    /// `0` answer `What?` and open no prompt.
+    #[test]
+    #[cfg(feature = "original-asset-tests")]
+    fn unmapped_punctuation_and_shifted_zero_answer_what_in_town() {
+        for shifted_zero in [false, true] {
+            let mut shell = VisualShellHarness::new(
+                "unmapped-keys",
+                PlayOptions {
+                    target: PlayTarget::Town(Scene::new(0x02).unwrap()),
+                    start: Some((15, 20)),
+                    clock: u5_runtime::GameClock::new(12, 10).unwrap(),
+                    ..PlayOptions::default()
+                },
+            );
+            shell.ticks(60);
+            if shifted_zero {
+                shell.tap_with(KeyCode::ShiftLeft, KeyCode::Digit0);
+            } else {
+                shell.tap(KeyCode::Slash);
+            }
+            let text = shell.text();
+            assert!(
+                text.contains("What?"),
+                "shifted_zero={shifted_zero}:\n{text}"
+            );
+            assert!(shell.visual().state.active_party_selector.is_none());
+            assert!(
+                !text.contains("None!"),
+                "shifted_zero={shifted_zero}:\n{text}"
+            );
+        }
     }
 
     /// Playtest H09, `input.md §6`: queued keystrokes "are honoured in
