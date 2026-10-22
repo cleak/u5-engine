@@ -1720,3 +1720,35 @@ fn play_script_runner_resolves_the_third_shrine_mantra_and_keeps_playing() {
     assert_eq!(state.shrine_ordained_mask, ShrineVirtue::Humility.bit());
     let _ = fs::remove_dir_all(dir);
 }
+
+/// Playtest G10: `magic.md §8` has the heal helper mark the stats display
+/// dirty, and `main-loop.md §6` step 1 / `stats-panel.md §2.3` drain that
+/// request "at the head of a command prompt ... before the prompt newline
+/// and the key read". A script runner's frame after the cast is the frame
+/// waiting at that prompt, so it must already show the healed hit points,
+/// as the interactive shells' turn gate does.
+#[test]
+fn play_script_frame_after_a_heal_shows_the_repainted_panel() {
+    let mut state = world_state(open_world_grid(), 5, 5);
+    state.party[0].max_hp = 200;
+    state.party[0].hp = 10;
+    state.party[0].mana = 50;
+    state.party[0].level = 8;
+    state.spell_charges[GREAT_HEAL_SPELL_INDEX] = 1;
+    state.repaint_stats_panel();
+    let commands = vec!["C1MV1".to_string()];
+    let mut observed = Vec::new();
+
+    replay_play_script_commands(&mut state, Path::new(""), &commands, |state, _, _| {
+        observed.push((
+            state.party[0].hp,
+            state.stats_panel == u5_runtime::stats_panel::stats_panel_snapshot_of(state),
+            state.stats_panel_refresh_requested,
+        ));
+        Ok(())
+    })
+    .unwrap();
+
+    assert_eq!(state.spell_charges[GREAT_HEAL_SPELL_INDEX], 0, "the heal resolved");
+    assert_eq!(observed, vec![(200, true, false)]);
+}

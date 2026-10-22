@@ -200,12 +200,32 @@ pub fn run_play_script_commands(
         state.run_blackthorn_rescue_to_handoff(game_dir)?;
         state.run_blackthorn_audience_exit_to_handoff(game_dir)?;
         state.run_shrine_third_mantra_resolution_to_completion(game_dir)?;
+        drain_play_script_prompt_head_panel_refresh(state);
         print_play_script_snapshot(state, tile_atlas)?;
         if disposition == PlayInputDisposition::Quit {
             break;
         }
     }
     Ok(())
+}
+
+/// `main-loop.md §6` step 1 / `stats-panel.md §2.3`: in the overworld and
+/// town a pending stats-panel refresh request is drained "at the head of a
+/// command prompt ... before the prompt newline and the key read". The
+/// interactive shells reach that point through the exploration gate before
+/// they draw the waiting frame; a script runner records its frame as soon as
+/// the command returns, and only met the gate when the *next* command
+/// arrived, so a Heal's deferred repaint showed one command late (playtest
+/// G10). Only the drain is run here: the gate's other work (the sleeping
+/// arm's turn, the dungeon entry reaction) still belongs to the next
+/// command's gate. Combat drains at its own prompts.
+fn drain_play_script_prompt_head_panel_refresh(state: &mut PlayState) {
+    if play_state_accepts_typeahead(state)
+        && !state.combat_active
+        && state.pending_blackthorn_rescue.is_none()
+    {
+        state.drain_stats_panel_refresh();
+    }
 }
 
 pub fn replay_play_script_commands<F>(
@@ -230,6 +250,7 @@ where
         state.run_blackthorn_rescue_to_handoff(game_dir)?;
         state.run_blackthorn_audience_exit_to_handoff(game_dir)?;
         state.run_shrine_third_mantra_resolution_to_completion(game_dir)?;
+        drain_play_script_prompt_head_panel_refresh(state);
         after_command(state, index, command)?;
         if disposition == PlayInputDisposition::Quit {
             break;
