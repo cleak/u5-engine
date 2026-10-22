@@ -75,3 +75,57 @@ fn playtest_g30_word_of_power_beside_another_seal_prints_no_no_effect_line() {
         crate::commands::WORD_OF_POWER_UTTERED_MESSAGE
     );
 }
+
+/// `town-mode.md §13`: "After the location is drawn, the same presentation
+/// helper walks the three Shadowlord runtime slots and, for every Shadowlord
+/// that is still alive, prints the corresponding \"air of\" virtue-opposition
+/// line". An overworld `E`-Enter replaced the transcript the load-time pass
+/// had printed into, so the rows never reached the window (G31).
+#[test]
+fn playtest_g31_entering_stonegate_prints_the_air_rows_for_living_shadowlords() {
+    let dir = debug_game_dir();
+    let scene = Scene::new(STONEGATE_SCENE_BYTE).unwrap();
+    fs::write(dir.join("KEEP.DAT"), location_pages()).unwrap();
+    fs::write(dir.join("KEEP.NPC"), vec![0; (scene.block + 1) * 576]).unwrap();
+    fs::write(dir.join("KEEP.TLK"), [0, 0]).unwrap();
+    fs::write(
+        dir.join(WORLD_LOCATION_TABLE_FILE),
+        "BRITANNIA 10 20 KEEP:4 7 0x12 KEEP\n",
+    )
+    .unwrap();
+    let mut grid = open_world_grid();
+    grid[world_cell_index(10, 20)] = 0x12;
+    let mut state = britannia_state(grid, 10, 20);
+    // Falsehood and cowardice alive, hatred vanquished.
+    state.shadowlord_hideouts = [0, SHADOWLORD_VANQUISHED, 3];
+
+    assert_eq!(
+        state.enter_current_location(&dir).unwrap(),
+        MoveOutcome::Transition(AreaTransition::EnteredLocation(scene))
+    );
+
+    let rows: Vec<&str> = state
+        .message_entries()
+        .iter()
+        .map(|entry| entry.text.as_str())
+        .collect();
+    let keep = rows
+        .iter()
+        .rposition(|row| *row == "keep")
+        .expect("entry narration row");
+    assert_eq!(
+        &rows[keep + 1..],
+        &[
+            "An air of",
+            "cowardice doth",
+            "surround thee...",
+            "",
+            "An air of",
+            "falsehood doth",
+            "surround thee...",
+        ]
+    );
+    assert!(state.message_row_open_mid_line);
+    assert!(!state.message.contains("hatred"));
+    let _ = fs::remove_dir_all(dir);
+}

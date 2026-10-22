@@ -587,6 +587,12 @@ fn world_enter_all_published_locations_without_sidecar() {
         if matches!(entry.target, PlayTarget::Dungeon(scene) if scene.record == 7) {
             state.shadowlord_hideouts = [SHADOWLORD_VANQUISHED; SHADOWLORD_COUNT];
         }
+        // Stonegate's "air of" rows (`town-mode.md §13`, playtest G31) follow
+        // the narration and would scroll the proper name out of this layout
+        // check; they have their own test.
+        if matches!(entry.target, PlayTarget::Town(scene) if scene.byte == STONEGATE_SCENE_BYTE) {
+            state.shadowlord_hideouts = [SHADOWLORD_VANQUISHED; SHADOWLORD_COUNT];
+        }
 
         state.begin_command_echo_for(Command::Enter);
         let outcome = state.enter_current_location(&dir).unwrap();
@@ -1010,7 +1016,12 @@ fn world_enter_stonegate_keeps_exact_entry_narration_without_diagnostics() {
         MoveOutcome::Transition(AreaTransition::EnteredLocation(scene))
     );
 
-    assert_eq!(state.message, "keep\n");
+    // `town-mode.md §13`: the living Shadowlord's "air of" row follows the
+    // narration (playtest G31); no engine summary sentence does.
+    assert_eq!(
+        state.message,
+        "keep\nAn air of\nfalsehood doth\nsurround thee..."
+    );
     assert!(!state.message.contains("Stonegate entry:"));
     let _ = fs::remove_dir_all(dir);
 }
