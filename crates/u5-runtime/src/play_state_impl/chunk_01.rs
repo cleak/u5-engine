@@ -817,7 +817,7 @@ impl PlayState {
         let transport = options.transport;
         let (player_aux1, player_aux3) = match transport {
             TransportState::Ship { hull, skiffs, .. } => (hull, skiffs),
-            _ => (0, 0),
+            _ => options.saved_player_aux.unwrap_or((0, 0)),
         };
         let marker = transport.save_marker();
         let mut active_objects = vec![ActiveObject {
@@ -1255,6 +1255,9 @@ impl PlayState {
         };
 
         let world_overlays = initial_world_overlay_cache(&options);
+        // `formats/saved-gam.md §8.1`: bytes `+0x05`/`+0x07` of slot zero
+        // round-trip from the file (playtest G27).
+        let (player_aux1, player_aux3) = options.saved_player_aux.unwrap_or((0, 0));
         let mut active_objects = vec![ActiveObject {
             type_byte: PLAYER_TILE,
             tile: PLAYER_TILE,
@@ -1262,8 +1265,8 @@ impl PlayState {
             y,
             z: level as i8,
             phase: PLAYER_ACTIVE_OBJECT_PHASE,
-            aux1: 0,
-            aux3: 0,
+            aux1: player_aux1,
+            aux3: player_aux3,
         }];
         if let Some(objects) = saved_active_objects {
             active_objects.extend(objects);
@@ -1653,6 +1656,14 @@ impl PlayState {
         let transport = options.transport;
         let world_overlays = initial_world_overlay_cache(&options);
         let marker = transport.save_marker();
+        // `formats/saved-gam.md §8.1`: slot zero "writes nothing to +0x05,
+        // +0x06 or +0x07. Those three round-trip from the file", so a loaded
+        // party off a ship keeps the saved pair rather than zeros
+        // (playtest G27). Aboard, the ship transport decoded the same bytes.
+        let (player_aux1, player_aux3) = match transport {
+            TransportState::Ship { hull, skiffs, .. } => (hull, skiffs),
+            _ => options.saved_player_aux.unwrap_or((0, 0)),
+        };
         let mut active_objects = vec![ActiveObject {
             type_byte: marker,
             tile: marker,
@@ -1660,8 +1671,8 @@ impl PlayState {
             y,
             z: plane.save_floor(),
             phase: PLAYER_ACTIVE_OBJECT_PHASE,
-            aux1: 0,
-            aux3: 0,
+            aux1: player_aux1,
+            aux3: player_aux3,
         }];
         match options.saved_active_objects {
             Some(saved_objects) => active_objects.extend(saved_objects),

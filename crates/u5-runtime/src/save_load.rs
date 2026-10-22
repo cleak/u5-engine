@@ -365,6 +365,12 @@ pub fn play_options_from_save_bytes_named(
         } else {
             None
         },
+        saved_player_aux: include_active_objects.then(|| {
+            (
+                bytes[SAVE_ACTIVE_OBJECTS_OFFSET + 5],
+                bytes[SAVE_ACTIVE_OBJECTS_OFFSET + 7],
+            )
+        }),
         // `formats/saved-gam.md §12.3`: a town-family scene reaches the
         // preserving entry, whose NPC family "comes from the save image";
         // `npc-schedules.md §13`: "loading resumes from there".

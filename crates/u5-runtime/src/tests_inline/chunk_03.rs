@@ -2893,6 +2893,7 @@ fn town_entry_applies_night_gate_substitution() {
         initial_britannia_overlay: None,
         debug_enter: None,
         saved_active_objects: None,
+        saved_player_aux: None,
         saved_npc_band: None,
         town_npc_mutations: Vec::new(),
         save_template_source: SaveTemplateSource::PreferSavedGame,

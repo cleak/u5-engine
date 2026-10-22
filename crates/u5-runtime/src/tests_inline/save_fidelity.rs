@@ -180,6 +180,37 @@ fn player_active_object_record_saves_a_zero_phase_byte() {
     let _ = fs::remove_dir_all(dir);
 }
 
+/// `formats/saved-gam.md §8.1`: slot zero's compositor "writes nothing to
+/// +0x05, +0x06 or +0x07. Those three round-trip from the file", and
+/// `save-load.md §4.2` has the load path normalise no restored byte. A load
+/// followed by an immediate save of a party off a ship must keep the saved
+/// pair, not rebuild it from the transport as zeros (playtest G27).
+#[test]
+fn player_record_bytes_five_and_seven_round_trip_off_a_ship() {
+    let dir = shipped_layout_iolos_hut_dir();
+    let mut template = shipped_layout_iolos_hut_save();
+    template[SAVE_ACTIVE_OBJECTS_OFFSET + 5] = 0x4D;
+    template[SAVE_ACTIVE_OBJECTS_OFFSET + 7] = 0x02;
+    fs::write(dir.join("SAVED.GAM"), template).unwrap();
+    fs::write(dir.join(SAVED_OOL_FILENAME), vec![0; SAVED_OOL_LEN]).unwrap();
+    write_empty_ool_mirrors(&dir);
+
+    let options = load_play_options_from_save(&dir).unwrap();
+    assert!(!matches!(options.transport, TransportState::Ship { .. }));
+    let scene = Scene::new(SHIPPED_IOLOS_HUT_SCENE).unwrap();
+    let mut state = PlayState::load_town_scene(&dir, scene, options).unwrap();
+    assert_eq!(state.active_objects[0].aux1, 0x4D);
+    assert_eq!(state.active_objects[0].aux3, 0x02);
+    assert_eq!(
+        state.save_game_command(&dir, Some(true)).unwrap(),
+        MoveOutcome::Saved
+    );
+    let saved = fs::read(dir.join("SAVED.GAM")).unwrap();
+    assert_eq!(saved[SAVE_ACTIVE_OBJECTS_OFFSET + 5], 0x4D);
+    assert_eq!(saved[SAVE_ACTIVE_OBJECTS_OFFSET + 7], 0x02);
+    let _ = fs::remove_dir_all(dir);
+}
+
 /// `doors-and-z-transitions.md §5`: the countdown starts at four and the
 /// door re-closes when it "hits zero". Runtime observation, spec silent
 /// on what happens next: the DOS build keeps the four-byte block. After
