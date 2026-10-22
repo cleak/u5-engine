@@ -180,6 +180,15 @@ impl PlayState {
                         session.phase = RestPhase::WatchSlot;
                         self.active_rest = Some(session);
                         self.message = self.render_active_rest();
+                        // `inventory.md §4.3`: the member prompt runs on the
+                        // shared selection surface (playtest H08, H36).
+                        let highlight = self
+                            .z_stats_initial_party_index()
+                            .min(self.party.len().saturating_sub(1));
+                        self.active_party_selector = Some(PartySelectorSession::new(
+                            PartySelectorTarget::CampWatch,
+                            highlight,
+                        ));
                         return Ok(None);
                     }
                     'N' => {
@@ -198,20 +207,30 @@ impl PlayState {
                     // Neither starts the camp - the resident handler the
                     // overworld shares (`commands.md §5.5`; playtest E16,
                     // E30).
-                    let watcher = if matches!(ch, '\u{1b}' | ' ' | '0' | '\r' | '\n') {
-                        None
-                    } else {
-                        let Some(digit) = ch
-                            .to_digit(10)
-                            .and_then(|digit| usize::try_from(digit).ok())
-                        else {
-                            continue;
-                        };
-                        if !(1..=self.party.len().min(6)).contains(&digit) {
+                    //
+                    // The prompt is `inventory.md §4.3`'s shared selection
+                    // surface: "A digit moves the indicator; it does not
+                    // commit ... Only Return or Space commits the indicated
+                    // row, Escape cancels", and the four direction keys move
+                    // the indicator. A digit used to commit at once and
+                    // Return to cancel (playtest H08, H36).
+                    let highlight = self
+                        .active_party_selector
+                        .filter(|selector| selector.target == PartySelectorTarget::CampWatch)
+                        .map_or(0, |selector| selector.highlight);
+                    let watcher = match acting_member_picker_key(ch, highlight, self.party.len()) {
+                        ActingMemberPickerKey::Move(row) => {
+                            self.active_party_selector = Some(PartySelectorSession::new(
+                                PartySelectorTarget::CampWatch,
+                                row,
+                            ));
                             continue;
                         }
-                        self.rest_prompt_watcher(digit - 1)
+                        ActingMemberPickerKey::Ignore => continue,
+                        ActingMemberPickerKey::Cancel => None,
+                        ActingMemberPickerKey::Pick(row) => self.rest_prompt_watcher(row),
                     };
+                    self.active_party_selector = None;
                     let Some(watcher) = watcher else {
                         // `Who will stand guard? ` keeps its trailing space
                         // too, so `None posted!\n\n` continues that row.

@@ -350,7 +350,11 @@ fn playtest_e16_cancelled_guard_pick_reasks_the_watch_question() {
     // An ineligible (poisoned) pick does the same.
     handle_play_key_input(&mut state, 'y', "", Path::new("")).unwrap();
     assert_eq!(state.message, REST_WATCH_MEMBER_PROMPT);
+    // `inventory.md §4.3`: the digit moves the indicator, and Return
+    // commits it (playtest H08, H36).
     handle_play_key_input(&mut state, '3', "", Path::new("")).unwrap();
+    assert_eq!(state.message, REST_WATCH_MEMBER_PROMPT);
+    handle_play_key_input(&mut state, '\r', "", Path::new("")).unwrap();
     assert!(state.active_rest.is_some(), "the rest has not begun");
     assert_eq!(state.message, REST_WATCH_PROMPT);
     assert_eq!(state.turn, 0);

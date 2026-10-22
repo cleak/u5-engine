@@ -1250,6 +1250,14 @@ pub enum PartySelectorTarget {
         drink: Option<bool>,
     },
     DungeonSearch,
+    /// `rest-and-camp.md §4`'s camp "member prompt", `Who will stand guard? `.
+    /// `inventory.md §4.3`: "Every command that needs a party member ...
+    /// shares one selection surface ... This is one shared routine, so the
+    /// rule is the same for ... every other caller" - the `Select:` label,
+    /// the inverted row, digits that move rather than commit, Return or Space
+    /// to commit and Escape to cancel (playtest H08, H36). The keys are read
+    /// by the live rest session, which owns the camp that follows.
+    CampWatch,
 }
 
 impl PartySelectorTarget {
@@ -1285,7 +1293,10 @@ impl PartySelectorTarget {
     /// dungeon acting-member callers are among the others: `dungeon-mode.md
     /// §8.1` gives that prompt a pick, a re-prompt and a cancel only.
     pub const fn ignores_zero(self) -> bool {
-        matches!(self, Self::DungeonLook { .. } | Self::DungeonSearch)
+        matches!(
+            self,
+            Self::DungeonLook { .. } | Self::DungeonSearch | Self::CampWatch
+        )
     }
 
     pub fn prompt(self) -> &'static str {
@@ -1293,6 +1304,7 @@ impl PartySelectorTarget {
             Self::NewOrder { first: None } => NEW_ORDER_FIRST_PROMPT,
             Self::NewOrder { first: Some(_) } => NEW_ORDER_SECOND_PROMPT,
             Self::FountainDrink { .. } => crate::FOUNTAIN_DRINK_PROMPT,
+            Self::CampWatch => crate::REST_WATCH_MEMBER_PROMPT,
             _ => crate::PARTY_SELECTION_PROMPT,
         }
     }

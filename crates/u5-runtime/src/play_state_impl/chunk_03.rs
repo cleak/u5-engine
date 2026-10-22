@@ -1341,6 +1341,9 @@ impl PlayState {
             }
             // Committed above, before the generic name echo.
             PartySelectorTarget::DungeonLook { .. } | PartySelectorTarget::DungeonSearch => {}
+            // The rest session reads this selector's keys itself
+            // (`step_active_rest`); the dispatcher never routes it here.
+            PartySelectorTarget::CampWatch => {}
         }
         true
     }

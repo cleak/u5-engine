@@ -941,6 +941,12 @@
             handle_play_key_input(&mut state, '2', "", &dir).unwrap(),
             PlayInputDisposition::Continue
         );
+        // `inventory.md §4.3`: the digit moves the indicator; Return commits.
+        assert!(state.active_rest.is_some());
+        assert_eq!(
+            handle_play_key_input(&mut state, '\r', "", &dir).unwrap(),
+            PlayInputDisposition::Continue
+        );
 
         assert!(state.active_rest.is_none());
         assert_eq!(state.turn, 12);
@@ -973,6 +979,8 @@
         handle_play_key_input(&mut state, '1', "", &dir).unwrap();
         handle_play_key_input(&mut state, 'Y', "", &dir).unwrap();
         handle_play_key_input(&mut state, '2', "", &dir).unwrap();
+        // `inventory.md §4.3`: the digit only moves the indicator.
+        handle_play_key_input(&mut state, '\r', "", &dir).unwrap();
         // `dungeon-mode.md §11`: an ineligible pick "prints `None
         // posted!\n\n` and re-asks the watch question" (playtest E16, E30);
         // the resident handler is the overworld camp's too, and the camp

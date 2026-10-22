@@ -489,6 +489,57 @@ fn playfix_e30_cancelled_guard_pick_re_asks_the_watch_question() {
     let _ = fs::remove_dir_all(dir);
 }
 
+/// Playtest H08/H36. `rest-and-camp.md §4` calls the guard choice "the member
+/// prompt", and `inventory.md §4.3` makes every member prompt one shared
+/// surface: the `Select:` label and an inverted row, "A digit moves the
+/// indicator; it does not commit ... Only Return or Space commits the
+/// indicated row, Escape cancels", and the direction keys move the
+/// indicator. A digit used to commit at once and Return to cancel.
+#[test]
+fn camp_guard_prompt_runs_on_the_shared_member_selector() {
+    let dir = debug_game_dir();
+    let mut state = world_state(open_world_grid(), 5, 5);
+    state.party.push(audit_g5_companion(1));
+    state.party.push(audit_g5_companion(2));
+    state.clock = GameClock::new(13, 0).unwrap();
+    assert_eq!(state.start_rest_prompt(), MoveOutcome::Observed);
+    assert_eq!(state.step_active_rest('7', "", &dir).unwrap(), None);
+    assert_eq!(state.step_active_rest('Y', "", &dir).unwrap(), None);
+    assert_eq!(state.message, REST_WATCH_MEMBER_PROMPT);
+    let selector = |state: &PlayState| {
+        state
+            .active_party_selector
+            .filter(|session| session.target == PartySelectorTarget::CampWatch)
+            .map(|session| session.highlight)
+    };
+    assert_eq!(selector(&state), Some(0));
+
+    // A digit moves the indicator and commits nothing.
+    assert_eq!(state.step_active_rest('3', "", &dir).unwrap(), None);
+    assert_eq!(selector(&state), Some(2));
+    assert!(matches!(
+        state.active_rest.as_ref().map(|session| session.phase),
+        Some(RestPhase::WatchSlot)
+    ));
+    assert_eq!(state.clock, GameClock::new(13, 0).unwrap(), "no camp ran");
+    // So do the direction keys.
+    assert_eq!(state.step_active_rest('\u{3}', "", &dir).unwrap(), None);
+    assert_eq!(selector(&state), Some(1));
+    // `0` is ignored by this caller.
+    assert_eq!(state.step_active_rest('0', "", &dir).unwrap(), None);
+    assert_eq!(selector(&state), Some(1));
+
+    // Escape cancels: `None posted!` and the watch question again.
+    assert_eq!(state.step_active_rest('\u{1b}', "", &dir).unwrap(), None);
+    assert_eq!(selector(&state), None);
+    assert!(matches!(
+        state.active_rest.as_ref().map(|session| session.phase),
+        Some(RestPhase::WatchYesNo)
+    ));
+    assert_eq!(state.message, REST_WATCH_PROMPT);
+    let _ = fs::remove_dir_all(dir);
+}
+
 /// E31: `dungeon-mode.md §11` / `rest-and-camp.md §4`: `For how many hours?
 /// (1-9) ` "loops until a digit or Space and echoes the key plus a line feed
 /// - Space or `0` aborts with no further output". Escape is not a cancel.
