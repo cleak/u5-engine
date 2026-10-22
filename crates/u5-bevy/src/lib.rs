@@ -154,9 +154,11 @@ use u5_runtime::{
 };
 #[cfg(test)]
 use u5_runtime::{
-    ENDGAME_GATE_CELL, ENDGAME_TABLEAU_HEIGHT, ENDGAME_TABLEAU_WIDTH,
-    MOONGATE_PHASE_ENDGAME_GROUND_TILE, MOONGATE_PHASE_SCRATCH_TILE, moongate_phase_gate_tile,
+    ENDGAME_GATE_CELL, ENDGAME_TABLEAU_WIDTH, MOONGATE_PHASE_ENDGAME_GROUND_TILE,
+    MOONGATE_PHASE_SCRATCH_TILE, moongate_phase_gate_tile,
 };
+#[cfg(all(test, feature = "original-asset-tests"))]
+use u5_runtime::ENDGAME_TABLEAU_HEIGHT;
 // Gameplay-screen border chrome and the message/command window.
 use u5_runtime::{
     CHROME_RULE_INDEX, ChromeFonts, ChromePalette, MESSAGE_WINDOW_RIGHT, MessageWindowRow,
