@@ -1963,10 +1963,16 @@
         assert_eq!(&rejected.schedule[..3], &[1, 2, 4]);
 
         assert_eq!(state.town_npc_mutations.len(), 4);
+        // `town-mode.md §5` step 5: a fresh entry reloads the authored
+        // schedule and dialogue from the `.NPC` block; the visit's rewrites
+        // do not survive it (playtest G24).
         state.load_scheduled_npcs(&slots);
         let restored = state.npcs.iter().find(|npc| npc.slot == 4).unwrap();
-        assert_eq!(&restored.schedule[..3], &[3, 3, 3]);
-        assert_eq!(restored.dialog_id, TOWN_NPC_COWERING_DIALOG_ID);
+        assert_eq!(&restored.schedule[..3], &[1, 2, 4]);
+        assert_eq!(restored.dialog_id, 0x24);
+        let guard = state.npcs.iter().find(|npc| npc.slot == 3).unwrap();
+        assert_eq!(&guard.schedule[..3], &[1, 2, 4]);
+        assert!(state.town_npc_mutations.is_empty());
     }
 
     #[test]

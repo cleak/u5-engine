@@ -41,6 +41,10 @@ pub struct PlayOptions {
     pub saved_dungeon_working_buffer: Option<Vec<u8>>,
     pub moonstone_slots: [MoonstoneGateSlot; MOONSTONE_SLOT_COUNT],
     pub shadowlord_hideouts: [u8; SHADOWLORD_COUNT],
+    /// `formats/saved-gam.md §9.1` `0x0325`: the Yell-path handshake the
+    /// shard and spell destruction check. Restored from the save image so a
+    /// save taken after the summon keeps it (playtest G23).
+    pub summoned_shadowlord: Option<usize>,
     pub removed_town_npc_flags: HashMap<u8, u32>,
     pub talk_branch_flags: HashMap<u8, u32>,
     pub shrine_ordained_mask: u8,
@@ -113,6 +117,11 @@ pub struct PlayOptions {
     pub initial_britannia_overlay: Option<Vec<ActiveObject>>,
     pub debug_enter: Option<PlayTarget>,
     pub saved_active_objects: Option<Vec<ActiveObject>>,
+    /// `formats/saved-gam.md §8.1`: slot zero's bytes `+0x05` and `+0x07`
+    /// as the save image holds them. The load path "normalises no restored
+    /// byte" (`save-load.md §4.2`), so off a ship they round-trip from the
+    /// file instead of being rebuilt from the transport (playtest G27).
+    pub saved_player_aux: Option<(u8, u8)>,
     /// `formats/saved-gam.md §12`: the live NPC family decoded from the
     /// `0x07B4..0x105F` band of a town-family save, which the preserving
     /// entry restores verbatim instead of re-initialising from the roster.
@@ -158,6 +167,7 @@ impl Default for PlayOptions {
             saved_dungeon_working_buffer: None,
             moonstone_slots: [MoonstoneGateSlot::invalid(); MOONSTONE_SLOT_COUNT],
             shadowlord_hideouts: DEFAULT_SHADOWLORD_HIDEOUTS,
+            summoned_shadowlord: None,
             removed_town_npc_flags: HashMap::new(),
             talk_branch_flags: HashMap::new(),
             shrine_ordained_mask: 0,
@@ -200,6 +210,7 @@ impl Default for PlayOptions {
             initial_britannia_overlay: None,
             debug_enter: None,
             saved_active_objects: None,
+            saved_player_aux: None,
             saved_npc_band: None,
             town_npc_mutations: Vec::new(),
             save_template_source: SaveTemplateSource::PreferSavedGame,

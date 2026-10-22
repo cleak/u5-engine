@@ -2448,6 +2448,8 @@ impl PlayState {
             saved_dungeon_working_buffer: None,
             moonstone_slots: self.moonstone_slots,
             shadowlord_hideouts: self.shadowlord_hideouts,
+            // Scene rebuilds keep the existing reset; the save image carries `0x0325`.
+            summoned_shadowlord: None,
             removed_town_npc_flags: self.removed_town_npc_flags.clone(),
             talk_branch_flags: self.talk_branch_flags.clone(),
             shrine_ordained_mask: self.shrine_ordained_mask,
@@ -2493,6 +2495,7 @@ impl PlayState {
             initial_britannia_overlay: None,
             debug_enter: self.debug_enter,
             saved_active_objects: None,
+            saved_player_aux: None,
             saved_npc_band: None,
             town_npc_mutations: self.town_npc_mutations.clone(),
             save_template_source: self.save_template_source,

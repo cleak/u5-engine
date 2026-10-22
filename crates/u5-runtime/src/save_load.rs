@@ -266,6 +266,10 @@ pub fn play_options_from_save_bytes_named(
         saved_dungeon_working_buffer,
         moonstone_slots,
         shadowlord_hideouts,
+        // `formats/saved-gam.md §9.1`: `0x0325` values `0..2` identify the
+        // active named Shadowlord; anything else (factory `0xFF`) is none.
+        summoned_shadowlord: Some(usize::from(bytes[SAVE_ACTIVE_SHADOWLORD_OFFSET]))
+            .filter(|index| *index < SHADOWLORD_COUNT),
         removed_town_npc_flags,
         talk_branch_flags,
         shrine_ordained_mask: bytes[SAVE_SHRINE_ORDAINED_MASK_OFFSET],
@@ -361,6 +365,12 @@ pub fn play_options_from_save_bytes_named(
         } else {
             None
         },
+        saved_player_aux: include_active_objects.then(|| {
+            (
+                bytes[SAVE_ACTIVE_OBJECTS_OFFSET + 5],
+                bytes[SAVE_ACTIVE_OBJECTS_OFFSET + 7],
+            )
+        }),
         // `formats/saved-gam.md §12.3`: a town-family scene reaches the
         // preserving entry, whose NPC family "comes from the save image";
         // `npc-schedules.md §13`: "loading resumes from there".

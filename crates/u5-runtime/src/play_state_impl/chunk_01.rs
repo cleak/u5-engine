@@ -462,6 +462,19 @@ impl PlayState {
         // second write here - one used to clobber the Glass Sword counter.
         save[SAVE_SHADOWLORD_HIDEOUTS_OFFSET..SAVE_SHADOWLORD_HIDEOUTS_OFFSET + SHADOWLORD_COUNT]
             .copy_from_slice(&self.shadowlord_hideouts);
+        // `formats/saved-gam.md §9.1`: `0x0325` is the Yell-path handshake
+        // that shard/spell destruction checks, saved because it sits in
+        // resident memory (§10 `0x0322..0x0327`). A live handshake writes
+        // its id; a cleared one writes the factory `0xFF` "none active"
+        // over a stale id, and "other values" are preserved byte-for-byte
+        // from the template (playtest G23).
+        match self.summoned_shadowlord.and_then(|index| u8::try_from(index).ok()) {
+            Some(index) => save[SAVE_ACTIVE_SHADOWLORD_OFFSET] = index,
+            None if usize::from(save[SAVE_ACTIVE_SHADOWLORD_OFFSET]) < SHADOWLORD_COUNT => {
+                save[SAVE_ACTIVE_SHADOWLORD_OFFSET] = SAVE_ACTIVE_SHADOWLORD_NONE;
+            }
+            None => {}
+        }
         // `formats/saved-gam.md §10` / `town-mode.md §5` step 6 (spec
         // `0170809`): `0x03B2` is the resident-Shadowlord selector, "a
         // **per-entry latch, not durable world state**". Town-family entry
@@ -804,7 +817,7 @@ impl PlayState {
         let transport = options.transport;
         let (player_aux1, player_aux3) = match transport {
             TransportState::Ship { hull, skiffs, .. } => (hull, skiffs),
-            _ => (0, 0),
+            _ => options.saved_player_aux.unwrap_or((0, 0)),
         };
         let marker = transport.save_marker();
         let mut active_objects = vec![ActiveObject {
@@ -955,7 +968,7 @@ impl PlayState {
             moonstone_slots: options.moonstone_slots,
             shadowlord_hideouts: options.shadowlord_hideouts,
             resident_shadowlord: None,
-            summoned_shadowlord: None,
+            summoned_shadowlord: options.summoned_shadowlord,
             removed_town_npc_flags: options.removed_town_npc_flags,
             shrine_ordained_mask: options.shrine_ordained_mask,
             shrine_codex_mask: options.shrine_codex_mask,
@@ -1242,6 +1255,9 @@ impl PlayState {
         };
 
         let world_overlays = initial_world_overlay_cache(&options);
+        // `formats/saved-gam.md §8.1`: bytes `+0x05`/`+0x07` of slot zero
+        // round-trip from the file (playtest G27).
+        let (player_aux1, player_aux3) = options.saved_player_aux.unwrap_or((0, 0));
         let mut active_objects = vec![ActiveObject {
             type_byte: PLAYER_TILE,
             tile: PLAYER_TILE,
@@ -1249,8 +1265,8 @@ impl PlayState {
             y,
             z: level as i8,
             phase: PLAYER_ACTIVE_OBJECT_PHASE,
-            aux1: 0,
-            aux3: 0,
+            aux1: player_aux1,
+            aux3: player_aux3,
         }];
         if let Some(objects) = saved_active_objects {
             active_objects.extend(objects);
@@ -1378,7 +1394,7 @@ impl PlayState {
             moonstone_slots: options.moonstone_slots,
             shadowlord_hideouts: options.shadowlord_hideouts,
             resident_shadowlord: None,
-            summoned_shadowlord: None,
+            summoned_shadowlord: options.summoned_shadowlord,
             removed_town_npc_flags: options.removed_town_npc_flags,
             shrine_ordained_mask: options.shrine_ordained_mask,
             shrine_codex_mask: options.shrine_codex_mask,
@@ -1640,6 +1656,14 @@ impl PlayState {
         let transport = options.transport;
         let world_overlays = initial_world_overlay_cache(&options);
         let marker = transport.save_marker();
+        // `formats/saved-gam.md §8.1`: slot zero "writes nothing to +0x05,
+        // +0x06 or +0x07. Those three round-trip from the file", so a loaded
+        // party off a ship keeps the saved pair rather than zeros
+        // (playtest G27). Aboard, the ship transport decoded the same bytes.
+        let (player_aux1, player_aux3) = match transport {
+            TransportState::Ship { hull, skiffs, .. } => (hull, skiffs),
+            _ => options.saved_player_aux.unwrap_or((0, 0)),
+        };
         let mut active_objects = vec![ActiveObject {
             type_byte: marker,
             tile: marker,
@@ -1647,8 +1671,8 @@ impl PlayState {
             y,
             z: plane.save_floor(),
             phase: PLAYER_ACTIVE_OBJECT_PHASE,
-            aux1: 0,
-            aux3: 0,
+            aux1: player_aux1,
+            aux3: player_aux3,
         }];
         match options.saved_active_objects {
             Some(saved_objects) => active_objects.extend(saved_objects),
@@ -1812,7 +1836,7 @@ impl PlayState {
             moonstone_slots: options.moonstone_slots,
             shadowlord_hideouts: options.shadowlord_hideouts,
             resident_shadowlord: None,
-            summoned_shadowlord: None,
+            summoned_shadowlord: options.summoned_shadowlord,
             removed_town_npc_flags: options.removed_town_npc_flags,
             shrine_ordained_mask: options.shrine_ordained_mask,
             shrine_codex_mask: options.shrine_codex_mask,

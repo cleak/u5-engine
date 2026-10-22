@@ -180,6 +180,127 @@ fn player_active_object_record_saves_a_zero_phase_byte() {
     let _ = fs::remove_dir_all(dir);
 }
 
+/// `formats/saved-gam.md §8.1`: slot zero's compositor "writes nothing to
+/// +0x05, +0x06 or +0x07. Those three round-trip from the file", and
+/// `save-load.md §4.2` has the load path normalise no restored byte. A load
+/// followed by an immediate save of a party off a ship must keep the saved
+/// pair, not rebuild it from the transport as zeros (playtest G27).
+#[test]
+fn player_record_bytes_five_and_seven_round_trip_off_a_ship() {
+    let dir = shipped_layout_iolos_hut_dir();
+    let mut template = shipped_layout_iolos_hut_save();
+    template[SAVE_ACTIVE_OBJECTS_OFFSET + 5] = 0x4D;
+    template[SAVE_ACTIVE_OBJECTS_OFFSET + 7] = 0x02;
+    fs::write(dir.join("SAVED.GAM"), template).unwrap();
+    fs::write(dir.join(SAVED_OOL_FILENAME), vec![0; SAVED_OOL_LEN]).unwrap();
+    write_empty_ool_mirrors(&dir);
+
+    let options = load_play_options_from_save(&dir).unwrap();
+    assert!(!matches!(options.transport, TransportState::Ship { .. }));
+    let scene = Scene::new(SHIPPED_IOLOS_HUT_SCENE).unwrap();
+    let mut state = PlayState::load_town_scene(&dir, scene, options).unwrap();
+    assert_eq!(state.active_objects[0].aux1, 0x4D);
+    assert_eq!(state.active_objects[0].aux3, 0x02);
+    assert_eq!(
+        state.save_game_command(&dir, Some(true)).unwrap(),
+        MoveOutcome::Saved
+    );
+    let saved = fs::read(dir.join("SAVED.GAM")).unwrap();
+    assert_eq!(saved[SAVE_ACTIVE_OBJECTS_OFFSET + 5], 0x4D);
+    assert_eq!(saved[SAVE_ACTIVE_OBJECTS_OFFSET + 7], 0x02);
+    let _ = fs::remove_dir_all(dir);
+}
+
+/// `time.md §8`: "Each of the sixteen character record slots carries a
+/// one-byte counter. The month rollover increments it, capped at 25", and
+/// `formats/saved-gam.md §3.1` +0x17 has the time system increment "every
+/// character-record slot". Unrecruited records age with the party and the
+/// lodged guests, and the next save writes the aged bytes (playtest G28).
+#[test]
+fn month_rollover_ages_every_roster_record_counter() {
+    let mut template = saved_game_seed_bytes(0, 0, 10, 20);
+    template[SAVE_AVATAR_NAME_OFFSET] = b'A';
+    for slot in 0..SAVE_ROSTER_SLOT_COUNT {
+        template[SAVE_ROSTER_OFFSET
+            + slot * SAVE_CHARACTER_RECORD_LEN
+            + SAVE_CHARACTER_STAY_COUNTER_OFFSET] = 3;
+    }
+    let roster = decode_party_roster(&template);
+    let dir = save_fidelity_game_dir(template);
+
+    let mut state = world_state(open_world_grid(), 10, 20);
+    state.party_roster = roster;
+    state.party_stay_counters = vec![3; state.party.len()];
+    state.clock = GameClock::with_date(139, 4, 28, 23, 59).unwrap();
+    state.advance_turn_with_minutes(1);
+    assert_eq!(state.clock, GameClock::with_date(139, 5, 1, 0, 0).unwrap());
+    assert!(state.party.len() < SAVE_ROSTER_SLOT_COUNT);
+    for record in &state.party_roster[state.party.len()..] {
+        assert_eq!(record.stay_counter, 4);
+    }
+
+    assert_eq!(
+        state.save_game_command(&dir, Some(true)).unwrap(),
+        MoveOutcome::Saved
+    );
+    let saved = fs::read(dir.join("SAVED.GAM")).unwrap();
+    for slot in 0..SAVE_ROSTER_SLOT_COUNT {
+        assert_eq!(
+            saved[SAVE_ROSTER_OFFSET
+                + slot * SAVE_CHARACTER_RECORD_LEN
+                + SAVE_CHARACTER_STAY_COUNTER_OFFSET],
+            4,
+            "roster slot {slot}"
+        );
+    }
+    let _ = fs::remove_dir_all(dir);
+}
+
+/// `time.md §8` ages each of the sixteen records once per rollover. A lodged
+/// guest's record is aged through the inn registry, so it must not also be
+/// aged a second time as an ordinary roster record (playtest G28).
+#[test]
+fn month_rollover_ages_a_lodged_guest_record_exactly_once() {
+    let mut template = saved_game_seed_bytes(0, 0, 10, 20);
+    template[SAVE_AVATAR_NAME_OFFSET] = b'A';
+    for slot in 0..SAVE_ROSTER_SLOT_COUNT {
+        template[SAVE_ROSTER_OFFSET
+            + slot * SAVE_CHARACTER_RECORD_LEN
+            + SAVE_CHARACTER_STAY_COUNTER_OFFSET] = 3;
+    }
+    let guest_slot = SAVE_ROSTER_SLOT_COUNT - 1;
+    template[inn_registry_marker_offset(guest_slot)] = 2;
+    let roster = decode_party_roster(&template);
+    let registry = decode_inn_registry(&template);
+    assert_eq!(registry.len(), 1);
+    assert_eq!(usize::from(registry[0].registry_slot), guest_slot);
+    let dir = save_fidelity_game_dir(template);
+
+    let mut state = world_state(open_world_grid(), 10, 20);
+    state.party_roster = roster;
+    state.inn_registry = registry;
+    state.party_stay_counters = vec![3; state.party.len()];
+    state.clock = GameClock::with_date(139, 4, 28, 23, 59).unwrap();
+    state.advance_turn_with_minutes(1);
+    assert_eq!(state.inn_registry[0].stay_counter, 4);
+
+    assert_eq!(
+        state.save_game_command(&dir, Some(true)).unwrap(),
+        MoveOutcome::Saved
+    );
+    let saved = fs::read(dir.join("SAVED.GAM")).unwrap();
+    for slot in 0..SAVE_ROSTER_SLOT_COUNT {
+        assert_eq!(
+            saved[SAVE_ROSTER_OFFSET
+                + slot * SAVE_CHARACTER_RECORD_LEN
+                + SAVE_CHARACTER_STAY_COUNTER_OFFSET],
+            4,
+            "roster slot {slot}"
+        );
+    }
+    let _ = fs::remove_dir_all(dir);
+}
+
 /// `doors-and-z-transitions.md §5`: the countdown starts at four and the
 /// door re-closes when it "hits zero". Runtime observation, spec silent
 /// on what happens next: the DOS build keeps the four-byte block. After
@@ -532,6 +653,73 @@ fn resident_shadowlord_latch_is_only_stamped_inside_a_location() {
     );
     let saved = fs::read(dir.join("SAVED.GAM")).unwrap();
     assert_eq!(saved[SAVE_RESIDENT_SHADOWLORD_OFFSET], 0x02);
+    let _ = fs::remove_dir_all(dir);
+}
+
+/// `formats/saved-gam.md §9.1`: `0x0325` is the Yell-path active-Shadowlord
+/// handshake "checked by shard/spell destruction", saved because it sits in
+/// resident memory. A save taken after the summon has to keep the id so the
+/// shard still matches after a reload; a cleared handshake writes the
+/// factory `0xFF`, and other values are preserved byte-for-byte
+/// (playtest G23).
+#[test]
+fn active_shadowlord_handshake_survives_save_and_reload() {
+    let mut template = saved_game_seed_bytes(0, 0, 10, 20);
+    template[SAVE_AVATAR_NAME_OFFSET] = b'A';
+    template[SAVE_ACTIVE_SHADOWLORD_OFFSET] = SAVE_ACTIVE_SHADOWLORD_NONE;
+    let dir = save_fidelity_game_dir(template);
+
+    let mut state = world_state(open_world_grid(), 10, 20);
+    state.summoned_shadowlord = Some(SHADOWLORD_FALSEHOOD_INDEX);
+    assert_eq!(
+        state.save_game_command(&dir, Some(true)).unwrap(),
+        MoveOutcome::Saved
+    );
+    let saved = fs::read(dir.join("SAVED.GAM")).unwrap();
+    assert_eq!(saved[SAVE_ACTIVE_SHADOWLORD_OFFSET], 0);
+    let reloaded = load_play_options_from_save(&dir).unwrap();
+    assert_eq!(reloaded.summoned_shadowlord, Some(SHADOWLORD_FALSEHOOD_INDEX));
+
+    // The shard clears the handshake; the next save stops naming it.
+    state.summoned_shadowlord = None;
+    assert_eq!(
+        state.save_game_command(&dir, Some(true)).unwrap(),
+        MoveOutcome::Saved
+    );
+    let saved = fs::read(dir.join("SAVED.GAM")).unwrap();
+    assert_eq!(saved[SAVE_ACTIVE_SHADOWLORD_OFFSET], SAVE_ACTIVE_SHADOWLORD_NONE);
+    assert_eq!(load_play_options_from_save(&dir).unwrap().summoned_shadowlord, None);
+
+    // Any other value is opaque and round-trips untouched.
+    let mut odd = saved.clone();
+    odd[SAVE_ACTIVE_SHADOWLORD_OFFSET] = 0x7E;
+    fs::write(dir.join("SAVED.GAM"), odd).unwrap();
+    assert_eq!(load_play_options_from_save(&dir).unwrap().summoned_shadowlord, None);
+    assert_eq!(
+        state.save_game_command(&dir, Some(true)).unwrap(),
+        MoveOutcome::Saved
+    );
+    let saved = fs::read(dir.join("SAVED.GAM")).unwrap();
+    assert_eq!(saved[SAVE_ACTIVE_SHADOWLORD_OFFSET], 0x7E);
+    let _ = fs::remove_dir_all(dir);
+}
+
+/// The restored handshake reaches the rebuilt play state, so the shard's
+/// "recorded id must equal the shard's own index" gate (`quest-graph.md`
+/// gate 3) still sees it after a Journey Onward.
+#[test]
+fn restored_active_shadowlord_handshake_reaches_the_loaded_town_state() {
+    let dir = shipped_layout_iolos_hut_dir();
+    let mut template = shipped_layout_iolos_hut_save();
+    template[SAVE_ACTIVE_SHADOWLORD_OFFSET] = 0x01;
+    fs::write(dir.join("SAVED.GAM"), template).unwrap();
+    fs::write(dir.join(SAVED_OOL_FILENAME), vec![0; SAVED_OOL_LEN]).unwrap();
+    write_empty_ool_mirrors(&dir);
+
+    let options = load_play_options_from_save(&dir).unwrap();
+    let scene = Scene::new(SHIPPED_IOLOS_HUT_SCENE).unwrap();
+    let state = PlayState::load_town_scene(&dir, scene, options).unwrap();
+    assert_eq!(state.summoned_shadowlord, Some(1));
     let _ = fs::remove_dir_all(dir);
 }
 
