@@ -1665,6 +1665,10 @@ pub const WISHING_WELL_COIN_NO_REPLY: &str = "No";
 /// mismatched-word arm in a granting scene; `view.md §3`'s coinless and
 /// ungated arms are not measured and take the same line here.
 pub const WISHING_WELL_NO_EFFECT_LINE: &str = "No effect...";
+/// `view.md §3` wish-outcome table: "Empty wish | `Nothing\n`", printed
+/// directly after the (empty) input with no leading feed. `No effect...`
+/// belongs only to a nonempty unmatched wish or an ineligible scene.
+pub const WISHING_WELL_EMPTY_WISH_LINE: &str = "Nothing";
 
 /// `view.md §3`: the surface/town fountain look "prompt[s] for the
 /// drinking party member". The section publishes the flow but none of its

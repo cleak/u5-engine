@@ -5157,6 +5157,56 @@ fn a_self_introduction_whose_name_entry_asks_who_closes_on_the_name_prompt() {
     assert!(answer.contains(crate::TLK_ASK_WHO_DISMISSIVE_LINE), "{answer:?}");
 }
 
+/// Playtest G02. `conversation.md §9` step 3 runs the Name entry "through
+/// the byte runner", §7.4 makes `0x8D` a forced literal newline and §7.6
+/// gives ASK-WHO no feed of its own, so the Name entry's two row breaks stand
+/// between its closing quote and the question: `"I am called` / `Grum"` / a
+/// blank row / `"What is thy` / `name?"`. The opening trimmed them and the
+/// question ran onto the name row (`Trian"What is`).
+#[test]
+fn a_self_introduction_keeps_the_name_entry_row_breaks_before_ask_who() {
+    let enc = |s: &str| s.bytes().map(|b| b ^ 0x80).collect::<Vec<u8>>();
+    let mut name = enc("Grum\"");
+    name.extend([
+        TLK_CODE_LITERAL_NEWLINE,
+        TLK_CODE_LITERAL_NEWLINE,
+        TLK_CODE_IF_ELSE,
+        0xFF,
+        TLK_CODE_ASK_WHO,
+    ]);
+    let raw = vec![
+        name,
+        enc("a knight."),
+        enc("Well met."),
+        enc("I guard."),
+        enc("Farewell."),
+    ];
+    let decoded = raw
+        .iter()
+        .map(|field| field.iter().map(|b| char::from(b ^ 0x80)).collect())
+        .collect();
+    let seed = (0u16..64)
+        .find(|seed| {
+            let mut stream = *seed;
+            u5_prng_range_u16(&mut stream, 0, 1) != 0
+        })
+        .expect("some seed introduces");
+    let mut state = test_state(open_grid(), 1, 1);
+    state.active_conversation_npc_slot = Some(1);
+    state.active_conversation = Some(Box::new(
+        crate::conversation_session::ConversationSession::new(raw, decoded),
+    ));
+
+    let opening = state.advance_active_conversation_greeting_with_seed(Some(seed));
+    assert!(
+        opening.ends_with(&format!(
+            "\"I am called Grum\"\n\n{}",
+            crate::TLK_ASK_WHO_PROMPT
+        )),
+        "{opening:?}"
+    );
+}
+
 #[test]
 fn conversation_keyword_line_is_capped_at_fifteen_characters() {
     // `conversation.md §6` step 2: the reader "accepts up to fifteen
@@ -8509,4 +8559,214 @@ fn tavern_provision_quantity_reads_two_digits_until_return() {
     handle_play_key_input(&mut state, '\r', "", Path::new("")).unwrap();
     assert_eq!(state.food, 0);
     assert!(state.message.starts_with("\n\n\"Hrumph.\""), "{:?}", state.message);
+}
+
+/// `input.md §8`: in the free-text reader "Escape clears the whole current
+/// line but does **not** submit or terminate it", and `text-output.md §10.6`
+/// makes that true of every reader. The sage's topic line and the well's wish
+/// line both submitted the Escape as their typed text: the sage answered
+/// "That, I cannot help thee with." and the well spent the wish on
+/// `No effect...` (playtest G15).
+#[test]
+fn escape_at_the_sage_topic_and_well_wish_lines_submits_nothing() {
+    use crate::shop_runtime::SageState;
+    use crate::shop_session::ActiveShopSession;
+
+    let mut sage = test_state(open_grid(), 1, 1);
+    sage.area = Area::Town {
+        scene: Scene::new(22).unwrap(),
+        floor: 0,
+    };
+    sage.gold = 200;
+    sage.active_shop = Some(ActiveShopSession::Sage(SageState::default()));
+    let entries_before = sage.message_entries().len();
+    let message_before = sage.message.clone();
+    handle_play_key_input(&mut sage, '\u{1b}', "", Path::new("")).unwrap();
+    assert_eq!(sage.message_entries().len(), entries_before);
+    assert_eq!(sage.message, message_before);
+    assert!(matches!(
+        sage.active_shop,
+        Some(ActiveShopSession::Sage(SageState::Prompt { .. }))
+    ));
+
+    let mut grid = open_grid();
+    grid[32 + 2] = 0xa1;
+    let mut well = test_state(grid, 1, 1);
+    well.player.facing = Direction::East;
+    well.gold = 2;
+    assert_eq!(well.look_facing(), MoveOutcome::Observed);
+    handle_play_key_input(&mut well, 'Y', "", Path::new("")).unwrap();
+    let message_before = well.message.clone();
+    handle_play_key_input(&mut well, '\u{1b}', "", Path::new("")).unwrap();
+    assert_eq!(well.message, message_before);
+    assert!(
+        well.active_wishing_well
+            .as_ref()
+            .is_some_and(|session| session.coin_accepted),
+        "the wish prompt keeps reading"
+    );
+    assert_eq!(well.gold, 1);
+}
+
+/// `view.md §3`: "The coin prompt accepts Y or N; other keys continue
+/// waiting", and `shops.md §8.A`'s shared Y/N row: "Other keys print nothing
+/// and keep polling". Escape answered `No` and ended the Look, and any other
+/// key printed `Drop a coin?` a second time on a row of its own (playtest
+/// G17).
+#[test]
+fn wishing_well_coin_prompt_waits_silently_on_keys_other_than_y_or_n() {
+    let mut grid = open_grid();
+    grid[32 + 2] = 0xa1;
+    let mut state = test_state(grid, 1, 1);
+    state.player.facing = Direction::East;
+    state.gold = 2;
+    assert_eq!(state.look_facing(), MoveOutcome::Observed);
+    let message_before = state.message.clone();
+    for key in ['\u{1b}', 'x', ' '] {
+        handle_play_key_input(&mut state, key, "", Path::new("")).unwrap();
+        assert_eq!(state.message, message_before, "{key:?}");
+        assert!(
+            state
+                .active_wishing_well
+                .as_ref()
+                .is_some_and(|session| !session.coin_accepted),
+            "{key:?} leaves the coin prompt waiting"
+        );
+    }
+    assert_eq!(state.gold, 2);
+    handle_play_key_input(&mut state, 'n', "", Path::new("")).unwrap();
+    assert!(state.active_wishing_well.is_none());
+}
+
+/// `view.md §3` wish-outcome table: "Empty wish | `Nothing\n`"; `No
+/// effect...` is the nonempty unmatched wish's line. A bare Enter at
+/// `Thy wish?` printed `No effect...` (playtest G18).
+#[test]
+fn wishing_well_empty_wish_prints_nothing_line() {
+    for enter in ['\r', '\n'] {
+        let mut grid = open_grid();
+        grid[32 + 2] = 0xa1;
+        let mut state = test_state(grid, 1, 1);
+        state.player.facing = Direction::East;
+        state.gold = 2;
+        assert_eq!(state.look_facing(), MoveOutcome::Observed);
+        assert_eq!(state.step_active_wishing_well('Y', ""), None);
+        assert_eq!(
+            state.step_active_wishing_well(enter, ""),
+            Some(MoveOutcome::Observed)
+        );
+        assert!(state.active_wishing_well.is_none());
+        assert_eq!(state.message, WISHING_WELL_EMPTY_WISH_LINE);
+        assert_eq!(state.gold, 1, "the coin is still spent");
+    }
+}
+
+/// `shops.md §8.8`: the sage's `You respond:` line "accepts up to fifteen
+/// characters". All twenty-six letters of a long topic were echoed across
+/// two rows (playtest G16).
+#[test]
+fn sage_topic_echo_is_capped_at_fifteen_characters() {
+    use crate::shop_runtime::SageState;
+    use crate::shop_session::ActiveShopSession;
+
+    let mut state = test_state(open_grid(), 1, 1);
+    state.area = Area::Town {
+        scene: Scene::new(22).unwrap(),
+        floor: 0,
+    };
+    state.gold = 200;
+    state.active_shop = Some(ActiveShopSession::Sage(SageState::default()));
+    handle_play_key_input(&mut state, 'a', "bcdefghijklmnopqrstuvwxyz", Path::new("")).unwrap();
+    let echoes = state
+        .message_entries()
+        .iter()
+        .filter(|entry| entry.text.contains("ABCDE"))
+        .map(|entry| entry.text.clone())
+        .collect::<Vec<_>>();
+    assert_eq!(echoes, vec!["ABCDEFGHIJKLMNO".to_string()]);
+    assert!(
+        !state
+            .message_entries()
+            .iter()
+            .any(|entry| entry.text.contains('P')),
+        "nothing past the fifteenth character is echoed"
+    );
+}
+
+/// `karma.md §4.1`: a qualifying payment with the counter at one hundred
+/// resets it and raises standing by one, and `conversation.md §7.4` makes each
+/// following `0x89` a further `+1`. Ava's bonus record is exactly that - the
+/// payment, then five raise-standing bytes - and from standing zero it ended
+/// at five: the counter was reset but the milestone's `+1` was overwritten by
+/// the runner's standing, counted from before the payment (playtest G04).
+#[test]
+fn town_raw_tlk_payment_milestone_survives_following_raise_standing_bytes() {
+    let mut dialogue: HashMap<u16, Vec<String>> = HashMap::new();
+    dialogue.insert(
+        0x10,
+        vec![
+            "Ava".to_string(),
+            "a beggar".to_string(),
+            "Greetings".to_string(),
+            "I beg".to_string(),
+            "Farewell".to_string(),
+            "ALMS".to_string(),
+            "placeholder".to_string(),
+        ],
+    );
+
+    let enc = |s: &str| s.bytes().map(|b| b ^ 0x80).collect::<Vec<u8>>();
+    let mut pay_response = vec![0x85, b'0', b'0', b'5'];
+    pay_response.extend([crate::tlk_control_codes::TLK_CODE_STANDING_UP; 5]);
+    pay_response.extend(enc("Bless thee"));
+    pay_response.push(0xFF);
+
+    let mut raw: HashMap<u16, Vec<Vec<u8>>> = HashMap::new();
+    raw.insert(
+        0x10,
+        vec![
+            enc("Ava"),
+            enc("a beggar"),
+            enc("Greetings"),
+            enc("I beg"),
+            enc("Farewell"),
+            enc("ALMS"),
+            pay_response,
+        ],
+    );
+
+    let mut state = test_state(open_grid(), 1, 1);
+    state.player.facing = Direction::East;
+    state.gold = 150;
+    state.moral_standing = 0;
+    state.toll_progress = TOLL_PROGRESS_MILESTONE;
+    state.load_scheduled_npcs(&[
+        NpcSlot {
+            slot: 0,
+            type_byte: 0,
+            dialog_id: 0,
+            schedule: [0; 16],
+            name: None,
+        },
+        NpcSlot {
+            slot: 1,
+            type_byte: TLK_GOLD_PAYMENT_KARMA_SPEAKER_CLASS,
+            dialog_id: 0x10,
+            schedule: [0, 0, 0, 2, 2, 2, 1, 1, 1, 0, 0, 0, 0, 8, 16, 20],
+            name: None,
+        },
+    ]);
+    state.talk_facing_with_dialogue_and_keyword_raw(&dialogue, &raw, None);
+    let _ = state.submit_active_conversation_keyword("alms");
+    assert_eq!(state.gold, 145);
+    assert_eq!(state.toll_progress, 0, "the milestone fired");
+    assert_eq!(state.moral_standing, 6, "0 + 1 (milestone) + 5 (0x89 x5)");
+
+    // A later raise-standing run in the same conversation starts from the
+    // live standing, milestone included: the session's carried selector
+    // must not hand the runner the pre-milestone value again.
+    let _ = state.submit_active_conversation_keyword("alms");
+    assert_eq!(state.gold, 140);
+    assert_eq!(state.toll_progress, 0, "no second milestone");
+    assert_eq!(state.moral_standing, 11, "6 + 5 (0x89 x5)");
 }

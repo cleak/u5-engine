@@ -2894,7 +2894,10 @@ impl PlayState {
                         self.message = format!("\n{WISHING_WELL_WISH_PROMPT}");
                         return None;
                     }
-                    'N' | '\u{1b}' | ' ' => {
+                    // `view.md §3`: "The coin prompt accepts Y or N; other
+                    // keys continue waiting" - Escape and Space are not a
+                    // No here (playtest G17).
+                    'N' => {
                         // Measured: the declined answer completes the
                         // prompt's own row and nothing else prints.
                         self.commit_prompt_reply(
@@ -2906,15 +2909,36 @@ impl PlayState {
                     _ => {}
                 }
             }
+            // Other keys wait silently: re-assigning the prompt to the slot
+            // printed `Drop a coin?` a second time on a row of its own
+            // (`shops.md §8.A` shared Y/N row: "Other keys print nothing and
+            // keep polling", playtest G17).
             self.active_wishing_well = Some(session);
-            self.message = self.render_active_wishing_well();
             return None;
         }
 
+        // `input.md §8`: the wish is read by the shared free-text reader, in
+        // which "Escape clears the whole current line but does **not**
+        // submit or terminate it". A bare Escape is never a typed wish
+        // (playtest G15).
+        if key == '\u{1b}' && suffix.is_empty() {
+            self.active_wishing_well = Some(session);
+            return None;
+        }
+        // The Enter that ends the line is not part of the wish, so a bare
+        // Enter is the empty wish.
         let wish = std::iter::once(key)
             .chain(suffix.chars())
+            .filter(|ch| !matches!(ch, '\r' | '\n'))
             .take(WISHING_WELL_WISH_MAX_CHARS)
             .collect::<String>();
+        // `view.md §3` wish-outcome table: "Empty wish | `Nothing\n`" -
+        // not `No effect...`, which is the nonempty unmatched wish's line
+        // (playtest G18).
+        if wish.is_empty() {
+            self.message = WISHING_WELL_EMPTY_WISH_LINE.to_string();
+            return Some(MoveOutcome::Observed);
+        }
         Some(self.resolve_wishing_well_wish(session.direction, &wish))
     }
 

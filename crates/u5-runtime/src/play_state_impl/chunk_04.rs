@@ -5297,8 +5297,7 @@ impl PlayState {
             };
             let (legacy_text, legacy_actions) = talk_response_text_and_actions(&response_text);
             self.apply_tlk_action_grants(&applied_grants);
-            self.apply_tlk_gold_payments(&applied_payments);
-            self.apply_tlk_moral_standing(applied_standing);
+            self.apply_tlk_payments_and_standing(&applied_payments, applied_standing);
             self.record_tlk_signal_flags(&applied_signal_flags);
             self.apply_tlk_alarm_sweeps(applied_alarms);
             self.apply_talk_action_grants(&legacy_actions);
@@ -5348,8 +5347,7 @@ impl PlayState {
             };
             let (legacy_text, legacy_actions) = talk_response_text_and_actions(&greeting_text);
             self.apply_tlk_action_grants(&applied_grants);
-            self.apply_tlk_gold_payments(&applied_payments);
-            self.apply_tlk_moral_standing(applied_standing);
+            self.apply_tlk_payments_and_standing(&applied_payments, applied_standing);
             self.record_tlk_signal_flags(&applied_signal_flags);
             self.apply_tlk_alarm_sweeps(applied_alarms);
             self.apply_talk_action_grants(&legacy_actions);
@@ -5463,6 +5461,36 @@ impl PlayState {
 
     /// Apply the byte-runner's recorded [`TlkActionDispatchVerb`] grants
     /// to the live runtime counters per `conversation.md §7.6`.
+    /// Apply one run's `0x85` payments and its raise/lower-standing writes.
+    ///
+    /// The runner reports standing as the absolute value its own writes
+    /// reached, counted from the standing it was handed - which is the
+    /// standing *before* any payment in the same run. Writing that value
+    /// after the payments therefore discarded a qualifying payment's
+    /// `karma.md §4.1` milestone: Ava's bonus record (the payment, then five
+    /// `0x89`) reset the counter but ended at `+5`, not `+6` (playtest G04).
+    /// The runner's writes are applied first and the milestone on top of
+    /// them. The milestone and `0x89` are capped `+1` steps, so for a record
+    /// that only raises standing the result is exactly stream order; only a
+    /// lower-standing write pinned at the floor could tell the two apart.
+    ///
+    /// The open session carries the selector its streams last wrote into
+    /// its later streams and turns, so it is handed the result here: a
+    /// milestone the session never saw would otherwise be overwritten again
+    /// by the next `0x89` / `0x8A` in the same conversation.
+    pub fn apply_tlk_payments_and_standing(
+        &mut self,
+        payments: &[crate::conversation_session::ConversationGoldPayment],
+        standing: Option<u8>,
+    ) {
+        self.apply_tlk_moral_standing(standing);
+        self.apply_tlk_gold_payments(payments);
+        let live = self.moral_standing;
+        if let Some(session) = self.active_conversation.as_mut() {
+            session.sync_moral_standing(live);
+        }
+    }
+
     /// `conversation.md §7.4` / `karma.md §4`: assign the shared
     /// moral-standing selector after a TLK stream ran `0x89`
     /// STANDING-UP or `0x8A` STANDING-DOWN. The runner already applied
@@ -5787,8 +5815,7 @@ impl PlayState {
             // flip and greeting below never run (`conversation.md §9` step 2).
             suspended = session.opening_suspended() || session.has_ended();
             self.apply_tlk_action_grants(&output.action_grants);
-            self.apply_tlk_gold_payments(&output.gold_payments);
-            self.apply_tlk_moral_standing(output.moral_standing);
+            self.apply_tlk_payments_and_standing(&output.gold_payments, output.moral_standing);
             self.record_tlk_signal_flags(&output.signal_flags);
             self.apply_tlk_alarm_sweeps(output.alarm_sweeps);
             if let Area::Town { scene, .. } = self.area {
@@ -5824,8 +5851,7 @@ impl PlayState {
             suspended_after_opening = session.awaiting_ask_who();
             rendered = output.rendered_text();
             self.apply_tlk_action_grants(&output.action_grants);
-            self.apply_tlk_gold_payments(&output.gold_payments);
-            self.apply_tlk_moral_standing(output.moral_standing);
+            self.apply_tlk_payments_and_standing(&output.gold_payments, output.moral_standing);
             self.record_tlk_signal_flags(&output.signal_flags);
             self.apply_tlk_alarm_sweeps(output.alarm_sweeps);
             if let Area::Town { scene, .. } = self.area {
@@ -5855,6 +5881,27 @@ impl PlayState {
                 // Playtest E02 (`"I am called Eb""`).
                 if !trimmed.text.ends_with('"') {
                     opening.push_plain("\"");
+                }
+            }
+            // `conversation.md §9` step 3 runs the entry "through the byte
+            // runner", where `0x8D` is a forced literal newline (§7.4), and
+            // §7.6 gives ASK-WHO no feed of its own: when the entry suspends
+            // on its `0x88`, the row breaks the stream printed before it are
+            // the only ones between the closing quote and the question.
+            // Trimming them ran the question onto the name row -
+            // `Trian"What is` / `thy name?"` (playtest G02; Trian, Woolfe,
+            // Gruman, Eb, Treanna and Joshua share the Name shape `<name>"`,
+            // two `0x8D`, `0x8C 0xFF`, `0x88`).
+            if suspended_after_opening {
+                let feeds = rendered
+                    .glyphs
+                    .iter()
+                    .rev()
+                    .take_while(|glyph| glyph.byte.is_ascii_whitespace())
+                    .filter(|glyph| glyph.byte == b'\n')
+                    .count();
+                for _ in 0..feeds {
+                    opening.push_plain("\n");
                 }
             }
         }
@@ -5972,8 +6019,7 @@ impl PlayState {
             asked_party_name = output.asked_party_name;
             ask_party_name_prompted = session.awaiting_ask_party_name();
             self.apply_tlk_action_grants(&output.action_grants);
-            self.apply_tlk_gold_payments(&output.gold_payments);
-            self.apply_tlk_moral_standing(output.moral_standing);
+            self.apply_tlk_payments_and_standing(&output.gold_payments, output.moral_standing);
             self.record_tlk_signal_flags(&output.signal_flags);
             self.apply_tlk_alarm_sweeps(output.alarm_sweeps);
             if let Area::Town { scene, .. } = self.area {

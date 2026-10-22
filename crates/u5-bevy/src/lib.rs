@@ -18921,6 +18921,26 @@ fn handle_visual_line_key(
             {
                 return Ok(Some(PlayInputDisposition::Continue));
             }
+            // `shops.md §8.8`: the sage topic "accepts up to fifteen
+            // characters" (playtest G16); `view.md §3`: the wish is "the
+            // shared twelve-character text input".
+            let reader_cap = if matches!(
+                state.active_shop.as_ref(),
+                Some(ActiveShopSession::Sage(SageState::Prompt { .. }))
+            ) {
+                Some(u5_runtime::SAGE_TOPIC_INPUT_LIMIT)
+            } else if state
+                .active_wishing_well
+                .as_ref()
+                .is_some_and(|session| session.coin_accepted)
+            {
+                Some(u5_runtime::WISHING_WELL_WISH_MAX_CHARS)
+            } else {
+                None
+            };
+            if reader_cap.is_some_and(|cap| input_line.chars().count() >= cap) {
+                return Ok(Some(PlayInputDisposition::Continue));
+            }
             input_line.push(char::from(byte));
             Ok(Some(PlayInputDisposition::Continue))
         }
@@ -27732,6 +27752,27 @@ mod tests {
             state.typed_prompt_echo_uppercases(),
             "the sage topic row echoes upper-cased"
         );
+    }
+
+    #[test]
+    fn visual_line_input_caps_the_sage_topic_at_fifteen() {
+        // `shops.md §8.8`: "Input accepts up to fifteen characters."
+        // Playtest G16.
+        let mut state = test_state(open_grid(), 1, 1);
+        state.active_shop = Some(ActiveShopSession::Sage(SageState::default()));
+        let mut input_line = String::new();
+        for _ in 0..20 {
+            handle_visual_line_key(
+                &mut state,
+                &mut input_line,
+                KeyCode::KeyA,
+                false,
+                false,
+                Path::new(""),
+            )
+            .unwrap();
+        }
+        assert_eq!(input_line.len(), u5_runtime::SAGE_TOPIC_INPUT_LIMIT);
     }
 
     #[test]

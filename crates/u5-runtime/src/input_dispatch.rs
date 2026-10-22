@@ -1193,6 +1193,18 @@ fn handle_active_shop_key_input(
     let Some(mut session) = state.active_shop.take() else {
         return PlayInputDisposition::Continue;
     };
+    // `input.md §8`: the sage's `You respond:` topic line is the shared
+    // free-text reader, where "Escape clears the whole current line but does
+    // **not** submit or terminate it" (`text-output.md §10.6`). The shell
+    // clears its own buffer; a bare Escape reaching here is never a typed
+    // topic (playtest G15).
+    if key == '\u{1b}'
+        && suffix.is_empty()
+        && matches!(session, ActiveShopSession::Sage(SageState::Prompt { .. }))
+    {
+        state.active_shop = Some(session);
+        return PlayInputDisposition::Continue;
+    }
     let ctx = ShopTransactionContext {
         party_gold: state.gold,
         speaker_intelligence: active_speaker_intelligence(state),
@@ -2402,7 +2414,13 @@ fn handle_active_shop_key_input(
             let mut sage_confirm_accepted = false;
             let outcome = match *s {
                 SageState::Prompt { .. } => {
-                    let line = active_shop_text_line(key, suffix);
+                    // `shops.md §8.8`: "Input accepts up to fifteen
+                    // characters." A byte past the cap is never accepted, so
+                    // it is neither echoed nor matched (playtest G16).
+                    let line = active_shop_text_line(key, suffix)
+                        .chars()
+                        .take(crate::shops::SAGE_TOPIC_INPUT_LIMIT)
+                        .collect::<String>();
                     // `shops.md §8.C`, the sage result table: the topic prompt
                     // ends `You respond:\n`, and "After typed topic | `\n\n`".
                     // The typed word therefore occupies the row that prompt
