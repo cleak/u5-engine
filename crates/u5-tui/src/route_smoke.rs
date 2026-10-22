@@ -2301,7 +2301,11 @@ pub fn route_smoke_cases() -> Vec<RouteSmokeCase> {
             options: dungeon_options.clone(),
             script: &["A"],
             expected: RouteSmokeExpectation::Dungeon(dungeon),
-            min_turn: 1,
+            // `combat.md §4` / `dungeon-mode.md §10`: the attack frames the
+            // arena from inside its dispatch and its turn is spent at the
+            // round loop's exit, so none has been spent while the arena is
+            // up (the dungeon sibling of playtest H21).
+            min_turn: 0,
             expected_frame_kind: "combat viewport",
         },
         RouteSmokeCase {
