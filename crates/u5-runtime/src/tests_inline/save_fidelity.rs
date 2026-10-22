@@ -211,6 +211,51 @@ fn player_record_bytes_five_and_seven_round_trip_off_a_ship() {
     let _ = fs::remove_dir_all(dir);
 }
 
+/// `time.md §8`: "Each of the sixteen character record slots carries a
+/// one-byte counter. The month rollover increments it, capped at 25", and
+/// `formats/saved-gam.md §3.1` +0x17 has the time system increment "every
+/// character-record slot". Unrecruited records age with the party and the
+/// lodged guests, and the next save writes the aged bytes (playtest G28).
+#[test]
+fn month_rollover_ages_every_roster_record_counter() {
+    let mut template = saved_game_seed_bytes(0, 0, 10, 20);
+    template[SAVE_AVATAR_NAME_OFFSET] = b'A';
+    for slot in 0..SAVE_ROSTER_SLOT_COUNT {
+        template[SAVE_ROSTER_OFFSET
+            + slot * SAVE_CHARACTER_RECORD_LEN
+            + SAVE_CHARACTER_STAY_COUNTER_OFFSET] = 3;
+    }
+    let roster = decode_party_roster(&template);
+    let dir = save_fidelity_game_dir(template);
+
+    let mut state = world_state(open_world_grid(), 10, 20);
+    state.party_roster = roster;
+    state.party_stay_counters = vec![3; state.party.len()];
+    state.clock = GameClock::with_date(139, 4, 28, 23, 59).unwrap();
+    state.advance_turn_with_minutes(1);
+    assert_eq!(state.clock, GameClock::with_date(139, 5, 1, 0, 0).unwrap());
+    assert!(state.party.len() < SAVE_ROSTER_SLOT_COUNT);
+    for record in &state.party_roster[state.party.len()..] {
+        assert_eq!(record.stay_counter, 4);
+    }
+
+    assert_eq!(
+        state.save_game_command(&dir, Some(true)).unwrap(),
+        MoveOutcome::Saved
+    );
+    let saved = fs::read(dir.join("SAVED.GAM")).unwrap();
+    for slot in 0..SAVE_ROSTER_SLOT_COUNT {
+        assert_eq!(
+            saved[SAVE_ROSTER_OFFSET
+                + slot * SAVE_CHARACTER_RECORD_LEN
+                + SAVE_CHARACTER_STAY_COUNTER_OFFSET],
+            4,
+            "roster slot {slot}"
+        );
+    }
+    let _ = fs::remove_dir_all(dir);
+}
+
 /// `doors-and-z-transitions.md §5`: the countdown starts at four and the
 /// door re-closes when it "hits zero". Runtime observation, spec silent
 /// on what happens next: the DOS build keeps the four-byte block. After

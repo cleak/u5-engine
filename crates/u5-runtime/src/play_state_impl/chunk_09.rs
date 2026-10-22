@@ -45,6 +45,30 @@ impl PreparedTopDownCell {
 }
 
 impl PlayState {
+    /// `time.md §8`: "Each of the sixteen character record slots carries a
+    /// one-byte counter. The month rollover increments it, capped at 25",
+    /// and implementations "should still preserve and age it on all
+    /// character records". The active party's copies, the lodged guests'
+    /// records and every other roster record age together (playtest G28).
+    pub(crate) fn age_character_month_counters(&mut self) {
+        age_stay_counters_month(&mut self.party_stay_counters);
+        age_inn_registry_month(&mut self.inn_registry);
+        // Active records are written from `party_stay_counters`, and a
+        // lodged guest's slot from its registry record; the rest of the
+        // roster is written from its own record.
+        let lodged: Vec<usize> = self
+            .inn_registry
+            .iter()
+            .map(|guest| guest.registry_slot as usize)
+            .collect();
+        let active = self.party.len();
+        for (slot, record) in self.party_roster.iter_mut().enumerate() {
+            if slot >= active && !lodged.contains(&slot) {
+                record.stay_counter = age_character_month_counter(record.stay_counter);
+            }
+        }
+    }
+
     pub fn apply_world_damage_tile(&mut self, entry: WorldDamageTileEntry) -> String {
         let mut checked = 0;
         let mut reports = Vec::new();
@@ -3119,8 +3143,7 @@ impl PlayState {
                 .fill(RARE_REAGENT_HARVEST_UNSEEN_DAY);
             self.fixed_hidden_treasure_daily_day = FIXED_HIDDEN_TREASURE_DAILY_UNSEEN_DAY;
             self.fortunes_of_war = 0;
-            age_stay_counters_month(&mut self.party_stay_counters);
-            age_inn_registry_month(&mut self.inn_registry);
+            self.age_character_month_counters();
         }
         self.repaint_stats_panel_on_day_rollover(previous_day);
         // `time.md §11` (spec `0170809`): the bundle's gate is the
@@ -3256,8 +3279,7 @@ impl PlayState {
                 .fill(RARE_REAGENT_HARVEST_UNSEEN_DAY);
             self.fixed_hidden_treasure_daily_day = FIXED_HIDDEN_TREASURE_DAILY_UNSEEN_DAY;
             self.fortunes_of_war = 0;
-            age_stay_counters_month(&mut self.party_stay_counters);
-            age_inn_registry_month(&mut self.inn_registry);
+            self.age_character_month_counters();
         }
         self.repaint_stats_panel_on_day_rollover(previous_day);
         // `time.md §11` (spec `0170809`) / `RETRACTIONS.md` R338: the
