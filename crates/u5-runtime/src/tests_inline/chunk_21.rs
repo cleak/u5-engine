@@ -8642,3 +8642,73 @@ fn sage_topic_echo_is_capped_at_fifteen_characters() {
         "nothing past the fifteenth character is echoed"
     );
 }
+
+/// `karma.md §4.1`: a qualifying payment with the counter at one hundred
+/// resets it and raises standing by one, and `conversation.md §7.4` makes each
+/// following `0x89` a further `+1`. Ava's bonus record is exactly that - the
+/// payment, then five raise-standing bytes - and from standing zero it ended
+/// at five: the counter was reset but the milestone's `+1` was overwritten by
+/// the runner's standing, counted from before the payment (playtest G04).
+#[test]
+fn town_raw_tlk_payment_milestone_survives_following_raise_standing_bytes() {
+    let mut dialogue: HashMap<u16, Vec<String>> = HashMap::new();
+    dialogue.insert(
+        0x10,
+        vec![
+            "Ava".to_string(),
+            "a beggar".to_string(),
+            "Greetings".to_string(),
+            "I beg".to_string(),
+            "Farewell".to_string(),
+            "ALMS".to_string(),
+            "placeholder".to_string(),
+        ],
+    );
+
+    let enc = |s: &str| s.bytes().map(|b| b ^ 0x80).collect::<Vec<u8>>();
+    let mut pay_response = vec![0x85, b'0', b'0', b'5'];
+    pay_response.extend([crate::tlk_control_codes::TLK_CODE_STANDING_UP; 5]);
+    pay_response.extend(enc("Bless thee"));
+    pay_response.push(0xFF);
+
+    let mut raw: HashMap<u16, Vec<Vec<u8>>> = HashMap::new();
+    raw.insert(
+        0x10,
+        vec![
+            enc("Ava"),
+            enc("a beggar"),
+            enc("Greetings"),
+            enc("I beg"),
+            enc("Farewell"),
+            enc("ALMS"),
+            pay_response,
+        ],
+    );
+
+    let mut state = test_state(open_grid(), 1, 1);
+    state.player.facing = Direction::East;
+    state.gold = 150;
+    state.moral_standing = 0;
+    state.toll_progress = TOLL_PROGRESS_MILESTONE;
+    state.load_scheduled_npcs(&[
+        NpcSlot {
+            slot: 0,
+            type_byte: 0,
+            dialog_id: 0,
+            schedule: [0; 16],
+            name: None,
+        },
+        NpcSlot {
+            slot: 1,
+            type_byte: TLK_GOLD_PAYMENT_KARMA_SPEAKER_CLASS,
+            dialog_id: 0x10,
+            schedule: [0, 0, 0, 2, 2, 2, 1, 1, 1, 0, 0, 0, 0, 8, 16, 20],
+            name: None,
+        },
+    ]);
+    state.talk_facing_with_dialogue_and_keyword_raw(&dialogue, &raw, None);
+    let _ = state.submit_active_conversation_keyword("alms");
+    assert_eq!(state.gold, 145);
+    assert_eq!(state.toll_progress, 0, "the milestone fired");
+    assert_eq!(state.moral_standing, 6, "0 + 1 (milestone) + 5 (0x89 x5)");
+}
