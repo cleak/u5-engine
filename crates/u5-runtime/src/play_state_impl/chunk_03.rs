@@ -2887,10 +2887,20 @@ impl PlayState {
             self.active_wishing_well = Some(session);
             return None;
         }
+        // The Enter that ends the line is not part of the wish, so a bare
+        // Enter is the empty wish.
         let wish = std::iter::once(key)
             .chain(suffix.chars())
+            .filter(|ch| !matches!(ch, '\r' | '\n'))
             .take(WISHING_WELL_WISH_MAX_CHARS)
             .collect::<String>();
+        // `view.md §3` wish-outcome table: "Empty wish | `Nothing\n`" -
+        // not `No effect...`, which is the nonempty unmatched wish's line
+        // (playtest G18).
+        if wish.is_empty() {
+            self.message = WISHING_WELL_EMPTY_WISH_LINE.to_string();
+            return Some(MoveOutcome::Observed);
+        }
         Some(self.resolve_wishing_well_wish(session.direction, &wish))
     }
 

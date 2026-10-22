@@ -8588,6 +8588,29 @@ fn wishing_well_coin_prompt_waits_silently_on_keys_other_than_y_or_n() {
     assert!(state.active_wishing_well.is_none());
 }
 
+/// `view.md §3` wish-outcome table: "Empty wish | `Nothing\n`"; `No
+/// effect...` is the nonempty unmatched wish's line. A bare Enter at
+/// `Thy wish?` printed `No effect...` (playtest G18).
+#[test]
+fn wishing_well_empty_wish_prints_nothing_line() {
+    for enter in ['\r', '\n'] {
+        let mut grid = open_grid();
+        grid[32 + 2] = 0xa1;
+        let mut state = test_state(grid, 1, 1);
+        state.player.facing = Direction::East;
+        state.gold = 2;
+        assert_eq!(state.look_facing(), MoveOutcome::Observed);
+        assert_eq!(state.step_active_wishing_well('Y', ""), None);
+        assert_eq!(
+            state.step_active_wishing_well(enter, ""),
+            Some(MoveOutcome::Observed)
+        );
+        assert!(state.active_wishing_well.is_none());
+        assert_eq!(state.message, WISHING_WELL_EMPTY_WISH_LINE);
+        assert_eq!(state.gold, 1, "the coin is still spent");
+    }
+}
+
 /// `shops.md §8.8`: the sage's `You respond:` line "accepts up to fifteen
 /// characters". All twenty-six letters of a long topic were echoed across
 /// two rows (playtest G16).
