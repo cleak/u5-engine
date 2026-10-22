@@ -27886,9 +27886,11 @@ mod tests {
     }
 
     #[test]
-    fn visual_line_input_buffers_shop_quantity_until_enter() {
+    fn shop_quantity_keys_reach_the_two_digit_reader_until_enter() {
         // `shops.md §8.C`, "Provision offer": the typed number allows two
-        // digits. (Reagents and guild bundles are Y/N offers, R418.)
+        // digits. (Reagents and guild bundles are Y/N offers, R418.) Playtest
+        // H14: `§8.5` runs it on the shared two-digit reader, so each key goes
+        // to the runtime's own reader, which drops a third digit.
         let mut state = test_state(open_grid(), 1, 1);
         state.gold = 300;
         state.food = 0;
@@ -27900,43 +27902,18 @@ mod tests {
                 entry: Default::default(),
             },
         ));
-        assert!(visual_line_prompt_active(&state));
+        assert!(!visual_line_prompt_active(&state));
 
-        let mut input_line = String::new();
-        handle_visual_line_key(
-            &mut state,
-            &mut input_line,
-            KeyCode::Digit1,
-            false,
-            false,
-            Path::new(""),
-        )
-        .unwrap();
-        handle_visual_line_key(
-            &mut state,
-            &mut input_line,
-            KeyCode::Digit2,
-            false,
-            false,
-            Path::new(""),
-        )
-        .unwrap();
-
-        assert_eq!(input_line, "12");
+        for key in [KeyCode::Digit1, KeyCode::Digit2, KeyCode::Digit3] {
+            let ch = key_code_to_command_char(key, false, false).unwrap();
+            handle_play_key_input(&mut state, ch, "", Path::new("")).unwrap();
+        }
         assert_eq!(state.gold, 300);
         assert_eq!(state.food, 0);
 
-        handle_visual_line_key(
-            &mut state,
-            &mut input_line,
-            KeyCode::Enter,
-            false,
-            false,
-            Path::new(""),
-        )
-        .unwrap();
+        let enter = key_code_to_command_char(KeyCode::Enter, false, false).unwrap();
+        handle_play_key_input(&mut state, enter, "", Path::new("")).unwrap();
 
-        assert!(input_line.is_empty());
         assert_eq!(state.gold, 120);
         assert_eq!(state.food, 300);
     }
