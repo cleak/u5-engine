@@ -1749,6 +1749,9 @@ fn play_script_frame_after_a_heal_shows_the_repainted_panel() {
     })
     .unwrap();
 
-    assert_eq!(state.spell_charges[GREAT_HEAL_SPELL_INDEX], 0, "the heal resolved");
+    assert_eq!(
+        state.spell_charges[GREAT_HEAL_SPELL_INDEX], 0,
+        "the heal resolved"
+    );
     assert_eq!(observed, vec![(200, true, false)]);
 }
