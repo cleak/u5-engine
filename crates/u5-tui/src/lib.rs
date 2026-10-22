@@ -14,7 +14,7 @@ pub mod visual_manifest;
 
 pub use audio_suite::{AudioSuiteCase, audio_suite_cases, run_audio_suite};
 pub use cli::{
-    CLI_USAGE, CliArgs, CreateCharacterCommand, parse_chargen_gender_arg,
+    CLI_USAGE, CliArgs, CreateCharacterCommand, chargen_typed_name, parse_chargen_gender_arg,
     parse_chargen_winners_arg, parse_cli_args, parse_pending_vehicle_arg, parse_start_arg,
     parse_time_arg, parse_transport_arg, run_create_character_command,
     run_interactive_create_character, split_play_script,

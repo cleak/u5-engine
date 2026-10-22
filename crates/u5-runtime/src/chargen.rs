@@ -816,19 +816,18 @@ pub fn commit_chargen_save(
 fn normalize_chargen_name(
     name_bytes: &[u8],
 ) -> Result<[u8; SAVE_CHARACTER_NAME_LEN], ChargenError> {
+    // `chargen.md §4`: "The name prompt accepts printable ASCII", and only
+    // "a zero-length name" takes the abort path. A name of spaces is
+    // printable and not zero-length, so it is a name (playtest G22).
+    if name_bytes.is_empty() {
+        return Err(ChargenError::BlankName);
+    }
     let mut name = [0; SAVE_CHARACTER_NAME_LEN];
-    let mut has_non_space = false;
     for (index, &byte) in name_bytes.iter().take(CHARGEN_NAME_INPUT_LIMIT).enumerate() {
         if !(0x20..=0x7e).contains(&byte) {
             return Err(ChargenError::InvalidNameByte(byte));
         }
-        if byte != b' ' {
-            has_non_space = true;
-        }
         name[index] = byte;
-    }
-    if !has_non_space {
-        return Err(ChargenError::BlankName);
     }
     Ok(name)
 }
@@ -870,6 +869,15 @@ mod tests {
         assert_eq!(session.submit_name("\n"), ChargenSessionStep::Aborted);
         assert_eq!(session.phase, ChargenSessionPhase::Aborted);
         assert!(session.result().is_none());
+    }
+
+    /// Playtest G22: `chargen.md §4` - "The name prompt accepts printable
+    /// ASCII", and only a zero-length name aborts. A space is a name.
+    #[test]
+    fn chargen_session_accepts_a_name_of_spaces() {
+        let mut session = ChargenSession::new(question_records(), rng_pool().to_vec()).unwrap();
+        assert_eq!(session.submit_name(" "), ChargenSessionStep::PromptGender);
+        assert_eq!(session.phase, ChargenSessionPhase::AwaitingGender);
     }
 
     #[test]

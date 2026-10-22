@@ -8,12 +8,12 @@ use std::io::{self, Write};
 use std::path::{Path, PathBuf};
 
 use u5_runtime::{
-    CHARGEN_QUESTION_COUNT, ChargenAvatar, ChargenSession, ChargenSessionStep, ChargenStats,
-    DEFAULT_GAME_DIR, FIRST_PLAYABLE_FRIGATE_TILE, FIRST_PLAYABLE_FULL_SHIP_HULL,
-    FIRST_PLAYABLE_SKIFF_TILE, GameClock, PendingVehicleAcquisition, PlayOptions, PlayTarget,
-    ShrineVirtue, TileGraphicsDepth, TransportState, WindState, chargen_stats_from_winners,
-    commit_chargen_save, load_play_options_from_init, load_play_options_from_save,
-    load_question_records, parse_u8_literal, run_chargen_tournament,
+    ChargenAvatar, ChargenSession, ChargenSessionStep, ChargenStats, DEFAULT_GAME_DIR,
+    FIRST_PLAYABLE_FRIGATE_TILE, FIRST_PLAYABLE_FULL_SHIP_HULL, FIRST_PLAYABLE_SKIFF_TILE,
+    GameClock, PendingVehicleAcquisition, PlayOptions, PlayTarget, ShrineVirtue, TileGraphicsDepth,
+    TransportState, WindState, chargen_stats_from_winners, commit_chargen_save,
+    load_play_options_from_init, load_play_options_from_save, load_question_records,
+    parse_u8_literal, question_record_display_text, run_chargen_tournament,
 };
 
 use crate::runtime_game_dir::prepare_writable_game_dir;
@@ -917,60 +917,60 @@ pub fn run_interactive_create_character(game_dir: &Path) -> io::Result<Option<Ch
                 if !read_chargen_line(&mut input)? {
                     return Ok(chargen_end_of_input());
                 }
-                match session.submit_name(&input) {
-                    ChargenSessionStep::Aborted => {
-                        println!("Character creation aborted; returning to the intro menu.");
-                        return Ok(None);
-                    }
-                    ChargenSessionStep::PromptGender => {}
-                    _ => println!("Use a nonblank printable ASCII name up to eight characters."),
+                // `chargen.md §4`: an empty name is the abort path, which
+                // "returns to the intro menu" with nothing printed.
+                if matches!(
+                    session.submit_name(&chargen_typed_name(&input)),
+                    ChargenSessionStep::Aborted
+                ) {
+                    return Ok(None);
                 }
             }
             ChargenSessionStep::PromptGender => {
+                // `chargen.md §4`: the prompt "polls for either `M` or `F`
+                // ... looping silently on any other key" - printed once, and
+                // every other key is read past without a word.
                 print!("Art thou Male or Female? ");
                 io::stdout().flush()?;
-                if !read_chargen_line(&mut input)? {
-                    return Ok(chargen_end_of_input());
-                }
-                if let Some(byte) = input.bytes().next() {
-                    if !matches!(
-                        session.submit_gender_key(byte),
-                        ChargenSessionStep::PresentIntro { .. }
-                    ) {
-                        println!("Press M or F.");
+                loop {
+                    if !read_chargen_line(&mut input)? {
+                        return Ok(chargen_end_of_input());
+                    }
+                    if input.bytes().any(|byte| {
+                        matches!(
+                            session.submit_gender_key(byte),
+                            ChargenSessionStep::PresentIntro { .. }
+                        )
+                    }) {
+                        break;
                     }
                 }
             }
             ChargenSessionStep::PresentIntro { text, .. } => {
+                // `chargen.md §5`: `{` is an indent and `_` a soft hyphen;
+                // neither draws a glyph in unbroken text.
                 println!();
-                println!("{text}");
-                prompt_continue()?;
+                println!("{}", question_record_display_text(&text));
+                wait_for_chargen_key()?;
                 session.advance_intro();
             }
             ChargenSessionStep::PresentQuestion(question) => {
                 println!();
-                println!(
-                    "Question {} of {} (round {})",
-                    question.question_index + 1,
-                    CHARGEN_QUESTION_COUNT,
-                    question.round
-                );
-                println!("{}", question.text);
+                println!("{}", question_record_display_text(&question.text));
+                // Stand-in for the two option tiles (`chargen.md §6`).
                 println!(
                     "A: {}    B: {}",
                     question.option_a.name(),
                     question.option_b.name()
                 );
+                // "any other key loops silently with no redraw and no error".
                 loop {
-                    print!("Choose A or B: ");
-                    io::stdout().flush()?;
                     if !read_chargen_line(&mut input)? {
                         return Ok(chargen_end_of_input());
                     }
-                    let Some(byte) = input.bytes().next() else {
-                        continue;
-                    };
-                    if !matches!(session.submit_answer_key(byte), ChargenSessionStep::Ignored) {
+                    if input.bytes().any(|byte| {
+                        !matches!(session.submit_answer_key(byte), ChargenSessionStep::Ignored)
+                    }) {
                         break;
                     }
                 }
@@ -996,6 +996,27 @@ pub fn run_interactive_create_character(game_dir: &Path) -> io::Result<Option<Ch
     }
 }
 
+/// `chargen.md §4` and `input.md §8`: the name typed on one line, through
+/// the free-text reader's rules - printable ASCII is appended up to the
+/// eight-character maximum, Backspace pops, Escape clears the line, and
+/// every other byte is discarded (playtest G22).
+pub fn chargen_typed_name(line: &str) -> String {
+    let mut name = String::new();
+    for ch in line.trim_end_matches(['\r', '\n']).chars() {
+        match ch {
+            '\u{08}' => {
+                name.pop();
+            }
+            '\u{1b}' => name.clear(),
+            ' '..='~' if name.len() < u5_runtime::chargen::CHARGEN_NAME_INPUT_LIMIT => {
+                name.push(ch)
+            }
+            _ => {}
+        }
+    }
+    name
+}
+
 /// Read one line of chargen input into `input`. Returns `false` at end
 /// of input: `chargen.md §4`'s silent re-loop on an invalid key assumes
 /// keys keep arriving, so the terminal harness must stop asking once
@@ -1011,9 +1032,8 @@ fn chargen_end_of_input() -> Option<ChargenAvatar> {
     None
 }
 
-fn prompt_continue() -> io::Result<()> {
-    print!("Press Enter to continue.");
-    io::stdout().flush()?;
+/// The keypress the gypsy narrative waits on; it prints nothing.
+fn wait_for_chargen_key() -> io::Result<()> {
     let mut input = String::new();
     io::stdin().read_line(&mut input)?;
     Ok(())

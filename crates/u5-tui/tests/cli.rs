@@ -791,7 +791,9 @@ fn cli_intro_journey_onward_without_active_save_returns_to_menu() {
     assert!(!stdout.contains("Disk read failed"), "{stdout}");
     assert!(!stdout.contains("Check the mounted"), "{stdout}");
     assert!(
-        stdout.contains("No active game\nPlease create a character\nor transfer one from Ultima IV\n"),
+        stdout.contains(
+            "No active game\nPlease create a character\nor transfer one from Ultima IV\n"
+        ),
         "{stdout}"
     );
     assert!(stdout.contains("Intro Menu"));
@@ -1322,7 +1324,10 @@ fn cli_interactive_chargen_stops_at_end_of_input() {
         b"x\n",
     );
     assert!(status.success(), "{stdout}");
-    assert!(stdout.matches("Art thou Male or Female?").count() <= 1, "{stdout}");
+    assert!(
+        stdout.matches("Art thou Male or Female?").count() <= 1,
+        "{stdout}"
+    );
     assert!(!dir.join(SAVED_GAM_FILENAME).exists());
     let _ = fs::remove_dir_all(dir);
 }
@@ -1333,11 +1338,62 @@ fn cli_intro_questionnaire_stops_at_end_of_input() {
     // without end once stdin closed.
     let dir = debug_game_dir();
     write_synthetic_question_dat(&dir);
-    let (status, stdout) = run_engine_until_eof(
-        &["--intro", dir.to_str().unwrap()],
-        b"x\nc\nIolo\nf\n",
-    );
+    let (status, stdout) =
+        run_engine_until_eof(&["--intro", dir.to_str().unwrap()], b"x\nc\nIolo\nf\n");
     assert!(status.success(), "{stdout}");
     assert!(stdout.matches("Choose A or B:").count() <= 1, "{stdout}");
+    let _ = fs::remove_dir_all(dir);
+}
+
+/// Playtest G22: `chargen.md §4` / `input.md §8` - the name line takes
+/// printable ASCII up to eight characters, Backspace pops, Escape clears.
+#[test]
+fn chargen_typed_name_applies_the_free_text_reader_rules() {
+    assert_eq!(chargen_typed_name("Av\x1batar\n"), "atar");
+    assert_eq!(chargen_typed_name("Avo\x08atar\n"), "Avatar");
+    assert_eq!(chargen_typed_name("AvatarXYZ\n"), "AvatarXY");
+    assert_eq!(chargen_typed_name(" \n"), " ");
+    assert_eq!(chargen_typed_name("\x1b\n"), "");
+}
+
+/// Playtest G22: a one-space name is a name; the gender prompt loops
+/// silently on other keys; the gypsy narrative prints without its `{`
+/// indent and `_` soft-hyphen markup; and no invented sentences appear.
+#[test]
+fn cli_interactive_chargen_follows_the_published_prompts() {
+    let dir = debug_game_dir();
+    let mut bytes = Vec::new();
+    for index in 0..QUESTION_DAT_RECORDS {
+        if index == 0 {
+            bytes.extend_from_slice(b"{Far from your mind while strol_ling");
+        } else {
+            bytes.extend_from_slice(format!("Record {index}").as_bytes());
+        }
+        bytes.push(0);
+    }
+    fs::write(dir.join(QUESTION_DAT_FILE), bytes).unwrap();
+    let (status, stdout) = run_engine_until_eof(
+        &["--create-character-interactive", dir.to_str().unwrap()],
+        b" \nx\nm\n",
+    );
+    assert!(status.success(), "{stdout}");
+    assert_eq!(
+        stdout.matches("Art thou Male or Female?").count(),
+        1,
+        "{stdout}"
+    );
+    assert!(
+        stdout.contains("Far from your mind while strolling"),
+        "{stdout}"
+    );
+    assert!(!stdout.contains('{') && !stdout.contains('_'), "{stdout}");
+    for invented in [
+        "nonblank printable",
+        "Press M or F",
+        "Press Enter to continue",
+        "Question 1 of",
+    ] {
+        assert!(!stdout.contains(invented), "{invented}: {stdout}");
+    }
     let _ = fs::remove_dir_all(dir);
 }
