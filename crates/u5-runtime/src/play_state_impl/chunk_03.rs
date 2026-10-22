@@ -77,12 +77,39 @@ impl PlayState {
         if let Some(session) = self.active_surface_chest.as_ref() {
             return Some(session.highlight);
         }
+        // `inventory.md §4.3`: the `On who: ` prompt of a potion, the
+        // Resurrection scroll and the party-target spells is the same shared
+        // surface - "The currently indicated member is shown by inverting a
+        // rectangle ... A digit moves the indicator" (playtest H06).
+        if let Some(highlight) = self.use_target_selector_highlight() {
+            return Some(highlight.min(self.party.len().saturating_sub(1)));
+        }
         // `inventory.md §5` step 1: R-Ready "selects a party member with
         // the same party-member selection surface used by Z-stats".
         self.active_ready
             .as_ref()
             .filter(|session| session.selected_party_index.is_none())
             .map(|session| session.cursor.min(self.party.len().saturating_sub(1)))
+    }
+
+    /// The indicated row of the shared `On who: ` prompt, whichever caller
+    /// opened it: a potion or the Resurrection scroll under U-Use, or a
+    /// party-target spell under C-Cast (whose session keeps the 1-based
+    /// indicator in its buffer, empty meaning the first member).
+    fn use_target_selector_highlight(&self) -> Option<usize> {
+        if let Some(session) = self.active_use.as_ref() {
+            match session.pending {
+                Some(
+                    UsePendingAction::PotionTarget { highlight, .. }
+                    | UsePendingAction::ScrollResurrectionTarget { highlight, .. },
+                ) => return Some(highlight),
+                _ => {}
+            }
+        }
+        self.active_cast_followup
+            .as_ref()
+            .filter(|session| matches!(session.kind, CastFollowupKind::PartyTarget))
+            .map(|session| session.buffer.parse::<usize>().unwrap_or(1).max(1) - 1)
     }
 
     /// The indicated row of a shop's member selection, which `shops.md §8.C`
@@ -127,6 +154,11 @@ impl PlayState {
     pub fn roster_box_label(&self) -> Option<String> {
         if self.active_party_selector.is_some()
             || self.shop_member_selector_highlight().is_some()
+            // `inventory.md §4.3`: a party-target spell's `On who: ` is the
+            // shared selection surface too (playtest H06/H26).
+            || self.active_cast_followup.as_ref().is_some_and(|session| {
+                matches!(session.kind, CastFollowupKind::PartyTarget)
+            })
             || self.active_jimmy.is_some()
             || self.active_surface_chest.is_some()
         {
@@ -939,6 +971,25 @@ impl PlayState {
             .is_some_and(|session| matches!(session.kind, CastFollowupKind::Direction { .. }))
         {
             return Some(SPELL_DIRECTION_PROMPT_PREFIX.to_string());
+        }
+        // `magic.md §8` (Awaken/Cure): the party-target spells "ask
+        // **`On who: `**, echo the chosen member's name and complete the
+        // row", and Gate Travel "prompts `To phase:_`" and echoes the typed
+        // key on that row. Both are prompts the command parks at mid-run, so
+        // `text-output.md §10.2` gives them "no feed and no marker": the
+        // cursor waits after the trailing space, as on the potion's `On who: `.
+        // The engine drew a blank and a fresh end-capped row under both
+        // (playtest H26).
+        if let Some(session) = self.active_cast_followup.as_ref() {
+            match session.kind {
+                CastFollowupKind::PartyTarget => {
+                    return Some(USE_POTION_TARGET_PROMPT.to_string());
+                }
+                CastFollowupKind::GatePhase => {
+                    return Some(GATE_TRAVEL_PHASE_PROMPT.to_string());
+                }
+                _ => {}
+            }
         }
         // `magic.md §8`: the creature prompt is `Creature: ` with a
         // trailing space, and the arena cursor - not a message-window

@@ -142,3 +142,81 @@ fn playfix4_h31_an_escaped_ready_player_prompt_keeps_its_marker_beneath() {
     assert_eq!(after.get(1).map(String::as_str), Some(">Search-"), "{after:?}");
     let _ = fs::remove_dir_all(dir);
 }
+
+fn p4window_two_member_world_state() -> PlayState {
+    let mut state = p4window_world_state();
+    state.party.push(audit_g5_companion(1));
+    state.party_names = vec![*b"AVATAR\0\0\0", *b"SHAMINO\0\0"];
+    state
+}
+
+/// H26/H06: `magic.md §8` (Awaken/Cure) - the party-target spells "ask
+/// **`On who: `**, echo the chosen member's name and complete the row";
+/// `text-output.md §10.2` - "a prompt a command parks at in the middle of its
+/// own run ... emits no feed, no marker"; `inventory.md §4.3` - every command
+/// that needs a party member shares the `Select:` label and the inverted row,
+/// and "A digit moves the indicator".
+#[test]
+fn playfix4_h26_a_spell_on_who_prompt_waits_inline_on_the_selection_surface() {
+    let dir = debug_game_dir();
+    let mut state = p4window_two_member_world_state();
+    state.spell_charges[HEAL_SPELL_INDEX] = 1;
+    state.party[0].mana = 20;
+    state.party[0].level = 8;
+    p4window_keys(&mut state, &dir, &['C', 'M', '\r']);
+    assert!(
+        state
+            .active_cast_followup
+            .as_ref()
+            .is_some_and(|session| session.kind == CastFollowupKind::PartyTarget),
+        "the target prompt waits"
+    );
+    assert_eq!(state.open_prompt_line().as_deref(), Some(USE_POTION_TARGET_PROMPT));
+    let rows = p4window_rows_from(&p4window_rows(&state), ":MANI");
+    assert_eq!(rows, [":MANI", "On who:"], "no blank and no marker row beneath");
+    assert_eq!(state.roster_box_label().as_deref(), Some("Select:"));
+    assert_eq!(state.selector_highlight(), Some(0));
+
+    p4window_keys(&mut state, &dir, &['2']);
+    assert_eq!(state.selector_highlight(), Some(1), "a digit moves the indicator");
+    p4window_keys(&mut state, &dir, &['\r']);
+    assert!(state.active_cast_followup.is_none());
+    let completed = format!("On who: {}", state.party_member_display_name(1));
+    assert!(
+        state.message_transcript.iter().any(|entry| entry.text == completed),
+        "{:?}",
+        p4window_rows(&state)
+    );
+    assert_eq!(state.selector_highlight(), None);
+    let _ = fs::remove_dir_all(dir);
+}
+
+/// H26: Gate Travel "prompts `To phase:_`" (`magic.md §8`) and echoes the
+/// typed key on that row, so it is the same parked mid-command prompt.
+#[test]
+fn playfix4_h26_the_gate_travel_phase_prompt_keeps_the_cursor_on_its_row() {
+    let mut state = p4window_world_state();
+    state.active_cast_followup = Some(CastFollowupSession {
+        caster_index: 0,
+        spell_code: "PRV".to_string(),
+        kind: CastFollowupKind::GatePhase,
+        buffer: String::new(),
+        combat_actor_slot: None,
+        combat_had_foe: false,
+    });
+    assert_eq!(state.open_prompt_line().as_deref(), Some(GATE_TRAVEL_PHASE_PROMPT));
+}
+
+/// H06: the potion's `On who: ` already drew `Select:`, but `inventory.md
+/// §4.3`'s inverted row never followed its indicator.
+#[test]
+fn playfix4_h06_the_potion_on_who_prompt_inverts_the_indicated_member() {
+    let mut state = p4window_two_member_world_state();
+    state.active_use = Some(UseSession {
+        cursor: 0,
+        pending: Some(UsePendingAction::PotionTarget { index: 0, highlight: 1 }),
+        strip_scrolls: 0,
+    });
+    assert_eq!(state.roster_box_label().as_deref(), Some("Select:"));
+    assert_eq!(state.selector_highlight(), Some(1));
+}
