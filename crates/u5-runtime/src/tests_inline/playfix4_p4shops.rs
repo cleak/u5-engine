@@ -340,6 +340,14 @@ fn playfix4_h35_ship_hole_up_results_keep_their_producer_blank_row() {
             .position(|row| row.starts_with(result))
             .unwrap_or_else(|| panic!("{rows:#?}"));
         assert_eq!(rows[at + 1..], [String::new()], "{rows:#?}");
+        // The blank under the result is the producer's own, so §10.4's
+        // derived blank is still owed after it; a plain turn blank satisfied
+        // that and the window showed one blank row instead of two.
+        assert_eq!(
+            log.lines().last().map(|line| line.kind),
+            Some(MessageLineKind::ProducerBlank),
+            "{rows:#?}"
+        );
         let _ = fs::remove_dir_all(dir);
     }
 }

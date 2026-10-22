@@ -27,9 +27,13 @@ impl PlayState {
             if sails_hoisted {
                 // `commands.md §5.5`: `lowered!\n\n` - the second feed is
                 // a blank row of the literal's own, ahead of the turn's
-                // derived one (playtest H35).
-                self.message =
-                    format!("{HOLE_UP_REPAIR_BODY}\n{HOLE_UP_SAILS_MUST_BE_LOWERED}\n\n");
+                // derived one (playtest H35). Emitted directly, as the
+                // dungeon exit's `Britannia!\n\n` is: through the slot the
+                // trailing pair flushed as the turn's own blank and the
+                // producer's row was lost.
+                self.emit_message_line(format!(
+                    "{HOLE_UP_REPAIR_BODY}\n{HOLE_UP_SAILS_MUST_BE_LOWERED}\n\n"
+                ));
                 return MoveOutcome::Blocked;
             }
             // `stats-panel.md §2.2.1` row 1: the ship-repair branch defers
@@ -52,9 +56,11 @@ impl PlayState {
             // so it takes the ordinary consumed outdoor turn.
             self.advance_turn();
             // `Hull_now_` plus `!\n\n`: as the sails refusal, the literal
-            // carries its own blank row (playtest H35).
-            self.message =
-                format!("{HOLE_UP_REPAIR_BODY}\n{HOLE_UP_HULL_NOW_PREFIX}{repaired}!\n\n");
+            // carries its own blank row and is emitted directly (playtest
+            // H35).
+            self.emit_message_line(format!(
+                "{HOLE_UP_REPAIR_BODY}\n{HOLE_UP_HULL_NOW_PREFIX}{repaired}!\n\n"
+            ));
             return MoveOutcome::Rested;
         }
         // `commands.md §5.5`'s other Hole-up refusal. Camping wants the
