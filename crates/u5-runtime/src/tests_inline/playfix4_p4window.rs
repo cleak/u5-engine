@@ -331,3 +331,32 @@ fn playfix4_h38_a_typed_answer_that_fills_its_row_is_followed_by_two_blank_rows(
     }
     let _ = fs::remove_dir_all(dir);
 }
+
+/// H26 through the key path: the Gate Travel `To phase: ` row is the open
+/// line the cursor waits on, with no blank and no marker row beneath it, and
+/// the typed key completes that same row.
+#[test]
+fn playfix4_h26_the_gate_travel_phase_prompt_waits_inline_through_the_key_path() {
+    let dir = debug_game_dir();
+    let mut state = britannia_state(open_world_grid(), 1, 1);
+    state.spell_charges[GATE_TRAVEL_SPELL_INDEX] = 1;
+    state.party[0].mana = GATE_TRAVEL_COST;
+    state.party[0].level = GATE_TRAVEL_COST;
+    state.active_player = Some(0);
+    p4window_keys(&mut state, &dir, &['C', 'P', 'R', 'V', '\r']);
+    assert!(
+        state
+            .active_cast_followup
+            .as_ref()
+            .is_some_and(|session| session.kind == CastFollowupKind::GatePhase),
+        "{:?}",
+        p4window_rows(&state)
+    );
+    let rows = p4window_rows_from(&p4window_rows(&state), ":POR REL VAS");
+    assert_eq!(rows, [":POR REL VAS", "To phase:"], "no blank and no marker row beneath");
+    p4window_keys(&mut state, &dir, &['9']);
+    let texts: Vec<&str> =
+        state.message_transcript.iter().map(|entry| entry.text.as_str()).collect();
+    assert!(texts.contains(&"To phase: 9"), "{texts:?}");
+    let _ = fs::remove_dir_all(dir);
+}
