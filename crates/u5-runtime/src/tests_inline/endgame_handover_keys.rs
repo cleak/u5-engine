@@ -61,3 +61,31 @@ fn a_key_during_the_box_hand_over_waits_until_it_finishes() {
     );
     assert!(state.keys_buffered_during_hold.is_empty());
 }
+
+/// Playtest H13, `input.md §6`: keys a hold buffered are read by the prompts
+/// that follow it, and with type-ahead off the first read empties the rest -
+/// "drop all pending keystrokes after consuming one". With it on, they are
+/// "honoured in order".
+#[test]
+fn a_hold_burst_is_read_one_key_then_flushed_unless_buffer_is_on() {
+    for (buffer_on, left) in [(false, 0), (true, 2)] {
+        let mut state = test_state(open_grid(), 5, 5);
+        state.typeahead_buffer_enabled = buffer_on;
+        for _ in 0..3 {
+            state
+                .keys_buffered_during_hold
+                .push_back((' ', String::new()));
+        }
+        assert!(state.buffered_hold_key_ready());
+        assert!(
+            crate::input_dispatch::drain_buffered_hold_key(&mut state, Path::new(""))
+                .unwrap()
+                .is_some()
+        );
+        assert_eq!(
+            state.keys_buffered_during_hold.len(),
+            left,
+            "buffer_on={buffer_on}"
+        );
+    }
+}

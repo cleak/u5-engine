@@ -5874,6 +5874,12 @@ fn handle_active_conversation_key_input(
 /// Called by the shell once the hold is over. One per call, so a buffered
 /// burst is dispatched at the same one-command-per-frame cadence a player's
 /// own typing would be.
+///
+/// The hold itself discards nothing (`karma.md §12`), but the read that takes
+/// the key is an ordinary one: `input.md §6`, with type-ahead off "the queue
+/// is emptied on every read" - "drop all pending keystrokes after consuming
+/// one". Replaying the whole burst let four taps during the third shrine
+/// mantra answer both altar pages and then run as commands (playtest H13).
 pub fn drain_buffered_hold_key(
     state: &mut PlayState,
     game_dir: &Path,
@@ -5884,7 +5890,32 @@ pub fn drain_buffered_hold_key(
     let Some((key, suffix)) = state.keys_buffered_during_hold.pop_front() else {
         return Ok(None);
     };
-    handle_play_key_input(state, key, &suffix, game_dir).map(Some)
+    let honours_queue = buffered_key_read_honours_queue(state);
+    let disposition = handle_play_key_input(state, key, &suffix, game_dir)?;
+    if !honours_queue {
+        state.keys_buffered_during_hold.clear();
+    }
+    Ok(Some(disposition))
+}
+
+/// `input.md §6`: whether the read about to take a buffered key leaves the
+/// rest queued - the player's Buffer On, or a free-text line reader, which
+/// "saves the setting, forces type-ahead on for the duration of a typed line,
+/// and restores it afterwards". The shrine's virtue and mantra answers and
+/// the spell and mixer name entries are typed lines too.
+fn buffered_key_read_honours_queue(state: &PlayState) -> bool {
+    state.typeahead_buffer_enabled
+        || free_text_line_reader_open(state)
+        || state.active_shrine_restoration.is_some()
+        || state.active_cast.is_some()
+        || state.active_cast_followup.is_some()
+        || state.active_mix.is_some()
+        || state.active_shrine.as_ref().is_some_and(|session| {
+            matches!(
+                session.phase,
+                crate::ShrinePhase::Virtue | crate::ShrinePhase::Mantra
+            )
+        })
 }
 
 fn handle_active_blackthorn_key_input(
