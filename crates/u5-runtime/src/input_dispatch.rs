@@ -5407,7 +5407,11 @@ fn format_reagent_outcome(
         }
         // "Already carrying 99 | `\n\n"Thou canst not carry any more!"\n\n`;
         // consume one command key, then redraw stock".
-        RefusedAtCap { .. } => "\n\"Thou canst not carry any more!\"\n".to_string(),
+        // The refusal follows `Thy interest?" `'s open row, so the first
+        // feed of each pair closes a row and the second is the blank; one
+        // feed a side ran it straight under the prompt and the redrawn
+        // stock straight under it (playtest H46).
+        RefusedAtCap { .. } => "\n\n\"Thou canst not carry any more!\"\n\n".to_string(),
         RedrawStock { herbalist } => reagent_stock_menu(herbalist),
         // "Paid | Token-expanded `\n"I thank thee!"\nsays $.\n`, then
         // `"Anything else?\n\n`, then stock".

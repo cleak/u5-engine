@@ -255,3 +255,38 @@ fn playfix4_h05_troll_toll_ignored_key_does_not_reprint_the_question() {
     assert!(rows.iter().any(|row| row == "Dost thou pay?Y"), "{rows:#?}");
     let _ = fs::remove_dir_all(dir);
 }
+
+/// H46: `shops.md §8.C` reagent table, "Already carrying 99":
+/// `\n\n"Thou canst not carry any more!"\n\n`; consume one command key, then
+/// redraw stock. Both line-feed pairs were short by one, so the refusal had
+/// no blank row on either side.
+#[test]
+fn playfix4_h46_herbalist_carry_cap_refusal_has_a_blank_row_each_side() {
+    use crate::shop_runtime::ReagentShopState;
+    use crate::shop_session::ActiveShopSession;
+    let mut state = test_state(open_grid(), 1, 1);
+    state.area = Area::Town {
+        scene: Scene::new(1).unwrap(),
+        floor: 0,
+    };
+    state.gold = 3000;
+    state.reagents = [99; 8];
+    state.active_shop = Some(ActiveShopSession::Reagent(ReagentShopState::Greeting {
+        herbalist: Herbalist::TheHerbalist,
+    }));
+    state.emit_message_line("\n\"Welcome!\" ");
+    state.open_message_row();
+    for key in ['Y', 'A', 'Z'] {
+        handle_play_key_input(&mut state, key, "", Path::new("")).unwrap();
+    }
+    state.flush_message_slot();
+    let rows = pf4_rows(&state);
+    let first = rows
+        .iter()
+        .position(|row| row == "\"Thou canst not carry any more!\"")
+        .unwrap_or_else(|| panic!("{rows:#?}"));
+    assert_eq!(rows[first - 1], "", "{rows:#?}");
+    assert_eq!(rows[first - 2], "Thy interest?\"", "{rows:#?}");
+    assert_eq!(rows[first + 1], "", "{rows:#?}");
+    assert!(rows[first + 2].starts_with("A..."), "{rows:#?}");
+}
