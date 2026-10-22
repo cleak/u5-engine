@@ -284,13 +284,16 @@ fn playfix4_h07_readying_an_arrows_row_prints_nothing() {
 #[test]
 fn playfix4_h34_h45_empty_use_and_mix_refusals_keep_the_echo_blank_row() {
     let dir = debug_game_dir();
-    // The dungeon fixture carries nothing usable (no moonstone can be
-    // buried underground) and no reagents.
+    // The dungeon fixture carries nothing usable once every stone lies
+    // buried (`inventory.md §4.5`: a carried stone gets a picker row in the
+    // dungeon too, playtest H33) and no reagents.
     for (key, echo, refusal) in [
         ('U', "Use item", USE_NO_USABLE_ITEMS_REFUSAL),
         ('M', "Mix Reagents", MMIX_NO_REAGENTS_OWNED_MESSAGE),
     ] {
         let mut state = dungeon_state(open_dungeon_record(), 0, 1, 1);
+        state.moonstone_slots =
+            [MoonstoneGateSlot { scene: 0, x: 1, y: 1, z: 0 }; MOONSTONE_SLOT_COUNT];
         state.reagents = [0; REAGENT_COUNT];
         p4window_keys(&mut state, &dir, &[key]);
         let texts: Vec<&str> =
