@@ -5893,11 +5893,26 @@ fn handle_active_blackthorn_key_input(
     suffix: &str,
     game_dir: &Path,
 ) -> io::Result<PlayInputDisposition> {
+    // `input.md §8`: the audience answer is read by the shared free-text
+    // reader, where Escape "clears the whole current line but does **not**
+    // submit or terminate it". A bare Escape at the answer prompt is never
+    // an answer, and one inside a typed line discards what came before it
+    // (playtest H39). The acknowledgement holds still take any key.
+    let answering = state
+        .active_blackthorn
+        .as_ref()
+        .is_some_and(|challenge| challenge.current_prompt().is_some());
+    if answering && key == '\u{1b}' && suffix.is_empty() {
+        return Ok(PlayInputDisposition::Continue);
+    }
     let mut line = String::new();
     if !matches!(key, '\r' | '\n' | ' ') {
         line.push(key);
     }
     line.push_str(suffix);
+    if answering && let Some(cleared) = line.rfind('\u{1b}') {
+        line = line[cleared + 1..].to_string();
+    }
     state.submit_blackthorn_audience_answer(&line, game_dir)?;
     Ok(PlayInputDisposition::Continue)
 }

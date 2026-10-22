@@ -5461,7 +5461,16 @@ impl PlayState {
         }
 
         let answer = blackthorn_challenge_limited_input(typed);
-        if answer.is_empty() {
+        // `input.md §8`: "Enter then submits whatever remains, including an
+        // empty buffer", so an empty answer at the demand is submitted and
+        // fails the mantra match like any other wrong answer. Only a session
+        // that is not asking anything re-renders its page (playtest H39).
+        if answer.is_empty()
+            && !self
+                .active_blackthorn
+                .as_ref()
+                .is_some_and(|challenge| challenge.current_prompt().is_some())
+        {
             self.message = self.blackthorn_current_prompt_message(game_dir)?;
             return Ok(MoveOutcome::PromptDeclined);
         }
