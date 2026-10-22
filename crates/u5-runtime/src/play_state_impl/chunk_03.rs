@@ -4766,6 +4766,14 @@ impl PlayState {
                     return true;
                 };
                 let stock_before = self.equipment_stock[item_id];
+                // Start the cascade from an empty slot, so whatever is in it
+                // afterwards is what the cascade itself printed. The
+                // ammunition exit leaves the slot alone (`inventory.md §6`:
+                // "no message at all"), and the slot still held the live
+                // `Item: ` prompt, which was then composed as if it were a
+                // refusal - every Return on the Arrows row logged two more
+                // `Item:` rows (playtest H07).
+                self.message.clear();
                 let outcome = self.ready_equipment(InlineReadyRequest {
                     party_index,
                     item_id,

@@ -249,3 +249,29 @@ fn playfix4_h37_space_at_a_spell_direction_prompt_completes_the_row_with_pass() 
     assert_eq!(rows, ["Direction-Pass", "", ">"]);
     let _ = fs::remove_dir_all(dir);
 }
+
+/// H07: `inventory.md §6` - arrows and quarrels: "selecting either row exits
+/// the cascade at the very top, with no mutation and no message at all - the
+/// refusal is silent"; `§5.2`: "Selecting an ammunition row itself is
+/// silent", so no `\n\n<msg>\n\nItem:_` re-prompt follows it.
+#[test]
+fn playfix4_h07_readying_an_arrows_row_prints_nothing() {
+    let dir = debug_game_dir();
+    let mut state = p4window_world_state();
+    state.equipment_stock[EQUIPMENT_ID_ARROWS] = 99;
+    p4window_keys(&mut state, &dir, &['R', '\r']);
+    let session = state.active_ready.clone().expect("the item picker is open");
+    assert_eq!(session.selected_party_index, Some(0));
+    let before: Vec<String> =
+        state.message_transcript.iter().map(|entry| entry.text.clone()).collect();
+    let rows_before = p4window_rows(&state);
+
+    p4window_keys(&mut state, &dir, &['\r', '\r']);
+    let after: Vec<String> =
+        state.message_transcript.iter().map(|entry| entry.text.clone()).collect();
+    assert_eq!(after, before, "no row is printed");
+    assert_eq!(p4window_rows(&state), rows_before);
+    assert!(state.active_ready.is_some(), "the picker stays open");
+    assert_eq!(state.equipment_stock[EQUIPMENT_ID_ARROWS], 99);
+    let _ = fs::remove_dir_all(dir);
+}
