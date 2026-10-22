@@ -2097,6 +2097,15 @@ fn handle_active_shop_key_input(
         }
         ActiveShopSession::Tavern(s) => {
             let mut food = state.food;
+            // `shops.md §8.B`: "Space means No where accepted. Every No
+            // response echoes `No` without a line feed"; Y/N take the shared
+            // entry echo, so Space's `No` continues the greeting's open row
+            // here (playtest H28).
+            if matches!(*s, TavernState::Greeting { .. }) && key_byte == b' ' {
+                state.flush_message_slot();
+                state.open_message_row();
+                state.emit_message_line_continuing_row("No");
+            }
             // `shops.md` §8.C's result table opens the bill "After the
             // action-letter echo", and the tavern's list and follow-up records
             // both end in a closing quote and a space - that space is the cell
