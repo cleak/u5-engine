@@ -5157,16 +5157,13 @@ impl PlayState {
         Some(child)
     }
 
-    /// Print a `divides!` line that no result narrator claimed, on its own
-    /// row, so a split is never silent (`combat.md §11.1`).
     /// Print the standing-hazard result lines held for `slot` (every slot
     /// when `None`): each "with no newline before it at all" (`combat.md
     /// §11.1`) and closed by its own feed, as every result line is.
     pub(crate) fn flush_combat_pending_hazard_lines(&mut self, slot: Option<usize>) {
-        let (due, kept): (Vec<_>, Vec<_>) =
-            std::mem::take(&mut self.combat_pending_hazard_lines)
-                .into_iter()
-                .partition(|(line_slot, _)| slot.is_none_or(|slot| slot == *line_slot));
+        let (due, kept): (Vec<_>, Vec<_>) = std::mem::take(&mut self.combat_pending_hazard_lines)
+            .into_iter()
+            .partition(|(line_slot, _)| slot.is_none_or(|slot| slot == *line_slot));
         self.combat_pending_hazard_lines = kept;
         for (_, line) in due {
             self.emit_combat_print(&format!("{line}\n"));
@@ -5174,6 +5171,8 @@ impl PlayState {
         }
     }
 
+    /// Print a `divides!` line that no result narrator claimed, on its own
+    /// row, so a split is never silent (`combat.md §11.1`).
     pub(crate) fn flush_unclaimed_combat_divide_line(&mut self) {
         if let Some(line) = self.combat_pending_divide_line.take() {
             self.emit_message_line(format!("{line}\n"));
