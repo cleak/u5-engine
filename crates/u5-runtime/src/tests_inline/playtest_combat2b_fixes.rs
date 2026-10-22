@@ -372,7 +372,8 @@ fn playtest_f34_gate_travel_echoes_the_phase_key() {
         state.flush_message_slot();
 
         let rows = combat2b_rows_text(&state);
-        let echoed = format!("{GATE_TRAVEL_PHASE_PROMPT}{key}");
+        // `input.md §6` folds the key to upper case before the echo (G20).
+        let echoed = format!("{GATE_TRAVEL_PHASE_PROMPT}{}", key.to_ascii_uppercase());
         let prompt = rows
             .iter()
             .position(|row| *row == echoed)
