@@ -462,6 +462,19 @@ impl PlayState {
         // second write here - one used to clobber the Glass Sword counter.
         save[SAVE_SHADOWLORD_HIDEOUTS_OFFSET..SAVE_SHADOWLORD_HIDEOUTS_OFFSET + SHADOWLORD_COUNT]
             .copy_from_slice(&self.shadowlord_hideouts);
+        // `formats/saved-gam.md §9.1`: `0x0325` is the Yell-path handshake
+        // that shard/spell destruction checks, saved because it sits in
+        // resident memory (§10 `0x0322..0x0327`). A live handshake writes
+        // its id; a cleared one writes the factory `0xFF` "none active"
+        // over a stale id, and "other values" are preserved byte-for-byte
+        // from the template (playtest G23).
+        match self.summoned_shadowlord.and_then(|index| u8::try_from(index).ok()) {
+            Some(index) => save[SAVE_ACTIVE_SHADOWLORD_OFFSET] = index,
+            None if usize::from(save[SAVE_ACTIVE_SHADOWLORD_OFFSET]) < SHADOWLORD_COUNT => {
+                save[SAVE_ACTIVE_SHADOWLORD_OFFSET] = SAVE_ACTIVE_SHADOWLORD_NONE;
+            }
+            None => {}
+        }
         // `formats/saved-gam.md §10` / `town-mode.md §5` step 6 (spec
         // `0170809`): `0x03B2` is the resident-Shadowlord selector, "a
         // **per-entry latch, not durable world state**". Town-family entry
@@ -955,7 +968,7 @@ impl PlayState {
             moonstone_slots: options.moonstone_slots,
             shadowlord_hideouts: options.shadowlord_hideouts,
             resident_shadowlord: None,
-            summoned_shadowlord: None,
+            summoned_shadowlord: options.summoned_shadowlord,
             removed_town_npc_flags: options.removed_town_npc_flags,
             shrine_ordained_mask: options.shrine_ordained_mask,
             shrine_codex_mask: options.shrine_codex_mask,
@@ -1378,7 +1391,7 @@ impl PlayState {
             moonstone_slots: options.moonstone_slots,
             shadowlord_hideouts: options.shadowlord_hideouts,
             resident_shadowlord: None,
-            summoned_shadowlord: None,
+            summoned_shadowlord: options.summoned_shadowlord,
             removed_town_npc_flags: options.removed_town_npc_flags,
             shrine_ordained_mask: options.shrine_ordained_mask,
             shrine_codex_mask: options.shrine_codex_mask,
@@ -1812,7 +1825,7 @@ impl PlayState {
             moonstone_slots: options.moonstone_slots,
             shadowlord_hideouts: options.shadowlord_hideouts,
             resident_shadowlord: None,
-            summoned_shadowlord: None,
+            summoned_shadowlord: options.summoned_shadowlord,
             removed_town_npc_flags: options.removed_town_npc_flags,
             shrine_ordained_mask: options.shrine_ordained_mask,
             shrine_codex_mask: options.shrine_codex_mask,

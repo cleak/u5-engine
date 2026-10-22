@@ -535,6 +535,73 @@ fn resident_shadowlord_latch_is_only_stamped_inside_a_location() {
     let _ = fs::remove_dir_all(dir);
 }
 
+/// `formats/saved-gam.md §9.1`: `0x0325` is the Yell-path active-Shadowlord
+/// handshake "checked by shard/spell destruction", saved because it sits in
+/// resident memory. A save taken after the summon has to keep the id so the
+/// shard still matches after a reload; a cleared handshake writes the
+/// factory `0xFF`, and other values are preserved byte-for-byte
+/// (playtest G23).
+#[test]
+fn active_shadowlord_handshake_survives_save_and_reload() {
+    let mut template = saved_game_seed_bytes(0, 0, 10, 20);
+    template[SAVE_AVATAR_NAME_OFFSET] = b'A';
+    template[SAVE_ACTIVE_SHADOWLORD_OFFSET] = SAVE_ACTIVE_SHADOWLORD_NONE;
+    let dir = save_fidelity_game_dir(template);
+
+    let mut state = world_state(open_world_grid(), 10, 20);
+    state.summoned_shadowlord = Some(SHADOWLORD_FALSEHOOD_INDEX);
+    assert_eq!(
+        state.save_game_command(&dir, Some(true)).unwrap(),
+        MoveOutcome::Saved
+    );
+    let saved = fs::read(dir.join("SAVED.GAM")).unwrap();
+    assert_eq!(saved[SAVE_ACTIVE_SHADOWLORD_OFFSET], 0);
+    let reloaded = load_play_options_from_save(&dir).unwrap();
+    assert_eq!(reloaded.summoned_shadowlord, Some(SHADOWLORD_FALSEHOOD_INDEX));
+
+    // The shard clears the handshake; the next save stops naming it.
+    state.summoned_shadowlord = None;
+    assert_eq!(
+        state.save_game_command(&dir, Some(true)).unwrap(),
+        MoveOutcome::Saved
+    );
+    let saved = fs::read(dir.join("SAVED.GAM")).unwrap();
+    assert_eq!(saved[SAVE_ACTIVE_SHADOWLORD_OFFSET], SAVE_ACTIVE_SHADOWLORD_NONE);
+    assert_eq!(load_play_options_from_save(&dir).unwrap().summoned_shadowlord, None);
+
+    // Any other value is opaque and round-trips untouched.
+    let mut odd = saved.clone();
+    odd[SAVE_ACTIVE_SHADOWLORD_OFFSET] = 0x7E;
+    fs::write(dir.join("SAVED.GAM"), odd).unwrap();
+    assert_eq!(load_play_options_from_save(&dir).unwrap().summoned_shadowlord, None);
+    assert_eq!(
+        state.save_game_command(&dir, Some(true)).unwrap(),
+        MoveOutcome::Saved
+    );
+    let saved = fs::read(dir.join("SAVED.GAM")).unwrap();
+    assert_eq!(saved[SAVE_ACTIVE_SHADOWLORD_OFFSET], 0x7E);
+    let _ = fs::remove_dir_all(dir);
+}
+
+/// The restored handshake reaches the rebuilt play state, so the shard's
+/// "recorded id must equal the shard's own index" gate (`quest-graph.md`
+/// gate 3) still sees it after a Journey Onward.
+#[test]
+fn restored_active_shadowlord_handshake_reaches_the_loaded_town_state() {
+    let dir = shipped_layout_iolos_hut_dir();
+    let mut template = shipped_layout_iolos_hut_save();
+    template[SAVE_ACTIVE_SHADOWLORD_OFFSET] = 0x01;
+    fs::write(dir.join("SAVED.GAM"), template).unwrap();
+    fs::write(dir.join(SAVED_OOL_FILENAME), vec![0; SAVED_OOL_LEN]).unwrap();
+    write_empty_ool_mirrors(&dir);
+
+    let options = load_play_options_from_save(&dir).unwrap();
+    let scene = Scene::new(SHIPPED_IOLOS_HUT_SCENE).unwrap();
+    let state = PlayState::load_town_scene(&dir, scene, options).unwrap();
+    assert_eq!(state.summoned_shadowlord, Some(1));
+    let _ = fs::remove_dir_all(dir);
+}
+
 /// `formats/saved-gam.md §10` / `time.md §6`: "a stored value of `51` or
 /// higher makes the recompute skip entirely and freezes ambient light for
 /// that call", so the byte has to reach the recompute from the save image

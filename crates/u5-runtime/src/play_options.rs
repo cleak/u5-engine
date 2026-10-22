@@ -41,6 +41,10 @@ pub struct PlayOptions {
     pub saved_dungeon_working_buffer: Option<Vec<u8>>,
     pub moonstone_slots: [MoonstoneGateSlot; MOONSTONE_SLOT_COUNT],
     pub shadowlord_hideouts: [u8; SHADOWLORD_COUNT],
+    /// `formats/saved-gam.md §9.1` `0x0325`: the Yell-path handshake the
+    /// shard and spell destruction check. Restored from the save image so a
+    /// save taken after the summon keeps it (playtest G23).
+    pub summoned_shadowlord: Option<usize>,
     pub removed_town_npc_flags: HashMap<u8, u32>,
     pub talk_branch_flags: HashMap<u8, u32>,
     pub shrine_ordained_mask: u8,
@@ -158,6 +162,7 @@ impl Default for PlayOptions {
             saved_dungeon_working_buffer: None,
             moonstone_slots: [MoonstoneGateSlot::invalid(); MOONSTONE_SLOT_COUNT],
             shadowlord_hideouts: DEFAULT_SHADOWLORD_HIDEOUTS,
+            summoned_shadowlord: None,
             removed_town_npc_flags: HashMap::new(),
             talk_branch_flags: HashMap::new(),
             shrine_ordained_mask: 0,

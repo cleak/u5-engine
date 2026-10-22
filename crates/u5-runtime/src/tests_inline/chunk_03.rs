@@ -2859,6 +2859,7 @@ fn town_entry_applies_night_gate_substitution() {
         saved_dungeon_working_buffer: None,
         moonstone_slots: [MoonstoneGateSlot::invalid(); MOONSTONE_SLOT_COUNT],
         shadowlord_hideouts: DEFAULT_SHADOWLORD_HIDEOUTS,
+        summoned_shadowlord: None,
         removed_town_npc_flags: HashMap::new(),
         talk_branch_flags: HashMap::new(),
         shrine_ordained_mask: 0,
