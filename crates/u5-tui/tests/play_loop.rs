@@ -1720,3 +1720,70 @@ fn play_script_runner_resolves_the_third_shrine_mantra_and_keeps_playing() {
     assert_eq!(state.shrine_ordained_mask, ShrineVirtue::Humility.bit());
     let _ = fs::remove_dir_all(dir);
 }
+
+/// Playtest G01 / G21: `input.md §8` - the free-text reader appends each
+/// printable byte and Enter returns the accumulated string, so a word made
+/// only of movement letters reaches the session as one line, never one
+/// line per letter. Backspace pops, Escape clears, and any other byte
+/// (a direction code, a function key, a control chord) is discarded.
+#[test]
+fn free_text_line_input_keeps_words_whole_and_applies_reader_editing() {
+    assert_eq!(
+        free_text_line_input("dawn\n"),
+        FreeTextLineInput::Submit('d', "awn".to_string())
+    );
+    assert_eq!(
+        free_text_line_input("ab\x1bcd"),
+        FreeTextLineInput::Submit('c', "d".to_string())
+    );
+    assert_eq!(
+        free_text_line_input("abc\x08d\x7fe"),
+        FreeTextLineInput::Submit('a', "bde".to_string())
+    );
+    assert_eq!(
+        free_text_line_input("s\x01un"),
+        FreeTextLineInput::Submit('s', "un".to_string())
+    );
+    assert_eq!(free_text_line_input("\x01"), FreeTextLineInput::Discard);
+    assert_eq!(free_text_line_input("\x1bOP"), FreeTextLineInput::Discard);
+    assert_eq!(free_text_line_input("\x1b[D"), FreeTextLineInput::Discard);
+    assert_eq!(free_text_line_input("buffer"), FreeTextLineInput::Discard);
+    assert_eq!(free_text_line_input("return"), FreeTextLineInput::Key);
+    assert_eq!(free_text_line_input("\x1b"), FreeTextLineInput::Key);
+    assert_eq!(free_text_line_input(""), FreeTextLineInput::Key);
+}
+
+/// Playtest G21: at the Yell prompt `sun` is one word of power. Splitting
+/// it submitted `S` and then ran `U` and `N` as world commands.
+#[test]
+fn yell_prompt_takes_a_movement_letter_word_as_one_line() {
+    let mut state = world_state(open_world_grid(), 4, 5);
+    state.typeahead_buffer_enabled = false;
+    handle_play_script_command(&mut state, "Y", Path::new("")).unwrap();
+    assert!(state.active_yell.is_some());
+
+    assert_eq!(
+        handle_play_script_command(&mut state, "sun", Path::new("")).unwrap(),
+        PlayInputDisposition::Continue
+    );
+
+    assert!(state.active_yell.is_none());
+    assert_eq!((state.player.x, state.player.y), (4, 5));
+    assert_eq!(state.turn, 1);
+    assert_eq!(state.message, "\nNo effect!");
+}
+
+/// Playtest G21: a direction code alone at the Yell prompt is discarded
+/// and the prompt keeps waiting.
+#[test]
+fn yell_prompt_discards_a_bare_direction_code() {
+    let mut state = world_state(open_world_grid(), 4, 5);
+    state.active_yell = Some(YellSession {
+        buffer: String::new(),
+    });
+
+    handle_play_script_command(&mut state, "\x01", Path::new("")).unwrap();
+
+    assert!(state.active_yell.is_some());
+    assert_eq!(state.turn, 0);
+}
