@@ -1546,14 +1546,26 @@ pub fn paint_z_stats_page_text_window(system: &mut TextWindowSystem, state: &Pla
         // Trim *spaces* only. The attribute page's first row leads with
         // the record's own glyph byte `0x0B`, which Rust's `trim_start`
         // treats as whitespace and would silently eat.
+        // `inventory.md §4.5`: a wrapped entry's next line starts at window
+        // column 0, over the frame's left rule (playtest H43).
+        let (line, indent) = match line.strip_prefix(crate::Z_STATS_WRAPPED_LINE_MARKER) {
+            Some(rest) => (rest, 0u8),
+            None => (line.as_str(), indent),
+        };
         let text = line.trim_end_matches(' ');
         let lead = (text.len() - text.trim_start_matches(' ').len()) as u8;
-        system.set_active_cursor(indent.saturating_add(lead), row.min(u8::MAX as usize) as u8);
+        let column = indent.saturating_add(lead);
+        system.set_active_cursor(column, row.min(u8::MAX as usize) as u8);
         if underline_row == Some(row) {
             system.emit_byte(TEXT_CTRL_UNDERLINE_TOGGLE);
         }
+        // §4.4: the frame's text window "is sixteen cells wide, and a row
+        // can legally emit through window column 15", so a framed list row
+        // is not clipped at the right rule (§4.5: the renderer "does not
+        // clip one at run time either"); the entry builder has already
+        // wrapped anything longer.
         let width = if framed {
-            PANEL_PICKER_CONTENT_COLUMNS + 1 - usize::from(indent)
+            (PANEL_PICKER_ROW_CELLS + 1).saturating_sub(usize::from(column))
         } else {
             STATS_PANEL_WIDTH
         };

@@ -3,6 +3,14 @@
 use crate::*;
 
 pub const Z_STATS_INVENTORY_PANEL_ROWS: usize = 8;
+
+/// A continuation line of a wrapped Z-stats inventory entry. `inventory.md
+/// §4.5`: a label that will not fit "the rest of the display line" moves to
+/// the next line, which starts at window column 0, over the frame's left
+/// rule, rather than at the list's column 1. The painter strips the marker and
+/// places the line there.
+pub const Z_STATS_WRAPPED_LINE_MARKER: char = '\u{1}';
+
 pub const READY_PICKER_PANEL_ROWS: usize = 8;
 /// `inventory.md §5` step 4 (`RETRACTIONS.md` R444): "PgUp and PgDn move seven
 /// displayable items toward the relevant endpoint; the frame has seven
