@@ -1100,6 +1100,20 @@ impl PlayState {
         MoveOutcome::Observed
     }
 
+    /// A selector key that only moves the indicator, or is ignored, leaves
+    /// the message window alone: `inventory.md §4.3` "The message window is
+    /// untouched apart from the caller's prompt itself." The slot keeps the
+    /// text that already printed the prompt - the fountain's look result ends
+    /// with it - so the flush has nothing new to append. Re-seating the slot
+    /// with the bare prompt read as a fresh write and printed the question a
+    /// second time (playtest H30).
+    fn keep_party_selector_prompt(&mut self, session: PartySelectorSession) {
+        let prompt = session.target.prompt();
+        if !self.message.ends_with(prompt) {
+            self.message = prompt.to_string();
+        }
+    }
+
     /// Feed one key to a live party-member selector.
     ///
     /// `text-output.md §10.6` publishes this surface's whole key set:
@@ -1150,7 +1164,7 @@ impl PlayState {
             return true;
         }
         if key == '0' && session.target.ignores_zero() {
-            self.message = session.target.prompt().to_string();
+            self.keep_party_selector_prompt(session);
             return true;
         }
         if matches!(key, '\u{1b}' | '0') {
@@ -1185,7 +1199,7 @@ impl PlayState {
                 session.highlight.saturating_sub(1)
             };
             self.active_party_selector = Some(session);
-            self.message = session.target.prompt().to_string();
+            self.keep_party_selector_prompt(session);
             return true;
         }
         // `cleak/u5-spec#192` (black-box, stock `ULTIMA.EXE`): a digit
@@ -1199,7 +1213,7 @@ impl PlayState {
                 session.highlight = row;
                 self.active_party_selector = Some(session);
             }
-            self.message = session.target.prompt().to_string();
+            self.keep_party_selector_prompt(session);
             return true;
         }
         // `text-output.md §10.6`: "Return or Space to accept". The
@@ -1207,8 +1221,9 @@ impl PlayState {
         // same two keys separately and reaches the same cascade, so both
         // commit the indicated row here too.
         if !matches!(key, '\r' | '\n' | ' ') {
-            // Any other key redraws the prompt; the selector stays live.
-            self.message = session.target.prompt().to_string();
+            // Any other key leaves the prompt as it is; the selector stays
+            // live.
+            self.keep_party_selector_prompt(session);
             return true;
         }
         let index = session.highlight;

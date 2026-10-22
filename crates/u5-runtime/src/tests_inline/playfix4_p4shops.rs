@@ -192,3 +192,30 @@ fn playfix4_h29_entry_space_no_continues_the_greeting_row() {
         assert!(!rows.iter().any(|row| row == "No"), "{label}: {rows:#?}");
     }
 }
+
+/// H30: `view.md §3` opens the shared selector of `inventory.md §4.3`,
+/// where digits and arrows only move the indicator and "The message window
+/// is untouched apart from the caller's prompt itself." An ignored key or a
+/// moved indicator must not print `Who will drink?` a second time.
+#[test]
+fn playfix4_h30_fountain_selector_keys_do_not_reprint_the_question() {
+    let mut grid = open_grid();
+    grid[32 + 2] = 0xd8;
+    let mut state = test_state(grid, 1, 1);
+    three_member_party(&mut state);
+    state.player.facing = Direction::East;
+    assert_eq!(state.look_facing(), MoveOutcome::Observed);
+    state.flush_message_slot();
+    assert!(state.active_party_selector.is_some());
+    for key in ['x', 'z', '9', '2', INPUT_CODE_SOUTH as char] {
+        handle_play_key_input(&mut state, key, "", Path::new("")).unwrap();
+        state.flush_message_slot();
+        let rows = pf4_rows(&state);
+        assert_eq!(
+            rows.iter().filter(|row| *row == FOUNTAIN_DRINK_PROMPT).count(),
+            1,
+            "{key:?}: {rows:#?}"
+        );
+    }
+    assert!(state.active_party_selector.is_some());
+}
