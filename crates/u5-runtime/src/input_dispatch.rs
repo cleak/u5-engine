@@ -6587,12 +6587,17 @@ fn handle_combat_multistage_command(
             // cleanup and keeps the resident `Push-` echo open for either a
             // direction or Space/Pass.
             state.tick_door_tracker();
-            state.begin_command_echo_for(Command::Push);
             if let Some(direction) = suffix
                 .chars()
                 .find_map(Direction::from_play_key)
                 .filter(|direction| direction.is_cardinal())
             {
+                // `combat.md §8`, the `P` row: "Prints the `Push-` label" -
+                // the surface label even in a dungeon-room arena, whose
+                // `Push` refusal form never runs here (playtest H27).
+                if let Some(echo) = command_echo(Command::Push, CommandEchoMode::Surface) {
+                    state.begin_command_echo(echo);
+                }
                 state.push_combat_actor_direction_after_cleanup(actor_slot, direction);
                 state.prepend_push_direction_result(direction);
                 let _ = apply_combat_committed_action_maintenance(state, actor_slot);
@@ -6622,6 +6627,10 @@ fn handle_combat_multistage_command(
                 // all end-capped - so it has to be logged as a command echo.
                 // Assigning it to the message slot flushed it as ordinary
                 // output, which drew the row one column left of the original.
+                // That echo is the label's only print: `combat.md §8`'s `P`
+                // row prints `Push-` once, and the world dispatcher's verb
+                // echo opened here as well stacked a second `Push-` (or the
+                // dungeon `Push`) row above it (playtest H23/H27).
                 let echo = state.render_active_direction_prompt();
                 state.message.clear();
                 state.emit_combat_command_echo_line(&echo);
