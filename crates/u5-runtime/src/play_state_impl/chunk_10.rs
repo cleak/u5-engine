@@ -445,7 +445,14 @@ impl PlayState {
             })
             .map(|slot| RuntimeNpc::from_slot(slot, self.clock.hour))
             .collect();
-        self.apply_persisted_town_npc_mutations();
+        // `town-mode.md §5` step 5: a fresh entry loads the schedule, type and
+        // dialogue tables from the location's `.NPC` block, and
+        // `npc-schedules.md §4` has that source "not rewritten during play".
+        // Pursuit, flight and Shadowlord rewrites live in the loaded copy for
+        // this visit only (a save carries them in its NPC band), so a fresh
+        // entry starts from the authored roster and forgets the scene's
+        // earlier rewrites instead of replaying them (playtest G24).
+        self.discard_town_npc_mutations_for_current_scene();
         self.relink_npc_objects();
     }
 
@@ -533,6 +540,14 @@ impl PlayState {
                 npc.active_object = None;
             }
         }
+    }
+
+    fn discard_town_npc_mutations_for_current_scene(&mut self) {
+        let Area::Town { scene, .. } = self.area else {
+            return;
+        };
+        self.town_npc_mutations
+            .retain(|mutation| mutation.scene_byte != scene.byte);
     }
 
     fn apply_persisted_town_npc_mutations(&mut self) {
