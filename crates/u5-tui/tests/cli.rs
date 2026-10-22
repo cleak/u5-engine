@@ -1172,7 +1172,11 @@ fn cli_intro_u4_transfer_refuses_terminal_preview_fallback() {
     child.stdin.as_mut().unwrap().write_all(b"\nT\n").unwrap();
 
     let output = child.wait_with_output().unwrap();
-    assert!(!output.status.success());
+    // Playtest G14: the refusal returns to the menu rather than ending the
+    // process, so end of input is an ordinary exit.
+    assert!(output.status.success());
+    let stdout = String::from_utf8(output.stdout).unwrap();
+    assert!(stdout.matches("Selection:").count() >= 2, "{stdout}");
     let stderr = String::from_utf8(output.stderr).unwrap();
     assert!(
         stderr.contains("terminal Ultima IV transfer preview is a forbidden fallback"),
