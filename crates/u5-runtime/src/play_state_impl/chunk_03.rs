@@ -1077,9 +1077,17 @@ impl PlayState {
     /// `R`-Ready, the roster picker rather than this prompt, still
     /// prints one. `cleak/u5-spec#223` asks for `commands.md` §5.8's
     /// world-mode rows to carry the same qualification.
+    ///
+    /// `traps.md §2.1` priority 2 applies here as at the container sites:
+    /// "when a single active character is set, that character is returned
+    /// directly and silently", and §2.1 names this the one selection that
+    /// "decides who performs Search, Jimmy, Get, Open, Look and Cast".
+    /// `commands.md §5.8`: an "explicit active-member selection supply their
+    /// own silent overrides". Search's direction form and the dungeon's
+    /// Search and Look used to ask `Player: ` with a member selected
+    /// (playtest H04).
     pub fn acting_member_selection(&self) -> ActingMemberSelection {
-        let statuses: Vec<u8> = self.party.iter().map(|member| member.status).collect();
-        acting_member_scan(&statuses)
+        self.shared_acting_member_selection(false)
     }
 
     /// Open the shared party-member selector. The caller has already

@@ -749,3 +749,33 @@ fn all_asleep_turn_prints_the_starvation_warning_under_its_own_sleep_row() {
     );
     let _ = fs::remove_dir_all(dir);
 }
+
+/// Playtest H04. `traps.md §2.1` priority 2: "when a single active character
+/// is set, that character is returned directly and silently" by the shared
+/// selection that "decides who performs Search, Jimmy, Get, Open, Look and
+/// Cast"; `dungeon-mode.md` runs dungeon Look and Search through that same
+/// prompt. With a member selected they used to print `Player: ` anyway.
+#[test]
+fn search_and_dungeon_look_honour_an_explicit_active_member() {
+    let dir = debug_game_dir();
+    let mut state = dungeon_state(open_dungeon_record(), 0, 1, 1);
+    state.party = vec![default_party()[0]; 3];
+    assert_eq!(state.acting_member_selection(), ActingMemberSelection::Prompt);
+    state.active_player = Some(1);
+    assert_eq!(
+        state.acting_member_selection(),
+        ActingMemberSelection::Selected(1)
+    );
+
+    for key in ['S', 'L'] {
+        let mut dungeon = state.clone();
+        assert!(dungeon.handle_dungeon_key(key, &dir).unwrap());
+        assert!(
+            dungeon.active_party_selector.is_none(),
+            "{key} opened the roster picker: {}",
+            dungeon.message
+        );
+        assert!(!dungeon.message.contains(PARTY_SELECTION_PROMPT), "{key}: {}", dungeon.message);
+    }
+    let _ = fs::remove_dir_all(dir);
+}
