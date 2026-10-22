@@ -3035,35 +3035,6 @@ impl PlayState {
             })
     }
 
-    pub fn active_object_treasure_marker_at(&self, x: usize, y: usize) -> Option<(usize, usize)> {
-        self.active_objects
-            .iter()
-            .copied()
-            .enumerate()
-            .skip(1)
-            .rev()
-            .find_map(|(object_slot, object)| {
-                if !self.object_occupies(object, x, y)
-                    || object.type_byte != FIXED_HIDDEN_TREASURE_OBJECT_TILE
-                {
-                    return None;
-                }
-                object
-                    .fixed_hidden_treasure_record()
-                    .or_else(|| {
-                        // Native fixed-treasure class records carry their
-                        // actual pickup visual in byte 1 and the record in
-                        // aux1. A live moldy corpse instead has `0x1F` in both
-                        // leading bytes and is handled by the sibling lookup.
-                        let record = object.aux1 as usize;
-                        (object.tile != FIXED_HIDDEN_TREASURE_OBJECT_TILE
-                            && record < FIXED_HIDDEN_TREASURE_COUNT)
-                            .then_some(record)
-                    })
-                    .map(|record| (object_slot, record))
-            })
-    }
-
     /// `containers.md §9`: locate either a native moldy-corpse object or a
     /// fixed-hidden-treasure staging record whose published pickup class is a
     /// moldy corpse. The `aux3` distinction is essential: every fixed treasure
@@ -3119,29 +3090,14 @@ impl PlayState {
                 }
             });
         }
-        let (object_slot, record) = self.active_object_treasure_marker_at(x, y)?;
-        let Some(entry) = FIXED_HIDDEN_TREASURES
-            .iter()
-            .find(|entry| entry.record == record)
-            .copied()
-        else {
-            // An internal invariant, not a player-facing path: the original
-            // prints nothing here, so neither does this. `u5-engine#19`.
-            self.message.clear();
-            return Some(MoveOutcome::Blocked);
-        };
-
-        // `containers.md §9` / cleak/u5-spec#175: only a surface/town Search
-        // of a moldy corpse enters the special branch. It chooses the Plague
-        // victim through the shared acting-member selection before consuming
-        // any corpse PRNG draw. A multi-member party reuses the established
-        // picker and resumes this coordinate after confirmation.
-        self.clear_consumed_active_object_slot(object_slot);
-        let grant = self.apply_fixed_hidden_treasure_pickup(entry.pickup, entry.state);
-        self.mark_visibility_dirty();
-        self.advance_turn();
-        self.message = format!("Found {}{}.", entry.pickup.label(), grant);
-        Some(MoveOutcome::Searched)
+        // `containers.md §3`: the active-object coordinate branch of Search is
+        // taken by class `0x1F` corpses only, and of Search's five result
+        // shapes "none of them is a slot-indexed treasure grant". A staged
+        // fixed-treasure pickup is not searched again into the inventory:
+        // "the later Get path owns the inventory transfer", so Search falls
+        // through to its later scans, where the fixed-treasure duplicate
+        // guard answers `nothing of note.` (playtest G26).
+        None
     }
 
     fn finish_moldy_corpse_search_at(
@@ -3174,12 +3130,27 @@ impl PlayState {
             return Some(MoveOutcome::Blocked);
         };
         // `containers.md §9`: Get never enters the moldy-corpse Search
-        // branch. It follows the ordinary object-table consumption path.
+        // branch. It follows the ordinary object-table consumption path, so
+        // the staged class and state reach the `containers.md §8` dispatcher
+        // and print its `commands.md §5.8` row (playtest G25).
+        let Some(grant) = fixed_hidden_treasure_pickup_grant(entry.pickup, entry.state) else {
+            // The corpse classes have no dispatcher arm: "Other values | No
+            // pickup | Prints the nothing-to-get refusal and leaves inventory
+            // unchanged", with no slot clear and no turn sentinel.
+            self.message = GET_NOTHING_REFUSAL.to_string();
+            return Some(MoveOutcome::Blocked);
+        };
         self.clear_consumed_active_object_slot(object_slot);
-        let grant = self.apply_fixed_hidden_treasure_pickup(entry.pickup, entry.state);
+        self.apply_object_pickup(grant.kind, grant.amount);
         self.mark_visibility_dirty();
         self.advance_turn();
-        self.message = format!("Got {}{}.", entry.pickup.label(), grant);
+        self.diagnostics.push(format!(
+            "got fixed hidden treasure record {record} ({}): {} {}",
+            entry.pickup.label(),
+            grant.amount,
+            grant.kind.label()
+        ));
+        self.message = format!("\n{}", grant.kind.pickup_result_line(grant.amount));
         Some(MoveOutcome::Got)
     }
 
@@ -3270,70 +3241,6 @@ impl PlayState {
             "Thou dost find\n{}\n",
             CORPSE_SEARCH_NOTHING_MESSAGES[usize::from(selector)]
         );
-    }
-
-    pub fn apply_fixed_hidden_treasure_pickup(
-        &mut self,
-        pickup: HiddenTreasurePickup,
-        state: u8,
-    ) -> String {
-        match pickup {
-            HiddenTreasurePickup::Food => {
-                self.food = self
-                    .food
-                    .saturating_add(u16::from(state))
-                    .min(PARTY_FOOD_CAP);
-                format!("; added {state} food")
-            }
-            HiddenTreasurePickup::SackOfGold => {
-                self.gold = self
-                    .gold
-                    .saturating_add(u16::from(state))
-                    .min(SHOP_GOLD_CAP);
-                format!("; added {state} gold")
-            }
-            HiddenTreasurePickup::RingOfKeys => {
-                self.keys = self.keys.saturating_add(state).min(99);
-                format!("; added {state} keys")
-            }
-            HiddenTreasurePickup::Gem => {
-                self.gems = self.gems.saturating_add(state).min(99);
-                format!("; added {state} gems")
-            }
-            HiddenTreasurePickup::Torches => {
-                self.torches = self.torches.saturating_add(state).min(99);
-                format!("; added {state} torches")
-            }
-            HiddenTreasurePickup::Potion => {
-                let subtype = (state as usize) & 7;
-                self.potion_stock[subtype] = self.potion_stock[subtype].saturating_add(1).min(99);
-                format!("; added 1 {} potion", potion_label(subtype))
-            }
-            HiddenTreasurePickup::Scroll => {
-                let subtype = (state as usize) & 7;
-                self.scroll_stock[subtype] = self.scroll_stock[subtype].saturating_add(1).min(99);
-                format!("; added 1 scroll subtype {subtype}")
-            }
-            HiddenTreasurePickup::Armour
-            | HiddenTreasurePickup::Weapon
-            | HiddenTreasurePickup::Ring
-            | HiddenTreasurePickup::Amulet => {
-                let item = state as usize;
-                if item < EQUIPMENT_COUNT {
-                    let amount = inventory_add_equipment_units(item);
-                    self.equipment_stock[item] =
-                        self.equipment_stock[item].saturating_add(amount).min(99);
-                    format!("; added equipment id {item}")
-                } else {
-                    "; no compatible inventory slot".to_string()
-                }
-            }
-            // Corpse/body classes are not ordinary inventory grants. Only a
-            // Search of MoldyCorpse is intercepted by the special branch.
-            HiddenTreasurePickup::MoldyCorpse | HiddenTreasurePickup::RottingBody => {
-                "; no inventory grant".to_string()
-            }
-        }
     }
 
     pub fn search_dungeon_secret(
@@ -3621,6 +3528,41 @@ impl PlayState {
         };
         MoveOutcome::Searched
     }
+}
+
+/// `hidden-treasures.md §2`: "The `State` column is the per-record pickup
+/// state staged into the active-object record; Get interprets it according to
+/// the pickup class." Each staged class is fed to the `containers.md §8`
+/// dispatcher arm of the same family, with the state as the record's
+/// auxiliary byte. The two corpse classes have no arm.
+fn fixed_hidden_treasure_pickup_grant(
+    pickup: HiddenTreasurePickup,
+    state: u8,
+) -> Option<ObjectPickupGrant> {
+    let type_byte = match pickup {
+        HiddenTreasurePickup::SackOfGold => INVENTORY_ADD_CLASS_CODE_GOLD,
+        HiddenTreasurePickup::Potion => INVENTORY_ADD_CLASS_CODE_POTION,
+        HiddenTreasurePickup::Scroll => INVENTORY_ADD_CLASS_CODE_SCROLL,
+        HiddenTreasurePickup::Weapon => INVENTORY_ADD_CLASS_CODE_WEAPON,
+        HiddenTreasurePickup::Armour => INVENTORY_ADD_CLASS_CODE_ARMOUR,
+        HiddenTreasurePickup::Ring => INVENTORY_ADD_CLASS_CODE_RING,
+        HiddenTreasurePickup::Amulet => INVENTORY_ADD_CLASS_CODE_AMULET,
+        HiddenTreasurePickup::RingOfKeys => INVENTORY_ADD_CLASS_CODE_KEY,
+        HiddenTreasurePickup::Gem => INVENTORY_ADD_CLASS_CODE_GEM,
+        HiddenTreasurePickup::Torches => INVENTORY_ADD_CLASS_CODE_TORCH,
+        HiddenTreasurePickup::Food => INVENTORY_ADD_CLASS_CODE_FOOD,
+        HiddenTreasurePickup::MoldyCorpse | HiddenTreasurePickup::RottingBody => return None,
+    };
+    native_object_pickup_grant(ActiveObject {
+        type_byte,
+        tile: FIXED_HIDDEN_TREASURE_OBJECT_TILE,
+        x: 0,
+        y: 0,
+        z: 0,
+        phase: STEADY_PHASE,
+        aux1: state,
+        aux3: 0,
+    })
 }
 
 fn native_object_pickup_grant(object: ActiveObject) -> Option<ObjectPickupGrant> {

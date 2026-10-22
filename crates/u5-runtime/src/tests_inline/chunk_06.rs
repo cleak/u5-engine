@@ -1568,8 +1568,13 @@
         );
     }
 
+    /// `containers.md §3`: the active-object coordinate branch of Search is
+    /// for class `0x1F` corpses only, and "none of [Search's result shapes]
+    /// is a slot-indexed treasure grant" - "the later Get path owns the
+    /// inventory transfer". Searching a staged fixed-treasure cell again
+    /// grants nothing and prints nothing of note (playtest G26).
     #[test]
-    fn search_active_object_treasure_marker_uses_highest_slot_before_live_tile() {
+    fn search_of_a_staged_fixed_treasure_grants_nothing() {
         let mut grid = open_grid();
         grid[8 * 32 + 5] = 0x4e;
         let mut state = test_state(grid, 4, 8);
@@ -1582,19 +1587,14 @@
             .active_objects
             .push(ActiveObject::fixed_hidden_treasure_pickup(13, 5, 8, 0));
 
-        assert_eq!(
-            state.search_facing_secret(&[], None),
-            MoveOutcome::Searched
-        );
+        assert_eq!(state.search_active_object_treasure_marker_at(5, 8), None);
 
         assert!(!state.active_objects[1].is_empty());
-        assert!(state.active_objects[2].is_empty());
-        assert_eq!(state.keys, DEFAULT_KEY_STOCK + 9);
+        assert!(!state.active_objects[2].is_empty());
+        assert_eq!(state.keys, DEFAULT_KEY_STOCK);
         assert_eq!(state.gems, DEFAULT_GEM_STOCK);
-        assert_eq!(state.grid[8 * 32 + 5], 0x4e);
-        assert_eq!(state.turn, 1);
-        assert!(state.visibility_dirty);
-        assert_eq!(state.message, "Found ring of keys; added 9 keys.");
+        assert_eq!(state.turn, 0);
+        assert!(!state.message.contains("Found"));
     }
 
     #[test]
@@ -1641,30 +1641,59 @@
         );
     }
 
+    /// `commands.md §5.8` "Successful Get, Search and eat results": a Get of
+    /// a staged fixed hidden treasure prints the class dispatcher's row -
+    /// `1_gem!`, `A_<colour>_potion!`, the equipment row name - not a debug
+    /// sentence (playtest G25).
     #[test]
-    fn search_active_object_treasure_marker_accepts_plain_class_record() {
+    fn get_of_a_staged_fixed_treasure_prints_the_published_pickup_row() {
+        // Record 18 Gem 1, record 21 Potion 5, record 28 Ring 42.
+        for (record, expected) in [
+            (18usize, "\n1 gem!".to_string()),
+            (21, format!("\nA {} potion!", potion_colour_display_word(5))),
+            (28, format!("\n{}!", equipment_name(42))),
+        ] {
+            let mut state = test_state(open_grid(), 4, 8);
+            state
+                .active_objects
+                .push(ActiveObject::fixed_hidden_treasure_pickup(record, 5, 8, 0));
+            let gems = state.gems;
+            let potions = state.potion_stock[5];
+            let rings = state.equipment_stock[42];
+
+            assert_eq!(
+                state.get_fixed_hidden_treasure_pickup_at(5, 8),
+                Some(MoveOutcome::Got)
+            );
+            assert_eq!(state.message, expected);
+            assert!(state.active_objects[1].is_empty());
+            assert_eq!(state.turn, 1);
+            match record {
+                18 => assert_eq!(state.gems, gems + 1),
+                21 => assert_eq!(state.potion_stock[5], potions + 1),
+                _ => assert_eq!(state.equipment_stock[42], rings + 1),
+            }
+        }
+    }
+
+    /// `containers.md §8` key row: a marked odd-key subtype strips the marker
+    /// for the displayed quantity and credits the skull-key counter, through
+    /// the same dispatcher a staged ring of keys reaches on Get.
+    #[test]
+    fn get_of_a_staged_odd_key_ring_credits_skull_keys() {
         let mut state = test_state(open_grid(), 4, 8);
-        state.player.facing = Direction::East;
-        state.active_objects.push(ActiveObject {
-            type_byte: FIXED_HIDDEN_TREASURE_OBJECT_TILE,
-            tile: 0x55,
-            x: 5,
-            y: 8,
-            z: 0,
-            phase: STEADY_PHASE,
-            aux1: 18,
-            aux3: 0,
-        });
-
+        state
+            .active_objects
+            .push(ActiveObject::fixed_hidden_treasure_pickup(14, 5, 8, 0));
+        let keys = state.keys;
+        let skull = state.special_items[SPECIAL_ITEM_SKULL_KEY_INDEX];
         assert_eq!(
-            state.search_facing_secret(&[], None),
-            MoveOutcome::Searched
+            state.get_fixed_hidden_treasure_pickup_at(5, 8),
+            Some(MoveOutcome::Got)
         );
-
-        assert!(state.active_objects[1].is_empty());
-        assert_eq!(state.gems, DEFAULT_GEM_STOCK + 1);
-        assert_eq!(state.turn, 1);
-        assert_eq!(state.message, "Found gem; added 1 gems.");
+        assert_eq!(state.message, "\n5 odd keys!");
+        assert_eq!(state.keys, keys);
+        assert_eq!(state.special_items[SPECIAL_ITEM_SKULL_KEY_INDEX], skull + 5);
     }
 
     #[test]
@@ -1873,7 +1902,7 @@
 
         assert_eq!(state.gems, 1);
         assert!(state.active_objects[1].is_empty());
-        assert!(state.message.contains("added 1 gems"));
+        assert_eq!(state.message, "\n1 gem!");
 
         assert_eq!(
             state.search_facing_with_game_dir(&dir).unwrap(),
@@ -1969,7 +1998,7 @@
     }
 
     #[test]
-    fn search_fixed_hidden_daily_cache_resets_by_day_and_caps_keys() {
+    fn search_fixed_hidden_daily_cache_resets_by_day_and_grants_odd_keys() {
         let dir = debug_game_dir();
         let mut state = test_state(open_grid(), 1, 2);
         state.area = Area::Town {
@@ -1979,6 +2008,7 @@
         state.player.facing = Direction::East;
         state.clock = GameClock::with_date(139, 4, 5, 12, 0).unwrap();
         state.keys = 98;
+        state.special_items[SPECIAL_ITEM_SKULL_KEY_INDEX] = 97;
 
         assert_eq!(
             state.search_facing_with_game_dir(&dir).unwrap(),
@@ -1986,11 +2016,16 @@
         );
         assert_eq!(state.fixed_hidden_treasure_daily_day, 5);
 
+        // Record 14's state `133` is a marked odd-key subtype: the
+        // `containers.md §8` key arm strips the marker, credits the
+        // skull/special-key counter capped at 99, and leaves skeleton keys.
         assert_eq!(
             state.get_facing_with_game_dir(&dir).unwrap(),
             MoveOutcome::Got
         );
-        assert_eq!(state.keys, 99);
+        assert_eq!(state.keys, 98);
+        assert_eq!(state.special_items[SPECIAL_ITEM_SKULL_KEY_INDEX], 99);
+        assert_eq!(state.message, "\n5 odd keys!");
 
         assert_eq!(
             state.search_facing_with_game_dir(&dir).unwrap(),
@@ -2213,7 +2248,7 @@
         );
 
         assert_eq!(state.food, PARTY_FOOD_CAP);
-        assert!(state.message.contains("added 10 food"));
+        assert_eq!(state.message, "\n10 food!");
         let _ = fs::remove_dir_all(dir);
     }
 
@@ -2237,7 +2272,7 @@
         );
 
         assert_eq!(state.equipment_stock[47], 1);
-        assert!(state.message.contains("equipment id 47"));
+        assert_eq!(state.message, format!("\n{}!", equipment_name(47)));
         let _ = fs::remove_dir_all(dir);
     }
 
