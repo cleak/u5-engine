@@ -4845,8 +4845,18 @@ impl PlayState {
     /// tick", and the arm "ends with **exactly one** world tick".
     fn apply_combat_arena_exit(&mut self, actor_slot: usize, class: u8) {
         let name = crate::input_dispatch::combat_actor_display_name(self, actor_slot);
+        // `combat.md §11.1`, "The self-acting arena exit line": "a line
+        // feed, the actor's name, the stored line ` escapes!`, and one
+        // further line feed". The leading feed "is not part of the stored
+        // string. The arm prints it as a single character, before anything
+        // else on the turn", and the cue follows it: "line feed, cue, name,
+        // stored line". As a real feed it leaves a blank row under a closed
+        // row (`text-output.md §10.4`); the line-opening emitter dropped it
+        // there (playtest H03).
+        self.emit_combat_print("\n");
         self.emit_sound_effect(SoundEffect::ActionSnap);
-        self.emit_message_line(format!("{name}{COMBAT_ARENA_EXIT_ESCAPES_LINE}"));
+        self.emit_combat_print(&format!("{name}{COMBAT_ARENA_EXIT_ESCAPES_LINE}"));
+        self.message_row_open_mid_line = false;
         if self.release_combat_actor_slot_negative(actor_slot) {
             self.mark_visibility_dirty();
         }
@@ -8500,6 +8510,23 @@ impl PlayState {
                     monster_attack_inputs,
                 )
             };
+            // `combat.md §14`, "The departure counts toward the side recount
+            // immediately": "the round loop runs the census as soon as the
+            // dispatch returns, before advancing to the next slot ... An
+            // escape by the last hostile therefore arms `VICTORY!` on that
+            // same turn", printed straight after the escape line. Only the
+            // party's command tail took this census, so the line waited for
+            // the next party action (playtest H02). A dispatch that resolved
+            // an attack is left to that tail: its result line is narrated
+            // after the walk returns and must not follow `VICTORY!`.
+            if self.combat_active
+                && ai_turn
+                    .as_ref()
+                    .is_some_and(|turn| turn.monster_attack.is_none())
+                && self.announce_combat_victory_if_needed()
+            {
+                self.emit_combat_print(COMBAT_VICTORY_LINE);
+            }
             CombatActorDispatchAction::MonsterAi { ai_turn }
         };
 

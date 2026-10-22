@@ -149,3 +149,106 @@ fn playtest_h20_a_dividing_monster_prints_divides_before_its_wound_line() {
     }
     assert!(seen, "some seed lands a wounding hit");
 }
+
+/// The Crown-bypass fixture of `combat_audit_g1`: a lone fleeing Wanderer in
+/// the arena's far corner whose first offered axis carries it off the grid.
+fn p4combat_lone_fleeing_hostile_state() -> PlayState {
+    let mut state = combat_ai_turn_state(10, 10);
+    state.combat_actors[8].owner_target_class = 13;
+    state.combat_actors[0].x = 0;
+    state.combat_actors[0].y = 0;
+    state.active_objects[0].x = 0;
+    state.active_objects[0].y = 0;
+    state.active_effect_tag = Some(CROWN_LB_ACTIVE_EFFECT_TAG);
+    state.active_effect_counter = u8::MAX;
+    state
+}
+
+/// `combat.md §11.1`, "The self-acting arena exit line": "a line feed, the
+/// actor's name, the stored line ` escapes!`, and one further line feed",
+/// the leading feed printed "as a single character, before anything else
+/// on the turn". Playtest H03: under an already-closed row (`North`) the
+/// leading feed was swallowed, so no blank row separated them.
+#[test]
+fn playtest_h03_the_escape_line_keeps_its_leading_line_feed() {
+    let mut state = p4combat_lone_fleeing_hostile_state();
+    state.emit_combat_print("North\n");
+    let before = state.message_entries().len();
+
+    let application = state
+        .apply_combat_ai_turn_with_inputs(
+            8,
+            false,
+            0,
+            false,
+            255,
+            255,
+            &[],
+            None,
+            0,
+            false,
+            Some((9, 9)),
+            true,
+            &[1, 2, 3, 4],
+            None,
+        )
+        .unwrap();
+
+    assert_eq!(
+        application.movement,
+        Some(CombatAiMovementOutcome::ArenaExit { direction_code: 2 })
+    );
+    let rows = p4combat_rows_text(&state);
+    assert_eq!(
+        rows[before..],
+        ["".to_string(), "Wanderer escapes!".to_string()],
+        "rows: {rows:?}"
+    );
+    assert!(!state.combat_transcript_row_open);
+}
+
+/// `combat.md §14`, "The departure counts toward the side recount
+/// immediately": "the round loop runs the census as soon as the dispatch
+/// returns, before advancing to the next slot ... An escape by the last
+/// hostile therefore arms `VICTORY!` on that same turn", so "a lone fleeing
+/// hostile against one party member prints the escape line and then the
+/// victory line back to back". Playtest H02: `VICTORY!` waited for the next
+/// party action.
+#[test]
+fn playtest_h02_the_last_hostile_escaping_arms_victory_on_its_own_turn() {
+    let mut state = p4combat_lone_fleeing_hostile_state();
+    let before = state.message_entries().len();
+
+    let application = state.apply_combat_actor_slot_dispatch_with_inputs(
+        8,
+        30,
+        false,
+        0,
+        false,
+        255,
+        255,
+        &[],
+        None,
+        0,
+        false,
+        Some((9, 9)),
+        true,
+        &[1, 2, 3, 4],
+        &[],
+    );
+
+    assert!(matches!(
+        application,
+        CombatActorSlotDispatchApplication::Slot {
+            action: CombatActorDispatchAction::MonsterAi { .. },
+            ..
+        }
+    ));
+    let rows = p4combat_rows_text(&state);
+    let tail: Vec<&str> = rows[before..]
+        .iter()
+        .map(String::as_str)
+        .filter(|row| !row.is_empty())
+        .collect();
+    assert_eq!(tail, ["Wanderer escapes!", "VICTORY!"], "rows: {rows:?}");
+}
