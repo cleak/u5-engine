@@ -4617,6 +4617,9 @@ impl PlayState {
         exit: CombatRoundLoopExit,
         writes_result_line: bool,
     ) -> CombatRoundLoopExitApplication {
+        // A standing-hazard result still held for its actor's output is
+        // printed before the fight's closing lines.
+        self.flush_combat_pending_hazard_lines(None);
         if !writes_result_line {
             // Fall through to the shared tail with the message untouched.
         } else {
@@ -4845,8 +4848,18 @@ impl PlayState {
     /// tick", and the arm "ends with **exactly one** world tick".
     fn apply_combat_arena_exit(&mut self, actor_slot: usize, class: u8) {
         let name = crate::input_dispatch::combat_actor_display_name(self, actor_slot);
+        // `combat.md §11.1`, "The self-acting arena exit line": "a line
+        // feed, the actor's name, the stored line ` escapes!`, and one
+        // further line feed". The leading feed "is not part of the stored
+        // string. The arm prints it as a single character, before anything
+        // else on the turn", and the cue follows it: "line feed, cue, name,
+        // stored line". As a real feed it leaves a blank row under a closed
+        // row (`text-output.md §10.4`); the line-opening emitter dropped it
+        // there (playtest H03).
+        self.emit_combat_print("\n");
         self.emit_sound_effect(SoundEffect::ActionSnap);
-        self.emit_message_line(format!("{name}{COMBAT_ARENA_EXIT_ESCAPES_LINE}"));
+        self.emit_combat_print(&format!("{name}{COMBAT_ARENA_EXIT_ESCAPES_LINE}"));
+        self.message_row_open_mid_line = false;
         if self.release_combat_actor_slot_negative(actor_slot) {
             self.mark_visibility_dirty();
         }
@@ -5130,10 +5143,43 @@ impl PlayState {
             z,
             combat_monster_placement_flags(placement.class),
         )?;
+        // `combat.md §11.1`, census: "`<monster> divides!` inside the
+        // damage handler, and the ordinary result line **still** prints
+        // after it" - `Order, stated once` step 4, after step 3's hit
+        // newline and before step 5's result line. Writing it into the slot
+        // let that result line overwrite it, so the divide was never seen
+        // (playtest H20); it is held for the shared result narrator, which
+        // owns those newlines.
         if let Some(stats) = combat_class_stats(placement.class) {
-            self.message = format!("{} divides!", stats.name);
+            self.flush_unclaimed_combat_divide_line();
+            self.combat_pending_divide_line = Some(format!("{} divides!", stats.name));
         }
         Some(child)
+    }
+
+    /// Print the standing-hazard result lines held for `slot` (every slot
+    /// when `None`): each "with no newline before it at all" (`combat.md
+    /// §11.1`) and closed by its own feed, as every result line is.
+    pub(crate) fn flush_combat_pending_hazard_lines(&mut self, slot: Option<usize>) {
+        let (due, kept): (Vec<_>, Vec<_>) = std::mem::take(&mut self.combat_pending_hazard_lines)
+            .into_iter()
+            .partition(|(line_slot, _)| slot.is_none_or(|slot| slot == *line_slot));
+        self.combat_pending_hazard_lines = kept;
+        for (_, line) in due {
+            self.emit_combat_print(&format!("{line}\n"));
+            self.message_row_open_mid_line = false;
+        }
+    }
+
+    /// Print a `divides!` line that no result narrator claimed, on its own
+    /// row, so a split is never silent (`combat.md §11.1`).
+    pub(crate) fn flush_unclaimed_combat_divide_line(&mut self) {
+        if let Some(line) = self.combat_pending_divide_line.take() {
+            self.emit_message_line(format!("{line}\n"));
+            // The line carries its own closing feed (`combat.md §11.1`:
+            // the result line still prints after it, on the next row).
+            self.message_row_open_mid_line = false;
+        }
     }
 
     /// `combat.md §6.1`, bit `0x80`: "It is the discriminator the
@@ -6263,6 +6309,18 @@ impl PlayState {
         };
         let field_contact =
             self.apply_combat_selected_field_contact_for_actor_position(actor_slot, field)?;
+        // `combat.md §11.1`, "Order, stated once": "the per-turn standing
+        // hazard reuses the same result narrator with **no newline before it
+        // at all**, and with no attacker, so a party target on that tier
+        // always reads the flat `<target> hit!`". The damage landed silently
+        // (playtest H22). The line is held until the actor's own output has
+        // printed - see [`Self::flush_combat_pending_hazard_lines`].
+        if let Some(application) = field_contact.damage_application
+            && let Some(line) =
+                self.combat_spell_narrated_result_line(actor_slot, None, application)
+        {
+            self.combat_pending_hazard_lines.push((actor_slot, line));
+        }
         let middle = tier == Some(CombatHazardTier::Middle);
         Some(CombatPostDispatchContactApplication {
             source,
@@ -6415,7 +6473,13 @@ impl PlayState {
         let narrates_kill = combat_weapon_damage_application_killed(Some(application));
         let gate = resolve_combat_attack_narrator_gate(self.combat_action_result, narrates_kill);
         self.combat_action_result = gate.result_after;
-        if gate.run_generic_chain { line } else { None }
+        let line = if gate.run_generic_chain { line } else { None };
+        // `combat.md §11.1`: a split's `divides!` precedes the result line.
+        match (self.combat_pending_divide_line.take(), line) {
+            (Some(divide), Some(line)) => Some(format!("{divide}\n{line}")),
+            (Some(divide), None) => Some(divide),
+            (None, line) => line,
+        }
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -8234,6 +8298,7 @@ impl PlayState {
         // `combat.md §6.3`: the combat walker clears the entire global
         // action-result scratch before the next actor dispatch.
         self.combat_action_result = 0;
+        self.flush_unclaimed_combat_divide_line();
 
         let actor = self.combat_actors[slot];
         if !combat_actor_is_present_not_dead(actor) {
@@ -8474,6 +8539,23 @@ impl PlayState {
                     monster_attack_inputs,
                 )
             };
+            // `combat.md §14`, "The departure counts toward the side recount
+            // immediately": "the round loop runs the census as soon as the
+            // dispatch returns, before advancing to the next slot ... An
+            // escape by the last hostile therefore arms `VICTORY!` on that
+            // same turn", printed straight after the escape line. Only the
+            // party's command tail took this census, so the line waited for
+            // the next party action (playtest H02). A dispatch that resolved
+            // an attack is left to that tail: its result line is narrated
+            // after the walk returns and must not follow `VICTORY!`.
+            if self.combat_active
+                && ai_turn
+                    .as_ref()
+                    .is_some_and(|turn| turn.monster_attack.is_none())
+                && self.announce_combat_victory_if_needed()
+            {
+                self.emit_combat_print(COMBAT_VICTORY_LINE);
+            }
             CombatActorDispatchAction::MonsterAi { ai_turn }
         };
 
@@ -8485,6 +8567,18 @@ impl PlayState {
             // the note on the player command tail.
             let _ = self.apply_combat_post_dispatch_contact_for_actor_position(slot);
             self.clear_combat_interference_for_completed_action(slot);
+            // A monster attack's result line is narrated after the walk
+            // returns (`append_combat_round_walk_messages`), which prints the
+            // hazard line behind it; every other dispatch has printed all it
+            // will by now.
+            let attack_narration_owed = matches!(
+                &action,
+                CombatActorDispatchAction::MonsterAi { ai_turn: Some(turn) }
+                    if turn.monster_attack.is_some()
+            );
+            if !attack_narration_owed {
+                self.flush_combat_pending_hazard_lines(Some(slot));
+            }
         }
 
         // `combat.md §7`: the recount that "first gives the party

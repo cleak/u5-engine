@@ -1043,7 +1043,15 @@ impl PlayState {
         // the history rather than sitting under `text-output.md §10.4`'s
         // blank - the same shape `emit_combat_command_echo_line` gives the
         // arena banner. One-shot: the row after this echo is ordinary again.
-        let continues_open_row = std::mem::take(&mut self.surface_command_row_follows_history);
+        //
+        // In the arena the same holds for the row the turn banner's own line
+        // feed opened (`combat.md §8.1`): R, U and Y open their world verb
+        // echo there, and must sit where [`Self::emit_combat_command_echo_line`]
+        // puts every other letter's echo - not under a derived blank row that
+        // appeared only after a banner that does not fill its last row
+        // (playtest H32).
+        let continues_open_row = std::mem::take(&mut self.surface_command_row_follows_history)
+            || (self.combat_active && self.combat_prompt_row_opened_by_banner);
         let text = echo.text.to_string();
         let glyphs = ordinary_glyphs_from_engine_text(&text);
         self.append_transcript_entry_on_row(text, glyphs, true, false, false, continues_open_row);

@@ -2179,7 +2179,10 @@ fn world_attack_adjacent_combat_class_object_selects_brit_cbt_arena() {
     );
 
     assert_eq!((state.player.x, state.player.y), (5, 5));
-    assert_eq!(state.turn, 1);
+    // `overworld.md §5` / `combat.md §4`: the attack's turn is spent after
+    // the fight, at the round loop's exit, not before the arena (playtest
+    // H21).
+    assert_eq!(state.turn, 0);
     assert!(state.combat_active);
     assert_eq!(state.pending_combat_terrain_trigger_slot, Some(1));
     // `combat.md §8.1`: the first actor's turn banner follows the entry

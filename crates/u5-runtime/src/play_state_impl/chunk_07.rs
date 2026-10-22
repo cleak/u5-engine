@@ -2508,7 +2508,14 @@ impl PlayState {
                         && !is_whirlpool_object(object)
                         && terrain_combat_base_class(object).is_some()
                     {
-                        self.advance_turn();
+                        // `overworld.md §5`: A-Attack is step 5's dispatch,
+                        // and step 6's per-turn block runs once, after it
+                        // returns. `combat.md §4`: "the only time a fight
+                        // adds is its round-wrap minutes"; the one turn
+                        // advance owed is the round loop's exit
+                        // (`apply_combat_round_loop_exit_inner`). Advancing
+                        // here as well ran the two-minute block - and its
+                        // poison tick - before the arena (playtest H21).
                         let _setup_report = self.enter_terrain_combat_from_world_object(
                             game_dir,
                             plane,

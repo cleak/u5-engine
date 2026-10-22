@@ -337,6 +337,16 @@ pub struct PlayState {
     /// time, ahead of the committed-action tail. The result narrator consumes
     /// it instead of classifying the same hit a second time.
     pub combat_wound_classified_at_hit: Option<usize>,
+    /// `combat.md §11.1`: the `<monster> divides!` line the damage handler
+    /// printed, held until the shared result narrator places it - after the
+    /// hit newline and before the result line ("Order, stated once" steps
+    /// 4 and 5). Any line no narrator claims is printed at the next actor
+    /// dispatch.
+    pub combat_pending_divide_line: Option<String>,
+    /// `combat.md §11.1`: result lines the per-turn standing hazard's shared
+    /// narrator produced, by acting slot, held until that actor's own output
+    /// (its command echo, its attack narration) has printed.
+    pub combat_pending_hazard_lines: Vec<(usize, String)>,
     /// `magic.md §7`: save-backed per-victim source slots used by the C-Cast
     /// interference gate. This state intentionally survives combat boundaries.
     pub combat_interference_sources: [u8; COMBAT_ACTOR_SLOTS],

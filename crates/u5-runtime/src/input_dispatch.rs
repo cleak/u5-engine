@@ -230,6 +230,20 @@ fn next_key_is_a_command(state: &PlayState) -> bool {
         && state.active_blackthorn_guard_demand.is_none()
 }
 
+/// `combat.md §8.1`: "**Short re-prompt, banner not reprinted:** an
+/// unrecognised key (`What?`), the two toggles Ctrl-S and Ctrl-B, and a
+/// refused step or refused climb" - "The handler emits one newline,
+/// refreshes the prompt window ... and reads another key", so the next
+/// echo keeps `text-output.md §10.4`'s derived blank row, as the arena's own
+/// `What?` already did. The toggles and a function key are answered before
+/// the arena's parser sees them, so they mark the short form here (playtest
+/// H24).
+fn mark_combat_short_reprompt(state: &mut PlayState) {
+    if state.combat_active {
+        state.combat_prompt_row_opened_by_banner = false;
+    }
+}
+
 /// Whether a function key arrives at the command prompt rather than at an
 /// open prompt: [`next_key_is_a_command`], and neither the town arrest
 /// prompt nor the combat target cursor is waiting on the key.
@@ -380,6 +394,7 @@ fn handle_play_key_input_inner(
             // where the original draws `?What?` and this engine drew a bare
             // `What?` with no separating row.
             state.emit_command_echo_line(unassigned_refusal_echo(0));
+            mark_combat_short_reprompt(state);
             return Ok(PlayInputDisposition::Continue);
         }
         // `input.md §8`: the free-text reader discards "Any other byte
@@ -587,10 +602,12 @@ fn handle_play_key_input_inner(
     }
     if key == PLAY_TYPEAHEAD_TOGGLE_KEY {
         state.toggle_typeahead_buffer();
+        mark_combat_short_reprompt(state);
         return Ok(PlayInputDisposition::Continue);
     }
     if key == PLAY_MUSIC_TOGGLE_KEY {
         state.toggle_music();
+        mark_combat_short_reprompt(state);
         return Ok(PlayInputDisposition::Continue);
     }
     // `commands.md §9`: the other two shared Control bindings. Neither
@@ -6618,12 +6635,17 @@ fn handle_combat_multistage_command(
             // cleanup and keeps the resident `Push-` echo open for either a
             // direction or Space/Pass.
             state.tick_door_tracker();
-            state.begin_command_echo_for(Command::Push);
             if let Some(direction) = suffix
                 .chars()
                 .find_map(Direction::from_play_key)
                 .filter(|direction| direction.is_cardinal())
             {
+                // `combat.md §8`, the `P` row: "Prints the `Push-` label" -
+                // the surface label even in a dungeon-room arena, whose
+                // `Push` refusal form never runs here (playtest H27).
+                if let Some(echo) = command_echo(Command::Push, CommandEchoMode::Surface) {
+                    state.begin_command_echo(echo);
+                }
                 state.push_combat_actor_direction_after_cleanup(actor_slot, direction);
                 state.prepend_push_direction_result(direction);
                 let _ = apply_combat_committed_action_maintenance(state, actor_slot);
@@ -6653,6 +6675,10 @@ fn handle_combat_multistage_command(
                 // all end-capped - so it has to be logged as a command echo.
                 // Assigning it to the message slot flushed it as ordinary
                 // output, which drew the row one column left of the original.
+                // That echo is the label's only print: `combat.md §8`'s `P`
+                // row prints `Push-` once, and the world dispatcher's verb
+                // echo opened here as well stacked a second `Push-` (or the
+                // dungeon `Push`) row above it (playtest H23/H27).
                 let echo = state.render_active_direction_prompt();
                 state.message.clear();
                 state.emit_combat_command_echo_line(&echo);
@@ -7430,6 +7456,14 @@ fn combat_attack_result_narration(
         CombatWeaponAttackResolution::OutOfRange { .. }
         | CombatWeaponAttackResolution::NoOrdinaryDamage { .. } => (None, None),
     };
+    // `combat.md §11.1`: a split class's `<monster> divides!` is printed
+    // "inside the damage handler, and the ordinary result line **still**
+    // prints after it" - after the damage roll's shatter line, before the
+    // result line (playtest H20).
+    let inside_damage_roll = match (inside_damage_roll, state.combat_pending_divide_line.take()) {
+        (Some(inside), Some(divide)) => Some(format!("{inside}\n{divide}")),
+        (inside, divide) => inside.or(divide),
+    };
     CombatAttackResultNarration {
         inside_damage_roll,
         result,
@@ -7734,12 +7768,14 @@ pub(crate) fn append_combat_round_walk_messages(
         .iter()
         .filter_map(|entry| match entry {
             CombatActorSlotDispatchApplication::Slot {
+                slot,
                 action:
                     CombatActorDispatchAction::MonsterAi {
                         ai_turn: Some(ai_turn),
                     },
                 ..
             } => Some((
+                *slot,
                 ai_turn.monster_attack?,
                 CombatMonsterAttackNarration::SelfActingHostile,
             )),
@@ -7749,14 +7785,17 @@ pub(crate) fn append_combat_round_walk_messages(
     // `combat.md §6.3`: the narrator gate already ran inside each attack's
     // own dispatch, while the shared result field still described that
     // slot; this loop only prints what the gate let through.
-    for (attack, narration) in attacks {
+    for (slot, attack, narration) in attacks {
         if let Some(line) = combat_monster_attack_narrated_result_message(state, attack, narration)
         {
             // `combat.md §11.1`, the order stated once: step 3 is "a newline",
             // step 5 the result line - which carries its own trailing newline.
             state.emit_combat_print(&format!("\n{line}\n"));
         }
+        // The attacker's standing-hazard line follows its attack's result.
+        state.flush_combat_pending_hazard_lines(Some(slot));
     }
+    state.flush_combat_pending_hazard_lines(None);
 }
 
 fn drive_combat_round_walk_and_append_message(state: &mut PlayState) {
@@ -7837,6 +7876,9 @@ fn advance_combat_round_after_actor_and_append_message(state: &mut PlayState, ac
     // its dispatched action. Keep the victim-local interference clear here as
     // a backstop for modal branches that can close without their normal tail.
     state.clear_combat_interference_for_completed_action(actor_slot);
+    // `combat.md §11.1`: the standing hazard's result line follows the
+    // actor's own output, which every caller has printed by now.
+    state.flush_combat_pending_hazard_lines(None);
     state.next_combat_actor_slot = actor_slot.saturating_add(1).min(COMBAT_ACTOR_SLOTS);
     if !state.pace_combat_presentations {
         // A staged beat the action queued - the Shard's `\n\nNo effect!\n`

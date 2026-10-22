@@ -225,7 +225,12 @@
             .apply_combat_weapon_damage_to_target(None, parent_slot, 1, false)
             .unwrap();
 
-        assert_eq!(state.message, "Slime divides!");
+        // `§11.1`: the line is held for the result narrator, which prints it
+        // between the hit newline and the result line (playtest H20).
+        assert_eq!(
+            state.combat_pending_divide_line.as_deref(),
+            Some("Slime divides!")
+        );
         assert!(!state.combat_actors[parent_slot].is_marked_dead());
         let child_slot = (COMBAT_PARTY_ACTOR_SLOTS..COMBAT_ACTOR_SLOTS)
             .find(|slot| *slot != parent_slot && !state.combat_actors[*slot].is_empty())
@@ -262,6 +267,7 @@
             .unwrap();
 
         assert_ne!(state.message, "Slime divides!");
+        assert!(state.combat_pending_divide_line.is_none());
         assert!(
             !(COMBAT_PARTY_ACTOR_SLOTS..COMBAT_ACTOR_SLOTS)
                 .any(|slot| slot != parent_slot && !state.combat_actors[slot].is_empty()),
