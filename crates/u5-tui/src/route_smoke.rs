@@ -2601,7 +2601,9 @@ pub fn route_smoke_cases() -> Vec<RouteSmokeCase> {
             options: world.clone(),
             script: &["C1FGI6,5"],
             expected: RouteSmokeExpectation::World(WorldPlane::Britannia),
-            min_turn: 1,
+            // `combat.md §15`: a combat cast charges no turn of its own
+            // (playtest G08); the same holds for every combat-cast route.
+            min_turn: 0,
             expected_frame_kind: "combat viewport",
         },
         RouteSmokeCase {
@@ -2609,7 +2611,7 @@ pub fn route_smoke_cases() -> Vec<RouteSmokeCase> {
             options: world.clone(),
             script: &["C1GIN6,5"],
             expected: RouteSmokeExpectation::World(WorldPlane::Britannia),
-            min_turn: 1,
+            min_turn: 0,
             expected_frame_kind: "combat viewport",
         },
         RouteSmokeCase {
@@ -2617,7 +2619,7 @@ pub fn route_smoke_cases() -> Vec<RouteSmokeCase> {
             options: world.clone(),
             script: &["C1GIZ6,5"],
             expected: RouteSmokeExpectation::World(WorldPlane::Britannia),
-            min_turn: 1,
+            min_turn: 0,
             expected_frame_kind: "combat viewport",
         },
         RouteSmokeCase {
@@ -2625,7 +2627,7 @@ pub fn route_smoke_cases() -> Vec<RouteSmokeCase> {
             options: world.clone(),
             script: &["C1GIS6,5"],
             expected: RouteSmokeExpectation::World(WorldPlane::Britannia),
-            min_turn: 1,
+            min_turn: 0,
             expected_frame_kind: "combat viewport",
         },
         RouteSmokeCase {
@@ -2633,7 +2635,7 @@ pub fn route_smoke_cases() -> Vec<RouteSmokeCase> {
             options: world.clone(),
             script: &["C1AG6"],
             expected: RouteSmokeExpectation::World(WorldPlane::Britannia),
-            min_turn: 1,
+            min_turn: 0,
             expected_frame_kind: "combat viewport",
         },
         RouteSmokeCase {
@@ -2641,7 +2643,7 @@ pub fn route_smoke_cases() -> Vec<RouteSmokeCase> {
             options: world.clone(),
             script: &["C1AG6"],
             expected: RouteSmokeExpectation::World(WorldPlane::Britannia),
-            min_turn: 1,
+            min_turn: 0,
             expected_frame_kind: "combat viewport",
         },
         RouteSmokeCase {
@@ -2649,7 +2651,7 @@ pub fn route_smoke_cases() -> Vec<RouteSmokeCase> {
             options: world.clone(),
             script: &["C1AY6"],
             expected: RouteSmokeExpectation::World(WorldPlane::Britannia),
-            min_turn: 1,
+            min_turn: 0,
             expected_frame_kind: "combat viewport",
         },
         RouteSmokeCase {
@@ -2657,7 +2659,7 @@ pub fn route_smoke_cases() -> Vec<RouteSmokeCase> {
             options: world.clone(),
             script: &["C1AS6"],
             expected: RouteSmokeExpectation::World(WorldPlane::Britannia),
-            min_turn: 1,
+            min_turn: 0,
             expected_frame_kind: "combat viewport",
         },
         RouteSmokeCase {
@@ -2665,7 +2667,7 @@ pub fn route_smoke_cases() -> Vec<RouteSmokeCase> {
             options: world.clone(),
             script: &["C1AEP6"],
             expected: RouteSmokeExpectation::World(WorldPlane::Britannia),
-            min_turn: 1,
+            min_turn: 0,
             expected_frame_kind: "combat viewport",
         },
         RouteSmokeCase {
@@ -2673,7 +2675,7 @@ pub fn route_smoke_cases() -> Vec<RouteSmokeCase> {
             options: world.clone(),
             script: &["C1EIP6"],
             expected: RouteSmokeExpectation::World(WorldPlane::Britannia),
-            min_turn: 1,
+            min_turn: 0,
             expected_frame_kind: "combat viewport",
         },
         RouteSmokeCase {
@@ -2681,7 +2683,7 @@ pub fn route_smoke_cases() -> Vec<RouteSmokeCase> {
             options: world.clone(),
             script: &["C1GP7"],
             expected: RouteSmokeExpectation::World(WorldPlane::Britannia),
-            min_turn: 1,
+            min_turn: 0,
             expected_frame_kind: "combat viewport",
         },
         RouteSmokeCase {
@@ -2689,7 +2691,7 @@ pub fn route_smoke_cases() -> Vec<RouteSmokeCase> {
             options: world.clone(),
             script: &["C1FV7"],
             expected: RouteSmokeExpectation::World(WorldPlane::Britannia),
-            min_turn: 1,
+            min_turn: 0,
             expected_frame_kind: "combat viewport",
         },
         RouteSmokeCase {
@@ -2697,7 +2699,7 @@ pub fn route_smoke_cases() -> Vec<RouteSmokeCase> {
             options: world.clone(),
             script: &["C1QW"],
             expected: RouteSmokeExpectation::World(WorldPlane::Britannia),
-            min_turn: 1,
+            min_turn: 0,
             expected_frame_kind: "combat viewport",
         },
         RouteSmokeCase {
@@ -2713,7 +2715,7 @@ pub fn route_smoke_cases() -> Vec<RouteSmokeCase> {
             options: world.clone(),
             script: &["C1CIQ"],
             expected: RouteSmokeExpectation::World(WorldPlane::Britannia),
-            min_turn: 1,
+            min_turn: 0,
             expected_frame_kind: "combat viewport",
         },
         RouteSmokeCase {
@@ -2729,7 +2731,7 @@ pub fn route_smoke_cases() -> Vec<RouteSmokeCase> {
             options: world.clone(),
             script: &["C1IPVY"],
             expected: RouteSmokeExpectation::World(WorldPlane::Britannia),
-            min_turn: 1,
+            min_turn: 0,
             expected_frame_kind: "combat viewport",
         },
         RouteSmokeCase {
@@ -2737,7 +2739,7 @@ pub fn route_smoke_cases() -> Vec<RouteSmokeCase> {
             options: world.clone(),
             script: &["C1ACX"],
             expected: RouteSmokeExpectation::World(WorldPlane::Britannia),
-            min_turn: 1,
+            min_turn: 0,
             expected_frame_kind: "combat viewport",
         },
         RouteSmokeCase {
@@ -2745,7 +2747,7 @@ pub fn route_smoke_cases() -> Vec<RouteSmokeCase> {
             options: world.clone(),
             script: &["C1AEX7"],
             expected: RouteSmokeExpectation::World(WorldPlane::Britannia),
-            min_turn: 1,
+            min_turn: 0,
             expected_frame_kind: "combat viewport",
         },
         RouteSmokeCase {
@@ -2753,7 +2755,7 @@ pub fn route_smoke_cases() -> Vec<RouteSmokeCase> {
             options: world.clone(),
             script: &["C1BRX7"],
             expected: RouteSmokeExpectation::World(WorldPlane::Britannia),
-            min_turn: 1,
+            min_turn: 0,
             expected_frame_kind: "combat viewport",
         },
         RouteSmokeCase {
@@ -2761,7 +2763,7 @@ pub fn route_smoke_cases() -> Vec<RouteSmokeCase> {
             options: world.clone(),
             script: &["C1IQX7"],
             expected: RouteSmokeExpectation::World(WorldPlane::Britannia),
-            min_turn: 1,
+            min_turn: 0,
             expected_frame_kind: "combat viewport",
         },
         RouteSmokeCase {
@@ -2769,7 +2771,7 @@ pub fn route_smoke_cases() -> Vec<RouteSmokeCase> {
             options: world.clone(),
             script: &["C1KX"],
             expected: RouteSmokeExpectation::World(WorldPlane::Britannia),
-            min_turn: 1,
+            min_turn: 0,
             expected_frame_kind: "combat viewport",
         },
         RouteSmokeCase {
@@ -2777,7 +2779,7 @@ pub fn route_smoke_cases() -> Vec<RouteSmokeCase> {
             options: world.clone(),
             script: &["C1BIX"],
             expected: RouteSmokeExpectation::World(WorldPlane::Britannia),
-            min_turn: 1,
+            min_turn: 0,
             expected_frame_kind: "combat viewport",
         },
         RouteSmokeCase {
@@ -2785,7 +2787,7 @@ pub fn route_smoke_cases() -> Vec<RouteSmokeCase> {
             options: world.clone(),
             script: &["C1CKX6"],
             expected: RouteSmokeExpectation::World(WorldPlane::Britannia),
-            min_turn: 1,
+            min_turn: 0,
             expected_frame_kind: "combat viewport",
         },
         RouteSmokeCase {
@@ -2793,7 +2795,7 @@ pub fn route_smoke_cases() -> Vec<RouteSmokeCase> {
             options: world.clone(),
             script: &["C1CX7"],
             expected: RouteSmokeExpectation::World(WorldPlane::Britannia),
-            min_turn: 1,
+            min_turn: 0,
             expected_frame_kind: "combat viewport",
         },
         RouteSmokeCase {
@@ -2801,7 +2803,7 @@ pub fn route_smoke_cases() -> Vec<RouteSmokeCase> {
             options: world.clone(),
             script: &["C1CX7"],
             expected: RouteSmokeExpectation::World(WorldPlane::Britannia),
-            min_turn: 1,
+            min_turn: 0,
             expected_frame_kind: "combat viewport",
         },
         RouteSmokeCase {
@@ -2809,7 +2811,7 @@ pub fn route_smoke_cases() -> Vec<RouteSmokeCase> {
             options: world.clone(),
             script: &["C1CX7"],
             expected: RouteSmokeExpectation::World(WorldPlane::Britannia),
-            min_turn: 1,
+            min_turn: 0,
             expected_frame_kind: "combat viewport",
         },
         RouteSmokeCase {
@@ -2959,7 +2961,10 @@ pub fn route_smoke_cases() -> Vec<RouteSmokeCase> {
             },
             script: &["empty", "empty", "empty", "empty", "empty"],
             expected: RouteSmokeExpectation::Dungeon(doom),
-            min_turn: 4,
+            // The room entry is the one exploration turn. Inside the fight
+            // `combat.md §15` adds time only at the round-counter wrap, so
+            // the passes that follow no longer count turns (playtest G08).
+            min_turn: 1,
             expected_frame_kind: "combat viewport",
         },
     ];
@@ -3125,7 +3130,9 @@ fn append_directed_wind_route_smoke_cases(cases: &mut Vec<RouteSmokeCase>, world
             options: world.clone(),
             script,
             expected: RouteSmokeExpectation::World(WorldPlane::Britannia),
-            min_turn: 1,
+            // `combat.md §15`: a combat cast charges no turn of its own;
+            // a fight adds time only at the round-counter wrap (playtest G08).
+            min_turn: 0,
             expected_frame_kind: "combat viewport",
         });
     }
@@ -5737,7 +5744,6 @@ fn validate_combat_spell_route_state(state: &PlayState, case_name: &str) -> io::
         if !state.combat_active
             || state.spell_charges[spell_index] != 0
             || state.party.first().is_none_or(|member| member.mana != 0)
-            || state.turn < 1
             || !target.is_empty()
             || !state.active_objects[COMBAT_PARTY_ACTOR_SLOTS].is_empty()
             || state.active_cast_followup.is_some()
@@ -5755,7 +5761,8 @@ fn validate_combat_spell_route_state(state: &PlayState, case_name: &str) -> io::
     if !state.combat_active
         || state.spell_charges[spell_index] != 0
         || state.party.first().is_none_or(|member| member.mana != 0)
-        || state.turn < 1
+    // No turn test: `combat.md §15` charges a combat cast no turn of its
+    // own (playtest G08).
     {
         return Err(io::Error::other(format!(
             "route smoke `{case_name}` did not spend combat spell resources"
@@ -6390,7 +6397,9 @@ fn validate_route_smoke_case_state(
                 || state.spell_charges[NEGATE_MAGIC_SPELL_INDEX] != 0
                 || state.spell_charges[TIME_STOP_SPELL_INDEX] != 0
                 || state.active_effect_tag != Some(NEGATE_TIME_ACTIVE_EFFECT_TAG)
-                || state.active_effect_counter != TIME_STOP_DURATION
+                // `magic.md §8`: the casting turn's own post-dispatch cleanup
+                // ages the new countdown (playtest G09).
+                || state.active_effect_counter != TIME_STOP_DURATION - 1
                 // `magic.md §5.1`: An Tym takes no generic completion line and
                 // does not acquire the scroll's `Negate time!` banner (R402).
                 || !state.message.is_empty()
@@ -6404,7 +6413,7 @@ fn validate_route_smoke_case_state(
                     state.spell_charges[TIME_STOP_SPELL_INDEX],
                     state.active_effect_tag,
                     state.active_effect_counter,
-                    TIME_STOP_DURATION,
+                    TIME_STOP_DURATION - 1,
                     state.message,
                 )));
             }
