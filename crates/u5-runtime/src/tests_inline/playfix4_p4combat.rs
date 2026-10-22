@@ -289,3 +289,37 @@ fn playtest_h22_standing_in_fire_narrates_the_flat_hit_line() {
     }
     assert!(seen, "some seed lands fire damage");
 }
+
+/// `combat.md §8.1`: "**Short re-prompt, banner not reprinted:** an
+/// unrecognised key (`What?`), the two toggles Ctrl-S and Ctrl-B ... The
+/// handler emits one newline, refreshes the prompt window ... and reads
+/// another key", and `§8.4` gives `Sound Off\n`, `Buffer Off\n` and `What?\n`.
+/// Playtest H24: after Ctrl-S, Ctrl-B or a function key the next prompt sat
+/// on the very next row, where the unmapped `7` leaves a blank row.
+#[test]
+fn playtest_h24_toggles_and_function_keys_take_the_short_re_prompt_blank_row() {
+    let game_dir = std::path::Path::new(".");
+    for key in [
+        PLAY_MUSIC_TOGGLE_KEY,
+        PLAY_TYPEAHEAD_TOGGLE_KEY,
+        char::from(0xC9u8),
+        '7',
+    ] {
+        let mut state = combat_state_after_the_conflict_banner(8, 5);
+        state.active_player = Some(0);
+        state.ensure_pending_combat_player_turn();
+
+        handle_play_key_input(&mut state, key, "", game_dir).unwrap();
+
+        assert_eq!(state.pending_combat_actor_slot, Some(0), "{key:?}");
+        let rows = combat_message_window_rows(&state);
+        let prompt = rows
+            .iter()
+            .rposition(|row| row.starts_with('>'))
+            .expect("the marker row is drawn");
+        assert!(
+            rows[prompt - 1].is_empty(),
+            "{key:?}: the re-prompt keeps its blank row: {rows:?}"
+        );
+    }
+}

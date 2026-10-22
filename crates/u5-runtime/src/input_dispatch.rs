@@ -230,6 +230,20 @@ fn next_key_is_a_command(state: &PlayState) -> bool {
         && state.active_blackthorn_guard_demand.is_none()
 }
 
+/// `combat.md §8.1`: "**Short re-prompt, banner not reprinted:** an
+/// unrecognised key (`What?`), the two toggles Ctrl-S and Ctrl-B, and a
+/// refused step or refused climb" - "The handler emits one newline,
+/// refreshes the prompt window ... and reads another key", so the next
+/// echo keeps `text-output.md §10.4`'s derived blank row, as the arena's own
+/// `What?` already did. The toggles and a function key are answered before
+/// the arena's parser sees them, so they mark the short form here (playtest
+/// H24).
+fn mark_combat_short_reprompt(state: &mut PlayState) {
+    if state.combat_active {
+        state.combat_prompt_row_opened_by_banner = false;
+    }
+}
+
 /// Whether a function key arrives at the command prompt rather than at an
 /// open prompt: [`next_key_is_a_command`], and neither the town arrest
 /// prompt nor the combat target cursor is waiting on the key.
@@ -380,6 +394,7 @@ fn handle_play_key_input_inner(
             // where the original draws `?What?` and this engine drew a bare
             // `What?` with no separating row.
             state.emit_command_echo_line(unassigned_refusal_echo(0));
+            mark_combat_short_reprompt(state);
             return Ok(PlayInputDisposition::Continue);
         }
         // `input.md §8`: the free-text reader discards "Any other byte
@@ -587,10 +602,12 @@ fn handle_play_key_input_inner(
     }
     if key == PLAY_TYPEAHEAD_TOGGLE_KEY {
         state.toggle_typeahead_buffer();
+        mark_combat_short_reprompt(state);
         return Ok(PlayInputDisposition::Continue);
     }
     if key == PLAY_MUSIC_TOGGLE_KEY {
         state.toggle_music();
+        mark_combat_short_reprompt(state);
         return Ok(PlayInputDisposition::Continue);
     }
     // `commands.md §9`: the other two shared Control bindings. Neither
