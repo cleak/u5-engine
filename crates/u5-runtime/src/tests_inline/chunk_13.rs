@@ -26832,6 +26832,8 @@ fn dungeon_command_letters_do_not_fall_through_to_diagonal_movement_refusal() {
         ('Z', PARTY_SELECTION_PROMPT, 0),
     ] {
         let mut state = dungeon_state(open_dungeon_record(), 0, 1, 1);
+        // No stone carried, so U has nothing to list (`inventory.md §4.5`).
+        state.moonstone_slots = [MoonstoneGateSlot { scene: 0, x: 1, y: 1, z: 0 }; MOONSTONE_SLOT_COUNT];
 
         assert!(state.handle_dungeon_key(key, Path::new("")).unwrap());
         assert!(

@@ -1198,34 +1198,38 @@ impl PlayState {
             UseItemRequest::Sceptre,
         );
 
-        if self.current_moonstone_bury_context().is_some() {
-            for index in 0..MOONSTONE_SLOT_COUNT {
-                // `inventory.md §7`: the handler "opens an item picker
-                // over usable carried stock", and the Moonstone row
-                // "records the current valid location into the matching
-                // saved Moonstone slot", while "Search/Get recovery later
-                // invalidates the slot". A slot that still holds a valid
-                // location is therefore a stone lying buried in the world,
-                // not one in the pack, so only an invalidated slot has a
-                // stone to bury. A capture of the original's U-Use picker
-                // at game start - every stone still buried - shows no
-                // Moonstone row at all, which is what this gate
-                // reproduces; the engine used to offer all eight.
-                if self.moonstone_slots[index].is_valid() {
-                    continue;
-                }
-                rows.push(UseItemPickerRow {
-                    // §4.5: "`Moonstone` followed by a space in the text
-                    // font, then one runic phase glyph" - the phase is the
-                    // glyph, not a spelled-out number.
-                    label: Z_STATS_MOONSTONE_LABEL.to_string(),
-                    quantity: None,
-                    decoration: crate::stats_panel::PanelPickerDecoration::Moonstone {
-                        phase: index as u8,
-                    },
-                    request: UseItemRequest::Moonstone(index),
-                });
+        // `inventory.md §4.5`, "Which entries get a row": a row exists
+        // "exactly when its stock value is nonzero ... no usability test
+        // anywhere in the path". A carried stone therefore gets its row in
+        // the dungeon and in combat too, where the bury branch later refuses
+        // it with `cannot be buried here!` (§7.1); the picker used to drop
+        // the rows wherever no bury context existed (playtest H33).
+        for index in 0..MOONSTONE_SLOT_COUNT {
+            // `inventory.md §7`: the handler "opens an item picker
+            // over usable carried stock", and the Moonstone row
+            // "records the current valid location into the matching
+            // saved Moonstone slot", while "Search/Get recovery later
+            // invalidates the slot". A slot that still holds a valid
+            // location is therefore a stone lying buried in the world,
+            // not one in the pack, so only an invalidated slot has a
+            // stone to bury. A capture of the original's U-Use picker
+            // at game start - every stone still buried - shows no
+            // Moonstone row at all, which is what this gate
+            // reproduces; the engine used to offer all eight.
+            if self.moonstone_slots[index].is_valid() {
+                continue;
             }
+            rows.push(UseItemPickerRow {
+                // §4.5: "`Moonstone` followed by a space in the text
+                // font, then one runic phase glyph" - the phase is the
+                // glyph, not a spelled-out number.
+                label: Z_STATS_MOONSTONE_LABEL.to_string(),
+                quantity: None,
+                decoration: crate::stats_panel::PanelPickerDecoration::Moonstone {
+                    phase: index as u8,
+                },
+                request: UseItemRequest::Moonstone(index),
+            });
         }
 
         // `inventory.md §7`, "The picker's row order is the use-item
@@ -2765,6 +2769,12 @@ impl PlayState {
     }
 
     pub fn current_moonstone_bury_context(&self) -> Option<(u8, u8, u8, String)> {
+        // `inventory.md §7`: "dungeon and combat scenes are outside the
+        // band", so a combat arena has no bury context whatever map it was
+        // entered from.
+        if self.combat_active {
+            return None;
+        }
         match self.area {
             Area::World { plane } => Some((
                 0,

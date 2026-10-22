@@ -1428,6 +1428,9 @@
     #[test]
     fn active_use_picker_refuses_when_no_usable_items_are_available() {
         let mut state = dungeon_state(vec![0; DUNGEON_SIDE * DUNGEON_SIDE], 0, 1, 1);
+        // Every stone lies buried, so nothing is carried (`inventory.md
+        // §4.5`: a carried stone would get its row here too).
+        state.moonstone_slots = [MoonstoneGateSlot { scene: 0, x: 1, y: 1, z: 0 }; MOONSTONE_SLOT_COUNT];
 
         assert_eq!(
             handle_play_key_input(&mut state, 'U', "", Path::new("")).unwrap(),

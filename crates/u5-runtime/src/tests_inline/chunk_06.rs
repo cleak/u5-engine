@@ -2921,17 +2921,51 @@
         assert_eq!(state.message, MOONSTONE_BURY_REFUSAL);
 
         let mut dungeon = dungeon_state(open_dungeon_record(), 0, 1, 1);
-        assert!(dungeon.handle_dungeon_key('U', &dir).unwrap());
-        assert_eq!(dungeon.turn, 1);
-        assert_eq!(dungeon.message, USE_NO_USABLE_ITEMS_REFUSAL);
         assert_eq!(
             handle_play_key_input(&mut dungeon, 'U', "1", &dir).unwrap(),
             PlayInputDisposition::Continue
         );
-        assert_eq!(dungeon.turn, 2);
+        assert_eq!(dungeon.turn, 1);
         // `inventory.md §7.1`: the Moonstone branch has exactly one refusal
         // literal, and the dungeon band is a scene outside `0x00..0x20`.
         assert_eq!(dungeon.message, MOONSTONE_BURY_REFUSAL);
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn use_picker_lists_carried_moonstones_in_the_dungeon_and_in_combat() {
+        // Playtest H33: `inventory.md §4.5` gives a carried stone its row
+        // "exactly when its stock value is nonzero ... no usability test
+        // anywhere in the path". The dungeon and combat used to answer
+        // `No usable items!` instead of opening the picker.
+        let dir = debug_game_dir();
+        let mut dungeon = dungeon_state(open_dungeon_record(), 0, 1, 1);
+        assert!(dungeon.moonstone_slots.iter().all(|slot| !slot.is_valid()));
+        assert!(dungeon.handle_dungeon_key('U', &dir).unwrap());
+        assert_ne!(dungeon.message, USE_NO_USABLE_ITEMS_REFUSAL);
+        assert!(dungeon.active_use.is_some());
+        let moonstones = dungeon
+            .use_item_picker_rows()
+            .iter()
+            .filter(|row| matches!(row.request, UseItemRequest::Moonstone(_)))
+            .count();
+        assert_eq!(moonstones, MOONSTONE_SLOT_COUNT);
+
+        // A combat arena is outside the bury band whatever map it was
+        // entered from, so the row is listed and the bury refuses it.
+        let mut grid = open_world_grid();
+        grid[world_cell_index(4, 5)] = 5;
+        let mut arena = britannia_state(grid, 4, 5);
+        arena.combat_active = true;
+        assert!(arena.current_moonstone_bury_context().is_none());
+        assert!(
+            arena
+                .use_item_picker_rows()
+                .iter()
+                .any(|row| matches!(row.request, UseItemRequest::Moonstone(0)))
+        );
+        assert_eq!(arena.use_moonstone_phase(Some(0)), MoveOutcome::Blocked);
+        assert_eq!(arena.moonstone_slots[0], MoonstoneGateSlot::invalid());
         let _ = fs::remove_dir_all(dir);
     }
 
