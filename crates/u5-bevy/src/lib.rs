@@ -493,9 +493,40 @@ struct QueuedSpeakerProgram {
     program: SpeakerProgram,
     audible: bool,
     interruptible: Option<InterruptibleSound>,
-    /// The effect holds the gameplay viewport inverted while it sounds
-    /// ([`SoundEffect::holds_viewport_inversion`]).
-    viewport_flash: bool,
+    /// How far into the program the gameplay viewport turns inverted, held
+    /// until the program ends; see [`viewport_flash_start`].
+    viewport_flash: Option<Duration>,
+}
+
+/// When a program's whole-viewport inversion begins, if it has one.
+///
+/// `rest-and-camp.md §7.1` step 4: the camp apparition's long sting holds it
+/// for the whole sting ([`SoundEffect::holds_viewport_inversion`]).
+///
+/// `audio.md §6`: every shared variant - potion, scroll and spell alike
+/// (`§6.1`) - is "run random rumble; invert the complete EGA/Tandy gameplay
+/// viewport; run the first software envelope; run the second ...; invert the
+/// same viewport again to restore it", and "Sound-disabled play still
+/// executes the rumble, both envelope loops, and both viewport operations".
+/// So the inversion starts where the rumble lead ends and lasts through both
+/// envelopes. The shell used to invert a potion for one host frame and a
+/// scroll not at all (playtest H12).
+fn viewport_flash_start(
+    effect: &SoundEffect,
+    program: &SpeakerProgram,
+    audible: bool,
+) -> Option<Duration> {
+    if effect.holds_viewport_inversion() {
+        return Some(Duration::ZERO);
+    }
+    if !matches!(effect, SoundEffect::SharedVariant { .. }) {
+        return None;
+    }
+    let lead = program
+        .ops
+        .iter()
+        .position(|op| matches!(op, u5_runtime::audio::SpeakerOp::Envelope(_)))?;
+    Some(SpeakerProgram::new(program.ops[..lead].to_vec()).duration(audible))
 }
 
 /// The tag of an interruptible program the voice is sounding, with the
@@ -512,12 +543,14 @@ struct SpeakerVoiceInterruptible {
 #[derive(Component)]
 struct SpeakerVoiceAudible;
 
-/// Marks a voice whose effect holds the whole gameplay viewport inverted for
-/// as long as it sounds: `rest-and-camp.md §7.1` step 4's camp-apparition
-/// flash rides each living member's long sting (u5-spec#299 Q5). Muted, the
-/// voice still lives for the program's own duration, so the flash does too.
+/// Marks a voice whose effect holds the whole gameplay viewport inverted from
+/// the carried offset into the program until it ends: `rest-and-camp.md
+/// §7.1` step 4's camp-apparition flash rides each living member's long sting
+/// (u5-spec#299 Q5), and `audio.md §6`'s shared variants invert after their
+/// rumble lead. Muted, the voice still lives for the program's own duration,
+/// so the flash does too.
 #[derive(Component)]
-struct SpeakerVoiceViewportFlash;
+struct SpeakerVoiceViewportFlash(Duration);
 
 /// How long the voice owns the channel: exactly [`SpeakerProgram::duration`].
 ///
@@ -9948,10 +9981,6 @@ fn play_speaker_effects(
         // `audio.md §3`: muting "changes output, not command or animation
         // cadence", so the program is built - and the jitter stream advanced -
         // for every effect, audible or not.
-        let viewport_flash = matches!(
-            &queued_effect.source,
-            SpeakerSource::Effect(effect) if effect.holds_viewport_inversion()
-        );
         let program = match &queued_effect.source {
             SpeakerSource::Effect(effect) => {
                 debug!(
@@ -9966,6 +9995,12 @@ fn play_speaker_effects(
                 cancel_interruptible_speaker_program(*tag, &mut pending, &voices, &mut cut_voices);
                 continue;
             }
+        };
+        let viewport_flash = match &queued_effect.source {
+            SpeakerSource::Effect(effect) => {
+                viewport_flash_start(effect, &program, queued_effect.audible)
+            }
+            _ => None,
         };
         pending.0.push_back(QueuedSpeakerProgram {
             program,
@@ -10010,8 +10045,8 @@ fn play_speaker_effects(
             audible,
         });
     }
-    if viewport_flash {
-        voice.insert(SpeakerVoiceViewportFlash);
+    if let Some(start) = viewport_flash {
+        voice.insert(SpeakerVoiceViewportFlash(start));
     }
     if !audible {
         return;
@@ -10338,9 +10373,86 @@ struct VisualState {
     /// input loop flushes queued type-ahead after every action, so this emits
     /// at most one fresh direction at a time after an initial hold delay.
     held_direction_repeat: HeldDirectionRepeat,
+    /// `input.md §6`'s "small input queue": keystrokes typed but not yet
+    /// read, oldest first. A key typed while the shell reads nothing - an
+    /// automatic combat turn, a blocking sound, a sleeping party - waits here
+    /// the way the BIOS buffer holds it, and the type-ahead setting decides
+    /// at each read whether the rest survive.
+    typed_keys: std::collections::VecDeque<TypedKey>,
+    /// `audio.md §7.4`: a refused overworld or town step "Prints `Blocked!`,
+    /// beeps, flushes keyboard type-ahead". The flush follows the blocking
+    /// beep, so it waits for the speaker to go idle.
+    flush_typeahead_when_speaker_idle: bool,
     /// The runtime diagnostic serial this shell last forwarded to the
     /// process log; see [`log_runtime_diagnostics`].
     diagnostic_cursor: u64,
+}
+
+/// One keystroke in [`VisualState::typed_keys`], with the modifier state it
+/// was typed under.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct TypedKey {
+    key: KeyCode,
+    shift: bool,
+    control: bool,
+}
+
+/// The keys that went down this frame, **in the order they were typed**.
+///
+/// `ButtonInput::get_just_pressed` is a hash set, so two keys landing in one
+/// host frame came out in hash order and a fast-typed word was scrambled
+/// (playtest H09). `input.md §6` honours queued keystrokes "in order", so the
+/// order comes from the window's ordered `KeyboardInput` stream. A key set on
+/// the `ButtonInput` with no event - a harness pressing it directly - has no
+/// order to keep and follows the evented ones.
+fn keys_pressed_in_typed_order(
+    keyboard: &ButtonInput<KeyCode>,
+    events: Option<&Events<bevy::input::keyboard::KeyboardInput>>,
+    cursor: &mut bevy::ecs::event::EventCursor<bevy::input::keyboard::KeyboardInput>,
+) -> Vec<KeyCode> {
+    let mut ordered = Vec::new();
+    if let Some(events) = events {
+        for event in cursor.read(events) {
+            if event.state == bevy::input::ButtonState::Pressed
+                && keyboard.just_pressed(event.key_code)
+                && !ordered.contains(&event.key_code)
+            {
+                ordered.push(event.key_code);
+            }
+        }
+    }
+    let unevented: Vec<KeyCode> = keyboard
+        .get_just_pressed()
+        .copied()
+        .filter(|key| !ordered.contains(key))
+        .collect();
+    ordered.extend(unevented);
+    ordered
+}
+
+/// `input.md §6`: whether a read in the current state honours the rest of the
+/// queue whatever the player's setting. "The free-text line reader saves the
+/// setting, forces type-ahead on for the duration of a typed line, and
+/// restores it afterwards", and a conversation keeps its keyword reader's
+/// gate cleared for the whole session (`conversation.md`, "Free-text input"),
+/// as the terminal shell's `play_state_free_text_line_reader` has it.
+///
+/// `input.md §8` builds the typed-number readers on the same routine with the
+/// same "Disable the buffer flush" step, so the tavern's provision quantity
+/// and the mixer's honour the queue too, and the spell-name entry is a typed
+/// line.
+fn visual_read_forces_typeahead(state: &PlayState) -> bool {
+    visual_line_prompt_active_ignoring_text_hold(state)
+        || state.active_conversation.is_some()
+        || state.active_cast.is_some()
+        || state.active_cast_followup.is_some()
+        || state.active_mix.is_some()
+        || matches!(
+            state.active_shop.as_ref(),
+            Some(ActiveShopSession::Tavern(
+                TavernState::PickProvisionQuantity { .. }
+            ))
+        )
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -10849,6 +10961,9 @@ struct VisualReturnToViewFrameMeta {
 struct AnimationPump {
     accumulator: f32,
     interval: f32,
+    /// Host time owed to the prompt cursor while a hold owns the loop; see
+    /// [`advance_hold_cursor_phase`].
+    hold_cursor_accumulator: f32,
 }
 
 impl Default for AnimationPump {
@@ -10856,8 +10971,29 @@ impl Default for AnimationPump {
         Self {
             accumulator: 0.0,
             interval: GAMEPLAY_WORLD_TICK_INTERVAL_SECS,
+            hold_cursor_accumulator: 0.0,
         }
     }
+}
+
+/// Advance the prompt cursor's phase while a hold, a staged presentation or
+/// a cinematic owns the loop - at most once per one-tick poll interval.
+///
+/// `input.md §3`: the four-glyph cursor advances one phase per cursor-poll
+/// call, and a no-key call takes "the calibrated one-tick delay"; a frontend
+/// "may schedule these four frames from elapsed time, retaining their order".
+/// These branches stepped it once per host frame - 60 phases a second at
+/// 60 Hz and 144 at 144 Hz - where the idle and prompt waits run the
+/// timer-tick cadence (playtest H19).
+fn advance_hold_cursor_phase(visual: &mut VisualState, pump: &mut AnimationPump, delta: f32) {
+    pump.hold_cursor_accumulator += delta;
+    if pump.hold_cursor_accumulator < GAMEPLAY_WORLD_TICK_INTERVAL_SECS {
+        return;
+    }
+    pump.hold_cursor_accumulator = (pump.hold_cursor_accumulator
+        - GAMEPLAY_WORLD_TICK_INTERVAL_SECS)
+        .min(GAMEPLAY_WORLD_TICK_INTERVAL_SECS - ANIMATION_PUMP_CATCH_UP_EPSILON_SECS);
+    visual.prompt_cursor_frame = visual.prompt_cursor_frame.wrapping_add(1);
 }
 
 #[derive(Resource)]
@@ -11124,7 +11260,7 @@ fn animate_static_tiles(
             .state
             .advance_text_hold_to(real_time.elapsed_secs_f64());
         visual.prompt_cursor_visible = !still_held && visual_line_prompt_active(&visual.state);
-        visual.prompt_cursor_frame = visual.prompt_cursor_frame.wrapping_add(1);
+        advance_hold_cursor_phase(visual.as_mut(), &mut pump, time.delta_secs());
         repaint_visual_frame(&mut visual, &mut images, "text hold");
         pump.accumulator = 0.0;
         return;
@@ -11141,7 +11277,7 @@ fn animate_static_tiles(
             .state
             .advance_staged_narration_to(real_time.elapsed_secs_f64());
         visual.prompt_cursor_visible = false;
-        visual.prompt_cursor_frame = visual.prompt_cursor_frame.wrapping_add(1);
+        advance_hold_cursor_phase(visual.as_mut(), &mut pump, time.delta_secs());
         repaint_visual_frame(&mut visual, &mut images, "staged narration");
         pump.accumulator = 0.0;
         return;
@@ -11161,7 +11297,7 @@ fn animate_static_tiles(
             visual.state.pending_blackthorn_audience_exit = false;
         }
         if visual.state.pending_blackthorn_audience_exit {
-            visual.prompt_cursor_frame = visual.prompt_cursor_frame.wrapping_add(1);
+            advance_hold_cursor_phase(visual.as_mut(), &mut pump, time.delta_secs());
             repaint_visual_frame(&mut visual, &mut images, "audience exit beat");
             pump.accumulator = 0.0;
             return;
@@ -11178,7 +11314,7 @@ fn animate_static_tiles(
             visual.state.pending_shrine_third_mantra = None;
         }
         if visual.state.pending_shrine_third_mantra.is_some() {
-            visual.prompt_cursor_frame = visual.prompt_cursor_frame.wrapping_add(1);
+            advance_hold_cursor_phase(visual.as_mut(), &mut pump, time.delta_secs());
             repaint_visual_frame(&mut visual, &mut images, "shrine third-mantra hold");
             pump.accumulator = 0.0;
             return;
@@ -11196,7 +11332,7 @@ fn animate_static_tiles(
             }
         }
         if visual.state.pending_blackthorn_rescue.is_some() {
-            visual.prompt_cursor_frame = visual.prompt_cursor_frame.wrapping_add(1);
+            advance_hold_cursor_phase(visual.as_mut(), &mut pump, time.delta_secs());
             repaint_visual_frame(&mut visual, &mut images, "rescue cinematic");
             pump.accumulator = 0.0;
             return;
@@ -11253,7 +11389,7 @@ fn animate_static_tiles(
             }
         }
         visual.prompt_cursor_visible = false;
-        visual.prompt_cursor_frame = visual.prompt_cursor_frame.wrapping_add(1);
+        advance_hold_cursor_phase(visual.as_mut(), &mut pump, time.delta_secs());
         pump.accumulator = 0.0;
         advanced = true;
     } else if visual.state.buffered_hold_key_ready() {
@@ -11270,7 +11406,7 @@ fn animate_static_tiles(
                 visual.state.keys_buffered_during_hold.clear();
             }
         }
-        visual.prompt_cursor_frame = visual.prompt_cursor_frame.wrapping_add(1);
+        advance_hold_cursor_phase(visual.as_mut(), &mut pump, time.delta_secs());
         pump.accumulator = 0.0;
         advanced = true;
     }
@@ -11374,6 +11510,9 @@ fn setup(
         rune_font,
     } = bootstrap;
     state.pace_combat_presentations = true;
+    // `commands.md §5.2`: real keystrokes, so `<`, `>` and `.` are unmapped
+    // keys here, not the terminal harness's shortcuts (playtest H18).
+    state.harness_shortcut_keys = false;
 
     let rgba = render_visual_play_frame_with_input(
         &mut state,
@@ -11431,6 +11570,8 @@ fn setup(
         skip_animation_pump_once: false,
         sweep_idle_redraw_pending: false,
         held_direction_repeat: HeldDirectionRepeat::default(),
+        typed_keys: Default::default(),
+        flush_typeahead_when_speaker_idle: false,
         diagnostic_cursor: 0,
     });
     commands.remove_resource::<PendingBootstrap>();
@@ -11485,11 +11626,16 @@ fn setup_intro(
 fn drive_visual_intro(
     mut commands: Commands,
     keyboard: Res<ButtonInput<KeyCode>>,
+    key_events: Option<Res<Events<bevy::input::keyboard::KeyboardInput>>>,
+    mut key_cursor: Local<bevy::ecs::event::EventCursor<bevy::input::keyboard::KeyboardInput>>,
     intro: Option<ResMut<VisualIntroState>>,
     mut images: ResMut<Assets<Image>>,
     mut sprites: Query<&mut Sprite>,
     mut windows: Query<&mut Window>,
 ) {
+    // Read every frame, so the order this frame's keys carry is never mixed
+    // with events left from an earlier one.
+    let keys = keys_pressed_in_typed_order(&keyboard, key_events.as_deref(), &mut key_cursor);
     let Some(mut intro) = intro else {
         return;
     };
@@ -11506,7 +11652,9 @@ fn drive_visual_intro(
         keyboard.pressed(KeyCode::ShiftLeft) || keyboard.pressed(KeyCode::ShiftRight);
     let control_pressed =
         keyboard.pressed(KeyCode::ControlLeft) || keyboard.pressed(KeyCode::ControlRight);
-    for key in keyboard.get_just_pressed() {
+    // `input.md §6`: in typed order, so a character name typed quickly is
+    // not scrambled (playtest H09).
+    for key in &keys {
         if *key == KeyCode::Escape {
             continue;
         }
@@ -11560,6 +11708,9 @@ fn transition_visual_intro_to_gameplay(
     let (mut state, atlas, text_font, rune_font) =
         launch.unwrap_or_else(|err| panic!("Journey Onward launch failed: {err}"));
     state.pace_combat_presentations = true;
+    // `commands.md §5.2`: real keystrokes, so `<`, `>` and `.` are unmapped
+    // keys here, not the terminal harness's shortcuts (playtest H18).
+    state.harness_shortcut_keys = false;
     let image_handle = intro
         .image_handle
         .clone()
@@ -11608,6 +11759,8 @@ fn transition_visual_intro_to_gameplay(
         skip_animation_pump_once: false,
         sweep_idle_redraw_pending: false,
         held_direction_repeat: HeldDirectionRepeat::default(),
+        typed_keys: Default::default(),
+        flush_typeahead_when_speaker_idle: false,
         diagnostic_cursor: 0,
     });
     commands.remove_resource::<VisualIntroState>();
@@ -13347,17 +13500,88 @@ fn log_runtime_diagnostics(visual: Option<ResMut<VisualState>>) {
     }
 }
 
+/// Whether the game is somewhere that reads no key, so what is typed stays in
+/// [`VisualState::typed_keys`] for the next read.
+fn visual_input_blocked(state: &PlayState) -> bool {
+    if state.visibility_sweep.is_some() {
+        // `catalogs/item-list.md §7.2`: the shared spell/potion visibility
+        // sweep - the White potion and X-Ray (*Wis An Ylem*) - "is
+        // synchronous, polls no input, and blocks through all twenty frames",
+        // plus its final ordinary idle redraw.
+        return true;
+    }
+    if !visual_modal_prompt_active(state) {
+        match state.party_capability() {
+            // Readiness only. The shell used to select the first able member
+            // here on every frame, which pinned the `stats-panel.md §4.1`
+            // active-player marker to that row for the whole session and, in
+            // combat, held the `combat.md §7` cursor box on it instead of the
+            // character being prompted.
+            PartyCapability::CanAct { .. } => {}
+            // The animation pump owns these automatic branches at its paced
+            // cadence. Input waits until it makes the roster ready - except
+            // for the one key the rescue cinematic itself is blocked on.
+            //
+            // `blackthorn.md §7` step 19 is "the cinematic's only blocking key
+            // read", and it sits at step 19 of twenty-five: the roster is
+            // still all-Dead there, because the restoration is step 22. So
+            // the party is Defeated at exactly the moment the cinematic needs
+            // a key, and rejecting input here deadlocked it - the cinematic
+            // waited for a key the shell would not deliver, and the window
+            // sat on its last frame forever because nothing else changed.
+            //
+            // That is `cleak/u5-engine#28`. It looked like a hang and is not
+            // one: measured 2026-09-13, both this system and the animation
+            // pump keep ticking to the end of the run.
+            PartyCapability::Sleeping | PartyCapability::Defeated
+                if !state.blackthorn_rescue_awaiting_acknowledgement() =>
+            {
+                return true;
+            }
+            PartyCapability::Sleeping | PartyCapability::Defeated => {}
+        }
+    }
+    // The animation pump presents automatic actors one at a time. Do not let
+    // a queued key become a player action before that walk reaches a ready
+    // party slot.
+    state.combat_active
+        && state.pace_combat_presentations
+        && state.pending_combat_actor_slot.is_none()
+}
+
 fn drive_visual(
     time: Res<Time>,
     keyboard: Res<ButtonInput<KeyCode>>,
+    key_events: Option<Res<Events<bevy::input::keyboard::KeyboardInput>>>,
+    mut key_cursor: Local<bevy::ecs::event::EventCursor<bevy::input::keyboard::KeyboardInput>>,
+    speaker_queue: Option<Res<SpeakerQueue>>,
+    speaker_voices: Query<(), With<SpeakerVoice>>,
     visual: Option<ResMut<VisualState>>,
     mut images: ResMut<Assets<Image>>,
     mut exit: EventWriter<AppExit>,
     mut speaker: EventWriter<SpeakerEffect>,
 ) {
+    // Read every frame, so the order this frame's keys carry is never mixed
+    // with events left from an earlier one.
+    let typed = keys_pressed_in_typed_order(&keyboard, key_events.as_deref(), &mut key_cursor);
     let Some(mut visual) = visual else {
         return;
     };
+    let shift_pressed =
+        keyboard.pressed(KeyCode::ShiftLeft) || keyboard.pressed(KeyCode::ShiftRight);
+    let control_pressed =
+        keyboard.pressed(KeyCode::ControlLeft) || keyboard.pressed(KeyCode::ControlRight);
+    // `input.md §6`: every keystroke is queued, in order, whether or not this
+    // frame reads one. The early returns below used to drop the frame's keys
+    // outright, so a key typed during the automatic combat walk was lost
+    // even with Buffer On (playtest H10).
+    visual
+        .typed_keys
+        .extend(typed.into_iter().map(|key| TypedKey {
+            key,
+            shift: shift_pressed,
+            control: control_pressed,
+        }));
     queue_pending_speaker_effects(&mut visual, &mut speaker);
     if let Some(playback) = visual.potion_flash_restore_pending.take() {
         let v: &mut VisualState = visual.as_mut();
@@ -13389,52 +13613,24 @@ fn drive_visual(
         replace_visual_image_data(&mut images, &v.image_handle, rgba, "potion flash restore");
         return;
     }
-    if visual.state.visibility_sweep.is_some() || visual.sweep_idle_redraw_pending {
-        // `catalogs/item-list.md §7.2`: the shared spell/potion visibility
-        // sweep - the White potion and X-Ray (*Wis An Ylem*) - "is
-        // synchronous, polls no input, and blocks through all twenty frames",
-        // plus its final ordinary idle redraw.
+    // `audio.md §2`: "Most effects own the calling thread until they finish,
+    // so gameplay and command input do not continue underneath them" - and
+    // `§7.2` has the potion "blocking, polls no input". While the one voice
+    // sounds, or effects wait for it, nothing is read; what is typed waits in
+    // the queue. Reading through the sound let a held key pile up ten seconds
+    // of beeps behind a wall, and a key typed during a potion answer `What?`
+    // at once (playtest H11).
+    let speaker_busy = speaker_queue
+        .as_deref()
+        .is_some_and(|queue| !queue.0.is_empty())
+        || !speaker_voices.is_empty();
+    if speaker_busy {
         return;
     }
-    if !visual_modal_prompt_active(&visual.state) {
-        match visual.state.party_capability() {
-            // Readiness only. The shell used to select the first able member
-            // here on every frame, which pinned the `stats-panel.md §4.1`
-            // active-player marker to that row for the whole session and, in
-            // combat, held the `combat.md §7` cursor box on it instead of the
-            // character being prompted.
-            PartyCapability::CanAct { .. } => {}
-            // The animation pump owns these automatic branches at its paced
-            // cadence. Input is rejected until it makes the roster ready -
-            // except for the one key the rescue cinematic itself is blocked
-            // on.
-            //
-            // `blackthorn.md §7` step 19 is "the cinematic's only blocking key
-            // read", and it sits at step 19 of twenty-five: the roster is
-            // still all-Dead there, because the restoration is step 22. So
-            // the party is Defeated at exactly the moment the cinematic needs
-            // a key, and rejecting input here deadlocked it - the cinematic
-            // waited for a key the shell would not deliver, and the window
-            // sat on its last frame forever because nothing else changed.
-            //
-            // That is `cleak/u5-engine#28`. It looked like a hang and is not
-            // one: measured 2026-09-13, both this system and the animation
-            // pump keep ticking to the end of the run.
-            PartyCapability::Sleeping | PartyCapability::Defeated
-                if !visual.state.blackthorn_rescue_awaiting_acknowledgement() =>
-            {
-                return;
-            }
-            PartyCapability::Sleeping | PartyCapability::Defeated => {}
-        }
+    if std::mem::take(&mut visual.flush_typeahead_when_speaker_idle) {
+        visual.typed_keys.clear();
     }
-    if visual.state.combat_active
-        && visual.state.pace_combat_presentations
-        && visual.state.pending_combat_actor_slot.is_none()
-    {
-        // The animation pump presents automatic actors one at a time. Do not
-        // let a queued key become a player action before that walk reaches a
-        // ready party slot.
+    if visual.sweep_idle_redraw_pending || visual_input_blocked(&visual.state) {
         return;
     }
     // A cinematic hold is not returned from here: it polls no keyboard, but
@@ -13442,10 +13638,6 @@ fn drive_visual(
     // buffering happens in the runtime's own dispatcher so every frontend
     // gets it. See `PlayState::keys_buffered_during_hold`.
     let mut handled = false;
-    let shift_pressed =
-        keyboard.pressed(KeyCode::ShiftLeft) || keyboard.pressed(KeyCode::ShiftRight);
-    let control_pressed =
-        keyboard.pressed(KeyCode::ControlLeft) || keyboard.pressed(KeyCode::ControlRight);
     let modal_prompt_active = visual_line_prompt_active(&visual.state)
         || visual_modal_prompt_active(&visual.state)
         || combat_targeting_cursor_owns_keyboard(&visual.state);
@@ -13461,16 +13653,23 @@ fn drive_visual(
         control_pressed,
         modal_prompt_active,
     );
-    for key in keyboard.get_just_pressed() {
-        if visual_line_prompt_active(&visual.state) {
+    while let Some(typed) = visual.typed_keys.pop_front() {
+        // `input.md §6`: "when the flush flag is set, drop all pending
+        // keystrokes after consuming one; when the flag is clear, leave the
+        // queue alone". A hold reads nothing, so a key it buffers is no read.
+        let honours_queue = visual.state.typeahead_buffer_enabled
+            || visual_read_forces_typeahead(&visual.state)
+            || visual.state.cinematic_hold_owns_input();
+        let effects_before = visual.state.sound_effect_serial;
+        let read = if visual_line_prompt_active(&visual.state) {
             let game_dir = visual.game_dir.clone();
             let v: &mut VisualState = visual.as_mut();
             let result = handle_visual_line_key(
                 &mut v.state,
                 &mut v.input_line,
-                *key,
-                shift_pressed,
-                control_pressed,
+                typed.key,
+                typed.shift,
+                typed.control,
                 &game_dir,
             );
             match result {
@@ -13480,43 +13679,67 @@ fn drive_visual(
                 }
                 Ok(Some(PlayInputDisposition::Continue)) => {
                     handled = true;
-                    if visual.state.pending_potion_flash.is_some() {
-                        break;
-                    }
-                    continue;
+                    true
                 }
-                Ok(None) => continue,
+                Ok(None) => false,
                 Err(err) => {
                     // The shell has nowhere else to report a failed asset read; the
                     // original has no equivalent state.
                     visual.state.message = format!("Input error: {err}"); // audit: not a player-facing line
                     handled = true;
-                    continue;
+                    true
                 }
             }
-        }
-        let shift_for_key = shift_pressed && (digit_translation || !is_top_row_digit(*key));
-        let Some(ch) = key_code_to_command_char(*key, shift_for_key, control_pressed) else {
-            continue;
+        } else {
+            let digit_translation = !dungeon_skips_digit_translation(&visual.state);
+            let shift_for_key = typed.shift && (digit_translation || !is_top_row_digit(typed.key));
+            match key_code_to_command_char(typed.key, shift_for_key, typed.control) {
+                None => false,
+                Some(ch) => {
+                    let game_dir = visual.game_dir.clone();
+                    match handle_play_key_input(&mut visual.state, ch, "", &game_dir) {
+                        Ok(PlayInputDisposition::Quit) => {
+                            exit.write(AppExit::Success);
+                            return;
+                        }
+                        Ok(PlayInputDisposition::Continue) => {
+                            handled = true;
+                            true
+                        }
+                        Err(err) => {
+                            // The shell has nowhere else to report a failed asset read; the
+                            // original has no equivalent state.
+                            visual.state.message = format!("Input error: {err}"); // audit: not a player-facing line
+                            handled = true;
+                            true
+                        }
+                    }
+                }
+            }
         };
-        let game_dir = visual.game_dir.clone();
-        match handle_play_key_input(&mut visual.state, ch, "", &game_dir) {
-            Ok(PlayInputDisposition::Quit) => {
-                exit.write(AppExit::Success);
-                return;
+        if read && !honours_queue {
+            visual.typed_keys.clear();
+        }
+        if visual.state.sound_effect_serial != effects_before {
+            // `audio.md §7.4`: the refused overworld or town step flushes
+            // type-ahead after its beep, whatever the setting.
+            if !visual.state.combat_active
+                && visual
+                    .state
+                    .sound_effects_after(effects_before)
+                    .iter()
+                    .any(|effect| matches!(effect, SoundEffect::BlockedStep))
+            {
+                visual.flush_typeahead_when_speaker_idle = true;
             }
-            Ok(PlayInputDisposition::Continue) => {
-                handled = true;
-                if visual.state.pending_potion_flash.is_some() {
-                    break;
-                }
-            }
-            Err(err) => {
-                // The shell has nowhere else to report a failed asset read; the
-                // original has no equivalent state.
-                visual.state.message = format!("Input error: {err}"); // audit: not a player-facing line
-                handled = true;
-            }
+            // The effect owns the thread; the next key waits for it.
+            break;
+        }
+        if visual.state.pending_potion_flash.is_some()
+            || visual.state.visibility_sweep.is_some()
+            || visual_input_blocked(&visual.state)
+        {
+            break;
         }
     }
     if !handled && let Some(ch) = repeat_command {
@@ -13542,25 +13765,14 @@ fn drive_visual(
 
     let v: &mut VisualState = visual.as_mut();
     v.prompt_cursor_visible = visual_line_prompt_active(&v.state);
-    if let Some(playback) = v.state.take_pending_potion_flash() {
-        // `audio.md §7.2` / `catalogs/item-list.md §7.2`: the accepted potion's
-        // blocking presentation is a `§6` shared variant, and the runtime
-        // already recorded it on `sound_effect_serial` when the bottle was
-        // decremented. The shell does not queue a second cue here; that is what
-        // made the potion sound twice.
-        let mut rgba = images
-            .get(&v.image_handle)
-            .and_then(|image| image.data.clone())
-            .expect("potion flash requires the current visual framebuffer");
-        assert!(
-            apply_visual_potion_flash_xor(&mut rgba, playback),
-            "potion flash playfield does not fit the visual framebuffer"
-        );
-        replace_visual_image_data(&mut images, &v.image_handle, rgba, "potion flash inversion");
-        run_potion_flash_soundless_timing(playback);
-        v.potion_flash_restore_pending = Some(playback);
-        return;
-    }
+    // `audio.md §7.2` / `catalogs/item-list.md §7.2`: the accepted potion's
+    // blocking presentation is a `§6` shared variant, and the runtime already
+    // recorded it on `sound_effect_serial` when the bottle was decremented.
+    // Its viewport inversion rides that voice ([`viewport_flash_start`]) for
+    // the length of both envelopes; inverting here as well held it for one
+    // host frame, while a counted busy loop stood in for the envelopes
+    // (playtest H12).
+    let _ = v.state.take_pending_potion_flash();
     let input_line = v.input_line.clone();
     let ctx = PlayFrameContext {
         ibm: &v.text_font,
@@ -13588,15 +13800,20 @@ fn drive_visual(
 /// inversion", since "No paired restoring inversion is issued" and each
 /// world-tick pause repaints every cell. One flash per voice, so flashes
 /// never accumulate.
+///
+/// `audio.md §6`'s shared variants ride the same flag: inverted once the
+/// voice has played its rumble lead, restored when the voice ends.
 fn present_camp_apparition_flash(
     visual: Option<ResMut<VisualState>>,
-    flashing: Query<(), With<SpeakerVoiceViewportFlash>>,
+    flashing: Query<(&SpeakerVoiceViewportFlash, &SpeakerVoiceLifetime)>,
     mut images: ResMut<Assets<Image>>,
 ) {
     let Some(mut visual) = visual else {
         return;
     };
-    let active = !flashing.is_empty();
+    let active = flashing
+        .iter()
+        .any(|(flash, lifetime)| lifetime.0.elapsed() >= flash.0);
     if visual.state.presentation_camp_flash_inverted == active {
         return;
     }
@@ -16946,17 +17163,15 @@ fn render_visual_play_frame_with_input_and_cursor(
     // the flash `magic.md §8`'s window hold waits on. Stock captures
     // (`cast-results` In Xen Mani, `cast-blink-overworld` In Por, 2026-10-17)
     // show the inverted view for most of the hold; this engine drew none.
-    if state.message_window_flash_hold_active()
-        && let Some(playback) = u5_runtime::potion_flash_playback(0)
-    {
-        let _ = apply_visual_potion_flash_xor(&mut rgba, playback);
-    }
+    //
     // `rest-and-camp.md §7.1` step 4 (u5-spec#299 Q5): the camp-apparition
     // flash is "one inversion of the whole gameplay viewport (the square from
     // pixel 8 to pixel 183 on both axes) in the accent pen (slot 1)" -
     // palette index 15 on the sixteen-colour drivers, so every pixel flips,
-    // the same exclusive-or as the shared flash above.
-    if state.presentation_camp_flash_inverted
+    // the same exclusive-or as the shared flash. Its voice flag also carries
+    // the shared variant's own inversion, which a spell's hold already
+    // covers, so the two are one inversion, never a double one.
+    if (state.message_window_flash_hold_active() || state.presentation_camp_flash_inverted)
         && let Some(playback) = u5_runtime::potion_flash_playback(0)
     {
         let _ = apply_visual_potion_flash_xor(&mut rgba, playback);
@@ -18601,11 +18816,16 @@ fn visual_line_prompt_active_ignoring_text_hold(state: &PlayState) -> bool {
             .is_some_and(|session| session.coin_accepted)
         || matches!(
             state.active_shop.as_ref(),
-            Some(
-                ActiveShopSession::Sage(SageState::Prompt { .. })
-                    | ActiveShopSession::Tavern(TavernState::PickProvisionQuantity { .. })
-            )
+            Some(ActiveShopSession::Sage(SageState::Prompt { .. }))
         )
+    // The tavern's provision quantity is not a text line: `shops.md §8.5`
+    // ("Which reader takes the number") and `input.md §8` put it on the
+    // shared two-digit reader - a third digit dropped, Backspace and the west
+    // code each erasing one, "every other key discarded in silence", and the
+    // reader's only output its echo. The runtime runs that reader key by key
+    // on the prompt's own row, so the shell hands it every key. Routed
+    // through this line editor it echoed letters, spaces and a third digit,
+    // and Left did not erase (playtest H14).
 }
 
 fn visual_modal_prompt_active(state: &PlayState) -> bool {
@@ -18757,17 +18977,7 @@ fn handle_visual_line_key(
             let (key, suffix) = match chars.next() {
                 Some(first) => {
                     let mut suffix = chars.collect::<String>();
-                    // The tavern's provision quantity is the shared two-digit
-                    // reader, whose only exit is Return (`shops.md §8.5`), so
-                    // the line editor's Enter is delivered with the digits.
-                    if state.active_shrine.is_some()
-                        || matches!(
-                            state.active_shop.as_ref(),
-                            Some(ActiveShopSession::Tavern(
-                                TavernState::PickProvisionQuantity { .. }
-                            ))
-                        )
-                    {
+                    if state.active_shrine.is_some() {
                         suffix.push('\n');
                     }
                     (first, suffix)
@@ -18803,6 +19013,18 @@ fn handle_visual_line_key(
                 .is_some_and(|session| session.coin_accepted)
             {
                 Some(u5_runtime::WISHING_WELL_WISH_MAX_CHARS)
+            } else if state.active_yell.is_some() {
+                // `commands.md §11`: Yell "accepts up to thirty characters"
+                // (playtest H15).
+                Some(u5_runtime::YELL_INPUT_MAX_LEN)
+            } else if state.active_shrine.is_some() {
+                // `karma.md §12`: the virtue and mantra questions each "read
+                // up to twelve characters" (playtest H15).
+                Some(u5_runtime::SHRINE_MANTRA_INPUT_LIMIT)
+            } else if state.active_shrine_restoration.is_some() {
+                // `karma.md`, the ruined shrine: each of its four answers is
+                // read "up to fifteen characters" (playtest H15).
+                Some(u5_runtime::SHRINE_RESTORATION_INPUT_MAX_LEN)
             } else {
                 None
             };
@@ -18974,6 +19196,11 @@ fn key_code_to_input_byte(key: KeyCode, shift_pressed: bool, control_pressed: bo
         // with `?What?`, and this engine read it as a bare `5`, opened
         // `Set Active Plr:` and answered `Invalid!` for a three-member party.
         Digit5 if numpad_flag => b'%',
+        // The same holds for the `0` key, which that rule never covers: with
+        // Shift held the keyboard sends `)`, an unmapped key and so `What?`
+        // (`commands.md §5.2`), not the `0` that opens Set Active Player
+        // (playtest H17).
+        Digit0 if shift_pressed => b')',
         Digit0 | Numpad0 => b'0',
         Digit1 => b'1',
         Digit2 => b'2',
@@ -19018,6 +19245,21 @@ fn key_code_to_input_byte(key: KeyCode, shift_pressed: bool, control_pressed: bo
                 b'.'
             }
         }
+        // `input.md §4`: printable punctuation is "Regular ASCII" and reaches
+        // the dispatcher, whose answer to an unmapped key is `What?`
+        // (`commands.md §5.2`). These keys used to produce no byte at all, so
+        // the shell said nothing where the original refuses (playtest H16).
+        Slash if shift_pressed => b'?',
+        Slash | NumpadDivide => b'/',
+        Semicolon if shift_pressed => b':',
+        Semicolon => b';',
+        Quote if shift_pressed => b'"',
+        Quote => b'\'',
+        Backquote if shift_pressed => b'~',
+        Backquote => b'`',
+        Backslash if shift_pressed => b'|',
+        Backslash => b'\\',
+        NumpadMultiply => b'*',
         KeyA => line_letter_for_shift(b'a', shift_pressed),
         KeyB => line_letter_for_shift(b'b', shift_pressed),
         KeyC => line_letter_for_shift(b'c', shift_pressed),
@@ -27644,9 +27886,11 @@ mod tests {
     }
 
     #[test]
-    fn visual_line_input_buffers_shop_quantity_until_enter() {
+    fn shop_quantity_keys_reach_the_two_digit_reader_until_enter() {
         // `shops.md §8.C`, "Provision offer": the typed number allows two
-        // digits. (Reagents and guild bundles are Y/N offers, R418.)
+        // digits. (Reagents and guild bundles are Y/N offers, R418.) Playtest
+        // H14: `§8.5` runs it on the shared two-digit reader, so each key goes
+        // to the runtime's own reader, which drops a third digit.
         let mut state = test_state(open_grid(), 1, 1);
         state.gold = 300;
         state.food = 0;
@@ -27658,43 +27902,18 @@ mod tests {
                 entry: Default::default(),
             },
         ));
-        assert!(visual_line_prompt_active(&state));
+        assert!(!visual_line_prompt_active(&state));
 
-        let mut input_line = String::new();
-        handle_visual_line_key(
-            &mut state,
-            &mut input_line,
-            KeyCode::Digit1,
-            false,
-            false,
-            Path::new(""),
-        )
-        .unwrap();
-        handle_visual_line_key(
-            &mut state,
-            &mut input_line,
-            KeyCode::Digit2,
-            false,
-            false,
-            Path::new(""),
-        )
-        .unwrap();
-
-        assert_eq!(input_line, "12");
+        for key in [KeyCode::Digit1, KeyCode::Digit2, KeyCode::Digit3] {
+            let ch = key_code_to_command_char(key, false, false).unwrap();
+            handle_play_key_input(&mut state, ch, "", Path::new("")).unwrap();
+        }
         assert_eq!(state.gold, 300);
         assert_eq!(state.food, 0);
 
-        handle_visual_line_key(
-            &mut state,
-            &mut input_line,
-            KeyCode::Enter,
-            false,
-            false,
-            Path::new(""),
-        )
-        .unwrap();
+        let enter = key_code_to_command_char(KeyCode::Enter, false, false).unwrap();
+        handle_play_key_input(&mut state, enter, "", Path::new("")).unwrap();
 
-        assert!(input_line.is_empty());
         assert_eq!(state.gold, 120);
         assert_eq!(state.food, 300);
     }
@@ -27764,7 +27983,7 @@ mod tests {
     }
 
     #[test]
-    fn visual_line_prompt_active_covers_quantity_shop_states() {
+    fn the_tavern_quantity_reaches_the_two_digit_reader_not_the_line_editor() {
         let mut tavern = test_state(open_grid(), 1, 1);
         tavern.active_shop = Some(ActiveShopSession::Tavern(
             TavernState::PickProvisionQuantity {
@@ -27774,7 +27993,11 @@ mod tests {
                 entry: Default::default(),
             },
         ));
-        assert!(visual_line_prompt_active(&tavern));
+        // Playtest H14: the provision quantity is the shared two-digit reader,
+        // which the runtime runs key by key, not a text line.
+        assert!(!visual_line_prompt_active(&tavern));
+        assert!(visual_modal_prompt_active(&tavern));
+        assert!(visual_read_forces_typeahead(&tavern));
 
         // `shops.md §8.2`: the guild offer is a Y/N confirmation, not a typed
         // quantity (R418).
@@ -30200,6 +30423,8 @@ mod tests {
             skip_animation_pump_once: false,
             sweep_idle_redraw_pending: false,
             held_direction_repeat: HeldDirectionRepeat::default(),
+            typed_keys: Default::default(),
+            flush_typeahead_when_speaker_idle: false,
             diagnostic_cursor: 0,
         });
         app.add_systems(
@@ -30346,6 +30571,29 @@ mod tests {
         assert_eq!(flash_voices(&mut app), 1, "muted, the long sting still flashes");
     }
 
+    /// Playtest H12, `audio.md §6`: every shared variant inverts the whole
+    /// viewport after its rumble lead and restores it after both envelopes,
+    /// muted or not - a scroll's included (`§6.1`, `§7.3`).
+    #[test]
+    fn a_shared_variant_voice_carries_the_viewport_flash_after_its_lead() {
+        for audible in [true, false] {
+            let mut app = speaker_test_app();
+            queue_speaker_effect(&mut app, SoundEffect::SharedVariant { variant: 1 }, audible);
+            let flashes: Vec<(Duration, Duration)> = app
+                .world_mut()
+                .query::<(&SpeakerVoiceViewportFlash, &SpeakerVoiceLifetime)>()
+                .iter(app.world())
+                .map(|(flash, lifetime)| (flash.0, lifetime.0.duration()))
+                .collect();
+            assert_eq!(flashes.len(), 1, "audible={audible}");
+            let (start, total) = flashes[0];
+            let lead = u5_runtime::audio::shared_variant_lead(1, &mut RumbleJitter::default())
+                .duration(audible);
+            assert_eq!(start, lead, "audible={audible}");
+            assert!(start > Duration::ZERO && start < total, "audible={audible}");
+        }
+    }
+
     /// u5-spec#299 Q5, `rest-and-camp.md §7.1` step 4: through the shell's
     /// own systems, the gameplay viewport (pixels 8..=183 on both axes)
     /// stands XOR-inverted in palette index 15 while the long sting sounds,
@@ -30396,6 +30644,8 @@ mod tests {
                 skip_animation_pump_once: false,
                 sweep_idle_redraw_pending: false,
                 held_direction_repeat: HeldDirectionRepeat::default(),
+                typed_keys: Default::default(),
+                flush_typeahead_when_speaker_idle: false,
                 diagnostic_cursor: 0,
             })
             .add_systems(
@@ -30501,5 +30751,524 @@ mod tests {
         assert!(endgame_tableau_phase_viewport(&state) == EndgameViewport::AbsorptionArena);
         state.endgame_absorption_arena = None;
         assert!(endgame_tableau_phase_viewport(&state) == EndgameViewport::Tableau);
+    }
+
+    /// The shell's own gameplay systems over a loaded scene at 60 Hz host
+    /// frames: the keyboard dispatcher, the idle pump, the speaker queue, its
+    /// expiry and the viewport flash. Keys arrive the way the window delivers
+    /// them - one ordered `KeyboardInput` event per press, plus the
+    /// `ButtonInput` state the input plugin derives from those events.
+    #[cfg(feature = "original-asset-tests")]
+    struct VisualShellHarness {
+        app: App,
+        dir: PathBuf,
+    }
+
+    #[cfg(feature = "original-asset-tests")]
+    impl VisualShellHarness {
+        const FRAME: Duration = Duration::from_micros(16_667);
+
+        fn new(label: &str, options: PlayOptions) -> Self {
+            let dir = writable_original_asset_copy(label);
+            let mut state = PlayState::load_scene(&dir, options).unwrap();
+            state.prng_state = 0x1234;
+            state.pace_combat_presentations = true;
+            state.harness_shortcut_keys = false;
+            let mut images = Assets::<Image>::default();
+            let image_handle = images.add(Image::new(
+                Extent3d {
+                    width: VISUAL_PLAY_FRAME_WIDTH,
+                    height: VISUAL_PLAY_FRAME_HEIGHT,
+                    depth_or_array_layers: 1,
+                },
+                TextureDimension::D2,
+                vec![0; (VISUAL_PLAY_FRAME_WIDTH * VISUAL_PLAY_FRAME_HEIGHT * 4) as usize],
+                TextureFormat::Rgba8UnormSrgb,
+                RenderAssetUsages::default(),
+            ));
+            let mut app = App::new();
+            app.insert_resource(Time::<()>::default());
+            app.insert_resource(Time::<bevy::prelude::Real>::default());
+            app.insert_resource(ButtonInput::<KeyCode>::default());
+            app.insert_resource(images);
+            app.insert_resource(AnimationPump::default());
+            app.add_event::<bevy::input::keyboard::KeyboardInput>();
+            app.add_event::<SpeakerEffect>();
+            app.add_event::<AppExit>();
+            app.insert_resource(VisualState {
+                game_dir: dir.clone(),
+                state,
+                atlas: load_tile_atlas(&dir, TileGraphicsDepth::Ega16).unwrap(),
+                image_handle,
+                text_font: load_ibm_ch_font(&dir).unwrap(),
+                rune_font: load_runes_ch_font(&dir).unwrap(),
+                sound_effect_cursor: 0,
+                prompt_cursor_frame: 0,
+                input_line: String::new(),
+                prompt_cursor_visible: false,
+                potion_flash_restore_pending: None,
+                skip_animation_pump_once: false,
+                sweep_idle_redraw_pending: false,
+                held_direction_repeat: HeldDirectionRepeat::default(),
+                typed_keys: Default::default(),
+                flush_typeahead_when_speaker_idle: false,
+                diagnostic_cursor: 0,
+            });
+            app.init_resource::<Assets<VisualSoundWave>>()
+                .init_resource::<SpeakerJitter>()
+                .init_resource::<SpeakerQueue>();
+            app.add_systems(
+                Update,
+                (
+                    drive_visual,
+                    animate_static_tiles,
+                    play_speaker_effects,
+                    expire_speaker_voice,
+                    present_camp_apparition_flash,
+                )
+                    .chain(),
+            );
+            Self { app, dir }
+        }
+
+        fn tick(&mut self) {
+            self.tick_by(Self::FRAME);
+        }
+
+        fn tick_by(&mut self, frame: Duration) {
+            let world = self.app.world_mut();
+            world.resource_mut::<Time>().advance_by(frame);
+            world
+                .resource_mut::<Time<bevy::prelude::Real>>()
+                .update_with_duration(frame);
+            self.app.update();
+            self.app
+                .world_mut()
+                .resource_mut::<ButtonInput<KeyCode>>()
+                .clear();
+        }
+
+        fn ticks(&mut self, frames: usize) {
+            for _ in 0..frames {
+                self.tick();
+            }
+        }
+
+        fn key_event(&mut self, key_code: KeyCode, state: bevy::input::ButtonState) {
+            let world = self.app.world_mut();
+            match state {
+                bevy::input::ButtonState::Pressed => {
+                    world.resource_mut::<ButtonInput<KeyCode>>().press(key_code)
+                }
+                bevy::input::ButtonState::Released => world
+                    .resource_mut::<ButtonInput<KeyCode>>()
+                    .release(key_code),
+            }
+            world.send_event(bevy::input::keyboard::KeyboardInput {
+                key_code,
+                logical_key: bevy::input::keyboard::Key::Unidentified(
+                    bevy::input::keyboard::NativeKey::Unidentified,
+                ),
+                state,
+                text: None,
+                repeat: false,
+                window: Entity::PLACEHOLDER,
+            });
+        }
+
+        /// Press and release `keys`, in this order, inside one host frame.
+        fn press_in_one_frame(&mut self, keys: &[KeyCode]) {
+            for key in keys {
+                self.key_event(*key, bevy::input::ButtonState::Pressed);
+            }
+            self.tick();
+            for key in keys {
+                self.key_event(*key, bevy::input::ButtonState::Released);
+            }
+        }
+
+        fn tap(&mut self, key: KeyCode) {
+            self.press_in_one_frame(&[key]);
+            self.ticks(3);
+        }
+
+        fn tap_with(&mut self, modifier: KeyCode, key: KeyCode) {
+            self.key_event(modifier, bevy::input::ButtonState::Pressed);
+            self.tick();
+            self.press_in_one_frame(&[key]);
+            self.key_event(modifier, bevy::input::ButtonState::Released);
+            self.ticks(3);
+        }
+
+        fn visual(&self) -> &VisualState {
+            self.app.world().resource::<VisualState>()
+        }
+
+        fn visual_mut(&mut self) -> Mut<'_, VisualState> {
+            self.app.world_mut().resource_mut::<VisualState>()
+        }
+
+        fn position(&self) -> (usize, usize) {
+            let player = &self.visual().state.player;
+            (player.x, player.y)
+        }
+
+        fn speaker_busy(&mut self) -> bool {
+            let queued = !self.app.world().resource::<SpeakerQueue>().0.is_empty();
+            let voices = self
+                .app
+                .world_mut()
+                .query_filtered::<Entity, With<SpeakerVoice>>()
+                .iter(self.app.world())
+                .count();
+            queued || voices > 0
+        }
+
+        fn text(&mut self) -> String {
+            let mut visual = self.visual_mut();
+            let line = visual.input_line.clone();
+            let echo = visual_line_prompt_active(&visual.state).then_some(line);
+            visual.state.render_text_window_frame(echo.as_deref())
+        }
+    }
+
+    #[cfg(feature = "original-asset-tests")]
+    impl Drop for VisualShellHarness {
+        fn drop(&mut self) {
+            let _ = fs::remove_dir_all(&self.dir);
+        }
+    }
+
+    #[cfg(feature = "original-asset-tests")]
+    fn britannia_meadow_shell(label: &str) -> VisualShellHarness {
+        VisualShellHarness::new(
+            label,
+            PlayOptions {
+                target: PlayTarget::World(WorldPlane::Britannia),
+                start: Some((86, 105)),
+                clock: u5_runtime::GameClock::new(13, 0).unwrap(),
+                ..PlayOptions::default()
+            },
+        )
+    }
+
+    /// Playtest H15, `input.md §8`: the reader "accepts printable ASCII bytes
+    /// up to the caller-supplied maximum length"; a byte past the cap is
+    /// neither accepted nor echoed. Yell's cap is thirty (`commands.md §11`).
+    #[test]
+    #[cfg(feature = "original-asset-tests")]
+    fn the_yell_line_stops_at_thirty_characters() {
+        let mut shell = britannia_meadow_shell("yell-cap");
+        shell.ticks(60);
+        shell.tap(KeyCode::KeyY);
+        assert!(shell.visual().state.active_yell.is_some());
+        for _ in 0..40 {
+            shell.tap(KeyCode::KeyA);
+        }
+        assert_eq!(
+            shell.visual().input_line,
+            "a".repeat(u5_runtime::YELL_INPUT_MAX_LEN)
+        );
+    }
+
+    /// Playtest H15, `karma.md §12`: the shrine's virtue and mantra prompts
+    /// "read up to twelve characters"; the ruined shrine's answers fifteen.
+    #[test]
+    fn shrine_answers_stop_at_their_published_caps() {
+        let type_into = |state: &mut PlayState, count: usize| {
+            let mut line = String::new();
+            for _ in 0..count {
+                handle_visual_line_key(
+                    state,
+                    &mut line,
+                    KeyCode::KeyH,
+                    false,
+                    false,
+                    Path::new(""),
+                )
+                .unwrap();
+            }
+            line
+        };
+        let mut shrine = test_state(open_grid(), 1, 1);
+        shrine.active_shrine = Some(u5_runtime::ShrineSession::new(ShrineVirtue::Honesty));
+        assert!(visual_line_prompt_active(&shrine));
+        assert_eq!(
+            type_into(&mut shrine, 21).len(),
+            u5_runtime::SHRINE_MANTRA_INPUT_LIMIT
+        );
+    }
+
+    /// Playtest H16, `commands.md §5.2`: "any unmapped key | `What?\n`" -
+    /// printable punctuation included (`input.md §4`). Playtest H17,
+    /// `input.md §5`: the modifier rule covers "digit `1` through `9`", so
+    /// Shift with `0` is the `)` the keyboard sends, not Set Active Player.
+    #[test]
+    fn punctuation_and_shifted_zero_are_ordinary_unmapped_bytes() {
+        use KeyCode::*;
+        for (key, shift, byte) in [
+            (Slash, false, b'/'),
+            (Slash, true, b'?'),
+            (Semicolon, false, b';'),
+            (Semicolon, true, b':'),
+            (Quote, false, b'\''),
+            (Quote, true, b'"'),
+            (Backquote, false, b'`'),
+            (Backslash, false, b'\\'),
+            (NumpadMultiply, false, b'*'),
+            (NumpadDivide, false, b'/'),
+            (Digit0, true, b')'),
+            (Digit0, false, b'0'),
+            (Numpad0, false, b'0'),
+        ] {
+            assert_eq!(
+                key_code_to_input_byte(key, shift, false),
+                Some(byte),
+                "{key:?} shift={shift}"
+            );
+        }
+    }
+
+    /// Playtest H16 and H17 through the shell: in a town, `/` and Shift with
+    /// `0` answer `What?` and open no prompt.
+    #[test]
+    #[cfg(feature = "original-asset-tests")]
+    fn unmapped_punctuation_and_shifted_zero_answer_what_in_town() {
+        for shifted_zero in [false, true] {
+            let mut shell = VisualShellHarness::new(
+                "unmapped-keys",
+                PlayOptions {
+                    target: PlayTarget::Town(Scene::new(0x02).unwrap()),
+                    start: Some((15, 20)),
+                    clock: u5_runtime::GameClock::new(12, 10).unwrap(),
+                    ..PlayOptions::default()
+                },
+            );
+            shell.ticks(60);
+            if shifted_zero {
+                shell.tap_with(KeyCode::ShiftLeft, KeyCode::Digit0);
+            } else {
+                shell.tap(KeyCode::Slash);
+            }
+            let text = shell.text();
+            assert!(
+                text.contains("What?"),
+                "shifted_zero={shifted_zero}:\n{text}"
+            );
+            assert!(shell.visual().state.active_party_selector.is_none());
+            assert!(
+                !text.contains("None!"),
+                "shifted_zero={shifted_zero}:\n{text}"
+            );
+        }
+    }
+
+    /// Playtest H18, `commands.md §5.2`: `K` is the only climb verb and an
+    /// unmapped key answers `What?`. The terminal harness's `<`, `>` and `.`
+    /// shortcuts reached the visual shell through Shift with Comma or Period
+    /// and printed a bare `Not climbable!`, and Period ran a silent idle tick.
+    #[test]
+    #[cfg(feature = "original-asset-tests")]
+    fn angle_brackets_and_period_are_unmapped_keys_in_the_visual_shell() {
+        for (shift, key) in [
+            (true, KeyCode::Comma),
+            (true, KeyCode::Period),
+            (false, KeyCode::Period),
+        ] {
+            let mut shell = britannia_meadow_shell("harness-shortcuts");
+            shell.ticks(60);
+            if shift {
+                shell.tap_with(KeyCode::ShiftLeft, key);
+            } else {
+                shell.tap(key);
+            }
+            let text = shell.text();
+            assert!(text.contains("What?"), "{key:?} shift={shift}:\n{text}");
+            assert!(
+                !text.contains("climbable"),
+                "{key:?} shift={shift}:\n{text}"
+            );
+        }
+    }
+
+    /// Playtest H19, `input.md §3`: the cursor advances one phase per poll,
+    /// and a no-key poll waits the one-tick delay - about 18 phases a second
+    /// - while a conversation's key wait holds the reply, at any host rate.
+    /// It used to advance once per host frame.
+    #[test]
+    #[cfg(feature = "original-asset-tests")]
+    fn the_cursor_keeps_the_poll_cadence_through_a_text_hold() {
+        use u5_runtime::text_hold::TextHoldKind;
+        use u5_runtime::tlk_runner::TlkRenderedText;
+        for (frame, frames_per_second) in [
+            (Duration::from_micros(16_667), 60u32),
+            (Duration::from_micros(6_944), 144),
+        ] {
+            let mut shell = britannia_meadow_shell("hold-cursor");
+            shell.ticks(30);
+            {
+                let mut visual = shell.visual_mut();
+                visual.state.message = "\"Some words".to_string();
+                // The reply's row is open mid-line, set by this caller.
+                visual.state.message_row_open_mid_line = true;
+                visual.state.begin_text_hold(
+                    vec![(TextHoldKind::WaitKey, TlkRenderedText::plain("more\""))],
+                    true,
+                );
+            }
+            let before = shell.visual().prompt_cursor_frame;
+            for _ in 0..frames_per_second {
+                shell.tick_by(frame);
+                assert!(shell.visual().state.text_hold_active());
+            }
+            let phases = shell.visual().prompt_cursor_frame - before;
+            assert!(
+                (17..=19).contains(&phases),
+                "{phases} phases in one second at {frames_per_second} Hz"
+            );
+        }
+    }
+
+    /// Playtest H09, `input.md §6`: queued keystrokes "are honoured in
+    /// order". Two letters landing in one host frame used to reach the Yell
+    /// line in `ButtonInput`'s hash-set order, so `ba` read back `ab`.
+    #[test]
+    #[cfg(feature = "original-asset-tests")]
+    fn keys_typed_in_one_frame_reach_the_line_in_typed_order() {
+        use KeyCode::*;
+        for (keys, expected) in [
+            ([KeyB, KeyA], "ba"),
+            ([KeyA, KeyB], "ab"),
+            ([KeyO, KeyE], "oe"),
+            ([KeyE, KeyO], "eo"),
+            ([KeyH, KeyI], "hi"),
+        ] {
+            let mut shell = britannia_meadow_shell("typed-order");
+            shell.ticks(60);
+            shell.tap(KeyY);
+            assert!(shell.visual().state.active_yell.is_some());
+            shell.press_in_one_frame(&keys);
+            shell.ticks(3);
+            assert_eq!(shell.visual().input_line, expected);
+        }
+    }
+
+    /// Playtest H10, `input.md §6`: with type-ahead off (the default) "the
+    /// queue is emptied on every read" - "drop all pending keystrokes after
+    /// consuming one". Two moves typed in one frame used to both run.
+    #[test]
+    #[cfg(feature = "original-asset-tests")]
+    fn buffer_off_reads_one_of_two_keys_typed_in_one_frame() {
+        let mut shell = britannia_meadow_shell("buffer-off");
+        shell.ticks(60);
+        assert!(!shell.visual().state.typeahead_buffer_enabled);
+        let (x, y) = shell.position();
+        shell.press_in_one_frame(&[KeyCode::ArrowLeft, KeyCode::ArrowUp]);
+        shell.ticks(120);
+        assert_eq!(shell.position(), (x - 1, y));
+        assert!(shell.visual().typed_keys.is_empty());
+    }
+
+    /// Playtest H10, `input.md §6`: with type-ahead on, "keystrokes queued
+    /// during an animation or a long action are honoured in order". The
+    /// second key waits out the first move's sound and then runs.
+    #[test]
+    #[cfg(feature = "original-asset-tests")]
+    fn buffer_on_honours_both_keys_typed_in_one_frame_in_order() {
+        let mut shell = britannia_meadow_shell("buffer-on");
+        shell.ticks(60);
+        shell.tap_with(KeyCode::ControlLeft, KeyCode::KeyB);
+        assert!(shell.visual().state.typeahead_buffer_enabled);
+        let (x, y) = shell.position();
+        shell.press_in_one_frame(&[KeyCode::ArrowLeft, KeyCode::ArrowUp]);
+        shell.ticks(120);
+        assert_eq!(shell.position(), (x - 1, y - 1));
+    }
+
+    /// Playtest H11, `audio.md §2`: "Most effects own the calling thread
+    /// until they finish, so gameplay and command input do not continue
+    /// underneath them". A key typed while the move's sound plays waits for
+    /// it, so the speaker never runs behind the keyboard.
+    #[test]
+    #[cfg(feature = "original-asset-tests")]
+    fn no_key_is_read_while_the_speaker_sounds() {
+        let mut shell = britannia_meadow_shell("speaker-blocks-input");
+        shell.ticks(60);
+        shell.tap_with(KeyCode::ControlLeft, KeyCode::KeyB);
+        let (x, y) = shell.position();
+        shell.press_in_one_frame(&[KeyCode::ArrowLeft]);
+        assert_eq!(shell.position(), (x - 1, y));
+        assert!(shell.speaker_busy(), "the move's sting is sounding");
+        shell.press_in_one_frame(&[KeyCode::ArrowUp]);
+        assert_eq!(shell.position(), (x - 1, y), "read under the sound");
+        for _ in 0..120 {
+            if !shell.speaker_busy() {
+                break;
+            }
+            shell.tick();
+        }
+        shell.ticks(2);
+        assert_eq!(shell.position(), (x - 1, y - 1));
+    }
+
+    /// Playtest H11, `audio.md §7.4`: holding a direction into a wall used to
+    /// queue a beep per typematic repeat - 176 ms of tone every 100 ms - and
+    /// the speaker kept beeping for seconds after the key came up.
+    #[test]
+    #[cfg(feature = "original-asset-tests")]
+    fn a_held_key_into_a_wall_leaves_no_speaker_backlog() {
+        let mut shell = VisualShellHarness::new(
+            "wall-backlog",
+            PlayOptions {
+                target: PlayTarget::Town(Scene::new(0x02).unwrap()),
+                start: Some((15, 20)),
+                clock: u5_runtime::GameClock::new(12, 10).unwrap(),
+                ..PlayOptions::default()
+            },
+        );
+        shell.ticks(60);
+        shell.key_event(KeyCode::ArrowLeft, bevy::input::ButtonState::Pressed);
+        shell.ticks(300);
+        shell.key_event(KeyCode::ArrowLeft, bevy::input::ButtonState::Released);
+        assert!(
+            shell.text().contains("Blocked!"),
+            "the walk reached the wall"
+        );
+        let queued = shell.app.world().resource::<SpeakerQueue>().0.len();
+        assert!(queued <= 1, "{queued} programs still queued at release");
+        // One blocked-step beep is 176 ms; nothing may wait behind it. (The
+        // square's fountain still rumbles on every idle tick, so the voice
+        // itself is not asked to fall silent.)
+        shell.ticks(18);
+        assert!(shell.app.world().resource::<SpeakerQueue>().0.is_empty());
+    }
+
+    /// Playtest H12, `audio.md §6` and `§10.3`: through the shell's own
+    /// systems the wind scroll's variant 1 holds the viewport inverted for
+    /// its two envelopes - about 1.2 s - and the frame is plain once it ends.
+    /// A potion's inversion used to last one host frame, a scroll's none.
+    #[test]
+    #[cfg(feature = "original-asset-tests")]
+    fn a_shared_variant_holds_the_viewport_inverted_through_both_envelopes() {
+        let mut shell = britannia_meadow_shell("shared-variant-flash");
+        shell.ticks(10);
+        shell.app.world_mut().send_event(SpeakerEffect::new(
+            SoundEffect::SharedVariant { variant: 1 },
+            true,
+        ));
+        let mut inverted_frames = 0;
+        for _ in 0..240 {
+            shell.tick();
+            if shell.visual().state.presentation_camp_flash_inverted {
+                inverted_frames += 1;
+            }
+        }
+        let inverted = VisualShellHarness::FRAME * inverted_frames;
+        assert!(
+            inverted >= Duration::from_millis(1_000) && inverted <= Duration::from_millis(1_500),
+            "inverted for {inverted:?}"
+        );
+        assert!(!shell.speaker_busy());
+        assert!(!shell.visual().state.presentation_camp_flash_inverted);
     }
 }

@@ -758,9 +758,9 @@ impl PlayState {
                 }
             }
             'y' => self.start_yell_prompt(),
-            '<' => self.climb(game_dir, ClimbIntent::Up)?,
-            '>' => self.climb(game_dir, ClimbIntent::Down)?,
-            '.' => self.idle_tick(),
+            '<' if self.harness_shortcut_keys => self.climb(game_dir, ClimbIntent::Up)?,
+            '>' if self.harness_shortcut_keys => self.climb(game_dir, ClimbIntent::Down)?,
+            '.' if self.harness_shortcut_keys => self.idle_tick(),
             _ => return Ok(false),
         };
         self.apply_post_turn_effects_after_outcome(turn_before, game_dir, outcome)?;
