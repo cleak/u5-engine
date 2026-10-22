@@ -119,18 +119,24 @@ impl PlayState {
                     // minutes of passes and twelve Space presses.
                     Area::Dungeon { .. } => {}
                 }
-                self.emit_party_sleep_line();
+                self.emit_party_sleep_echo_row();
+                // `time.md §5`: the starvation warning belongs to the same
+                // upkeep pass as the damage, and this turn's pass runs below.
+                // The slot is emptied so its report is a row of its own under
+                // `Zzzzzz...` rather than joined onto the sleep line, and the
+                // town arm goes through the same wrapper as the overworld so
+                // the report is appended on this turn instead of after the
+                // next awake command (playtest H42).
+                self.message.clear();
+                self.message_flushed.clear();
                 let transition = match self.area {
-                    Area::Town { .. } => {
-                        self.apply_town_post_turn_effects_after_turn(turn_before, game_dir)?
-                    }
                     // The same clarified contract requires the full ordinary
                     // no-input tail: environment/transport hooks, party
                     // status/provisions, encounter probe, and the normally
                     // gated active-object walk/prune. `advance_turn` owns the
                     // time/status/object portion; this helper owns the
                     // I/O-bearing underfoot and encounter portion.
-                    Area::World { .. } => {
+                    Area::Town { .. } | Area::World { .. } => {
                         self.apply_top_down_post_turn_effects_after_turn(turn_before, game_dir)?
                     }
                     // `dungeon-mode.md §4`: sleeping repeats without the
@@ -138,6 +144,16 @@ impl PlayState {
                     // loop head's clock.
                     Area::Dungeon { .. } => None,
                 };
+                if transition.is_none() {
+                    self.flush_message_slot();
+                }
+                if self.message.is_empty() {
+                    // Nothing followed the sleep line; the slot keeps it, as
+                    // a printed line, exactly as the echo left it.
+                    self.message = PARTY_SLEEP_LINE.to_string();
+                    self.message_flushed = PARTY_SLEEP_LINE.to_string();
+                }
+                self.finish_party_sleep_row();
                 Ok(ExplorationTurnGateOutcome::Slept { transition })
             }
             PartyCapability::Defeated => {
@@ -193,10 +209,18 @@ impl PlayState {
     /// slot flush skips as already printed, so it showed a single
     /// `Zzzzzz...` under a live command row and looked frozen (`F14`,
     /// `cleak/u5-engine#47`). Each pass is its own emission now.
-    pub(crate) fn emit_party_sleep_line(&mut self) {
+    ///
+    /// This is the marker row; [`Self::finish_party_sleep_row`] leaves the
+    /// cursor on the fresh row under it. The pass's own upkeep report
+    /// (`Starving!`) prints between the two (playtest H42).
+    fn emit_party_sleep_echo_row(&mut self) {
         // Anything the previous turn left in the slot prints above this row.
         self.flush_message_slot();
         self.emit_command_echo_line(PARTY_SLEEP_LINE);
+    }
+
+    /// The end of one sleep pass's rows; see [`Self::emit_party_sleep_echo_row`].
+    fn finish_party_sleep_row(&mut self) {
         // The literal ends with its own line feed (`Zzzzzz...\n`), and the
         // pass then waits with the cursor on the fresh row that feed opened.
         // Measured 2026-10-20 (`asleep-dungeon`, idle beats): the stock

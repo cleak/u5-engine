@@ -551,3 +551,86 @@ fn blackthorn_correct_answer_runs_the_audience_exit_beat() {
     assert!(!state.pending_blackthorn_audience_exit);
     let _ = fs::remove_dir_all(dir);
 }
+
+/// Playtest H39. `input.md §8`: the audience answer is the shared free-text
+/// reader, where Escape "clears the whole current line but does **not**
+/// submit or terminate it; the reader continues until Enter is pressed, and
+/// Enter then submits whatever remains, including an empty buffer". A bare
+/// Escape used to be submitted as a wrong answer, and an empty Return used to
+/// reprint the demand without submitting anything.
+#[test]
+fn blackthorn_answer_prompt_ignores_escape_and_submits_an_empty_return() {
+    let dir = debug_game_dir();
+    let mut state = test_state(open_grid(), 5, 5);
+    push_companions(&mut state, 2);
+    let scene = Scene::new(BLACKTHORN_CAPTIVE_CELL_SCENE).unwrap();
+    state.area = Area::Town { scene, floor: 0 };
+    state.begin_blackthorn_audience_capture(&dir).unwrap();
+    state.submit_blackthorn_audience_answer("", &dir).unwrap();
+    state.submit_blackthorn_audience_answer("", &dir).unwrap();
+    let asking = |state: &PlayState| {
+        state
+            .active_blackthorn
+            .as_ref()
+            .and_then(|challenge| challenge.current_prompt())
+    };
+    assert_eq!(asking(&state).map(|(ordinal, _)| ordinal), Some(0));
+
+    handle_play_key_input(&mut state, '\u{1b}', "", &dir).unwrap();
+    assert_eq!(asking(&state).map(|(ordinal, _)| ordinal), Some(0));
+    assert_eq!(
+        state.active_blackthorn.as_ref().map(|c| c.wrong_count),
+        Some(0)
+    );
+    assert!(!state.message.contains("laughing at me"), "{}", state.message);
+
+    handle_play_key_input(&mut state, '\r', "", &dir).unwrap();
+    assert_eq!(
+        state.active_blackthorn.as_ref().map(|c| c.wrong_count),
+        Some(1)
+    );
+    assert!(
+        state.message.contains("Make not the mistake of laughing at me"),
+        "the empty answer is a wrong answer: {}",
+        state.message
+    );
+    let _ = fs::remove_dir_all(dir);
+}
+
+/// Playtest H40. `blackthorn.md §4.1`, first wrong answer with at least two
+/// nondead members: the threat ends `die!" ` with its row still open, then
+/// "acknowledgement, then `\n\n` before the second ask" (§5: "wait for
+/// acknowledgement; print `\n\n`"). The first feed ends the threat row and
+/// the second leaves one blank row above `"Now tell me,`.
+#[test]
+fn blackthorn_second_ask_sits_under_one_blank_row_after_the_threat() {
+    let dir = debug_game_dir();
+    let mut state = test_state(open_grid(), 5, 5);
+    push_companions(&mut state, 2);
+    let scene = Scene::new(BLACKTHORN_CAPTIVE_CELL_SCENE).unwrap();
+    state.area = Area::Town { scene, floor: 0 };
+    state.begin_blackthorn_audience_capture(&dir).unwrap();
+    state.submit_blackthorn_audience_answer("", &dir).unwrap();
+    state.submit_blackthorn_audience_answer("", &dir).unwrap();
+    state
+        .submit_blackthorn_audience_answer("nonsense", &dir)
+        .unwrap();
+    state.flush_message_slot();
+    state.submit_blackthorn_audience_answer("", &dir).unwrap();
+    state.flush_message_slot();
+
+    let log = message_log_from_entries(state.message_entries(), |text| {
+        Some(text.to_string())
+    });
+    let rows: Vec<String> = log.lines().iter().map(|line| line.text.clone()).collect();
+    let threat = rows
+        .iter()
+        .rposition(|row| row.contains("die!\""))
+        .unwrap_or_else(|| panic!("no threat row in {rows:?}"));
+    assert_eq!(rows[threat + 1].trim(), "", "rows: {rows:?}");
+    assert!(
+        rows[threat + 2].starts_with("\"Now tell me,"),
+        "rows: {rows:?}"
+    );
+    let _ = fs::remove_dir_all(dir);
+}

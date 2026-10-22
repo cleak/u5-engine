@@ -5457,7 +5457,16 @@ impl PlayState {
                         self.open_message_row();
                         format!("\n\n{demand}\n\n{BLACKTHORN_INPUT_PROMPT}")
                     } else {
-                        format!("{demand}\n\n{BLACKTHORN_INPUT_PROMPT}")
+                        // §4.1, first wrong answer: the threat, then
+                        // "acknowledgement, then `\n\n` before the second
+                        // ask" (§5 likewise). The threat ends in an open row
+                        // after `die!" `, so the first feed closes it and the
+                        // second leaves the blank row above `"Now tell me,`
+                        // - the same shape as the preamble above (playtest
+                        // H40).
+                        self.flush_message_slot();
+                        self.open_message_row();
+                        format!("\n\n{demand}\n\n{BLACKTHORN_INPUT_PROMPT}")
                     }
                 }
                 _ => String::new(),
@@ -5468,7 +5477,16 @@ impl PlayState {
         }
 
         let answer = blackthorn_challenge_limited_input(typed);
-        if answer.is_empty() {
+        // `input.md §8`: "Enter then submits whatever remains, including an
+        // empty buffer", so an empty answer at the demand is submitted and
+        // fails the mantra match like any other wrong answer. Only a session
+        // that is not asking anything re-renders its page (playtest H39).
+        if answer.is_empty()
+            && !self
+                .active_blackthorn
+                .as_ref()
+                .is_some_and(|challenge| challenge.current_prompt().is_some())
+        {
             self.message = self.blackthorn_current_prompt_message(game_dir)?;
             return Ok(MoveOutcome::PromptDeclined);
         }
@@ -6718,6 +6736,7 @@ impl PlayState {
                 // body is staged so a paced frontend shows it at the slot's
                 // own step rather than during beat 8.
                 self.stats_panel_hold = Some(self.displayed_stats_panel().clone());
+                let mut not_dead_continues_intoned = true;
                 for slot in 0..self.party.len() {
                     // `audio.md §8.6.2` / R494: one envelope per in-party
                     // slot, in ascending slot order, immediately before that
@@ -6727,6 +6746,17 @@ impl PlayState {
                     ));
                     if self.party[slot].status == b'D' {
                         self.resurrect_party_member_to_hp(slot, 1);
+                    } else if std::mem::take(&mut not_dead_continues_intoned) {
+                        // §7: beat 8 "has **no** trailing line feed, so when
+                        // beat 8a fires the first `Not dead!` runs straight
+                        // on from `intoned.` on the same row" (playtest H48).
+                        // The panel-repaint holds between them print nothing,
+                        // so the row is still the one beat 8 left open.
+                        self.staged_narration.push_secs_on_open_row(
+                            crate::narration::bios_ticks_secs(wait),
+                            crate::blackthorn::BLACKTHORN_RESCUE_NOT_DEAD,
+                        );
+                        wait = 0;
                     } else {
                         self.staged_narration
                             .push_ticks(wait, crate::blackthorn::BLACKTHORN_RESCUE_NOT_DEAD);

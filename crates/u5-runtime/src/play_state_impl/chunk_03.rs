@@ -739,6 +739,13 @@ impl PlayState {
             // it prints first and the row is then stated open.
             self.flush_message_slot();
             self.open_message_row();
+            // A beat with no leading feed runs straight on along that row
+            // rather than starting one of its own - `blackthorn.md §7`'s
+            // first `Not dead!` after beat 8's `intoned.` (playtest H48).
+            if !beat.text.starts_with('\n') {
+                self.emit_message_line_continuing_row(beat.text);
+                return;
+            }
         }
         self.emit_message_line(beat.text);
     }
@@ -1121,9 +1128,17 @@ impl PlayState {
     /// `R`-Ready, the roster picker rather than this prompt, still
     /// prints one. `cleak/u5-spec#223` asks for `commands.md` §5.8's
     /// world-mode rows to carry the same qualification.
+    ///
+    /// `traps.md §2.1` priority 2 applies here as at the container sites:
+    /// "when a single active character is set, that character is returned
+    /// directly and silently", and §2.1 names this the one selection that
+    /// "decides who performs Search, Jimmy, Get, Open, Look and Cast".
+    /// `commands.md §5.8`: an "explicit active-member selection supply their
+    /// own silent overrides". Search's direction form and the dungeon's
+    /// Search and Look used to ask `Player: ` with a member selected
+    /// (playtest H04).
     pub fn acting_member_selection(&self) -> ActingMemberSelection {
-        let statuses: Vec<u8> = self.party.iter().map(|member| member.status).collect();
-        acting_member_scan(&statuses)
+        self.shared_acting_member_selection(false)
     }
 
     /// Open the shared party-member selector. The caller has already
@@ -1392,6 +1407,9 @@ impl PlayState {
             }
             // Committed above, before the generic name echo.
             PartySelectorTarget::DungeonLook { .. } | PartySelectorTarget::DungeonSearch => {}
+            // The rest session reads this selector's keys itself
+            // (`step_active_rest`); the dispatcher never routes it here.
+            PartySelectorTarget::CampWatch => {}
         }
         true
     }
@@ -4315,7 +4333,24 @@ impl PlayState {
             return false;
         };
         let key = z_stats_first_input_key(key, suffix);
-        match z_stats_input_action(key) {
+        let mut action = z_stats_input_action(key);
+        // `inventory.md §4.7`: "On Attributes, Arms and Equipment, Left/Right
+        // also move backward/forward through the cycle. Within a populated
+        // shared inventory list, Left/Right instead scroll its entries;
+        // Up/Down return to the outer page cycle." Every arrow used to turn
+        // the page, so only the unpublished bracket keys could reach the rows
+        // past the first panel (playtest H44).
+        if self
+            .z_stats_inventory_row_count(&session)
+            .is_some_and(|rows| rows > 0)
+        {
+            match u8::try_from(key as u32) {
+                Ok(INPUT_CODE_EAST) => action = ZStatsInputAction::InventoryPageNext,
+                Ok(INPUT_CODE_WEST) => action = ZStatsInputAction::InventoryPagePrevious,
+                _ => {}
+            }
+        }
+        match action {
             ZStatsInputAction::Exit => {
                 // `inventory.md §4.7`: "Leaving the pages prints `Done`"
                 // plus a newline "in the message window." The page
@@ -5201,10 +5236,10 @@ impl PlayState {
                 // (`cleak/u5-spec#202`).
                 // The reagent rows carry a leading space, so they sit one
                 // column right of the moonstone rows on the items page.
-                (count > 0).then(|| format!(" {count}-{}", reagent.z_stats_name()))
+                (count > 0).then(|| z_stats_counted_row(count, reagent.z_stats_name()))
             })
             .collect::<Vec<_>>();
-        append_inventory_rows(lines, rows, session.inventory_cursor);
+        append_wrapped_inventory_rows(lines, rows, session.inventory_cursor);
     }
 
     fn render_z_stats_spell_page(&self, session: &ZStatsSession, lines: &mut Vec<String>) {
@@ -5220,10 +5255,16 @@ impl PlayState {
             .enumerate()
             .filter_map(|(index, count)| {
                 let name = spell_common_name(index).unwrap_or("Unknown Spell");
-                (count > 0).then(|| format!("{} {}: {count}", SPELL_CODES[index], name))
+                // `inventory.md §4.7`: "The party-wide inventory pages use the
+                // same eight-row frame and row renderer as the R-Ready
+                // picker", so a charge is §4.5's counted row - quantity,
+                // selector, name - not an invented `Name: count` (playtest
+                // H43). The label text itself is not published.
+                (count > 0)
+                    .then(|| z_stats_counted_row(count, &format!("{} {}", SPELL_CODES[index], name)))
             })
             .collect::<Vec<_>>();
-        append_inventory_rows(lines, rows, session.inventory_cursor);
+        append_wrapped_inventory_rows(lines, rows, session.inventory_cursor);
     }
 
     fn render_z_stats_special_use_page(&self, session: &ZStatsSession, lines: &mut Vec<String>) {
@@ -5251,27 +5292,28 @@ impl PlayState {
         }
         // Keys, gems, torches and the grapple belong to the counters
         // screen (`§4.7`'s `Equipment` literals), not here; the stock
-        // game's items page does not list them.
-        if self.climbing_gear > 0 {
-            rows.push(format!("Grapple: {}", self.climbing_gear));
-        }
-        for (index, count) in self.special_items.iter().copied().enumerate() {
-            if count > 0 {
-                rows.push(format!("{}: {count}", special_item_name(index)));
+        // game's items page does not list them. §4.5: "Grapple and the
+        // food/gold/ordinary-key/gem/torch counters do not add entries to
+        // this 38-name U-Use family", which is the family this page
+        // catalogues.
+        //
+        // The other thirty entries take §4.5's published labels,
+        // decorations and quantity rule - the same rows the U-Use picker
+        // builds - through §4.7's shared row renderer, rather than the
+        // invented, clipped `Name: count` rows this page used to print
+        // (playtest H43). The carried-moonstone rows are U-Use's own
+        // predicate; this page lists all eight above instead.
+        for row in self.use_item_picker_rows() {
+            if matches!(row.request, UseItemRequest::Moonstone(_)) {
+                continue;
             }
+            let name = row.decoration.decorate(&row.label);
+            rows.push(match row.quantity {
+                Some(count) => z_stats_counted_row(count, &name),
+                None => name,
+            });
         }
-        for (index, count) in self.scroll_stock.iter().copied().enumerate() {
-            if count > 0 {
-                let label = SCROLL_SPELL_LABELS.get(index).copied().unwrap_or("Unknown");
-                rows.push(format!("Scroll {label}: {count}"));
-            }
-        }
-        for (index, count) in self.potion_stock.iter().copied().enumerate() {
-            if count > 0 {
-                rows.push(format!("{}: {count}", potion_inventory_name(index)));
-            }
-        }
-        append_inventory_rows(lines, rows, session.inventory_cursor);
+        append_wrapped_inventory_rows(lines, rows, session.inventory_cursor);
     }
 
     fn render_z_stats_equipment_stock_page(
@@ -5285,10 +5327,20 @@ impl PlayState {
             .copied()
             .enumerate()
             .filter_map(|(index, count)| {
-                (count > 0).then(|| format!("{}: {count}", equipment_name(index)))
+                // `inventory.md §4.7`: this page shares the R-Ready picker's
+                // row renderer, and that picker draws `catalogs/item-list.md`
+                // §5.1.2's short-label row. §4.5 also measures that no
+                // equipment entry ever takes a second display line, even at a
+                // three-digit quantity - which holds for the ten-cell short
+                // labels and not for canonical names such as `Spiked Shield`.
+                let label = crate::EQUIPMENT_SHORT_LABELS
+                    .get(index)
+                    .copied()
+                    .unwrap_or_else(|| equipment_name(index));
+                (count > 0).then(|| z_stats_counted_row(count, label))
             })
             .collect::<Vec<_>>();
-        append_inventory_rows(lines, rows, session.inventory_cursor);
+        append_wrapped_inventory_rows(lines, rows, session.inventory_cursor);
     }
 
     pub fn party_member_display_name(&self, index: usize) -> String {
@@ -7528,6 +7580,105 @@ fn append_inventory_rows(lines: &mut Vec<String>, rows: Vec<String>, cursor: usi
     }
 }
 
+/// One counted row of `inventory.md §4.5`: "the quantity is right-aligned in
+/// a two-cell field in window columns 1 and 2, the selector occupies the next
+/// column, and the name begins in the column after it". A quantity of one
+/// hundred or more takes three cells and is "never clamped".
+///
+/// The Z-stats pages' selector cell is the hyphen of the measured reagent row
+/// `4-Sulfur Ash` (`cleak/u5-spec#202`); §4.7 has all four pages share one
+/// row renderer, so the same cell serves the other three.
+fn z_stats_counted_row(count: u8, name: &str) -> String {
+    format!("{count:>2}-{name}")
+}
+
+/// The display lines one Z-stats inventory entry occupies.
+///
+/// `inventory.md §4.5`: the row renderer "does not clip [a label] at run time
+/// either: the shared word-wrapping printer moves a label that will not fit
+/// the rest of the display line onto the next line", and a row "can legally
+/// emit through window column 15". A row opens at column 1, so fifteen cells
+/// fit; a row that ends exactly on column 15 still costs the page its next
+/// line, because the cursor wraps at the window edge before the padding.
+///
+/// When the label does not fit, "the first display line carries only the
+/// quantity and selector; the label that will not fit is moved off it whole,
+/// and lands on the next display line starting in window column 0", except
+/// that a label containing a space "still breaks at the space": the words
+/// that fit stay after the selector and the rest moves. The quantity and
+/// selector never break, so a counted `Shard/Falsehd` is ` 5-` over
+/// `Shard/Falsehd` - the shape [`crate::stats_panel::PanelPickerRow::lines`]
+/// gives the U-Use picker.
+fn z_stats_entry_lines(row: &str) -> Vec<String> {
+    let width = crate::stats_panel::PANEL_PICKER_ROW_CELLS;
+    let cells = row.chars().count();
+    if cells < width {
+        return vec![row.to_string()];
+    }
+    if cells == width {
+        return vec![row.to_string(), String::new()];
+    }
+    let (prefix, label) = z_stats_split_counted_prefix(row);
+    let mut first = prefix.to_string();
+    let mut used = prefix.chars().count();
+    let mut words = label.split(' ').peekable();
+    let mut placed_any = false;
+    while let Some(word) = words.peek() {
+        let sep = usize::from(placed_any);
+        let need = sep + word.chars().count();
+        if used + need > width {
+            break;
+        }
+        if placed_any {
+            first.push(' ');
+        }
+        first.push_str(word);
+        used += need;
+        placed_any = true;
+        words.next();
+    }
+    let rest = words.collect::<Vec<_>>().join(" ");
+    vec![first, format!("{Z_STATS_WRAPPED_LINE_MARKER}{rest}")]
+}
+
+/// Split a Z-stats row into its counted prefix (quantity and the `-`
+/// selector, from [`z_stats_counted_row`]) and its label. An uncounted row
+/// has an empty prefix.
+fn z_stats_split_counted_prefix(row: &str) -> (&str, &str) {
+    let digits_start = row.len() - row.trim_start_matches(' ').len();
+    let digits = row[digits_start..]
+        .bytes()
+        .take_while(u8::is_ascii_digit)
+        .count();
+    let selector = digits_start + digits;
+    if digits > 0 && row[selector..].starts_with('-') {
+        row.split_at(selector + 1)
+    } else {
+        ("", row)
+    }
+}
+
+/// [`append_inventory_rows`] for the four shared inventory pages, whose
+/// entries can take two display lines. `inventory.md §4.4`: the page is filled
+/// by line, "a page with one wrapped entry shows six entries", and an entry
+/// whose second line would not fit is not started.
+fn append_wrapped_inventory_rows(lines: &mut Vec<String>, rows: Vec<String>, cursor: usize) {
+    if rows.is_empty() {
+        lines.push(Z_STATS_NONE_OWNED_PLACEHOLDER.to_string());
+        return;
+    }
+    let start = cursor.min(z_stats_inventory_last_cursor(rows.len()));
+    let mut placed = Vec::new();
+    for row in rows.iter().skip(start) {
+        let entry = z_stats_entry_lines(row);
+        if placed.len() + entry.len() > crate::stats_panel::PANEL_PICKER_ROWS {
+            break;
+        }
+        placed.extend(entry);
+    }
+    lines.extend(placed);
+}
+
 /// The furthest the row cursor can scan forward on a band with `row_count`
 /// displayable slots.
 ///
@@ -7536,6 +7687,10 @@ fn append_inventory_rows(lines: &mut Vec<String>, rows: Vec<String>, cursor: usi
 /// what happens at the two ends of the band, so the conservative reading is
 /// taken: a scan that finds no further displayable slot leaves the cursor
 /// where it was. Nothing here wraps.
+///
+/// The frame has seven interior rows (`inventory.md §4.4`), not the panel's
+/// eight: stopping one entry short of the end left the band's last entry
+/// unreachable on every list longer than seven (playtest H44).
 fn z_stats_inventory_last_cursor(row_count: usize) -> usize {
-    row_count.saturating_sub(Z_STATS_INVENTORY_PANEL_ROWS)
+    row_count.saturating_sub(crate::stats_panel::PANEL_PICKER_ROWS)
 }

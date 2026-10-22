@@ -12788,6 +12788,7 @@ fn combat_input_dispatch_use_without_items_ends_action_after_refusal() {
     state.special_items.fill(0);
     state.scroll_stock.fill(0);
     state.potion_stock.fill(0);
+    state.moonstone_slots = [MoonstoneGateSlot { scene: 0, x: 1, y: 1, z: 0 }; MOONSTONE_SLOT_COUNT];
     state.area = Area::Dungeon {
         scene: DungeonScene::new(DUNGEON_DOOM_SCENE_BYTE).unwrap(),
         level: 0,

@@ -247,7 +247,7 @@
             state.active_z_stats.as_ref().map(|session| session.page),
             Some(ZStatsPage::Spells)
         );
-        assert!(z_stats_panel_text(&state).contains("IL Light: 2"));
+        assert!(z_stats_panel_text(&state).contains(" 2-IL Light"));
         // No page counter, and none of the forty-seven zero-charge slots.
         assert!(
             !z_stats_panel_text(&state).contains("Rows"),
@@ -260,7 +260,7 @@
         // One displayable slot, so a forward scan finds no next non-zero slot
         // and the band stays where it is.
         assert!(state.step_active_z_stats(']', ""));
-        assert!(z_stats_panel_text(&state).contains("IL Light: 2"));
+        assert!(z_stats_panel_text(&state).contains(" 2-IL Light"));
         assert!(!z_stats_panel_text(&state).contains("Rows"));
 
         // Ten displayable slots on a forty-eight-slot band: the panel holds
@@ -269,48 +269,48 @@
         for index in 1..10 {
             state.spell_charges[index] = 1;
         }
-        let rows: Vec<String> = (0..10)
-            .map(|index| {
-                format!(
-                    "{} {}: {}",
-                    SPELL_CODES[index],
-                    spell_common_name(index).unwrap(),
-                    if index == 0 { 2 } else { 1 }
-                )
+        // `inventory.md §4.7`/§4.5 (playtest H43): each slot is the shared
+        // counted row - quantity, selector, label - and a label that does not
+        // fit wraps, so an entry is recognised by its first display line.
+        let shows = |state: &PlayState, index: usize| {
+            let count = if index == 0 { 2 } else { 1 };
+            let head = format!("{count:>2}-{}", SPELL_CODES[index]);
+            let session = state.active_z_stats.clone().unwrap();
+            state.z_stats_panel_rows(&session).iter().any(|row| {
+                row.strip_prefix(&head)
+                    .is_some_and(|rest| rest.is_empty() || rest.starts_with(' '))
             })
-            .collect();
+        };
 
         assert!(state.step_active_z_stats('Z', ""));
-        assert!(z_stats_panel_text(&state).contains(&rows[0]));
-        assert!(z_stats_panel_text(&state).contains(&rows[7]));
-        assert!(!z_stats_panel_text(&state).contains(&rows[8]));
+        assert!(shows(&state, 0));
+        assert!(!shows(&state, 9));
 
         assert!(state.step_active_z_stats(']', ""));
         assert!(
-            !z_stats_panel_text(&state).contains(&rows[0]),
+            !shows(&state, 0),
             "one forward scan should drop exactly the first slot: {:?}",
             z_stats_panel_text(&state)
         );
-        assert!(z_stats_panel_text(&state).contains(&rows[1]));
-        assert!(z_stats_panel_text(&state).contains(&rows[8]));
-        assert!(!z_stats_panel_text(&state).contains(&rows[9]));
+        assert!(shows(&state, 1));
 
         assert!(state.step_active_z_stats(']', ""));
-        assert!(z_stats_panel_text(&state).contains(&rows[2]));
-        assert!(z_stats_panel_text(&state).contains(&rows[9]));
-        assert!(!z_stats_panel_text(&state).contains(&rows[1]));
+        assert!(shows(&state, 2));
+        assert!(!shows(&state, 1));
 
         // §4.7 publishes the scan but not what happens past the end of a
         // band; the engine's conservative reading is that a scan with no
         // further non-zero slot leaves the cursor alone, and in particular
-        // never wraps back to the top of the band.
+        // never wraps back to the top of the band. Ten slots on a
+        // seven-row frame: the cursor stops at the fourth.
         assert!(state.step_active_z_stats(']', ""));
-        assert!(z_stats_panel_text(&state).contains(&rows[9]));
-        assert!(!z_stats_panel_text(&state).contains(&rows[1]));
+        assert!(shows(&state, 3));
+        assert!(state.step_active_z_stats(']', ""));
+        assert!(shows(&state, 3));
+        assert!(!shows(&state, 2));
 
         assert!(state.step_active_z_stats('[', ""));
-        assert!(z_stats_panel_text(&state).contains(&rows[1]));
-        assert!(!z_stats_panel_text(&state).contains(&rows[9]));
+        assert!(shows(&state, 2));
 
         assert!(state.step_active_z_stats('>', ""));
         assert_eq!(
@@ -331,8 +331,8 @@
 
         assert!(state.step_active_z_stats('>', ""));
         assert!(z_stats_panel_text(&state).contains(&format!(
-            "{}: 2",
-            equipment_name(EQUIPMENT_ID_BOW)
+            " 2-{}",
+            EQUIPMENT_SHORT_LABELS[EQUIPMENT_ID_BOW]
         )));
         assert!(!z_stats_panel_text(&state).contains(equipment_name(EQUIPMENT_ID_CROSSBOW)));
     }
@@ -1428,6 +1428,9 @@
     #[test]
     fn active_use_picker_refuses_when_no_usable_items_are_available() {
         let mut state = dungeon_state(vec![0; DUNGEON_SIDE * DUNGEON_SIDE], 0, 1, 1);
+        // Every stone lies buried, so nothing is carried (`inventory.md
+        // §4.5`: a carried stone would get its row here too).
+        state.moonstone_slots = [MoonstoneGateSlot { scene: 0, x: 1, y: 1, z: 0 }; MOONSTONE_SLOT_COUNT];
 
         assert_eq!(
             handle_play_key_input(&mut state, 'U', "", Path::new("")).unwrap(),
@@ -5571,4 +5574,118 @@ fn the_combat_active_player_digit_answers_with_its_published_three_forms() {
     // The label carries its own feed, so every answer lands on the row
     // beneath it rather than beside it.
     assert!(COMBAT_SET_ACTIVE_PLAYER_LABEL.ends_with('\n'));
+}
+
+fn z_stats_page_rows_for_test(state: &PlayState) -> Vec<String> {
+    let session = state
+        .active_z_stats
+        .clone()
+        .expect("a live Z-stats page to read");
+    state.z_stats_panel_rows(&session)
+}
+
+fn open_z_stats_page_for_test(state: &mut PlayState, page: ZStatsPage) {
+    assert_eq!(state.z_stats(), MoveOutcome::Observed);
+    for _ in 0..12 {
+        if state.active_z_stats.as_ref().map(|session| session.page) == Some(page) {
+            return;
+        }
+        assert!(state.step_active_z_stats('>', ""));
+    }
+    panic!("never reached {page:?}");
+}
+
+/// Playtest H43. `inventory.md §4.7`: "The party-wide inventory pages use the
+/// same eight-row frame and row renderer as the R-Ready picker", and §4.5's
+/// counted row is `[quantity][one-cell selector][name]`, which "does not clip
+/// one at run time either": a label that will not fit wraps onto the next
+/// line. The Spells, Items and Armaments pages printed `Name: count` rows the
+/// painter clipped at the frame edge.
+#[test]
+fn z_stats_shared_inventory_pages_use_the_counted_picker_row_and_wrap_long_labels() {
+    let mut state = test_state(open_grid(), 1, 1);
+    state.spell_charges = [0; SPELL_COUNT];
+    state.spell_charges[IN_LOR_SPELL_INDEX] = 99;
+    open_z_stats_page_for_test(&mut state, ZStatsPage::Spells);
+    let rows = z_stats_page_rows_for_test(&state);
+    assert_eq!(rows[0], "99-IL Light", "rows: {rows:?}");
+
+    let helm = EQUIPMENT_NAMES.iter().position(|name| *name == "Leather Helm").unwrap();
+    let shield = EQUIPMENT_NAMES.iter().position(|name| *name == "Spiked Shield").unwrap();
+    state.equipment_stock = [0; EQUIPMENT_COUNT];
+    state.equipment_stock[helm] = 9;
+    state.equipment_stock[shield] = 9;
+    open_z_stats_page_for_test(&mut state, ZStatsPage::EquipmentStock);
+    let rows = z_stats_page_rows_for_test(&state);
+    // The R-Ready picker's short-label row (`catalogs/item-list.md`
+    // §5.1.2), which §4.5 measures as never taking a second display line.
+    let (first, second) = if helm < shield { (0, 1) } else { (1, 0) };
+    assert_eq!(rows[first], " 9-Leath Helm", "rows: {rows:?}");
+    assert_eq!(rows[second], " 9-Spkd. Shld", "rows: {rows:?}");
+    state.equipment_stock[shield] = 200;
+    let rows = z_stats_page_rows_for_test(&state);
+    assert_eq!(rows[second], "200-Spkd. Shld", "rows: {rows:?}");
+    assert_eq!(rows[first], " 9-Leath Helm", "rows: {rows:?}");
+    assert!(
+        !rows.iter().any(|row| row.starts_with(Z_STATS_WRAPPED_LINE_MARKER)),
+        "no equipment entry wraps: {rows:?}"
+    );
+
+    state.special_items[SPECIAL_ITEM_SEXTANT_INDEX] = 255;
+    state.potion_stock[POTION_BLUE_INDEX] = 4;
+    open_z_stats_page_for_test(&mut state, ZStatsPage::SpecialUse);
+    // The eight Moonstones head the page; scan past them.
+    state.active_z_stats.as_mut().unwrap().inventory_cursor = MOONSTONE_SLOT_COUNT;
+    let rows = z_stats_page_rows_for_test(&state);
+    assert!(rows.iter().any(|row| row == "Sextant"), "rows: {rows:?}");
+
+    // §4.5, a counted `Shard/Falsehd`: "two quantity cells and the selector
+    // on the first display line; the thirteen-cell label" on the second,
+    // which opens at window column 0. The quantity's leading space is not a
+    // break point.
+    state.special_items[SPECIAL_ITEM_SHARD_FALSEHOOD_INDEX] = 5;
+    let rows = z_stats_page_rows_for_test(&state);
+    let head = rows
+        .iter()
+        .position(|row| row == " 5-")
+        .unwrap_or_else(|| panic!("no bare counted head: {rows:?}"));
+    assert_eq!(
+        rows[head + 1],
+        format!("{Z_STATS_WRAPPED_LINE_MARKER}Shard/Falsehd"),
+        "rows: {rows:?}"
+    );
+    assert!(
+        !rows.iter().any(|row| row.contains(": ")),
+        "no `Name: count` rows: {rows:?}"
+    );
+}
+
+/// Playtest H44. `inventory.md §4.7`: "Within a populated shared inventory
+/// list, Left/Right instead scroll its entries; Up/Down return to the outer
+/// page cycle." Every arrow used to turn the page.
+#[test]
+fn z_stats_left_and_right_scroll_a_populated_shared_list() {
+    let mut state = test_state(open_grid(), 1, 1);
+    state.spell_charges = [1; SPELL_COUNT];
+    open_z_stats_page_for_test(&mut state, ZStatsPage::Spells);
+    let page = |state: &PlayState| state.active_z_stats.as_ref().map(|s| (s.page, s.inventory_cursor));
+
+    assert!(state.step_active_z_stats('\u{2}', ""));
+    assert_eq!(page(&state), Some((ZStatsPage::Spells, 1)));
+    assert!(state.step_active_z_stats('\u{2}', ""));
+    assert_eq!(page(&state), Some((ZStatsPage::Spells, 2)));
+    assert!(state.step_active_z_stats('\u{1}', ""));
+    assert_eq!(page(&state), Some((ZStatsPage::Spells, 1)));
+    assert!(state.step_active_z_stats('\u{4}', ""));
+    assert_ne!(page(&state).map(|(page, _)| page), Some(ZStatsPage::Spells));
+
+    // An empty list is not populated, so Left/Right still turn the page.
+    let mut empty = test_state(open_grid(), 1, 1);
+    empty.spell_charges = [0; SPELL_COUNT];
+    open_z_stats_page_for_test(&mut empty, ZStatsPage::Spells);
+    assert!(empty.step_active_z_stats('\u{2}', ""));
+    assert_ne!(
+        empty.active_z_stats.as_ref().map(|s| s.page),
+        Some(ZStatsPage::Spells)
+    );
 }

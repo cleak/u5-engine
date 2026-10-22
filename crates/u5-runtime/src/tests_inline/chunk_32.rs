@@ -471,6 +471,52 @@ fn blackthorn_rescue_prints_one_not_dead_line_per_undead_slot() {
     let _ = fs::remove_dir_all(dir);
 }
 
+/// Playtest H48. `blackthorn.md §7`: beat 8 `\n\nStrange words are intoned.`
+/// "has **no** trailing line feed, so when beat 8a fires the first `Not
+/// dead!` runs straight on from `intoned.` on the same row". With the
+/// window's word wrap that reads `are intoned.Not` / `dead!` / `Not dead!`.
+#[test]
+fn blackthorn_rescue_first_not_dead_runs_on_from_the_intoned_row() {
+    let dir = debug_game_dir();
+    let mut state = test_state(open_grid(), 1, 1);
+    for _ in 0..2 {
+        let slot = state.party.len() as u8;
+        state.party.push(PartyMember {
+            slot,
+            class_byte: b'F',
+            status: b'G',
+            climb_stat: 20,
+            mana: 0,
+            hp: 40,
+            max_hp: 40,
+            level: 3,
+        });
+    }
+    // Slot 0 Ashes, slot 1 Dead, slot 2 Ashes: two beat-8a lines, with the
+    // Dead slot's silent revive between beat 8 and the first of them.
+    for (member, status) in state.party.iter_mut().zip([b'A', b'D', b'A']) {
+        member.status = status;
+        member.hp = 0;
+    }
+    assert_eq!(state.party_capability(), PartyCapability::Defeated);
+
+    state.apply_blackthorn_rescue_refuge(&dir).unwrap();
+    state.run_blackthorn_rescue_to_handoff(&dir).unwrap();
+
+    let log = message_log_from_entries(state.message_entries(), |text| Some(text.to_string()));
+    let rows: Vec<&str> = log.lines().iter().map(|line| line.text.as_str()).collect();
+    let intoned = rows
+        .iter()
+        .position(|row| row.contains("intoned."))
+        .unwrap_or_else(|| panic!("no beat 8 row in {rows:?}"));
+    assert_eq!(
+        rows.get(intoned..intoned + 3),
+        Some(["are intoned.Not", "dead!", "Not dead!"].as_slice()),
+        "rows: {rows:?}"
+    );
+    let _ = fs::remove_dir_all(dir);
+}
+
 #[test]
 fn defeated_gate_enters_the_same_rescue_from_all_exploration_modes() {
     let dir = debug_game_dir();
@@ -661,4 +707,75 @@ fn ruined_shrine_restoration_applies_the_shared_matchers_restart_quirk() {
         );
         assert_eq!(world.shrine_ruin_flags[0] == 0x01, restores);
     }
+}
+
+/// Playtest H42. `time.md §5`, provision counter already zero: "The party
+/// receives the starvation warning, and then each party slot ... takes an
+/// independently rolled uniform `1..8`" - the warning belongs to the same
+/// upkeep pass as the damage. `main-loop.md §6`: the asleep arm emits the
+/// prompt pair and the sleep line, then passes the turn, so the warning
+/// prints on the slept-through turn that crosses the hour, on its own row
+/// under `Zzzzzz...`. The town arm used to hold it until after the next
+/// awake command.
+#[test]
+fn all_asleep_turn_prints_the_starvation_warning_under_its_own_sleep_row() {
+    let dir = debug_game_dir();
+    let mut state = test_state(open_grid(), 1, 1);
+    state.party[0].status = b'S';
+    state.party[0].hp = 60;
+    state.party[0].max_hp = 60;
+    state.food = 0;
+    state.clock = GameClock::new(8, 59).unwrap();
+    state.cleanup_previous_hour = 8;
+
+    assert!(matches!(
+        state.apply_exploration_turn_gate(&dir).unwrap(),
+        ExplorationTurnGateOutcome::Slept { transition: None }
+    ));
+    assert_eq!(state.clock.hour, 9);
+    assert!(state.party[0].hp < 60, "the crossing starves the sleeper");
+    assert!(state.pending_hourly_status_message.is_none());
+
+    let log = message_log_from_entries(state.message_entries(), |text| Some(text.to_string()));
+    let rows: Vec<&str> = log.lines().iter().map(|line| line.text.as_str()).collect();
+    let sleep = rows
+        .iter()
+        .rposition(|row| *row == PARTY_SLEEP_LINE)
+        .unwrap_or_else(|| panic!("no sleep row in {rows:?}"));
+    assert_eq!(
+        rows.get(sleep + 1..),
+        Some([STARVATION_WARNING, ""].as_slice()),
+        "rows: {rows:?}"
+    );
+    let _ = fs::remove_dir_all(dir);
+}
+
+/// Playtest H04. `traps.md §2.1` priority 2: "when a single active character
+/// is set, that character is returned directly and silently" by the shared
+/// selection that "decides who performs Search, Jimmy, Get, Open, Look and
+/// Cast"; `dungeon-mode.md` runs dungeon Look and Search through that same
+/// prompt. With a member selected they used to print `Player: ` anyway.
+#[test]
+fn search_and_dungeon_look_honour_an_explicit_active_member() {
+    let dir = debug_game_dir();
+    let mut state = dungeon_state(open_dungeon_record(), 0, 1, 1);
+    state.party = vec![default_party()[0]; 3];
+    assert_eq!(state.acting_member_selection(), ActingMemberSelection::Prompt);
+    state.active_player = Some(1);
+    assert_eq!(
+        state.acting_member_selection(),
+        ActingMemberSelection::Selected(1)
+    );
+
+    for key in ['S', 'L'] {
+        let mut dungeon = state.clone();
+        assert!(dungeon.handle_dungeon_key(key, &dir).unwrap());
+        assert!(
+            dungeon.active_party_selector.is_none(),
+            "{key} opened the roster picker: {}",
+            dungeon.message
+        );
+        assert!(!dungeon.message.contains(PARTY_SELECTION_PROMPT), "{key}: {}", dungeon.message);
+    }
+    let _ = fs::remove_dir_all(dir);
 }
