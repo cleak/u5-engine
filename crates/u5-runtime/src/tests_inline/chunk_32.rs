@@ -662,3 +662,44 @@ fn ruined_shrine_restoration_applies_the_shared_matchers_restart_quirk() {
         assert_eq!(world.shrine_ruin_flags[0] == 0x01, restores);
     }
 }
+
+/// Playtest H42. `time.md §5`, provision counter already zero: "The party
+/// receives the starvation warning, and then each party slot ... takes an
+/// independently rolled uniform `1..8`" - the warning belongs to the same
+/// upkeep pass as the damage. `main-loop.md §6`: the asleep arm emits the
+/// prompt pair and the sleep line, then passes the turn, so the warning
+/// prints on the slept-through turn that crosses the hour, on its own row
+/// under `Zzzzzz...`. The town arm used to hold it until after the next
+/// awake command.
+#[test]
+fn all_asleep_turn_prints_the_starvation_warning_under_its_own_sleep_row() {
+    let dir = debug_game_dir();
+    let mut state = test_state(open_grid(), 1, 1);
+    state.party[0].status = b'S';
+    state.party[0].hp = 60;
+    state.party[0].max_hp = 60;
+    state.food = 0;
+    state.clock = GameClock::new(8, 59).unwrap();
+    state.cleanup_previous_hour = 8;
+
+    assert!(matches!(
+        state.apply_exploration_turn_gate(&dir).unwrap(),
+        ExplorationTurnGateOutcome::Slept { transition: None }
+    ));
+    assert_eq!(state.clock.hour, 9);
+    assert!(state.party[0].hp < 60, "the crossing starves the sleeper");
+    assert!(state.pending_hourly_status_message.is_none());
+
+    let log = message_log_from_entries(state.message_entries(), |text| Some(text.to_string()));
+    let rows: Vec<&str> = log.lines().iter().map(|line| line.text.as_str()).collect();
+    let sleep = rows
+        .iter()
+        .rposition(|row| *row == PARTY_SLEEP_LINE)
+        .unwrap_or_else(|| panic!("no sleep row in {rows:?}"));
+    assert_eq!(
+        rows.get(sleep + 1..),
+        Some([STARVATION_WARNING, ""].as_slice()),
+        "rows: {rows:?}"
+    );
+    let _ = fs::remove_dir_all(dir);
+}
