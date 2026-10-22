@@ -10436,8 +10436,23 @@ fn keys_pressed_in_typed_order(
 /// restores it afterwards", and a conversation keeps its keyword reader's
 /// gate cleared for the whole session (`conversation.md`, "Free-text input"),
 /// as the terminal shell's `play_state_free_text_line_reader` has it.
+///
+/// `input.md §8` builds the typed-number readers on the same routine with the
+/// same "Disable the buffer flush" step, so the tavern's provision quantity
+/// and the mixer's honour the queue too, and the spell-name entry is a typed
+/// line.
 fn visual_read_forces_typeahead(state: &PlayState) -> bool {
-    visual_line_prompt_active_ignoring_text_hold(state) || state.active_conversation.is_some()
+    visual_line_prompt_active_ignoring_text_hold(state)
+        || state.active_conversation.is_some()
+        || state.active_cast.is_some()
+        || state.active_cast_followup.is_some()
+        || state.active_mix.is_some()
+        || matches!(
+            state.active_shop.as_ref(),
+            Some(ActiveShopSession::Tavern(
+                TavernState::PickProvisionQuantity { .. }
+            ))
+        )
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -18771,11 +18786,16 @@ fn visual_line_prompt_active_ignoring_text_hold(state: &PlayState) -> bool {
             .is_some_and(|session| session.coin_accepted)
         || matches!(
             state.active_shop.as_ref(),
-            Some(
-                ActiveShopSession::Sage(SageState::Prompt { .. })
-                    | ActiveShopSession::Tavern(TavernState::PickProvisionQuantity { .. })
-            )
+            Some(ActiveShopSession::Sage(SageState::Prompt { .. }))
         )
+    // The tavern's provision quantity is not a text line: `shops.md §8.5`
+    // ("Which reader takes the number") and `input.md §8` put it on the
+    // shared two-digit reader - a third digit dropped, Backspace and the west
+    // code each erasing one, "every other key discarded in silence", and the
+    // reader's only output its echo. The runtime runs that reader key by key
+    // on the prompt's own row, so the shell hands it every key. Routed
+    // through this line editor it echoed letters, spaces and a third digit,
+    // and Left did not erase (playtest H14).
 }
 
 fn visual_modal_prompt_active(state: &PlayState) -> bool {
@@ -18927,17 +18947,7 @@ fn handle_visual_line_key(
             let (key, suffix) = match chars.next() {
                 Some(first) => {
                     let mut suffix = chars.collect::<String>();
-                    // The tavern's provision quantity is the shared two-digit
-                    // reader, whose only exit is Return (`shops.md §8.5`), so
-                    // the line editor's Enter is delivered with the digits.
-                    if state.active_shrine.is_some()
-                        || matches!(
-                            state.active_shop.as_ref(),
-                            Some(ActiveShopSession::Tavern(
-                                TavernState::PickProvisionQuantity { .. }
-                            ))
-                        )
-                    {
+                    if state.active_shrine.is_some() {
                         suffix.push('\n');
                     }
                     (first, suffix)
@@ -27934,7 +27944,7 @@ mod tests {
     }
 
     #[test]
-    fn visual_line_prompt_active_covers_quantity_shop_states() {
+    fn the_tavern_quantity_reaches_the_two_digit_reader_not_the_line_editor() {
         let mut tavern = test_state(open_grid(), 1, 1);
         tavern.active_shop = Some(ActiveShopSession::Tavern(
             TavernState::PickProvisionQuantity {
@@ -27944,7 +27954,11 @@ mod tests {
                 entry: Default::default(),
             },
         ));
-        assert!(visual_line_prompt_active(&tavern));
+        // Playtest H14: the provision quantity is the shared two-digit reader,
+        // which the runtime runs key by key, not a text line.
+        assert!(!visual_line_prompt_active(&tavern));
+        assert!(visual_modal_prompt_active(&tavern));
+        assert!(visual_read_forces_typeahead(&tavern));
 
         // `shops.md §8.2`: the guild offer is a Y/N confirmation, not a typed
         // quantity (R418).
