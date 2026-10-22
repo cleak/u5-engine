@@ -707,6 +707,13 @@ impl PlayState {
             // it prints first and the row is then stated open.
             self.flush_message_slot();
             self.open_message_row();
+            // A beat with no leading feed runs straight on along that row
+            // rather than starting one of its own - `blackthorn.md §7`'s
+            // first `Not dead!` after beat 8's `intoned.` (playtest H48).
+            if !beat.text.starts_with('\n') {
+                self.emit_message_line_continuing_row(beat.text);
+                return;
+            }
         }
         self.emit_message_line(beat.text);
     }

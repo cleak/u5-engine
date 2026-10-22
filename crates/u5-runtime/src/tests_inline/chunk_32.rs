@@ -471,6 +471,52 @@ fn blackthorn_rescue_prints_one_not_dead_line_per_undead_slot() {
     let _ = fs::remove_dir_all(dir);
 }
 
+/// Playtest H48. `blackthorn.md §7`: beat 8 `\n\nStrange words are intoned.`
+/// "has **no** trailing line feed, so when beat 8a fires the first `Not
+/// dead!` runs straight on from `intoned.` on the same row". With the
+/// window's word wrap that reads `are intoned.Not` / `dead!` / `Not dead!`.
+#[test]
+fn blackthorn_rescue_first_not_dead_runs_on_from_the_intoned_row() {
+    let dir = debug_game_dir();
+    let mut state = test_state(open_grid(), 1, 1);
+    for _ in 0..2 {
+        let slot = state.party.len() as u8;
+        state.party.push(PartyMember {
+            slot,
+            class_byte: b'F',
+            status: b'G',
+            climb_stat: 20,
+            mana: 0,
+            hp: 40,
+            max_hp: 40,
+            level: 3,
+        });
+    }
+    // Slot 0 Ashes, slot 1 Dead, slot 2 Ashes: two beat-8a lines, with the
+    // Dead slot's silent revive between beat 8 and the first of them.
+    for (member, status) in state.party.iter_mut().zip([b'A', b'D', b'A']) {
+        member.status = status;
+        member.hp = 0;
+    }
+    assert_eq!(state.party_capability(), PartyCapability::Defeated);
+
+    state.apply_blackthorn_rescue_refuge(&dir).unwrap();
+    state.run_blackthorn_rescue_to_handoff(&dir).unwrap();
+
+    let log = message_log_from_entries(state.message_entries(), |text| Some(text.to_string()));
+    let rows: Vec<&str> = log.lines().iter().map(|line| line.text.as_str()).collect();
+    let intoned = rows
+        .iter()
+        .position(|row| row.contains("intoned."))
+        .unwrap_or_else(|| panic!("no beat 8 row in {rows:?}"));
+    assert_eq!(
+        rows.get(intoned..intoned + 3),
+        Some(["are intoned.Not", "dead!", "Not dead!"].as_slice()),
+        "rows: {rows:?}"
+    );
+    let _ = fs::remove_dir_all(dir);
+}
+
 #[test]
 fn defeated_gate_enters_the_same_rescue_from_all_exploration_modes() {
     let dir = debug_game_dir();

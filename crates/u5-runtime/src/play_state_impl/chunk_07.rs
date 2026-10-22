@@ -6729,6 +6729,7 @@ impl PlayState {
                 // body is staged so a paced frontend shows it at the slot's
                 // own step rather than during beat 8.
                 self.stats_panel_hold = Some(self.displayed_stats_panel().clone());
+                let mut not_dead_continues_intoned = true;
                 for slot in 0..self.party.len() {
                     // `audio.md §8.6.2` / R494: one envelope per in-party
                     // slot, in ascending slot order, immediately before that
@@ -6738,6 +6739,17 @@ impl PlayState {
                     ));
                     if self.party[slot].status == b'D' {
                         self.resurrect_party_member_to_hp(slot, 1);
+                    } else if std::mem::take(&mut not_dead_continues_intoned) {
+                        // §7: beat 8 "has **no** trailing line feed, so when
+                        // beat 8a fires the first `Not dead!` runs straight
+                        // on from `intoned.` on the same row" (playtest H48).
+                        // The panel-repaint holds between them print nothing,
+                        // so the row is still the one beat 8 left open.
+                        self.staged_narration.push_secs_on_open_row(
+                            crate::narration::bios_ticks_secs(wait),
+                            crate::blackthorn::BLACKTHORN_RESCUE_NOT_DEAD,
+                        );
+                        wait = 0;
                     } else {
                         self.staged_narration
                             .push_ticks(wait, crate::blackthorn::BLACKTHORN_RESCUE_NOT_DEAD);
