@@ -11486,6 +11486,9 @@ fn setup(
         rune_font,
     } = bootstrap;
     state.pace_combat_presentations = true;
+    // `commands.md §5.2`: real keystrokes, so `<`, `>` and `.` are unmapped
+    // keys here, not the terminal harness's shortcuts (playtest H18).
+    state.harness_shortcut_keys = false;
 
     let rgba = render_visual_play_frame_with_input(
         &mut state,
@@ -11681,6 +11684,9 @@ fn transition_visual_intro_to_gameplay(
     let (mut state, atlas, text_font, rune_font) =
         launch.unwrap_or_else(|err| panic!("Journey Onward launch failed: {err}"));
     state.pace_combat_presentations = true;
+    // `commands.md §5.2`: real keystrokes, so `<`, `>` and `.` are unmapped
+    // keys here, not the terminal harness's shortcuts (playtest H18).
+    state.harness_shortcut_keys = false;
     let image_handle = intro
         .image_handle
         .clone()
@@ -30766,6 +30772,7 @@ mod tests {
             let mut state = PlayState::load_scene(&dir, options).unwrap();
             state.prng_state = 0x1234;
             state.pace_combat_presentations = true;
+            state.harness_shortcut_keys = false;
             let mut images = Assets::<Image>::default();
             let image_handle = images.add(Image::new(
                 Extent3d {
@@ -31047,6 +31054,34 @@ mod tests {
             assert!(
                 !text.contains("None!"),
                 "shifted_zero={shifted_zero}:\n{text}"
+            );
+        }
+    }
+
+    /// Playtest H18, `commands.md §5.2`: `K` is the only climb verb and an
+    /// unmapped key answers `What?`. The terminal harness's `<`, `>` and `.`
+    /// shortcuts reached the visual shell through Shift with Comma or Period
+    /// and printed a bare `Not climbable!`, and Period ran a silent idle tick.
+    #[test]
+    #[cfg(feature = "original-asset-tests")]
+    fn angle_brackets_and_period_are_unmapped_keys_in_the_visual_shell() {
+        for (shift, key) in [
+            (true, KeyCode::Comma),
+            (true, KeyCode::Period),
+            (false, KeyCode::Period),
+        ] {
+            let mut shell = britannia_meadow_shell("harness-shortcuts");
+            shell.ticks(60);
+            if shift {
+                shell.tap_with(KeyCode::ShiftLeft, key);
+            } else {
+                shell.tap(key);
+            }
+            let text = shell.text();
+            assert!(text.contains("What?"), "{key:?} shift={shift}:\n{text}");
+            assert!(
+                !text.contains("climbable"),
+                "{key:?} shift={shift}:\n{text}"
             );
         }
     }

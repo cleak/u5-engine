@@ -3080,6 +3080,7 @@ impl PlayState {
         // whole sixteen-actor round inside one host frame, with the paced
         // presentation path silently unreachable for the rest of the session.
         next.pace_combat_presentations = self.pace_combat_presentations;
+        next.harness_shortcut_keys = self.harness_shortcut_keys;
         // `inventory.md §4.4` (u5-spec#296): the stats-panel window's inverse
         // bit is display state, not scene state - "Turns, movement and
         // messages do not clear it ... It flips back only when a later picker

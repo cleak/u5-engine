@@ -345,6 +345,13 @@ pub struct PlayState {
     /// set this so the automatic actor walk stops after each visible action;
     /// batch-oriented callers retain the blocking walk by default.
     pub pace_combat_presentations: bool,
+    /// Frontend input policy, never serialized. The terminal harness keeps
+    /// its `<` / `>` climb and `.` idle-tick shortcuts, which play scripts
+    /// rely on. They are not commands of the game - `commands.md §5.2` makes
+    /// `K` the only climb verb and answers any unmapped key `What?` - so a
+    /// frontend that delivers real keystrokes clears this, and those bytes
+    /// then take that refusal (playtest H18).
+    pub harness_shortcut_keys: bool,
     pub combat_frame_snapshot: Option<CombatFrameSnapshot>,
     pub pending_combat_actor_slot: Option<usize>,
     /// Whether the message window's cursor is standing part-way along a row
