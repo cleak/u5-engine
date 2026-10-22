@@ -1219,6 +1219,28 @@ impl PlayState {
             self.commit_dungeon_acting_member_pick(session, index);
             return true;
         }
+        // `commands.md §5.8`, the conditional acting-member exchange that
+        // the direction form of Search and Cast run (and the death-vision
+        // sphere, `view.md §3`): "An ineligible pick prints `Disabled!\n\n`
+        // and repeats the prompt". Eligible is Good or Poisoned
+        // (`traps.md §2.1`) - the same gate the chest, Jimmy and dungeon
+        // sites apply. A Dead or Sleeping pick used to be accepted, and
+        // the cast then aborted silently (playtest G05).
+        if matches!(
+            session.target,
+            PartySelectorTarget::Search { .. }
+                | PartySelectorTarget::Cast
+                | PartySelectorTarget::DeathVision { .. }
+        ) && !self
+            .party
+            .get(index)
+            .is_some_and(|member| acting_member_status_eligible(member.status))
+        {
+            self.emit_message_line(DUNGEON_ACTING_MEMBER_DISABLED);
+            self.active_party_selector = Some(session);
+            self.message = session.target.prompt().to_string();
+            return true;
+        }
         // `commands.md §5.6`: `Player:_` is "colon then exactly one
         // trailing space", so the chosen name lands on that same line -
         // the original shows `Player: Avatar`.
