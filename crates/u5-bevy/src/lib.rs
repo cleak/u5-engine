@@ -10961,6 +10961,9 @@ struct VisualReturnToViewFrameMeta {
 struct AnimationPump {
     accumulator: f32,
     interval: f32,
+    /// Host time owed to the prompt cursor while a hold owns the loop; see
+    /// [`advance_hold_cursor_phase`].
+    hold_cursor_accumulator: f32,
 }
 
 impl Default for AnimationPump {
@@ -10968,8 +10971,29 @@ impl Default for AnimationPump {
         Self {
             accumulator: 0.0,
             interval: GAMEPLAY_WORLD_TICK_INTERVAL_SECS,
+            hold_cursor_accumulator: 0.0,
         }
     }
+}
+
+/// Advance the prompt cursor's phase while a hold, a staged presentation or
+/// a cinematic owns the loop - at most once per one-tick poll interval.
+///
+/// `input.md §3`: the four-glyph cursor advances one phase per cursor-poll
+/// call, and a no-key call takes "the calibrated one-tick delay"; a frontend
+/// "may schedule these four frames from elapsed time, retaining their order".
+/// These branches stepped it once per host frame - 60 phases a second at
+/// 60 Hz and 144 at 144 Hz - where the idle and prompt waits run the
+/// timer-tick cadence (playtest H19).
+fn advance_hold_cursor_phase(visual: &mut VisualState, pump: &mut AnimationPump, delta: f32) {
+    pump.hold_cursor_accumulator += delta;
+    if pump.hold_cursor_accumulator < GAMEPLAY_WORLD_TICK_INTERVAL_SECS {
+        return;
+    }
+    pump.hold_cursor_accumulator = (pump.hold_cursor_accumulator
+        - GAMEPLAY_WORLD_TICK_INTERVAL_SECS)
+        .min(GAMEPLAY_WORLD_TICK_INTERVAL_SECS - ANIMATION_PUMP_CATCH_UP_EPSILON_SECS);
+    visual.prompt_cursor_frame = visual.prompt_cursor_frame.wrapping_add(1);
 }
 
 #[derive(Resource)]
@@ -11236,7 +11260,7 @@ fn animate_static_tiles(
             .state
             .advance_text_hold_to(real_time.elapsed_secs_f64());
         visual.prompt_cursor_visible = !still_held && visual_line_prompt_active(&visual.state);
-        visual.prompt_cursor_frame = visual.prompt_cursor_frame.wrapping_add(1);
+        advance_hold_cursor_phase(visual.as_mut(), &mut pump, time.delta_secs());
         repaint_visual_frame(&mut visual, &mut images, "text hold");
         pump.accumulator = 0.0;
         return;
@@ -11253,7 +11277,7 @@ fn animate_static_tiles(
             .state
             .advance_staged_narration_to(real_time.elapsed_secs_f64());
         visual.prompt_cursor_visible = false;
-        visual.prompt_cursor_frame = visual.prompt_cursor_frame.wrapping_add(1);
+        advance_hold_cursor_phase(visual.as_mut(), &mut pump, time.delta_secs());
         repaint_visual_frame(&mut visual, &mut images, "staged narration");
         pump.accumulator = 0.0;
         return;
@@ -11273,7 +11297,7 @@ fn animate_static_tiles(
             visual.state.pending_blackthorn_audience_exit = false;
         }
         if visual.state.pending_blackthorn_audience_exit {
-            visual.prompt_cursor_frame = visual.prompt_cursor_frame.wrapping_add(1);
+            advance_hold_cursor_phase(visual.as_mut(), &mut pump, time.delta_secs());
             repaint_visual_frame(&mut visual, &mut images, "audience exit beat");
             pump.accumulator = 0.0;
             return;
@@ -11290,7 +11314,7 @@ fn animate_static_tiles(
             visual.state.pending_shrine_third_mantra = None;
         }
         if visual.state.pending_shrine_third_mantra.is_some() {
-            visual.prompt_cursor_frame = visual.prompt_cursor_frame.wrapping_add(1);
+            advance_hold_cursor_phase(visual.as_mut(), &mut pump, time.delta_secs());
             repaint_visual_frame(&mut visual, &mut images, "shrine third-mantra hold");
             pump.accumulator = 0.0;
             return;
@@ -11308,7 +11332,7 @@ fn animate_static_tiles(
             }
         }
         if visual.state.pending_blackthorn_rescue.is_some() {
-            visual.prompt_cursor_frame = visual.prompt_cursor_frame.wrapping_add(1);
+            advance_hold_cursor_phase(visual.as_mut(), &mut pump, time.delta_secs());
             repaint_visual_frame(&mut visual, &mut images, "rescue cinematic");
             pump.accumulator = 0.0;
             return;
@@ -11365,7 +11389,7 @@ fn animate_static_tiles(
             }
         }
         visual.prompt_cursor_visible = false;
-        visual.prompt_cursor_frame = visual.prompt_cursor_frame.wrapping_add(1);
+        advance_hold_cursor_phase(visual.as_mut(), &mut pump, time.delta_secs());
         pump.accumulator = 0.0;
         advanced = true;
     } else if visual.state.buffered_hold_key_ready() {
@@ -11382,7 +11406,7 @@ fn animate_static_tiles(
                 visual.state.keys_buffered_during_hold.clear();
             }
         }
-        visual.prompt_cursor_frame = visual.prompt_cursor_frame.wrapping_add(1);
+        advance_hold_cursor_phase(visual.as_mut(), &mut pump, time.delta_secs());
         pump.accumulator = 0.0;
         advanced = true;
     }
@@ -30831,11 +30855,15 @@ mod tests {
         }
 
         fn tick(&mut self) {
+            self.tick_by(Self::FRAME);
+        }
+
+        fn tick_by(&mut self, frame: Duration) {
             let world = self.app.world_mut();
-            world.resource_mut::<Time>().advance_by(Self::FRAME);
+            world.resource_mut::<Time>().advance_by(frame);
             world
                 .resource_mut::<Time<bevy::prelude::Real>>()
-                .update_with_duration(Self::FRAME);
+                .update_with_duration(frame);
             self.app.update();
             self.app
                 .world_mut()
@@ -31082,6 +31110,44 @@ mod tests {
             assert!(
                 !text.contains("climbable"),
                 "{key:?} shift={shift}:\n{text}"
+            );
+        }
+    }
+
+    /// Playtest H19, `input.md §3`: the cursor advances one phase per poll,
+    /// and a no-key poll waits the one-tick delay - about 18 phases a second
+    /// - while a conversation's key wait holds the reply, at any host rate.
+    /// It used to advance once per host frame.
+    #[test]
+    #[cfg(feature = "original-asset-tests")]
+    fn the_cursor_keeps_the_poll_cadence_through_a_text_hold() {
+        use u5_runtime::text_hold::TextHoldKind;
+        use u5_runtime::tlk_runner::TlkRenderedText;
+        for (frame, frames_per_second) in [
+            (Duration::from_micros(16_667), 60u32),
+            (Duration::from_micros(6_944), 144),
+        ] {
+            let mut shell = britannia_meadow_shell("hold-cursor");
+            shell.ticks(30);
+            {
+                let mut visual = shell.visual_mut();
+                visual.state.message = "\"Some words".to_string();
+                // The reply's row is open mid-line, set by this caller.
+                visual.state.message_row_open_mid_line = true;
+                visual.state.begin_text_hold(
+                    vec![(TextHoldKind::WaitKey, TlkRenderedText::plain("more\""))],
+                    true,
+                );
+            }
+            let before = shell.visual().prompt_cursor_frame;
+            for _ in 0..frames_per_second {
+                shell.tick_by(frame);
+                assert!(shell.visual().state.text_hold_active());
+            }
+            let phases = shell.visual().prompt_cursor_frame - before;
+            assert!(
+                (17..=19).contains(&phases),
+                "{phases} phases in one second at {frames_per_second} Hz"
             );
         }
     }
