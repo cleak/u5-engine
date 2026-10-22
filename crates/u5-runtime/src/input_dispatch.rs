@@ -2606,7 +2606,12 @@ fn handle_active_shop_key_input(
                 }
                 // `shops.md §8.B`: "Space means No where accepted. Every No
                 // response echoes `No`"; Y/N take the shared entry echo.
+                // The greeting's continuation row is open whatever the slot's
+                // text ended on, as at the inn and the shipwright (playtest
+                // H29).
                 ReagentShopOutcome::DeclinedEntry if key_byte == b' ' => {
+                    state.flush_message_slot();
+                    state.open_message_row();
                     state.emit_message_line_continuing_row("No")
                 }
                 _ => {}
@@ -2681,7 +2686,14 @@ fn handle_active_shop_key_input(
             // trailing line feed." At entry the shared echo covers `Y`/`N`;
             // Space "means No" and echoes it here.
             match outcome {
-                HorseTraderOutcome::Declined if confirming || key_byte == b' ' => {
+                HorseTraderOutcome::Declined if confirming => {
+                    state.emit_message_line_continuing_row("No");
+                }
+                // The greeting's continuation row is open whatever the slot's
+                // text ended on (playtest H29).
+                HorseTraderOutcome::Declined if key_byte == b' ' => {
+                    state.flush_message_slot();
+                    state.open_message_row();
                     state.emit_message_line_continuing_row("No");
                 }
                 HorseTraderOutcome::Purchased { .. }
@@ -2996,7 +3008,11 @@ fn handle_active_shop_key_input(
                 GuildShopOutcome::Declined => state.emit_message_line_continuing_row("No"),
                 // `shops.md §8.B`: "Space means No where accepted. Every No
                 // response echoes `No`"; Y/N take the shared entry echo.
+                // The greeting's continuation row is open whatever the slot's
+                // text ended on (playtest H29).
                 GuildShopOutcome::DeclinedEntry if key_byte == b' ' => {
+                    state.flush_message_slot();
+                    state.open_message_row();
                     state.emit_message_line_continuing_row("No")
                 }
                 _ => {}

@@ -151,3 +151,44 @@ fn playfix4_h28_tavern_entry_refusal_prints_the_bark_with_assets() {
         );
     }
 }
+
+/// H29: `shops.md §8.B` "A greeting ending in columns 1 through 11 instead
+/// receives the single-space continuation", "Space means No where accepted.
+/// Every No response echoes `No` without a line feed". At the guild,
+/// herbalist and horse trader Space's `No` dropped to a row of its own.
+#[test]
+fn playfix4_h29_entry_space_no_continues_the_greeting_row() {
+    use crate::shop_runtime::{GuildShopState, HorseTraderState, ReagentShopState};
+    use crate::shop_session::ActiveShopSession;
+    let sessions = [
+        (
+            22,
+            ActiveShopSession::Guild(GuildShopState::Greeting {
+                shop: crate::shops::GuildShop::TheGuild,
+            }),
+        ),
+        (
+            1,
+            ActiveShopSession::Reagent(ReagentShopState::Greeting {
+                herbalist: Herbalist::TheHerbalist,
+            }),
+        ),
+        (
+            1,
+            ActiveShopSession::HorseTrader(HorseTraderState::Greeting {
+                stable: Stable::TheStablehouse,
+            }),
+        ),
+    ];
+    for (scene, session) in sessions {
+        let label = format!("{session:?}");
+        let mut state = pf4_shop_at_entry(scene, session);
+        handle_play_key_input(&mut state, ' ', "", Path::new("")).unwrap();
+        let rows = pf4_rows(&state);
+        assert!(
+            rows.iter().any(|row| row == "\"Welcome, ye?\" No"),
+            "{label}: {rows:#?}"
+        );
+        assert!(!rows.iter().any(|row| row == "No"), "{label}: {rows:#?}");
+    }
+}
