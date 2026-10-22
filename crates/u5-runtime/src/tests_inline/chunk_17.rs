@@ -1435,7 +1435,7 @@
         );
 
         assert!(state.active_use.is_none());
-        assert_eq!(state.message, USE_NO_USABLE_ITEMS_REFUSAL);
+        assert_eq!(state.message, format!("\n{USE_NO_USABLE_ITEMS_REFUSAL}"));
         assert_eq!(state.turn, 1);
     }
 

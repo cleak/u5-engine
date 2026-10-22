@@ -275,3 +275,33 @@ fn playfix4_h07_readying_an_arrows_row_prints_nothing() {
     assert_eq!(state.equipment_stock[EQUIPMENT_ID_ARROWS], 99);
     let _ = fs::remove_dir_all(dir);
 }
+
+/// H34/H45: `commands.md §5` - `U` echoes `Use_item\n\n` and `M` echoes
+/// `Mix_Reagents\n\n`, and "The echo is printed **before** the handler's
+/// precondition check", so `No usable items!` (`inventory.md §7.1`) and
+/// `No reagents owned!` (`magic.md §6` step 1) sit under a blank row, exactly
+/// where `Item: ` and `For what spell?` would.
+#[test]
+fn playfix4_h34_h45_empty_use_and_mix_refusals_keep_the_echo_blank_row() {
+    let dir = debug_game_dir();
+    // The dungeon fixture carries nothing usable (no moonstone can be
+    // buried underground) and no reagents.
+    for (key, echo, refusal) in [
+        ('U', "Use item", USE_NO_USABLE_ITEMS_REFUSAL),
+        ('M', "Mix Reagents", MMIX_NO_REAGENTS_OWNED_MESSAGE),
+    ] {
+        let mut state = dungeon_state(open_dungeon_record(), 0, 1, 1);
+        state.reagents = [0; REAGENT_COUNT];
+        p4window_keys(&mut state, &dir, &[key]);
+        let texts: Vec<&str> =
+            state.message_transcript.iter().map(|entry| entry.text.as_str()).collect();
+        assert_eq!(texts, [echo, "", refusal], "{key}");
+    }
+    let mut state = p4window_world_state();
+    state.reagents = [0; REAGENT_COUNT];
+    p4window_keys(&mut state, &dir, &['M']);
+    let texts: Vec<&str> =
+        state.message_transcript.iter().map(|entry| entry.text.as_str()).collect();
+    assert_eq!(texts, ["Mix Reagents", "", MMIX_NO_REAGENTS_OWNED_MESSAGE]);
+    let _ = fs::remove_dir_all(dir);
+}

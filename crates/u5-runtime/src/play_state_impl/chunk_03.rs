@@ -2355,7 +2355,10 @@ impl PlayState {
 
     pub fn start_mix_reagents_prompt(&mut self) -> MoveOutcome {
         if self.reagents.iter().all(|count| *count == 0) {
-            self.message = MMIX_NO_REAGENTS_OWNED_MESSAGE.to_string();
+            // `commands.md §5`: the echo is `Mix_Reagents\n\n`, so the
+            // refusal takes the same blank row `For what spell?` does
+            // (playtest H45).
+            self.message = format!("\n{MMIX_NO_REAGENTS_OWNED_MESSAGE}");
             return MoveOutcome::Blocked;
         }
         self.active_mix = Some(MixSession::new());

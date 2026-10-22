@@ -468,7 +468,10 @@ impl PlayState {
     pub fn start_use_item(&mut self) -> MoveOutcome {
         let rows = self.use_item_picker_rows();
         if rows.is_empty() {
-            self.message = USE_NO_USABLE_ITEMS_REFUSAL.to_string();
+            // `commands.md §5`: the echo is `Use_item\n\n`, printed "before
+            // the handler's precondition check", so the refusal sits under
+            // the same blank row the `Item: ` prompt does (playtest H34/H45).
+            self.message = format!("\n{USE_NO_USABLE_ITEMS_REFUSAL}");
             // inventory.md §7: U-Use returns the normal action result even
             // when item-specific dispatch is never reached.
             self.advance_turn();
