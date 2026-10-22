@@ -5049,7 +5049,10 @@ impl PlayState {
             session.inventory_cursor = 0;
             return;
         };
-        let last_cursor = z_stats_inventory_last_cursor(row_count);
+        let last_cursor = match self.z_stats_wrapped_inventory_rows(session.page) {
+            Some(rows) => z_stats_wrapped_inventory_last_cursor(&rows),
+            None => z_stats_inventory_last_cursor(row_count),
+        };
         let current = session.inventory_cursor.min(last_cursor);
         session.inventory_cursor = if delta >= 0 {
             current.saturating_add(delta as usize).min(last_cursor)
@@ -5212,6 +5215,24 @@ impl PlayState {
     }
 
     fn render_z_stats_reagent_page(&self, session: &ZStatsSession, lines: &mut Vec<String>) {
+        append_wrapped_inventory_rows(lines, self.z_stats_reagent_rows(), session.inventory_cursor);
+    }
+
+    /// The rows of one of the four shared inventory pages that render
+    /// through [`append_wrapped_inventory_rows`], or `None` for any other
+    /// page. The row cursor's scan limit is measured on these rows' rendered
+    /// display lines ([`z_stats_wrapped_inventory_last_cursor`]).
+    fn z_stats_wrapped_inventory_rows(&self, page: ZStatsPage) -> Option<Vec<String>> {
+        match page {
+            ZStatsPage::Reagents => Some(self.z_stats_reagent_rows()),
+            ZStatsPage::Spells => Some(self.z_stats_spell_rows()),
+            ZStatsPage::SpecialUse => Some(self.z_stats_special_use_rows()),
+            ZStatsPage::EquipmentStock => Some(self.z_stats_equipment_stock_rows()),
+            _ => None,
+        }
+    }
+
+    fn z_stats_reagent_rows(&self) -> Vec<String> {
         const REAGENTS: [Reagent; REAGENT_COUNT] = [
             Reagent::SulfurAsh,
             Reagent::Ginseng,
@@ -5226,7 +5247,7 @@ impl PlayState {
         // the next slot with a non-zero count, so empty slots are skipped
         // rather than shown as blank rows." The eight-slot reagent band is
         // ordinary inventory browsing, so its zero slots never reach a row.
-        let rows = REAGENTS
+        REAGENTS
             .iter()
             .filter_map(|reagent| {
                 let count = self.reagents[reagent.inventory_index()];
@@ -5238,36 +5259,54 @@ impl PlayState {
                 // column right of the moonstone rows on the items page.
                 (count > 0).then(|| z_stats_counted_row(count, reagent.z_stats_name()))
             })
-            .collect::<Vec<_>>();
-        append_wrapped_inventory_rows(lines, rows, session.inventory_cursor);
+            .collect::<Vec<_>>()
     }
 
     fn render_z_stats_spell_page(&self, session: &ZStatsSession, lines: &mut Vec<String>) {
+        append_wrapped_inventory_rows(lines, self.z_stats_spell_rows(), session.inventory_cursor);
+    }
+
+    fn z_stats_spell_rows(&self) -> Vec<String> {
         // `inventory.md §4.7`: the forty-eight-slot spell-charge band is one
         // of the four inventory pages, and those pages "do not paginate: the
         // navigator scans forward or backward for the next slot with a
         // non-zero count, so empty slots are skipped rather than shown as
         // blank rows." A zero-charge spell is therefore not a row at all.
-        let rows = self
-            .spell_charges
+        self.spell_charges
             .iter()
             .copied()
             .enumerate()
             .filter_map(|(index, count)| {
-                let name = spell_common_name(index).unwrap_or("Unknown Spell");
                 // `inventory.md §4.7`: "The party-wide inventory pages use the
                 // same eight-row frame and row renderer as the R-Ready
                 // picker", so a charge is §4.5's counted row - quantity,
                 // selector, name - not an invented `Name: count` (playtest
-                // H43). The label text itself is not published.
-                (count > 0)
-                    .then(|| z_stats_counted_row(count, &format!("{} {}", SPELL_CODES[index], name)))
+                // H43).
+                //
+                // §4.5 measures every spell-charge name "at one-, two- and
+                // three-digit quantities" and finds that **none** takes a
+                // second display line, so a spell label ends before window
+                // column 15 even after a three-cell quantity: ten cells at
+                // most. The 48 spell-charge label literals themselves are not
+                // published. Of the per-spell names `catalogs/spell-list.md`
+                // §5 publishes, only the compact parser code fits (the common
+                // names and rune phrases run to sixteen cells), so the row
+                // carries the code alone. The engine's own `<code> <name>`
+                // label wrapped `Magic Missile` onto a second line.
+                (count > 0).then(|| z_stats_counted_row(count, SPELL_CODES[index]))
             })
-            .collect::<Vec<_>>();
-        append_wrapped_inventory_rows(lines, rows, session.inventory_cursor);
+            .collect::<Vec<_>>()
     }
 
     fn render_z_stats_special_use_page(&self, session: &ZStatsSession, lines: &mut Vec<String>) {
+        append_wrapped_inventory_rows(
+            lines,
+            self.z_stats_special_use_rows(),
+            session.inventory_cursor,
+        );
+    }
+
+    fn z_stats_special_use_rows(&self) -> Vec<String> {
         let mut rows = Vec::new();
         // The eight Moonstones head this page. `inventory.md §4.5` gives
         // the row form - "the word `Moonstone_`, then a single runic
@@ -5313,7 +5352,7 @@ impl PlayState {
                 None => name,
             });
         }
-        append_wrapped_inventory_rows(lines, rows, session.inventory_cursor);
+        rows
     }
 
     fn render_z_stats_equipment_stock_page(
@@ -5321,8 +5360,15 @@ impl PlayState {
         session: &ZStatsSession,
         lines: &mut Vec<String>,
     ) {
-        let rows = self
-            .equipment_stock
+        append_wrapped_inventory_rows(
+            lines,
+            self.z_stats_equipment_stock_rows(),
+            session.inventory_cursor,
+        );
+    }
+
+    fn z_stats_equipment_stock_rows(&self) -> Vec<String> {
+        self.equipment_stock
             .iter()
             .copied()
             .enumerate()
@@ -5339,8 +5385,7 @@ impl PlayState {
                     .unwrap_or_else(|| equipment_name(index));
                 (count > 0).then(|| z_stats_counted_row(count, label))
             })
-            .collect::<Vec<_>>();
-        append_wrapped_inventory_rows(lines, rows, session.inventory_cursor);
+            .collect::<Vec<_>>()
     }
 
     pub fn party_member_display_name(&self, index: usize) -> String {
@@ -7667,7 +7712,7 @@ fn append_wrapped_inventory_rows(lines: &mut Vec<String>, rows: Vec<String>, cur
         lines.push(Z_STATS_NONE_OWNED_PLACEHOLDER.to_string());
         return;
     }
-    let start = cursor.min(z_stats_inventory_last_cursor(rows.len()));
+    let start = cursor.min(z_stats_wrapped_inventory_last_cursor(&rows));
     let mut placed = Vec::new();
     for row in rows.iter().skip(start) {
         let entry = z_stats_entry_lines(row);
@@ -7693,4 +7738,28 @@ fn append_wrapped_inventory_rows(lines: &mut Vec<String>, rows: Vec<String>, cur
 /// unreachable on every list longer than seven (playtest H44).
 fn z_stats_inventory_last_cursor(row_count: usize) -> usize {
     row_count.saturating_sub(crate::stats_panel::PANEL_PICKER_ROWS)
+}
+
+/// [`z_stats_inventory_last_cursor`] for the four shared inventory pages,
+/// whose entries can take two display lines.
+///
+/// `inventory.md §4.4`: the render loop "terminates on the cursor's row, not
+/// on an entry count, so an entry that wraps onto a second display line costs
+/// a row: an overflowing page shows six entries, or five if two of them
+/// wrap". The final window is therefore the longest run of trailing entries
+/// whose rendered lines fit the frame's seven interior rows, not the last
+/// seven entries: counting entries put the scan's end on a top entry whose
+/// page could not draw the band's last entry when a wrapped row was among
+/// them.
+fn z_stats_wrapped_inventory_last_cursor(rows: &[String]) -> usize {
+    let mut lines = 0;
+    let mut start = rows.len().saturating_sub(1);
+    for (index, row) in rows.iter().enumerate().rev() {
+        lines += z_stats_entry_lines(row).len();
+        if lines > crate::stats_panel::PANEL_PICKER_ROWS {
+            break;
+        }
+        start = index;
+    }
+    start
 }
