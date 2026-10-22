@@ -1183,4 +1183,5 @@ mod tests {
     include!("tests_inline/spec299_c3.rs");
     include!("tests_inline/playfix3_p3magic.rs");
     include!("tests_inline/playfix3_p3quest.rs");
+    include!("tests_inline/playfix3_p3world.rs");
 }

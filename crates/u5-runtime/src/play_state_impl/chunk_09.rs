@@ -3321,8 +3321,9 @@ impl PlayState {
         if apply_hourly_party_status {
             // `town-mode.md §7`/§10 puts this pass at the *end* of the
             // underfoot handler. Ordinary town actions are one-minute turns;
-            // longer town-rest/arrest cleanup increments are direct time-loop
-            // calls and retain their existing immediate pass.
+            // the town-bed rest loop's ten-minute steps are direct time-loop
+            // calls and retain their existing immediate pass. The arrest
+            // wait-to-morning loop opts out (`time.md §12` census).
             let ordinary_town_turn =
                 matches!(self.area, Area::Town { .. }) && minutes == MINUTES_PER_INDOOR_TURN;
             if ordinary_town_turn || defer_stonegate_epilogue {
@@ -3501,6 +3502,22 @@ impl PlayState {
             .count() as u16
     }
 
+    /// `time.md §8`: "Each of the sixteen character record slots carries a
+    /// one-byte counter. The month rollover increments it, capped at 25", and
+    /// implementations "should still preserve and age it on all character
+    /// records". The active party ages through `party_stay_counters` and
+    /// lodged guests through the inn registry; this ages the preserved
+    /// records behind the party prefix - the unrecruited companions - which
+    /// otherwise kept the shipped `0xFF` (playtest W6). A lodged guest's
+    /// roster copy ages too, so it agrees with the registry copy written
+    /// over it.
+    pub(crate) fn age_inactive_roster_month_counters(&mut self) {
+        let active = self.party.len();
+        for record in self.party_roster.iter_mut().skip(active) {
+            record.stay_counter = age_character_month_counter(record.stay_counter);
+        }
+    }
+
     /// `time.md §5` party status/provision pass, entered once per
     /// turn-consuming action. "The pass compares the shared pre-cascade hour
     /// snapshot (Section 2; save byte `0x02DA`, Section 11) with the current
@@ -3531,7 +3548,20 @@ impl PlayState {
         self.apply_hourly_poison_tick();
         if hour_changed {
             if self.food == 0 {
-                self.pending_hourly_status_message = self.apply_hourly_starvation_tick();
+                // `time.md §5`: every invocation that sees an hour change
+                // with the counter at zero prints its own warning. A
+                // multi-hour town-bed rest crosses several before the slot
+                // is drained, so each crossing adds a row rather than
+                // replacing the last one (playtest W3).
+                if let Some(report) = self.apply_hourly_starvation_tick() {
+                    match self.pending_hourly_status_message.as_mut() {
+                        Some(pending) => {
+                            pending.push('\n');
+                            pending.push_str(&report);
+                        }
+                        None => self.pending_hourly_status_message = Some(report),
+                    }
+                }
             } else if is_provision_decrement_hour(self.clock.hour) {
                 self.food = self.food.saturating_sub(consumers);
             }
