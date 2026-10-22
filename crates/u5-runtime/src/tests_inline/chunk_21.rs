@@ -8761,4 +8761,12 @@ fn town_raw_tlk_payment_milestone_survives_following_raise_standing_bytes() {
     assert_eq!(state.gold, 145);
     assert_eq!(state.toll_progress, 0, "the milestone fired");
     assert_eq!(state.moral_standing, 6, "0 + 1 (milestone) + 5 (0x89 x5)");
+
+    // A later raise-standing run in the same conversation starts from the
+    // live standing, milestone included: the session's carried selector
+    // must not hand the runner the pre-milestone value again.
+    let _ = state.submit_active_conversation_keyword("alms");
+    assert_eq!(state.gold, 140);
+    assert_eq!(state.toll_progress, 0, "no second milestone");
+    assert_eq!(state.moral_standing, 11, "6 + 5 (0x89 x5)");
 }

@@ -5452,12 +5452,6 @@ impl PlayState {
 
     /// Apply the byte-runner's recorded [`TlkActionDispatchVerb`] grants
     /// to the live runtime counters per `conversation.md §7.6`.
-    /// `conversation.md §7.4` / `karma.md §4`: assign the shared
-    /// moral-standing selector after a TLK stream ran `0x89`
-    /// STANDING-UP or `0x8A` STANDING-DOWN. The runner already applied
-    /// the published capped-add / capped-subtract writers, so this is an
-    /// assignment; `None` means the stream ran neither code and the
-    /// selector is untouched.
     /// Apply one run's `0x85` payments and its raise/lower-standing writes.
     ///
     /// The runner reports standing as the absolute value its own writes
@@ -5470,6 +5464,11 @@ impl PlayState {
     /// them. The milestone and `0x89` are capped `+1` steps, so for a record
     /// that only raises standing the result is exactly stream order; only a
     /// lower-standing write pinned at the floor could tell the two apart.
+    ///
+    /// The open session carries the selector its streams last wrote into
+    /// its later streams and turns, so it is handed the result here: a
+    /// milestone the session never saw would otherwise be overwritten again
+    /// by the next `0x89` / `0x8A` in the same conversation.
     pub fn apply_tlk_payments_and_standing(
         &mut self,
         payments: &[crate::conversation_session::ConversationGoldPayment],
@@ -5477,8 +5476,18 @@ impl PlayState {
     ) {
         self.apply_tlk_moral_standing(standing);
         self.apply_tlk_gold_payments(payments);
+        let live = self.moral_standing;
+        if let Some(session) = self.active_conversation.as_mut() {
+            session.sync_moral_standing(live);
+        }
     }
 
+    /// `conversation.md §7.4` / `karma.md §4`: assign the shared
+    /// moral-standing selector after a TLK stream ran `0x89`
+    /// STANDING-UP or `0x8A` STANDING-DOWN. The runner already applied
+    /// the published capped-add / capped-subtract writers, so this is an
+    /// assignment; `None` means the stream ran neither code and the
+    /// selector is untouched.
     pub fn apply_tlk_moral_standing(&mut self, standing: Option<u8>) {
         if let Some(standing) = standing {
             self.moral_standing = standing;

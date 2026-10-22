@@ -438,6 +438,15 @@ impl ConversationSession {
         self.npc_slot = slot;
     }
 
+    /// Hand the session the party's live moral-standing selector after the
+    /// caller applied a step's output. The caller's own writes (a `0x85`
+    /// payment's `karma.md §4.1` milestone) land outside the runner, and
+    /// without this the session's carried selector would feed
+    /// the next stream the pre-milestone standing (playtest G04).
+    pub fn sync_moral_standing(&mut self, standing: u8) {
+        self.moral_standing = Some(standing);
+    }
+
     /// Run the greeting through the byte runner. Caller should display
     /// the rendered text and then transition to keyword input.
     /// `conversation.md §9` step 2's Description entry.
