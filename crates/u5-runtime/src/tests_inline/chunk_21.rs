@@ -8558,6 +8558,36 @@ fn escape_at_the_sage_topic_and_well_wish_lines_submits_nothing() {
     assert_eq!(well.gold, 1);
 }
 
+/// `view.md §3`: "The coin prompt accepts Y or N; other keys continue
+/// waiting", and `shops.md §8.A`'s shared Y/N row: "Other keys print nothing
+/// and keep polling". Escape answered `No` and ended the Look, and any other
+/// key printed `Drop a coin?` a second time on a row of its own (playtest
+/// G17).
+#[test]
+fn wishing_well_coin_prompt_waits_silently_on_keys_other_than_y_or_n() {
+    let mut grid = open_grid();
+    grid[32 + 2] = 0xa1;
+    let mut state = test_state(grid, 1, 1);
+    state.player.facing = Direction::East;
+    state.gold = 2;
+    assert_eq!(state.look_facing(), MoveOutcome::Observed);
+    let message_before = state.message.clone();
+    for key in ['\u{1b}', 'x', ' '] {
+        handle_play_key_input(&mut state, key, "", Path::new("")).unwrap();
+        assert_eq!(state.message, message_before, "{key:?}");
+        assert!(
+            state
+                .active_wishing_well
+                .as_ref()
+                .is_some_and(|session| !session.coin_accepted),
+            "{key:?} leaves the coin prompt waiting"
+        );
+    }
+    assert_eq!(state.gold, 2);
+    handle_play_key_input(&mut state, 'n', "", Path::new("")).unwrap();
+    assert!(state.active_wishing_well.is_none());
+}
+
 /// `shops.md §8.8`: the sage's `You respond:` line "accepts up to fifteen
 /// characters". All twenty-six letters of a long topic were echoed across
 /// two rows (playtest G16).

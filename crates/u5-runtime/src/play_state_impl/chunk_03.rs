@@ -2856,7 +2856,10 @@ impl PlayState {
                         self.message = format!("\n{WISHING_WELL_WISH_PROMPT}");
                         return None;
                     }
-                    'N' | '\u{1b}' | ' ' => {
+                    // `view.md §3`: "The coin prompt accepts Y or N; other
+                    // keys continue waiting" - Escape and Space are not a
+                    // No here (playtest G17).
+                    'N' => {
                         // Measured: the declined answer completes the
                         // prompt's own row and nothing else prints.
                         self.commit_prompt_reply(
@@ -2868,8 +2871,11 @@ impl PlayState {
                     _ => {}
                 }
             }
+            // Other keys wait silently: re-assigning the prompt to the slot
+            // printed `Drop a coin?` a second time on a row of its own
+            // (`shops.md §8.A` shared Y/N row: "Other keys print nothing and
+            // keep polling", playtest G17).
             self.active_wishing_well = Some(session);
-            self.message = self.render_active_wishing_well();
             return None;
         }
 
