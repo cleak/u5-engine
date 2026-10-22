@@ -323,3 +323,33 @@ fn playtest_h24_toggles_and_function_keys_take_the_short_re_prompt_blank_row() {
         );
     }
 }
+
+/// `combat.md §8.1`: the banner ends with a colon and one line feed before
+/// the key read, so whatever the player types next is echoed on the row
+/// that feed opened - the same row for every letter. Playtest H32: under a
+/// banner whose last row is short, R-Ready, U-Use and Y-Yell opened their
+/// world verb echo under an extra blank row while D, C, A, S and G did not.
+#[test]
+fn playtest_h32_every_letter_echoes_on_the_row_under_the_banner() {
+    let game_dir = std::path::Path::new(".");
+    for key in ['D', 'R', 'U', 'Y'] {
+        let mut state = combat_state_after_the_conflict_banner(8, 5);
+        // `Iolo, armed with` / `bare hands:` - the banner's last row does
+        // not fill the window's width.
+        state.party_names[0] = *b"Iolo\0\0\0\0\0";
+        state.active_player = Some(0);
+        state.ensure_pending_combat_player_turn();
+
+        handle_play_key_input(&mut state, key, "", game_dir).unwrap();
+
+        let rows = combat_message_window_rows(&state);
+        let banner_end = rows
+            .iter()
+            .position(|row| row == "bare hands:")
+            .unwrap_or_else(|| panic!("{key}: rows: {rows:?}"));
+        assert!(
+            rows[banner_end + 1].starts_with('>') && rows[banner_end + 1].len() > 1,
+            "{key}: the echo sits on the row under the banner: {rows:?}"
+        );
+    }
+}
