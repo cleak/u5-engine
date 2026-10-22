@@ -18983,6 +18983,18 @@ fn handle_visual_line_key(
                 .is_some_and(|session| session.coin_accepted)
             {
                 Some(u5_runtime::WISHING_WELL_WISH_MAX_CHARS)
+            } else if state.active_yell.is_some() {
+                // `commands.md §11`: Yell "accepts up to thirty characters"
+                // (playtest H15).
+                Some(u5_runtime::YELL_INPUT_MAX_LEN)
+            } else if state.active_shrine.is_some() {
+                // `karma.md §12`: the virtue and mantra questions each "read
+                // up to twelve characters" (playtest H15).
+                Some(u5_runtime::SHRINE_MANTRA_INPUT_LIMIT)
+            } else if state.active_shrine_restoration.is_some() {
+                // `karma.md`, the ruined shrine: each of its four answers is
+                // read "up to fifteen characters" (playtest H15).
+                Some(u5_runtime::SHRINE_RESTORATION_INPUT_MAX_LEN)
             } else {
                 None
             };
@@ -30906,6 +30918,53 @@ mod tests {
                 ..PlayOptions::default()
             },
         )
+    }
+
+    /// Playtest H15, `input.md §8`: the reader "accepts printable ASCII bytes
+    /// up to the caller-supplied maximum length"; a byte past the cap is
+    /// neither accepted nor echoed. Yell's cap is thirty (`commands.md §11`).
+    #[test]
+    #[cfg(feature = "original-asset-tests")]
+    fn the_yell_line_stops_at_thirty_characters() {
+        let mut shell = britannia_meadow_shell("yell-cap");
+        shell.ticks(60);
+        shell.tap(KeyCode::KeyY);
+        assert!(shell.visual().state.active_yell.is_some());
+        for _ in 0..40 {
+            shell.tap(KeyCode::KeyA);
+        }
+        assert_eq!(
+            shell.visual().input_line,
+            "a".repeat(u5_runtime::YELL_INPUT_MAX_LEN)
+        );
+    }
+
+    /// Playtest H15, `karma.md §12`: the shrine's virtue and mantra prompts
+    /// "read up to twelve characters"; the ruined shrine's answers fifteen.
+    #[test]
+    fn shrine_answers_stop_at_their_published_caps() {
+        let type_into = |state: &mut PlayState, count: usize| {
+            let mut line = String::new();
+            for _ in 0..count {
+                handle_visual_line_key(
+                    state,
+                    &mut line,
+                    KeyCode::KeyH,
+                    false,
+                    false,
+                    Path::new(""),
+                )
+                .unwrap();
+            }
+            line
+        };
+        let mut shrine = test_state(open_grid(), 1, 1);
+        shrine.active_shrine = Some(u5_runtime::ShrineSession::new(ShrineVirtue::Honesty));
+        assert!(visual_line_prompt_active(&shrine));
+        assert_eq!(
+            type_into(&mut shrine, 21).len(),
+            u5_runtime::SHRINE_MANTRA_INPUT_LIMIT
+        );
     }
 
     /// Playtest H09, `input.md §6`: queued keystrokes "are honoured in
