@@ -493,9 +493,40 @@ struct QueuedSpeakerProgram {
     program: SpeakerProgram,
     audible: bool,
     interruptible: Option<InterruptibleSound>,
-    /// The effect holds the gameplay viewport inverted while it sounds
-    /// ([`SoundEffect::holds_viewport_inversion`]).
-    viewport_flash: bool,
+    /// How far into the program the gameplay viewport turns inverted, held
+    /// until the program ends; see [`viewport_flash_start`].
+    viewport_flash: Option<Duration>,
+}
+
+/// When a program's whole-viewport inversion begins, if it has one.
+///
+/// `rest-and-camp.md §7.1` step 4: the camp apparition's long sting holds it
+/// for the whole sting ([`SoundEffect::holds_viewport_inversion`]).
+///
+/// `audio.md §6`: every shared variant - potion, scroll and spell alike
+/// (`§6.1`) - is "run random rumble; invert the complete EGA/Tandy gameplay
+/// viewport; run the first software envelope; run the second ...; invert the
+/// same viewport again to restore it", and "Sound-disabled play still
+/// executes the rumble, both envelope loops, and both viewport operations".
+/// So the inversion starts where the rumble lead ends and lasts through both
+/// envelopes. The shell used to invert a potion for one host frame and a
+/// scroll not at all (playtest H12).
+fn viewport_flash_start(
+    effect: &SoundEffect,
+    program: &SpeakerProgram,
+    audible: bool,
+) -> Option<Duration> {
+    if effect.holds_viewport_inversion() {
+        return Some(Duration::ZERO);
+    }
+    if !matches!(effect, SoundEffect::SharedVariant { .. }) {
+        return None;
+    }
+    let lead = program
+        .ops
+        .iter()
+        .position(|op| matches!(op, u5_runtime::audio::SpeakerOp::Envelope(_)))?;
+    Some(SpeakerProgram::new(program.ops[..lead].to_vec()).duration(audible))
 }
 
 /// The tag of an interruptible program the voice is sounding, with the
@@ -512,12 +543,14 @@ struct SpeakerVoiceInterruptible {
 #[derive(Component)]
 struct SpeakerVoiceAudible;
 
-/// Marks a voice whose effect holds the whole gameplay viewport inverted for
-/// as long as it sounds: `rest-and-camp.md §7.1` step 4's camp-apparition
-/// flash rides each living member's long sting (u5-spec#299 Q5). Muted, the
-/// voice still lives for the program's own duration, so the flash does too.
+/// Marks a voice whose effect holds the whole gameplay viewport inverted from
+/// the carried offset into the program until it ends: `rest-and-camp.md
+/// §7.1` step 4's camp-apparition flash rides each living member's long sting
+/// (u5-spec#299 Q5), and `audio.md §6`'s shared variants invert after their
+/// rumble lead. Muted, the voice still lives for the program's own duration,
+/// so the flash does too.
 #[derive(Component)]
-struct SpeakerVoiceViewportFlash;
+struct SpeakerVoiceViewportFlash(Duration);
 
 /// How long the voice owns the channel: exactly [`SpeakerProgram::duration`].
 ///
@@ -9948,10 +9981,6 @@ fn play_speaker_effects(
         // `audio.md §3`: muting "changes output, not command or animation
         // cadence", so the program is built - and the jitter stream advanced -
         // for every effect, audible or not.
-        let viewport_flash = matches!(
-            &queued_effect.source,
-            SpeakerSource::Effect(effect) if effect.holds_viewport_inversion()
-        );
         let program = match &queued_effect.source {
             SpeakerSource::Effect(effect) => {
                 debug!(
@@ -9966,6 +9995,12 @@ fn play_speaker_effects(
                 cancel_interruptible_speaker_program(*tag, &mut pending, &voices, &mut cut_voices);
                 continue;
             }
+        };
+        let viewport_flash = match &queued_effect.source {
+            SpeakerSource::Effect(effect) => {
+                viewport_flash_start(effect, &program, queued_effect.audible)
+            }
+            _ => None,
         };
         pending.0.push_back(QueuedSpeakerProgram {
             program,
@@ -10010,8 +10045,8 @@ fn play_speaker_effects(
             audible,
         });
     }
-    if viewport_flash {
-        voice.insert(SpeakerVoiceViewportFlash);
+    if let Some(start) = viewport_flash {
+        voice.insert(SpeakerVoiceViewportFlash(start));
     }
     if !audible {
         return;
@@ -13685,25 +13720,14 @@ fn drive_visual(
 
     let v: &mut VisualState = visual.as_mut();
     v.prompt_cursor_visible = visual_line_prompt_active(&v.state);
-    if let Some(playback) = v.state.take_pending_potion_flash() {
-        // `audio.md §7.2` / `catalogs/item-list.md §7.2`: the accepted potion's
-        // blocking presentation is a `§6` shared variant, and the runtime
-        // already recorded it on `sound_effect_serial` when the bottle was
-        // decremented. The shell does not queue a second cue here; that is what
-        // made the potion sound twice.
-        let mut rgba = images
-            .get(&v.image_handle)
-            .and_then(|image| image.data.clone())
-            .expect("potion flash requires the current visual framebuffer");
-        assert!(
-            apply_visual_potion_flash_xor(&mut rgba, playback),
-            "potion flash playfield does not fit the visual framebuffer"
-        );
-        replace_visual_image_data(&mut images, &v.image_handle, rgba, "potion flash inversion");
-        run_potion_flash_soundless_timing(playback);
-        v.potion_flash_restore_pending = Some(playback);
-        return;
-    }
+    // `audio.md §7.2` / `catalogs/item-list.md §7.2`: the accepted potion's
+    // blocking presentation is a `§6` shared variant, and the runtime already
+    // recorded it on `sound_effect_serial` when the bottle was decremented.
+    // Its viewport inversion rides that voice ([`viewport_flash_start`]) for
+    // the length of both envelopes; inverting here as well held it for one
+    // host frame, while a counted busy loop stood in for the envelopes
+    // (playtest H12).
+    let _ = v.state.take_pending_potion_flash();
     let input_line = v.input_line.clone();
     let ctx = PlayFrameContext {
         ibm: &v.text_font,
@@ -13731,15 +13755,20 @@ fn drive_visual(
 /// inversion", since "No paired restoring inversion is issued" and each
 /// world-tick pause repaints every cell. One flash per voice, so flashes
 /// never accumulate.
+///
+/// `audio.md §6`'s shared variants ride the same flag: inverted once the
+/// voice has played its rumble lead, restored when the voice ends.
 fn present_camp_apparition_flash(
     visual: Option<ResMut<VisualState>>,
-    flashing: Query<(), With<SpeakerVoiceViewportFlash>>,
+    flashing: Query<(&SpeakerVoiceViewportFlash, &SpeakerVoiceLifetime)>,
     mut images: ResMut<Assets<Image>>,
 ) {
     let Some(mut visual) = visual else {
         return;
     };
-    let active = !flashing.is_empty();
+    let active = flashing
+        .iter()
+        .any(|(flash, lifetime)| lifetime.0.elapsed() >= flash.0);
     if visual.state.presentation_camp_flash_inverted == active {
         return;
     }
@@ -17089,17 +17118,15 @@ fn render_visual_play_frame_with_input_and_cursor(
     // the flash `magic.md §8`'s window hold waits on. Stock captures
     // (`cast-results` In Xen Mani, `cast-blink-overworld` In Por, 2026-10-17)
     // show the inverted view for most of the hold; this engine drew none.
-    if state.message_window_flash_hold_active()
-        && let Some(playback) = u5_runtime::potion_flash_playback(0)
-    {
-        let _ = apply_visual_potion_flash_xor(&mut rgba, playback);
-    }
+    //
     // `rest-and-camp.md §7.1` step 4 (u5-spec#299 Q5): the camp-apparition
     // flash is "one inversion of the whole gameplay viewport (the square from
     // pixel 8 to pixel 183 on both axes) in the accent pen (slot 1)" -
     // palette index 15 on the sixteen-colour drivers, so every pixel flips,
-    // the same exclusive-or as the shared flash above.
-    if state.presentation_camp_flash_inverted
+    // the same exclusive-or as the shared flash. Its voice flag also carries
+    // the shared variant's own inversion, which a spell's hold already
+    // covers, so the two are one inversion, never a double one.
+    if (state.message_window_flash_hold_active() || state.presentation_camp_flash_inverted)
         && let Some(playback) = u5_runtime::potion_flash_playback(0)
     {
         let _ = apply_visual_potion_flash_xor(&mut rgba, playback);
@@ -30491,6 +30518,29 @@ mod tests {
         assert_eq!(flash_voices(&mut app), 1, "muted, the long sting still flashes");
     }
 
+    /// Playtest H12, `audio.md §6`: every shared variant inverts the whole
+    /// viewport after its rumble lead and restores it after both envelopes,
+    /// muted or not - a scroll's included (`§6.1`, `§7.3`).
+    #[test]
+    fn a_shared_variant_voice_carries_the_viewport_flash_after_its_lead() {
+        for audible in [true, false] {
+            let mut app = speaker_test_app();
+            queue_speaker_effect(&mut app, SoundEffect::SharedVariant { variant: 1 }, audible);
+            let flashes: Vec<(Duration, Duration)> = app
+                .world_mut()
+                .query::<(&SpeakerVoiceViewportFlash, &SpeakerVoiceLifetime)>()
+                .iter(app.world())
+                .map(|(flash, lifetime)| (flash.0, lifetime.0.duration()))
+                .collect();
+            assert_eq!(flashes.len(), 1, "audible={audible}");
+            let (start, total) = flashes[0];
+            let lead = u5_runtime::audio::shared_variant_lead(1, &mut RumbleJitter::default())
+                .duration(audible);
+            assert_eq!(start, lead, "audible={audible}");
+            assert!(start > Duration::ZERO && start < total, "audible={audible}");
+        }
+    }
+
     /// u5-spec#299 Q5, `rest-and-camp.md §7.1` step 4: through the shell's
     /// own systems, the gameplay viewport (pixels 8..=183 on both axes)
     /// stands XOR-inverted in palette index 15 while the long sting sounds,
@@ -30956,5 +31006,34 @@ mod tests {
         // itself is not asked to fall silent.)
         shell.ticks(18);
         assert!(shell.app.world().resource::<SpeakerQueue>().0.is_empty());
+    }
+
+    /// Playtest H12, `audio.md §6` and `§10.3`: through the shell's own
+    /// systems the wind scroll's variant 1 holds the viewport inverted for
+    /// its two envelopes - about 1.2 s - and the frame is plain once it ends.
+    /// A potion's inversion used to last one host frame, a scroll's none.
+    #[test]
+    #[cfg(feature = "original-asset-tests")]
+    fn a_shared_variant_holds_the_viewport_inverted_through_both_envelopes() {
+        let mut shell = britannia_meadow_shell("shared-variant-flash");
+        shell.ticks(10);
+        shell.app.world_mut().send_event(SpeakerEffect::new(
+            SoundEffect::SharedVariant { variant: 1 },
+            true,
+        ));
+        let mut inverted_frames = 0;
+        for _ in 0..240 {
+            shell.tick();
+            if shell.visual().state.presentation_camp_flash_inverted {
+                inverted_frames += 1;
+            }
+        }
+        let inverted = VisualShellHarness::FRAME * inverted_frames;
+        assert!(
+            inverted >= Duration::from_millis(1_000) && inverted <= Duration::from_millis(1_500),
+            "inverted for {inverted:?}"
+        );
+        assert!(!shell.speaker_busy());
+        assert!(!shell.visual().state.presentation_camp_flash_inverted);
     }
 }
