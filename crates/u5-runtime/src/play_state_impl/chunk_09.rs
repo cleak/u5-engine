@@ -3228,7 +3228,12 @@ impl PlayState {
         // value rather than being swallowed by the loop-head minute. The flag
         // is consumed on the next advance either way, so it cannot leak past
         // one turn.
-        let minutes = if self.dungeon_loop_minute_charged {
+        // A fight entered from inside a dungeon dispatch (the A-Attack
+        // arena, a room trigger) leaves the loop-head minute charged until
+        // the round loop's exit spends the turn. The round-wrap minute
+        // `combat.md §4` gives a fight is its own time, so it neither
+        // consumes nor is swallowed by that flag.
+        let minutes = if self.dungeon_loop_minute_charged && !self.combat_active {
             self.dungeon_loop_minute_charged = false;
             if matches!(self.area, Area::Dungeon { .. }) && minutes == self.turn_minute_increment()
             {

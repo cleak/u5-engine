@@ -25645,7 +25645,10 @@ fn dungeon_attack_forward_monster_clears_active_object_and_consumes_turn() {
 
     assert!(state.handle_dungeon_key('A', Path::new("")).unwrap());
 
-    assert_eq!(state.turn, 1);
+    // `combat.md §4` / `dungeon-mode.md §4`: the attack's turn is spent at
+    // the round loop's exit, not before the arena (the dungeon sibling of
+    // playtest H21).
+    assert_eq!(state.turn, 0);
     assert!(state.combat_active);
     assert!(state.combat_frame_snapshot.as_ref().unwrap().active_objects[1].is_empty());
     // `dungeon-mode.md §14.1`: the synthesised source band encodes the
