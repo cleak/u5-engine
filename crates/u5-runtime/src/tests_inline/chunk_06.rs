@@ -1913,6 +1913,46 @@
         let _ = fs::remove_dir_all(dir);
     }
 
+    /// `containers.md §5`: "Repeating the same Search later skips the
+    /// already-found record and continues scanning", and the staged object
+    /// is left for Get, which "owns the inventory transfer". A second Search
+    /// before Get grants nothing and leaves the staged slot in place
+    /// (playtest G26).
+    #[test]
+    fn second_search_of_a_staged_fixed_treasure_before_get_grants_nothing() {
+        let dir = debug_game_dir();
+        let mut state = test_state(open_grid(), 4, 8);
+        state.area = Area::Town {
+            scene: Scene::new(1).unwrap(),
+            floor: 0,
+        };
+        state.player.facing = Direction::East;
+        state.gems = 0;
+
+        assert_eq!(
+            state.search_facing_with_game_dir(&dir).unwrap(),
+            MoveOutcome::Searched
+        );
+        let staged = ActiveObject::fixed_hidden_treasure_pickup(18, 5, 8, 0);
+        assert_eq!(state.active_objects[1], staged);
+
+        assert_eq!(
+            state.search_facing_with_game_dir(&dir).unwrap(),
+            MoveOutcome::Blocked
+        );
+        assert_eq!(state.message, SEARCH_NOTHING_FOUND);
+        assert_eq!(state.gems, 0);
+        assert_eq!(state.active_objects[1], staged);
+
+        assert_eq!(
+            state.get_facing_with_game_dir(&dir).unwrap(),
+            MoveOutcome::Got
+        );
+        assert_eq!(state.gems, 1);
+        assert_eq!(state.message, "\n1 gem!");
+        let _ = fs::remove_dir_all(dir);
+    }
+
     #[test]
     fn fixed_hidden_treasure_table_covers_all_spec_records() {
         assert_eq!(

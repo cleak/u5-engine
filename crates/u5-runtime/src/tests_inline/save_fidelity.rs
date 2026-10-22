@@ -256,6 +256,51 @@ fn month_rollover_ages_every_roster_record_counter() {
     let _ = fs::remove_dir_all(dir);
 }
 
+/// `time.md §8` ages each of the sixteen records once per rollover. A lodged
+/// guest's record is aged through the inn registry, so it must not also be
+/// aged a second time as an ordinary roster record (playtest G28).
+#[test]
+fn month_rollover_ages_a_lodged_guest_record_exactly_once() {
+    let mut template = saved_game_seed_bytes(0, 0, 10, 20);
+    template[SAVE_AVATAR_NAME_OFFSET] = b'A';
+    for slot in 0..SAVE_ROSTER_SLOT_COUNT {
+        template[SAVE_ROSTER_OFFSET
+            + slot * SAVE_CHARACTER_RECORD_LEN
+            + SAVE_CHARACTER_STAY_COUNTER_OFFSET] = 3;
+    }
+    let guest_slot = SAVE_ROSTER_SLOT_COUNT - 1;
+    template[inn_registry_marker_offset(guest_slot)] = 2;
+    let roster = decode_party_roster(&template);
+    let registry = decode_inn_registry(&template);
+    assert_eq!(registry.len(), 1);
+    assert_eq!(usize::from(registry[0].registry_slot), guest_slot);
+    let dir = save_fidelity_game_dir(template);
+
+    let mut state = world_state(open_world_grid(), 10, 20);
+    state.party_roster = roster;
+    state.inn_registry = registry;
+    state.party_stay_counters = vec![3; state.party.len()];
+    state.clock = GameClock::with_date(139, 4, 28, 23, 59).unwrap();
+    state.advance_turn_with_minutes(1);
+    assert_eq!(state.inn_registry[0].stay_counter, 4);
+
+    assert_eq!(
+        state.save_game_command(&dir, Some(true)).unwrap(),
+        MoveOutcome::Saved
+    );
+    let saved = fs::read(dir.join("SAVED.GAM")).unwrap();
+    for slot in 0..SAVE_ROSTER_SLOT_COUNT {
+        assert_eq!(
+            saved[SAVE_ROSTER_OFFSET
+                + slot * SAVE_CHARACTER_RECORD_LEN
+                + SAVE_CHARACTER_STAY_COUNTER_OFFSET],
+            4,
+            "roster slot {slot}"
+        );
+    }
+    let _ = fs::remove_dir_all(dir);
+}
+
 /// `doors-and-z-transitions.md §5`: the countdown starts at four and the
 /// door re-closes when it "hits zero". Runtime observation, spec silent
 /// on what happens next: the DOS build keeps the four-byte block. After
