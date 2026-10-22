@@ -3468,14 +3468,6 @@ impl PlayState {
             .count() as u16
     }
 
-    /// `time.md §5` party status/provision pass, entered once per
-    /// turn-consuming action. "The pass compares the shared pre-cascade hour
-    /// snapshot (Section 2; save byte `0x02DA`, Section 11) with the current
-    /// hour; it has no snapshot of its own", and "After the branch is
-    /// handled, the pass writes the current hour into that shared snapshot,
-    /// so neither this branch nor a following mode-zero cleanup refires until
-    /// the clock crosses another hour" (u5-spec#298 Q27, `RETRACTIONS.md`
-    /// R548, which withdrew the pass's own snapshot).
     /// `time.md §8`: "Each of the sixteen character record slots carries a
     /// one-byte counter. The month rollover increments it, capped at 25", and
     /// implementations "should still preserve and age it on all character
@@ -3492,6 +3484,14 @@ impl PlayState {
         }
     }
 
+    /// `time.md §5` party status/provision pass, entered once per
+    /// turn-consuming action. "The pass compares the shared pre-cascade hour
+    /// snapshot (Section 2; save byte `0x02DA`, Section 11) with the current
+    /// hour; it has no snapshot of its own", and "After the branch is
+    /// handled, the pass writes the current hour into that shared snapshot,
+    /// so neither this branch nor a following mode-zero cleanup refires until
+    /// the clock crosses another hour" (u5-spec#298 Q27, `RETRACTIONS.md`
+    /// R548, which withdrew the pass's own snapshot).
     pub fn apply_hourly_status_provision_pass(&mut self) -> u16 {
         let hour_changed = self.clock.hour != self.cleanup_previous_hour;
         let consumers = self.apply_status_provision_pass(hour_changed);
