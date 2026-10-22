@@ -4846,14 +4846,7 @@ impl PlayState {
         let _ = self.restore_resident_shadowlord_after_floor_reload();
         self.sync_player_object();
         self.mark_visibility_dirty();
-        let mut cleanup_ticks = 0;
-        while !town_arrest_release_loop_done(self.clock.hour) && cleanup_ticks < 96 {
-            self.advance_turn_with_minutes_and_door_tick(
-                TOWN_ARREST_CLEANUP_INCREMENT_MINUTES,
-                false,
-            );
-            cleanup_ticks += 1;
-        }
+        self.advance_town_arrest_wait_to_morning();
         // `moons.md §3` (issue #190): "The town arrest jail relocation
         // refreshes. The relocation arm - the one that moves the party to
         // the Yew jail, runs the clock forward to 08:00 in repeated
@@ -4884,6 +4877,33 @@ impl PlayState {
         Ok(Some(MoveOutcome::Transition(
             AreaTransition::EnteredLocation(scene),
         )))
+    }
+
+    /// The arrest wait-to-morning loop (`time.md §10`: "advances time in
+    /// repeated twenty-minute cleanup calls until the hour byte reaches
+    /// 08:00"). Returns the number of cleanup calls made.
+    ///
+    /// `time.md §12` lists this loop as a twenty-minute *cleanup* caller, and
+    /// the party status pass census is "exactly four places: the overworld
+    /// per-turn epilogue, the town per-turn underfoot handler, the dungeon
+    /// post-action handler, and the town-bed rest loop's ten-minute step".
+    /// The arrest loop is not one of them, so the wait takes no poison
+    /// points, eats no meal and leaves the turn-step counter alone - that
+    /// counter's only increment is the upkeep pass (`formats/saved-gam.md`
+    /// `0x02E5`) (playtest W1).
+    pub(crate) fn advance_town_arrest_wait_to_morning(&mut self) -> u16 {
+        let mut cleanup_ticks = 0;
+        while !town_arrest_release_loop_done(self.clock.hour) && cleanup_ticks < 96 {
+            self.advance_turn_with_minutes_policy(
+                TOWN_ARREST_CLEANUP_INCREMENT_MINUTES,
+                false,
+                true,
+                false,
+                false,
+            );
+            cleanup_ticks += 1;
+        }
+        cleanup_ticks
     }
 
     /// `town-mode.md §14`: "The arrest sequence itself branches on the

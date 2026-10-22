@@ -3285,8 +3285,9 @@ impl PlayState {
         if apply_hourly_party_status {
             // `town-mode.md §7`/§10 puts this pass at the *end* of the
             // underfoot handler. Ordinary town actions are one-minute turns;
-            // longer town-rest/arrest cleanup increments are direct time-loop
-            // calls and retain their existing immediate pass.
+            // the town-bed rest loop's ten-minute steps are direct time-loop
+            // calls and retain their existing immediate pass. The arrest
+            // wait-to-morning loop opts out (`time.md §12` census).
             let ordinary_town_turn =
                 matches!(self.area, Area::Town { .. }) && minutes == MINUTES_PER_INDOOR_TURN;
             if ordinary_town_turn || defer_stonegate_epilogue {
