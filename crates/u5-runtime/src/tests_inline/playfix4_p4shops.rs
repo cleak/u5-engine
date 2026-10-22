@@ -310,3 +310,36 @@ fn playfix4_h47_inn_rest_recovery_death_takes_a_blank_row_after_morning() {
         "{rows:#?}"
     );
 }
+
+/// H35: `commands.md §5.5` gives the sea Hole-up results as `Hull_now_` plus
+/// `!\n\n` and `Sails_must_be\n` plus `lowered!\n\n`. Two feeds after the
+/// result are "complete, plus one deliberate extra blank row"
+/// (`text-output.md §10.3`), so the result row carries a producer blank of
+/// its own before the turn's derived one; the engine dropped it.
+#[test]
+fn playfix4_h35_ship_hole_up_results_keep_their_producer_blank_row() {
+    for sails_hoisted in [false, true] {
+        let mut state = world_state(vec![BRIT_DEEP_WATER_TILE; WORLD_CELLS], 5, 5);
+        state.player.transport = TransportState::Ship {
+            type_byte: TRANSPORT_MARKER_SHIP_FURLED_FIRST,
+            tile: FIRST_PLAYABLE_FRIGATE_TILE,
+            sails_hoisted,
+            hull: 77,
+            skiffs: 2,
+        };
+        state.sync_player_object();
+        state.message_transcript.clear();
+        let dir = debug_game_dir();
+        handle_play_key_input(&mut state, 'H', "", &dir).unwrap();
+        state.flush_message_slot();
+        let log = message_log_from_entries(state.message_entries(), |line| Some(line.to_string()));
+        let rows: Vec<String> = log.lines().iter().map(|line| line.text.clone()).collect();
+        let result = if sails_hoisted { "lowered!" } else { "Hull now " };
+        let at = rows
+            .iter()
+            .position(|row| row.starts_with(result))
+            .unwrap_or_else(|| panic!("{rows:#?}"));
+        assert_eq!(rows[at + 1..], [String::new()], "{rows:#?}");
+        let _ = fs::remove_dir_all(dir);
+    }
+}

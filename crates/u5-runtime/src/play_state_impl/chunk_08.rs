@@ -25,7 +25,11 @@ impl PlayState {
         {
             self.replace_command_echo(HOLE_UP_REPAIR_ECHO);
             if sails_hoisted {
-                self.message = format!("{HOLE_UP_REPAIR_BODY}\n{HOLE_UP_SAILS_MUST_BE_LOWERED}");
+                // `commands.md §5.5`: `lowered!\n\n` - the second feed is
+                // a blank row of the literal's own, ahead of the turn's
+                // derived one (playtest H35).
+                self.message =
+                    format!("{HOLE_UP_REPAIR_BODY}\n{HOLE_UP_SAILS_MUST_BE_LOWERED}\n\n");
                 return MoveOutcome::Blocked;
             }
             // `stats-panel.md §2.2.1` row 1: the ship-repair branch defers
@@ -47,7 +51,10 @@ impl PlayState {
             // The spec does not give the branch a minute charge of its own,
             // so it takes the ordinary consumed outdoor turn.
             self.advance_turn();
-            self.message = format!("{HOLE_UP_REPAIR_BODY}\n{HOLE_UP_HULL_NOW_PREFIX}{repaired}!");
+            // `Hull_now_` plus `!\n\n`: as the sails refusal, the literal
+            // carries its own blank row (playtest H35).
+            self.message =
+                format!("{HOLE_UP_REPAIR_BODY}\n{HOLE_UP_HULL_NOW_PREFIX}{repaired}!\n\n");
             return MoveOutcome::Rested;
         }
         // `commands.md §5.5`'s other Hole-up refusal. Camping wants the
