@@ -1180,4 +1180,5 @@ mod tests {
     include!("tests_inline/playfix2_shops.rs");
     include!("tests_inline/rc3_residuals.rs");
     include!("tests_inline/spec299_c3.rs");
+    include!("tests_inline/playfix3_p3quest.rs");
 }
