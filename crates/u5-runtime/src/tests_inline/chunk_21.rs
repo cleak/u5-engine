@@ -5157,6 +5157,56 @@ fn a_self_introduction_whose_name_entry_asks_who_closes_on_the_name_prompt() {
     assert!(answer.contains(crate::TLK_ASK_WHO_DISMISSIVE_LINE), "{answer:?}");
 }
 
+/// Playtest G02. `conversation.md §9` step 3 runs the Name entry "through
+/// the byte runner", §7.4 makes `0x8D` a forced literal newline and §7.6
+/// gives ASK-WHO no feed of its own, so the Name entry's two row breaks stand
+/// between its closing quote and the question: `"I am called` / `Grum"` / a
+/// blank row / `"What is thy` / `name?"`. The opening trimmed them and the
+/// question ran onto the name row (`Trian"What is`).
+#[test]
+fn a_self_introduction_keeps_the_name_entry_row_breaks_before_ask_who() {
+    let enc = |s: &str| s.bytes().map(|b| b ^ 0x80).collect::<Vec<u8>>();
+    let mut name = enc("Grum\"");
+    name.extend([
+        TLK_CODE_LITERAL_NEWLINE,
+        TLK_CODE_LITERAL_NEWLINE,
+        TLK_CODE_IF_ELSE,
+        0xFF,
+        TLK_CODE_ASK_WHO,
+    ]);
+    let raw = vec![
+        name,
+        enc("a knight."),
+        enc("Well met."),
+        enc("I guard."),
+        enc("Farewell."),
+    ];
+    let decoded = raw
+        .iter()
+        .map(|field| field.iter().map(|b| char::from(b ^ 0x80)).collect())
+        .collect();
+    let seed = (0u16..64)
+        .find(|seed| {
+            let mut stream = *seed;
+            u5_prng_range_u16(&mut stream, 0, 1) != 0
+        })
+        .expect("some seed introduces");
+    let mut state = test_state(open_grid(), 1, 1);
+    state.active_conversation_npc_slot = Some(1);
+    state.active_conversation = Some(Box::new(
+        crate::conversation_session::ConversationSession::new(raw, decoded),
+    ));
+
+    let opening = state.advance_active_conversation_greeting_with_seed(Some(seed));
+    assert!(
+        opening.ends_with(&format!(
+            "\"I am called Grum\"\n\n{}",
+            crate::TLK_ASK_WHO_PROMPT
+        )),
+        "{opening:?}"
+    );
+}
+
 #[test]
 fn conversation_keyword_line_is_capped_at_fifteen_characters() {
     // `conversation.md §6` step 2: the reader "accepts up to fifteen

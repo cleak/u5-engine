@@ -5865,6 +5865,27 @@ impl PlayState {
                     opening.push_plain("\"");
                 }
             }
+            // `conversation.md §9` step 3 runs the entry "through the byte
+            // runner", where `0x8D` is a forced literal newline (§7.4), and
+            // §7.6 gives ASK-WHO no feed of its own: when the entry suspends
+            // on its `0x88`, the row breaks the stream printed before it are
+            // the only ones between the closing quote and the question.
+            // Trimming them ran the question onto the name row -
+            // `Trian"What is` / `thy name?"` (playtest G02; Trian, Woolfe,
+            // Gruman, Eb, Treanna and Joshua share the Name shape `<name>"`,
+            // two `0x8D`, `0x8C 0xFF`, `0x88`).
+            if suspended_after_opening {
+                let feeds = rendered
+                    .glyphs
+                    .iter()
+                    .rev()
+                    .take_while(|glyph| glyph.byte.is_ascii_whitespace())
+                    .filter(|glyph| glyph.byte == b'\n')
+                    .count();
+                for _ in 0..feeds {
+                    opening.push_plain("\n");
+                }
+            }
         }
         (opening, suspended_after_opening)
     }
