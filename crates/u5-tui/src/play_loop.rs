@@ -110,7 +110,7 @@ pub fn run_interactive_play_loop<R: BufRead>(
         // handoff, and this shell has no pump to walk it there.
         state.run_blackthorn_rescue_to_handoff(game_dir)?;
         state.run_blackthorn_audience_exit_to_handoff(game_dir)?;
-        state.run_shrine_third_mantra_resolution_to_completion(game_dir)?;
+        resolve_shrine_third_mantra_without_pump(state, game_dir)?;
         // `endgame.md §7` steps 4-6 read no key and this shell has no pump,
         // so the box hand-over is run to record `3` here; a key typed during
         // it waits in the buffer and is replayed below.
@@ -187,6 +187,27 @@ pub fn run_interactive_play_loop<R: BufRead>(
     Ok(())
 }
 
+/// Walk a pending third-mantra resolution to its end in a shell with no
+/// presentation pump.
+///
+/// `karma.md §7.2`: nothing between the Return that ends the third mantra and
+/// the next command row waits for a key - the turn-in arm's attribute lines
+/// print "after the whole sound" and its exit pacing follows. The shells flush
+/// staged narration *before* this resolution runs, so what the resolution
+/// itself stages has to be flushed here too; it used to wait for the next
+/// command, leaving `Strength +1` and the prompt off the frame (playtest H41).
+fn resolve_shrine_third_mantra_without_pump(
+    state: &mut PlayState,
+    game_dir: &Path,
+) -> io::Result<()> {
+    if state.pending_shrine_third_mantra.is_none() {
+        return Ok(());
+    }
+    state.run_shrine_third_mantra_resolution_to_completion(game_dir)?;
+    state.flush_staged_narration();
+    Ok(())
+}
+
 pub fn run_play_script_commands(
     state: &mut PlayState,
     game_dir: &Path,
@@ -211,7 +232,7 @@ pub fn run_play_script_commands(
         // third shrine mantra was a no-op (playtest E58).
         state.run_blackthorn_rescue_to_handoff(game_dir)?;
         state.run_blackthorn_audience_exit_to_handoff(game_dir)?;
-        state.run_shrine_third_mantra_resolution_to_completion(game_dir)?;
+        resolve_shrine_third_mantra_without_pump(state, game_dir)?;
         drain_play_script_prompt_head_panel_refresh(state);
         print_play_script_snapshot(state, tile_atlas)?;
         if disposition == PlayInputDisposition::Quit {
@@ -261,7 +282,7 @@ where
         // `blackthorn-audience-correct` and `-wrong`.
         state.run_blackthorn_rescue_to_handoff(game_dir)?;
         state.run_blackthorn_audience_exit_to_handoff(game_dir)?;
-        state.run_shrine_third_mantra_resolution_to_completion(game_dir)?;
+        resolve_shrine_third_mantra_without_pump(state, game_dir)?;
         drain_play_script_prompt_head_panel_refresh(state);
         after_command(state, index, command)?;
         if disposition == PlayInputDisposition::Quit {
@@ -742,7 +763,7 @@ fn settle_play_script_exploration_gate(state: &mut PlayState, game_dir: &Path) -
         state.flush_text_hold();
         state.run_blackthorn_rescue_to_handoff(game_dir)?;
         state.run_blackthorn_audience_exit_to_handoff(game_dir)?;
-        state.run_shrine_third_mantra_resolution_to_completion(game_dir)?;
+        resolve_shrine_third_mantra_without_pump(state, game_dir)?;
         match state.apply_exploration_turn_gate(game_dir)? {
             ExplorationTurnGateOutcome::Ready { .. } => return Ok(()),
             ExplorationTurnGateOutcome::Slept { .. }
