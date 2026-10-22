@@ -163,26 +163,34 @@ fn drive_intro_subflow(
             prompt_continue()?;
         }
         IntroSubflow::UltimaIvTransfer => {
-            let result = if run_manual_u4_transfer(game_dir)? {
-                IntroSubflowResult::SaveReady
-            } else {
-                IntroSubflowResult::Cancelled
+            let result = match refuse_unsupported_subflow(run_manual_u4_transfer(game_dir))? {
+                Some(true) => IntroSubflowResult::SaveReady,
+                Some(false) => IntroSubflowResult::Cancelled,
+                None => {
+                    dispatch.complete_subflow(subflow, IntroSubflowResult::Cancelled);
+                    return Ok(IntroLoopControl::Continue);
+                }
             };
             dispatch.complete_subflow(subflow, result);
             prompt_continue()?;
         }
         IntroSubflow::StorySlides => {
-            run_story_slides(game_dir)?;
+            let shown = refuse_unsupported_subflow(run_story_slides(game_dir))?.is_some();
             dispatch.complete_subflow(subflow, IntroSubflowResult::ReturnedToMenu);
-            prompt_continue()?;
+            if shown {
+                prompt_continue()?;
+            }
         }
         IntroSubflow::Acknowledgements => {
-            u5_runtime::require_graphical_acknowledgements_surface();
+            let _ = refuse_unsupported_subflow::<()>(Err(acknowledgements_need_graphical_surface()))?;
+            dispatch.complete_subflow(subflow, IntroSubflowResult::ReturnedToMenu);
         }
         IntroSubflow::ReturnToView => {
-            run_return_to_view_preview(game_dir)?;
+            let shown = refuse_unsupported_subflow(run_return_to_view_preview(game_dir))?.is_some();
             dispatch.complete_subflow(subflow, IntroSubflowResult::ReturnedToMenu);
-            prompt_continue()?;
+            if shown {
+                prompt_continue()?;
+            }
         }
     }
     Ok(IntroLoopControl::Continue)
@@ -225,26 +233,55 @@ fn run_return_to_view_preview(game_dir: &Path) -> io::Result<()> {
     }
 }
 
-fn require_terminal_story_renderer_contract() -> ! {
-    panic!(
-        "terminal intro story diagnostics are a forbidden fallback; story slides require the graphical intro renderer, published proportional width table, and inline doorway text before playback can advance; see cleak/u5-spec#69 and cleak/u5-spec#70"
+/// A menu entry the terminal harness cannot present: an
+/// [`io::ErrorKind::Unsupported`] refusal. [`drive_intro_subflow`] reports it
+/// and returns to `Selection:`; a choice the menu itself offers must not
+/// end the process (playtest G14).
+fn unsupported_in_terminal(message: &str) -> io::Error {
+    io::Error::new(io::ErrorKind::Unsupported, message.to_string())
+}
+
+/// Report an [`unsupported_in_terminal`] refusal on stderr and yield
+/// `None`; any other error still propagates.
+fn refuse_unsupported_subflow<T>(result: io::Result<T>) -> io::Result<Option<T>> {
+    match result {
+        Ok(value) => Ok(Some(value)),
+        Err(err) if err.kind() == io::ErrorKind::Unsupported => {
+            eprintln!("{err}");
+            Ok(None)
+        }
+        Err(err) => Err(err),
+    }
+}
+
+/// `intro.md §11`: the acknowledgements are artwork drawn into the
+/// `STARTSC` bitmap; see [`u5_runtime::require_graphical_acknowledgements_surface`].
+fn acknowledgements_need_graphical_surface() -> io::Error {
+    unsupported_in_terminal(
+        "intro acknowledgements are the §11 credits artwork screen and need the graphical intro renderer; the terminal harness has no pixel surface, and substituting placeholder credits is a forbidden fallback; see cleak/u5-spec#72",
     )
 }
 
-fn require_terminal_return_to_view_renderer_contract() -> ! {
+fn require_terminal_story_renderer_contract() -> io::Result<()> {
+    Err(unsupported_in_terminal(
+        "terminal intro story diagnostics are a forbidden fallback; story slides require the graphical intro renderer, published proportional width table, and inline doorway text before playback can advance; see cleak/u5-spec#69 and cleak/u5-spec#70",
+    ))
+}
+
+fn require_terminal_return_to_view_renderer_contract() -> io::Result<()> {
     // `cleak/u5-spec#54` is published and the preview is implemented in
     // the graphical shell: nineteen 16x16 cells across by four down at
     // (8, 128). The terminal harness has no pixel surface to blit that
     // strip onto, so a text transcript of it stays a forbidden fallback.
-    panic!(
-        "terminal Return-to-View diagnostics are a forbidden fallback; the preview is a 304x64 tile strip and must run in the graphical shell; see cleak/u5-spec#54"
-    )
+    Err(unsupported_in_terminal(
+        "terminal Return-to-View diagnostics are a forbidden fallback; the preview is a 304x64 tile strip and must run in the graphical shell; see cleak/u5-spec#54",
+    ))
 }
 
-fn require_terminal_u4_transfer_renderer_contract() -> ! {
-    panic!(
-        "terminal Ultima IV transfer preview is a forbidden fallback; U4 transfer requires the graphical roster/status preview, prompt window, redraw timing, and confirmation input contract before a transfer can advance; see cleak/u5-spec#73"
-    )
+fn require_terminal_u4_transfer_renderer_contract() -> io::Result<bool> {
+    Err(unsupported_in_terminal(
+        "terminal Ultima IV transfer preview is a forbidden fallback; U4 transfer requires the graphical roster/status preview, prompt window, redraw timing, and confirmation input contract before a transfer can advance; see cleak/u5-spec#73",
+    ))
 }
 
 fn run_manual_u4_transfer(game_dir: &Path) -> io::Result<bool> {
@@ -303,11 +340,9 @@ mod tests {
         fs::create_dir_all(&dir).unwrap();
         fs::write(dir.join(STORY_DAT_FILE), b"placeholder").unwrap();
 
-        let result = std::panic::catch_unwind(|| {
-            let _ = run_story_slides(&dir);
-        });
-
-        let message = panic_message(result.expect_err("terminal story diagnostics must panic"));
+        let err = run_story_slides(&dir).expect_err("terminal story diagnostics must refuse");
+        assert_eq!(err.kind(), io::ErrorKind::Unsupported);
+        let message = err.to_string();
         assert!(
             message.contains("terminal intro story diagnostics are a forbidden fallback"),
             "{message}"
@@ -336,12 +371,10 @@ mod tests {
         fs::create_dir_all(&dir).unwrap();
         fs::write(dir.join(MISCMAPS_DAT_FILE), [0u8]).unwrap();
 
-        let result = std::panic::catch_unwind(|| {
-            let _ = run_return_to_view_preview(&dir);
-        });
-
-        let message =
-            panic_message(result.expect_err("terminal Return-to-View diagnostics must panic"));
+        let err = run_return_to_view_preview(&dir)
+            .expect_err("terminal Return-to-View diagnostics must refuse");
+        assert_eq!(err.kind(), io::ErrorKind::Unsupported);
+        let message = err.to_string();
         assert!(
             message.contains("terminal Return-to-View diagnostics are a forbidden fallback"),
             "{message}"
@@ -351,15 +384,23 @@ mod tests {
         let _ = fs::remove_dir_all(dir);
     }
 
-    fn panic_message(payload: Box<dyn std::any::Any + Send>) -> String {
-        payload
-            .downcast_ref::<String>()
-            .cloned()
-            .or_else(|| {
-                payload
-                    .downcast_ref::<&str>()
-                    .map(|message| message.to_string())
-            })
-            .expect("panic payload must be a string")
+    /// Playtest G14: a refusal returns to the menu instead of ending the
+    /// process; other errors still propagate.
+    #[test]
+    fn unsupported_menu_entries_are_refused_without_ending_the_process() {
+        assert_eq!(
+            refuse_unsupported_subflow::<()>(Err(acknowledgements_need_graphical_surface()))
+                .unwrap(),
+            None
+        );
+        assert_eq!(
+            refuse_unsupported_subflow::<()>(require_terminal_story_renderer_contract()).unwrap(),
+            None
+        );
+        assert_eq!(refuse_unsupported_subflow(Ok(7)).unwrap(), Some(7));
+        assert!(
+            refuse_unsupported_subflow::<()>(Err(io::Error::from(io::ErrorKind::NotFound)))
+                .is_err()
+        );
     }
 }
