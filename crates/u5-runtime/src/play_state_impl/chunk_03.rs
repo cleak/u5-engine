@@ -1824,10 +1824,33 @@ impl PlayState {
                         continue;
                     }
                     if ch == ' ' {
+                        // `input.md §11`: "Space is accepted as `Pass`: it
+                        // echoes `Pass`", exactly as a cardinal echoes its
+                        // label - on the open `Direction-` row, which the word
+                        // completes (`text-output.md §10.3`: the direction
+                        // prompt appends `Pass` "to the open line"). It was
+                        // printed on a row of its own (playtest H37).
+                        let completed = self.complete_open_direction_echo(
+                            SPELL_DIRECTION_PROMPT_PREFIX,
+                            DIRECTION_PROMPT_LABEL_PASS,
+                        );
                         if pass_allowed {
-                            return self.finish_active_cast_followup(session, " ", game_dir);
+                            let result = self.finish_active_cast_followup(session, " ", game_dir);
+                            // The handlers' own pass arm prints `Pass` (it is
+                            // also the inline suffix form's only echo); here
+                            // the prompt row already carries it, so the slot
+                            // must not print it a second time on a row below.
+                            if completed && self.message == DIRECTION_PROMPT_LABEL_PASS {
+                                let line =
+                                    format!("{SPELL_DIRECTION_PROMPT_PREFIX}{DIRECTION_PROMPT_LABEL_PASS}");
+                                self.message = line.clone();
+                                self.message_flushed = line;
+                            }
+                            return result;
                         }
-                        self.message = DIRECTION_PROMPT_LABEL_PASS.to_string();
+                        if !completed {
+                            self.message = DIRECTION_PROMPT_LABEL_PASS.to_string();
+                        }
                         return Ok(None);
                     }
                     let Some(direction) =

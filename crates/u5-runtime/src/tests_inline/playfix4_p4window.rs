@@ -220,3 +220,32 @@ fn playfix4_h06_the_potion_on_who_prompt_inverts_the_indicated_member() {
     assert_eq!(state.roster_box_label().as_deref(), Some("Select:"));
     assert_eq!(state.selector_highlight(), Some(1));
 }
+
+/// H37: `input.md §11` - "Space is accepted as `Pass`: it echoes `Pass`",
+/// as the cardinals echo their labels; `text-output.md §10.3` - the
+/// direction prompt appends `North` ... or `Pass` "to the open line".
+#[test]
+fn playfix4_h37_space_at_a_spell_direction_prompt_completes_the_row_with_pass() {
+    let dir = debug_game_dir();
+    let mut state = p4window_world_state();
+    state.spell_charges[spell_index_from_code("AS").unwrap()] = 1;
+    state.party[0].mana = 20;
+    state.party[0].level = 8;
+    p4window_keys(&mut state, &dir, &['C', 'A', 'S', '\r']);
+    assert!(
+        state.active_cast_followup.as_ref().is_some_and(|session| matches!(
+            session.kind,
+            CastFollowupKind::Direction { .. }
+        )),
+        "{:?}",
+        p4window_rows(&state)
+    );
+    p4window_keys(&mut state, &dir, &[' ']);
+    let texts: Vec<&str> =
+        state.message_transcript.iter().map(|entry| entry.text.as_str()).collect();
+    assert!(texts.contains(&"Direction-Pass"), "{texts:?}");
+    assert!(!texts.contains(&"Pass"), "{texts:?}");
+    let rows = p4window_rows_from(&p4window_rows(&state), "Direction-Pass");
+    assert_eq!(rows, ["Direction-Pass", "", ">"]);
+    let _ = fs::remove_dir_all(dir);
+}
