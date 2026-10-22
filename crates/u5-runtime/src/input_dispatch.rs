@@ -7408,6 +7408,14 @@ fn combat_attack_result_narration(
         CombatWeaponAttackResolution::OutOfRange { .. }
         | CombatWeaponAttackResolution::NoOrdinaryDamage { .. } => (None, None),
     };
+    // `combat.md §11.1`: a split class's `<monster> divides!` is printed
+    // "inside the damage handler, and the ordinary result line **still**
+    // prints after it" - after the damage roll's shatter line, before the
+    // result line (playtest H20).
+    let inside_damage_roll = match (inside_damage_roll, state.combat_pending_divide_line.take()) {
+        (Some(inside), Some(divide)) => Some(format!("{inside}\n{divide}")),
+        (inside, divide) => inside.or(divide),
+    };
     CombatAttackResultNarration {
         inside_damage_roll,
         result,

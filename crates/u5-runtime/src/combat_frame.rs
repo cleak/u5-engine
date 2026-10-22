@@ -5130,10 +5130,29 @@ impl PlayState {
             z,
             combat_monster_placement_flags(placement.class),
         )?;
+        // `combat.md §11.1`, census: "`<monster> divides!` inside the
+        // damage handler, and the ordinary result line **still** prints
+        // after it" - `Order, stated once` step 4, after step 3's hit
+        // newline and before step 5's result line. Writing it into the slot
+        // let that result line overwrite it, so the divide was never seen
+        // (playtest H20); it is held for the shared result narrator, which
+        // owns those newlines.
         if let Some(stats) = combat_class_stats(placement.class) {
-            self.message = format!("{} divides!", stats.name);
+            self.flush_unclaimed_combat_divide_line();
+            self.combat_pending_divide_line = Some(format!("{} divides!", stats.name));
         }
         Some(child)
+    }
+
+    /// Print a `divides!` line that no result narrator claimed, on its own
+    /// row, so a split is never silent (`combat.md §11.1`).
+    pub(crate) fn flush_unclaimed_combat_divide_line(&mut self) {
+        if let Some(line) = self.combat_pending_divide_line.take() {
+            self.emit_message_line(format!("{line}\n"));
+            // The line carries its own closing feed (`combat.md §11.1`:
+            // the result line still prints after it, on the next row).
+            self.message_row_open_mid_line = false;
+        }
     }
 
     /// `combat.md §6.1`, bit `0x80`: "It is the discriminator the
@@ -6415,7 +6434,13 @@ impl PlayState {
         let narrates_kill = combat_weapon_damage_application_killed(Some(application));
         let gate = resolve_combat_attack_narrator_gate(self.combat_action_result, narrates_kill);
         self.combat_action_result = gate.result_after;
-        if gate.run_generic_chain { line } else { None }
+        let line = if gate.run_generic_chain { line } else { None };
+        // `combat.md §11.1`: a split's `divides!` precedes the result line.
+        match (self.combat_pending_divide_line.take(), line) {
+            (Some(divide), Some(line)) => Some(format!("{divide}\n{line}")),
+            (Some(divide), None) => Some(divide),
+            (None, line) => line,
+        }
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -8234,6 +8259,7 @@ impl PlayState {
         // `combat.md §6.3`: the combat walker clears the entire global
         // action-result scratch before the next actor dispatch.
         self.combat_action_result = 0;
+        self.flush_unclaimed_combat_divide_line();
 
         let actor = self.combat_actors[slot];
         if !combat_actor_is_present_not_dead(actor) {
