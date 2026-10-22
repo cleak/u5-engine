@@ -8557,3 +8557,35 @@ fn escape_at_the_sage_topic_and_well_wish_lines_submits_nothing() {
     );
     assert_eq!(well.gold, 1);
 }
+
+/// `shops.md §8.8`: the sage's `You respond:` line "accepts up to fifteen
+/// characters". All twenty-six letters of a long topic were echoed across
+/// two rows (playtest G16).
+#[test]
+fn sage_topic_echo_is_capped_at_fifteen_characters() {
+    use crate::shop_runtime::SageState;
+    use crate::shop_session::ActiveShopSession;
+
+    let mut state = test_state(open_grid(), 1, 1);
+    state.area = Area::Town {
+        scene: Scene::new(22).unwrap(),
+        floor: 0,
+    };
+    state.gold = 200;
+    state.active_shop = Some(ActiveShopSession::Sage(SageState::default()));
+    handle_play_key_input(&mut state, 'a', "bcdefghijklmnopqrstuvwxyz", Path::new("")).unwrap();
+    let echoes = state
+        .message_entries()
+        .iter()
+        .filter(|entry| entry.text.contains("ABCDE"))
+        .map(|entry| entry.text.clone())
+        .collect::<Vec<_>>();
+    assert_eq!(echoes, vec!["ABCDEFGHIJKLMNO".to_string()]);
+    assert!(
+        !state
+            .message_entries()
+            .iter()
+            .any(|entry| entry.text.contains('P')),
+        "nothing past the fifteenth character is echoed"
+    );
+}
