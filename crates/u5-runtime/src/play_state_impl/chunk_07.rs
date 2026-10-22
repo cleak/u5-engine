@@ -1576,7 +1576,7 @@ impl PlayState {
                     // The seal-toggle outcomes' text is not published and no
                     // capture of this engine's suite reaches one, so they add
                     // nothing rather than an invented sentence; the mutation
-                    // itself is the observable. The no-target outcomes take
+                    // itself is the observable. The no-neighbour outcome takes
                     // the measured `No effect!` under a blank row.
                     let context = match outcome {
                         WordOfPowerTargetOutcome::EntranceToggled { open, .. } => {
@@ -1586,9 +1586,18 @@ impl PlayState {
                             ""
                         }
                         WordOfPowerTargetOutcome::RuinedShrine { .. } => unreachable!(),
-                        WordOfPowerTargetOutcome::NoQualifyingNeighbor
-                        | WordOfPowerTargetOutcome::WrongCoordinate { .. } => {
+                        // Step 1 "additionally prints the no-effect result"
+                        // only when no neighbour qualifies; step 3's wrong
+                        // coordinate "still produces the utterance feedback
+                        // ... but changes nothing" (playtest G30).
+                        WordOfPowerTargetOutcome::NoQualifyingNeighbor => {
                             crate::commands::WORD_OF_POWER_NO_EFFECT_TAIL
+                        }
+                        WordOfPowerTargetOutcome::WrongCoordinate { x, y } => {
+                            self.diagnostics.push(format!(
+                                "Word of power: sealed neighbour ({x}, {y}) is not this word's entrance"
+                            ));
+                            ""
                         }
                     };
                     self.message = format!("{utterance}{context}");

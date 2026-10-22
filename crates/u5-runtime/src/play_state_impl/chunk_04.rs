@@ -3023,7 +3023,13 @@ impl PlayState {
         let mut next = Self::load_scene(game_dir, options)?;
         next.turn = previous_turn;
         next.world_overlays = self.world_overlays.clone();
-        if matches!(target, PlayTarget::World(_)) {
+        if let PlayTarget::World(plane) = target {
+            // `catalogs/quest-graph.md §5`: the shards and the Amulet are
+            // placed "by the outdoor setup pass that runs whenever the party
+            // is on a non-surface outdoor plane", and `overworld.md §9`'s
+            // warp ends in a normal scene entry, so a moonstone transit into
+            // the Underworld runs the same pass the falls do (playtest G29).
+            next.place_underworld_fixed_objects(plane);
             next.cache_current_world_overlay();
         }
         if matches!(target, PlayTarget::Dungeon(_)) {

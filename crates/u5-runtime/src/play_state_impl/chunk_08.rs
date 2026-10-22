@@ -2584,6 +2584,21 @@ impl PlayState {
             next.message_transcript_revision = entry_transcript_revision;
             next.message_flushed = entry_message_flushed;
             next.pending_command_echo = None;
+            // `town-mode.md §13`: "After the location is drawn", Stonegate's
+            // presentation prints one "air of" row per still-living
+            // Shadowlord. `load_town_scene` printed them into the transcript
+            // the entry log just replaced, so they never reached the window
+            // on an `E`-Enter (playtest G31). Print them again under the
+            // entry narration. That narration ends with its own line feed, so
+            // the rows start on a fresh row; the last row is left open, as
+            // the load-time producer leaves it, for the prompt's feed.
+            if let Some(note) = next.stonegate_entry_presentation_message() {
+                next.message_row_open_mid_line = false;
+                next.push_message_transcript_lines(&note);
+                next.message_row_open_mid_line = true;
+                next.message.push_str(&note);
+                next.message_flushed = next.message.clone();
+            }
         }
         // `text-output.md §9`: window 2's "only mutable state is its cursor,
         // which advances with output and is moved only by explicit cursor

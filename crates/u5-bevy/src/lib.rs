@@ -39,8 +39,8 @@ use u5_runtime::{
     DEFAULT_CLIMB_STAT, DEFAULT_FOOD_STOCK, DEFAULT_KEY_STOCK, DES_POR_SPELL_INDEX,
     DISPEL_FIELD_COST, DISPEL_FIELD_SPELL_INDEX, DUNGEON_CBT_RECORDS, DUNGEON_LEVEL_SPELL_COST,
     DUNGEON_MONSTER_COMBAT_CLASSES, Direction, DisplayDriverFamily, DungeonRoomCombatSetup,
-    DungeonScene, EGA_PALETTE_RGB as ENHANCED_EGA_PALETTE_RGB, ENDGAME_GATE_CELL,
-    ENDGAME_TABLEAU_HEIGHT, ENDGAME_TABLEAU_WIDTH, ENERGY_FIELD_COST, ENERGY_FIELD_SPELL_INDEX,
+    DungeonScene, EGA_PALETTE_RGB as ENHANCED_EGA_PALETTE_RGB, ENERGY_FIELD_COST,
+    ENERGY_FIELD_SPELL_INDEX,
     EQUIP_SLOT_RING, EQUIP_SLOT_WEAPON, EQUIPMENT_EMPTY, EQUIPMENT_ID_ARROWS, EQUIPMENT_ID_BOW,
     EQUIPMENT_ID_RING_REGENERATION, ExplorationTurnGateOutcome, FIELD_SPELL_COST,
     FIRE_FIELD_SPELL_INDEX, FIRST_PLAYABLE_FRIGATE_TILE, FIRST_PLAYABLE_FULL_SHIP_HULL,
@@ -65,8 +65,7 @@ use u5_runtime::{
     LOAD_EMPTY_SAVE_LINE_1, LOAD_EMPTY_SAVE_LINE_2, LOAD_EMPTY_SAVE_LINE_3,
     LOCAL_VIEW_OVERLAY_ORIGIN_X, LOCAL_VIEW_OVERLAY_ORIGIN_Y, MAGIC_LOCK_COST,
     MAGIC_LOCK_SPELL_INDEX, MAIN_TEXT_WINDOW_INDEX, MISCMAPS_DAT_FILE,
-    MOONGATE_PHASE_ENDGAME_GROUND_TILE, MOONGATE_PHASE_SCRATCH_TILE, MORAL_STANDING_MAX,
-    MonitorModel, MonochromeBitmap, MoongatePhaseDraw, MoonstoneGateSlot, NARRATIVE_GATE_X,
+    MORAL_STANDING_MAX, MonitorModel, MonochromeBitmap, MoonstoneGateSlot, NARRATIVE_GATE_X,
     NARRATIVE_GATE_Y, NATURAL_MOONGATE_TERRAIN_TILE, NEGATE_MAGIC_COST, NEGATE_MAGIC_SPELL_INDEX,
     NPC_DIALOG_ID_NONE, NPC_SCHEDULE_AI_OFFSET, NPC_SCHEDULE_WAYPOINT_COUNT, NpcSlot,
     OOL_RECORD_LEN, OOL_SLOTS, OPEN_SPELL_COST, OPEN_SPELL_INDEX, PCS_GLYPH_HEIGHT, PEER_COST,
@@ -106,14 +105,14 @@ use u5_runtime::{
     ViewOverlayMode, WORD_OF_POWER_SEALED_TILE, WORLD_RUINED_SHRINE_TILE, WORLD_SHRINE_COORDINATES,
     WORLD_SIDE, WindState, WorldPlane, WorldReturn, X_RAY_COST, X_RAY_SPELL_INDEX,
     YELL_NOTHING_SAID_MESSAGE, YELL_SAILS_HOISTED_MESSAGE, advance_paced_combat_presentation,
-    blit_tile_id_to_viewport, blit_tile_pixels_to_viewport, combat_actor_is_active_not_dead,
+    blit_tile_id_to_viewport, combat_actor_is_active_not_dead,
     combat_class_companion, combat_class_sprite_byte, combat_class_stats, combat_party_actor_byte,
     commit_chargen_save, configure_talk_shop_text_window,
     conversation_session::ConversationSession,
     default_party_equipment, default_party_experience, default_party_intelligence,
     default_party_names, default_party_roster, default_party_stay_counters, dungeon_cell_index,
     dungeon_room_combat_instance_from_setup, dungeon_room_combat_setup_from_record_for_entry,
-    dungeon_room_entry_seed_for_direction, endgame_tableau_role_for_slot, handle_play_key_input,
+    dungeon_room_entry_seed_for_direction, handle_play_key_input,
     hash_bytes, input_function_key_code, input_numpad_flag, input_typed_digit_direction_code,
     intro_doorway_paragraph_boxes,
     intro_menu::{IntroSubflow, IntroSubflowResult},
@@ -126,7 +125,7 @@ use u5_runtime::{
     load_proportional_font, load_question_records, load_return_to_view_assets, load_story_records,
     load_tile_atlas, load_title_bit, load_ultima_title_tick_frames,
     menu_dispatch::{UnifiedMenuDispatch, UnifiedMenuStep},
-    moongate_phase_draw, moongate_phase_gate_tile, paint_arms_sell_browser_text_window,
+    paint_arms_sell_browser_text_window,
     paint_inn_pickup_register_text_window, paint_prompt_text_window_with_cursor,
     paint_stats_panel_text_window, play_options_from_save_bytes_named,
     published_world_location_entries, read_save_image_file, render_play_text_window_system,
@@ -146,14 +145,20 @@ use u5_runtime::{
     terrain_combat_party_entry_positions, terrain_combat_setup_from_record_at_arena,
     title_flourish_band, title_flourish_content_row, title_flourish_step_state,
     title_flourish_total_steps, title_flourish_visible_rows, title_tick_next_frame,
-    town_resident_name, u5_prng_advance_state, u5_prng_range_u16, with_moongate_phase_scratch_tile,
-    word_of_power_seal_for_word,
+    town_resident_name, u5_prng_advance_state, u5_prng_range_u16, word_of_power_seal_for_word,
 };
 #[cfg(test)]
 use u5_runtime::{
     ENDGAME_TABLEAU_LORD_BRITISH_ACTOR_BYTE, ENDGAME_TABLEAU_LORD_BRITISH_SLOT,
     ENDGAME_TABLEAU_WALKABLE_TILE, INTRO_DOORWAY_SECOND_LINE_PEN_Y, STATS_PANEL_TEXT_LEFT,
 };
+#[cfg(test)]
+use u5_runtime::{
+    ENDGAME_GATE_CELL, ENDGAME_TABLEAU_WIDTH, MOONGATE_PHASE_ENDGAME_GROUND_TILE,
+    MOONGATE_PHASE_SCRATCH_TILE, moongate_phase_gate_tile,
+};
+#[cfg(all(test, feature = "original-asset-tests"))]
+use u5_runtime::ENDGAME_TABLEAU_HEIGHT;
 // Gameplay-screen border chrome and the message/command window.
 use u5_runtime::{
     CHROME_RULE_INDEX, ChromeFonts, ChromePalette, MESSAGE_WINDOW_RIGHT, MessageWindowRow,
@@ -17473,149 +17478,12 @@ fn endgame_tableau_phase_viewport(state: &PlayState) -> EndgameViewport {
     }
 }
 
-fn endgame_frame_should_show_tableau(state: &PlayState) -> bool {
-    let Some(endgame) = state.endgame.as_ref() else {
-        return false;
-    };
-    if matches!(
-        endgame.outcome,
-        Some(u5_runtime::EndgameOutcome::MissingBoxOrRefused)
-    ) {
-        return true;
-    }
-    if !matches!(endgame.outcome, Some(u5_runtime::EndgameOutcome::Victory)) {
-        return true;
-    }
-    matches!(
-        endgame.cinematic.step,
-        u5_runtime::endgame_cinematic::EndgameCinematicStep::RiteMessage(_)
-            | u5_runtime::endgame_cinematic::EndgameCinematicStep::ThroneTableau
-    )
-}
-
-fn render_endgame_tableau_viewport(
-    state: &PlayState,
-    atlas: &TileAtlas,
-) -> io::Result<TileViewport> {
-    let width = ENDGAME_TABLEAU_WIDTH * TILE_ATLAS_SIDE;
-    let height = ENDGAME_TABLEAU_HEIGHT * TILE_ATLAS_SIDE;
-    let mut viewport = TileViewport {
-        depth: atlas.depth,
-        cells_wide: ENDGAME_TABLEAU_WIDTH,
-        cells_high: ENDGAME_TABLEAU_HEIGHT,
-        width,
-        height,
-        pixels: vec![0; width * height],
-    };
-
-    for y in 0..ENDGAME_TABLEAU_HEIGHT {
-        for x in 0..ENDGAME_TABLEAU_WIDTH {
-            let tile = state.grid.get(y * TOWN_GRID_SIDE + x).copied().unwrap_or(0);
-            if (x, y) == ENDGAME_GATE_CELL && tile == NATURAL_MOONGATE_TERRAIN_TILE {
-                let rows = match moongate_phase_draw(state.natural_moongate_counter) {
-                    MoongatePhaseDraw::WholeGate => None,
-                    MoongatePhaseDraw::Ground => Some(0),
-                    MoongatePhaseDraw::Composed { rows } => Some(rows),
-                };
-                if let Some(rows) = rows {
-                    let missing = |tile: usize| {
-                        io::Error::new(
-                            io::ErrorKind::InvalidData,
-                            format!("endgame gate renderer is missing tile {tile}"),
-                        )
-                    };
-                    let ground = atlas
-                        .tile_pixels(usize::from(MOONGATE_PHASE_ENDGAME_GROUND_TILE))
-                        .ok_or_else(|| missing(usize::from(MOONGATE_PHASE_ENDGAME_GROUND_TILE)))?
-                        .to_vec();
-                    let gate_tile = usize::from(moongate_phase_gate_tile());
-                    let gate = atlas
-                        .tile_pixels(gate_tile)
-                        .ok_or_else(|| missing(gate_tile))?
-                        .to_vec();
-                    let mut scratch = atlas
-                        .tile_pixels(MOONGATE_PHASE_SCRATCH_TILE)
-                        .ok_or_else(|| missing(MOONGATE_PHASE_SCRATCH_TILE))?
-                        .to_vec();
-                    with_moongate_phase_scratch_tile(
-                        &mut scratch,
-                        &ground,
-                        &gate,
-                        rows,
-                        |composed| blit_tile_pixels_to_viewport(&mut viewport, composed, x, y),
-                    )??;
-                    // Both halves of the composition - floor `0x44` and gate
-                    // `0xDC` - are in the remapped set.
-                    remap_endgame_tableau_cell(
-                        &mut viewport,
-                        usize::from(NATURAL_MOONGATE_TERRAIN_TILE),
-                        x,
-                        y,
-                    );
-                    continue;
-                }
-            }
-            blit_tile_id_to_viewport(&mut viewport, atlas, usize::from(tile), x, y)?;
-            remap_endgame_tableau_cell(&mut viewport, usize::from(tile), x, y);
-        }
-    }
-
-    for (slot, object) in state.active_objects.iter().copied().enumerate().rev() {
-        if endgame_tableau_role_for_slot(slot, object).is_none() {
-            continue;
-        }
-        if object.x >= ENDGAME_TABLEAU_WIDTH || object.y >= ENDGAME_TABLEAU_HEIGHT {
-            continue;
-        }
-        // `active-objects.md §12` / `catalogs/tile-catalog.md §3.1`,
-        // published in answer to cleak/u5-spec#82: an active-object
-        // record carries an *actor byte*, not a tile id. The renderer
-        // adds 256, so actor bytes index the upper, actor half of the
-        // 512-tile space - which is why actor `0x44` is the Bard sprite
-        // (tile 324) and not the floor tile whose terrain index is also
-        // `0x44`. `0x16` is the reserved draw-nothing value.
-        //
-        // The byte drawn is the compositor's, not the slot's: the default
-        // helper is terrain-aware for actors at or above `0x40`, so a king on
-        // the bed or a leader on a chair draws as the occupied fixture
-        // (`endgame_tableau_actor_drawn_byte`).
-        let Some(byte) = u5_runtime::endgame_tableau_actor_drawn_byte(&state.grid, object) else {
-            continue;
-        };
-        let Some(tile) = u5_runtime::actor_tile_for_byte(byte) else {
-            continue;
-        };
-        blit_tile_id_to_viewport(&mut viewport, atlas, tile, object.x, object.y)?;
-    }
-    Ok(viewport)
-}
-
-/// `display-driver-abi.md §10`'s endgame remap, applied to one drawn cell.
-///
-/// The mode rewrites twenty-two tiles of the loaded tileset in place, so a
-/// renderer that keeps its atlas pristine applies the same map to the
-/// pixels those tiles just wrote. "Walls, ground outside that set, and
-/// actor sprites are untouched, which is why a captured final room shows
-/// green floor and furniture inside an unchanged stone border."
-/// `cleak/u5-engine#7`.
-fn remap_endgame_tableau_cell(
-    viewport: &mut TileViewport,
-    tile: usize,
-    cell_x: usize,
-    cell_y: usize,
-) {
-    if !u5_runtime::endgame_tileset_remap_applies(tile) {
-        return;
-    }
-    let dst_x = cell_x * TILE_ATLAS_SIDE;
-    let dst_y = cell_y * TILE_ATLAS_SIDE;
-    for row in 0..TILE_ATLAS_SIDE {
-        let start = (dst_y + row) * viewport.width + dst_x;
-        u5_runtime::remap_endgame_tileset_pixels(
-            &mut viewport.pixels[start..start + TILE_ATLAS_SIDE],
-        );
-    }
-}
+// `endgame.md §3.1`'s tableau raster and its frame predicate are shared
+// with the headless `--save-screen` composer (playtest G32).
+use u5_runtime::endgame_tableau_frame::{
+    endgame_frame_shows_tableau as endgame_frame_should_show_tableau,
+    render_endgame_tableau_viewport,
+};
 
 /// `blackthorn.md §6.1`: the audience owns the same eleven-by-eleven
 /// gameplay viewport while its temporary MISCMAPS scene is active. Terrain
