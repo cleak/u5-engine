@@ -5189,7 +5189,17 @@ impl PlayState {
             .copied()
             .enumerate()
             .filter_map(|(index, count)| {
-                (count > 0).then(|| z_stats_counted_row(count, equipment_name(index)))
+                // `inventory.md §4.7`: this page shares the R-Ready picker's
+                // row renderer, and that picker draws `catalogs/item-list.md`
+                // §5.1.2's short-label row. §4.5 also measures that no
+                // equipment entry ever takes a second display line, even at a
+                // three-digit quantity - which holds for the ten-cell short
+                // labels and not for canonical names such as `Spiked Shield`.
+                let label = crate::EQUIPMENT_SHORT_LABELS
+                    .get(index)
+                    .copied()
+                    .unwrap_or_else(|| equipment_name(index));
+                (count > 0).then(|| z_stats_counted_row(count, label))
             })
             .collect::<Vec<_>>();
         append_wrapped_inventory_rows(lines, rows, session.inventory_cursor);
@@ -7452,26 +7462,62 @@ fn z_stats_counted_row(count: u8, name: &str) -> String {
 /// emit through window column 15". A row opens at column 1, so fifteen cells
 /// fit; a row that ends exactly on column 15 still costs the page its next
 /// line, because the cursor wraps at the window edge before the padding.
+///
+/// When the label does not fit, "the first display line carries only the
+/// quantity and selector; the label that will not fit is moved off it whole,
+/// and lands on the next display line starting in window column 0", except
+/// that a label containing a space "still breaks at the space": the words
+/// that fit stay after the selector and the rest moves. The quantity and
+/// selector never break, so a counted `Shard/Falsehd` is ` 5-` over
+/// `Shard/Falsehd` - the shape [`crate::stats_panel::PanelPickerRow::lines`]
+/// gives the U-Use picker.
 fn z_stats_entry_lines(row: &str) -> Vec<String> {
+    let width = crate::stats_panel::PANEL_PICKER_ROW_CELLS;
     let cells = row.chars().count();
-    if cells < crate::stats_panel::PANEL_PICKER_ROW_CELLS {
+    if cells < width {
         return vec![row.to_string()];
     }
-    if cells == crate::stats_panel::PANEL_PICKER_ROW_CELLS {
+    if cells == width {
         return vec![row.to_string(), String::new()];
     }
-    crate::wrap_text(row, crate::stats_panel::PANEL_PICKER_ROW_CELLS + 1, 1)
-        .into_iter()
-        .enumerate()
-        .map(|(index, line)| {
-            let line = line.trim_end().to_string();
-            if index == 0 {
-                line
-            } else {
-                format!("{Z_STATS_WRAPPED_LINE_MARKER}{}", line.trim_start())
-            }
-        })
-        .collect()
+    let (prefix, label) = z_stats_split_counted_prefix(row);
+    let mut first = prefix.to_string();
+    let mut used = prefix.chars().count();
+    let mut words = label.split(' ').peekable();
+    let mut placed_any = false;
+    while let Some(word) = words.peek() {
+        let sep = usize::from(placed_any);
+        let need = sep + word.chars().count();
+        if used + need > width {
+            break;
+        }
+        if placed_any {
+            first.push(' ');
+        }
+        first.push_str(word);
+        used += need;
+        placed_any = true;
+        words.next();
+    }
+    let rest = words.collect::<Vec<_>>().join(" ");
+    vec![first, format!("{Z_STATS_WRAPPED_LINE_MARKER}{rest}")]
+}
+
+/// Split a Z-stats row into its counted prefix (quantity and the `-`
+/// selector, from [`z_stats_counted_row`]) and its label. An uncounted row
+/// has an empty prefix.
+fn z_stats_split_counted_prefix(row: &str) -> (&str, &str) {
+    let digits_start = row.len() - row.trim_start_matches(' ').len();
+    let digits = row[digits_start..]
+        .bytes()
+        .take_while(u8::is_ascii_digit)
+        .count();
+    let selector = digits_start + digits;
+    if digits > 0 && row[selector..].starts_with('-') {
+        row.split_at(selector + 1)
+    } else {
+        ("", row)
+    }
 }
 
 /// [`append_inventory_rows`] for the four shared inventory pages, whose

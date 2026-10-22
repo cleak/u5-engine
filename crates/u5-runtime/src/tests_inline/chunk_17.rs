@@ -332,7 +332,7 @@
         assert!(state.step_active_z_stats('>', ""));
         assert!(z_stats_panel_text(&state).contains(&format!(
             " 2-{}",
-            equipment_name(EQUIPMENT_ID_BOW)
+            EQUIPMENT_SHORT_LABELS[EQUIPMENT_ID_BOW]
         )));
         assert!(!z_stats_panel_text(&state).contains(equipment_name(EQUIPMENT_ID_CROSSBOW)));
     }
@@ -5617,17 +5617,18 @@ fn z_stats_shared_inventory_pages_use_the_counted_picker_row_and_wrap_long_label
     state.equipment_stock[shield] = 9;
     open_z_stats_page_for_test(&mut state, ZStatsPage::EquipmentStock);
     let rows = z_stats_page_rows_for_test(&state);
-    let (first, second) = if helm < shield { (0, 2) } else { (2, 0) };
-    // Fifteen cells end on window column 15; the cursor's wrap at the window
-    // edge costs the page the next line.
-    assert_eq!(rows[first], " 9-Leather Helm", "rows: {rows:?}");
-    assert_eq!(rows[first + 1], "", "rows: {rows:?}");
-    // Sixteen cells: the label word-wraps and its tail opens at column 0.
-    assert_eq!(rows[second], " 9-Spiked", "rows: {rows:?}");
-    assert_eq!(
-        rows[second + 1],
-        format!("{Z_STATS_WRAPPED_LINE_MARKER}Shield"),
-        "rows: {rows:?}"
+    // The R-Ready picker's short-label row (`catalogs/item-list.md`
+    // §5.1.2), which §4.5 measures as never taking a second display line.
+    let (first, second) = if helm < shield { (0, 1) } else { (1, 0) };
+    assert_eq!(rows[first], " 9-Leath Helm", "rows: {rows:?}");
+    assert_eq!(rows[second], " 9-Spkd. Shld", "rows: {rows:?}");
+    state.equipment_stock[shield] = 200;
+    let rows = z_stats_page_rows_for_test(&state);
+    assert_eq!(rows[second], "200-Spkd. Shld", "rows: {rows:?}");
+    assert_eq!(rows[first], " 9-Leath Helm", "rows: {rows:?}");
+    assert!(
+        !rows.iter().any(|row| row.starts_with(Z_STATS_WRAPPED_LINE_MARKER)),
+        "no equipment entry wraps: {rows:?}"
     );
 
     state.special_items[SPECIAL_ITEM_SEXTANT_INDEX] = 255;
@@ -5637,6 +5638,22 @@ fn z_stats_shared_inventory_pages_use_the_counted_picker_row_and_wrap_long_label
     state.active_z_stats.as_mut().unwrap().inventory_cursor = MOONSTONE_SLOT_COUNT;
     let rows = z_stats_page_rows_for_test(&state);
     assert!(rows.iter().any(|row| row == "Sextant"), "rows: {rows:?}");
+
+    // §4.5, a counted `Shard/Falsehd`: "two quantity cells and the selector
+    // on the first display line; the thirteen-cell label" on the second,
+    // which opens at window column 0. The quantity's leading space is not a
+    // break point.
+    state.special_items[SPECIAL_ITEM_SHARD_FALSEHOOD_INDEX] = 5;
+    let rows = z_stats_page_rows_for_test(&state);
+    let head = rows
+        .iter()
+        .position(|row| row == " 5-")
+        .unwrap_or_else(|| panic!("no bare counted head: {rows:?}"));
+    assert_eq!(
+        rows[head + 1],
+        format!("{Z_STATS_WRAPPED_LINE_MARKER}Shard/Falsehd"),
+        "rows: {rows:?}"
+    );
     assert!(
         !rows.iter().any(|row| row.contains(": ")),
         "no `Name: count` rows: {rows:?}"
