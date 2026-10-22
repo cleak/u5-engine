@@ -77,12 +77,39 @@ impl PlayState {
         if let Some(session) = self.active_surface_chest.as_ref() {
             return Some(session.highlight);
         }
+        // `inventory.md §4.3`: the `On who: ` prompt of a potion, the
+        // Resurrection scroll and the party-target spells is the same shared
+        // surface - "The currently indicated member is shown by inverting a
+        // rectangle ... A digit moves the indicator" (playtest H06).
+        if let Some(highlight) = self.use_target_selector_highlight() {
+            return Some(highlight.min(self.party.len().saturating_sub(1)));
+        }
         // `inventory.md §5` step 1: R-Ready "selects a party member with
         // the same party-member selection surface used by Z-stats".
         self.active_ready
             .as_ref()
             .filter(|session| session.selected_party_index.is_none())
             .map(|session| session.cursor.min(self.party.len().saturating_sub(1)))
+    }
+
+    /// The indicated row of the shared `On who: ` prompt, whichever caller
+    /// opened it: a potion or the Resurrection scroll under U-Use, or a
+    /// party-target spell under C-Cast (whose session keeps the 1-based
+    /// indicator in its buffer, empty meaning the first member).
+    fn use_target_selector_highlight(&self) -> Option<usize> {
+        if let Some(session) = self.active_use.as_ref() {
+            match session.pending {
+                Some(
+                    UsePendingAction::PotionTarget { highlight, .. }
+                    | UsePendingAction::ScrollResurrectionTarget { highlight, .. },
+                ) => return Some(highlight),
+                _ => {}
+            }
+        }
+        self.active_cast_followup
+            .as_ref()
+            .filter(|session| matches!(session.kind, CastFollowupKind::PartyTarget))
+            .map(|session| session.buffer.parse::<usize>().unwrap_or(1).max(1) - 1)
     }
 
     /// The indicated row of a shop's member selection, which `shops.md §8.C`
@@ -127,6 +154,11 @@ impl PlayState {
     pub fn roster_box_label(&self) -> Option<String> {
         if self.active_party_selector.is_some()
             || self.shop_member_selector_highlight().is_some()
+            // `inventory.md §4.3`: a party-target spell's `On who: ` is the
+            // shared selection surface too (playtest H06/H26).
+            || self.active_cast_followup.as_ref().is_some_and(|session| {
+                matches!(session.kind, CastFollowupKind::PartyTarget)
+            })
             || self.active_jimmy.is_some()
             || self.active_surface_chest.is_some()
         {
@@ -940,6 +972,25 @@ impl PlayState {
         {
             return Some(SPELL_DIRECTION_PROMPT_PREFIX.to_string());
         }
+        // `magic.md §8` (Awaken/Cure): the party-target spells "ask
+        // **`On who: `**, echo the chosen member's name and complete the
+        // row", and Gate Travel "prompts `To phase:_`" and echoes the typed
+        // key on that row. Both are prompts the command parks at mid-run, so
+        // `text-output.md §10.2` gives them "no feed and no marker": the
+        // cursor waits after the trailing space, as on the potion's `On who: `.
+        // The engine drew a blank and a fresh end-capped row under both
+        // (playtest H26).
+        if let Some(session) = self.active_cast_followup.as_ref() {
+            match session.kind {
+                CastFollowupKind::PartyTarget => {
+                    return Some(USE_POTION_TARGET_PROMPT.to_string());
+                }
+                CastFollowupKind::GatePhase => {
+                    return Some(GATE_TRAVEL_PHASE_PROMPT.to_string());
+                }
+                _ => {}
+            }
+        }
         // `magic.md §8`: the creature prompt is `Creature: ` with a
         // trailing space, and the arena cursor - not a message-window
         // line - shows the selected cell, so the row stays open under it.
@@ -1514,7 +1565,19 @@ impl PlayState {
     /// capture of the original casting an out-of-scene spell shows
     /// `:GRAV POR` and `Not here!` on consecutive rows.
     fn commit_cast_spell_echo(&mut self, buffer: &str) {
-        self.emit_message_line(format!(":{}", rune_echo_for_buffer(buffer)));
+        // The live echo ends in the last syllable's space, but the submitted
+        // row is closed (below), so the logged row must not carry it: the
+        // message log reads a trailing space as a row still open and drops
+        // `text-output.md §10.4`'s derived blank under it (playtest H31).
+        let echo = format!(":{}", rune_echo_for_buffer(buffer));
+        self.emit_message_line(echo.trim_end());
+        // `magic.md §5.1`: "submitting the name advances to the next row
+        // before any result/refusal is printed", so the row is closed. Set
+        // explicitly for this caller: `emit_message_line` infers "open" from
+        // the missing feed, and that stale flag outlived the command - every
+        // later Look/Get/Search spent its leading feed closing a row that was
+        // already closed and lost its blank row (playtest H25).
+        self.message_row_open_mid_line = false;
         // `magic.md §5.1`: "submitting the name advances to the next row
         // before any result/refusal is printed". In the arena the open-row
         // flag the next arena print reads still described the `Cast...`
@@ -1761,10 +1824,33 @@ impl PlayState {
                         continue;
                     }
                     if ch == ' ' {
+                        // `input.md §11`: "Space is accepted as `Pass`: it
+                        // echoes `Pass`", exactly as a cardinal echoes its
+                        // label - on the open `Direction-` row, which the word
+                        // completes (`text-output.md §10.3`: the direction
+                        // prompt appends `Pass` "to the open line"). It was
+                        // printed on a row of its own (playtest H37).
+                        let completed = self.complete_open_direction_echo(
+                            SPELL_DIRECTION_PROMPT_PREFIX,
+                            DIRECTION_PROMPT_LABEL_PASS,
+                        );
                         if pass_allowed {
-                            return self.finish_active_cast_followup(session, " ", game_dir);
+                            let result = self.finish_active_cast_followup(session, " ", game_dir);
+                            // The handlers' own pass arm prints `Pass` (it is
+                            // also the inline suffix form's only echo); here
+                            // the prompt row already carries it, so the slot
+                            // must not print it a second time on a row below.
+                            if completed && self.message == DIRECTION_PROMPT_LABEL_PASS {
+                                let line =
+                                    format!("{SPELL_DIRECTION_PROMPT_PREFIX}{DIRECTION_PROMPT_LABEL_PASS}");
+                                self.message = line.clone();
+                                self.message_flushed = line;
+                            }
+                            return result;
                         }
-                        self.message = DIRECTION_PROMPT_LABEL_PASS.to_string();
+                        if !completed {
+                            self.message = DIRECTION_PROMPT_LABEL_PASS.to_string();
+                        }
                         return Ok(None);
                     }
                     let Some(direction) =
@@ -2269,7 +2355,10 @@ impl PlayState {
 
     pub fn start_mix_reagents_prompt(&mut self) -> MoveOutcome {
         if self.reagents.iter().all(|count| *count == 0) {
-            self.message = MMIX_NO_REAGENTS_OWNED_MESSAGE.to_string();
+            // `commands.md §5`: the echo is `Mix_Reagents\n\n`, so the
+            // refusal takes the same blank row `For what spell?` does
+            // (playtest H45).
+            self.message = format!("\n{MMIX_NO_REAGENTS_OWNED_MESSAGE}");
             return MoveOutcome::Blocked;
         }
         self.active_mix = Some(MixSession::new());
@@ -4574,8 +4663,26 @@ impl PlayState {
                     // has been shown yet. `§4.3`: "Cancellation returns to
                     // that caller, which supplies its own response"; the spec
                     // publishes none for R-Ready, so the `Player: ` row is
-                    // left as printed and closed, with nothing added.
+                    // left as printed, with nothing added.
                     self.commit_live_prompt_reply(PARTY_SELECTION_PROMPT, "", false);
+                    // Nothing printed means no feed closed that row, so
+                    // `text-output.md §10.4`'s next poll closes it instead and
+                    // the marker lands directly beneath: "A result that does
+                    // not end in a feed ... no blank row appears". The log
+                    // already ran the next echo directly under it (the row
+                    // ends in the prompt's space); the waiting frame read the
+                    // row as closed, drew a blank, and lost it when a key was
+                    // typed (playtest H31). Only the row is marked: the world
+                    // flag stays as the next command's own echo expects.
+                    if let Some(last) = self
+                        .message_transcript
+                        .last_mut()
+                        .filter(|entry| !entry.explicit_blank && entry.text == PARTY_SELECTION_PROMPT)
+                    {
+                        last.leaves_row_open = true;
+                        self.message_transcript_revision =
+                            self.message_transcript_revision.wrapping_add(1);
+                    }
                 }
                 PartyTargetSelectorAction::Discard => {
                     self.message = self.render_ready_session(&session);
@@ -4662,6 +4769,14 @@ impl PlayState {
                     return true;
                 };
                 let stock_before = self.equipment_stock[item_id];
+                // Start the cascade from an empty slot, so whatever is in it
+                // afterwards is what the cascade itself printed. The
+                // ammunition exit leaves the slot alone (`inventory.md §6`:
+                // "no message at all"), and the slot still held the live
+                // `Item: ` prompt, which was then composed as if it were a
+                // refusal - every Return on the Arrows row logged two more
+                // `Item:` rows (playtest H07).
+                self.message.clear();
                 let outcome = self.ready_equipment(InlineReadyRequest {
                     party_index,
                     item_id,
