@@ -302,6 +302,28 @@ impl ConversationSessionOutput {
         self.rendered_glyphs.extend(rendered.glyphs.iter().copied());
     }
 
+    /// `conversation.md §7.6` "What ASK-WHO prints" + §7.7 HEAD: a response
+    /// that reaches an ASK-WHO with nothing printed after its last quote - a
+    /// scoped answer or Bye entry that is a bare GOTO into a head opening on
+    /// IF-ELSE and `0x88` (Judge Dryden's `y`, Jimmy's and Phillip's `bye`) -
+    /// leaves that quote as the last printable byte, so the handler's own
+    /// opening quote is dropped and the question continues it: one quote, no
+    /// row breaks between. The framing above had closed that quote onto a
+    /// row of its own and padded a blank under it before the prompt's quote,
+    /// a stray lone `"` row (playtest G03). The question's own quote, on the
+    /// row the lone quote stood on, is that same single visible quote.
+    fn continue_lone_quote_into_ask_who(&mut self) {
+        const LONE_QUOTE_TAIL: &str = "\n\"\n\n";
+        if !self.text.ends_with(LONE_QUOTE_TAIL)
+            || self.rendered_glyphs.len() != self.text.len()
+        {
+            return;
+        }
+        let keep = self.text.len() - (LONE_QUOTE_TAIL.len() - 1);
+        self.text.truncate(keep);
+        self.rendered_glyphs.truncate(keep);
+    }
+
     /// [`Self::push_framed_response`] for a fixed engine literal.
     fn set_framed_text(&mut self, text: &str) {
         self.text.clear();
@@ -534,6 +556,18 @@ impl ConversationSession {
 
     /// Feed one typed keyword line. Returns the rendered response.
     pub fn submit_keyword(
+        &mut self,
+        line: &str,
+        ctx: &ConversationContext<'_>,
+    ) -> ConversationSessionOutput {
+        let mut out = self.submit_keyword_unframed_ask_who(line, ctx);
+        if self.awaiting_ask_who() {
+            out.continue_lone_quote_into_ask_who();
+        }
+        out
+    }
+
+    fn submit_keyword_unframed_ask_who(
         &mut self,
         line: &str,
         ctx: &ConversationContext<'_>,
@@ -3514,5 +3548,49 @@ mod tests {
         let mut s = baseline_session();
         let out = s.submit_keyword("job", &ctx());
         assert!(out.text.is_empty());
+    }
+
+    /// Playtest G03. `conversation.md §7.7`: a non-empty scoped line prints
+    /// two row breaks, the matched answer "emit[s] the quote", and a bare GOTO
+    /// into a head opening on IF-ELSE and `0x88` emits the HEAD quote (dropped
+    /// after the first) before ASK-WHO's own opening quote (dropped too,
+    /// §7.6). One quote, no rows between it and the question: the answer row,
+    /// a blank, then `"What is thy name?"`. The engine drew a lone `"` row and
+    /// a blank above the question's quote (Judge Dryden's `inqu`/`y`; Jimmy's
+    /// and Phillip's Bye entries take the same shape through the keyword
+    /// path).
+    #[test]
+    fn a_bare_goto_into_an_ask_who_head_continues_the_answer_quote() {
+        let mut head = vec![TLK_CODE_LABEL_RECORD, 0x91];
+        head.extend(enc("Art thou here to confess?"));
+        let mut ask = vec![
+            TLK_CODE_LABEL_RECORD,
+            0x92,
+            TLK_CODE_IF_ELSE,
+            0x93,
+            TLK_CODE_ASK_WHO,
+        ];
+        ask.extend(enc("\"Done."));
+        let names: [&[u8]; 1] = [b"AVATAR"];
+        let context = party_ctx(&names);
+        let mut s = label_session(
+            vec![0x91],
+            vec![head, enc("Later then."), enc("y"), vec![0x92], ask.clone(), enc("x")],
+        );
+        s.submit_keyword("ask", &context);
+        assert_eq!(
+            s.phase,
+            ConversationSessionPhase::AwaitingScopedKeyword { label: 0x91 }
+        );
+        let answered = s.submit_keyword("y", &context);
+        assert!(s.awaiting_ask_who());
+        assert_eq!(answered.text, "\n");
+        assert_eq!(answered.rendered_text().glyphs.len(), answered.text.len());
+
+        // The keyword path: a response that is a bare GOTO to the same head.
+        let mut s = label_session(vec![0x92], vec![enc("x"), ask]);
+        let asked = s.submit_keyword("ask", &context);
+        assert!(s.awaiting_ask_who());
+        assert_eq!(asked.text, "\n");
     }
 }
