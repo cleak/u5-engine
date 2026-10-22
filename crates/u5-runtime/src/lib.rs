@@ -1184,4 +1184,5 @@ mod tests {
     include!("tests_inline/playfix3_p3magic.rs");
     include!("tests_inline/playfix3_p3quest.rs");
     include!("tests_inline/playfix3_p3world.rs");
+    include!("tests_inline/playfix4_p4shops.rs");
 }
