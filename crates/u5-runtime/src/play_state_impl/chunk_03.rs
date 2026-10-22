@@ -1622,6 +1622,15 @@ impl PlayState {
         // `Aim!` / blank / `Avatar, armed`.
         self.push_explicit_blank_message_entry();
         self.message.clear();
+        // Set explicitly for this caller. The blank just pushed *is* the
+        // fresh row the closed cursor left, so the banner's leading feed
+        // closes it rather than blanking another: one blank row, as the
+        // stock draws (`combat-cast/fired`). G11's name-commit clear left
+        // this flag false and the arena drew two (rc5 regression).
+        if self.combat_active {
+            self.combat_transcript_row_open = true;
+        }
+        self.message_row_open_mid_line = false;
         self.combat_aim_marker_cell = None;
         // `combat.md §7`: the cursor lowers the marker gate "as its last"
         // act.

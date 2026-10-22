@@ -231,3 +231,36 @@ fn playfix3_g12_a_sextant_reading_opens_under_a_blank_row() {
     assert_eq!(rows[item + 1], "", "{rows:?}");
     assert_eq!(rows[item + 2], USE_SEXTANT_READING_LABEL, "{rows:?}");
 }
+
+/// rc5 regression of G11, measured against the stock in `combat-cast/fired`
+/// and `combat-ready-armour/invisibility`: an aim confirmed on an empty cell
+/// reads `Aim!` / blank / banner, and a spell with no charge reads
+/// `None mixed!` / blank / banner. One blank row, not two.
+#[test]
+fn rc5_g11_an_empty_aim_and_none_mixed_keep_a_single_blank_before_the_banner() {
+    let game_dir = std::path::Path::new(".");
+    let north = char::from(crate::input_codes::INPUT_CODE_NORTH);
+    for (keys, charges, last_exchange_row) in [
+        (vec!['C', 'G', 'P', '\r', north, '\r'], 9, "Aim!"),
+        (vec!['C', 'L', 'S', '\r'], 0, "None mixed!"),
+    ] {
+        let mut state = combat_state_after_the_conflict_banner(8, 5);
+        state.active_player = Some(0);
+        state.party[0].mana = 50;
+        state.party[0].level = 8;
+        state.spell_charges = [charges; SPELL_COUNT];
+        state.ensure_pending_combat_player_turn();
+
+        for key in keys {
+            handle_play_key_input(&mut state, key, "", game_dir).unwrap();
+        }
+
+        let rows = combat_message_window_rows(&state);
+        let exchange = rows
+            .iter()
+            .rposition(|row| row.trim_end() == last_exchange_row)
+            .unwrap_or_else(|| panic!("{last_exchange_row} is drawn: {rows:?}"));
+        assert_eq!(rows[exchange + 1], "", "{last_exchange_row}: {rows:?}");
+        assert_eq!(rows[exchange + 2], "Avatar, armed", "{last_exchange_row}: {rows:?}");
+    }
+}

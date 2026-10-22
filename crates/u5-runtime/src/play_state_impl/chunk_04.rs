@@ -2898,6 +2898,13 @@ impl PlayState {
         if self.combat_active {
             self.emit_message_line(text);
             self.push_explicit_blank_message_entry();
+            // Set explicitly for this caller: the blank just pushed is the
+            // row the banner's leading feed closes, so one blank row stands
+            // between the refusal and the banner. G11's name-commit clear
+            // left this false and the arena drew two (rc5 regression,
+            // `combat-ready-armour/invisibility`).
+            self.combat_transcript_row_open = true;
+            self.message_row_open_mid_line = false;
             return;
         }
         self.message = text;
