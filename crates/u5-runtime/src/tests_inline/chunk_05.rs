@@ -1289,14 +1289,16 @@ fn y_yell_word_of_power_opens_matching_surface_seal_only_at_target() {
     wrong_place.area = Area::World {
         plane: WorldPlane::Britannia,
     };
+    // No neighbour qualifies here (`commands.md` §11.1 step 1); a sealed
+    // neighbour at the wrong coordinate is step 3, pinned by playtest G30.
     let wrong_idx = world_cell_index(4, 5);
-    wrong_place.grid[wrong_idx] = WORD_OF_POWER_SEALED_TILE;
+    let open_tile = wrong_place.grid[wrong_idx];
     assert_eq!(
         handle_play_key_input(&mut wrong_place, 'Y', "fallax", Path::new("")).unwrap(),
         PlayInputDisposition::Continue
     );
 
-    assert_eq!(wrong_place.grid[wrong_idx], WORD_OF_POWER_SEALED_TILE);
+    assert_eq!(wrong_place.grid[wrong_idx], open_tile);
     assert_eq!(wrong_place.word_of_power_seal_flags[0], 0);
     assert!(wrong_place.message.contains("A word of power is uttered"));
     // Measured 2026-09-11 (`word-of-power-audio/dosbox-word`): a recognised

@@ -632,8 +632,8 @@ pub const READY_BOTH_HANDS_REFUSAL: &str = "Both hands must be free before thou 
 /// uttered line straight onto the typed-word row and sat one row high for
 /// the rest of the capture.
 pub const WORD_OF_POWER_UTTERED_MESSAGE: &str = "\nA word of power is uttered";
-/// The tail a recognised Word adds when no adjacent cell qualifies, or the
-/// coordinate does not match. Measured in the same capture: a blank row and
+/// The tail a recognised Word adds when no adjacent cell qualifies
+/// (`commands.md §11.1` step 1; a wrong coordinate adds nothing). Measured in the same capture: a blank row and
 /// `No effect!`.
 pub const WORD_OF_POWER_NO_EFFECT_TAIL: &str = "\n\nNo effect!";
 
