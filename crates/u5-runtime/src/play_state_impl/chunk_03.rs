@@ -5939,9 +5939,15 @@ impl PlayState {
             self.emit_sound_effect(SoundEffect::SharedVariant { variant });
         }
 
-        self.advance_turn();
+        // `main-loop.md §6`: dispatch (step 3) installs the tag before the
+        // per-turn cleanup (step 4) runs, so the casting turn's own cleanup
+        // already sees it - `§8` step 1 halves a `Q` turn - and `magic.md
+        // §8`'s aging at "the per-turn cleanup that follows command
+        // dispatch" spends the new duration's first unit. The scroll
+        // installers already ran in this order (playtest G09).
         self.active_effect_tag = Some(tag);
         self.active_effect_counter = duration;
+        self.advance_turn();
         // `magic.md §5.1`: every spell reaching this helper is in the "No
         // generic completion line" row - `In Sanct` (Protection), `Rel Tym`
         // (Quickness) and `In An` among them - and the row's prose is explicit
@@ -6898,7 +6904,6 @@ impl PlayState {
             variant: audio::spell_circle(TIME_STOP_SPELL_INDEX),
         });
 
-        self.advance_turn();
         // `magic.md §8` (added 2026-10-16, u5-spec#298 Q15): the
         // magic-absorption sentinel is any of the thirty-two active-object
         // records whose **base tile is exactly `0xFC`**; frames `0xFD..0xFF`
@@ -6912,13 +6917,18 @@ impl PlayState {
             .take(OOL_SLOTS)
             .any(|object| object.type_byte == SHADOWLORD_ACTOR_TILE)
         {
+            self.advance_turn();
             self.emit_sound_effect(SoundEffect::MagicAbsorbed);
             self.fail_committed_spell_cast();
             self.message = format!("{NEGATE_TIME_MAGIC_ABSORBED_LINE}\n{}", self.message);
             return MoveOutcome::Blocked;
         }
+        // `main-loop.md §6`/`§8` step 1: the cast turn's own cleanup sees
+        // the `T` tag dispatch just wrote and skips its minute, as the
+        // Negate Time scroll already does (playtest G09).
         self.active_effect_tag = Some(NEGATE_TIME_ACTIVE_EFFECT_TAG);
         self.active_effect_counter = TIME_STOP_DURATION;
+        self.advance_turn();
         // `magic.md §5.1`: An Tym is in the "No generic completion line" row -
         // "In particular Protection, Negate Magic, Peer and Negate Time do not
         // acquire their scroll counterparts' banners." `Negate time!` is a

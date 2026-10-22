@@ -124,3 +124,45 @@ fn playfix3_g06_a_wrong_recipe_prints_the_mixing_beat_once() {
         );
     }
 }
+
+/// G09: `main-loop.md §6` runs dispatch (step 3) before the per-turn
+/// cleanup (step 4), and `§8` step 1: "If the cleanup sees the `Q` tag,
+/// halve the increment ... If it sees the `T` tag, skip the minute".
+/// `magic.md §8`: the countdown ages at "the per-turn cleanup that follows
+/// command dispatch". The casting turn's own cleanup therefore sees the new
+/// tag and spends the new duration's first unit.
+#[test]
+fn playfix3_g09_a_timed_effect_spell_takes_hold_on_its_own_casting_turn() {
+    // (code, spell index, expected clock minute after the cast, tag)
+    for (code, spell, minute, tag) in [
+        ("RT", QUICKNESS_SPELL_INDEX, 1, b'Q'),
+        ("AT", TIME_STOP_SPELL_INDEX, 0, b'T'),
+        ("IS", PROTECTION_SPELL_INDEX, 2, b'P'),
+    ] {
+        let mut state = world_state(open_world_grid(), 5, 5);
+        state.party[0].mana = 50;
+        state.party[0].level = 8;
+        state.spell_charges[spell] = 1;
+        state.active_player = Some(0);
+        state.clock = GameClock::new(13, 0).unwrap();
+
+        handle_play_key_input(&mut state, 'C', &format!("1{code}"), Path::new("")).unwrap();
+        assert_eq!(state.spell_charges[spell], 0, "{code}: the cast resolved");
+        assert_eq!(state.active_effect_tag, Some(tag), "{code}");
+        assert_eq!(
+            (state.clock.hour, state.clock.minute),
+            (13, minute),
+            "{code}: the casting turn's cleanup sees the tag"
+        );
+        let duration = match tag {
+            b'Q' => 30,
+            b'T' => TIME_STOP_DURATION,
+            _ => 20,
+        };
+        assert_eq!(
+            state.active_effect_counter,
+            duration - 1,
+            "{code}: the casting turn ages the new duration"
+        );
+    }
+}

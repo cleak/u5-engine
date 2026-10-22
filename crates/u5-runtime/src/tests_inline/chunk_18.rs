@@ -840,9 +840,12 @@
         assert_eq!(state.spell_charges[TIME_STOP_SPELL_INDEX], 0);
         assert_eq!(state.party[0].mana, 0);
         assert_eq!(state.turn, 1);
-        assert_eq!(state.clock, GameClock::new(12, 2).unwrap());
+        // `main-loop.md §8` step 1: the casting turn's own cleanup sees the
+        // `T` tag and skips its minute, and ages the new duration (playtest
+        // G09).
+        assert_eq!(state.clock, GameClock::new(12, 0).unwrap());
         assert_eq!(state.active_effect_tag, Some(NEGATE_TIME_ACTIVE_EFFECT_TAG));
-        assert_eq!(state.active_effect_counter, TIME_STOP_DURATION);
+        assert_eq!(state.active_effect_counter, TIME_STOP_DURATION - 1);
         assert_eq!(state.time_stop_counter, 0);
         // `magic.md §5.1`: An Tym takes no generic completion line and does
         // not acquire its scroll counterpart's banner (`RETRACTIONS.md` R402).
