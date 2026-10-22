@@ -3874,7 +3874,15 @@ impl PlayState {
             return Ok(Some(PlayInputDisposition::Continue));
         }
         self.active_yes_no_prompt = Some(session);
-        self.message = self.render_active_yes_no_prompt();
+        // An ignored key leaves the question standing. The troll demand of
+        // `overworld.md §7.1` step 3 printed `Dost thou pay?` at the end of
+        // its own emission ("every other key is ignored"); re-seating the slot
+        // with the bare question read as a fresh write and printed it a second
+        // time, and the answer then echoed onto that copy (playtest H05).
+        let prompt = self.render_active_yes_no_prompt();
+        if !self.message.ends_with(&prompt) {
+            self.message = prompt;
+        }
         Ok(None)
     }
 

@@ -219,3 +219,39 @@ fn playfix4_h30_fountain_selector_keys_do_not_reprint_the_question() {
     }
     assert!(state.active_party_selector.is_some());
 }
+
+/// H05: `overworld.md §7.1` step 3 prints `...gp toll!\n\nDost thou pay?`
+/// once, "only `Y` and `N` are accepted and every other key is ignored",
+/// then echoes the accepted letter onto that question's row. An ignored key
+/// used to print the question a second time.
+#[test]
+fn playfix4_h05_troll_toll_ignored_key_does_not_reprint_the_question() {
+    let mut state = britannia_state(open_world_grid(), 2, 1);
+    state.gold = 100;
+    state.emit_message_line("Caught!\n\nThe trolls demand a 54 gp toll!\n\nDost thou pay?");
+    state.active_yes_no_prompt = Some(YesNoPromptSession::new(
+        YesNoPromptKind::TrollBridgeToll { toll: 54 },
+    ));
+    let dir = debug_game_dir();
+    for key in ['E', 'x', '\u{1b}'] {
+        handle_play_key_input(&mut state, key, "", &dir).unwrap();
+        state.flush_message_slot();
+        assert!(state.active_yes_no_prompt.is_some(), "{key:?}");
+    }
+    let rows = pf4_rows(&state);
+    assert_eq!(
+        rows.iter().filter(|row| row.starts_with(TROLL_BRIDGE_TOLL_QUESTION)).count(),
+        1,
+        "{rows:#?}"
+    );
+    handle_play_key_input(&mut state, 'Y', "", &dir).unwrap();
+    state.flush_message_slot();
+    let rows = pf4_rows(&state);
+    assert_eq!(
+        rows.iter().filter(|row| row.starts_with(TROLL_BRIDGE_TOLL_QUESTION)).count(),
+        1,
+        "{rows:#?}"
+    );
+    assert!(rows.iter().any(|row| row == "Dost thou pay?Y"), "{rows:#?}");
+    let _ = fs::remove_dir_all(dir);
+}
