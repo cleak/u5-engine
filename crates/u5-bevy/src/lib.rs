@@ -132,7 +132,7 @@ use u5_runtime::{
     render_return_to_view_playback_frame_over, render_text_panel_rgba, render_text_window_rgba,
     render_text_window_rgba_with_runes, resolve_palette_register,
     return_to_view_caption_start_column, return_to_view_fixed_wipe_rectangles,
-    run_intro_pre_flourish_phase, run_potion_flash_soundless_timing,
+    run_intro_pre_flourish_phase,
     run_return_to_view_playback_until_restart, save_image_has_active_avatar,
     shop_runtime::{
         ArmsShopState, GuildShopState, HealerShopState, HorseTraderState, InnkeeperState,
@@ -10185,12 +10185,16 @@ fn replace_visual_image_data(
         .data = Some(rgba);
 }
 
+#[allow(clippy::too_many_arguments)]
 fn screenshot_system(
     mut commands: Commands,
     config: Res<ScreenshotConfig>,
     mut state: ResMut<ScreenshotState>,
     visual: Option<ResMut<VisualState>>,
     intro: Option<ResMut<VisualIntroState>>,
+    speaker_queue: Option<Res<SpeakerQueue>>,
+    speaker_voices: Query<(), With<SpeakerVoice>>,
+    mut speaker: EventWriter<SpeakerEffect>,
     mut images: ResMut<Assets<Image>>,
     mut exit: EventWriter<AppExit>,
 ) {
@@ -10203,55 +10207,55 @@ fn screenshot_system(
     // system) before the screenshot delay finishes counting down.
     if !state.preset_keys_applied && !config.preset_keys.is_empty() {
         if let Some(mut visual) = visual {
-            if visual.potion_flash_restore_pending.is_some()
+            // Scripted screenshot input follows the same blocking boundary as
+            // live keyboard input ([`drive_visual`]): `audio.md §2`, a
+            // sounding effect owns the thread, and `§7.2`'s potion is
+            // "blocking, polls no input". Leave the remaining key queue
+            // intact until the presentation has completed.
+            let speaker_busy = speaker_queue
+                .as_deref()
+                .is_some_and(|queue| !queue.0.is_empty())
+                || !speaker_voices.is_empty();
+            if speaker_busy
                 || visual.state.visibility_sweep.is_some()
                 || visual.sweep_idle_redraw_pending
             {
-                // Scripted screenshot input follows the same blocking potion
-                // boundary as live keyboard input. Leave the remaining key
-                // queue intact until the presentation has completed.
                 return;
             }
             let game_dir = visual.game_dir.clone();
             while let Some(ch) = config.preset_keys.get(state.preset_key_cursor).copied() {
+                let effects_before = visual.state.sound_effect_serial;
                 handle_play_key_input(&mut visual.state, ch, "", &game_dir)
                     .unwrap_or_else(|err| panic!("screenshot preset play input failed: {err}"));
                 state.preset_key_cursor += 1;
-                if visual.state.pending_potion_flash.is_some() {
+                // As on the keyboard path: an effect owns the thread, so the
+                // next key waits for it.
+                if visual.state.sound_effect_serial != effects_before
+                    || visual.state.pending_potion_flash.is_some()
+                {
                     break;
                 }
             }
             let v: &mut VisualState = visual.as_mut();
-            if let Some(playback) = v.state.take_pending_potion_flash() {
-                let mut rgba = images
-                    .get(&v.image_handle)
-                    .and_then(|image| image.data.clone())
-                    .expect("screenshot potion flash requires the current framebuffer");
-                assert!(apply_visual_potion_flash_xor(&mut rgba, playback));
-                replace_visual_image_data(
-                    &mut images,
-                    &v.image_handle,
-                    rgba,
-                    "screenshot preset potion flash",
-                );
-                run_potion_flash_soundless_timing(playback);
-                v.potion_flash_restore_pending = Some(playback);
-            } else {
-                // Re-render the framebuffer to reflect the new state.
-                let ctx = PlayFrameContext {
-                    ibm: &v.text_font,
-                    runes: &v.rune_font,
-                    game_dir: &game_dir,
-                    cursor_frame: v.prompt_cursor_frame,
-                };
-                let rgba = render_visual_play_frame_with_input(&mut v.state, &v.atlas, ctx, "", "");
-                replace_visual_image_data(
-                    &mut images,
-                    &v.image_handle,
-                    rgba,
-                    "screenshot preset play",
-                );
-            }
+            // `audio.md §7.2` / `catalogs/item-list.md §7.2`: the accepted
+            // potion's presentation is a `§6` shared variant the runtime
+            // recorded on `sound_effect_serial`, and its viewport inversion
+            // rides that voice for both envelopes ([`viewport_flash_start`],
+            // playtest H12) - as on the live keyboard path. This path used to
+            // invert for one frame and stand a counted busy loop in for the
+            // envelopes. Sending the effects now starts the voice on the next
+            // speaker pass; the gate above then holds the remaining keys.
+            let _ = v.state.take_pending_potion_flash();
+            queue_pending_speaker_effects(v, &mut speaker);
+            // Re-render the framebuffer to reflect the new state.
+            let ctx = PlayFrameContext {
+                ibm: &v.text_font,
+                runes: &v.rune_font,
+                game_dir: &game_dir,
+                cursor_frame: v.prompt_cursor_frame,
+            };
+            let rgba = render_visual_play_frame_with_input(&mut v.state, &v.atlas, ctx, "", "");
+            replace_visual_image_data(&mut images, &v.image_handle, rgba, "screenshot preset play");
             state.preset_keys_applied = state.preset_key_cursor >= config.preset_keys.len();
         } else if let Some(mut intro) = intro {
             // `systems/intro.md §3` pre-flourish J shortcut and the
@@ -10359,13 +10363,6 @@ struct VisualState {
     prompt_cursor_frame: u64,
     input_line: String,
     prompt_cursor_visible: bool,
-    /// The shared potion flash is currently displaying the inverted
-    /// pre-effect framebuffer. The next Update restores by rendering the
-    /// resulting gameplay state.
-    potion_flash_restore_pending: Option<PotionFlashPlayback>,
-    /// Prevent the animation pump from painting a second frame in the same
-    /// Update that restores a potion flash.
-    skip_animation_pump_once: bool,
     /// The spell/potion visibility sweep owns one ordinary idle redraw
     /// immediately after its twentieth frozen-visibility repaint.
     sweep_idle_redraw_pending: bool,
@@ -11194,14 +11191,6 @@ fn animate_static_tiles(
     let Some(mut visual) = visual else {
         return;
     };
-    if visual.potion_flash_restore_pending.is_some() {
-        return;
-    }
-    if visual.skip_animation_pump_once {
-        visual.skip_animation_pump_once = false;
-        pump.accumulator = 0.0;
-        return;
-    }
 
     // `endgame.md §4` (issue #298 Q43, `RETRACTIONS.md` R558/R559): the
     // tableau sprites run on the ordinary per-slot animator "through every
@@ -11566,8 +11555,6 @@ fn setup(
         prompt_cursor_frame: 0,
         input_line: String::new(),
         prompt_cursor_visible: false,
-        potion_flash_restore_pending: None,
-        skip_animation_pump_once: false,
         sweep_idle_redraw_pending: false,
         held_direction_repeat: HeldDirectionRepeat::default(),
         typed_keys: Default::default(),
@@ -11755,8 +11742,6 @@ fn transition_visual_intro_to_gameplay(
         prompt_cursor_frame: 0,
         input_line: String::new(),
         prompt_cursor_visible: false,
-        potion_flash_restore_pending: None,
-        skip_animation_pump_once: false,
         sweep_idle_redraw_pending: false,
         held_direction_repeat: HeldDirectionRepeat::default(),
         typed_keys: Default::default(),
@@ -13583,36 +13568,6 @@ fn drive_visual(
             control: control_pressed,
         }));
     queue_pending_speaker_effects(&mut visual, &mut speaker);
-    if let Some(playback) = visual.potion_flash_restore_pending.take() {
-        let v: &mut VisualState = visual.as_mut();
-        v.skip_animation_pump_once = true;
-        let restored = images
-            .get_mut(&v.image_handle)
-            .and_then(|image| image.data.as_mut())
-            .expect("potion flash restore requires the inverted visual framebuffer");
-        assert!(
-            apply_visual_potion_flash_xor(restored, playback),
-            "potion flash restorative XOR does not fit the visual framebuffer"
-        );
-        v.prompt_cursor_visible = visual_line_prompt_active(&v.state);
-        let input_line = v.input_line.clone();
-        let ctx = PlayFrameContext {
-            ibm: &v.text_font,
-            runes: &v.rune_font,
-            game_dir: &v.game_dir,
-            cursor_frame: v.prompt_cursor_frame,
-        };
-        let rgba = render_visual_play_frame_with_input_and_cursor(
-            &mut v.state,
-            &v.atlas,
-            ctx,
-            &input_line,
-            "",
-            v.prompt_cursor_visible,
-        );
-        replace_visual_image_data(&mut images, &v.image_handle, rgba, "potion flash restore");
-        return;
-    }
     // `audio.md §2`: "Most effects own the calling thread until they finish,
     // so gameplay and command input do not continue underneath them" - and
     // `§7.2` has the potion "blocking, polls no input". While the one voice
@@ -30419,8 +30374,6 @@ mod tests {
             prompt_cursor_frame: 0,
             input_line: String::new(),
             prompt_cursor_visible: false,
-            potion_flash_restore_pending: None,
-            skip_animation_pump_once: false,
             sweep_idle_redraw_pending: false,
             held_direction_repeat: HeldDirectionRepeat::default(),
             typed_keys: Default::default(),
@@ -30640,8 +30593,6 @@ mod tests {
                 prompt_cursor_frame: 0,
                 input_line: String::new(),
                 prompt_cursor_visible: false,
-                potion_flash_restore_pending: None,
-                skip_animation_pump_once: false,
                 sweep_idle_redraw_pending: false,
                 held_direction_repeat: HeldDirectionRepeat::default(),
                 typed_keys: Default::default(),
@@ -30806,8 +30757,6 @@ mod tests {
                 prompt_cursor_frame: 0,
                 input_line: String::new(),
                 prompt_cursor_visible: false,
-                potion_flash_restore_pending: None,
-                skip_animation_pump_once: false,
                 sweep_idle_redraw_pending: false,
                 held_direction_repeat: HeldDirectionRepeat::default(),
                 typed_keys: Default::default(),
@@ -31270,5 +31219,89 @@ mod tests {
         );
         assert!(!shell.speaker_busy());
         assert!(!shell.visual().state.presentation_camp_flash_inverted);
+    }
+
+    /// `audio.md §6` / `§7.2` through the screenshot preset-key path: the
+    /// potion's inversion rides its shared-variant voice for both envelopes,
+    /// exactly as on the keyboard path (playtest H12), and the next preset
+    /// key waits for the voice. This path used to invert one frame by hand
+    /// and stand a counted busy loop in for the envelopes.
+    #[test]
+    #[cfg(feature = "original-asset-tests")]
+    fn the_screenshot_preset_potion_rides_the_speaker_voice() {
+        let mut shell = britannia_meadow_shell("screenshot-preset-potion");
+        {
+            let mut visual = shell.visual_mut();
+            let state = &mut visual.state;
+            state.special_items.fill(0);
+            state.scroll_stock.fill(0);
+            state.potion_stock.fill(0);
+            state.potion_stock[u5_runtime::POTION_YELLOW_INDEX] = 1;
+            state.party[0].hp = 5;
+        }
+        shell.ticks(10);
+        assert!(!shell.speaker_busy());
+        let shot = shell.dir.join("never-taken.png");
+        shell
+            .app
+            .insert_resource(ScreenshotConfig {
+                path: Some(shot),
+                frame_delay: u32::MAX,
+                preset_keys: vec!['U', '\r', ' ', 'Z'],
+            })
+            .insert_resource(ScreenshotState::default())
+            .add_systems(Update, screenshot_system.after(present_camp_apparition_flash));
+
+        let started = std::time::Instant::now();
+        let mut drunk_at = None;
+        for frame in 0..10 {
+            shell.tick();
+            // `audio.md §7.2`: the bottle is spent before the target is
+            // named, so the accepted drink is the healed member.
+            if shell.visual().state.party[0].hp > 5 {
+                drunk_at = Some(frame);
+                break;
+            }
+        }
+        assert!(drunk_at.is_some(), "the preset keys drink the potion");
+        assert!(
+            started.elapsed() < Duration::from_millis(500),
+            "no busy loop stands in for the envelopes: {:?}",
+            started.elapsed()
+        );
+        assert_eq!(
+            shell.app.world().resource::<ScreenshotState>().preset_key_cursor,
+            3,
+            "the key after the potion waits"
+        );
+        // The voice starts on the next speaker pass and carries the flash.
+        shell.tick();
+        assert!(shell.speaker_busy());
+        let mut inverted_frames = 0;
+        for _ in 0..240 {
+            if shell.speaker_busy() {
+                assert_eq!(
+                    shell.app.world().resource::<ScreenshotState>().preset_key_cursor,
+                    3,
+                    "no preset key runs under the voice"
+                );
+            }
+            if shell.visual().state.presentation_camp_flash_inverted {
+                inverted_frames += 1;
+            }
+            shell.tick();
+        }
+        let inverted = VisualShellHarness::FRAME * inverted_frames;
+        assert!(
+            inverted >= Duration::from_millis(500),
+            "inverted for {inverted:?}, held by the voice rather than one frame"
+        );
+        assert!(!shell.speaker_busy());
+        assert!(!shell.visual().state.presentation_camp_flash_inverted);
+        assert_eq!(
+            shell.app.world().resource::<ScreenshotState>().preset_key_cursor,
+            4,
+            "the waiting key runs once the voice has ended"
+        );
     }
 }
