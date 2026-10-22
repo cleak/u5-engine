@@ -2006,7 +2006,13 @@ impl PlayState {
         // were right all along and only the font was wrong
         // (`cleak/u5-spec#237`).
         let pair = sextant_coordinate_pair_line(self.player.y as u8, self.player.x as u8);
-        self.emit_message_line(USE_SEXTANT_READING_LABEL);
+        // `inventory.md §7.1`'s completion table gives the Sextant
+        // `Sextant\n\n`: the second feed leaves one blank row above
+        // `Position:`. The picker inserts that feed for a handler that
+        // returns its line in the slot; this one records its own rows, so
+        // it carries the feed itself (playtest G12). On a still-open row the
+        // feed only closes it (`text-output.md §10.4`).
+        self.emit_message_line(format!("\n{USE_SEXTANT_READING_LABEL}"));
         for row in pair.split('\n').filter(|row| !row.is_empty()) {
             self.push_runic_message_entry(row);
         }

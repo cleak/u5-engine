@@ -200,3 +200,34 @@ fn playfix3_g11_a_resultless_combat_cast_leaves_a_blank_row_before_the_banner() 
         assert_eq!(rows[exchange + 2], "Avatar, armed", "{last_exchange_row}: {rows:?}");
     }
 }
+
+/// G12: `inventory.md §7.1`'s completion table gives the Sextant
+/// `Sextant\n\n`, so one blank row stands between the completed `Item:`
+/// row and `Position:`, as it does for the Spyglass and the Watch.
+#[test]
+fn playfix3_g12_a_sextant_reading_opens_under_a_blank_row() {
+    let mut state = britannia_state(open_world_grid(), 5, 5);
+    state.special_items[SPECIAL_ITEM_SEXTANT_INDEX] = 1;
+    state.clock = GameClock::new(22, 0).unwrap();
+    let row = state
+        .use_item_picker_rows()
+        .iter()
+        .position(|row| row.request == UseItemRequest::Sextant)
+        .expect("the Sextant row is listed");
+
+    handle_play_key_input(&mut state, 'U', "", Path::new("")).unwrap();
+    for _ in 0..row {
+        handle_play_key_input(&mut state, char::from(INPUT_CODE_SOUTH), "", Path::new(""))
+            .unwrap();
+    }
+    handle_play_key_input(&mut state, '\r', "", Path::new("")).unwrap();
+    state.flush_message_slot();
+
+    let rows = p3magic_transcript_rows(&state);
+    let item = rows
+        .iter()
+        .rposition(|row| row == "Item: Sextant")
+        .unwrap_or_else(|| panic!("the item row completes: {rows:?}"));
+    assert_eq!(rows[item + 1], "", "{rows:?}");
+    assert_eq!(rows[item + 2], USE_SEXTANT_READING_LABEL, "{rows:?}");
+}
