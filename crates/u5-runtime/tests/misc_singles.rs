@@ -236,7 +236,10 @@ fn active_ship_cadence_counter_is_record_byte_seven() {
     let mut state = ship_state(WindState::North, 0x2c, 0);
     state.advance_outdoor_active_objects();
     assert_eq!(state.active_objects[1].phase, 0x00, "byte 6 plays no part");
-    assert_eq!(state.active_objects[1].aux3, 1, "one move of the 2-of-3 cycle spent");
+    assert_eq!(
+        state.active_objects[1].aux3, 1,
+        "one move of the 2-of-3 cycle spent"
+    );
     assert_eq!(state.active_objects[1].aux1, 100, "hull untouched");
     state.advance_outdoor_active_objects();
     assert_eq!(state.active_objects[1].aux3, 2);
@@ -244,19 +247,28 @@ fn active_ship_cadence_counter_is_record_byte_seven() {
     let before = (state.active_objects[1].x, state.active_objects[1].y);
     state.advance_outdoor_active_objects();
     assert_eq!(state.active_objects[1].aux3, 0);
-    assert_eq!((state.active_objects[1].x, state.active_objects[1].y), before);
+    assert_eq!(
+        (state.active_objects[1].x, state.active_objects[1].y),
+        before
+    );
 
     // An inherited value at or above the cap skips and resets.
     let mut state = ship_state(WindState::North, 0x2c, 7);
     state.advance_outdoor_active_objects();
     assert_eq!(state.active_objects[1].aux3, 0);
-    assert_eq!((state.active_objects[1].x, state.active_objects[1].y), (100, 100));
+    assert_eq!(
+        (state.active_objects[1].x, state.active_objects[1].y),
+        (100, 100)
+    );
 
     // "An inherited 255 wraps to 0, so the ship moves on that pass."
     let mut state = ship_state(WindState::North, 0x2c, 255);
     state.advance_outdoor_active_objects();
     assert_eq!(state.active_objects[1].aux3, 0);
-    assert_eq!((state.active_objects[1].x, state.active_objects[1].y), (100, 99));
+    assert_eq!(
+        (state.active_objects[1].x, state.active_objects[1].y),
+        (100, 99)
+    );
 
     // Calm and "every turn" leave the counter alone.
     let mut state = ship_state(WindState::Calm, 0x2c, 1);
@@ -265,7 +277,10 @@ fn active_ship_cadence_counter_is_record_byte_seven() {
     let mut state = ship_state(WindState::North, 0x2d, 1);
     state.advance_outdoor_active_objects();
     assert_eq!(state.active_objects[1].aux3, 1);
-    assert_eq!((state.active_objects[1].x, state.active_objects[1].y), (101, 100));
+    assert_eq!(
+        (state.active_objects[1].x, state.active_objects[1].y),
+        (101, 100)
+    );
 }
 
 /// Issue #298 Q32: once the cadence permits movement the ship takes the
@@ -279,7 +294,10 @@ fn active_ship_step_rewrites_both_tile_bytes_to_its_heading() {
     state.player.x = 60;
     state.player.y = 100;
     state.advance_outdoor_active_objects();
-    assert_eq!((state.active_objects[1].x, state.active_objects[1].y), (99, 100));
+    assert_eq!(
+        (state.active_objects[1].x, state.active_objects[1].y),
+        (99, 100)
+    );
     assert_eq!(state.active_objects[1].type_byte, 0x2f);
     assert_eq!(state.active_objects[1].tile, 0x2f);
 }
@@ -1236,4 +1254,73 @@ fn a_presentation_sweep_leaves_every_actor_coordinate_unchanged() {
         u32::from(state.animation.frame) > 0,
         "`§13.5`: a presentation that pumps the world redraw still pays the tile layers"
     );
+}
+
+// ---------------------------------------------------------------------------
+// `systems/input.md §5` — function keys reach no prompt (playtest G13).
+// ---------------------------------------------------------------------------
+
+/// `input.md §5`: the function-key block is consumed by "no mode loop, no
+/// letter dispatcher, no prompt, and no panel"; `commands.md §9` Control+E:
+/// "Y leaves the game; every other returned key prints `N\n` on the
+/// prompt's own row and continues". An F1 at `Exit to DOS?` is such a key,
+/// so the prompt closes on `N` and a following `Y` is an ordinary command.
+#[test]
+fn function_key_at_exit_to_dos_answers_no_instead_of_what() {
+    let mut state = test_state(open_grid(), 5, 5);
+    handle_play_key_input(
+        &mut state,
+        PLAY_EXIT_TO_DOS_KEY,
+        "",
+        std::path::Path::new(""),
+    )
+    .unwrap();
+    assert!(state.active_yes_no_prompt.is_some());
+
+    let f1 = char::from(INPUT_CODE_F1);
+    assert_eq!(
+        handle_play_key_input(&mut state, f1, "", std::path::Path::new("")).unwrap(),
+        PlayInputDisposition::Continue
+    );
+
+    assert!(state.active_yes_no_prompt.is_none());
+    assert_ne!(state.message, unassigned_refusal_echo(0));
+    assert_ne!(
+        handle_play_key_input(&mut state, 'Y', "", std::path::Path::new("")).unwrap(),
+        PlayInputDisposition::Quit
+    );
+}
+
+/// `input.md §10`: at the adjacent-tile prompt "function keys ... are
+/// ignored and cause the prompt to read again". No top-level `What?`.
+#[test]
+fn function_key_at_a_direction_prompt_leaves_the_prompt_waiting() {
+    let mut state = test_state(open_grid(), 5, 5);
+    state.start_get_direction_prompt();
+    let prompt = state.message.clone();
+
+    handle_play_key_input(
+        &mut state,
+        char::from(INPUT_CODE_F1),
+        "",
+        std::path::Path::new(""),
+    )
+    .unwrap();
+
+    assert!(state.active_direction_prompt.is_some());
+    assert_eq!(state.message, prompt);
+}
+
+/// The command prompt still answers an F-key with the resident `What?`.
+#[test]
+fn function_key_at_the_command_prompt_still_answers_what() {
+    let mut state = test_state(open_grid(), 5, 5);
+    handle_play_key_input(
+        &mut state,
+        char::from(INPUT_CODE_F1),
+        "",
+        std::path::Path::new(""),
+    )
+    .unwrap();
+    assert_eq!(state.message, unassigned_refusal_echo(0));
 }

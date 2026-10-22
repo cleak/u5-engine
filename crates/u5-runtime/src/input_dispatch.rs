@@ -230,6 +230,15 @@ fn next_key_is_a_command(state: &PlayState) -> bool {
         && state.active_blackthorn_guard_demand.is_none()
 }
 
+/// Whether a function key arrives at the command prompt rather than at an
+/// open prompt: [`next_key_is_a_command`], and neither the town arrest
+/// prompt nor the combat target cursor is waiting on the key.
+fn function_key_reaches_the_command_dispatcher(state: &PlayState) -> bool {
+    next_key_is_a_command(state)
+        && state.pending_town_arrest.is_none()
+        && state.active_combat_targeting.is_none()
+}
+
 /// The overworld loop's head, between one command and the next key read.
 ///
 /// `overworld.md §9.2`: "The overworld command loop has a live-gate entry
@@ -328,7 +337,18 @@ fn handle_play_key_input_inner(
         return Ok(PlayInputDisposition::Continue);
     }
     if let Some(byte) = input_byte_from_char(key) {
-        if matches!(input_byte_class(byte), InputByteClass::FunctionKey) {
+        // `input.md §5`: nothing consumes the function-key block - "no mode
+        // loop, no letter dispatcher, no prompt, and no panel". The `What?`
+        // below is the command dispatcher's answer to an unassigned key, so
+        // it belongs to the command prompt alone. Under an open prompt the
+        // key goes to that prompt, whose own rule for a key it does not
+        // accept applies - discarded and read again (`§8`, `§10`), or the
+        // `N` an Exit-to-DOS answer prints (`commands.md §9`). Answering
+        // `What?` there drew a command marker over a prompt that was still
+        // live, and the next `Y` quit the game (playtest G13).
+        if matches!(input_byte_class(byte), InputByteClass::FunctionKey)
+            && function_key_reaches_the_command_dispatcher(state)
+        {
             // Measured 2026-09-07: a function key is just an unassigned
             // key, and answers the resident `What?` like any other.
             //
