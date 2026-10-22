@@ -64,3 +64,40 @@ fn playtest_h27_dungeon_room_combat_push_opens_no_stray_echo_row() {
         .collect();
     assert_eq!(new_rows, [&"Push-".to_string()], "rows: {rows:?}");
 }
+
+/// `overworld.md §5`: the per-turn block (two-minute clock, party upkeep)
+/// is step 6 and runs once, after step 5's dispatch returns; `combat.md §4`:
+/// "the only time a fight adds is its round-wrap minutes". Playtest H21: an
+/// overworld A-Attack advanced the turn before framing the arena as well as
+/// after it, so the arena opened two minutes late and a poisoned member
+/// could die before being seated.
+#[test]
+fn playtest_h21_overworld_attack_spends_no_turn_before_the_arena() {
+    let dir = debug_game_dir();
+    fs::write(
+        dir.join(BRIT_CBT_FILE),
+        synthetic_combat_arena_record().repeat(BRIT_CBT_RECORDS),
+    )
+    .unwrap();
+    let mut state = world_state(open_world_grid(), 5, 5);
+    state.active_objects.push(ActiveObject {
+        type_byte: 0x80,
+        tile: 0x80,
+        x: 6,
+        y: 5,
+        z: WorldPlane::Underworld.save_floor(),
+        phase: 0,
+        aux1: 0,
+        aux3: 0,
+    });
+    let turn = state.turn;
+    let clock = (state.clock.hour, state.clock.minute);
+
+    handle_play_key_input(&mut state, 'A', "", &dir).unwrap();
+    handle_play_key_input(&mut state, char::from(INPUT_CODE_EAST), "", &dir).unwrap();
+
+    assert!(state.combat_active, "the attack frames the arena");
+    assert_eq!(state.turn, turn, "no turn is spent before the arena");
+    assert_eq!((state.clock.hour, state.clock.minute), clock);
+    let _ = fs::remove_dir_all(dir);
+}
