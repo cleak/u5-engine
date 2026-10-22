@@ -1465,9 +1465,14 @@ pub fn step_tavern(
                     lore_letter: letters.lore,
                 }
             }
+            // `shops.md §8.B`: "Every No response echoes `No` without a line
+            // feed, then exits through the appropriate closing-bark flow", and
+            // `§8.A` renders the nothing-bought bark "at the tail of a visit
+            // that completed no purchase, including a refused entry prompt".
+            // The entry refusal used to leave silently (playtest H28).
             TavernDrinkPrompt::Leave => {
                 *state = TavernState::Exited;
-                TavernOutcome::Exited
+                TavernOutcome::NoSaleExit
             }
             TavernDrinkPrompt::Discard => TavernOutcome::InvalidInput,
         },

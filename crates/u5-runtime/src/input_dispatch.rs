@@ -1867,6 +1867,12 @@ fn handle_active_shop_key_input(
                             ));
                             // "A poisoned member's recovery death adds `\n`,
                             // the member name, and ` has\npassed away.\n`."
+                            // That `\n` follows `Morning!\n`, whose own feed
+                            // the slot leaves to the next row, so the name
+                            // takes two here: one closes the `Morning!` row and
+                            // one is the blank above the name. The closing
+                            // `\n` is left to the next row as `Morning!`'s is
+                            // (playtest H47).
                             for index in poisoned {
                                 if state.party.get(index).is_some_and(|m| m.status == b'D') {
                                     let name = state
@@ -1874,7 +1880,7 @@ fn handle_active_shop_key_input(
                                         .get(index)
                                         .and_then(|name| crate::party::party_name_to_string(name))
                                         .unwrap_or_default();
-                                    message.push_str(&format!("\n{name} has\npassed away."));
+                                    message.push_str(&format!("\n\n{name} has\npassed away."));
                                 }
                             }
                             let surcharge = apply_active_shop_surcharge(state);
@@ -2114,6 +2120,15 @@ fn handle_active_shop_key_input(
         }
         ActiveShopSession::Tavern(s) => {
             let mut food = state.food;
+            // `shops.md §8.B`: "Space means No where accepted. Every No
+            // response echoes `No` without a line feed"; Y/N take the shared
+            // entry echo, so Space's `No` continues the greeting's open row
+            // here (playtest H28).
+            if matches!(*s, TavernState::Greeting { .. }) && key_byte == b' ' {
+                state.flush_message_slot();
+                state.open_message_row();
+                state.emit_message_line_continuing_row("No");
+            }
             // `shops.md` §8.C's result table opens the bill "After the
             // action-letter echo", and the tavern's list and follow-up records
             // both end in a closing quote and a space - that space is the cell
@@ -2614,7 +2629,12 @@ fn handle_active_shop_key_input(
                 }
                 // `shops.md §8.B`: "Space means No where accepted. Every No
                 // response echoes `No`"; Y/N take the shared entry echo.
+                // The greeting's continuation row is open whatever the slot's
+                // text ended on, as at the inn and the shipwright (playtest
+                // H29).
                 ReagentShopOutcome::DeclinedEntry if key_byte == b' ' => {
+                    state.flush_message_slot();
+                    state.open_message_row();
                     state.emit_message_line_continuing_row("No")
                 }
                 _ => {}
@@ -2689,7 +2709,14 @@ fn handle_active_shop_key_input(
             // trailing line feed." At entry the shared echo covers `Y`/`N`;
             // Space "means No" and echoes it here.
             match outcome {
-                HorseTraderOutcome::Declined if confirming || key_byte == b' ' => {
+                HorseTraderOutcome::Declined if confirming => {
+                    state.emit_message_line_continuing_row("No");
+                }
+                // The greeting's continuation row is open whatever the slot's
+                // text ended on (playtest H29).
+                HorseTraderOutcome::Declined if key_byte == b' ' => {
+                    state.flush_message_slot();
+                    state.open_message_row();
                     state.emit_message_line_continuing_row("No");
                 }
                 HorseTraderOutcome::Purchased { .. }
@@ -3004,7 +3031,11 @@ fn handle_active_shop_key_input(
                 GuildShopOutcome::Declined => state.emit_message_line_continuing_row("No"),
                 // `shops.md §8.B`: "Space means No where accepted. Every No
                 // response echoes `No`"; Y/N take the shared entry echo.
+                // The greeting's continuation row is open whatever the slot's
+                // text ended on (playtest H29).
                 GuildShopOutcome::DeclinedEntry if key_byte == b' ' => {
+                    state.flush_message_slot();
+                    state.open_message_row();
                     state.emit_message_line_continuing_row("No")
                 }
                 _ => {}
@@ -5399,7 +5430,11 @@ fn format_reagent_outcome(
         }
         // "Already carrying 99 | `\n\n"Thou canst not carry any more!"\n\n`;
         // consume one command key, then redraw stock".
-        RefusedAtCap { .. } => "\n\"Thou canst not carry any more!\"\n".to_string(),
+        // The refusal follows `Thy interest?" `'s open row, so the first
+        // feed of each pair closes a row and the second is the blank; one
+        // feed a side ran it straight under the prompt and the redrawn
+        // stock straight under it (playtest H46).
+        RefusedAtCap { .. } => "\n\n\"Thou canst not carry any more!\"\n\n".to_string(),
         RedrawStock { herbalist } => reagent_stock_menu(herbalist),
         // "Paid | Token-expanded `\n"I thank thee!"\nsays $.\n`, then
         // `"Anything else?\n\n`, then stock".

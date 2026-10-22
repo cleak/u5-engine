@@ -2125,7 +2125,27 @@ impl PlayState {
 
         let nx = nx as usize;
         let ny = ny as usize;
-        if self.blocking_object_at(nx, ny).is_some() {
+        // `vehicles.md §4`: B-Board "probes the current position", with a
+        // town-only `Nay!` availability check, and `shops.md §8.10` places "a
+        // boardable horse object for the party" on an adjacent town cell. A
+        // vehicle the current transport could board is therefore a cell the
+        // party can step onto (`movement.md §7`), as on the overworld
+        // (playtest E22); anything else on the cell still blocks (playtest
+        // H01). A schedule NPC's own sprite is not such an object even when
+        // it wears the horse frames (`npc-roster.md`: "used for stable and
+        // paddock actors and for Smith at Iolo's Hut"), so a linked slot
+        // keeps blocking as every other NPC does.
+        let onto_boardable_vehicle = self
+            .boardable_vehicle_slot_at(nx, ny)
+            .is_some_and(|candidate| {
+                !candidate.blocked_by_occupant
+                    && self.player.transport.can_board(candidate.transport)
+                    && !self
+                        .npcs
+                        .iter()
+                        .any(|npc| npc.active_object == Some(candidate.slot))
+            });
+        if !onto_boardable_vehicle && self.blocking_object_at(nx, ny).is_some() {
             self.message = MOVEMENT_BLOCKED_REFUSAL.to_string();
             // `audio.md §7.4`: the town object-occupancy refusal arm.
             self.emit_town_blocked_step();
