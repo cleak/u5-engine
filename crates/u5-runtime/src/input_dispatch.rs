@@ -1850,6 +1850,12 @@ fn handle_active_shop_key_input(
                             ));
                             // "A poisoned member's recovery death adds `\n`,
                             // the member name, and ` has\npassed away.\n`."
+                            // That `\n` follows `Morning!\n`, whose own feed
+                            // the slot leaves to the next row, so the name
+                            // takes two here: one closes the `Morning!` row and
+                            // one is the blank above the name. The closing
+                            // `\n` is left to the next row as `Morning!`'s is
+                            // (playtest H47).
                             for index in poisoned {
                                 if state.party.get(index).is_some_and(|m| m.status == b'D') {
                                     let name = state
@@ -1857,7 +1863,7 @@ fn handle_active_shop_key_input(
                                         .get(index)
                                         .and_then(|name| crate::party::party_name_to_string(name))
                                         .unwrap_or_default();
-                                    message.push_str(&format!("\n{name} has\npassed away."));
+                                    message.push_str(&format!("\n\n{name} has\npassed away."));
                                 }
                             }
                             let surcharge = apply_active_shop_surcharge(state);

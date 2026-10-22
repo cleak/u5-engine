@@ -290,3 +290,23 @@ fn playfix4_h46_herbalist_carry_cap_refusal_has_a_blank_row_each_side() {
     assert_eq!(rows[first + 1], "", "{rows:#?}");
     assert!(rows[first + 2].starts_with("A..."), "{rows:#?}");
 }
+
+/// H47: `shops.md §8.C` inn table, "Sleep / morning": `Morning!\n`, and "A
+/// poisoned member's recovery death adds `\n`, the member name, and
+/// ` has\npassed away.\n`" - a blank row between `Morning!` and the name.
+#[test]
+fn playfix4_h47_inn_rest_recovery_death_takes_a_blank_row_after_morning() {
+    let mut state = pf2_inn_state();
+    state.party[1].status = b'P';
+    state.party[1].hp = 2;
+    pf2_keys(&mut state, &['R', 'Y']);
+    state.flush_message_slot();
+    assert_eq!(state.party[1].status, b'D', "the poisoned member dies overnight");
+    let rows = pf4_rows(&state);
+    let morning = pf2_row_index(&rows, crate::commands::PAID_INN_REST_MORNING_LINE);
+    assert_eq!(
+        rows[morning + 1..],
+        ["", "SHAMINO has", "passed away."],
+        "{rows:#?}"
+    );
+}
