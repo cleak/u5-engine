@@ -7720,12 +7720,14 @@ pub(crate) fn append_combat_round_walk_messages(
         .iter()
         .filter_map(|entry| match entry {
             CombatActorSlotDispatchApplication::Slot {
+                slot,
                 action:
                     CombatActorDispatchAction::MonsterAi {
                         ai_turn: Some(ai_turn),
                     },
                 ..
             } => Some((
+                *slot,
                 ai_turn.monster_attack?,
                 CombatMonsterAttackNarration::SelfActingHostile,
             )),
@@ -7735,14 +7737,17 @@ pub(crate) fn append_combat_round_walk_messages(
     // `combat.md §6.3`: the narrator gate already ran inside each attack's
     // own dispatch, while the shared result field still described that
     // slot; this loop only prints what the gate let through.
-    for (attack, narration) in attacks {
+    for (slot, attack, narration) in attacks {
         if let Some(line) = combat_monster_attack_narrated_result_message(state, attack, narration)
         {
             // `combat.md §11.1`, the order stated once: step 3 is "a newline",
             // step 5 the result line - which carries its own trailing newline.
             state.emit_combat_print(&format!("\n{line}\n"));
         }
+        // The attacker's standing-hazard line follows its attack's result.
+        state.flush_combat_pending_hazard_lines(Some(slot));
     }
+    state.flush_combat_pending_hazard_lines(None);
 }
 
 fn drive_combat_round_walk_and_append_message(state: &mut PlayState) {
@@ -7823,6 +7828,9 @@ fn advance_combat_round_after_actor_and_append_message(state: &mut PlayState, ac
     // its dispatched action. Keep the victim-local interference clear here as
     // a backstop for modal branches that can close without their normal tail.
     state.clear_combat_interference_for_completed_action(actor_slot);
+    // `combat.md §11.1`: the standing hazard's result line follows the
+    // actor's own output, which every caller has printed by now.
+    state.flush_combat_pending_hazard_lines(None);
     state.next_combat_actor_slot = actor_slot.saturating_add(1).min(COMBAT_ACTOR_SLOTS);
     if !state.pace_combat_presentations {
         // A staged beat the action queued - the Shard's `\n\nNo effect!\n`

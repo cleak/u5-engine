@@ -252,3 +252,40 @@ fn playtest_h02_the_last_hostile_escaping_arms_victory_on_its_own_turn() {
         .collect();
     assert_eq!(tail, ["Wanderer escapes!", "VICTORY!"], "rows: {rows:?}");
 }
+
+/// `combat.md §11.1`, "Order, stated once": "the per-turn standing hazard
+/// reuses the same result narrator with **no newline before it at all**, and
+/// with no attacker, so a party target on that tier always reads the flat
+/// `<target> hit!`"; `§7` step 7's middle (fire) tier feeds the
+/// damage-and-status resolver. Playtest H22: the hazard took HP every turn
+/// and printed nothing.
+#[test]
+fn playtest_h22_standing_in_fire_narrates_the_flat_hit_line() {
+    let game_dir = std::path::Path::new(".");
+    let mut seen = false;
+    for seed in 0..64u16 {
+        let mut state = combat_state_after_the_conflict_banner(8, 5);
+        state.party[0].hp = 60;
+        state.party[0].max_hp = 60;
+        state.combat_terrain[5][5] = COMBAT_CONTACT_TERRAIN_MOLTEN_LAVA;
+        state.prng_state = seed;
+        state.ensure_pending_combat_player_turn();
+        let before = state.message_entries().len();
+
+        handle_play_key_input(&mut state, ' ', "", game_dir).unwrap();
+
+        if state.party[0].hp >= 60 {
+            continue;
+        }
+        seen = true;
+        let rows = p4combat_rows_text(&state);
+        let pass = before
+            + rows[before..]
+                .iter()
+                .position(|row| row == "Pass")
+                .unwrap_or_else(|| panic!("seed {seed}: rows: {rows:?}"));
+        assert_eq!(rows[pass + 1], "Avatar hit!", "seed {seed}: rows: {rows:?}");
+        break;
+    }
+    assert!(seen, "some seed lands fire damage");
+}

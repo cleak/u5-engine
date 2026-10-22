@@ -4617,6 +4617,9 @@ impl PlayState {
         exit: CombatRoundLoopExit,
         writes_result_line: bool,
     ) -> CombatRoundLoopExitApplication {
+        // A standing-hazard result still held for its actor's output is
+        // printed before the fight's closing lines.
+        self.flush_combat_pending_hazard_lines(None);
         if !writes_result_line {
             // Fall through to the shared tail with the message untouched.
         } else {
@@ -5156,6 +5159,21 @@ impl PlayState {
 
     /// Print a `divides!` line that no result narrator claimed, on its own
     /// row, so a split is never silent (`combat.md §11.1`).
+    /// Print the standing-hazard result lines held for `slot` (every slot
+    /// when `None`): each "with no newline before it at all" (`combat.md
+    /// §11.1`) and closed by its own feed, as every result line is.
+    pub(crate) fn flush_combat_pending_hazard_lines(&mut self, slot: Option<usize>) {
+        let (due, kept): (Vec<_>, Vec<_>) =
+            std::mem::take(&mut self.combat_pending_hazard_lines)
+                .into_iter()
+                .partition(|(line_slot, _)| slot.is_none_or(|slot| slot == *line_slot));
+        self.combat_pending_hazard_lines = kept;
+        for (_, line) in due {
+            self.emit_combat_print(&format!("{line}\n"));
+            self.message_row_open_mid_line = false;
+        }
+    }
+
     pub(crate) fn flush_unclaimed_combat_divide_line(&mut self) {
         if let Some(line) = self.combat_pending_divide_line.take() {
             self.emit_message_line(format!("{line}\n"));
@@ -6292,6 +6310,18 @@ impl PlayState {
         };
         let field_contact =
             self.apply_combat_selected_field_contact_for_actor_position(actor_slot, field)?;
+        // `combat.md §11.1`, "Order, stated once": "the per-turn standing
+        // hazard reuses the same result narrator with **no newline before it
+        // at all**, and with no attacker, so a party target on that tier
+        // always reads the flat `<target> hit!`". The damage landed silently
+        // (playtest H22). The line is held until the actor's own output has
+        // printed - see [`Self::flush_combat_pending_hazard_lines`].
+        if let Some(application) = field_contact.damage_application
+            && let Some(line) =
+                self.combat_spell_narrated_result_line(actor_slot, None, application)
+        {
+            self.combat_pending_hazard_lines.push((actor_slot, line));
+        }
         let middle = tier == Some(CombatHazardTier::Middle);
         Some(CombatPostDispatchContactApplication {
             source,
@@ -8538,6 +8568,18 @@ impl PlayState {
             // the note on the player command tail.
             let _ = self.apply_combat_post_dispatch_contact_for_actor_position(slot);
             self.clear_combat_interference_for_completed_action(slot);
+            // A monster attack's result line is narrated after the walk
+            // returns (`append_combat_round_walk_messages`), which prints the
+            // hazard line behind it; every other dispatch has printed all it
+            // will by now.
+            let attack_narration_owed = matches!(
+                &action,
+                CombatActorDispatchAction::MonsterAi { ai_turn: Some(turn) }
+                    if turn.monster_attack.is_some()
+            );
+            if !attack_narration_owed {
+                self.flush_combat_pending_hazard_lines(Some(slot));
+            }
         }
 
         // `combat.md §7`: the recount that "first gives the party
