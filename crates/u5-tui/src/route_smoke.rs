@@ -7474,10 +7474,16 @@ fn validate_route_smoke_case_state(
                 || state.shrine_codex_mask & ShrineVirtue::Honesty.bit() == 0
                 || state.moral_standing != 13
                 // `Completed the Shrine of Honesty` was engine prose. The
-                // turn-in's own presentation is the stat award - the message
-                // here reads `Intelligence +1` - and the three state clauses
-                // above are the published contract.
-                || state.message.is_empty()
+                // turn-in's own presentation is the stat award,
+                // `Intelligence +1`, and the three state clauses above are
+                // the published contract. `karma.md §7.2` has no key wait
+                // before the award, so the route runs the presentation to its
+                // end and the line is read from the transcript, not the live
+                // slot (playtest H41).
+                || !state
+                    .message_entries()
+                    .iter()
+                    .any(|entry| entry.text == u5_runtime::commands::SHRINE_REWARD_INTELLIGENCE_LINE)
             {
                 return Err(io::Error::other(format!(
                     "route smoke `{case_name}` did not clear ordained state and apply the \
