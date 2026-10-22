@@ -63,13 +63,22 @@ class TitleFlameMaskTest(unittest.TestCase):
 
 class DiceBeatsTest(unittest.TestCase):
     def test_sail_heading_echo_skips_only_its_encounter_beats(self) -> None:
+        # `sailing` joined on rc5: it hangs on the per-side wind roll.
+        # `hoisted` and `heading` stay compared.
         self.assertEqual(
-            pc.dice_beats("sail-heading-echo"), {"sailing-more", "same-key"}
+            pc.dice_beats("sail-heading-echo"),
+            {"sailing", "sailing-more", "same-key"},
         )
         # The per-beat directive must not make the whole scenario a lottery:
         # its deterministic beats still have to report a difference.
         self.assertFalse(pc.is_lottery("sail-heading-echo"))
         self.assertEqual(pc.dice_beats("no-such-scenario"), frozenset())
+
+
+class EncounterTrafficTest(unittest.TestCase):
+    def test_swamp_walk_is_retried_but_not_a_lottery(self) -> None:
+        self.assertTrue(pc.is_traffic_variable("swamp-walk"))
+        self.assertFalse(pc.is_lottery("swamp-walk"))
 
     def test_hut_ready_picker_skips_only_its_strength_beats(self) -> None:
         # The ready beats hinge on the chargen Strength draw; the picker as it

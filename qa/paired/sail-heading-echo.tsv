@@ -51,7 +51,24 @@
 # / `Ship sunk!` and then the blank row `Ship sunk!\n` opened, held through
 # the drowning descent (`overworld.md` §6.3 step 6); the engine left
 # `Ship sunk!` open as the bottom row (`offset-1`). Fixed on rc4.
-# dice-beats: sailing-more same-key
+#
+# `sailing` joined the dice beats on rc5. What it shows depends on the wind,
+# and the wind is rolled per side: the start beat's banner across the
+# thirteen runs 2026-10-16..2026-10-22 read, stock, North, (no capture),
+# North, South, East, South, North, North, West, North, East, North, East,
+# and the engine's varied as widely; it also drifts turn by turn. Where both
+# sides read North by `heading` (rc4,
+# 20261020-142358) both ran onto the shoal and sank by 4 s, and that run
+# caught the real `offset-1` fixed above. On the rc5 sweep (20261022-060826)
+# the stock started East and turned West - straight upwind, so the ship held
+# station and read `Hull weak!` / blank / bare `>` - while the engine,
+# under North wind, sailed onto the shoal: `BREAKING UP!` / `Ship sunk!`,
+# and the panel's `Ship:1` became `G:150` as the party went into the water.
+# Neither side's code differs between those two runs; the wind does. The
+# sink layout is pinned by `tests_inline/sail_bare_marker_rows.rs` and
+# `rc1_paired_fixes.rs`, and `heading` still carries the course-change
+# prompt pair this scenario exists for.
+# dice-beats: sailing sailing-more same-key
 # requires-seed: profile `seed-drowning-collision` (frigate west of a coast)
 both	wait	15000
 both	key	space

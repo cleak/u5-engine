@@ -1,5 +1,16 @@
 # Probe: does walking in swamp poison the party, and after how many steps?
 # requires-seed: the party on grass at (64,14), south of the swamp at (64,12)
+#
+# Encounter traffic: a wandering-creature spawn can land on either side
+# during the walk (`encounters.md`; `prng.md` Section 3 seeds the generator
+# from the host clock, so the two sides never share the roll). Rare: the
+# stock side met none in the 21 runs from 2026-09-07 to the rc4 sweep
+# (20261020-152219), and on the 22nd (rc5 sweep, 20261022-070624) an orc
+# stood beside the party at step 9 and `Attacked!` / `*** CONFLICT ***`
+# followed at step 10, while the engine walked on exactly as rc4 did and
+# its beats 1-9 still agreed. A run like that measures the spawn roll, not
+# the engine; `paired_suite.py` retries this scenario once on a difference
+# (`paired_compare.ENCOUNTER_TRAFFIC_MARKER`).
 both	wait	15000
 both	key	space
 both	wait	4000

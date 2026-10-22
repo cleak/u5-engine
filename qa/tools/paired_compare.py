@@ -834,6 +834,13 @@ def is_lottery(scenario: str) -> bool:
 # Both sides vary: the *stock* side of `town-talk-second-npc` printed
 # `Blocked!` twice on one run and not at all on the next.
 TRAFFIC_MARKER = "npc traffic"
+# The overworld counterpart: a walk on which either side can, rarely, roll
+# a wandering-creature spawn (`encounters.md`, host-clock seeded per
+# `prng.md` §3). `swamp-walk` agreed on 21 consecutive stock runs and the
+# 22nd stock side met orcs at step 9 (rc5 sweep, 2026-10-22). Rare enough
+# that a retry is the right answer and a lottery marker - which would read
+# RERUN on every pass and hide real regressions - is not.
+ENCOUNTER_TRAFFIC_MARKER = "encounter traffic"
 
 
 def is_traffic_variable(scenario: str) -> bool:
@@ -852,7 +859,8 @@ def is_traffic_variable(scenario: str) -> bool:
     scenario agrees most of the time and is worth re-running, which is
     what `paired_suite` does with this.
     """
-    return TRAFFIC_MARKER in _scenario_header(scenario)
+    header = _scenario_header(scenario)
+    return TRAFFIC_MARKER in header or ENCOUNTER_TRAFFIC_MARKER in header
 
 
 
