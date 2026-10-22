@@ -2873,6 +2873,14 @@ impl PlayState {
             return None;
         }
 
+        // `input.md §8`: the wish is read by the shared free-text reader, in
+        // which "Escape clears the whole current line but does **not**
+        // submit or terminate it". A bare Escape is never a typed wish
+        // (playtest G15).
+        if key == '\u{1b}' && suffix.is_empty() {
+            self.active_wishing_well = Some(session);
+            return None;
+        }
         let wish = std::iter::once(key)
             .chain(suffix.chars())
             .take(WISHING_WELL_WISH_MAX_CHARS)

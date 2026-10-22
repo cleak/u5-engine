@@ -8510,3 +8510,50 @@ fn tavern_provision_quantity_reads_two_digits_until_return() {
     assert_eq!(state.food, 0);
     assert!(state.message.starts_with("\n\n\"Hrumph.\""), "{:?}", state.message);
 }
+
+/// `input.md §8`: in the free-text reader "Escape clears the whole current
+/// line but does **not** submit or terminate it", and `text-output.md §10.6`
+/// makes that true of every reader. The sage's topic line and the well's wish
+/// line both submitted the Escape as their typed text: the sage answered
+/// "That, I cannot help thee with." and the well spent the wish on
+/// `No effect...` (playtest G15).
+#[test]
+fn escape_at_the_sage_topic_and_well_wish_lines_submits_nothing() {
+    use crate::shop_runtime::SageState;
+    use crate::shop_session::ActiveShopSession;
+
+    let mut sage = test_state(open_grid(), 1, 1);
+    sage.area = Area::Town {
+        scene: Scene::new(22).unwrap(),
+        floor: 0,
+    };
+    sage.gold = 200;
+    sage.active_shop = Some(ActiveShopSession::Sage(SageState::default()));
+    let entries_before = sage.message_entries().len();
+    let message_before = sage.message.clone();
+    handle_play_key_input(&mut sage, '\u{1b}', "", Path::new("")).unwrap();
+    assert_eq!(sage.message_entries().len(), entries_before);
+    assert_eq!(sage.message, message_before);
+    assert!(matches!(
+        sage.active_shop,
+        Some(ActiveShopSession::Sage(SageState::Prompt { .. }))
+    ));
+
+    let mut grid = open_grid();
+    grid[32 + 2] = 0xa1;
+    let mut well = test_state(grid, 1, 1);
+    well.player.facing = Direction::East;
+    well.gold = 2;
+    assert_eq!(well.look_facing(), MoveOutcome::Observed);
+    handle_play_key_input(&mut well, 'Y', "", Path::new("")).unwrap();
+    let message_before = well.message.clone();
+    handle_play_key_input(&mut well, '\u{1b}', "", Path::new("")).unwrap();
+    assert_eq!(well.message, message_before);
+    assert!(
+        well.active_wishing_well
+            .as_ref()
+            .is_some_and(|session| session.coin_accepted),
+        "the wish prompt keeps reading"
+    );
+    assert_eq!(well.gold, 1);
+}

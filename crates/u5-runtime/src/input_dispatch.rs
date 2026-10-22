@@ -1143,6 +1143,18 @@ fn handle_active_shop_key_input(
     let Some(mut session) = state.active_shop.take() else {
         return PlayInputDisposition::Continue;
     };
+    // `input.md §8`: the sage's `You respond:` topic line is the shared
+    // free-text reader, where "Escape clears the whole current line but does
+    // **not** submit or terminate it" (`text-output.md §10.6`). The shell
+    // clears its own buffer; a bare Escape reaching here is never a typed
+    // topic (playtest G15).
+    if key == '\u{1b}'
+        && suffix.is_empty()
+        && matches!(session, ActiveShopSession::Sage(SageState::Prompt { .. }))
+    {
+        state.active_shop = Some(session);
+        return PlayInputDisposition::Continue;
+    }
     let ctx = ShopTransactionContext {
         party_gold: state.gold,
         speaker_intelligence: active_speaker_intelligence(state),
