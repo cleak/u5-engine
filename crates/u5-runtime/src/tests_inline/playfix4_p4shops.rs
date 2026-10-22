@@ -47,6 +47,45 @@ fn playfix4_h01_unboardable_town_objects_still_block() {
     assert_eq!((state.player.x, state.player.y), (5, 5));
 }
 
+/// H01 review: a schedule NPC wearing the horse frames (`npc-roster.md`:
+/// "used for stable and paddock actors and for Smith at Iolo's Hut") is an
+/// NPC, not a parked vehicle. Its linked sprite keeps blocking the step, so
+/// the party cannot walk onto it and ride it off.
+#[test]
+fn playfix4_h01_npc_horse_sprite_still_blocks_the_town_step() {
+    let mut state = test_state(open_grid(), 5, 5);
+    assert!(matches!(state.area, Area::Town { .. }));
+    state.active_objects.push(ActiveObject {
+        type_byte: HORSE_PARKED_FIRST,
+        tile: HORSE_PARKED_FIRST,
+        x: 5,
+        y: 6,
+        z: 0,
+        phase: STEADY_PHASE,
+        aux1: 0,
+        aux3: 0,
+    });
+    let slot = state.active_objects.len() - 1;
+    state.npcs.push(RuntimeNpc {
+        slot: 1,
+        type_byte: HORSE_PARKED_FIRST,
+        dialog_id: 0,
+        schedule: [0; NPC_SCHEDULE_RECORD_LEN],
+        state: NPC_STATE_IDLE,
+        x: 5,
+        y: 6,
+        z: 0,
+        cached_wp: 0,
+        move_queue: Vec::new(),
+        move_queue_pos: 0,
+        stuck_counter: 0,
+        active_object: Some(slot),
+    });
+    assert_eq!(state.step(Direction::South), MoveOutcome::Blocked);
+    assert_eq!((state.player.x, state.player.y), (5, 5));
+    assert!(state.player.transport.is_foot());
+}
+
 fn pf4_rows(state: &PlayState) -> Vec<String> {
     state
         .message_entries()
