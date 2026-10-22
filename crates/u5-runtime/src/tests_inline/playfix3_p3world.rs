@@ -115,3 +115,29 @@ fn p3w_w3_town_bed_rest_warns_of_starvation_once_per_crossed_hour() {
     );
     let _ = std::fs::remove_dir_all(dir);
 }
+
+#[test]
+fn p3w_w4_town_bed_rest_across_dusk_leaves_the_gate_in_day_form() {
+    // `town-mode.md §6`: "While the player remains in town, the normal turn
+    // epilogue watches for hour changes; when the new hour is `5` or `20`, it
+    // runs the same XOR pass", and §16: "When that one-minute cleanup
+    // changes the hour to `5` or `20`". The bed rest advances "in ten-minute
+    // steps" of the cleanup (§12), outside that epilogue.
+    let (mut state, dir) = p3w_town_bed_state();
+    state.grid[4 * 32 + 5] = 0x87;
+    state.grid[5 * 32 + 5] = 0x44;
+    state.clock = GameClock::new(19, 0).unwrap();
+    assert_eq!(
+        state.hole_up_command(&dir, Some(2)).unwrap(),
+        MoveOutcome::Rested
+    );
+    assert_eq!(state.clock.hour, 21);
+    assert_eq!(state.grid[5 * 32 + 5], 0x44, "the rest loop ran no gate pass");
+
+    // The ordinary one-minute turn still toggles at the boundary.
+    state.clock = GameClock::new(4, 59).unwrap();
+    state.advance_turn_with_minutes(MINUTES_PER_INDOOR_TURN);
+    assert_eq!(state.clock.hour, 5);
+    assert_eq!(state.grid[5 * 32 + 5], 0x44 ^ 0xdd);
+    let _ = std::fs::remove_dir_all(dir);
+}

@@ -3297,7 +3297,16 @@ impl PlayState {
             }
         }
         self.decay_light_counters(effective_minutes);
+        // `town-mode.md §6`/§16: the dawn/dusk gate pass belongs to the town
+        // turn epilogue ("When that one-minute cleanup changes the hour to
+        // `5` or `20`"), not to the shared cleanup. The town-bed rest loop's
+        // ten-minute steps - the only `run_town_schedules = false` caller -
+        // are direct cleanup calls and leave the gate bytes alone, so a rest
+        // across 20:00 keeps the day form (playtest W4). The arrest loop
+        // keeps the toggle: there the original's closing entry pass reloads
+        // the floor at 08:00, and toggling on the way reaches the same bytes.
         if matches!(self.area, Area::Town { .. })
+            && run_town_schedules
             && self.clock.hour != previous_hour
             && matches!(self.clock.hour, 5 | 20)
         {
