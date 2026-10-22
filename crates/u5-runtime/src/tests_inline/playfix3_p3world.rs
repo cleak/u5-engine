@@ -159,3 +159,36 @@ fn p3w_w5_ignite_turn_spends_its_own_light_unit() {
     assert_eq!(world.ignite_torch(), MoveOutcome::Ignited);
     assert_eq!(world.torch_counter, SURFACE_TORCH_DURATION - 2);
 }
+
+#[test]
+fn p3w_w6_month_rollover_ages_every_character_record() {
+    // `time.md §8`: "Each of the sixteen character record slots carries a
+    // one-byte counter. The month rollover increments it, capped at 25", and
+    // implementations "should still preserve and age it on all character
+    // records". `stat-arithmetic.md`'s capped add stores the cap for a result
+    // at or above it, so the shipped `0xFF` becomes 25.
+    let mut state = test_state(open_grid(), 1, 1);
+    let active = state.party.len();
+    let mut roster = default_party_roster(active.max(1));
+    roster.truncate(active);
+    let template = roster[0].clone();
+    for counter in [0xFF, 3] {
+        let mut record = template.clone();
+        record.stay_counter = counter;
+        roster.push(record);
+    }
+    state.party_roster = roster;
+    state.clock = GameClock {
+        day: 28,
+        hour: 23,
+        minute: 59,
+        ..state.clock
+    };
+    state.advance_turn_with_minutes(MINUTES_PER_INDOOR_TURN);
+    assert_eq!(state.clock.day, 1);
+    let inactive: Vec<u8> = state.party_roster[active..]
+        .iter()
+        .map(|record| record.stay_counter)
+        .collect();
+    assert_eq!(inactive, [CHARACTER_MONTH_COUNTER_CAP, 4]);
+}

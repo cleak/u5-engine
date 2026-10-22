@@ -3121,6 +3121,7 @@ impl PlayState {
             self.fortunes_of_war = 0;
             age_stay_counters_month(&mut self.party_stay_counters);
             age_inn_registry_month(&mut self.inn_registry);
+            self.age_inactive_roster_month_counters();
         }
         self.repaint_stats_panel_on_day_rollover(previous_day);
         // `time.md §11` (spec `0170809`): the bundle's gate is the
@@ -3258,6 +3259,7 @@ impl PlayState {
             self.fortunes_of_war = 0;
             age_stay_counters_month(&mut self.party_stay_counters);
             age_inn_registry_month(&mut self.inn_registry);
+            self.age_inactive_roster_month_counters();
         }
         self.repaint_stats_panel_on_day_rollover(previous_day);
         // `time.md §11` (spec `0170809`) / `RETRACTIONS.md` R338: the
@@ -3483,6 +3485,22 @@ impl PlayState {
     /// so neither this branch nor a following mode-zero cleanup refires until
     /// the clock crosses another hour" (u5-spec#298 Q27, `RETRACTIONS.md`
     /// R548, which withdrew the pass's own snapshot).
+    /// `time.md §8`: "Each of the sixteen character record slots carries a
+    /// one-byte counter. The month rollover increments it, capped at 25", and
+    /// implementations "should still preserve and age it on all character
+    /// records". The active party ages through `party_stay_counters` and
+    /// lodged guests through the inn registry; this ages the preserved
+    /// records behind the party prefix - the unrecruited companions - which
+    /// otherwise kept the shipped `0xFF` (playtest W6). A lodged guest's
+    /// roster copy ages too, so it agrees with the registry copy written
+    /// over it.
+    pub(crate) fn age_inactive_roster_month_counters(&mut self) {
+        let active = self.party.len();
+        for record in self.party_roster.iter_mut().skip(active) {
+            record.stay_counter = age_character_month_counter(record.stay_counter);
+        }
+    }
+
     pub fn apply_hourly_status_provision_pass(&mut self) -> u16 {
         let hour_changed = self.clock.hour != self.cleanup_previous_hour;
         let consumers = self.apply_status_provision_pass(hour_changed);
