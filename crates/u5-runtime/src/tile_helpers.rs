@@ -1933,8 +1933,11 @@ pub const fn dungeon_search_outcome_line(
 }
 
 pub fn dungeon_search_description(tile: u8) -> &'static str {
-    if let Some(field) = dungeon_field_effect(tile) {
-        return field.label();
+    // `dungeon-mode.md §8.1` "Search outcomes": "The field classes reuse the
+    // L-Look wording of this section" - `a sleep field`, not the bare effect
+    // label (playtest K22).
+    if dungeon_field_effect(tile).is_some() {
+        return dungeon_look_description(tile);
     }
     match tile >> 4 {
         0x0 => "nothing of note",

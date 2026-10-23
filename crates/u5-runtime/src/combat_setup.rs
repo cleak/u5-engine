@@ -1367,13 +1367,25 @@ impl PlayState {
         let centre_icon = dungeon_ambush_centre_icon(underfoot_class);
         // `dungeon-mode.md §14.1` step 3.1 (u5-spec#298 Q13): the room floor
         // byte keys on the dungeon's flavour.
-        let floor_tile = dungeon_ambush_arena_floor_tile(matches!(
+        let flavour_3 = matches!(
             self.area,
             Area::Dungeon { scene, .. }
                 if scene.presentation_flavour() == DungeonPresentationFlavour::FlavourByte3
-        ));
+        );
+        let floor_tile = dungeon_ambush_arena_floor_tile(flavour_3);
+        // Steps 3.2 and 3.5 (playtest K20): the `#` wall lines in the
+        // flavour's outline byte, and each side opened or sealed by the
+        // class of the adjoining dungeon cell (north, east, south, west).
+        let outline_tile = dungeon_ambush_arena_outline_tile(flavour_3);
+        let sides = [(0, -1), (1, 0), (0, 1), (-1, 0)].map(|(dx, dy): (isize, isize)| {
+            let x = (self.player.x as isize + dx).rem_euclid(DUNGEON_SIDE as isize) as usize;
+            let y = (self.player.y as isize + dy).rem_euclid(DUNGEON_SIDE as isize) as usize;
+            dungeon_ambush_side_treatment(dungeon_cell_class_of(self.dungeon_cell(level, x, y)))
+        });
         let record = CombatArenaRecord::synthesise_dungeon_ambush(
             floor_tile,
+            outline_tile,
+            sides,
             facing_seed,
             stats.class,
             count,

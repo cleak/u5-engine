@@ -2397,8 +2397,9 @@ fn dungeon_search_field_reports_feature_without_applying_effect() {
     assert_eq!(state.party[0].status, b'G');
     assert_eq!(state.turn, 1);
     // `dungeon-mode.md §8.1`: "The field classes reuse the L-Look wording of
-    // this section", which this engine has as the field description.
-    assert!(state.message.contains("poison gas field"));
+    // this section", and L-Look (§12 step 5) names only the exact bytes
+    // `0x80..0x83`: the marked `0x89` reads as the generic energy field.
+    assert_eq!(state.message, "an energy field.");
     let _ = fs::remove_dir_all(dir);
 }
 

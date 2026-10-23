@@ -183,8 +183,55 @@ pub const DUNGEON_AMBUSH_ARENA_FLAVOUR3_FLOOR_TILE: u8 = 0x45;
 /// `dungeon-mode.md §14.1` step 3.3: "`0xFF`, the darkness byte, goes in the
 /// four outer corners (0,0), (10,0), (0,10) and (10,10)."
 pub const DUNGEON_AMBUSH_ARENA_CORNER_TILE: u8 = 0xFF;
+/// `dungeon-mode.md §14.1` step 3.2: "The outline byte - `0x4F` (wall) in
+/// the flavour-3 dungeons, `0x4D` (stone wall) elsewhere".
+pub const DUNGEON_AMBUSH_ARENA_OUTLINE_TILE: u8 = 0x4D;
+/// `dungeon-mode.md §14.1` step 3.2: the flavour-3 outline byte.
+pub const DUNGEON_AMBUSH_ARENA_FLAVOUR3_OUTLINE_TILE: u8 = 0x4F;
+/// `dungeon-mode.md §14.1` step 3.2: the wall lines sit on rows Y = 1 and
+/// Y = 9 and on columns X = 1 and X = 9.
+pub const DUNGEON_AMBUSH_ARENA_WALL_LINES: [usize; 2] = [1, 9];
+
+/// `dungeon-mode.md §14.1` step 3.5 and its 2026-08-23 correction box: what
+/// the painter does to one side of the arena, keyed by the class of the
+/// adjoining dungeon cell one step in that direction.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum DungeonAmbushSideTreatment {
+    /// "a passable class carves an opening in that side's wall line - seven
+    /// cells wide". The engine carves the seven cells between the two
+    /// crossing wall lines (`2..=8`).
+    SevenCellOpening,
+    /// "the remaining classes (the door families) carve the five-cell
+    /// opening", a subset of the seven; the engine carves the centred five
+    /// (`3..=7`).
+    FiveCellOpening,
+    /// "the wall classes carve nothing: that side's outer edge strip, one
+    /// cell outside the wall line, is filled with the same filler byte the
+    /// always-outside corners get", "including that side's two wall stubs".
+    Sealed,
+}
+
+/// `dungeon-mode.md §14.1` step 3.5: the side treatment for an adjoining
+/// dungeon cell class. "Door families" is the §6.4 grouping (`0xA?`, `0xE?`,
+/// `0xF?`); the wall classes are `0xB?`..`0xD?`; every class below the door
+/// families is passable.
+pub const fn dungeon_ambush_side_treatment(class: DungeonCellClass) -> DungeonAmbushSideTreatment {
+    match class {
+        DungeonCellClass::Wall => DungeonAmbushSideTreatment::Sealed,
+        DungeonCellClass::RoomHelperState
+        | DungeonCellClass::HeavyDoorVariant
+        | DungeonCellClass::RoomTrigger => DungeonAmbushSideTreatment::FiveCellOpening,
+        _ => DungeonAmbushSideTreatment::SevenCellOpening,
+    }
+}
+
+/// The plain (non-flavour-3) arena with all four sides opened seven cells.
 pub const DUNGEON_AMBUSH_ARENA_TERRAIN: [[u8; COMBAT_ARENA_SIDE]; COMBAT_ARENA_SIDE] =
-    dungeon_ambush_arena_terrain(DUNGEON_AMBUSH_ARENA_FLOOR_TILE);
+    dungeon_ambush_arena_terrain(
+        DUNGEON_AMBUSH_ARENA_FLOOR_TILE,
+        DUNGEON_AMBUSH_ARENA_OUTLINE_TILE,
+        [DungeonAmbushSideTreatment::SevenCellOpening; 4],
+    );
 
 /// `dungeon-mode.md §14.1` step 3: the room floor byte for a dungeon whose
 /// presentation flavour is `flavour_3` (Deceit, Wrong, Covetous) or not.
@@ -196,17 +243,69 @@ pub const fn dungeon_ambush_arena_floor_tile(flavour_3: bool) -> u8 {
     }
 }
 
-/// `dungeon-mode.md §14.1` steps 3.1 and 3.3: the fill and the four corner
-/// markers, before any centre icon.
+/// `dungeon-mode.md §14.1` step 3.2: the outline byte by flavour.
+pub const fn dungeon_ambush_arena_outline_tile(flavour_3: bool) -> u8 {
+    if flavour_3 {
+        DUNGEON_AMBUSH_ARENA_FLAVOUR3_OUTLINE_TILE
+    } else {
+        DUNGEON_AMBUSH_ARENA_OUTLINE_TILE
+    }
+}
+
+/// `dungeon-mode.md §14.1` steps 3.1, 3.2, 3.3 and 3.5, in that order, before
+/// any centre icon (step 3.4 touches only (5,5), which no other step
+/// writes). `sides` is north, east, south, west: north is row Y = 1 with
+/// outer strip row 0, east is column X = 9 with strip column 10, and so on.
 pub const fn dungeon_ambush_arena_terrain(
     fill_byte: u8,
+    outline_byte: u8,
+    sides: [DungeonAmbushSideTreatment; 4],
 ) -> [[u8; COMBAT_ARENA_SIDE]; COMBAT_ARENA_SIDE] {
     let mut terrain = [[fill_byte; COMBAT_ARENA_SIDE]; COMBAT_ARENA_SIDE];
     let last = COMBAT_ARENA_SIDE - 1;
+    // Wall lines, crossing like a `#` and running out to the grid edge.
+    let mut i = 0;
+    while i < COMBAT_ARENA_SIDE {
+        let mut line = 0;
+        while line < DUNGEON_AMBUSH_ARENA_WALL_LINES.len() {
+            let at = DUNGEON_AMBUSH_ARENA_WALL_LINES[line];
+            terrain[at][i] = outline_byte;
+            terrain[i][at] = outline_byte;
+            line += 1;
+        }
+        i += 1;
+    }
     terrain[0][0] = DUNGEON_AMBUSH_ARENA_CORNER_TILE;
     terrain[0][last] = DUNGEON_AMBUSH_ARENA_CORNER_TILE;
     terrain[last][0] = DUNGEON_AMBUSH_ARENA_CORNER_TILE;
     terrain[last][last] = DUNGEON_AMBUSH_ARENA_CORNER_TILE;
+    let mut side = 0;
+    while side < 4 {
+        // (wall-line index, outer-strip index, line is a row)
+        let (line_at, strip_at, is_row) = match side {
+            0 => (DUNGEON_AMBUSH_ARENA_WALL_LINES[0], 0, true),
+            1 => (DUNGEON_AMBUSH_ARENA_WALL_LINES[1], last, false),
+            2 => (DUNGEON_AMBUSH_ARENA_WALL_LINES[1], last, true),
+            _ => (DUNGEON_AMBUSH_ARENA_WALL_LINES[0], 0, false),
+        };
+        let (from, to, at, byte) = match sides[side] {
+            DungeonAmbushSideTreatment::SevenCellOpening => (2, 8, line_at, fill_byte),
+            DungeonAmbushSideTreatment::FiveCellOpening => (3, 7, line_at, fill_byte),
+            DungeonAmbushSideTreatment::Sealed => {
+                (0, last, strip_at, DUNGEON_AMBUSH_ARENA_CORNER_TILE)
+            }
+        };
+        let mut cell = from;
+        while cell <= to {
+            if is_row {
+                terrain[at][cell] = byte;
+            } else {
+                terrain[cell][at] = byte;
+            }
+            cell += 1;
+        }
+        side += 1;
+    }
     terrain
 }
 
@@ -308,17 +407,18 @@ impl CombatArenaRecord {
     /// slots". The record is then read back by the ordinary room-combat
     /// setup helper, which recovers the same class the painter encoded.
     ///
-    /// The four corner markers (`0xFF`) are stamped after the fill
-    /// (u5-spec#298 Q13). The two wall lines and the four per-side
-    /// treatments are **not** stamped: §14.1 publishes the outline byte and
-    /// rows, but not which wall-line cells the seven- and five-cell openings
-    /// carve nor which dungeon classes count as passable, door or wall for
-    /// that dispatch, and the lines alone would seal the party in.
+    /// The terrain is [`dungeon_ambush_arena_terrain`]: fill, `#` wall
+    /// lines in `outline_byte`, the four `0xFF` corners, and the per-side
+    /// treatment `sides` (north, east, south, west) from the adjoining
+    /// dungeon cells (u5-spec#298 Q13, playtest K20).
     ///
     /// `centre_icon` is [`dungeon_ambush_centre_icon`] for the party's
     /// dungeon cell class (`None` leaves the floor byte).
+    #[allow(clippy::too_many_arguments)]
     pub fn synthesise_dungeon_ambush(
         fill_byte: u8,
+        outline_byte: u8,
+        sides: [DungeonAmbushSideTreatment; 4],
         facing_seed: u8,
         class: u8,
         count: u8,
@@ -326,7 +426,7 @@ impl CombatArenaRecord {
         centre_icon: Option<u8>,
     ) -> Self {
         let mut rows = [[0u8; COMBAT_ARENA_ROW_STRIDE]; COMBAT_ARENA_SIDE];
-        let terrain = dungeon_ambush_arena_terrain(fill_byte);
+        let terrain = dungeon_ambush_arena_terrain(fill_byte, outline_byte, sides);
         for (row, terrain_row) in rows.iter_mut().zip(terrain.iter()) {
             row[..COMBAT_ARENA_SIDE].copy_from_slice(terrain_row);
         }
