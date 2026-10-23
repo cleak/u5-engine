@@ -1081,8 +1081,13 @@ impl PlayState {
         // the transports the measurement could not reach: "Mounted and carpet
         // direction echoes can include their normal `Ride ` or `Fly ` prefix
         // before the compass word", so the line is not foot-only.
+        //
+        // `movement.md §8.1`/`commands.md §5.2` give the feedback as
+        // `Slow progress!\n` / `Very slow!\n`: the line closes its own row,
+        // so the next command's echo keeps its blank row (playtest K04).
         if let Some(line) = slow_line {
             self.emit_message_line(line);
+            self.message_row_open_mid_line = false;
         }
         // `overworld.md §5` steps 6e-6h, in order: the fixed narrative gate,
         // the status pass's report, the exclusive underfoot chain (bridge

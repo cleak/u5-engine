@@ -663,6 +663,19 @@ fn handle_play_key_input_inner(
         mark_combat_short_reprompt(state);
         return Ok(PlayInputDisposition::Continue);
     }
+    // `commands.md §9`: "Combat replaces the scheme entirely with its own
+    // parser", and `combat.md §8` lists the arena's control codes as Escape,
+    // Ctrl-S, Ctrl-B, Space, digits and directions - "Anything else - the
+    // stock `What?` refusal and a free re-prompt". Ctrl-K, Ctrl-V and Ctrl-E
+    // are therefore exploration-only; in the arena they fall through to the
+    // combat parser (playtest K15).
+    if matches!(
+        key,
+        PLAY_MORAL_STANDING_KEY | PLAY_VERSION_BANNER_KEY | PLAY_EXIT_TO_DOS_KEY
+    ) && state.combat_active
+    {
+        return Ok(handle_combat_key_input(state, key, suffix));
+    }
     // `commands.md §9`: the other two shared Control bindings. Neither
     // consumes a turn, and both print one command-echo row.
     if key == PLAY_MORAL_STANDING_KEY {
@@ -6070,6 +6083,29 @@ fn handle_endgame_key_input(
             .keys_buffered_during_hold
             .push_back((key, suffix.to_string()));
         return Ok(PlayInputDisposition::Continue);
+    }
+    // `endgame.md §4`/`§5`: the setup pass and its walk-in read no key, so
+    // a key that arrives while they still owe frames waits for the first
+    // read that follows - the greeting's any-key wait (`§5.1`). Settle the
+    // entry presentation first, which prints the greeting and opens that
+    // wait, and let this key satisfy it. It used to reach the yes/no read
+    // directly: record 1 never printed and the answer echo was glued to the
+    // greeting row (playtest K09). The holds those frames stage print
+    // nothing and precede the greeting, so they are spent here too, with the
+    // greeting kept in the slot it was composed into: left queued, they were
+    // emitted after the question and took the slot that the answer echo
+    // reads its `You reply: ` row from.
+    if state
+        .endgame
+        .as_ref()
+        .is_some_and(|endgame| !endgame.is_terminal())
+        && state.finish_endgame_entry_presentation() > 0
+    {
+        let greeting = std::mem::take(&mut state.message);
+        let greeting_flushed = std::mem::take(&mut state.message_flushed);
+        state.flush_staged_narration();
+        state.message = greeting;
+        state.message_flushed = greeting_flushed;
     }
     // `endgame.md §5.1`'s blocking key read between pages. The greeting
     // is one page; the question that follows it is the next, and the

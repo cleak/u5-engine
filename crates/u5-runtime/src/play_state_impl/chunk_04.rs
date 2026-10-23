@@ -1038,9 +1038,7 @@ impl PlayState {
             return MoveOutcome::Blocked;
         }
 
-        let variation_roll = self.potion_variation_roll(index, target_index);
-        let random_roll = self.potion_random_effect_roll(index, target_index);
-        let effect_index = potion_effect_index_after_variation(index, variation_roll, random_roll);
+        let effect_index = self.potion_effect_index_after_variation_roll(index);
         self.use_potion_with_effect(index, target_index, effect_index)
     }
 
@@ -2413,9 +2411,7 @@ impl PlayState {
             return MoveOutcome::Blocked;
         }
 
-        let variation_roll = self.potion_variation_roll(index, target_index);
-        let random_roll = self.potion_random_effect_roll(index, target_index);
-        let effect_index = potion_effect_index_after_variation(index, variation_roll, random_roll);
+        let effect_index = self.potion_effect_index_after_variation_roll(index);
         self.use_potion_with_effect(index, target_index, effect_index)
     }
 
@@ -2469,7 +2465,7 @@ impl PlayState {
                     self.message = POTION_RESULT_FAILED.to_string();
                     return MoveOutcome::Blocked;
                 }
-                let amount = self.potion_heal_amount(selected_index, target_index);
+                let amount = self.potion_heal_amount();
                 let _ = self.party[target_index].heal_by(amount);
                 self.advance_turn();
                 self.message = POTION_RESULT_HEALED.to_string();
@@ -2576,32 +2572,38 @@ impl PlayState {
         }
     }
 
-    pub fn potion_variation_roll(&self, selected_index: usize, target_index: usize) -> u8 {
-        (self.turn as u8)
-            .wrapping_add((selected_index as u8).wrapping_mul(13))
-            .wrapping_add((target_index as u8).wrapping_mul(29))
-            .wrapping_add((self.player.x as u8).wrapping_mul(3))
-            .wrapping_add((self.player.y as u8).wrapping_mul(5))
-            .wrapping_add(self.clock.hour)
-            & 0x0f
+    /// `catalogs/item-list.md §7.2`: "fourteen chances in sixteen use the
+    /// selected colour's effect, one chance in sixteen forces the Orange
+    /// sleep effect, and one chance in sixteen replaces the effect with a
+    /// random potion id from `0..7`". `prng.md §1` puts such small game
+    /// decisions on the shared range generator, so both rolls are draws from
+    /// it - never a hash of the turn, position and clock (playtest K21). The
+    /// random-id draw is taken only on the branch that uses it.
+    pub fn potion_effect_index_after_variation_roll(&mut self, selected_index: usize) -> usize {
+        let variation_roll = self.potion_variation_roll();
+        let random_roll = if variation_roll & POTION_VARIATION_ROLL_MASK
+            > POTION_VARIATION_FORCED_ORANGE_ROLL
+        {
+            self.potion_random_effect_roll()
+        } else {
+            0
+        };
+        potion_effect_index_after_variation(selected_index, variation_roll, random_roll)
     }
 
-    pub fn potion_random_effect_roll(&self, selected_index: usize, target_index: usize) -> u8 {
-        (self.turn as u8)
-            .rotate_left(1)
-            .wrapping_add((selected_index as u8).wrapping_mul(37))
-            .wrapping_add((target_index as u8).wrapping_mul(11))
-            .wrapping_add(self.clock.minute)
+    pub fn potion_variation_roll(&mut self) -> u8 {
+        self.random_range_u8(0, POTION_VARIATION_ROLL_MASK)
     }
 
-    pub fn potion_heal_amount(&self, selected_index: usize, target_index: usize) -> u16 {
-        let raw_roll = (self.turn as u8)
-            .wrapping_add((selected_index as u8).wrapping_mul(9))
-            .wrapping_add((target_index as u8).wrapping_mul(17))
-            .wrapping_add((self.player.x as u8).wrapping_mul(3))
-            .wrapping_add((self.player.y as u8).wrapping_mul(5))
-            % (HEAL_RAW_ROLL_MAX + 1);
-        heal_spell_amount_from_raw_roll(raw_roll)
+    pub fn potion_random_effect_roll(&mut self) -> u8 {
+        self.random_range_u8(0, POTION_VARIATION_RANDOM_INDEX_MASK)
+    }
+
+    /// `catalogs/item-list.md §7.2` Yellow: "Heal the selected target
+    /// through the shared small-heal helper" - the same rolled amount the
+    /// Heal spell draws.
+    pub fn potion_heal_amount(&mut self) -> u16 {
+        self.heal_spell_amount()
     }
 
     pub fn clear_combat_party_sleep_presentation(&mut self, target_index: usize) -> bool {

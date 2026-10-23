@@ -147,24 +147,26 @@ const HARPSICHORD_TUNE_SCRIPT: [&str; 13] = [
     "6", "7", "8", "9", "8", "7", "8", "7", "6", "7", "6", "5", "3",
 ];
 
-/// Full victory route: `endgame.md §5`'s first Yes (with the box owned it is
-/// the effective answer, R404), the five box hand-over frames of `§7` steps
-/// 4-5 (the eight-iteration lead, slot 0's step up, its step back, the
-/// four-iteration pause, the box and record 3), the 40-tick rite lead-in,
-/// six rite acknowledgements, one Orb presentation, one Orb acknowledgement,
-/// 40 automatic tableau frames, and eight ending acknowledgements through the
-/// terminal hold.
-const ENDGAME_FULL_VICTORY_CINEMATIC_SCRIPT: [&str; 102] = {
-    let mut script = ["empty"; 102];
-    script[0] = "Y";
-    let mut index = 1;
-    while index < 46 {
+/// Full victory route: `endgame.md §5.1`'s greeting any-key wait (the route
+/// starts while the walk-in still owes frames, so its first key settles the
+/// walk-in and only dismisses the greeting page - playtest K09), then `§5`'s
+/// first Yes (with the box owned it is the effective answer, R404), the five
+/// box hand-over frames of `§7` steps 4-5 (the eight-iteration lead, slot 0's
+/// step up, its step back, the four-iteration pause, the box and record 3),
+/// the 40-tick rite lead-in, six rite acknowledgements, one Orb presentation,
+/// one Orb acknowledgement, 40 automatic tableau frames, and eight ending
+/// acknowledgements through the terminal hold.
+const ENDGAME_FULL_VICTORY_CINEMATIC_SCRIPT: [&str; 103] = {
+    let mut script = ["empty"; 103];
+    script[1] = "Y";
+    let mut index = 2;
+    while index < 47 {
         script[index] = "endgame:frame";
         index += 1;
     }
-    script[52] = "endgame:frame";
-    index = 54;
-    while index < 94 {
+    script[53] = "endgame:frame";
+    index = 55;
+    while index < 95 {
         script[index] = "endgame:frame";
         index += 1;
     }
@@ -8216,7 +8218,9 @@ fn validate_route_smoke_case_state(
             }
         }
         "ship-xit-no-skiffs-refusal" => {
-            if state.turn != 0
+            // `commands.md §3`: X does not forward its handler's value, so
+            // the refusal reports "acted" and costs the turn (playtest K17).
+            if state.turn != 1
                 || !matches!(
                     state.player.transport,
                     TransportState::Ship {
