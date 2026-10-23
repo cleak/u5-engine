@@ -2969,10 +2969,16 @@ mod combat_setup_batch_tests {
             state.party_equipment[0][EQUIP_SLOT_RING] == EQUIPMENT_ID_RING_INVISIBILITY as u8;
         assert!(ring_kept, "fixture: the seeded vanish roll keeps the ring");
         assert!(state.combat_actors[0].is_phase_suppressed());
-        assert_eq!(state.active_objects[0].tile, COMBAT_HIDDEN_ACTIVE_OBJECT_TILE);
+        assert_eq!(
+            state.active_objects[0].tile,
+            COMBAT_HIDDEN_ACTIVE_OBJECT_TILE
+        );
         assert_ne!(state.active_objects[0].type_byte, 0xc0);
         for slot in 1..4 {
-            assert!(!state.combat_actors[slot].is_phase_suppressed(), "slot {slot}");
+            assert!(
+                !state.combat_actors[slot].is_phase_suppressed(),
+                "slot {slot}"
+            );
             let record = state.active_objects[slot];
             assert_eq!(record.tile, record.type_byte, "slot {slot} stays drawn");
             assert_ne!(record.type_byte, 0xc0, "slot {slot} kept its party record");
@@ -2980,6 +2986,33 @@ mod combat_setup_batch_tests {
         let first_monster = state.combat_actors[COMBAT_PARTY_ACTOR_SLOTS];
         assert_eq!(first_monster.active_object_slot, 4);
         let _ = fs::remove_dir_all(dir);
+    }
+
+    /// Playtest J21 follow-up. `active-objects.md §8` early-out 4: "A slot
+    /// whose displayed-frame byte is the hidden value ... is skipped. This is
+    /// how gameplay parks an actor." The animator runs in the arena, so the
+    /// non-zero hidden value must still park the wearer's record.
+    #[test]
+    fn the_animator_leaves_a_hidden_wearers_record_parked() {
+        let (mut state, dir) = batch_combat_state(&[b'G', b'G', b'G', b'G']);
+        state.party_equipment[0][EQUIP_SLOT_RING] = EQUIPMENT_ID_RING_INVISIBILITY as u8;
+        state
+            .enter_terrain_combat_from_world_object(&dir, WorldPlane::Britannia, 1, batch_trigger())
+            .unwrap();
+        let _ = fs::remove_dir_all(dir);
+        assert_eq!(
+            state.active_objects[0].tile,
+            COMBAT_HIDDEN_ACTIVE_OBJECT_TILE
+        );
+        for _ in 0..256 {
+            state.animate_active_objects();
+            assert_eq!(
+                state.active_objects[0].tile,
+                COMBAT_HIDDEN_ACTIVE_OBJECT_TILE
+            );
+        }
+        let wearer = state.combat_actors[0];
+        assert!(!state.combat_actor_presentation_displayed(wearer));
     }
 
     /// Distinguishable seats so a seat read by the packed descriptor
