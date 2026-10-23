@@ -2147,7 +2147,9 @@ fn validate_visual_route_final_state(
             return Ok(());
         }
         "route-ship-xit-no-skiffs-refusal" => {
-            if state.turn != 0
+            // `commands.md §3`: X does not forward its handler's value, so
+            // the refusal reports "acted" and costs the turn (playtest K17).
+            if state.turn != 1
                 || !matches!(
                     state.player.transport,
                     TransportState::Ship {
@@ -6984,7 +6986,11 @@ fn visual_route_suite_cases() -> Vec<VisualRouteSuiteCase> {
             // display frame: `endgame.md §6` step 3's terminal loop
             // jitters slots 1, 3, 4 and 5 for as long as the player
             // watches, which is what this route's name is about.
-            script: &["Y", "N", "endgame:frame"],
+            //
+            // The first key only pages the greeting (`endgame.md §5.1`): it
+            // arrives while the walk-in still owes frames, which it settles
+            // (playtest K09). It used to be taken as the first answer.
+            script: &["Y", "N", "N", "endgame:frame"],
             configure: Some(seed_visual_route_endgame_missing_box),
         },
         VisualRouteSuiteCase {
@@ -9380,13 +9386,17 @@ fn seed_visual_route_ruined_honesty_shrine(state: &mut PlayState) {
 /// `endgame.md §7.1` fade to black, all six `END.DAT` narrative windows,
 /// the certificate and elapsed-time report, finishing in the `§9.5`
 /// terminal hold.
-const ENDGAME_FULL_VICTORY_CINEMATIC_SCRIPT: [&str; 102] = {
-    let mut script = [""; 102];
+const ENDGAME_FULL_VICTORY_CINEMATIC_SCRIPT: [&str; 103] = {
+    let mut script = [""; 103];
     // `endgame.md §5` step 2: "**Only a first No** asks the second question
     // ... A first Yes skips this question whether the party owns the box or
     // not" (R404). With the box owned the first Yes opens the rite, so the
     // second `Y` this script used to send is gone.
-    script[0] = "Y";
+    // `endgame.md §5.1`: the route starts while the walk-in still owes
+    // frames, so its first key settles the walk-in and only dismisses the
+    // greeting's any-key wait (playtest K09); the first Yes follows it.
+    script[0] = "";
+    script[1] = "Y";
     // Five display frames occupy 1..=5 for `endgame.md §7` steps 4-5's box
     // hand-over (the eight-iteration lead, slot 0's step up and back, the
     // four-iteration pause, then the box with record 3). Forty more occupy
@@ -9396,14 +9406,14 @@ const ENDGAME_FULL_VICTORY_CINEMATIC_SCRIPT: [&str; 102] = {
     // frames cover the 15-phase rise, four full-height ticks,
     // one-member/Lord-British exits, 15-phase sink, floor restore, and
     // fade. The remaining eight keys reach terminal hold.
-    let mut index = 1;
-    while index < 46 {
+    let mut index = 2;
+    while index < 47 {
         script[index] = "endgame:frame";
         index += 1;
     }
-    script[52] = "endgame:frame";
-    index = 54;
-    while index < 94 {
+    script[53] = "endgame:frame";
+    index = 55;
+    while index < 95 {
         script[index] = "endgame:frame";
         index += 1;
     }
@@ -9757,7 +9767,7 @@ fn visual_route_frame_is_intentionally_black(label: &str) -> bool {
 /// `§7.1` fade. Pinned so a change in the beat ordering fails the suite
 /// rather than silently moving the black frame somewhere else.
 const ENDGAME_FADE_TO_BLACK_FRAME_LABEL: &str =
-    "route-endgame-box-full-victory-cinematic-93-endgame_frame";
+    "route-endgame-box-full-victory-cinematic-94-endgame_frame";
 
 fn visual_route_allows_unchanged_step(route_label: &str, step: usize) -> bool {
     // `endgame.md §4`: the restoration beat is a held frame - a short
@@ -9769,16 +9779,17 @@ fn visual_route_allows_unchanged_step(route_label: &str, step: usize) -> bool {
     // `endgame.md §6`'s terminal wander throttles each slot behind a
     // random yes/no gate before it tries a direction, so a single pumped
     // frame is allowed to move nobody and repeat the frame exactly.
-    // Step 2 is the answer that enters the terminal branch. §6 has that
+    // Step 3 is the answer that enters the terminal branch (step 1 only
+    // pages the greeting, playtest K09). §6 has that
     // branch print nothing - the window keeps record 10's exchange - and the
     // rearrangement it runs can leave the drawn frame identical for the same
     // tile-index reason as the walk-in steps below. **Measured** 2026-09-08
     // (`qa/paired/doom-final-room-waiting.tsv`): the stock window is unchanged
     // eight seconds in.
-    (route_label == "route-endgame-missing-box-terminal-jitter" && (2..=3).contains(&step))
+    (route_label == "route-endgame-missing-box-terminal-jitter" && (3..=4).contains(&step))
         || (route_label == "route-endgame-missing-box-confirmation" && step == 2)
         || (route_label == "route-endgame-tableau-walk-in")
-        || (route_label == "route-endgame-box-full-victory-cinematic" && (2..=102).contains(&step))
+        || (route_label == "route-endgame-box-full-victory-cinematic" && (2..=103).contains(&step))
         || (route_label == "route-doom-combat-multi-round-pass" && (2..=5).contains(&step))
         // `animation.md §13.2`: "The shipped initial value of the byte is the
         // freeze state, so the very first world step of a session is a bare
@@ -25945,8 +25956,10 @@ mod tests {
         // tavern drink-and-food routes end the provision quantity with
         // Return (`shops.md §8.5`, +2). The two town prisoner-release routes
         // lost their member key: a one-member party's Jimmy picks silently
-        // (`commands.md §5.8`, -2).
-        assert_eq!(reports.len(), 2064);
+        // (`commands.md §5.8`, -2). The two endgame routes that start during
+        // the walk-in page the greeting before their first answer
+        // (`endgame.md §5.1`, playtest K09, +2).
+        assert_eq!(reports.len(), 2066);
         for report in &reports {
             assert!(report.path.exists());
             assert_eq!(report.width, VISUAL_PLAY_FRAME_WIDTH);
@@ -25961,7 +25974,7 @@ mod tests {
             }
         }
         let manifest = fs::read_to_string(dir.join("manifest.txt")).unwrap();
-        assert!(manifest.contains("coverage\tvisual-route-steps\t2064"));
+        assert!(manifest.contains("coverage\tvisual-route-steps\t2066"));
         assert!(manifest.contains("coverage\tvisual-key-route-steps\t90"));
         assert!(manifest.contains("coverage\tvisual-route-combat-steps\t"));
         assert!(manifest.contains("route-world-movement-01-d\t320x200\t"));
@@ -26263,11 +26276,11 @@ mod tests {
         assert!(manifest.contains("route-underworld-doom-word-of-power-seal-opens-01-yveramocor"));
         assert!(manifest.contains("route-britannia-ruined-honesty-shrine-restoration-05-ahm"));
         assert!(manifest.contains("route-britannia-empty-yell-is-acted-02-empty"));
-        assert!(manifest.contains("route-endgame-missing-box-terminal-jitter-03-endgame_frame"));
+        assert!(manifest.contains("route-endgame-missing-box-terminal-jitter-04-endgame_frame"));
         assert!(manifest.contains("route-endgame-missing-box-confirmation-02-y"));
         assert!(manifest.contains("route-endgame-box-victory-confirmation-01-y"));
         assert!(manifest.contains(ENDGAME_FADE_TO_BLACK_FRAME_LABEL));
-        assert!(manifest.contains("route-endgame-box-full-victory-cinematic-102-empty"));
+        assert!(manifest.contains("route-endgame-box-full-victory-cinematic-103-empty"));
         assert!(manifest.contains("route-doom-combat-trigger-01-empty"));
         assert!(manifest.contains("route-doom-room-combat-trigger-01-empty"));
         assert!(manifest.contains("route-doom-combat-pass-02-empty"));
