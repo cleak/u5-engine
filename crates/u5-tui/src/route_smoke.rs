@@ -8312,8 +8312,9 @@ fn validate_route_smoke_case_state(
             // `dungeon-mode.md §14.1` step 3 (u5-spec#298 Q13): the room
             // floor byte (by flavour), the `#` wall lines in the flavour's
             // outline byte, `0xFF` corners, a per-side opening or seal
-            // (playtest K20), and the centre icon. The side the party faces
-            // (east, where the monster stood) is never sealed.
+            // (playtest K20), and the centre icon. The fixture drops the
+            // monster beside the Deceit entrance whatever that cell is, so any
+            // of the 81 side combinations is accepted.
             let ambush_floor = state.combat_terrain[2][2];
             let flavour_3 = ambush_floor == DUNGEON_AMBUSH_ARENA_FLAVOUR3_FLOOR_TILE;
             let ambush_terrain_ok = matches!(
@@ -8326,13 +8327,12 @@ fn validate_route_smoke_case_state(
                 let treatments = [Side::SevenCellOpening, Side::FiveCellOpening, Side::Sealed];
                 (0..81usize).any(|code| {
                     let sides = [0, 1, 2, 3].map(|side| treatments[code / 3usize.pow(side) % 3]);
-                    sides[1] != Side::Sealed
-                        && terrain
-                            == u5_runtime::dungeon_ambush_arena_terrain(
-                                ambush_floor,
-                                u5_runtime::dungeon_ambush_arena_outline_tile(flavour_3),
-                                sides,
-                            )
+                    terrain
+                        == u5_runtime::dungeon_ambush_arena_terrain(
+                            ambush_floor,
+                            u5_runtime::dungeon_ambush_arena_outline_tile(flavour_3),
+                            sides,
+                        )
                 })
             };
             let party_slots = state.party.len().min(COMBAT_PARTY_ACTOR_SLOTS);
