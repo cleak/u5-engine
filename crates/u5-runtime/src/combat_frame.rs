@@ -9216,7 +9216,17 @@ impl PlayState {
             self.mark_visibility_dirty();
         }
         if tick.advance_time_minutes != 0 {
-            self.advance_turn_with_minutes(tick.advance_time_minutes);
+            // `time.md §5`: the party status/provision pass "does **not** run
+            // in combat mode", and its caller census: "Combat mode and the
+            // wilderness camp elapse loop never invoke it, so poison damage
+            // and provision consumption do not accrue there" (playtest J20).
+            self.advance_turn_with_minutes_policy(
+                tick.advance_time_minutes,
+                true,
+                true,
+                false,
+                true,
+            );
         }
         tick
     }

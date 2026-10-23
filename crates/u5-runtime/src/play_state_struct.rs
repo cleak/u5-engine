@@ -420,6 +420,12 @@ pub struct PlayState {
     /// overworld's per-entry initialiser sets the flag **unconditionally**"
     /// (`RETRACTIONS.md` R497, amended by R526, u5-spec#297).
     pub overworld_prompt_pair_suppressed: bool,
+    /// `town-mode.md §7.1`: a firing drunkenness draw prints `Hic!` and a
+    /// line break on the row of the command whose key was read, and the
+    /// substituted cardinal step's echo follows on the next row with no
+    /// prompt pair of its own (playtest J18). Set by the hiccup, consumed by
+    /// that step's [`Self::begin_command_echo`].
+    pub town_hiccup_echo_continues: bool,
     /// The stats-panel text window's own, persistent inverse-video bit
     /// (`inventory.md §4.4` "The highlight can leak into the panel",
     /// u5-spec#296; `text-output.md` control bytes: the `0xFD` toggle "flips
@@ -881,6 +887,12 @@ pub struct PlayState {
     /// Talk dispatcher runs for an automatic conversation-contact event,
     /// which "does not create an additional Talk command or schedule tick".
     pub talk_entered_by_contact: bool,
+    /// `town-mode.md §7` step 4 / `shops.md §2`: an explicit Talk that
+    /// opened a shop owes its turn epilogue - clock minute, underfoot and
+    /// status pass, both walkers - to the moment the shop arm returns, not to
+    /// the moment it opens (playtest J16). Set when the shop opens; the
+    /// shop-key dispatcher spends it when the session closes.
+    pub pending_talk_shop_turn: bool,
     pub active_conversation_join_candidate: Option<String>,
     pub active_z_stats: Option<crate::z_stats::ZStatsSession>,
     /// `inventory.md §4`: the outside-combat party-member selector that

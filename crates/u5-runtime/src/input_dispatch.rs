@@ -547,7 +547,16 @@ fn handle_play_key_input_inner(
         return Ok(disposition);
     }
     if state.active_shop.is_some() {
-        return Ok(handle_active_shop_key_input(state, key, suffix, game_dir));
+        let disposition = handle_active_shop_key_input(state, key, suffix, game_dir);
+        // `town-mode.md §7` step 4 / `shops.md §2`: the explicit Talk that
+        // opened this shop "receives normal town clock/scheduler processing"
+        // once the shop arm returns (playtest J16).
+        if state.active_shop.is_none() && std::mem::take(&mut state.pending_talk_shop_turn) {
+            let turn_before = state.turn;
+            state.advance_turn();
+            state.apply_top_down_post_turn_effects_after_turn(turn_before, game_dir)?;
+        }
+        return Ok(disposition);
     }
     if state.active_conversation.is_some() {
         return Ok(handle_active_conversation_key_input(state, key, suffix));
@@ -603,7 +612,15 @@ fn handle_play_key_input_inner(
         if state.town_drunkenness_counter != 0 && state.random_range_u8(0, 1) == 1 {
             state.town_alarm_sweep(scene, floor, None);
             state.town_drunkenness_counter -= 1;
-            state.emit_message_line("Hic!\n");
+            // `town-mode.md §7`/§7.1: drunkenness is a pre-dispatch stage
+            // after the command read, so `Hic!` lands on that command's
+            // prompt row - after its feed and marker - and its line break
+            // leaves the substituted step's echo on the next row with no
+            // prompt pair of its own (playtest J18).
+            state.flush_message_slot();
+            state.emit_command_echo_line("Hic!");
+            state.message_row_open_mid_line = false;
+            state.town_hiccup_echo_continues = true;
             let replacement = state.random_range_u8(0, 3);
             key = char::from(INPUT_CODE_CARDINAL_FIRST + replacement);
             suffix = "";

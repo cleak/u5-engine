@@ -1190,4 +1190,5 @@ mod tests {
     include!("tests_inline/playfix5_p5look.rs");
     include!("tests_inline/rc6_residuals.rs");
     include!("tests_inline/playfix5_p5panel.rs");
+    include!("tests_inline/playfix5_p5world.rs");
 }

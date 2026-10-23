@@ -4906,7 +4906,10 @@ impl PlayState {
                 ) {
                     self.clear_active_effect_slot();
                 }
-                self.advance_talk_turn();
+                // `town-mode.md §7` step 4, as on the asset-backed entry
+                // below: the Talk turn is spent when the shop arm returns
+                // (playtest J16).
+                self.pending_talk_shop_turn = !self.talk_entered_by_contact;
                 // Both Talk entries go through one greeting builder now. This
                 // one is the dialogue-map path and carries no game directory,
                 // so it takes the builder's no-assets fallback; the
@@ -5152,7 +5155,12 @@ impl PlayState {
                 ) {
                     self.clear_active_effect_slot();
                 }
-                self.advance_talk_turn();
+                // `town-mode.md §7` step 4: the epilogue runs "when the
+                // dispatcher returns", and the Talk dispatcher runs the whole
+                // shop arm; `shops.md §4.1` reads the hour "fresh from the
+                // world clock on every render". So the turn is spent when
+                // the session closes, not before the greeting (playtest J16).
+                self.pending_talk_shop_turn = !self.talk_entered_by_contact;
                 let message = self.format_talk_shop_opening_message(
                     dialog_id,
                     &session,

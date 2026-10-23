@@ -1085,7 +1085,12 @@ impl PlayState {
         // `text-output.md §10.2`: the overworld helper tests its prompt flag
         // and "re-arms the flag as soon as it has tested it", so exactly one
         // prompt after a shipboard direction loses its feed and marker.
-        if self.take_overworld_prompt_pair_suppression() {
+        //
+        // `town-mode.md §7.1`: a drunken scramble's substituted step echoes
+        // beneath the `Hic!` row its own key's prompt already opened, with
+        // neither feed nor marker (playtest J18).
+        let hiccup_continues = std::mem::take(&mut self.town_hiccup_echo_continues);
+        if self.take_overworld_prompt_pair_suppression() || hiccup_continues {
             if let Some(entry) = self.message_transcript.last_mut() {
                 entry.prompt_pair_suppressed = true;
             }

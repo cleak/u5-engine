@@ -1728,46 +1728,13 @@ impl PlayState {
         let sceptre_reclaimed = base_class.class == COMBAT_CLASS_SHADOW_LORD
             && self.special_items[SPECIAL_ITEM_SCEPTRE_LB_INDEX] != 0;
 
-        // Step 1/2: clear both tables, then seat the party from the
-        // arena record's six party entry X/Y coordinates. Seating runs
-        // before the count roll and reads its own coordinate table, so
-        // party seats never depend on the monster count.
-        let mut active_objects = vec![ActiveObject::empty(); COMBAT_ACTOR_SLOTS];
-        let mut actors = [CombatActorDescriptor::empty(); COMBAT_ACTOR_SLOTS];
-        let party_positions = terrain_combat_party_entry_positions(&setup);
-        self.populate_combat_party_with_positions(
-            &mut active_objects,
-            &mut actors,
-            object.z,
-            &party_positions,
-        );
-        // `combat.md §5` "Arena-centre special", published between the
-        // party descriptor seeding above and the monster count below: a
-        // `0xDC` centre cell becomes a special active object with setup id
-        // one, draw-free, so it changes no existing entry. The outdoor
-        // terrain path is one of `§5`'s three callers, and the one the
-        // three-caller census says can never present a qualifying centre
-        // cell, so it owns no floor-fill byte (`RETRACTIONS.md` R362
-        // withdraws the "inert for stock `BRIT.CBT`" conclusion this comment
-        // used to draw: the byte is painted at run time on the dungeon-room
-        // path, not loaded from an arena record).
-        let mut setup_terrain = setup.terrain;
-        self.place_combat_arena_centre_special(
-            &mut setup_terrain,
-            None,
-            object.z,
-            &mut active_objects,
-        );
-
-        // `active-objects.md §7`: monster records "continue from the
-        // first record left free by the seated party". Scanned, not
-        // counted - see the note on
-        // [`Self::populate_combat_party_with_positions`].
-        let first_free_record = first_free_combat_active_object_record(&active_objects)
-            .unwrap_or(COMBAT_PARTY_ACTOR_SLOTS);
-
-        // Step 3: the group-name line and the conflict banner, before any
-        // monster is placed.
+        // The group-name line, emitted world-side before the framer and so
+        // before seating, whose ring vanish check can print (playtest J22:
+        // `combat.md §5.3`, "The group-name banner and the arena-record
+        // selection both happen in the world-side entry step, before the
+        // framer is entered", while the vanish check is step 3, seating, and
+        // the conflict banner is step 4). The conflict banner itself stays
+        // below, after seating and before any monster is placed.
         //
         // `combat.md §4.1`: "Two separate banners are printed when a
         // terrain fight begins, by two different stages". Banner one is
@@ -1851,6 +1818,44 @@ impl PlayState {
             self.emit_sound_effect(SoundEffect::SceptreReclaimed);
             self.special_items[SPECIAL_ITEM_SCEPTRE_LB_INDEX] = 0;
         }
+
+        // Step 1/2: clear both tables, then seat the party from the
+        // arena record's six party entry X/Y coordinates. Seating runs
+        // before the count roll and reads its own coordinate table, so
+        // party seats never depend on the monster count.
+        let mut active_objects = vec![ActiveObject::empty(); COMBAT_ACTOR_SLOTS];
+        let mut actors = [CombatActorDescriptor::empty(); COMBAT_ACTOR_SLOTS];
+        let party_positions = terrain_combat_party_entry_positions(&setup);
+        self.populate_combat_party_with_positions(
+            &mut active_objects,
+            &mut actors,
+            object.z,
+            &party_positions,
+        );
+        // `combat.md §5` "Arena-centre special", published between the
+        // party descriptor seeding above and the monster count below: a
+        // `0xDC` centre cell becomes a special active object with setup id
+        // one, draw-free, so it changes no existing entry. The outdoor
+        // terrain path is one of `§5`'s three callers, and the one the
+        // three-caller census says can never present a qualifying centre
+        // cell, so it owns no floor-fill byte (`RETRACTIONS.md` R362
+        // withdraws the "inert for stock `BRIT.CBT`" conclusion this comment
+        // used to draw: the byte is painted at run time on the dungeon-room
+        // path, not loaded from an arena record).
+        let mut setup_terrain = setup.terrain;
+        self.place_combat_arena_centre_special(
+            &mut setup_terrain,
+            None,
+            object.z,
+            &mut active_objects,
+        );
+
+        // `active-objects.md §7`: monster records "continue from the
+        // first record left free by the seated party". Scanned, not
+        // counted - see the note on
+        // [`Self::populate_combat_party_with_positions`].
+        let first_free_record = first_free_combat_active_object_record(&active_objects)
+            .unwrap_or(COMBAT_PARTY_ACTOR_SLOTS);
 
         self.emit_centered_message_line(combat_banner_line());
         // `combat.md §4.1`: the banner fills the row edge to edge, so "the
@@ -2179,7 +2184,12 @@ impl PlayState {
         // `audio.md §8.1` terrain-combat-entry path, in its published
         // order: print the line, play the 40-update action snap, then
         // remove the item.
-        self.message = COMBAT_RING_VANISHED_MESSAGE.to_string();
+        // `text-output.md §11`: the line reaches the window when it is
+        // produced - below the world-side group name and above the conflict
+        // banner (playtest J22) - not parked in the slot for a later writer.
+        // It is a completed row: the conflict banner starts on the next one.
+        self.emit_message_line(COMBAT_RING_VANISHED_MESSAGE);
+        self.message_row_open_mid_line = false;
         self.emit_sound_effect(SoundEffect::ActionSnap);
         self.party_equipment[roster_slot][EQUIP_SLOT_RING] = EQUIPMENT_EMPTY;
     }
@@ -2660,6 +2670,52 @@ mod combat_setup_batch_tests {
         let _ = fs::remove_dir_all(dir);
     }
 
+    /// Playtest J22. `combat.md §5.3`: the group name is printed world-side
+    /// "before the framer is entered"; the ring vanish check is step 3
+    /// (seating) and the conflict banner step 4. So the vanish line sits
+    /// between the group name's blank row and `*** CONFLICT ***`.
+    #[test]
+    fn a_seating_ring_vanish_prints_below_the_group_name_and_above_the_banner() {
+        let mut vanished = None;
+        for seed in 0u16..4096 {
+            let (mut state, dir) = batch_combat_state(&[b'G']);
+            state.party_equipment[0][EQUIP_SLOT_RING] = EQUIPMENT_ID_RING_INVISIBILITY as u8;
+            state.prng_state = seed;
+            state
+                .enter_terrain_combat_from_world_object(
+                    &dir,
+                    WorldPlane::Britannia,
+                    1,
+                    batch_trigger(),
+                )
+                .unwrap();
+            let _ = fs::remove_dir_all(dir);
+            if state.party_equipment[0][EQUIP_SLOT_RING] == EQUIPMENT_EMPTY {
+                vanished = Some(state);
+                break;
+            }
+        }
+        let state = vanished.expect("some seed rolls the 1-in-16 vanish");
+        let tail: Vec<(String, bool, bool)> = state
+            .message_entries()
+            .iter()
+            .rev()
+            .take(5)
+            .rev()
+            .map(|entry| (entry.text.clone(), entry.centered, entry.explicit_blank))
+            .collect();
+        assert_eq!(
+            tail,
+            vec![
+                (String::new(), false, true),
+                ("ORCS".to_string(), true, false),
+                (String::new(), false, true),
+                (COMBAT_RING_VANISHED_MESSAGE.to_string(), false, false),
+                (combat_banner_line(), true, false),
+            ]
+        );
+    }
+
     /// `combat.md §4.1`: "The banner is count-independent ... a lone
     /// attacker still gets the group name: one bat announces `BATS`."
     #[test]
@@ -2893,6 +2949,70 @@ mod combat_setup_batch_tests {
             COMBAT_PARTY_ACTOR_SLOTS
         );
         let _ = fs::remove_dir_all(dir);
+    }
+
+    /// Playtest J21. `combat.md §5`: "A wearer of the Ring of Invisibility
+    /// is marked hidden and its presentation byte switched to the
+    /// suppressed-sprite value" - only the wearer. `active-objects.md §7`
+    /// gives monsters "the next free records", a free record being one whose
+    /// tile byte is zero, so a hidden seat must not read as free.
+    #[test]
+    fn an_invisibility_ring_hides_only_its_wearer_and_keeps_the_seat_allocated() {
+        let (mut state, dir) = batch_combat_state(&[b'G', b'G', b'G', b'G']);
+        state.party_equipment[0][EQUIP_SLOT_RING] = EQUIPMENT_ID_RING_INVISIBILITY as u8;
+
+        state
+            .enter_terrain_combat_from_world_object(&dir, WorldPlane::Britannia, 1, batch_trigger())
+            .unwrap();
+
+        let ring_kept =
+            state.party_equipment[0][EQUIP_SLOT_RING] == EQUIPMENT_ID_RING_INVISIBILITY as u8;
+        assert!(ring_kept, "fixture: the seeded vanish roll keeps the ring");
+        assert!(state.combat_actors[0].is_phase_suppressed());
+        assert_eq!(
+            state.active_objects[0].tile,
+            COMBAT_HIDDEN_ACTIVE_OBJECT_TILE
+        );
+        assert_ne!(state.active_objects[0].type_byte, 0xc0);
+        for slot in 1..4 {
+            assert!(
+                !state.combat_actors[slot].is_phase_suppressed(),
+                "slot {slot}"
+            );
+            let record = state.active_objects[slot];
+            assert_eq!(record.tile, record.type_byte, "slot {slot} stays drawn");
+            assert_ne!(record.type_byte, 0xc0, "slot {slot} kept its party record");
+        }
+        let first_monster = state.combat_actors[COMBAT_PARTY_ACTOR_SLOTS];
+        assert_eq!(first_monster.active_object_slot, 4);
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    /// Playtest J21 follow-up. `active-objects.md §8` early-out 4: "A slot
+    /// whose displayed-frame byte is the hidden value ... is skipped. This is
+    /// how gameplay parks an actor." The animator runs in the arena, so the
+    /// non-zero hidden value must still park the wearer's record.
+    #[test]
+    fn the_animator_leaves_a_hidden_wearers_record_parked() {
+        let (mut state, dir) = batch_combat_state(&[b'G', b'G', b'G', b'G']);
+        state.party_equipment[0][EQUIP_SLOT_RING] = EQUIPMENT_ID_RING_INVISIBILITY as u8;
+        state
+            .enter_terrain_combat_from_world_object(&dir, WorldPlane::Britannia, 1, batch_trigger())
+            .unwrap();
+        let _ = fs::remove_dir_all(dir);
+        assert_eq!(
+            state.active_objects[0].tile,
+            COMBAT_HIDDEN_ACTIVE_OBJECT_TILE
+        );
+        for _ in 0..256 {
+            state.animate_active_objects();
+            assert_eq!(
+                state.active_objects[0].tile,
+                COMBAT_HIDDEN_ACTIVE_OBJECT_TILE
+            );
+        }
+        let wearer = state.combat_actors[0];
+        assert!(!state.combat_actor_presentation_displayed(wearer));
     }
 
     /// Distinguishable seats so a seat read by the packed descriptor
