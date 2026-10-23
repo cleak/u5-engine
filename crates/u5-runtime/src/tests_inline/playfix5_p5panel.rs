@@ -80,7 +80,11 @@ fn playfix5_j23_effect_slot_is_absent_while_a_picker_or_z_page_owns_the_panel() 
 
     let mut using = state.clone();
     assert_eq!(using.start_use_item(), MoveOutcome::Observed);
-    assert_eq!(gameplay_chrome_content(&using).timing_glyph, None, "U-Use picker");
+    assert_eq!(
+        gameplay_chrome_content(&using).timing_glyph,
+        None,
+        "U-Use picker"
+    );
     assert!(using.step_active_use('\u{1b}', "", Path::new("")).unwrap());
     assert_eq!(
         gameplay_chrome_content(&using).timing_glyph,
@@ -91,7 +95,11 @@ fn playfix5_j23_effect_slot_is_absent_while_a_picker_or_z_page_owns_the_panel() 
     let mut z = state.clone();
     z.z_stats_for_party(0);
     assert!(z.active_z_stats.is_some());
-    assert_eq!(gameplay_chrome_content(&z).timing_glyph, None, "Z-stats page");
+    assert_eq!(
+        gameplay_chrome_content(&z).timing_glyph,
+        None,
+        "Z-stats page"
+    );
 }
 
 /// An outdoor Britannia state with the Avatar active, so the Sextant reads.
@@ -118,7 +126,11 @@ fn playfix5_j12_moonstone_and_sextant_results_close_their_row() {
     // echo / blank / result (commands.md §5.8) is unchanged after it.
     let dir = debug_game_dir();
     let expected = p5panel_plain_get_rows(&dir);
-    assert_eq!(expected.get(1).map(String::as_str), Some(""), "{expected:?}");
+    assert_eq!(
+        expected.get(1).map(String::as_str),
+        Some(""),
+        "{expected:?}"
+    );
 
     let mut moonstone = p5panel_britannia_state();
     moonstone.scroll_stock = [0; SCROLL_COUNT];
@@ -137,9 +149,15 @@ fn playfix5_j12_moonstone_and_sextant_results_close_their_row() {
         "the Moonstone row ran: {:?}",
         moonstone.message
     );
-    assert!(!moonstone.message_row_open_mid_line, "Moonstone result closes its row");
+    assert!(
+        !moonstone.message_row_open_mid_line,
+        "Moonstone result closes its row"
+    );
     p4window_keys(&mut moonstone, &dir, &['G', '\u{3}']);
-    assert_eq!(p4window_rows_from(&p4window_rows(&moonstone), ">Get-North"), expected);
+    assert_eq!(
+        p4window_rows_from(&p4window_rows(&moonstone), ">Get-North"),
+        expected
+    );
 
     let mut sextant = p5panel_britannia_state();
     sextant.scroll_stock = [0; SCROLL_COUNT];
@@ -160,9 +178,15 @@ fn playfix5_j12_moonstone_and_sextant_results_close_their_row() {
         "the Sextant read: {:?}",
         sextant.message
     );
-    assert!(!sextant.message_row_open_mid_line, "the readout closes its row");
+    assert!(
+        !sextant.message_row_open_mid_line,
+        "the readout closes its row"
+    );
     p4window_keys(&mut sextant, &dir, &['G', '\u{3}']);
-    assert_eq!(p4window_rows_from(&p4window_rows(&sextant), ">Get-North"), expected);
+    assert_eq!(
+        p4window_rows_from(&p4window_rows(&sextant), ">Get-North"),
+        expected
+    );
     let _ = fs::remove_dir_all(dir);
 }
 
@@ -217,12 +241,19 @@ fn playfix5_j24_an_active_player_digit_with_a_three_digit_hull_lifts_the_history
         p4window_keys(&mut state, &dir, &['1']);
         let added = state.message_entries().len() - before;
         p4window_keys(&mut state, &dir, &[' ']);
-        (added, p4window_rows_from(&p4window_rows(&state), ">Set Active Plr:"))
+        (
+            added,
+            p4window_rows_from(&p4window_rows(&state), ">Set Active Plr:"),
+        )
     };
     let (lifted, lifted_rows) = rows_after_digit(150);
     let (plain, plain_rows) = rows_after_digit(99);
     assert_eq!(lifted, plain + 1, "one strip scroll");
-    assert_eq!(lifted_rows.len(), plain_rows.len() + 1, "{lifted_rows:?} vs {plain_rows:?}");
+    assert_eq!(
+        lifted_rows.len(),
+        plain_rows.len() + 1,
+        "{lifted_rows:?} vs {plain_rows:?}"
+    );
     let _ = fs::remove_dir_all(dir);
 }
 
@@ -246,13 +277,20 @@ fn playfix5_j26_z_then_zero_closes_the_player_row_before_status() {
     let mut named = p5panel_three_member_state();
     p4window_keys(&mut named, &dir, &['Z', '\r']);
     let named_rows = p4window_rows_from(&p4window_rows(&named), ">Z-stats...");
-    assert_eq!(named_rows.get(2).map(String::as_str), Some(""), "{named_rows:?}");
+    assert_eq!(
+        named_rows.get(2).map(String::as_str),
+        Some(""),
+        "{named_rows:?}"
+    );
 
     let mut zero = p5panel_three_member_state();
     p4window_keys(&mut zero, &dir, &['Z', '0']);
     assert!(zero.active_z_stats.is_some(), "0 opens shared Equipment");
     let rows = p4window_rows_from(&p4window_rows(&zero), ">Z-stats...");
-    assert!(rows.get(1).is_some_and(|row| row.trim_end() == "Player:"), "{rows:?}");
+    assert!(
+        rows.get(1).is_some_and(|row| row.trim_end() == "Player:"),
+        "{rows:?}"
+    );
     assert_eq!(rows.get(2).map(String::as_str), Some(""), "{rows:?}");
     assert_eq!(rows.len(), named_rows.len(), "{rows:?} vs {named_rows:?}");
     let _ = fs::remove_dir_all(dir);
@@ -271,14 +309,23 @@ fn playfix5_j28_zero_is_ignored_at_the_cast_search_and_new_order_selectors() {
     ] {
         let mut state = p5panel_three_member_state();
         p4window_keys(&mut state, &dir, &keys);
-        assert!(state.active_party_selector.is_some(), "{target} opened the selector");
+        assert!(
+            state.active_party_selector.is_some(),
+            "{target} opened the selector"
+        );
         let before = p4window_rows(&state);
         p4window_keys(&mut state, &dir, &['0']);
-        assert!(state.active_party_selector.is_some(), "{target}: 0 does not close it");
+        assert!(
+            state.active_party_selector.is_some(),
+            "{target}: 0 does not close it"
+        );
         assert_eq!(p4window_rows(&state), before, "{target}: 0 prints nothing");
         // Escape is still the cancel.
         p4window_keys(&mut state, &dir, &['\u{1b}']);
-        assert!(state.active_party_selector.is_none(), "{target}: Escape cancels");
+        assert!(
+            state.active_party_selector.is_none(),
+            "{target}: Escape cancels"
+        );
     }
     let _ = fs::remove_dir_all(dir);
 }

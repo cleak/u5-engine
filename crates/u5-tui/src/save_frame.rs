@@ -756,8 +756,14 @@ mod tests {
         for &(column, row) in &cells {
             for y in 0..cell {
                 for x in 0..cell {
-                    let at = ((usize::from(row) * cell + y) * width + usize::from(column) * cell + x) * 4;
-                    let pixel = if (x, y) == (3, 3) { [0, 0, 0, 0xff] } else { [0xff; 4] };
+                    let at =
+                        ((usize::from(row) * cell + y) * width + usize::from(column) * cell + x)
+                            * 4;
+                    let pixel = if (x, y) == (3, 3) {
+                        [0, 0, 0, 0xff]
+                    } else {
+                        [0xff; 4]
+                    };
                     text[at..at + 4].copy_from_slice(&pixel);
                 }
             }
@@ -765,7 +771,11 @@ mod tests {
         overlay_panel_text_window_rgba(&mut rgba, &text, width, height, &state);
         for &(column, row) in &cells {
             let at = ((usize::from(row) * cell + 3) * width + usize::from(column) * cell + 3) * 4;
-            assert_eq!(&rgba[at..at + 4], &[0, 0, 0, 0xff], "cell ({column}, {row}) keeps its black");
+            assert_eq!(
+                &rgba[at..at + 4],
+                &[0, 0, 0, 0xff],
+                "cell ({column}, {row}) keeps its black"
+            );
         }
 
         // Without the leak the cells are not opaque: black lets chrome show.
