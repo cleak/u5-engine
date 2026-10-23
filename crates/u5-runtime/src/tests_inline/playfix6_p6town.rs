@@ -153,3 +153,60 @@ fn p6town_attack_on_a_refused_town_npc_prints_the_ordinary_failure_text() {
     assert_eq!(state.message, ATTACK_NOTHING_TO_ATTACK_REFUSAL);
     assert_eq!(state.npcs.len(), 1, "the refused target is left in place");
 }
+
+/// Playtest K12. `conversation.md §2` step 5: the five dispatcher branches,
+/// the silent-figure (cowering) index among them, "every one of them follows
+/// the dispatcher's own leading line feed" - the blank row the guard refusal
+/// already leaves under `Talk-<dir>`.
+#[test]
+fn p6town_cowering_and_scare_talk_follow_the_dispatchers_leading_feed() {
+    for dialog_id in [TOWN_NPC_COWERING_DIALOG_ID, TOWN_NPC_BRUSHOFF_DIALOG_ID] {
+        let mut state = test_state(open_grid(), 1, 1);
+        state.player.facing = Direction::East;
+        state.load_scheduled_npcs(&[
+            NpcSlot { slot: 0, type_byte: 0, dialog_id: 0, schedule: [0; 16], name: None },
+            NpcSlot {
+                slot: 1,
+                type_byte: 0x50,
+                dialog_id,
+                schedule: [3, 3, 3, 2, 2, 2, 1, 1, 1, 0, 0, 0, 6, 12, 18, 22],
+                name: None,
+            },
+        ]);
+        state.begin_command_echo_for(Command::Talk);
+        assert_eq!(
+            state.talk_facing_with_dialogue(&HashMap::new()),
+            MoveOutcome::Talked
+        );
+        assert!(
+            state.message.starts_with('\n'),
+            "dialog 0x{dialog_id:02X}: {:?}",
+            state.message
+        );
+    }
+}
+
+/// Playtest K13. `conversation.md §2` step 5: the scare index "hand[s] off to
+/// the town scare-and-flee helper ... no literals are established", and
+/// `OPEN-QUESTIONS.md` lists the gap. The engine printed an invented
+/// `Begone, vermin!`; it now prints nothing past the dispatcher's feed and
+/// still applies the flight rewrite.
+#[test]
+fn p6town_scare_talk_prints_no_invented_line() {
+    let mut state = test_state(open_grid(), 1, 1);
+    state.player.facing = Direction::East;
+    state.load_scheduled_npcs(&[
+        NpcSlot { slot: 0, type_byte: 0, dialog_id: 0, schedule: [0; 16], name: None },
+        NpcSlot {
+            slot: 1,
+            type_byte: 0x50,
+            dialog_id: TOWN_NPC_BRUSHOFF_DIALOG_ID,
+            schedule: [7, 7, 7, 2, 2, 2, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0],
+            name: None,
+        },
+    ]);
+    state.talk_facing_with_dialogue(&HashMap::new());
+    assert_eq!(state.message.trim(), "");
+    assert!(state.diagnostics_contain("scare hand-off reached"));
+    assert_eq!(&state.npcs[0].schedule[..3], &[3, 3, 3]);
+}

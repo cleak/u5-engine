@@ -6461,7 +6461,7 @@ fn cowering_talk_is_canned_without_a_tlk_record() {
         state.talk_facing_with_dialogue(&HashMap::new()),
         MoveOutcome::Talked
     );
-    assert_eq!(state.message, TOWN_NPC_COWERING_RESPONSE);
+    assert_eq!(state.message, format!("\n{TOWN_NPC_COWERING_RESPONSE}"));
     assert_eq!(state.turn, 1);
     assert!(state.active_conversation.is_none());
 }
@@ -6492,7 +6492,7 @@ fn brush_off_talk_skips_tlk_loading_and_attempts_forced_flight() {
         state.talk_facing_with_game_dir(&dir).unwrap(),
         MoveOutcome::Talked
     );
-    assert_eq!(state.message, TOWN_NPC_BRUSHOFF_RESPONSE);
+    assert_eq!(state.message, "\n");
     assert_eq!(state.npcs[0].dialog_id, TOWN_NPC_COWERING_DIALOG_ID);
     assert_eq!(&state.npcs[0].schedule[..3], &[3, 3, 3]);
     assert_eq!(state.turn, 1);

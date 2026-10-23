@@ -5701,7 +5701,7 @@ impl PlayState {
             dialog_id,
             TOWN_NPC_COWERING_DIALOG_ID | TOWN_NPC_BRUSHOFF_DIALOG_ID
         ) {
-            let text = if dialog_id == TOWN_NPC_BRUSHOFF_DIALOG_ID {
+            if dialog_id == TOWN_NPC_BRUSHOFF_DIALOG_ID {
                 let target_slot = self
                     .talk_record_at(target_x, target_y)
                     .map(|npc| npc.slot);
@@ -5713,14 +5713,16 @@ impl PlayState {
                     let _ = self.npcs[index].force_town_flight();
                     self.record_town_npc_mutation(index);
                 }
-                TOWN_NPC_BRUSHOFF_RESPONSE
-            } else {
-                TOWN_NPC_COWERING_RESPONSE
-            };
+                self.push_diagnostic(
+                    "scare hand-off reached; its line is not published".to_string(),
+                );
+            }
+            let text = town_npc_dispatcher_sentinel_line(dialog_id)
+                .expect("cowering and scare indices are dispatcher sentinels");
             self.active_conversation = None;
             self.active_conversation_npc_slot = None;
-            self.message = text.to_string();
-            return Some(text.to_string());
+            self.message = text.clone();
+            return Some(text);
         }
         if dialog_id == 0 || talk_shop_trigger(dialog_id).is_some() {
             return None;
@@ -6567,8 +6569,9 @@ impl PlayState {
         target_x: usize,
         target_y: usize,
     ) -> Option<MoveOutcome> {
-        let response = match dialog_id {
-            TOWN_NPC_COWERING_DIALOG_ID => TOWN_NPC_COWERING_RESPONSE,
+        let response = town_npc_dispatcher_sentinel_line(dialog_id)?;
+        match dialog_id {
+            TOWN_NPC_COWERING_DIALOG_ID => {}
             TOWN_NPC_BRUSHOFF_DIALOG_ID => {
                 let target_slot = self
                     .talk_record_at(target_x, target_y)
@@ -6581,12 +6584,14 @@ impl PlayState {
                     let _ = self.npcs[index].force_town_flight();
                     self.record_town_npc_mutation(index);
                 }
-                TOWN_NPC_BRUSHOFF_RESPONSE
+                self.push_diagnostic(
+                    "scare hand-off reached; its line is not published".to_string(),
+                );
             }
             _ => return None,
-        };
+        }
         self.advance_talk_turn();
-        self.message = response.to_string();
+        self.message = response;
         Some(MoveOutcome::Talked)
     }
 

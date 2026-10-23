@@ -4651,7 +4651,12 @@ impl PlayState {
         {
             let _ = self.npcs[index].force_town_flight();
             self.record_town_npc_mutation(index);
-            self.message = TOWN_NPC_BRUSHOFF_RESPONSE.to_string();
+            // The shouted line's wording is not published
+            // (`conversation.md §2` step 5, `OPEN-QUESTIONS.md`), so it is
+            // recorded rather than invented (playtest K13).
+            self.push_diagnostic(format!(
+                "NPC slot {npc_slot} shouts the brush-off; its line is not published"
+            ));
             return Ok(Some(MoveOutcome::Used));
         }
         // Measured 2026-09-08 at Minoc's gate at 16:00
