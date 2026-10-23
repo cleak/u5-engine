@@ -329,14 +329,14 @@ fn town_look_sign_terrain_tile_reads_signs_dat_or_the_blank_sign() {
     let mut state = test_state(grid, 1, 1);
 
     state.look_direction_with_game_dir(Direction::East, &dir).unwrap();
-    assert_eq!(state.message, "Sign:\nPosted notice");
+    assert_eq!(state.message, format!("{LOOK_RESULT_PREFIX}\nPosted notice"));
 
     state.look_direction_with_game_dir(Direction::South, &dir).unwrap();
     assert_eq!(state.message, format!("{LOOK_RESULT_PREFIX}\na sign"));
 
     state.player.y = 2;
     state.look_direction_with_game_dir(Direction::South, &dir).unwrap();
-    assert_eq!(state.message, "Sign:\n");
+    assert_eq!(state.message, format!("{LOOK_RESULT_PREFIX}\n"));
     let _ = fs::remove_dir_all(dir);
 }
 
@@ -395,6 +395,7 @@ fn yew_wanted_poster_exception_uses_party_names_without_signs_dat() {
     assert_eq!(
         state.message,
         [
+            LOOK_RESULT_PREFIX,
             "abbbbbbbbbbbbbc",
             "g   Wanted:   g",
             "g             g",
@@ -993,7 +994,7 @@ fn town_look_renders_matching_signs_dat_record_and_spends_its_turn() {
         MoveOutcome::Observed
     );
 
-    assert_eq!(state.message, "Sign:\nNorth Road");
+    assert_eq!(state.message, format!("{LOOK_RESULT_PREFIX}\nNorth Road"));
     assert_eq!(state.turn, 1);
     assert_eq!(state.clock, GameClock::new(12, 1).unwrap());
     let _ = fs::remove_dir_all(dir);

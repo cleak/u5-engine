@@ -69,3 +69,37 @@ fn playtest_j04_sign_scene_blocks_stop_at_the_next_block() {
     assert_eq!(crate::signs_io::matching_sign_bodies(&records, 3, 0, 28, 15), vec!["Thr"]);
     assert_eq!(crate::signs_io::matching_sign_bodies(&records, 4, 0, 17, 17), vec!["Fou"]);
 }
+
+/// `view.md §3` entry dispatch: row 3 prints the shared "thou dost see"
+/// preamble for the sign row too, and row 5 "emit[s] a line break, then
+/// render[s] the sign". `formats/signs-dat.md §6`: the authored stream is laid
+/// out without "proportional-font wrapping, implicit line breaking", so its
+/// sixteen-cell rows stay intact rather than being re-flowed at word breaks.
+/// No `Sign:` label is published (J05).
+#[test]
+fn playtest_j05_sign_look_prints_the_preamble_and_keeps_authored_rows() {
+    let dir = debug_game_dir();
+    fs::write(dir.join(LOOK2_DAT_FILE), look2_bytes(&[])).unwrap();
+    fs::write(
+        dir.join(SIGNS_DAT_FILE),
+        signs_dat_bytes_for_test(&[(
+            17,
+            0,
+            1,
+            2,
+            b"g LAW OF VALOR ggDEATH OR THOU  g",
+        )]),
+    )
+    .unwrap();
+    let mut grid = open_grid();
+    grid[32 + 2] = 0xa0;
+    let mut state = test_state(grid, 1, 1);
+
+    state.look_direction_with_game_dir(Direction::East, &dir).unwrap();
+
+    assert_eq!(
+        state.message,
+        format!("{LOOK_RESULT_PREFIX}\ng LAW OF VALOR g\ngDEATH OR THOU  \ng")
+    );
+    let _ = fs::remove_dir_all(dir);
+}

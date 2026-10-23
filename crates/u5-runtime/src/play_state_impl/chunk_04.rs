@@ -3975,9 +3975,8 @@ impl PlayState {
                 // Row 5: the sign path is selected by the live terrain tile,
                 // and only then is `SIGNS.DAT` consulted.
                 if sign_or_wanted_poster_object_class(self.grid[y * 32 + x]) {
-                    let sign = self
-                        .sign_message_at_for_current_area(game_dir, y as u8, x as u8)?
-                        .unwrap_or_else(|| "Sign:\n".to_string());
+                    let sign =
+                        self.sign_message_at_for_current_area(game_dir, y as u8, x as u8)?;
                     // `view.md §5` (audit A012): a `0x0D` holds the rest of
                     // the sign behind a key.
                     self.present_sign_message(sign);
@@ -4044,9 +4043,8 @@ impl PlayState {
                 }
                 // `view.md §3` entry-dispatch row 5, see the town arm.
                 if sign_or_wanted_poster_object_class(self.grid[world_cell_index(x, y)]) {
-                    let sign = self
-                        .sign_message_at_for_current_area(game_dir, y as u8, x as u8)?
-                        .unwrap_or_else(|| "Sign:\n".to_string());
+                    let sign =
+                        self.sign_message_at_for_current_area(game_dir, y as u8, x as u8)?;
                     self.present_sign_message(sign);
                     return Ok(MoveOutcome::Observed);
                 }
@@ -4456,13 +4454,28 @@ impl PlayState {
         if bodies.is_empty() {
             return Ok(None);
         }
-        Ok(Some(format!("Sign:\n{}", bodies.join("\n"))))
+        // `formats/signs-dat.md §6`: the stream is "already authored" and
+        // a renderer should "[a]void proportional-font wrapping, implicit
+        // line breaking". The shipped bodies carry no line feeds: each
+        // authored row is exactly one message-window row wide and reaches
+        // the next row through the per-cell emitter's own edge wrap
+        // (`text-output.md §5`). Laying the stream out cell by cell keeps
+        // the rows intact; the word-wrap printer broke them mid-row
+        // (playtest J05).
+        Ok(Some(sign_stream_rows(&bodies.concat())))
     }
 
     /// Put a sign into the message slot. `formats/signs-dat.md §6`: "Pause on
     /// the embedded pause code" - the sign prints up to its first `0x0D` and
     /// the rest waits behind a key (see [`crate::text_hold`]).
-    fn present_sign_message(&mut self, sign: String) {
+    ///
+    /// `view.md §3` entry dispatch: row 3 prints the shared "thou dost see"
+    /// preamble for rows 4, 5 and 6 alike, and row 5 then emits "a line
+    /// break, then render[s] the sign or poster". No `Sign:` label is
+    /// published (playtest J05). A coordinate with no record prints the
+    /// unpublished blank-sign fallback as nothing beyond that line break.
+    fn present_sign_message(&mut self, sign: Option<String>) {
+        let sign = format!("{LOOK_RESULT_PREFIX}\n{}", sign.unwrap_or_default());
         let (first, rest) = crate::text_hold::split_rendered_at_holds(
             &crate::tlk_runner::TlkRenderedText::plain(sign),
         );
@@ -6716,6 +6729,28 @@ impl PlayState {
         };
         self.set_talk_branch_flag_for_scene(scene, bit_index)
     }
+}
+
+/// Lay an authored `SIGNS.DAT` stream out as message-window rows the way
+/// the per-cell emitter does (`text-output.md §5`): every printed cell
+/// advances the cursor, and the cell that fills the row's last column carries
+/// the cursor onto the next row. Hold markers occupy no cell.
+pub fn sign_stream_rows(stream: &str) -> String {
+    let mut out = String::with_capacity(stream.len() + stream.len() / 8);
+    let mut column = 0usize;
+    for ch in stream.chars() {
+        if ch == char::from(crate::text_hold::TEXT_HOLD_WAIT_KEY_MARKER) {
+            out.push(ch);
+            continue;
+        }
+        if column == crate::MESSAGE_WINDOW_WIDTH {
+            out.push('\n');
+            column = 0;
+        }
+        out.push(ch);
+        column += 1;
+    }
+    out
 }
 
 pub fn yew_wanted_poster_rows(names: &[[u8; SAVE_CHARACTER_NAME_LEN]]) -> Vec<String> {
