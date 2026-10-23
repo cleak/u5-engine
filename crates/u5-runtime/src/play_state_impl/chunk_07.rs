@@ -2667,6 +2667,12 @@ impl PlayState {
                                 "Attacked NPC slot {npc_slot} type 0x{type_byte:02X} at ({x}, {y}) to the {}; no attackable town NPC.",
                                 direction.name()
                             ));
+                            // `town-mode.md §7`: "Invalid targets produce the
+                            // ordinary failure text" - `combat.md §8.2`'s
+                            // `Nothing to attack!`. This arm used to print
+                            // nothing at all, so `A` at a resident Shadowlord
+                            // read only `Attack-North` (playtest K08).
+                            self.message = ATTACK_NOTHING_TO_ATTACK_REFUSAL.to_string();
                             return Ok(MoveOutcome::Blocked);
                         }
                     }
@@ -2677,6 +2683,8 @@ impl PlayState {
                     object.tile,
                     direction.name()
                 ));
+                // `town-mode.md §7`: the ordinary failure text (playtest K08).
+                self.message = ATTACK_NOTHING_TO_ATTACK_REFUSAL.to_string();
                 return Ok(MoveOutcome::Blocked);
             }
             self.push_diagnostic(format!(

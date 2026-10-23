@@ -131,3 +131,25 @@ fn p6town_contact_conversation_keeps_the_commands_result_line() {
     );
     let _ = fs::remove_dir_all(dir);
 }
+
+/// Playtest K08. `town-mode.md §7`: A-Attack "looks for a live NPC linked to
+/// the target sprite ... Invalid targets produce the ordinary failure text",
+/// which `combat.md §8.2` gives as `Nothing to attack!`. A resident
+/// Shadowlord (roster type `0xFC`) is refused, and the refusal used to print
+/// nothing after `Attack-East`.
+#[test]
+fn p6town_attack_on_a_refused_town_npc_prints_the_ordinary_failure_text() {
+    let mut shadowlord = g6_npc(31, 6, 5, 0, (6, 5, 0));
+    shadowlord.type_byte = SHADOWLORD_ACTOR_TILE;
+    let mut state = g6_town_with(vec![shadowlord], 5, 5);
+    assert!(state.town_attack_target_at(0, 6, 5).is_some());
+
+    assert_eq!(
+        handle_play_key_input(&mut state, 'A', "6", Path::new("")).unwrap(),
+        PlayInputDisposition::Continue
+    );
+
+    assert!(state.diagnostics_contain("no attackable town NPC"));
+    assert_eq!(state.message, ATTACK_NOTHING_TO_ATTACK_REFUSAL);
+    assert_eq!(state.npcs.len(), 1, "the refused target is left in place");
+}
