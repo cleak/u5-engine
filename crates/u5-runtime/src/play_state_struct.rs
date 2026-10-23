@@ -420,6 +420,12 @@ pub struct PlayState {
     /// overworld's per-entry initialiser sets the flag **unconditionally**"
     /// (`RETRACTIONS.md` R497, amended by R526, u5-spec#297).
     pub overworld_prompt_pair_suppressed: bool,
+    /// `town-mode.md §7.1`: a firing drunkenness draw prints `Hic!` and a
+    /// line break on the row of the command whose key was read, and the
+    /// substituted cardinal step's echo follows on the next row with no
+    /// prompt pair of its own (playtest J18). Set by the hiccup, consumed by
+    /// that step's [`Self::begin_command_echo`].
+    pub town_hiccup_echo_continues: bool,
     /// The stats-panel text window's own, persistent inverse-video bit
     /// (`inventory.md §4.4` "The highlight can leak into the panel",
     /// u5-spec#296; `text-output.md` control bytes: the `0xFD` toggle "flips

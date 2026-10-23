@@ -86,3 +86,36 @@ fn p5world_talk_entered_shop_spends_its_turn_when_the_shop_closes() {
     assert_eq!(state.clock, GameClock::new(12, 0).unwrap());
     assert!(state.food < 63, "the 12:00 meal is eaten after the shop");
 }
+
+/// Playtest J18. `town-mode.md §7`/§7.1: drunkenness is a pre-dispatch stage
+/// that runs after the command is read; a firing draw "prints the fixed line
+/// `Hic!` followed by a line break" and substitutes a cardinal step. So
+/// `Hic!` sits on the read command's own prompt row, after its marker, and
+/// the substituted step's echo follows on the next row with no marker and no
+/// blank of its own.
+#[test]
+fn p5world_hiccup_takes_the_command_prompt_row_and_the_step_echo_follows() {
+    let gate_seed = (0..=u16::MAX)
+        .find(|seed| {
+            let mut state = *seed;
+            u5_prng_range_u16(&mut state, 0, 1) == 1
+        })
+        .unwrap();
+    let mut state = test_state(open_grid(), 15, 15);
+    state.town_drunkenness_counter = 25;
+    state.prng_state = gate_seed;
+    handle_play_key_input(&mut state, ' ', "", Path::new("")).unwrap();
+    assert_eq!(state.town_drunkenness_counter, 24);
+    assert!(!state.town_hiccup_echo_continues);
+
+    let rows = p4window_rows(&state);
+    let hic = rows
+        .iter()
+        .position(|row| row == ">Hic!")
+        .unwrap_or_else(|| panic!("no `>Hic!` row in {rows:?}"));
+    let step = &rows[hic + 1];
+    assert!(
+        ["North", "South", "East", "West"].contains(&step.as_str()),
+        "the substituted step's echo follows `Hic!` directly: {rows:?}"
+    );
+}

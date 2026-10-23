@@ -576,7 +576,15 @@ fn handle_play_key_input_inner(
         if state.town_drunkenness_counter != 0 && state.random_range_u8(0, 1) == 1 {
             state.town_alarm_sweep(scene, floor, None);
             state.town_drunkenness_counter -= 1;
-            state.emit_message_line("Hic!\n");
+            // `town-mode.md §7`/§7.1: drunkenness is a pre-dispatch stage
+            // after the command read, so `Hic!` lands on that command's
+            // prompt row - after its feed and marker - and its line break
+            // leaves the substituted step's echo on the next row with no
+            // prompt pair of its own (playtest J18).
+            state.flush_message_slot();
+            state.emit_command_echo_line("Hic!");
+            state.message_row_open_mid_line = false;
+            state.town_hiccup_echo_continues = true;
             let replacement = state.random_range_u8(0, 3);
             key = char::from(INPUT_CODE_CARDINAL_FIRST + replacement);
             suffix = "";
