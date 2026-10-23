@@ -309,6 +309,25 @@ fn is_alias_bridge_payload(payload: &[u8]) -> bool {
 pub fn decode_sign_payload(bytes: &[u8]) -> String {
     let mut out = String::with_capacity(bytes.len());
     for &byte in bytes {
+        // `formats/signs-dat.md §4`: "Bytes `0x29..0x31`" select macro
+        // fragments and "Bytes `0x26` and `0x27`" the separator glyph; "Other
+        // bytes print as their low-seven-bit character value", and the high
+        // bit "does not change which low-seven-bit character is emitted". The
+        // macro and separator tests are on the raw byte, as
+        // [`sign_body_byte_kind`] already classifies them: masking first
+        // turned high-bit `,` `.` `/` `0` `1` (`0xAC..0xB1`) into macro stars
+        // and a high-bit `'` into a separator (playtest K01).
+        match byte {
+            SIGN_BODY_SEPARATOR_GLYPH_A | SIGN_BODY_SEPARATOR_GLYPH_B => {
+                out.push('-');
+                continue;
+            }
+            SIGN_BODY_MACRO_FIRST..=SIGN_BODY_MACRO_LAST => {
+                out.push('*');
+                continue;
+            }
+            _ => {}
+        }
         let low = byte & 0x7f;
         match low {
             0x00 => break,
@@ -318,8 +337,6 @@ pub fn decode_sign_payload(bytes: &[u8]) -> String {
             // feed (`0x8A`), which the per-cell emitter turns into a row
             // break with a column reset (`text-output.md §5`).
             SIGN_BODY_LINE_FEED => out.push('\n'),
-            0x26 | 0x27 => out.push('-'),
-            0x29..=0x31 => out.push('*'),
             ch if (0x20..=0x7e).contains(&ch) => out.push(ch as char),
             _ => {}
         }

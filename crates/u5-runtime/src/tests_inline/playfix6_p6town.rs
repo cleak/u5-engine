@@ -230,3 +230,16 @@ fn p6town_look_off_the_town_grid_describes_the_substituted_corner_cell() {
 
     assert_eq!(state.message, expected);
 }
+
+/// Playtest K01. `formats/signs-dat.md §4`: "Bytes `0x29..0x31`" select macro
+/// fragments, "Other bytes print as their low-seven-bit character value", and
+/// the high bit "does not change which low-seven-bit character is emitted".
+/// High-bit `,` `.` `/` `0` `1` are outside the raw macro range and print as
+/// themselves; the low-bit macro and separator bytes keep their meaning.
+#[test]
+fn p6town_sign_high_bit_punctuation_prints_its_low_seven_bit_character() {
+    let high = |text: &[u8]| text.iter().map(|byte| byte | 0x80).collect::<Vec<u8>>();
+    assert_eq!(decode_sign_payload(&high(b"DEATH, 3/02/1.")), "DEATH, 3/02/1.");
+    assert_eq!(decode_sign_payload(&high(b"BRITISH'S")), "BRITISH'S");
+    assert_eq!(decode_sign_payload(&[0x29, b'A', 0x31, 0x26, 0x27]), "*A*--");
+}
