@@ -994,7 +994,7 @@ pub use town_mode::{
     TOWN_DAWN_DUSK_GATE_OPEN_TILE, TOWN_DAWN_DUSK_GATE_TOGGLE_XOR, TOWN_EXIT_UNDERWORLD_SCENE,
     TOWN_GRID_BYTES, TOWN_GRID_SIDE, TOWN_NIGHT_BAND_DAWN_HOUR, TOWN_NIGHT_BAND_DUSK_HOUR,
     TOWN_NPC_ALARM_GUARD_TYPE, TOWN_NPC_ALARM_LICH_TYPE, TOWN_NPC_BLOCK_BYTES,
-    TOWN_NPC_BRUSHOFF_DIALOG_ID, TOWN_NPC_BRUSHOFF_RESPONSE, TOWN_NPC_CONTACT_ATTACKED_LINE,
+    TOWN_NPC_BRUSHOFF_DIALOG_ID, TOWN_NPC_CONTACT_ATTACKED_LINE,
     TOWN_NPC_CONTACT_CONFLICT_ACTOR_FIRST, TOWN_NPC_COWERING_DIALOG_ID,
     TOWN_NPC_COWERING_RESPONSE, TOWN_NPC_FORCED_FLIGHT_AI, TOWN_NPC_FORCED_PURSUIT_NEAR_AI,
     TOWN_NPC_FORCED_PURSUIT_NEAR_TYPE_CUTOFF, TOWN_NPC_FORCED_PURSUIT_RANDOM_AI,
@@ -1011,7 +1011,8 @@ pub use town_mode::{
     town_dawn_dusk_gate_pass_fires_at_hour, town_dawn_dusk_gate_toggle,
     town_dawn_dusk_substitution_active, town_entry_is_jail_wakeup, town_exit_lands_underworld,
     town_floor_offset, town_location_class, town_npc_activation_mask_eligible,
-    town_npc_attack_enters_conflict, town_npc_attack_resolution, town_npc_removal_recorded,
+    town_npc_attack_enters_conflict, town_npc_attack_resolution, town_npc_dispatcher_sentinel_line,
+    town_npc_removal_recorded,
     town_npc_type_guard_like, town_per_class_index, town_resident_name, town_stair_intent,
     town_tile_marker, world_location_table_scene_for_row,
 };
@@ -1191,4 +1192,5 @@ mod tests {
     include!("tests_inline/rc6_residuals.rs");
     include!("tests_inline/playfix5_p5panel.rs");
     include!("tests_inline/playfix5_p5world.rs");
+    include!("tests_inline/playfix6_p6town.rs");
 }

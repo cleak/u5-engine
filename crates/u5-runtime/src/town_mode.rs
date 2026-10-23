@@ -524,10 +524,28 @@ pub const TOWN_NPC_BRUSHOFF_DIALOG_ID: u8 = 0xFE;
 /// silent-figure index prints, after the dispatcher's own leading line feed,
 /// `"` then `Don't hurt me!` ⏎ `Please go away!` then `"` and a line feed -
 /// the quotes "framed by two separately emitted double-quote characters".
-/// The leading and closing line feeds come from the message-row framing every
-/// dispatcher line gets here (compare `TALK_NO_RESPONSE_MESSAGE`).
+/// The closing line feed comes from the message-row framing; the leading one
+/// is the dispatcher's, added by [`town_npc_dispatcher_sentinel_line`] exactly
+/// as [`crate::talk_non_speaker_refusal_for_sprite`] adds it to the guard
+/// refusal (playtest K12).
 pub const TOWN_NPC_COWERING_RESPONSE: &str = "\"Don't hurt me!\nPlease go away!\"";
-pub const TOWN_NPC_BRUSHOFF_RESPONSE: &str = "Begone, vermin!";
+
+/// `conversation.md §2` step 5: the cowering and scare indices are two of the
+/// five dispatcher branches, "and every one of them follows the dispatcher's
+/// own leading line feed".
+///
+/// The scare index then "hand[s] off to the town scare-and-flee helper ...
+/// neither hand-off was entered in this pass, so no literals are established"
+/// (`OPEN-QUESTIONS.md`). The engine used to print an invented
+/// `Begone, vermin!` there (playtest K13); it now prints only the leading
+/// feed and leaves the hand-off's own text as an open spec question.
+pub fn town_npc_dispatcher_sentinel_line(dialog_id: u8) -> Option<String> {
+    match dialog_id {
+        TOWN_NPC_COWERING_DIALOG_ID => Some(format!("\n{TOWN_NPC_COWERING_RESPONSE}")),
+        TOWN_NPC_BRUSHOFF_DIALOG_ID => Some("\n".to_string()),
+        _ => None,
+    }
+}
 /// `town-mode.md §14`: on the arrest/conflict contact's conflict outcome, "an
 /// actor byte at least `0x40` prints `Attacked!` and enters the NPC-conflict
 /// chain; a lower byte clears the NPC slot".

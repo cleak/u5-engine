@@ -4359,7 +4359,10 @@ fn active_conversation_keeps_numeric_signal_separate_from_falsehood_theft() {
     assert!(ended);
     assert!(state.active_conversation.is_none());
     assert_eq!(state.conversation_signal_flags[5], 1);
-    assert_eq!(text, "\n\"Farewell\"\n\n Stolen goods.");
+    // Playtest K14: the stolen-goods line's wording is unpublished, so the
+    // farewell is not followed by an invented ` Stolen goods.`.
+    assert_eq!(text, "\n\"Farewell\"\n\n");
+    assert!(state.diagnostics_contain("stolen-goods line reached"));
 }
 
 #[test]
@@ -4372,7 +4375,7 @@ fn final_conversation_cleanup_suppresses_on_nonzero_shared_sentinel() {
         state.shared_town_conversation_sentinel(),
         CONVERSATION_SHARED_NO_SLOT_SENTINEL
     );
-    assert_eq!(state.run_final_conversation_cleanup(), None);
+    assert!(!state.run_final_conversation_cleanup());
     assert_eq!(state.conversation_signal_flags[7], 1);
     assert_eq!(state.gold, gold_before);
 }
@@ -4396,10 +4399,7 @@ fn final_conversation_cleanup_uses_inventory_cascade_and_fresh_seed() {
     state.potion_stock = [0; POTION_COUNT];
     state.gold = 10;
 
-    assert_eq!(
-        state.run_final_conversation_cleanup_with_seed(0x0123),
-        Some("Stolen goods.".to_string())
-    );
+    assert!(state.run_final_conversation_cleanup_with_seed(0x0123));
     assert_eq!(state.gems, 1);
     assert_eq!(state.gold, 10);
 
@@ -6461,7 +6461,7 @@ fn cowering_talk_is_canned_without_a_tlk_record() {
         state.talk_facing_with_dialogue(&HashMap::new()),
         MoveOutcome::Talked
     );
-    assert_eq!(state.message, TOWN_NPC_COWERING_RESPONSE);
+    assert_eq!(state.message, format!("\n{TOWN_NPC_COWERING_RESPONSE}"));
     assert_eq!(state.turn, 1);
     assert!(state.active_conversation.is_none());
 }
@@ -6492,7 +6492,7 @@ fn brush_off_talk_skips_tlk_loading_and_attempts_forced_flight() {
         state.talk_facing_with_game_dir(&dir).unwrap(),
         MoveOutcome::Talked
     );
-    assert_eq!(state.message, TOWN_NPC_BRUSHOFF_RESPONSE);
+    assert_eq!(state.message, "\n");
     assert_eq!(state.npcs[0].dialog_id, TOWN_NPC_COWERING_DIALOG_ID);
     assert_eq!(&state.npcs[0].schedule[..3], &[3, 3, 3]);
     assert_eq!(state.turn, 1);

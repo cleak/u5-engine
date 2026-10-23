@@ -2667,6 +2667,12 @@ impl PlayState {
                                 "Attacked NPC slot {npc_slot} type 0x{type_byte:02X} at ({x}, {y}) to the {}; no attackable town NPC.",
                                 direction.name()
                             ));
+                            // `town-mode.md §7`: "Invalid targets produce the
+                            // ordinary failure text" - `combat.md §8.2`'s
+                            // `Nothing to attack!`. This arm used to print
+                            // nothing at all, so `A` at a resident Shadowlord
+                            // read only `Attack-North` (playtest K08).
+                            self.message = ATTACK_NOTHING_TO_ATTACK_REFUSAL.to_string();
                             return Ok(MoveOutcome::Blocked);
                         }
                     }
@@ -2677,6 +2683,8 @@ impl PlayState {
                     object.tile,
                     direction.name()
                 ));
+                // `town-mode.md §7`: the ordinary failure text (playtest K08).
+                self.message = ATTACK_NOTHING_TO_ATTACK_REFUSAL.to_string();
                 return Ok(MoveOutcome::Blocked);
             }
             self.push_diagnostic(format!(
@@ -4616,6 +4624,15 @@ impl PlayState {
         if floor < 0 {
             return Ok(None);
         }
+        // `npc-schedules.md §9.2` / `commands.md §3`: contact is handled in
+        // the epilogue *after* the command, so it adds to that command's
+        // output and never replaces it. Push, Open, Jimmy and Attack leave
+        // their result (`Won't budge!`, `Nothing to open!`, ...) in the
+        // message slot for the turn boundary's flush, and the conversation
+        // and brush-off arms below overwrite that slot - the result line
+        // was lost whenever a contact fired on the same turn (playtest
+        // K16). Commit it to the transcript first.
+        self.flush_message_slot();
         let npc_slot = event.npc_slot;
         let behavior = event.behavior;
         let Some(type_byte) = self
@@ -4634,7 +4651,12 @@ impl PlayState {
         {
             let _ = self.npcs[index].force_town_flight();
             self.record_town_npc_mutation(index);
-            self.message = TOWN_NPC_BRUSHOFF_RESPONSE.to_string();
+            // The shouted line's wording is not published
+            // (`conversation.md §2` step 5, `OPEN-QUESTIONS.md`), so it is
+            // recorded rather than invented (playtest K13).
+            self.push_diagnostic(format!(
+                "NPC slot {npc_slot} shouts the brush-off; its line is not published"
+            ));
             return Ok(Some(MoveOutcome::Used));
         }
         // Measured 2026-09-08 at Minoc's gate at 16:00
@@ -4920,13 +4942,19 @@ impl PlayState {
     /// points, eats no meal and leaves the turn-step counter alone - that
     /// counter's only increment is the upkeep pass (`formats/saved-gam.md`
     /// `0x02E5`) (playtest W1).
+    ///
+    /// Nor is it a schedule-processor caller: `npc-schedules.md §5` names
+    /// only the town turn loop and the H-Hole-Up burst, so the wait leaves
+    /// every NPC where the jail load placed it. Running the scheduler here
+    /// walked Yew's guards off their posts overnight (playtest K05).
     pub(crate) fn advance_town_arrest_wait_to_morning(&mut self) -> u16 {
         let mut cleanup_ticks = 0;
         while !town_arrest_release_loop_done(self.clock.hour) && cleanup_ticks < 96 {
-            self.advance_turn_with_minutes_policy(
+            self.advance_turn_with_minutes_policy_and_schedules(
                 TOWN_ARREST_CLEANUP_INCREMENT_MINUTES,
                 false,
                 true,
+                false,
                 false,
                 false,
             );

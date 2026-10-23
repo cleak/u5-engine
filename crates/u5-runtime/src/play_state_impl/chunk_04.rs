@@ -3952,14 +3952,28 @@ impl PlayState {
                 let (dx, dy) = direction.delta();
                 let x = self.player.x as isize + dx;
                 let y = self.player.y as isize + dy;
-                if !(0..32).contains(&x) || !(0..32).contains(&y) {
-                    // The border ring is the location's exit trigger, so a
-                    // look cannot be aimed off the grid from inside it.
+                if !self.surface_look_target_visible(x, y) {
                     self.message.clear();
                     return Ok(MoveOutcome::Observed);
                 }
-                if !self.surface_look_target_visible(x, y) {
-                    self.message.clear();
+                if !(0..32).contains(&x) || !(0..32).contains(&y) {
+                    // `view.md §3` step 3 reads the target through the shared
+                    // live-map tile query, and `town-mode.md §15`: asked for
+                    // "any coordinate outside 0..31 on either axis while a
+                    // location floor is loaded, the accessor returns the
+                    // loaded floor's (31,31) cell instead of failing ...
+                    // Every caller that asks the accessor for an
+                    // out-of-range coordinate ... takes the same
+                    // substitution". This arm used to print nothing at all
+                    // (playtest K19). No town actor has an off-grid
+                    // coordinate, so the per-map object row cannot match;
+                    // the terrain description of the substituted cell is
+                    // what Look reports.
+                    let tile = self.grid[TOWN_GRID_SIDE * TOWN_GRID_SIDE - 1];
+                    self.message = format!(
+                        "{LOOK_RESULT_PREFIX}\n{}",
+                        self.look_description(tile, look_table, TOWN_GRID_SIDE - 1)
+                    );
                     return Ok(MoveOutcome::Observed);
                 }
                 let x = x as usize;
@@ -5701,7 +5715,7 @@ impl PlayState {
             dialog_id,
             TOWN_NPC_COWERING_DIALOG_ID | TOWN_NPC_BRUSHOFF_DIALOG_ID
         ) {
-            let text = if dialog_id == TOWN_NPC_BRUSHOFF_DIALOG_ID {
+            if dialog_id == TOWN_NPC_BRUSHOFF_DIALOG_ID {
                 let target_slot = self
                     .talk_record_at(target_x, target_y)
                     .map(|npc| npc.slot);
@@ -5713,14 +5727,16 @@ impl PlayState {
                     let _ = self.npcs[index].force_town_flight();
                     self.record_town_npc_mutation(index);
                 }
-                TOWN_NPC_BRUSHOFF_RESPONSE
-            } else {
-                TOWN_NPC_COWERING_RESPONSE
-            };
+                self.push_diagnostic(
+                    "scare hand-off reached; its line is not published".to_string(),
+                );
+            }
+            let text = town_npc_dispatcher_sentinel_line(dialog_id)
+                .expect("cowering and scare indices are dispatcher sentinels");
             self.active_conversation = None;
             self.active_conversation_npc_slot = None;
-            self.message = text.to_string();
-            return Some(text.to_string());
+            self.message = text.clone();
+            return Some(text);
         }
         if dialog_id == 0 || talk_shop_trigger(dialog_id).is_some() {
             return None;
@@ -5792,13 +5808,8 @@ impl PlayState {
         }
         self.active_conversation = None;
         self.active_conversation_npc_slot = None;
-        let mut opening = conversation_opening_stopped_rendered(rendered);
-        if let Some(cleanup) = self.run_final_conversation_cleanup() {
-            if !opening.text.is_empty() {
-                opening.push_plain(" ");
-            }
-            opening.push_plain(&cleanup);
-        }
+        let opening = conversation_opening_stopped_rendered(rendered);
+        let _ = self.run_final_conversation_cleanup();
         opening
     }
 
@@ -6130,14 +6141,7 @@ impl PlayState {
             }
             self.active_conversation = None;
             self.active_conversation_npc_slot = None;
-            if let Some(cleanup) = self.run_final_conversation_cleanup() {
-                if !text.is_empty() {
-                    text.push(' ');
-                    rendered.push_plain(" ");
-                }
-                text.push_str(&cleanup);
-                rendered.push_plain(&cleanup);
-            }
+            let _ = self.run_final_conversation_cleanup();
         }
         debug_assert_eq!(rendered.text, text);
         self.emit_tlk_message(rendered);
@@ -6473,18 +6477,27 @@ impl PlayState {
         }
     }
 
-    /// Run the Shadowlord of Falsehood's post-conversation theft.
-    pub fn run_final_conversation_cleanup(&mut self) -> Option<String> {
+    /// Run the Shadowlord of Falsehood's post-conversation theft. Returns
+    /// whether the theft ran.
+    ///
+    /// `conversation.md §10` says the cleanup "prints the stolen-goods line",
+    /// but no spec document publishes that line's wording. The engine used to
+    /// print an invented ` Stolen goods.` here (playtest K14); the line is now
+    /// recorded as a diagnostic until the spec names it.
+    pub fn run_final_conversation_cleanup(&mut self) -> bool {
         self.run_final_conversation_cleanup_with_seed(host_clock_prng_seed_now())
     }
 
     /// Deterministic-seed form of [`Self::run_final_conversation_cleanup`].
     /// The production caller samples the host clock after the warning line and
     /// sound; tests can inject the same resulting 12-bit seed directly.
-    pub fn run_final_conversation_cleanup_with_seed(&mut self, host_seed: u16) -> Option<String> {
+    pub fn run_final_conversation_cleanup_with_seed(&mut self, host_seed: u16) -> bool {
         if self.resident_shadowlord != Some(SHADOWLORD_FALSEHOOD_INDEX) {
-            return None;
+            return false;
         }
+        self.push_diagnostic(
+            "Falsehood theft: stolen-goods line reached; its wording is not published".to_string(),
+        );
         self.emit_sound_effect(SoundEffect::ActionSnap);
 
         // `prng.md §3`: this sample precedes inventory inspection even when
@@ -6513,7 +6526,7 @@ impl PlayState {
             self.gold = self.gold.saturating_sub(debit);
         }
         self.mark_visibility_dirty();
-        Some("Stolen goods.".to_string())
+        true
     }
 
     pub fn apply_talk_action_grants(&mut self, actions: &[char]) {
@@ -6567,8 +6580,9 @@ impl PlayState {
         target_x: usize,
         target_y: usize,
     ) -> Option<MoveOutcome> {
-        let response = match dialog_id {
-            TOWN_NPC_COWERING_DIALOG_ID => TOWN_NPC_COWERING_RESPONSE,
+        let response = town_npc_dispatcher_sentinel_line(dialog_id)?;
+        match dialog_id {
+            TOWN_NPC_COWERING_DIALOG_ID => {}
             TOWN_NPC_BRUSHOFF_DIALOG_ID => {
                 let target_slot = self
                     .talk_record_at(target_x, target_y)
@@ -6581,12 +6595,14 @@ impl PlayState {
                     let _ = self.npcs[index].force_town_flight();
                     self.record_town_npc_mutation(index);
                 }
-                TOWN_NPC_BRUSHOFF_RESPONSE
+                self.push_diagnostic(
+                    "scare hand-off reached; its line is not published".to_string(),
+                );
             }
             _ => return None,
-        };
+        }
         self.advance_talk_turn();
-        self.message = response.to_string();
+        self.message = response;
         Some(MoveOutcome::Talked)
     }
 

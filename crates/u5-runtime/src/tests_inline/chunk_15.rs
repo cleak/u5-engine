@@ -2007,7 +2007,9 @@
             state.apply_town_npc_contact_event(scene, 0, Path::new("")).unwrap(),
             Some(MoveOutcome::Used)
         );
-        assert_eq!(state.message, TOWN_NPC_BRUSHOFF_RESPONSE);
+        // Playtest K13: the shouted line's wording is unpublished.
+        assert!(state.message.is_empty(), "{:?}", state.message);
+        assert!(state.diagnostics_contain("shouts the brush-off"));
         assert_eq!(&state.npcs[0].schedule[..3], &[3, 3, 3]);
         assert_eq!(state.npcs[0].dialog_id, TOWN_NPC_COWERING_DIALOG_ID);
     }
