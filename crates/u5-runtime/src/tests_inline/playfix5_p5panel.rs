@@ -62,3 +62,34 @@ fn playfix5_j11_highlighting_the_plans_row_leaves_no_inverse_leak() {
         );
     }
 }
+
+#[test]
+fn playfix5_j23_effect_slot_is_absent_while_a_picker_or_z_page_owns_the_panel() {
+    // inventory.md §4.4 / §4.7 clear the panel for the picker frame and the
+    // Z-stats page; stats-panel.md §8 draws the slot only from the
+    // full-panel refresh. So the slot is gone until the panel is restored.
+    let mut state = p5panel_empty_stock_state();
+    state.special_items[SPECIAL_ITEM_SPYGLASS_INDEX] = 1;
+    state.active_effect_tag = Some(PROTECTION_ACTIVE_EFFECT_TAG);
+    state.active_effect_counter = 20;
+    assert_eq!(
+        gameplay_chrome_content(&state).timing_glyph,
+        Some(PROTECTION_ACTIVE_EFFECT_TAG),
+        "the resting panel shows the slot"
+    );
+
+    let mut using = state.clone();
+    assert_eq!(using.start_use_item(), MoveOutcome::Observed);
+    assert_eq!(gameplay_chrome_content(&using).timing_glyph, None, "U-Use picker");
+    assert!(using.step_active_use('\u{1b}', "", Path::new("")).unwrap());
+    assert_eq!(
+        gameplay_chrome_content(&using).timing_glyph,
+        Some(PROTECTION_ACTIVE_EFFECT_TAG),
+        "the slot returns with the roster redraw"
+    );
+
+    let mut z = state.clone();
+    z.z_stats_for_party(0);
+    assert!(z.active_z_stats.is_some());
+    assert_eq!(gameplay_chrome_content(&z).timing_glyph, None, "Z-stats page");
+}

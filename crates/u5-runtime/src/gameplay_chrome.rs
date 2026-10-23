@@ -1321,8 +1321,15 @@ pub fn gameplay_chrome_content(state: &crate::PlayState) -> GameplayChromeConten
     // The arms browser's badge is published at row 7 (`shops.md`); the
     // taller item picker's goes in the lower divider band instead, because
     // its frame covers row 7. See [`PICKER_PAGE_GAP`].
+    // `inventory.md §4.4` clears the whole panel for the picker frame and
+    // §4.7 clears it for a Z-stats page; `stats-panel.md §8` writes the
+    // timed-effect slot only from the full-panel refresh, which runs again
+    // when the picker or page closes. Nothing paints the slot meanwhile, so
+    // it is absent while either owns the panel (playtest J23).
+    let panel_owned = state.active_z_stats.is_some() || picker.is_some();
     let timing_glyph = match browser.map(|browser| browser.page_indicator(&state.equipment_stock)) {
         Some(indicator) => page_badge_glyph(indicator),
+        None if panel_owned => None,
         None => state.active_effect_tag.filter(|tag| *tag != 0),
     };
     // The item picker and the framed Z-stats inventory pages share this
@@ -1336,7 +1343,7 @@ pub fn gameplay_chrome_content(state: &crate::PlayState) -> GameplayChromeConten
     // clear covers the whole panel", so the divider band that separated
     // the roster rows from the counters has nothing left to divide -
     // exactly the Z-stats page case.
-    let stats_panel_single_box = state.active_z_stats.is_some() || picker.is_some();
+    let stats_panel_single_box = panel_owned;
     match state.area {
         crate::Area::Dungeon { level, .. } => GameplayChromeContent {
             top: ChromeGap::Label(dungeon_level_label(level)),
