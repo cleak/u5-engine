@@ -93,3 +93,75 @@ fn playfix5_j23_effect_slot_is_absent_while_a_picker_or_z_page_owns_the_panel() 
     assert!(z.active_z_stats.is_some());
     assert_eq!(gameplay_chrome_content(&z).timing_glyph, None, "Z-stats page");
 }
+
+/// An outdoor Britannia state with the Avatar active, so the Sextant reads.
+fn p5panel_britannia_state() -> PlayState {
+    let mut state = britannia_state(open_world_grid(), 5, 5);
+    state.active_player = Some(0);
+    state
+}
+
+/// The Get rows a plain world state prints, from its echo down. Get shares
+/// Look's shape (`commands.md §5.2`/§5.8: echo, blank row, result) and needs
+/// no look-text asset.
+fn p5panel_plain_get_rows(dir: &Path) -> Vec<String> {
+    let mut plain = p5panel_britannia_state();
+    p4window_keys(&mut plain, dir, &['G', '\u{3}']);
+    p4window_rows_from(&p4window_rows(&plain), ">Get-North")
+}
+
+#[test]
+fn playfix5_j12_moonstone_and_sextant_results_close_their_row() {
+    // inventory.md §7.1: the Moonstone completions are `buried!\n` and
+    // `cannot be buried here!\n`; magic.md §8: the coordinate printer ends
+    // with a newline. Each leaves the row closed, so the next command's
+    // echo / blank / result (commands.md §5.8) is unchanged after it.
+    let dir = debug_game_dir();
+    let expected = p5panel_plain_get_rows(&dir);
+    assert_eq!(expected.get(1).map(String::as_str), Some(""), "{expected:?}");
+
+    let mut moonstone = p5panel_britannia_state();
+    moonstone.scroll_stock = [0; SCROLL_COUNT];
+    moonstone.potion_stock = [0; POTION_COUNT];
+    moonstone.special_items = [0; SPECIAL_ITEM_COUNT];
+    moonstone.moonstone_slots = [MoonstoneGateSlot {
+        scene: 0,
+        x: 0,
+        y: 0,
+        z: 0,
+    }; MOONSTONE_SLOT_COUNT];
+    moonstone.moonstone_slots[0] = MoonstoneGateSlot::invalid();
+    p4window_keys(&mut moonstone, &dir, &['U', '\r']);
+    assert!(
+        moonstone.message.contains("buried"),
+        "the Moonstone row ran: {:?}",
+        moonstone.message
+    );
+    assert!(!moonstone.message_row_open_mid_line, "Moonstone result closes its row");
+    p4window_keys(&mut moonstone, &dir, &['G', '\u{3}']);
+    assert_eq!(p4window_rows_from(&p4window_rows(&moonstone), ">Get-North"), expected);
+
+    let mut sextant = p5panel_britannia_state();
+    sextant.scroll_stock = [0; SCROLL_COUNT];
+    sextant.potion_stock = [0; POTION_COUNT];
+    sextant.special_items = [0; SPECIAL_ITEM_COUNT];
+    sextant.moonstone_slots = moonstone.moonstone_slots;
+    sextant.moonstone_slots[0] = MoonstoneGateSlot {
+        scene: 0,
+        x: 0,
+        y: 0,
+        z: 0,
+    };
+    sextant.special_items[SPECIAL_ITEM_SEXTANT_INDEX] = 255;
+    sextant.clock = GameClock::new(22, 7).unwrap();
+    p4window_keys(&mut sextant, &dir, &['U', '\r']);
+    assert!(
+        sextant.message.starts_with(USE_SEXTANT_READING_LABEL),
+        "the Sextant read: {:?}",
+        sextant.message
+    );
+    assert!(!sextant.message_row_open_mid_line, "the readout closes its row");
+    p4window_keys(&mut sextant, &dir, &['G', '\u{3}']);
+    assert_eq!(p4window_rows_from(&p4window_rows(&sextant), ">Get-North"), expected);
+    let _ = fs::remove_dir_all(dir);
+}

@@ -2032,6 +2032,12 @@ impl PlayState {
             self.push_runic_message_entry(row);
         }
         self.adopt_flushed_message(format!("{USE_SEXTANT_READING_LABEL}{pair}"));
+        // The coordinate printer ends with its own line feed (`magic.md §8`:
+        // "a newline before the pair as well as after it"), so the readout
+        // leaves the row closed. The runic rows above do not touch the flag,
+        // which still held the open `Position:` row and swallowed the next
+        // command's blank row (playtest J12).
+        self.message_row_open_mid_line = false;
         MoveOutcome::Used
     }
 

@@ -717,12 +717,16 @@ pub const USE_ITEM_ECHO_MOONSTONE: &str = "Moonstone";
 /// **Measured** 2026-09-07 from a ship at sea: the moonstone's refusal
 /// *continues* its `Item: ` row - `Item: Moonstone cannot be buried here!`
 /// is one wrapped sentence. The engine named the tile byte instead.
-pub const MOONSTONE_BURY_REFUSAL: &str = " cannot be buried here!";
+/// `inventory.md §7.1` gives the completion as `cannot be buried here!\n`:
+/// its own feed closes the row, so the next command's leading feed buys
+/// `text-output.md §10.4`'s blank row (playtest J12).
+pub const MOONSTONE_BURY_REFUSAL: &str = " cannot be buried here!\n";
 /// `inventory.md §7.1` (published for `cleak/u5-spec#262`): the accepted
 /// burial completes the same `Moonstone_` row with `buried!`. "Neither outcome
 /// is followed by the shared U-Use failure tail: this branch never sets the
 /// command's failure result, so `Failed!` cannot appear after either line."
-pub const MOONSTONE_BURY_SUCCESS: &str = " buried!";
+/// The completion is `buried!\n`, closing its row (playtest J12).
+pub const MOONSTONE_BURY_SUCCESS: &str = " buried!\n";
 
 /// **Measured** 2026-09-07 with each item alone in the picker: the spyglass
 /// answers `No stars!` when there are none to read, the sextant answers
