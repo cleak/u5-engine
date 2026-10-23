@@ -881,6 +881,12 @@ pub struct PlayState {
     /// Talk dispatcher runs for an automatic conversation-contact event,
     /// which "does not create an additional Talk command or schedule tick".
     pub talk_entered_by_contact: bool,
+    /// `town-mode.md §7` step 4 / `shops.md §2`: an explicit Talk that
+    /// opened a shop owes its turn epilogue - clock minute, underfoot and
+    /// status pass, both walkers - to the moment the shop arm returns, not to
+    /// the moment it opens (playtest J16). Set when the shop opens; the
+    /// shop-key dispatcher spends it when the session closes.
+    pub pending_talk_shop_turn: bool,
     pub active_conversation_join_candidate: Option<String>,
     pub active_z_stats: Option<crate::z_stats::ZStatsSession>,
     /// `inventory.md §4`: the outside-combat party-member selector that

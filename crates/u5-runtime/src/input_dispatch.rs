@@ -511,7 +511,16 @@ fn handle_play_key_input_inner(
         return Ok(disposition);
     }
     if state.active_shop.is_some() {
-        return Ok(handle_active_shop_key_input(state, key, suffix, game_dir));
+        let disposition = handle_active_shop_key_input(state, key, suffix, game_dir);
+        // `town-mode.md §7` step 4 / `shops.md §2`: the explicit Talk that
+        // opened this shop "receives normal town clock/scheduler processing"
+        // once the shop arm returns (playtest J16).
+        if state.active_shop.is_none() && std::mem::take(&mut state.pending_talk_shop_turn) {
+            let turn_before = state.turn;
+            state.advance_turn();
+            state.apply_top_down_post_turn_effects_after_turn(turn_before, game_dir)?;
+        }
+        return Ok(disposition);
     }
     if state.active_conversation.is_some() {
         return Ok(handle_active_conversation_key_input(state, key, suffix));

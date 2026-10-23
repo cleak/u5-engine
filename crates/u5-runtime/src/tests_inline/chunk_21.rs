@@ -2915,7 +2915,10 @@ fn town_raw_tlk_shop_trigger_opens_active_shop_session() {
         state.active_shop,
         Some(crate::shop_session::ActiveShopSession::ShipBroker(_))
     ));
-    assert_eq!(state.turn, 1);
+    // `town-mode.md §7` step 4: the Talk turn is spent when the shop arm
+    // returns, not before the greeting (playtest J16).
+    assert_eq!(state.turn, 0);
+    assert!(state.pending_talk_shop_turn);
 }
 
 #[test]
@@ -2976,7 +2979,10 @@ fn talk_shop_entry_uses_shared_preamble_record_when_shoppe_dat_is_loaded() {
     assert_eq!(state.message, "\n\"Guild preamble two. ");
     assert_eq!(state.prng_state, expected_prng);
     assert!(state.active_shop.is_some());
-    assert_eq!(state.turn, 1);
+    // `town-mode.md §7` step 4: the Talk turn is spent when the shop arm
+    // returns, not before the greeting (playtest J16).
+    assert_eq!(state.turn, 0);
+    assert!(state.pending_talk_shop_turn);
     let _ = fs::remove_dir_all(dir);
 }
 
@@ -6273,7 +6279,10 @@ fn talk_display_marker_tile_does_not_preempt_real_shop() {
     // to be asserted on the word "Ship", which only appeared because the
     // opening line carried an engine-internal `Dispatch family:` suffix.
     assert!(state.message.contains("now open"));
-    assert_eq!(state.turn, 1);
+    // `town-mode.md §7` step 4: the Talk turn is spent when the shop arm
+    // returns, not before the greeting (playtest J16).
+    assert_eq!(state.turn, 0);
+    assert!(state.pending_talk_shop_turn);
     assert!(matches!(
         state.active_shop,
         Some(ActiveShopSession::ShipBroker(_))
