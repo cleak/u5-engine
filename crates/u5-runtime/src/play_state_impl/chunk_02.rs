@@ -164,9 +164,15 @@ impl PlayState {
                 | Direction::NorthEast
                 | Direction::SouthWest
                 | Direction::SouthEast => {
-                    self.message =
-                        "Dungeon movement supports forward, back, and turns only.".to_string();
-                    handled!();
+                    // `dungeon-mode.md §4` step 3 routes only the four
+                    // cardinal codes (and Enter and `.`) to movement and
+                    // "everything else ... to the resident command
+                    // dispatcher"; `input.md §5` has diagonals "fall through
+                    // as non-movement input". The dispatcher's answer to an
+                    // unmapped key is the stock `What?\n` (`commands.md
+                    // §5.2`), which the caller prints. The engine printed an
+                    // invented four-row sentence here (playtest J03).
+                    return Ok(false);
                 }
             }
         }

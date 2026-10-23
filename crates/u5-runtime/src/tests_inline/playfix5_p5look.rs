@@ -124,3 +124,24 @@ fn playtest_j06_telescope_look_keeps_the_thou_dost_see_preamble() {
     state.look_through_telescope();
     assert_eq!(state.message, format!("{LOOK_RESULT_PREFIX}\nthe sun!"));
 }
+
+/// `dungeon-mode.md §4` step 3 routes only the cardinal codes, Enter and `.`
+/// to movement and "everything else ... to the resident command
+/// dispatcher"; `input.md §5` has diagonals "fall through as non-movement
+/// input", and `commands.md §5.2` answers "any unmapped key" with `What?\n`.
+/// Each diagonal therefore prints its own `What?`, never an invented sentence
+/// (J03).
+#[test]
+fn playtest_j03_dungeon_diagonal_keys_print_what() {
+    let dir = debug_game_dir();
+    let mut state = dungeon_state(open_dungeon_record(), 0, 1, 1);
+
+    handle_play_key_input(&mut state, char::from(INPUT_CODE_NORTHWEST), "", &dir).unwrap();
+    handle_play_key_input(&mut state, char::from(INPUT_CODE_SOUTHEAST), "", &dir).unwrap();
+
+    let texts = transcript_texts(&state).join("\n");
+    assert!(!texts.contains("Dungeon movement"), "{texts:?}");
+    assert_eq!(texts.matches("What?").count(), 2, "{texts:?}");
+    assert_eq!((state.player.x, state.player.y), (1, 1));
+    let _ = fs::remove_dir_all(dir);
+}
