@@ -2096,9 +2096,13 @@ impl PlayState {
     /// hours 6 through 17, selects the first healthy/poisoned member
     /// when necessary, and applies one point through the shared damage
     /// path. All other hours enter the night-sky overlay.
+    ///
+    /// The telescope is terrain-path row 2, so `view.md §3` entry-dispatch
+    /// row 3's shared "thou dost see" preamble has already been printed: the
+    /// row replaces only the description text (playtest J06).
     pub fn look_through_telescope(&mut self) {
         if !sky_view_is_daylight(self.clock.hour) {
-            self.activate_night_sky_overlay(None);
+            self.activate_night_sky_overlay(Some(LOOK_RESULT_PREFIX));
             return;
         }
 
@@ -2112,7 +2116,7 @@ impl PlayState {
         if let Some(slot) = self.active_player.filter(|slot| *slot < self.party.len()) {
             self.apply_shared_party_damage(slot, 1);
         }
-        self.message = "the sun!".to_string();
+        self.message = format!("{LOOK_RESULT_PREFIX}\nthe sun!");
     }
 
     /// `systems/view.md §4.2.2`: capture the eighty PRNG-selected stars

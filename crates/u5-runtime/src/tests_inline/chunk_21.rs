@@ -1019,7 +1019,7 @@ fn world_look_telescope_routes_to_night_sky() {
         MoveOutcome::Observed
     );
 
-    assert_eq!(state.message, "the night sky! ");
+    assert_eq!(state.message, format!("{LOOK_RESULT_PREFIX}\nthe night sky! "));
     assert!(!state.message.contains("telescope"));
     assert!(
         state
@@ -1067,7 +1067,7 @@ fn world_look_telescope_daylight_shows_sun_and_applies_damage() {
         MoveOutcome::Observed
     );
 
-    assert_eq!(state.message, "the sun!");
+    assert_eq!(state.message, format!("{LOOK_RESULT_PREFIX}\nthe sun!"));
     assert_eq!(state.active_player, Some(0));
     assert_eq!(state.party[0].hp, hp_before - 1);
     assert!(state.active_view_overlay.is_none());
@@ -1100,7 +1100,7 @@ fn town_look_telescope_enters_the_sky_renderer_instead_of_a_description() {
         MoveOutcome::Observed
     );
 
-    assert_eq!(state.message, "the night sky! ");
+    assert_eq!(state.message, format!("{LOOK_RESULT_PREFIX}\nthe night sky! "));
     assert!(!state.message.contains("telescope"));
     assert!(
         state
@@ -1139,7 +1139,7 @@ fn town_look_telescope_is_tested_above_the_wishing_well_row() {
 
     // The §4.2 daylight branch, not a coin-and-wish prompt and not a
     // LOOK2 description line.
-    assert_eq!(state.message, "the sun!");
+    assert_eq!(state.message, format!("{LOOK_RESULT_PREFIX}\nthe sun!"));
     assert_eq!(state.party[0].hp, hp_before - 1);
     assert!(state.active_wishing_well.is_none());
     let _ = fs::remove_dir_all(dir);

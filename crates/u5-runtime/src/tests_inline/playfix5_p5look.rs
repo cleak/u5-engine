@@ -103,3 +103,24 @@ fn playtest_j05_sign_look_prints_the_preamble_and_keeps_authored_rows() {
     );
     let _ = fs::remove_dir_all(dir);
 }
+
+/// `view.md §3`: the entry dispatch prints the shared "thou dost see"
+/// preamble at row 3, before row 6's terrain path, whose row 2 sends a
+/// telescope to the sky renderer "instead of printing any description
+/// text". Only the description is replaced, not the preamble (J06).
+#[test]
+fn playtest_j06_telescope_look_keeps_the_thou_dost_see_preamble() {
+    let mut state = test_state(open_grid(), 1, 1);
+
+    state.clock = GameClock::new(22, 0).unwrap();
+    state.look_through_telescope();
+    assert_eq!(
+        state.message,
+        format!("{LOOK_RESULT_PREFIX}\nthe night sky! ")
+    );
+
+    state.active_view_overlay = None;
+    state.clock = GameClock::new(10, 0).unwrap();
+    state.look_through_telescope();
+    assert_eq!(state.message, format!("{LOOK_RESULT_PREFIX}\nthe sun!"));
+}
