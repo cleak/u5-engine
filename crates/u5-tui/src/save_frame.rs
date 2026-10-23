@@ -730,6 +730,53 @@ mod tests {
         std::env::temp_dir().join(format!("u5-save-frame-{name}-{nonce}"))
     }
 
+    /// Playtest J25: `inventory.md §4.4` (u5-spec#299 Q12) - under the leaked
+    /// inverse the effect glyph comes out black on a light cell and each cap
+    /// keeps its black triangle, so the slot cells are laid opaque, black
+    /// pixels included, exactly as the Bevy shell lays them.
+    #[test]
+    fn save_screen_lays_the_leaked_effect_slot_cells_opaque() {
+        use u5_runtime::test_fixtures::{open_grid, test_state};
+        let mut state = test_state(open_grid(), 1, 1);
+        state.active_effect_tag = Some(b'P');
+        state.repaint_stats_panel();
+        state.stats_panel_window_inverse = true;
+        let slot = u5_runtime::stats_panel_opaque_effect_cell(&state).expect("leaked slot");
+        let mut cells = vec![slot];
+        cells.extend(u5_runtime::stats_panel_opaque_effect_cap_cells(&state));
+        assert_eq!(cells.len(), 3);
+
+        let (width, height) = (TEXT_WINDOW_RENDER_WIDTH, TEXT_WINDOW_RENDER_HEIGHT);
+        let chrome = [0u8, 0, 170, 0xff];
+        let mut rgba: Vec<u8> = chrome.repeat(width * height);
+        // The text raster: each slot cell is white with one black pixel - the
+        // glyph's stroke under the inverse.
+        let mut text = vec![0u8; width * height * 4];
+        let cell = u5_runtime::CH_CELL_SIDE;
+        for &(column, row) in &cells {
+            for y in 0..cell {
+                for x in 0..cell {
+                    let at = ((usize::from(row) * cell + y) * width + usize::from(column) * cell + x) * 4;
+                    let pixel = if (x, y) == (3, 3) { [0, 0, 0, 0xff] } else { [0xff; 4] };
+                    text[at..at + 4].copy_from_slice(&pixel);
+                }
+            }
+        }
+        overlay_panel_text_window_rgba(&mut rgba, &text, width, height, &state);
+        for &(column, row) in &cells {
+            let at = ((usize::from(row) * cell + 3) * width + usize::from(column) * cell + 3) * 4;
+            assert_eq!(&rgba[at..at + 4], &[0, 0, 0, 0xff], "cell ({column}, {row}) keeps its black");
+        }
+
+        // Without the leak the cells are not opaque: black lets chrome show.
+        state.stats_panel_window_inverse = false;
+        let mut plain: Vec<u8> = chrome.repeat(width * height);
+        overlay_panel_text_window_rgba(&mut plain, &text, width, height, &state);
+        let (column, row) = slot;
+        let at = ((usize::from(row) * cell + 3) * width + usize::from(column) * cell + 3) * 4;
+        assert_eq!(&plain[at..at + 4], &chrome);
+    }
+
     /// Playtest E66: the `--save-screen` compositor follows the Bevy shell's
     /// message-window rules. `endgame.md §5.1`'s greeting page waits for a key
     /// that is not a command (a bare cursor, no end cap), and the waiting
@@ -1129,12 +1176,7 @@ pub fn compose_gameplay_screen(
     // no-runes overload silently falls back to the text font, so the runic
     // cells rendered as whatever `IBM.CH` holds at that code.
     let text = u5_runtime::render_text_window_rgba_with_runes(&system, ibm, Some(runes))?;
-    for (dst, src) in rgba.chunks_exact_mut(4).zip(text.chunks_exact(4)) {
-        if src[0] == 0 && src[1] == 0 && src[2] == 0 {
-            continue;
-        }
-        dst.copy_from_slice(src);
-    }
+    overlay_panel_text_window_rgba(&mut rgba, &text, width, height, state);
 
     // Keep this in step with the Bevy shell's own message-window
     // assembly: this path exists so `--save-screen` is a native-resolution
@@ -1223,6 +1265,59 @@ pub fn compose_gameplay_screen(
         );
     }
     Ok(rgba)
+}
+
+/// Lay the panel text-window raster over the chrome.
+///
+/// Mirrors the Bevy shell's opaque cells (`render_visual_play_frame_over_viewport`):
+/// the picker's panel cells, and under the leaked inverse the timed-effect
+/// slot's glyph and caps, are whole text cells whose black pixels cover the
+/// chrome beneath (`inventory.md §4.4`, u5-spec#299 Q12). Every other cell
+/// lays only its non-black pixels. Overlaying only the non-black pixels
+/// everywhere drew the inverted `P` as a solid white cell and the caps
+/// without their black triangles (playtest J25).
+fn overlay_panel_text_window_rgba(
+    rgba: &mut [u8],
+    text: &[u8],
+    width: usize,
+    height: usize,
+    state: &PlayState,
+) {
+    let opaque_cells: Vec<(u8, u8)> = u5_runtime::picker_panel_opaque_cells(state)
+        .into_iter()
+        .chain(u5_runtime::stats_panel_opaque_effect_cell(state))
+        .chain(u5_runtime::stats_panel_opaque_effect_cap_cells(state))
+        .collect();
+    let cell = u5_runtime::CH_CELL_SIDE;
+    // The chrome a residue cell leaves to the band
+    // (`picker_residue_cell_chrome_columns`), saved before the text lands.
+    let kept_chrome: Vec<(usize, [u8; 4])> = opaque_cells
+        .iter()
+        .flat_map(|&(column, row)| {
+            let (x0, y0) = (usize::from(column) * cell, usize::from(row) * cell);
+            let keep = u5_runtime::picker_residue_cell_chrome_columns(state, column, row);
+            (y0..(y0 + cell).min(height))
+                .flat_map(move |y| (x0..(x0 + keep).min(width)).map(move |x| (y * width + x) * 4))
+        })
+        .map(|at| (at, [rgba[at], rgba[at + 1], rgba[at + 2], rgba[at + 3]]))
+        .collect();
+    for (dst, src) in rgba.chunks_exact_mut(4).zip(text.chunks_exact(4)) {
+        if src[0] == 0 && src[1] == 0 && src[2] == 0 {
+            continue;
+        }
+        dst.copy_from_slice(src);
+    }
+    for (column, row) in opaque_cells {
+        let (x0, y0) = (usize::from(column) * cell, usize::from(row) * cell);
+        for y in y0..(y0 + cell).min(height) {
+            let start = (y * width + x0) * 4;
+            let end = (y * width + (x0 + cell).min(width)) * 4;
+            rgba[start..end].copy_from_slice(&text[start..end]);
+        }
+    }
+    for (at, pixel) in kept_chrome {
+        rgba[at..at + 4].copy_from_slice(&pixel);
+    }
 }
 
 /// The raster that fills the gameplay viewport, chosen as the visual shell
