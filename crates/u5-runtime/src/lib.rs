@@ -1194,4 +1194,5 @@ mod tests {
     include!("tests_inline/playfix5_p5world.rs");
     include!("tests_inline/playfix6_p6town.rs");
     include!("tests_inline/playfix6_p6cmd.rs");
+    include!("tests_inline/playfix6_p6shop.rs");
 }
