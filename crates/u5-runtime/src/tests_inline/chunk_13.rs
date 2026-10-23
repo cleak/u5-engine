@@ -19405,6 +19405,10 @@ fn endgame_confirmation_gates_victory_on_final_answer_and_box_flag() {
     let dir = debug_game_dir();
     let mut missing_box = dungeon_state(open_dungeon_record(), 0, 1, 1);
     missing_box.enter_endgame();
+    // `endgame.md §5` step 1: the greeting's any-key wait comes first; the
+    // walk-in reads no key, so the first key only dismisses that page
+    // (playtest K09).
+    handle_play_key_input(&mut missing_box, ' ', "", &dir).unwrap();
 
     // A Yes claimed without the box ends the audience on that answer:
     // `endgame.md §5` step 4's explicit sandalwood question is not asked
@@ -19422,6 +19426,7 @@ fn endgame_confirmation_gates_victory_on_final_answer_and_box_flag() {
     // A No answer still gets the second question, box or no box.
     let mut refused = dungeon_state(open_dungeon_record(), 0, 1, 1);
     refused.enter_endgame();
+    handle_play_key_input(&mut refused, ' ', "", &dir).unwrap();
     assert_eq!(
         handle_play_key_input(&mut refused, 'N', "", &dir).unwrap(),
         PlayInputDisposition::Continue

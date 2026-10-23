@@ -6084,6 +6084,29 @@ fn handle_endgame_key_input(
             .push_back((key, suffix.to_string()));
         return Ok(PlayInputDisposition::Continue);
     }
+    // `endgame.md §4`/`§5`: the setup pass and its walk-in read no key, so
+    // a key that arrives while they still owe frames waits for the first
+    // read that follows - the greeting's any-key wait (`§5.1`). Settle the
+    // entry presentation first, which prints the greeting and opens that
+    // wait, and let this key satisfy it. It used to reach the yes/no read
+    // directly: record 1 never printed and the answer echo was glued to the
+    // greeting row (playtest K09). The holds those frames stage print
+    // nothing and precede the greeting, so they are spent here too, with the
+    // greeting kept in the slot it was composed into: left queued, they were
+    // emitted after the question and took the slot that the answer echo
+    // reads its `You reply: ` row from.
+    if state
+        .endgame
+        .as_ref()
+        .is_some_and(|endgame| !endgame.is_terminal())
+        && state.finish_endgame_entry_presentation() > 0
+    {
+        let greeting = std::mem::take(&mut state.message);
+        let greeting_flushed = std::mem::take(&mut state.message_flushed);
+        state.flush_staged_narration();
+        state.message = greeting;
+        state.message_flushed = greeting_flushed;
+    }
     // `endgame.md §5.1`'s blocking key read between pages. The greeting
     // is one page; the question that follows it is the next, and the
     // confirmation only reads once both are on screen.

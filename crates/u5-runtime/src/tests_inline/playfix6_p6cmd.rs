@@ -83,3 +83,60 @@ fn playtest_k21_yellow_potion_heal_amount_is_rolled() {
         .collect();
     assert!(amounts.len() > 4, "{amounts:?}");
 }
+
+/// `endgame.md §5` step 1: "Print the greeting, wait for any key, print the
+/// first box question; accept and echo Yes or No", and `§5.1`: the accepted
+/// answer "is echoed ... as the literal `Yes` or `No` followed by a blank
+/// line". The setup walk-in reads no key, so a key pressed while it still
+/// owes frames can only satisfy the greeting's any-key wait. Playtest K09:
+/// such a key was taken as the yes/no answer, record 1 never printed, and
+/// the echo was glued to the greeting row (or lost after a later key).
+#[test]
+fn playtest_k09_a_key_during_the_walk_in_only_dismisses_the_greeting_page() {
+    let dir = debug_game_dir();
+    let mut settled = endgame_window_walked_in_state();
+    while settled.advance_endgame_display_frame() {
+        settled.flush_staged_narration();
+    }
+    handle_play_key_input(&mut settled, 'x', "", &dir).unwrap();
+    settled.flush_staged_narration();
+    let expected = endgame_window_shell_rows(&settled);
+    assert_eq!(expected.last().map(String::as_str), Some("You reply:_"));
+
+    // Every early point in the walk-in, the way the shell pumps it: one frame
+    // then the staged holds played out, until a key arrives.
+    let mut owed = 0;
+    let mut probe = endgame_window_walked_in_state();
+    while probe.advance_endgame_display_frame() {
+        probe.flush_staged_narration();
+        owed += 1;
+    }
+    assert!(owed > 2, "the walk-in owes several frames");
+    for early in 1..owed {
+        let mut state = endgame_window_walked_in_state();
+        for _ in 0..early {
+            assert!(state.advance_endgame_display_frame());
+            state.flush_staged_narration();
+        }
+        handle_play_key_input(&mut state, 'x', "", &dir).unwrap();
+        state.flush_staged_narration();
+        assert_eq!(
+            endgame_window_shell_rows(&state),
+            expected,
+            "key after {early} of {owed} frames"
+        );
+        handle_play_key_input(&mut state, 'q', "", &dir).unwrap();
+        handle_play_key_input(&mut state, 'y', "", &dir).unwrap();
+        state.flush_staged_narration();
+        let rows = endgame_window_shell_rows(&state);
+        assert!(
+            rows.iter().any(|row| row == "You reply: Yes"),
+            "key after {early} of {owed} frames: {rows:?}"
+        );
+        assert!(
+            rows.iter().all(|row| !row.contains("!\"Yes")),
+            "the echo is not glued to the greeting: {rows:?}"
+        );
+    }
+    let _ = fs::remove_dir_all(dir);
+}
