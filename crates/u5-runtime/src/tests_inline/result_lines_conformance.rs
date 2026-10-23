@@ -685,3 +685,19 @@ fn a_defeated_party_awaiting_the_rescue_draws_no_cursor() {
     state.message_row_open_mid_line = true;
     assert!(!state.message_window_cursor_suppressed(), "the rescue's key read");
 }
+
+/// `dungeon-mode.md §8.1` "Search outcomes": "The field classes reuse the
+/// L-Look wording of this section" (playtest K22) - the article included.
+#[test]
+fn dungeon_search_on_a_field_reuses_the_look_wording() {
+    for (tile, line) in [
+        (0x80u8, "a sleep field"),
+        (0x81, "a poison gas field"),
+        (0x82, "a wall of fire"),
+        (0x83, "an electric field"),
+        (0x8B, "an energy field"),
+    ] {
+        assert_eq!(dungeon_search_description(tile), line, "{tile:#04x}");
+        assert_eq!(dungeon_search_description(tile), dungeon_look_description(tile));
+    }
+}
