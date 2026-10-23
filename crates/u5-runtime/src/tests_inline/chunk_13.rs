@@ -25552,7 +25552,9 @@ fn dungeon_l_inline_relative_focus_wraps_level_coordinates() {
     );
 
     assert!(state.message.contains("wooden chest"));
-    assert_eq!(state.turn, 0);
+    // `dungeon-mode.md §12`: L-Look "retains the resident dispatcher's acted
+    // result" and selects the ordinary dungeon post-action pass (J08).
+    assert_eq!(state.turn, 1);
 }
 
 #[test]

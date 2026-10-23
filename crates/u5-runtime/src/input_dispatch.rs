@@ -75,6 +75,11 @@ fn run_with_command_epilogue(
     state.stats_panel_command_baseline = crate::stats_panel::stats_panel_snapshot_of(state);
     let mut combat_was_active = state.combat_active;
     let mut result = command(state);
+    if result.is_ok() {
+        if let Err(error) = settle_dungeon_acted_charge(state, game_dir) {
+            result = Err(error);
+        }
+    }
     // `combat.md §8.1`: the turn banner is "emitted at the start of every
     // keyboard-driven combatant's turn, *before any key is read*". A
     // committed combat action already drives the walker to the next prompt
@@ -195,6 +200,32 @@ fn run_with_command_epilogue(
         }
     }
     result
+}
+
+/// `commands.md §3` / `dungeon-mode.md §4` step 6: once a dungeon letter
+/// that reports the default "acted" has closed its last prompt, charge the
+/// turn its handler did not take and run the dungeon post-action pass - the
+/// 1-in-16 wake roll and the active monster's step - before the next key is
+/// read (playtest J08). The dungeon loop advanced the minute at its head
+/// ([`PlayState::advance_dungeon_loop_minute`]), so the charge adds no
+/// second minute. A fight or a scene change ends the obligation.
+fn settle_dungeon_acted_charge(state: &mut PlayState, game_dir: &Path) -> io::Result<()> {
+    let Some(turn_before) = state.dungeon_acted_turn_before else {
+        return Ok(());
+    };
+    if !state.combat_active && !next_key_is_a_command(state) {
+        return Ok(());
+    }
+    state.dungeon_acted_turn_before = None;
+    if state.combat_active
+        || !matches!(state.area, Area::Dungeon { .. })
+        || state.turn != turn_before
+    {
+        return Ok(());
+    }
+    state.advance_turn();
+    state.apply_top_down_post_turn_effects_after_turn(turn_before, game_dir)?;
+    Ok(())
 }
 
 /// Whether the next key the shell reads is an ordinary command key: no

@@ -145,3 +145,28 @@ fn playtest_j03_dungeon_diagonal_keys_print_what() {
     assert_eq!((state.player.x, state.player.y), (1, 1));
     let _ = fs::remove_dir_all(dir);
 }
+
+/// `commands.md §3`: "Most letters discard whatever their handler returned
+/// and report the default \"acted\"" and the dungeon loop "[t]ests only \"is
+/// it non-zero\", which selects the dungeon's post-action pass"; "The `E`
+/// refusal inside a town or dungeon retains the default **acted** result".
+/// So E, T and F refusals underground each spend the turn that drives the
+/// post-action pass (the wake roll and the monster step), and the loop-head
+/// minute is not charged twice (J08).
+#[test]
+fn playtest_j08_dungeon_acted_refusals_spend_the_post_action_turn() {
+    let dir = debug_game_dir();
+    let mut state = dungeon_state(open_dungeon_record(), 0, 1, 1);
+    let clock_before = state.clock;
+
+    for key in ['E', 'T', 'F'] {
+        let turn_before = state.turn;
+        handle_play_key_input(&mut state, key, "", &dir).unwrap();
+        assert_eq!(state.turn, turn_before + 1, "{key} must report acted");
+    }
+
+    let mut expected = clock_before;
+    expected.advance_minutes(3);
+    assert_eq!(state.clock, expected, "one loop-head minute per command");
+    let _ = fs::remove_dir_all(dir);
+}
