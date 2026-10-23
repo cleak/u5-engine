@@ -197,3 +197,34 @@ fn playtest_j09_fire_view_and_outdoor_talk_refusals_spend_a_turn() {
     }
     let _ = fs::remove_dir_all(dir);
 }
+
+/// `input.md §6`: lowercase ASCII letters are folded to uppercase before
+/// dispatch, and `commands.md §5.2` gives every dispatcher arm its verb echo.
+/// The legacy lowercase diagonal letters must therefore echo `Z-stats...`,
+/// `Cast...` and `New Order` like their uppercase twins, not the diagonal's
+/// empty movement echo (J29).
+#[test]
+fn playtest_j29_lowercase_diagonal_letters_echo_their_verb() {
+    for key in ['z', 'c', 'n', 'y', 'u', 'b'] {
+        let upper = key.to_ascii_uppercase();
+        assert_eq!(
+            top_down_command_echo(key).map(|echo| echo.text),
+            top_down_command_echo(upper).map(|echo| echo.text),
+            "{key}"
+        );
+        assert!(top_down_command_echo(key).is_some(), "{key}");
+    }
+    // The cardinal harness letters keep their movement echo.
+    assert_eq!(top_down_command_echo('w').map(|echo| echo.text), Some("North"));
+
+    let dir = debug_game_dir();
+    let mut state = britannia_state(open_world_grid(), 5, 5);
+    handle_play_key_input(&mut state, 'z', "", &dir).unwrap();
+    let texts = transcript_texts(&state);
+    assert_eq!(
+        texts.first().map(String::as_str),
+        top_down_command_echo('Z').map(|echo| echo.text),
+        "{texts:?}"
+    );
+    let _ = fs::remove_dir_all(dir);
+}

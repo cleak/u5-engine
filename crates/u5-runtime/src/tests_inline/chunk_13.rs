@@ -26229,10 +26229,12 @@ fn top_down_lowercase_vi_and_wasd_movement_still_routes_before_commands() {
             (5, 5),
             "diagonal key {key} stepped the party"
         );
+        // The letter now opens its verb echo like its uppercase twin
+        // (playtest J29), so the prompt may sit on the echo's row.
+        let shown = format!("{}\n{}", transcript_texts(&state).join("\n"), state.message);
         assert!(
-            state.message.contains(expected_message),
-            "{key} reported `{}`",
-            state.message
+            shown.contains(expected_message),
+            "{key} reported `{shown}`"
         );
     }
 }

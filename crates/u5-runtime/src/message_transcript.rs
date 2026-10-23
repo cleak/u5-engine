@@ -1409,7 +1409,13 @@ pub fn top_down_command_echo(key: char) -> Option<CommandEcho> {
     if key.is_ascii_uppercase() {
         return command_for_letter(key as u8).and_then(unassigned_or(key, surface));
     }
-    if let Some(direction) = Direction::from_play_key(key) {
+    // Only a cardinal key is movement here (`movement.md §2`). The legacy
+    // lowercase diagonal letters `y`, `u`, `b`, `z`, `n` and `c` reach the
+    // letter dispatcher, which folds them to uppercase (`input.md §6`), so
+    // they echo their verb exactly as the uppercase letter does - the
+    // diagonal's empty movement echo swallowed `Z-stats...`, `Cast...` and
+    // `New Order` (playtest J29).
+    if let Some(direction) = Direction::from_play_key(key).filter(|d| d.is_cardinal()) {
         return movement_echo(direction);
     }
     if key.is_ascii_alphabetic() {
