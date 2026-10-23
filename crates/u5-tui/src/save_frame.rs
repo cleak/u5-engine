@@ -520,15 +520,12 @@ fn save_frame_suite_intro_menu(out: &Path) -> io::Result<SavedFrameReport> {
         "Ultima V",
         "",
         "Intro Menu",
-        "  J  Journey Onward",
-        "  C  Create New Character",
-        "  T  Transfer from Ultima IV",
-        "  U  Ultima V Introduction",
-        "  A  Acknowledgements",
-        "  R  Return to View",
-        "",
-        "Selection:",
     ]
+    .into_iter()
+    .map(str::to_string)
+    .chain(crate::intro_loop::intro_menu_text_rows())
+    .chain(["", "Selection:"].into_iter().map(str::to_string))
+    .collect::<Vec<_>>()
     .join("\n");
     save_text_window_report(out, "intro text window", &text, None)
 }
