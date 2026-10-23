@@ -2248,6 +2248,10 @@ fn handle_active_shop_key_input(
                     quantity_entry_pending = true;
                 }
             }
+            // `shops.md §8.C`, "Enough-drink answer": "N prints `No!` and
+            // proceeds with the purchase". Set by that arm so the echo can
+            // land on the question's open row before the purchase text.
+            let mut enough_drink_refused = false;
             let outcome = match (*s, yes, no, inline_digit) {
                 (TavernState::Greeting { .. }, _, _, _) => step_tavern(
                     s,
@@ -2306,6 +2310,7 @@ fn handle_active_shop_key_input(
                     // fourth purchase performs any affordability check.
                     state.town_drunkenness_counter = 25;
                     state.moral_standing = state.moral_standing.saturating_sub(1);
+                    enough_drink_refused = true;
                     *s = TavernState::Menu {
                         tavern,
                         continuation_ready,
@@ -2439,6 +2444,19 @@ fn handle_active_shop_key_input(
             if matches!(outcome, TavernOutcome::Continued { .. }) {
                 state.emit_message_line_continuing_row("Yes");
                 state.push_explicit_blank_message_entry();
+            }
+            // `shops.md §8.C`, "Enough-drink answer": the question ends
+            // `to drink?" ` with no line feed, so both answers continue that
+            // row - "Y prints `Yes\n\n` and returns to continuation. N prints
+            // `No!` and proceeds with the purchase". The engine put `Yes` on
+            // a row of its own and printed no `No!` at all (playtest K24,
+            // K25).
+            if matches!(outcome, TavernOutcome::DeclinedEnoughDrink) {
+                state.emit_message_line_continuing_row("Yes");
+                state.push_explicit_blank_message_entry();
+            }
+            if enough_drink_refused {
+                state.emit_message_line_continuing_row("No!");
             }
             let tavern_vendor_name = match state.area {
                 Area::Town { scene, .. } => crate::play_state_impl::shop_vendor_name_for_scene(
@@ -4934,7 +4952,9 @@ fn format_tavern_outcome(
         ),
         // `shops.md §8.C` "Enough-drink answer": "Y prints `Yes\n\n` and
         // returns to continuation."
-        DeclinedEnoughDrink => format!("Yes\n\n{TAVERN_ANYTHING_ELSE_PROMPT}"),
+        // The `Yes` itself is echoed onto the question's row by the
+        // dispatcher.
+        DeclinedEnoughDrink => TAVERN_ANYTHING_ELSE_PROMPT.to_string(),
         // Measured: the served drink draws one gendered line, and the price
         // is not repeated back.
         // `shops.md §8.C`: the accepted choice's line, then for a paid
