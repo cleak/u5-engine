@@ -2875,7 +2875,10 @@ fn town_talk_reports_public_shop_trigger_dispatch_family() {
     assert!(state.message.contains("The Oaken Oar"));
     assert!(state.active_shop.is_some());
     assert!(!state.message.contains("out of scope"));
-    assert_eq!(state.turn, 1);
+    // `town-mode.md §7` step 4: the Talk turn is spent when the shop arm
+    // returns, not before the greeting (playtest J16).
+    assert_eq!(state.turn, 0);
+    assert!(state.pending_talk_shop_turn);
 }
 
 #[test]
@@ -4511,7 +4514,10 @@ fn town_talk_horse_mounted_still_reaches_horse_trader() {
 
     assert!(state.message.contains("Horse & Rider"));
     assert!(state.active_shop.is_some());
-    assert_eq!(state.turn, 1);
+    // `town-mode.md §7` step 4: the Talk turn is spent when the shop arm
+    // returns, not before the greeting (playtest J16).
+    assert_eq!(state.turn, 0);
+    assert!(state.pending_talk_shop_turn);
 }
 
 #[test]

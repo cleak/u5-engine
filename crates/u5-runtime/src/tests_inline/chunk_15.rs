@@ -1630,14 +1630,16 @@
         assert_eq!(state.clock, clock_before);
         assert!(!state.talk_entered_by_contact);
 
-        // Explicit Talk makes the same edit and is an ordinary acted turn.
+        // Explicit Talk makes the same edit and is an ordinary acted turn,
+        // spent when the shop arm returns (`town-mode.md §7` step 4,
+        // playtest J16).
         let mut state = test_state(open_grid(), 5, 5);
         state.load_scheduled_npcs(&[idle(), keeper(4)]);
         state.player.facing = Direction::East;
-        let clock_before = state.clock;
         state.talk_facing_with_dialogue(&HashMap::new());
         assert_eq!(ai_at_cached_wp(&state), 1);
-        assert_ne!(state.clock, clock_before);
+        assert!(state.active_shop.is_some());
+        assert!(state.pending_talk_shop_turn);
         let _ = fs::remove_dir_all(dir);
     }
 
