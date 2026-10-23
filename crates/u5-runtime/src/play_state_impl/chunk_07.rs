@@ -4616,6 +4616,15 @@ impl PlayState {
         if floor < 0 {
             return Ok(None);
         }
+        // `npc-schedules.md §9.2` / `commands.md §3`: contact is handled in
+        // the epilogue *after* the command, so it adds to that command's
+        // output and never replaces it. Push, Open, Jimmy and Attack leave
+        // their result (`Won't budge!`, `Nothing to open!`, ...) in the
+        // message slot for the turn boundary's flush, and the conversation
+        // and brush-off arms below overwrite that slot - the result line
+        // was lost whenever a contact fired on the same turn (playtest
+        // K16). Commit it to the transcript first.
+        self.flush_message_slot();
         let npc_slot = event.npc_slot;
         let behavior = event.behavior;
         let Some(type_byte) = self

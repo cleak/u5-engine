@@ -86,3 +86,48 @@ fn p6town_arrest_wait_to_morning_runs_no_schedule_pass() {
     assert_eq!(state.clock.hour, 8);
     assert_eq!(g6_pos(&state, 0), (15, 5), "no NPC moves during the wait");
 }
+
+/// Playtest K16. `npc-schedules.md §9.2` / `commands.md §3`: contact is
+/// evaluated in the town epilogue *after* the command, so a conversation it
+/// opens follows the command's own result instead of replacing it.
+#[test]
+fn p6town_contact_conversation_keeps_the_commands_result_line() {
+    let dir = debug_game_dir();
+    let keeper = NpcSlot {
+        slot: 1,
+        type_byte: 0x54,
+        dialog_id: 0x81,
+        schedule: [4, 4, 4, 6, 6, 6, 5, 5, 5, 0, 0, 0, 0, 8, 16, 20],
+        name: None,
+    };
+    let idle = NpcSlot {
+        slot: 0,
+        type_byte: 0,
+        dialog_id: 0,
+        schedule: [0; 16],
+        name: None,
+    };
+    let mut state = test_state(open_grid(), 5, 5);
+    let Area::Town { scene, floor } = state.area else {
+        unreachable!()
+    };
+    state.load_scheduled_npcs(&[idle, keeper]);
+    state.begin_command_echo(top_down_command_echo('O').unwrap());
+    state.message = "Nothing to open!".to_string();
+    state.advance_npc_schedules();
+    assert!(state.pending_town_npc_contact.is_some());
+    let outcome = state.apply_town_npc_contact_event(scene, floor, &dir).unwrap();
+    assert!(outcome.is_some());
+    assert!(state.diagnostics_contain("opens conversation contact"));
+    state.flush_message_slot();
+    let rows: Vec<String> = state
+        .message_entries()
+        .iter()
+        .map(|entry| entry.text.clone())
+        .collect();
+    assert!(
+        rows.iter().any(|row| row.ends_with("Nothing to open!")),
+        "the command's result survives the contact: {rows:?}"
+    );
+    let _ = fs::remove_dir_all(dir);
+}
