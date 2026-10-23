@@ -3778,7 +3778,7 @@ fn handle_arms_shop_key_input(
             })
         }
         (ArmsShopState::BuyConfirm { .. } | ArmsShopState::SellConfirm { .. }, true, _, _) => {
-            emit_sell_confirm_echo(state, prior_state, "Yes");
+            emit_arms_confirm_echo(state, prior_state, "Yes");
             step_arms_shop(
                 shop_state,
                 ArmsShopInput::Confirm(true),
@@ -3789,7 +3789,7 @@ fn handle_arms_shop_key_input(
             )
         }
         (ArmsShopState::BuyConfirm { .. } | ArmsShopState::SellConfirm { .. }, _, true, _) => {
-            emit_sell_confirm_echo(state, prior_state, "No");
+            emit_arms_confirm_echo(state, prior_state, "No");
             step_arms_shop(
                 shop_state,
                 ArmsShopInput::Confirm(false),
@@ -3940,7 +3940,10 @@ fn handle_arms_shop_key_input(
                 arms_post_item_prompt(speech.speaker_is_female, state.arms_transaction_completed);
             let listing = format_arms_stock_buy_menu(table, None);
             let call = arms_stock_call_for_roll(state.random_range_u8(0, 3));
-            format!("{post}\n\n{listing}\n{call}")
+            // `shops.md §8.A`, "Arms buy decline echo": "`N` prints `No`
+            // followed by a blank line". The `No` continues the prompt's
+            // row; the first feed closes it, the second is the blank.
+            format!("\n\n{post}\n\n{listing}\n{call}")
         }
         (ArmsShopOutcome::Declined, _) if matches!(shop_state, ArmsShopState::SellPickItem(_)) => {
             // The `No` is echoed onto the open `Deal?" ` row above, not
@@ -4482,8 +4485,8 @@ fn render_shared_shoppe_flourish(game_dir: &Path, record_id: usize) -> Option<St
 /// leave have only ever drawn `0..3`. The bands read that way too - `0..3` are
 /// the dismissals and `4..7` the warm send-offs - which is the sentiment split
 /// the two outcome rows describe.
-/// Echo the accepted `Y`/`N` onto the row the sell quote's `Deal?" ` tail left
-/// the cursor on.
+/// Echo the accepted `Y`/`N` onto the row the sell quote's `Deal?" ` tail, or
+/// the buy quote's confirmation prompt, left the cursor on.
 ///
 /// `shops.md` §8.A's "Shared `Y`/`N` prompt primitive" row: the prompt "loops
 /// until uppercase `Y` or `N`; `Y` echoes the resident `Yes` literal and `N`
@@ -4492,17 +4495,19 @@ fn render_shared_shoppe_flourish(game_dir: &Path, record_id: usize) -> Option<St
 /// `Deal?" No` and `Deal?" Yes` on one row. This engine printed the `No` on a
 /// row of its own and omitted the `Yes` entirely, so the sell transcript ran a
 /// row short of the original from the first quote onward.
-///
-/// The buy side already echoes its own decline through a different path, so
-/// only the sell confirmation is echoed here.
-fn emit_sell_confirm_echo(
+fn emit_arms_confirm_echo(
     state: &mut PlayState,
     prior_state: crate::shop_runtime::ArmsShopState,
     echo: &str,
 ) {
+    // `shops.md §8.1`: "`N` echoes `No` ... `Y` echoes `Yes` and first
+    // checks whether the carried equipment counter ... is already `99`" -
+    // the buy confirmation echoes on its prompt's open row the same as the
+    // sell `Deal?" ` does. The buy side printed nothing (playtest K07, K26).
     if matches!(
         prior_state,
         crate::shop_runtime::ArmsShopState::SellConfirm { .. }
+            | crate::shop_runtime::ArmsShopState::BuyConfirm { .. }
     ) {
         state.emit_message_line_continuing_row(echo.to_string());
     }
@@ -8405,8 +8410,10 @@ mod arms_shop_resident_literal_tests {
                 handle_active_shop_key_input(&mut state, key, "", game_dir());
             }
             let rendered = state.message.clone();
+            // `shops.md §8.A`: the `No` echo is followed by a blank line,
+            // so two feeds lead the prompt (playtest K07).
             assert!(
-                rendered.starts_with(&format!("\"Anything else, {suffix}")),
+                rendered.starts_with(&format!("\n\n\"Anything else, {suffix}")),
                 "declined quote with completed={completed} rendered {rendered:?}"
             );
         }
