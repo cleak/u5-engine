@@ -80,14 +80,14 @@ fn playtest_f28_a_combat_potion_binds_the_acting_combatant_without_on_who() {
     state.potion_stock[POTION_YELLOW_INDEX] = 1;
     // Pin the bottle's variation roll to its own colour for party slot 1 so
     // the heal can be read off the bound member.
-    let hour = (0..24u8)
-        .find(|hour| {
-            state.clock.hour = *hour;
-            state.potion_variation_roll(POTION_YELLOW_INDEX, 1)
-                <= POTION_VARIATION_SELECTED_THRESHOLD
+    let seed = (1..=u16::MAX)
+        .find(|seed| {
+            let mut probe = state.clone();
+            probe.prng_state = *seed;
+            probe.potion_variation_roll() <= POTION_VARIATION_SELECTED_THRESHOLD
         })
-        .expect("some hour keeps the selected colour");
-    state.clock.hour = hour;
+        .expect("some seed keeps the selected colour");
+    state.prng_state = seed;
 
     combat2b_use_row(
         &mut state,
@@ -412,14 +412,14 @@ fn playtest_f28_a_combat_potion_binds_the_roster_member_of_a_packed_descriptor()
     state.combat_actors[1].owner_target_class = 2;
     state.party[0].hp = 5;
     state.potion_stock[POTION_YELLOW_INDEX] = 1;
-    let hour = (0..24u8)
-        .find(|hour| {
-            state.clock.hour = *hour;
-            state.potion_variation_roll(POTION_YELLOW_INDEX, 2)
-                <= POTION_VARIATION_SELECTED_THRESHOLD
+    let seed = (1..=u16::MAX)
+        .find(|seed| {
+            let mut probe = state.clone();
+            probe.prng_state = *seed;
+            probe.potion_variation_roll() <= POTION_VARIATION_SELECTED_THRESHOLD
         })
-        .expect("some hour keeps the selected colour");
-    state.clock.hour = hour;
+        .expect("some seed keeps the selected colour");
+    state.prng_state = seed;
 
     combat2b_use_row(
         &mut state,
