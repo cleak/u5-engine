@@ -2252,7 +2252,7 @@ fn world_attack_reports_published_base_combat_class_from_sprite_run() {
 }
 
 #[test]
-fn ship_fire_requires_ship_and_inline_broadside_direction_without_turn() {
+fn ship_fire_requires_ship_and_inline_broadside_direction() {
     let mut foot = world_state(open_world_grid(), 5, 5);
 
     assert_eq!(
@@ -2282,26 +2282,18 @@ fn ship_fire_requires_ship_and_inline_broadside_direction_without_turn() {
     assert_eq!(ship.turn, 0);
     ship.active_direction_prompt = None;
 
-    assert_eq!(
-        ship.fire_ship_broadside(Some(Direction::NorthEast)),
-        MoveOutcome::Blocked
-    );
-    assert_eq!(ship.message, "Fire broadsides only!");
-    assert_eq!(ship.turn, 0);
-
-    assert_eq!(
-        ship.fire_ship_broadside(Some(Direction::East)),
-        MoveOutcome::Blocked
-    );
-    assert_eq!(ship.message, "Fire broadsides only!");
-    assert_eq!(ship.turn, 0);
-
-    assert_eq!(
-        ship.fire_ship_broadside(Some(Direction::West)),
-        MoveOutcome::Blocked
-    );
-    assert_eq!(ship.message, "Fire broadsides only!");
-    assert_eq!(ship.turn, 0);
+    // `commands.md §3`: F does not forward its handler's value, so every
+    // bow/stern refusal reports "acted" and costs the outdoor turn
+    // (playtest K18).
+    for (expected_turn, direction) in [
+        (1, Direction::NorthEast),
+        (2, Direction::East),
+        (3, Direction::West),
+    ] {
+        assert_eq!(ship.fire_ship_broadside(Some(direction)), MoveOutcome::Blocked);
+        assert_eq!(ship.message, "Fire broadsides only!");
+        assert_eq!(ship.turn, expected_turn, "{direction:?}");
+    }
 }
 
 #[test]

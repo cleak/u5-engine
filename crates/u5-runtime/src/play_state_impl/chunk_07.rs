@@ -3031,15 +3031,20 @@ impl PlayState {
         let Some(direction) = direction else {
             return self.start_fire_direction_prompt();
         };
-        let Some(ship_facing) = self.player.facing.cardinal_facing_index() else {
-            self.message = "Fire broadsides only!".to_string();
-            return MoveOutcome::Blocked;
-        };
-        let Some(fire_direction) = direction.cardinal_facing_index() else {
-            self.message = "Fire broadsides only!".to_string();
-            return MoveOutcome::Blocked;
-        };
-        if !ship_broadside_direction_accepted(ship_facing, fire_direction) {
+        // `vehicles.md §7` step 3 gives the bow/stern refusal only its text,
+        // and `commands.md §3` does not forward F's handler value, so the
+        // refusal reports "acted" and costs the outdoor turn like every other
+        // F outcome (playtest K18).
+        let broadside = self
+            .player
+            .facing
+            .cardinal_facing_index()
+            .zip(direction.cardinal_facing_index())
+            .is_some_and(|(ship_facing, fire_direction)| {
+                ship_broadside_direction_accepted(ship_facing, fire_direction)
+            });
+        if !broadside {
+            self.advance_turn();
             self.message = "Fire broadsides only!".to_string();
             return MoveOutcome::Blocked;
         }
