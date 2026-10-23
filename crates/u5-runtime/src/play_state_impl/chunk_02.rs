@@ -110,6 +110,23 @@ impl PlayState {
         // word." The snapshot is taken after the loop-head minute so the pass
         // still keys on whether the command itself consumed a turn.
         let turn_before = self.turn;
+        // `commands.md §3`: "Most letters discard whatever their handler
+        // returned and report the default \"acted\"", and the dungeon loop
+        // "[t]ests only \"is it non-zero\", which selects the dungeon's
+        // post-action pass". These letters neither forward (`A`, `B`, `C`,
+        // `K`, `Y`) nor are published "no action" producers (`D`, `W`, `Q`,
+        // dungeon `P`, digits); `E`'s dungeon refusal "retains the default
+        // acted result" and `dungeon-mode.md §12` says the same of L-Look
+        // "even if its focus prompt is cancelled". The command epilogue
+        // charges the turn once the letter's last prompt has closed if the
+        // handler did not (playtest J08).
+        if matches!(
+            key.to_ascii_lowercase(),
+            'e' | 'f' | 'g' | 'h' | 'i' | 'j' | 'l' | 'm' | 'n' | 'o' | 'r' | 's' | 't' | 'u'
+                | 'v' | 'x' | 'z'
+        ) {
+            self.dungeon_acted_turn_before = Some(turn_before);
+        }
         macro_rules! handled {
             ($outcome:expr) => {{
                 let outcome = $outcome;
@@ -164,9 +181,15 @@ impl PlayState {
                 | Direction::NorthEast
                 | Direction::SouthWest
                 | Direction::SouthEast => {
-                    self.message =
-                        "Dungeon movement supports forward, back, and turns only.".to_string();
-                    handled!();
+                    // `dungeon-mode.md §4` step 3 routes only the four
+                    // cardinal codes (and Enter and `.`) to movement and
+                    // "everything else ... to the resident command
+                    // dispatcher"; `input.md §5` has diagonals "fall through
+                    // as non-movement input". The dispatcher's answer to an
+                    // unmapped key is the stock `What?\n` (`commands.md
+                    // §5.2`), which the caller prints. The engine printed an
+                    // invented four-row sentence here (playtest J03).
+                    return Ok(false);
                 }
             }
         }
@@ -494,17 +517,22 @@ impl PlayState {
                 'E' => {
                     handled!(self.enter_current_location(game_dir)?);
                 }
+                // `commands.md §3`: `F` and `V` keep the default "acted" on
+                // every exit, refusals included (playtest J09); see the
+                // lowercase arms below.
                 'F' => {
-                    if let Some(direction) = inline_direction {
-                        handled!(self.fire_command(Some(direction), game_dir)?);
+                    let outcome = if let Some(direction) = inline_direction {
+                        self.fire_command(Some(direction), game_dir)?
                     } else if matches!(
                         (self.area, self.player.transport),
                         (Area::World { .. }, TransportState::Ship { .. })
                     ) {
-                        handled!(self.start_fire_direction_prompt());
+                        self.start_fire_direction_prompt()
                     } else {
-                        handled!(self.fire_command(None, game_dir)?);
-                    }
+                        self.fire_command(None, game_dir)?
+                    };
+                    self.charge_tile_command_acted_exit(turn_before);
+                    handled!(outcome);
                 }
                 'G' => {
                     if let Some(direction) = inline_direction {
@@ -623,7 +651,9 @@ impl PlayState {
                     handled!(outcome);
                 }
                 'V' => {
-                    handled!(self.view_gem());
+                    let outcome = self.view_gem();
+                    self.charge_tile_command_acted_exit(turn_before);
+                    handled!(outcome);
                 }
                 'X' => {
                     handled!(self.dungeon_exit_vehicle_command(game_dir)?);
@@ -693,11 +723,19 @@ impl PlayState {
                     self.look_facing_with_game_dir(game_dir)?
                 }
             }
-            'v' => self.view_gem(),
+            // `commands.md §3`: `V` and `F` neither forward their handler's
+            // value nor are "no action" producers, so every exit - `You have
+            // none!`, `Fire` / `What?` - keeps the default "acted" and the
+            // mode loop runs its per-turn epilogue (playtest J09).
+            'v' => {
+                let outcome = self.view_gem();
+                self.charge_tile_command_acted_exit(turn_before);
+                outcome
+            }
             'i' => self.ignite_torch(),
             'h' => self.hole_up_command(game_dir, inline_rest)?,
             'f' => {
-                if let Some(direction) = inline_direction {
+                let outcome = if let Some(direction) = inline_direction {
                     self.fire_command(Some(direction), game_dir)?
                 } else if matches!(
                     (self.area, self.player.transport),
@@ -706,7 +744,9 @@ impl PlayState {
                     self.start_fire_direction_prompt()
                 } else {
                     self.fire_command(None, game_dir)?
-                }
+                };
+                self.charge_tile_command_acted_exit(turn_before);
+                outcome
             }
             'p' => {
                 if let Some(direction) = inline_direction {

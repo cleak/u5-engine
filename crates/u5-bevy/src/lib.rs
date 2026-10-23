@@ -14002,18 +14002,17 @@ fn summarize_intro(intro: &mut VisualIntroState) -> String {
         );
     }
 
-    let mut lines = vec![
-        "Ultima V".to_string(),
-        String::new(),
-        "J  Journey Onward".to_string(),
-        "C  Create New Character".to_string(),
-        "T  Transfer from Ultima IV".to_string(),
-        "U  Ultima V Introduction".to_string(),
-        "A  Acknowledgements".to_string(),
-        "R  Return to View".to_string(),
-        String::new(),
-        "Esc quits visual intro".to_string(),
-    ];
+    // `intro.md §6.2`: the labels are the full names; `Return to View` was
+    // an invented abbreviation (playtest J13). Read them from the menu's own
+    // label table so the two cannot drift.
+    let mut lines = vec!["Ultima V".to_string(), String::new()];
+    lines.extend(
+        INTRO_MENU_LABELS
+            .iter()
+            .zip(['J', 'C', 'T', 'U', 'A', 'R'])
+            .map(|((_, _, _, label), key)| format!("{key}  {}", label.trim())),
+    );
+    lines.extend([String::new(), "Esc quits visual intro".to_string()]);
     if !intro.message.is_empty() {
         lines.push(String::new());
         lines.push(intro.message.clone());

@@ -375,7 +375,7 @@ fn daylight_telescope_selects_and_damages_the_first_eligible_member() {
 
     assert_eq!(state.active_player, Some(0));
     assert_eq!(state.party[0].hp, hp_before - 1);
-    assert_eq!(state.message, "the sun!");
+    assert_eq!(state.message, format!("{LOOK_RESULT_PREFIX}\nthe sun!"));
     assert!(state.active_view_overlay.is_none());
 }
 

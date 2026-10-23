@@ -899,6 +899,14 @@ pub struct PlayState {
     /// world turn (clock, active objects, encounters) runs while `Player: `
     /// or the picker is still waiting (playtest F23).
     pub exploration_acted_charge_owed: bool,
+    /// `commands.md §3`: a dungeon letter that neither forwards its
+    /// handler's value nor is a published "no action" producer reports the
+    /// default "acted", and the dungeon loop runs its post-action pass on any
+    /// non-zero status (`dungeon-mode.md §4` step 6). The action counter
+    /// before such a letter was dispatched, held until its last prompt has
+    /// closed; the command epilogue then charges the turn if the handler did
+    /// not (playtest J08).
+    pub dungeon_acted_turn_before: Option<u64>,
     pub active_use: Option<crate::z_stats::UseSession>,
     pub active_cast: Option<crate::z_stats::CastSession>,
     pub active_cast_followup: Option<crate::z_stats::CastFollowupSession>,

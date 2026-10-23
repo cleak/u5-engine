@@ -20,7 +20,7 @@ use u5_runtime::{
 };
 
 use crate::cli::run_interactive_create_character;
-use crate::play_loop::run_play_loop;
+use crate::play_loop::{ansi_navigation_input_byte, run_play_loop};
 
 enum IntroLoopControl {
     Continue,
@@ -196,15 +196,33 @@ fn drive_intro_subflow(
     Ok(IntroLoopControl::Continue)
 }
 
+/// `intro.md §6.2`: "The labels are the **full names**. The abbreviated
+/// forms ... and `Return to View` that earlier revisions of this table
+/// published do not exist in the shipped data; they were invented." Rows
+/// `0..=5` map to `J`, `C`, `T`, `U`, `A`, `R` (playtest J13).
+pub(crate) const INTRO_MENU_ROWS: [(char, &str); 6] = [
+    ('J', "Journey Onward"),
+    ('C', "Create New Character"),
+    ('T', "Transfer from Ultima IV"),
+    ('U', "Ultima V Introduction"),
+    ('A', "Acknowledgements"),
+    ('R', "Return to the View"),
+];
+
+/// The terminal menu's rows: the hotkey letter, then the published label.
+pub(crate) fn intro_menu_text_rows() -> Vec<String> {
+    INTRO_MENU_ROWS
+        .iter()
+        .map(|(key, label)| format!("  {key}  {label}"))
+        .collect()
+}
+
 fn print_intro_menu() {
     println!();
     println!("Intro Menu");
-    println!("  J  Journey Onward");
-    println!("  C  Create New Character");
-    println!("  T  Transfer from Ultima IV");
-    println!("  U  Ultima V Introduction");
-    println!("  A  Acknowledgements");
-    println!("  R  Return to View");
+    for row in intro_menu_text_rows() {
+        println!("{row}");
+    }
     print!("Selection: ");
     let _ = io::stdout().flush();
 }
@@ -299,7 +317,19 @@ fn read_menu_key() -> io::Result<Option<u8>> {
     if io::stdin().read_line(&mut input)? == 0 {
         return Ok(None);
     }
-    Ok(Some(input.bytes().next().unwrap_or(b'\n')))
+    Ok(Some(menu_key_from_line(&input)))
+}
+
+/// `intro.md §6.2` Input: the arrow keys move the highlight. A terminal
+/// sends them as `ESC [ A`-style sequences, which the play loop already
+/// decodes through [`ansi_navigation_input_byte`]; taking only the line's
+/// first byte turned every arrow into a discarded `ESC` (playtest J14).
+fn menu_key_from_line(input: &str) -> u8 {
+    let line = input.trim_end_matches(['\r', '\n']);
+    if let Some(code) = ansi_navigation_input_byte(line) {
+        return code;
+    }
+    input.bytes().next().unwrap_or(b'\n')
 }
 
 fn prompt_continue() -> io::Result<()> {
@@ -313,6 +343,39 @@ fn prompt_continue() -> io::Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// `intro.md §6.2`: row 5 is `Return to the View`; `Return to View` was
+    /// an invented abbreviation (playtest J13).
+    #[test]
+    fn playtest_j13_terminal_menu_uses_the_full_published_labels() {
+        let rows = intro_menu_text_rows();
+        assert_eq!(rows[5], "  R  Return to the View");
+        assert!(rows.iter().all(|row| !row.ends_with("Return to View")));
+        assert_eq!(rows[1], "  C  Create New Character");
+    }
+
+    /// `intro.md §6.2` Input: "Down arrow, right arrow - Move the highlight
+    /// one row toward row 5". A terminal's `ESC [ B` must reach the menu as
+    /// the Down code, not as a discarded `ESC` (playtest J14).
+    #[test]
+    fn playtest_j14_terminal_menu_decodes_arrow_escape_sequences() {
+        assert_eq!(menu_key_from_line("\x1b[B\n"), u5_runtime::INPUT_CODE_SOUTH);
+        assert_eq!(menu_key_from_line("\x1b[A\r\n"), u5_runtime::INPUT_CODE_NORTH);
+        assert_eq!(menu_key_from_line("\x1bOC\n"), u5_runtime::INPUT_CODE_EAST);
+        assert_eq!(menu_key_from_line("c\n"), b'c');
+        assert_eq!(menu_key_from_line("\n"), b'\n');
+
+        let mut dispatch = UnifiedMenuDispatch::new();
+        dispatch.dismiss_title();
+        assert_eq!(
+            dispatch.submit_menu_key(menu_key_from_line("\x1b[B\n")),
+            UnifiedMenuStep::PresentMenu
+        );
+        assert_eq!(
+            dispatch.submit_menu_key(menu_key_from_line("\n")),
+            UnifiedMenuStep::EnteredSubflow(IntroSubflow::CharacterCreation)
+        );
+    }
 
     fn temp_intro_dir(name: &str) -> std::path::PathBuf {
         let nonce = std::time::SystemTime::now()

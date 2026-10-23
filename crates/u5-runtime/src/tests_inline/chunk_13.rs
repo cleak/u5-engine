@@ -25552,7 +25552,9 @@ fn dungeon_l_inline_relative_focus_wraps_level_coordinates() {
     );
 
     assert!(state.message.contains("wooden chest"));
-    assert_eq!(state.turn, 0);
+    // `dungeon-mode.md §12`: L-Look "retains the resident dispatcher's acted
+    // result" and selects the ordinary dungeon post-action pass (J08).
+    assert_eq!(state.turn, 1);
 }
 
 #[test]
@@ -25935,7 +25937,9 @@ fn view_without_a_gem_keeps_the_published_echo_then_refusal_lines() {
     );
     assert!(state.message_entries()[0].is_command_echo);
     assert!(!state.message_entries()[1].is_command_echo);
-    assert_eq!(state.turn, 0);
+    // `commands.md §3`: V does not forward, so the refusal is "acted"
+    // (playtest J09).
+    assert_eq!(state.turn, 1);
 }
 
 #[test]
@@ -26225,10 +26229,12 @@ fn top_down_lowercase_vi_and_wasd_movement_still_routes_before_commands() {
             (5, 5),
             "diagonal key {key} stepped the party"
         );
+        // The letter now opens its verb echo like its uppercase twin
+        // (playtest J29), so the prompt may sit on the echo's row.
+        let shown = format!("{}\n{}", transcript_texts(&state).join("\n"), state.message);
         assert!(
-            state.message.contains(expected_message),
-            "{key} reported `{}`",
-            state.message
+            shown.contains(expected_message),
+            "{key} reported `{shown}`"
         );
     }
 }

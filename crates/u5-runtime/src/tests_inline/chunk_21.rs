@@ -329,14 +329,14 @@ fn town_look_sign_terrain_tile_reads_signs_dat_or_the_blank_sign() {
     let mut state = test_state(grid, 1, 1);
 
     state.look_direction_with_game_dir(Direction::East, &dir).unwrap();
-    assert_eq!(state.message, "Sign:\nPosted notice");
+    assert_eq!(state.message, format!("{LOOK_RESULT_PREFIX}\nPosted notice"));
 
     state.look_direction_with_game_dir(Direction::South, &dir).unwrap();
     assert_eq!(state.message, format!("{LOOK_RESULT_PREFIX}\na sign"));
 
     state.player.y = 2;
     state.look_direction_with_game_dir(Direction::South, &dir).unwrap();
-    assert_eq!(state.message, "Sign:\n");
+    assert_eq!(state.message, format!("{LOOK_RESULT_PREFIX}\n"));
     let _ = fs::remove_dir_all(dir);
 }
 
@@ -395,6 +395,7 @@ fn yew_wanted_poster_exception_uses_party_names_without_signs_dat() {
     assert_eq!(
         state.message,
         [
+            LOOK_RESULT_PREFIX,
             "abbbbbbbbbbbbbc",
             "g   Wanted:   g",
             "g             g",
@@ -993,7 +994,7 @@ fn town_look_renders_matching_signs_dat_record_and_spends_its_turn() {
         MoveOutcome::Observed
     );
 
-    assert_eq!(state.message, "Sign:\nNorth Road");
+    assert_eq!(state.message, format!("{LOOK_RESULT_PREFIX}\nNorth Road"));
     assert_eq!(state.turn, 1);
     assert_eq!(state.clock, GameClock::new(12, 1).unwrap());
     let _ = fs::remove_dir_all(dir);
@@ -1018,7 +1019,7 @@ fn world_look_telescope_routes_to_night_sky() {
         MoveOutcome::Observed
     );
 
-    assert_eq!(state.message, "the night sky! ");
+    assert_eq!(state.message, format!("{LOOK_RESULT_PREFIX}\nthe night sky! "));
     assert!(!state.message.contains("telescope"));
     assert!(
         state
@@ -1066,7 +1067,7 @@ fn world_look_telescope_daylight_shows_sun_and_applies_damage() {
         MoveOutcome::Observed
     );
 
-    assert_eq!(state.message, "the sun!");
+    assert_eq!(state.message, format!("{LOOK_RESULT_PREFIX}\nthe sun!"));
     assert_eq!(state.active_player, Some(0));
     assert_eq!(state.party[0].hp, hp_before - 1);
     assert!(state.active_view_overlay.is_none());
@@ -1099,7 +1100,7 @@ fn town_look_telescope_enters_the_sky_renderer_instead_of_a_description() {
         MoveOutcome::Observed
     );
 
-    assert_eq!(state.message, "the night sky! ");
+    assert_eq!(state.message, format!("{LOOK_RESULT_PREFIX}\nthe night sky! "));
     assert!(!state.message.contains("telescope"));
     assert!(
         state
@@ -1138,7 +1139,7 @@ fn town_look_telescope_is_tested_above_the_wishing_well_row() {
 
     // The §4.2 daylight branch, not a coin-and-wish prompt and not a
     // LOOK2 description line.
-    assert_eq!(state.message, "the sun!");
+    assert_eq!(state.message, format!("{LOOK_RESULT_PREFIX}\nthe sun!"));
     assert_eq!(state.party[0].hp, hp_before - 1);
     assert!(state.active_wishing_well.is_none());
     let _ = fs::remove_dir_all(dir);
@@ -1146,7 +1147,7 @@ fn town_look_telescope_is_tested_above_the_wishing_well_row() {
 
 #[test]
 fn look_clock_tiles_append_twelve_hour_time_context() {
-    let table = parse_look2_dat(&look2_bytes(&[(0xfa, "a clock")])).unwrap();
+    let table = parse_look2_dat(&look2_bytes(&[(0xfa, "a clock, showing: ")])).unwrap();
     let mut grid = open_grid();
     grid[2 * 32 + 1] = 0x05;
     let mut state = test_state(grid, 1, 1);
@@ -1154,19 +1155,19 @@ fn look_clock_tiles_append_twelve_hour_time_context() {
     state.clock = GameClock::new(0, 7).unwrap();
     assert_eq!(
         state.look_description(0xfa, Some(&table), 0),
-        "a clock (12:07 AM)"
+        "a clock, showing: 12:07 AM"
     );
 
     state.clock = GameClock::new(12, 0).unwrap();
     assert_eq!(
         state.look_description(0xfa, Some(&table), 0),
-        "a clock (12:00 PM)"
+        "a clock, showing: 12:00 PM"
     );
 
     state.clock = GameClock::new(23, 59).unwrap();
     assert_eq!(
         state.look_description(0xfa, Some(&table), 0),
-        "a clock (11:59 PM)"
+        "a clock, showing: 11:59 PM"
     );
 }
 
@@ -1342,7 +1343,7 @@ fn world_look_uses_look2_description_for_wrapped_object() {
 fn world_look_dungeon_mouth_appends_name_keyed_on_target_x() {
     // `view.md §3` row 5c (audit A008): the name is chosen by the target
     // cell's X alone, with no location-table row and no game dir needed.
-    let table = parse_look2_dat(&look2_bytes(&[(0xdf, "a dungeon mouth")])).unwrap();
+    let table = parse_look2_dat(&look2_bytes(&[(0xdf, "a dungeon mouth ")])).unwrap();
     let mut grid = open_world_grid();
     grid[world_cell_index(126, 1)] = 0xdf;
     grid[world_cell_index(240, 1)] = 0xdf;
@@ -1365,7 +1366,7 @@ fn world_look_dungeon_mouth_appends_name_keyed_on_target_x() {
     state
         .look_direction_with_resources(Direction::East, Some(&table), None)
         .unwrap();
-    assert!(state.message.ends_with("\na dungeon mouth"), "{:?}", state.message);
+    assert!(state.message.ends_with("\na dungeon mouth "), "{:?}", state.message);
 
     // The same arm serves town Look.
     let state = test_state(open_grid(), 1, 1);
@@ -1373,7 +1374,7 @@ fn world_look_dungeon_mouth_appends_name_keyed_on_target_x() {
         state.look_description(0xdf, Some(&table), 58),
         "a dungeon mouth Shame"
     );
-    assert_eq!(state.look_description(0xdf, Some(&table), 59), "a dungeon mouth");
+    assert_eq!(state.look_description(0xdf, Some(&table), 59), "a dungeon mouth ");
 }
 
 #[test]
@@ -1431,7 +1432,7 @@ fn world_look_shrine_altar_appends_no_virtue_context() {
 }
 
 #[test]
-fn overworld_talk_reports_no_response_without_tlk_lookup_or_turn() {
+fn overworld_talk_reports_no_response_without_tlk_lookup_and_spends_a_turn() {
     let mut state = britannia_state(open_world_grid(), 1, 1);
     state.player.facing = Direction::East;
 
@@ -1444,8 +1445,12 @@ fn overworld_talk_reports_no_response_without_tlk_lookup_or_turn() {
 
     assert_eq!(state.message, "Funny, no response!");
     assert_eq!((state.player.x, state.player.y), (1, 1));
-    assert_eq!(state.turn, 0);
-    assert_eq!(state.clock, GameClock::default());
+    // `commands.md §3`: T does not forward its handler's value, so the
+    // outdoor refusal keeps the default "acted" (playtest J09).
+    assert_eq!(state.turn, 1);
+    let mut expected = GameClock::default();
+    expected.advance_minutes(2);
+    assert_eq!(state.clock, expected);
 }
 
 #[test]
