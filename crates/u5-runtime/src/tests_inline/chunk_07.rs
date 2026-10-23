@@ -2243,6 +2243,30 @@ fn horse_world_movement_uses_one_cell_on_rough_terrain() {
 }
 
 #[test]
+fn difficult_terrain_feedback_line_closes_its_own_row() {
+    // `movement.md §8.1` / `commands.md §5.2`: the feedback is
+    // `Slow progress!\n` / `Very slow!\n`, so it leaves no open row behind
+    // and the next command's echo keeps its blank row (playtest K04).
+    for (tile, line) in [
+        (7u8, crate::commands::MOVEMENT_SLOW_PROGRESS_LINE),
+        (0x0A, crate::commands::MOVEMENT_VERY_SLOW_LINE),
+    ] {
+        let mut grid = open_world_grid();
+        grid[world_cell_index(1, 0)] = tile;
+        let mut state = world_state(grid, 0, 0);
+        state.message_row_open_mid_line = false;
+
+        assert_eq!(state.step(Direction::East), MoveOutcome::Moved);
+
+        assert_eq!(state.message, line);
+        assert!(
+            !state.message_row_open_mid_line,
+            "`{line}` must close its own row"
+        );
+    }
+}
+
+#[test]
 fn difficult_terrain_extra_object_call_takes_its_own_transport_cadence_turn() {
     // `movement.md §8.1`: "The cadence unit is **one object-update call**,
     // including each additional terrain call and the later ordinary outdoor
