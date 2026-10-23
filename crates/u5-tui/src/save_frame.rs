@@ -11,7 +11,8 @@ use u5_runtime::{
     CHROME_RULE_INDEX, COMBAT_ARENA_SIDE, ChromeFonts, ChromePalette, DungeonScene, FixedCellFont,
     MESSAGE_WINDOW_RIGHT, PlayOptions, PlayState, PlayTarget, STATS_PANEL_TEXT_LEFT, Scene,
     TEXT_WINDOW_RENDER_HEIGHT, TEXT_WINDOW_RENDER_WIDTH, TILE_ATLAS_SIDE, TOWN_GRID_SIDE,
-    TextWindowSystem, TileGraphicsDepth, VIEWPORT_ORIGIN_X, VIEWPORT_ORIGIN_Y, ViewOverlayMode,
+    LOCAL_VIEW_OVERLAY_ORIGIN_X, LOCAL_VIEW_OVERLAY_ORIGIN_Y, TextWindowSystem, TileGraphicsDepth,
+    VIEWPORT_ORIGIN_X, VIEWPORT_ORIGIN_Y, ViewOverlayMode,
     WorldPlane, configure_play_text_windows, gameplay_chrome_content, hash_bytes, load_ibm_ch_font,
     load_runes_ch_font, load_tile_atlas, message_log_from_entries, paint_fixed_cell_glyph,
     paint_gameplay_frame_chrome, paint_message_line_cap, paint_stats_panel_text_window,
@@ -842,6 +843,42 @@ mod tests {
         let _ = fs::remove_dir_all(dir);
     }
 
+    /// Playtest K02. `view.md §4`: the local 32-by-32 View raster's cells
+    /// "occupy the inclusive screen rectangle (32,32)..(159,159)" with a
+    /// 24-pixel margin on every side of the viewport. `--save-screen` drew it
+    /// flush at the viewport origin (8,8).
+    #[test]
+    fn save_screen_centres_the_local_view_overlay_in_the_viewport() {
+        use u5_runtime::test_fixtures::{open_grid, synthetic_tile_atlas, test_state};
+        let mut state = test_state(open_grid(), 5, 5);
+        state.gems = 1;
+        state.view_gem();
+        assert!(save_screen_local_view_overlay_active(&state));
+        let atlas = synthetic_tile_atlas(TileGraphicsDepth::Ega16);
+        let overlay = save_screen_viewport(&mut state, &atlas).unwrap().unwrap();
+        assert_eq!((overlay.width, overlay.height), (128, 128));
+
+        let (width, height) = (TEXT_WINDOW_RENDER_WIDTH, TEXT_WINDOW_RENDER_HEIGHT);
+        let mut rgba = [9u8, 9, 9, 0xff].repeat(width * height);
+        blit_save_screen_viewport(&mut rgba, width, height, &overlay, true);
+
+        let pixel = |x: usize, y: usize| &rgba[(y * width + x) * 4..(y * width + x) * 4 + 4];
+        let source = overlay.to_rgba();
+        let src = |x: usize, y: usize| &source[(y * 128 + x) * 4..(y * 128 + x) * 4 + 4];
+        let lit = (0..128 * 128)
+            .map(|index| (index % 128, index / 128))
+            .find(|&(x, y)| src(x, y) != [0, 0, 0, 0xff])
+            .expect("the overlay draws something");
+        for (x, y) in [(0, 0), (127, 127), lit] {
+            assert_eq!(pixel(32 + x, 32 + y), src(x, y), "overlay cell at ({x}, {y})");
+        }
+        // The 24-pixel margin is cleared, not left with what was beneath.
+        assert_eq!(pixel(8, 8), &[0, 0, 0, 0xff]);
+        assert_eq!(pixel(183, 183), &[0, 0, 0, 0xff]);
+        // Outside the viewport the screen is untouched.
+        assert_eq!(pixel(7, 7), &[9, 9, 9, 0xff]);
+    }
+
     /// Playtest G32: `endgame.md §3.1` - "The throne-room tableau is the
     /// ordinary eleven-by-eleven world viewport". Entered from the Doom
     /// final room, the `--save-screen` viewport kept drawing the dungeon the
@@ -1259,19 +1296,70 @@ pub fn compose_gameplay_screen(
         );
     }
 
+    let local_view_overlay = save_screen_local_view_overlay_active(state);
     if let Some(viewport) = save_screen_viewport(state, atlas)? {
-        blit_rgba(
-            &mut rgba,
-            width,
-            height,
-            &viewport.to_rgba(),
-            viewport.width,
-            viewport.height,
-            VIEWPORT_ORIGIN_X,
-            VIEWPORT_ORIGIN_Y,
-        );
+        blit_save_screen_viewport(&mut rgba, width, height, &viewport, local_view_overlay);
     }
     Ok(rgba)
+}
+
+/// Lay the viewport raster into the composed screen.
+///
+/// `view.md §4`: the local View/Peer/X-Ray raster is "centered inside the
+/// main gameplay viewport" at `anchor = 32 + cell * 4`, covering
+/// `(32,32)..(159,159)` - "The formula is authoritative". The Bevy shell
+/// clears the viewport and blits there; this path put the 128-pixel raster
+/// flush at the viewport's own origin (playtest K02).
+fn blit_save_screen_viewport(
+    rgba: &mut [u8],
+    width: usize,
+    height: usize,
+    viewport: &u5_runtime::TileViewport,
+    local_view_overlay: bool,
+) {
+    let (origin_x, origin_y) = if local_view_overlay {
+        clear_save_screen_viewport(rgba, width, height);
+        (LOCAL_VIEW_OVERLAY_ORIGIN_X, LOCAL_VIEW_OVERLAY_ORIGIN_Y)
+    } else {
+        (VIEWPORT_ORIGIN_X, VIEWPORT_ORIGIN_Y)
+    };
+    blit_rgba(
+        rgba,
+        width,
+        height,
+        &viewport.to_rgba(),
+        viewport.width,
+        viewport.height,
+        origin_x,
+        origin_y,
+    );
+}
+
+/// Whether the viewport [`save_screen_viewport`] returns is the local
+/// 32-by-32 View/Peer/X-Ray raster rather than a full-viewport frame. The
+/// dungeon V-View and the telescope sky replace the whole viewport
+/// (`view.md §6`, `§4.2.2`), as in the Bevy compositor's same test.
+fn save_screen_local_view_overlay_active(state: &PlayState) -> bool {
+    use u5_runtime::endgame_tableau_frame::endgame_frame_shows_tableau;
+    !endgame_frame_shows_tableau(state)
+        && state.active_view_overlay.as_ref().is_some_and(|overlay| {
+            !matches!(
+                overlay.kind,
+                u5_runtime::ViewOverlayKind::Dungeon { .. } | u5_runtime::ViewOverlayKind::Sky(_)
+            )
+        })
+}
+
+/// Black out the inclusive `(8,8)..(183,183)` viewport compose rectangle,
+/// as the Bevy shell does before blitting a local view overlay.
+fn clear_save_screen_viewport(rgba: &mut [u8], width: usize, height: usize) {
+    let side = VIEWPORT_SIZE_PX;
+    for y in VIEWPORT_ORIGIN_Y..(VIEWPORT_ORIGIN_Y + side).min(height) {
+        for x in VIEWPORT_ORIGIN_X..(VIEWPORT_ORIGIN_X + side).min(width) {
+            let offset = (y * width + x) * 4;
+            rgba[offset..offset + 4].copy_from_slice(&[0, 0, 0, 255]);
+        }
+    }
 }
 
 /// Lay the panel text-window raster over the chrome.
