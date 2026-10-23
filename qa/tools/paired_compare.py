@@ -792,7 +792,7 @@ def compare_cached(artifact: pathlib.Path, cache: dict) -> tuple:
 
 
 # Bump when a classifier change would alter a cached verdict.
-CACHE_VERSION = 34
+CACHE_VERSION = 36
 
 
 # A scenario whose *roster panel* is a lottery and whose message window is
@@ -1006,6 +1006,63 @@ def sleep_phase_beats(scenario: str) -> frozenset[str]:
     return _declared_beats(scenario, SLEEP_PHASE_MARKER)
 
 
+def torn_sleep_frame(stock: list[list[str]], engine: list[list[str]]) -> bool:
+    """A stock sleep-loop shot taken while the window was mid-scroll.
+
+    The stock scrolls its message window by copying rows, and a screenshot can
+    land while that copy is under way: the rows above some point are still at
+    the old position, the rows below have already moved, and the row between
+    can be drawn across two cells. `asleep-dungeon` read that three times in
+    two rc7 runs (`idle9` of 20261022-194158, `idle1` and `pass1` of
+    20261023-020457) and once in rc4 (`idle7` of 20261020-102224), each time on
+    a different beat and each time with every other beat agreeing.
+
+    Such a frame measures nothing about the rows, so it is recognised by its
+    own shape rather than excused by a looser row match:
+
+      - the engine frame is a clean loop frame - no two printed rows adjacent,
+        which is the loop's own `row, blank` contract;
+      - the stock frame has two printed rows adjacent, which no settled loop
+        frame does;
+      - and every printed stock row is one of the engine's own loop rows,
+        except at most one row that is visibly half drawn: an unmatched cell
+        past the prompt column, or the prompt column's marker cell with
+        nothing after it (rc4's `idle7` caught only that marker of the moving
+        row).
+
+    "Printed" counts any drawn cell, the unmatched marker cell included, so a
+    marker-only row is a printed row for the adjacency test even though
+    `row_text` reads it blank.
+
+    A wake cannot hide behind this: a `Pass` echo or any other new row decodes
+    cleanly past the marker, is not an engine loop row, and so is not a torn
+    frame. The roster panel and the viewport are compared before this is
+    consulted.
+    """
+
+    def printed(row: list[str]) -> bool:
+        return any(cell not in ("<00>", " ", "~") for cell in row)
+
+    stock_text = [row_text(row) for row in stock]
+    engine_text = [row_text(row) for row in engine]
+    loop_rows = {text for text in engine_text if text}
+    if not loop_rows:
+        return False
+    if any(printed(a) and printed(b) for a, b in zip(engine, engine[1:])):
+        return False
+    if not any(printed(a) and printed(b) for a, b in zip(stock, stock[1:])):
+        return False
+    half_drawn = 0
+    for row, text in zip(stock, stock_text):
+        if not printed(row) or text in loop_rows:
+            continue
+        marker_only = not text and row[0] == "?"
+        if not marker_only and "?" not in row[1:]:
+            return False
+        half_drawn += 1
+    return half_drawn <= 1
+
+
 # Beats whose only varying quantity is how many passes of a sleep loop ran
 # before a random wake, one by one:
 #
@@ -1198,6 +1255,12 @@ def compare(artifact: pathlib.Path) -> tuple[int, int, int, int, int]:
             if label in sleep_phase_beats(scenario) and kind in SLEEP_PHASE_KINDS:
                 same += 1
                 print(f"  phase  {scenario}/{label}: {kind}, sleep-loop scroll phase, counted as agreeing")
+                continue
+            # A stock shot caught mid-scroll measured nothing: skipped, not
+            # agreeing. See `torn_sleep_frame`.
+            if label in sleep_phase_beats(scenario) and torn_sleep_frame(left, right):
+                skipped += 1
+                print(f"  torn   {scenario}/{label}: {kind}, stock frame caught mid-scroll, not compared")
                 continue
             if label in sleep_count_beats(scenario) and collapse_repeated_units(
                 [row_text(row) for row in left]

@@ -50,6 +50,44 @@ class SleepLoopDeclarationTest(unittest.TestCase):
             pc.collapse_repeated_units(stock), pc.collapse_repeated_units(no_blank)
         )
 
+    @staticmethod
+    def _frame(*rows: str) -> list[list[str]]:
+        """Decoded rows: a space is the empty cell, `?` an unmatched one."""
+        return [
+            ["<00>" if ch == " " else ch for ch in row.ljust(pc.COLS)]
+            for row in rows
+        ]
+
+    def test_a_stock_frame_caught_mid_scroll_is_torn(self) -> None:
+        engine = self._frame("", "?Z", "", "?Z", "", "?Z", "", "?Z", "")
+        # Rows above the tear still at the old position, a half-drawn row,
+        # rows below already moved: `idle1` of 20261023-020457.
+        half_row = self._frame("", "?Z", "", "?Z", "?Z", "???", "", "?Z", "")
+        self.assertTrue(pc.torn_sleep_frame(half_row, engine))
+        # Two clean rows adjacent: `idle9` of 20261022-194158.
+        adjacent = self._frame("", "?Z", "", "?Z", "?Z", "", "?Z", "", "")
+        self.assertTrue(pc.torn_sleep_frame(adjacent, engine))
+        # Only the moving row's marker cell drawn: rc4's `idle7`.
+        marker = self._frame("?Z", "", "?Z", "?", "", "?Z", "", "?Z", "")
+        self.assertTrue(pc.torn_sleep_frame(marker, engine))
+
+    def test_a_settled_or_woken_stock_frame_is_not_torn(self) -> None:
+        engine = self._frame("", "?Z", "", "?Z", "", "?Z", "", "?Z", "")
+        # A settled frame one row out of phase is the declared phase, not a
+        # tear.
+        settled = self._frame("?Z", "", "?Z", "", "?Z", "", "?Z", "", "")
+        self.assertFalse(pc.torn_sleep_frame(settled, engine))
+        # A wake echo under a pass row decodes cleanly and is new text.
+        woken = self._frame("", "?Z", "", "?Z", "", "?Z", "?P", "", "")
+        self.assertFalse(pc.torn_sleep_frame(woken, engine))
+        # Two half-drawn rows are more than one scroll in flight.
+        two_torn = self._frame("", "?Z", "???", "?Z", "?Z", "???", "", "", "")
+        self.assertFalse(pc.torn_sleep_frame(two_torn, engine))
+        # Against an engine frame with adjacent rows nothing is excused: it is
+        # not a clean loop frame.
+        engine_adjacent = self._frame("", "?Z", "?Z", "", "?Z", "", "", "", "")
+        self.assertFalse(pc.torn_sleep_frame(engine_adjacent, engine_adjacent))
+
     def test_an_unfinished_bottom_unit_folds_into_the_one_above(self) -> None:
         self.assertEqual(pc.collapse_repeated_units(["Z", "", "Z"]), ["Z"])
         self.assertEqual(pc.collapse_repeated_units(["", "Z", "", "Z", ""]), ["Z"])

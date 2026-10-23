@@ -19,6 +19,13 @@
 # engine `Healed!` - the original had rolled the forced-Orange override on a
 # yellow potion. Every other row, including `Item: Potion` and `0n who:
 # Avatar`, was identical.
+#
+# The rc7 sweep drew both swings on consecutive runs. 20261023-014239: the
+# original printed `No noticeable effect now!` on that row (the random potion
+# row replacement); 20261023-022354: `Slept!` with the Avatar's panel status
+# `S` (the forced-Orange override, which is why the roster panel differs on
+# such a run too). Every other row agreed on both, and this scenario matched
+# on the ten runs before them.
 both	wait	15000
 both	key	space
 both	wait	4000

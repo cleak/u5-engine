@@ -18,6 +18,18 @@
 #   - and no answer row, no end cap and no cursor while the hold runs - the
 #     question has not been asked yet, and a held page reads no key.
 #
+# The `mid` beat sits on the Approach-to-Kneel boundary. `shrine-enter-pacing`
+# brackets the stock Kneel record to its `t1800`..`t2400` window, and `mid` is
+# shot about 2000 ms after E-Enter - inside that window - so either side can
+# be caught on either side of the record. The rc7 sweep (20261023-000730) read
+# `mid` with the stock just starting `...and thou dost` and the engine already
+# showing the whole Kneel record; the rc6 sweep (20261022-154453) had the stock
+# still on `Shrine...` at the same beat, and rc7's own re-capture
+# (20261023-020407) read 3 of 3 with no narration change between. A `mid`
+# that differs only by how much of the Kneel record has printed is that
+# boundary, not a pacing regression; `shrine-enter-pacing` is the
+# measurement to consult, and it read 8 of 8 on the same rc7 binary.
+#
 # requires-seed: the party on the published Honesty shrine coordinate
 both	wait	15000
 both	key	space

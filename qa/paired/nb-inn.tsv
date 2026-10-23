@@ -22,6 +22,15 @@
 # service question; the question itself and everything below it agree exactly.
 # A difference confined to those greeting rows must be re-run before it means
 # anything.
+#
+# The `talk` beat reads `record-wide` rather than a legal pool draw on most
+# runs, because the greeting's length also decides the entry prompt's
+# punctuation (`shops.md` Section 8.B: the colon is conditional on the
+# finished greeting's column), so a different draw changes the row under it
+# as well. From 2026-10-13 to the rc7 sweep this scenario read 2 matches and
+# 14 such re-runs; rc6's match (20261022-143317) was a lucky pair of draws,
+# not a baseline, and rc7's two runs (20261022-225655, 20261023-021136)
+# differ only on `talk` with `yes`, `no` and `esc` agreeing.
 both	wait	15000
 both	key	space
 both	wait	4000
