@@ -663,6 +663,19 @@ fn handle_play_key_input_inner(
         mark_combat_short_reprompt(state);
         return Ok(PlayInputDisposition::Continue);
     }
+    // `commands.md §9`: "Combat replaces the scheme entirely with its own
+    // parser", and `combat.md §8` lists the arena's control codes as Escape,
+    // Ctrl-S, Ctrl-B, Space, digits and directions - "Anything else - the
+    // stock `What?` refusal and a free re-prompt". Ctrl-K, Ctrl-V and Ctrl-E
+    // are therefore exploration-only; in the arena they fall through to the
+    // combat parser (playtest K15).
+    if matches!(
+        key,
+        PLAY_MORAL_STANDING_KEY | PLAY_VERSION_BANNER_KEY | PLAY_EXIT_TO_DOS_KEY
+    ) && state.combat_active
+    {
+        return Ok(handle_combat_key_input(state, key, suffix));
+    }
     // `commands.md §9`: the other two shared Control bindings. Neither
     // consumes a turn, and both print one command-echo row.
     if key == PLAY_MORAL_STANDING_KEY {
