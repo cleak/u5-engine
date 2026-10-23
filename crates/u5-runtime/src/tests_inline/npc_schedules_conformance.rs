@@ -280,3 +280,31 @@ fn npc_queue_drain_re_enters_the_floor_transition_state_and_ends_the_tick() {
     );
     assert_eq!(state.npcs[0].state, NPC_STATE_IDLE);
 }
+
+#[test]
+fn npc_standing_on_its_waypoint_does_not_refresh_the_cached_waypoint() {
+    // npc-schedules.md §6: "The cache is written in exactly three
+    // situations, and no others" - entry, forced placement, and arrival
+    // through the per-step destination outcome. An idle NPC that merely
+    // stands on its active waypoint through a pass keeps its cache
+    // (playtest J15: the shop parity gate reads that cache).
+    let mut state = test_state(npc_open_grid(), 20, 20);
+    state.area = Area::Town {
+        scene: Scene::new(0x11).unwrap(),
+        floor: 0,
+    };
+    let mut npc = scheduled_npc(1, 4, 4, 0, (4, 4, 0));
+    npc.schedule[NPC_SCHEDULE_TIME_OFFSET..NPC_SCHEDULE_TIME_OFFSET + 4]
+        .copy_from_slice(&[1, 2, 3, 4]);
+    npc.cached_wp = 2;
+    state.npcs.push(npc);
+    state.clock.hour = 14;
+    let wp = waypoint_for_hour(&state.npcs[0].schedule, state.clock.hour);
+    assert_ne!(wp, 2, "fixture: the active waypoint differs from the cache");
+
+    state.advance_npc_schedules();
+
+    assert_eq!((state.npcs[0].x, state.npcs[0].y), (4, 4));
+    assert_eq!(state.npcs[0].state, NPC_STATE_IDLE);
+    assert_eq!(state.npcs[0].cached_wp, 2);
+}

@@ -988,8 +988,15 @@ impl PlayState {
                     }
                 }
             }
+            // `npc-schedules.md §6`: an NPC already standing on its waypoint
+            // is reset to idle, but "the trigger does *not* update the cached
+            // waypoint field". The cache "is written in exactly three
+            // situations, and no others" (entry, forced placement, and arrival
+            // through the per-step destination outcome), and §9.1 stage 4: "A
+            // wander step that lands on the waypoint does **not** refresh the
+            // cached-waypoint field". Standing here is none of the three.
             if (self.npcs[index].x, self.npcs[index].y, self.npcs[index].z) == (tx, ty, tz) {
-                self.npcs[index].set_settled_at_waypoint(wp);
+                self.npcs[index].set_idle();
                 continue;
             }
 
