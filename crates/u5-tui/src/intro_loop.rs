@@ -20,7 +20,7 @@ use u5_runtime::{
 };
 
 use crate::cli::run_interactive_create_character;
-use crate::play_loop::run_play_loop;
+use crate::play_loop::{ansi_navigation_input_byte, run_play_loop};
 
 enum IntroLoopControl {
     Continue,
@@ -317,7 +317,19 @@ fn read_menu_key() -> io::Result<Option<u8>> {
     if io::stdin().read_line(&mut input)? == 0 {
         return Ok(None);
     }
-    Ok(Some(input.bytes().next().unwrap_or(b'\n')))
+    Ok(Some(menu_key_from_line(&input)))
+}
+
+/// `intro.md §6.2` Input: the arrow keys move the highlight. A terminal
+/// sends them as `ESC [ A`-style sequences, which the play loop already
+/// decodes through [`ansi_navigation_input_byte`]; taking only the line's
+/// first byte turned every arrow into a discarded `ESC` (playtest J14).
+fn menu_key_from_line(input: &str) -> u8 {
+    let line = input.trim_end_matches(['\r', '\n']);
+    if let Some(code) = ansi_navigation_input_byte(line) {
+        return code;
+    }
+    input.bytes().next().unwrap_or(b'\n')
 }
 
 fn prompt_continue() -> io::Result<()> {
@@ -340,6 +352,29 @@ mod tests {
         assert_eq!(rows[5], "  R  Return to the View");
         assert!(rows.iter().all(|row| !row.ends_with("Return to View")));
         assert_eq!(rows[1], "  C  Create New Character");
+    }
+
+    /// `intro.md §6.2` Input: "Down arrow, right arrow - Move the highlight
+    /// one row toward row 5". A terminal's `ESC [ B` must reach the menu as
+    /// the Down code, not as a discarded `ESC` (playtest J14).
+    #[test]
+    fn playtest_j14_terminal_menu_decodes_arrow_escape_sequences() {
+        assert_eq!(menu_key_from_line("\x1b[B\n"), u5_runtime::INPUT_CODE_SOUTH);
+        assert_eq!(menu_key_from_line("\x1b[A\r\n"), u5_runtime::INPUT_CODE_NORTH);
+        assert_eq!(menu_key_from_line("\x1bOC\n"), u5_runtime::INPUT_CODE_EAST);
+        assert_eq!(menu_key_from_line("c\n"), b'c');
+        assert_eq!(menu_key_from_line("\n"), b'\n');
+
+        let mut dispatch = UnifiedMenuDispatch::new();
+        dispatch.dismiss_title();
+        assert_eq!(
+            dispatch.submit_menu_key(menu_key_from_line("\x1b[B\n")),
+            UnifiedMenuStep::PresentMenu
+        );
+        assert_eq!(
+            dispatch.submit_menu_key(menu_key_from_line("\n")),
+            UnifiedMenuStep::EnteredSubflow(IntroSubflow::CharacterCreation)
+        );
     }
 
     fn temp_intro_dir(name: &str) -> std::path::PathBuf {
