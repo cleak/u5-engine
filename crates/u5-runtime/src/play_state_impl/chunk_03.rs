@@ -550,8 +550,12 @@ impl PlayState {
             self.flush_message_slot();
             if !self.message_row_open_mid_line {
                 // Cursor at column 0 of a fresh row: the lift leaves one
-                // blank row between the history and the cursor.
-                self.push_explicit_blank_message_entry();
+                // blank row between the history and the cursor. It is not
+                // the next prompt's own feed (`text-output.md §10.5`: the
+                // message cursor stays put), so that feed's derived blank is
+                // still owed on top of it - an explicit blank stood in for
+                // it and the lift never showed (playtest J24).
+                self.push_producer_blank_message_entry();
             } else if let Some(open) = self.message_transcript.last().map(|entry| entry.text.clone())
             {
                 let _ = self.break_open_prompt_row_for_strip_scroll(&open);
@@ -575,7 +579,10 @@ impl PlayState {
     pub(crate) fn wake_town_sleepers_without_panel_refresh(&mut self, members: &[usize]) {
         if crate::stats_panel::stats_panel_snapshot_of(self) != self.stats_panel_command_baseline {
             match self.stats_panel_command_refresh {
-                crate::stats_panel::PanelRefreshMode::Immediate => self.repaint_stats_panel(),
+                // An unconditional site still repaints at the command's end;
+                // here only a change it made before the wake is settled.
+                crate::stats_panel::PanelRefreshMode::Immediate
+                | crate::stats_panel::PanelRefreshMode::Always => self.repaint_stats_panel(),
                 crate::stats_panel::PanelRefreshMode::Deferred => {
                     self.request_stats_panel_refresh()
                 }
@@ -1079,6 +1086,7 @@ impl PlayState {
     pub fn set_active_player_command(&mut self, digit: char) -> MoveOutcome {
         self.begin_command_echo_for(Command::SetActivePlayer);
         let slot = digit.to_digit(10).map(|digit| digit as usize);
+        let mut selected = true;
         self.message = match slot {
             Some(0) => {
                 self.active_player = None;
@@ -1110,8 +1118,24 @@ impl PlayState {
                 self.active_player = Some(index);
                 self.party_member_display_name(index)
             }
-            _ => SET_ACTIVE_PLAYER_INVALID_REPLY.to_string(),
+            _ => {
+                selected = false;
+                SET_ACTIVE_PLAYER_INVALID_REPLY.to_string()
+            }
         };
+        // `stats-panel.md §2.2.1` lists the active-player digit keys (`0`
+        // clears; `1`..`6` select) among the inline whole-panel repaints, so
+        // an accepted selection refreshes the panel even when no number on it
+        // changed: a wishing-well debit shows (§2.4, playtest J27) and a
+        // three-digit hull lifts the message history (§2.1, playtest J24).
+        // A rejected digit selects nothing and is not listed.
+        if selected {
+            self.stats_panel_command_refresh = crate::stats_panel::PanelRefreshMode::Always;
+        }
+        // `commands.md §5`'s `0` row: every answer - `None!`, `Invalid!` or
+        // the member's name - is followed by a line feed, so the row is
+        // closed when the panel repaints (and when the next command prints).
+        self.close_message_row();
         MoveOutcome::Observed
     }
 
@@ -1225,6 +1249,19 @@ impl PlayState {
                 inventory_cursor: 0,
             };
             z_stats.open_shared_equipment();
+            // `commands.md §5.8`: the selector's "no selection" result
+            // "completes the row as `Player:_` plus a bare line feed". The
+            // page loop's `\nStatus:_` then spends one blank row, exactly as
+            // after a named member ([`Self::z_stats_for_party`]); the row
+            // used to be left open, so `Status:` sat directly beneath
+            // (playtest J26).
+            let prompt = session.target.prompt();
+            if prompt.ends_with(' ') {
+                let _ = self.complete_open_direction_echo(prompt, "");
+            }
+            if !self.message_transcript.is_empty() {
+                self.push_explicit_blank_message_entry();
+            }
             self.message = self.render_z_stats_session(&z_stats);
             self.active_z_stats = Some(z_stats);
             return true;
@@ -1233,7 +1270,7 @@ impl PlayState {
             self.keep_party_selector_prompt(session);
             return true;
         }
-        if matches!(key, '\u{1b}' | '0') {
+        if key == '\u{1b}' {
             self.active_party_selector = None;
             let prompt = session.target.prompt();
             // `commands.md §5.3`: a prompt ending in a trailing space

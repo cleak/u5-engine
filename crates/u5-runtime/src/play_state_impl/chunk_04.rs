@@ -1279,12 +1279,20 @@ impl PlayState {
             UseItemRequest::Spyglass,
         );
 
-        self.push_owned_use_row(
-            &mut rows,
-            SPECIAL_ITEM_HMS_CAPE_PLANS_INDEX,
-            "HMS Cape Plan",
-            UseItemRequest::HmsCapePlans,
-        );
+        // `inventory.md §4.5`, "Exactly two families are normalised on the
+        // way into the stock": "the HMS Cape plans entry becomes the marker
+        // for any nonzero carried value", so the plans row is always the
+        // uncounted thirteen-cell `HMS Cape Plan` that never wraps. A saved
+        // count of one used to print ` 1 ` before it and push the label onto
+        // a second display line over the frame's left rule (playtest J10).
+        if self.special_items[SPECIAL_ITEM_HMS_CAPE_PLANS_INDEX] > 0 {
+            rows.push(UseItemPickerRow {
+                label: "HMS Cape Plan".to_string(),
+                decoration: crate::stats_panel::PanelPickerDecoration::None,
+                quantity: None,
+                request: UseItemRequest::HmsCapePlans,
+            });
+        }
 
         self.push_owned_use_row(
             &mut rows,
@@ -2024,6 +2032,12 @@ impl PlayState {
             self.push_runic_message_entry(row);
         }
         self.adopt_flushed_message(format!("{USE_SEXTANT_READING_LABEL}{pair}"));
+        // The coordinate printer ends with its own line feed (`magic.md §8`:
+        // "a newline before the pair as well as after it"), so the readout
+        // leaves the row closed. The runic rows above do not touch the flag,
+        // which still held the open `Position:` row and swallowed the next
+        // command's blank row (playtest J12).
+        self.message_row_open_mid_line = false;
         MoveOutcome::Used
     }
 

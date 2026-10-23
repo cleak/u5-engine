@@ -192,12 +192,17 @@ fn run_with_command_epilogue(
     // browser exit, R Ready end, dungeon post-action redraw, combat entry
     // and exit) repaint unconditionally at their own step instead, which is
     // §2.4's "any inline repaint" that does reveal a stale debit.
-    if crate::stats_panel::stats_panel_snapshot_of(state) != state.stats_panel_command_baseline {
-        match state.stats_panel_command_refresh {
-            crate::stats_panel::PanelRefreshMode::Immediate => state.repaint_stats_panel(),
-            crate::stats_panel::PanelRefreshMode::Deferred => state.request_stats_panel_refresh(),
-            crate::stats_panel::PanelRefreshMode::None => {}
+    let panel_changed =
+        crate::stats_panel::stats_panel_snapshot_of(state) != state.stats_panel_command_baseline;
+    match state.stats_panel_command_refresh {
+        crate::stats_panel::PanelRefreshMode::Always => state.repaint_stats_panel(),
+        crate::stats_panel::PanelRefreshMode::Immediate if panel_changed => {
+            state.repaint_stats_panel()
         }
+        crate::stats_panel::PanelRefreshMode::Deferred if panel_changed => {
+            state.request_stats_panel_refresh()
+        }
+        _ => {}
     }
     result
 }
