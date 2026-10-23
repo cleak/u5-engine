@@ -3096,7 +3096,10 @@ impl PlayState {
     /// command has fully returned (no sub-prompt left open); charges the one
     /// turn only when the handler did not already take it. The town arm
     /// matches the measured cancelled-Search turn below. Dungeon loops are
-    /// excluded: they advance their own clock (`commands.md §3`).
+    /// excluded: they advance their own clock (`commands.md §3`), and the
+    /// dungeon dispatcher's acted letters are settled by the command
+    /// epilogue (playtest J08). `F` and `V` use the same charge for their
+    /// refusals (playtest J09).
     pub fn charge_tile_command_acted_exit(&mut self, turn_before: u64) {
         if self.turn != turn_before
             || self.combat_active

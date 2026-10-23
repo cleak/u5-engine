@@ -517,17 +517,22 @@ impl PlayState {
                 'E' => {
                     handled!(self.enter_current_location(game_dir)?);
                 }
+                // `commands.md §3`: `F` and `V` keep the default "acted" on
+                // every exit, refusals included (playtest J09); see the
+                // lowercase arms below.
                 'F' => {
-                    if let Some(direction) = inline_direction {
-                        handled!(self.fire_command(Some(direction), game_dir)?);
+                    let outcome = if let Some(direction) = inline_direction {
+                        self.fire_command(Some(direction), game_dir)?
                     } else if matches!(
                         (self.area, self.player.transport),
                         (Area::World { .. }, TransportState::Ship { .. })
                     ) {
-                        handled!(self.start_fire_direction_prompt());
+                        self.start_fire_direction_prompt()
                     } else {
-                        handled!(self.fire_command(None, game_dir)?);
-                    }
+                        self.fire_command(None, game_dir)?
+                    };
+                    self.charge_tile_command_acted_exit(turn_before);
+                    handled!(outcome);
                 }
                 'G' => {
                     if let Some(direction) = inline_direction {
@@ -646,7 +651,9 @@ impl PlayState {
                     handled!(outcome);
                 }
                 'V' => {
-                    handled!(self.view_gem());
+                    let outcome = self.view_gem();
+                    self.charge_tile_command_acted_exit(turn_before);
+                    handled!(outcome);
                 }
                 'X' => {
                     handled!(self.dungeon_exit_vehicle_command(game_dir)?);
@@ -716,11 +723,19 @@ impl PlayState {
                     self.look_facing_with_game_dir(game_dir)?
                 }
             }
-            'v' => self.view_gem(),
+            // `commands.md §3`: `V` and `F` neither forward their handler's
+            // value nor are "no action" producers, so every exit - `You have
+            // none!`, `Fire` / `What?` - keeps the default "acted" and the
+            // mode loop runs its per-turn epilogue (playtest J09).
+            'v' => {
+                let outcome = self.view_gem();
+                self.charge_tile_command_acted_exit(turn_before);
+                outcome
+            }
             'i' => self.ignite_torch(),
             'h' => self.hole_up_command(game_dir, inline_rest)?,
             'f' => {
-                if let Some(direction) = inline_direction {
+                let outcome = if let Some(direction) = inline_direction {
                     self.fire_command(Some(direction), game_dir)?
                 } else if matches!(
                     (self.area, self.player.transport),
@@ -729,7 +744,9 @@ impl PlayState {
                     self.start_fire_direction_prompt()
                 } else {
                     self.fire_command(None, game_dir)?
-                }
+                };
+                self.charge_tile_command_acted_exit(turn_before);
+                outcome
             }
             'p' => {
                 if let Some(direction) = inline_direction {

@@ -25937,7 +25937,9 @@ fn view_without_a_gem_keeps_the_published_echo_then_refusal_lines() {
     );
     assert!(state.message_entries()[0].is_command_echo);
     assert!(!state.message_entries()[1].is_command_echo);
-    assert_eq!(state.turn, 0);
+    // `commands.md §3`: V does not forward, so the refusal is "acted"
+    // (playtest J09).
+    assert_eq!(state.turn, 1);
 }
 
 #[test]

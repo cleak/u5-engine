@@ -4606,6 +4606,13 @@ impl PlayState {
     ) -> io::Result<MoveOutcome> {
         let Area::Town { scene, .. } = self.area else {
             self.message = "Funny, no response!".to_string();
+            // `commands.md §3`: `T` does not forward its handler's value, so
+            // the outdoor refusal keeps the default "acted" and the overworld
+            // runs its per-turn epilogue (playtest J09). The dungeon arm is
+            // charged by its own loop.
+            if matches!(self.area, Area::World { .. }) && !self.combat_active {
+                self.advance_turn();
+            }
             return Ok(MoveOutcome::Blocked);
         };
         if self.talk_entry_gates_apply() && self.talk_liveness_blocked() {

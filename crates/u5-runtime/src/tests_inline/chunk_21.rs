@@ -1432,7 +1432,7 @@ fn world_look_shrine_altar_appends_no_virtue_context() {
 }
 
 #[test]
-fn overworld_talk_reports_no_response_without_tlk_lookup_or_turn() {
+fn overworld_talk_reports_no_response_without_tlk_lookup_and_spends_a_turn() {
     let mut state = britannia_state(open_world_grid(), 1, 1);
     state.player.facing = Direction::East;
 
@@ -1445,8 +1445,12 @@ fn overworld_talk_reports_no_response_without_tlk_lookup_or_turn() {
 
     assert_eq!(state.message, "Funny, no response!");
     assert_eq!((state.player.x, state.player.y), (1, 1));
-    assert_eq!(state.turn, 0);
-    assert_eq!(state.clock, GameClock::default());
+    // `commands.md §3`: T does not forward its handler's value, so the
+    // outdoor refusal keeps the default "acted" (playtest J09).
+    assert_eq!(state.turn, 1);
+    let mut expected = GameClock::default();
+    expected.advance_minutes(2);
+    assert_eq!(state.clock, expected);
 }
 
 #[test]

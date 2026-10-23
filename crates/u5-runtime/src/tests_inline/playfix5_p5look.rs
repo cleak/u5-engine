@@ -170,3 +170,30 @@ fn playtest_j08_dungeon_acted_refusals_spend_the_post_action_turn() {
     assert_eq!(state.clock, expected, "one loop-head minute per command");
     let _ = fs::remove_dir_all(dir);
 }
+
+/// `commands.md §3`: status `1` "Acted" is "kept by every letter that does
+/// not forward or refuse", and "no action" comes only from unknown input,
+/// `D`, `W`, `Q`, the typeahead toggle, dungeon `P` and refusing *forwarded*
+/// handlers. `F`, `V` and `T` do not forward, so their refusals - `What?`,
+/// `You have none!`, the outdoor `Funny, no response!` - still run the
+/// per-turn epilogue (J09).
+#[test]
+fn playtest_j09_fire_view_and_outdoor_talk_refusals_spend_a_turn() {
+    let dir = debug_game_dir();
+    let mut world = britannia_state(open_world_grid(), 45, 62);
+    world.gems = 0;
+    for key in ['F', 'V', 't', 'f', 'v'] {
+        let turn_before = world.turn;
+        handle_play_key_input(&mut world, key, "", &dir).unwrap();
+        assert_eq!(world.turn, turn_before + 1, "overworld {key} must report acted");
+    }
+
+    let mut town = test_state(open_grid(), 5, 5);
+    town.gems = 0;
+    for key in ['F', 'V'] {
+        let turn_before = town.turn;
+        handle_play_key_input(&mut town, key, "", &dir).unwrap();
+        assert_eq!(town.turn, turn_before + 1, "town {key} must report acted");
+    }
+    let _ = fs::remove_dir_all(dir);
+}
