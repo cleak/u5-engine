@@ -41,3 +41,31 @@ fn playtest_j02_look_appenders_add_no_separator_or_brackets() {
         "the Flame of Truth"
     );
 }
+
+/// `formats/signs-dat.md §5`: "The active scene indexes the `SIGNS.DAT`
+/// scene directory", that one block is scanned, and "[e]very matching
+/// record is printed". Shipped blocks are back to back with no sentinel
+/// between them; a scene-k record must still be collected once, not once
+/// per non-empty directory slot at or before k (J04).
+#[test]
+fn playtest_j04_sign_scene_blocks_stop_at_the_next_block() {
+    let mut bytes = vec![0u8; SIGNS_DAT_SCENE_DIRECTORY_BYTES];
+    let first = SIGNS_DAT_SCENE_DIRECTORY_BYTES as u16;
+    let second = first + 4 + 3 + 1;
+    let third = second + 4 + 3 + 1;
+    bytes[2 * 2..2 * 2 + 2].copy_from_slice(&first.to_le_bytes());
+    bytes[3 * 2..3 * 2 + 2].copy_from_slice(&second.to_le_bytes());
+    bytes[4 * 2..4 * 2 + 2].copy_from_slice(&third.to_le_bytes());
+    bytes.extend_from_slice(&[2, 0, 15, 28]);
+    bytes.extend_from_slice(b"Two\0");
+    bytes.extend_from_slice(&[3, 0, 15, 28]);
+    bytes.extend_from_slice(b"Thr\0");
+    bytes.extend_from_slice(&[4, 0, 17, 17]);
+    bytes.extend_from_slice(b"Fou\0");
+    bytes.push(0);
+
+    let records = parse_sign_records(&bytes).unwrap();
+    assert_eq!(records.len(), 3);
+    assert_eq!(crate::signs_io::matching_sign_bodies(&records, 3, 0, 28, 15), vec!["Thr"]);
+    assert_eq!(crate::signs_io::matching_sign_bodies(&records, 4, 0, 17, 17), vec!["Fou"]);
+}

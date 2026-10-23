@@ -168,21 +168,40 @@ pub fn parse_sign_records(bytes: &[u8]) -> io::Result<Vec<SignRecord>> {
             continue;
         }
         visited.push(offset);
-        parse_scene_block(bytes, slot as u8, offset, &mut records)?;
+        // `formats/signs-dat.md §5`: "The active scene indexes the
+        // `SIGNS.DAT` scene directory" and "[t]he scene block is scanned".
+        // Shipped blocks sit back to back with no sentinel between them, so
+        // a block ends where the next scene's block begins. Scanning on past
+        // it collected each scene-k record once per non-empty slot <= k, and
+        // the Look path printed one sign body that many times (playtest J04).
+        let end = scene_block_end(bytes, offset);
+        parse_scene_block(bytes, slot as u8, offset, end, &mut records)?;
     }
     Ok(records)
+}
+
+/// The first nonzero directory offset after `start`, or the end of the file:
+/// where the scene block that begins at `start` stops.
+fn scene_block_end(bytes: &[u8], start: usize) -> usize {
+    (0..SCENE_DIRECTORY_SLOTS)
+        .map(|slot| u16::from_le_bytes([bytes[slot * 2], bytes[slot * 2 + 1]]) as usize)
+        .filter(|&offset| offset > start)
+        .min()
+        .unwrap_or(bytes.len())
+        .min(bytes.len())
 }
 
 fn parse_scene_block(
     bytes: &[u8],
     directory_scene: u8,
     start: usize,
+    end: usize,
     out: &mut Vec<SignRecord>,
 ) -> io::Result<()> {
     let mut cursor = start;
     let mut raw_records = Vec::new();
     while cursor < bytes.len() {
-        if bytes[cursor] == 0 {
+        if cursor >= end || bytes[cursor] == 0 {
             for index in 0..raw_records.len() {
                 let raw = &raw_records[index];
                 let body = resolve_sign_body(bytes, &raw_records, index, directory_scene)?;
