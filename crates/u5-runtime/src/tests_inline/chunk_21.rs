@@ -1343,7 +1343,7 @@ fn world_look_uses_look2_description_for_wrapped_object() {
 fn world_look_dungeon_mouth_appends_name_keyed_on_target_x() {
     // `view.md §3` row 5c (audit A008): the name is chosen by the target
     // cell's X alone, with no location-table row and no game dir needed.
-    let table = parse_look2_dat(&look2_bytes(&[(0xdf, "a dungeon mouth")])).unwrap();
+    let table = parse_look2_dat(&look2_bytes(&[(0xdf, "a dungeon mouth ")])).unwrap();
     let mut grid = open_world_grid();
     grid[world_cell_index(126, 1)] = 0xdf;
     grid[world_cell_index(240, 1)] = 0xdf;
@@ -1366,7 +1366,7 @@ fn world_look_dungeon_mouth_appends_name_keyed_on_target_x() {
     state
         .look_direction_with_resources(Direction::East, Some(&table), None)
         .unwrap();
-    assert!(state.message.ends_with("\na dungeon mouth"), "{:?}", state.message);
+    assert!(state.message.ends_with("\na dungeon mouth "), "{:?}", state.message);
 
     // The same arm serves town Look.
     let state = test_state(open_grid(), 1, 1);
@@ -1374,7 +1374,7 @@ fn world_look_dungeon_mouth_appends_name_keyed_on_target_x() {
         state.look_description(0xdf, Some(&table), 58),
         "a dungeon mouth Shame"
     );
-    assert_eq!(state.look_description(0xdf, Some(&table), 59), "a dungeon mouth");
+    assert_eq!(state.look_description(0xdf, Some(&table), 59), "a dungeon mouth ");
 }
 
 #[test]
