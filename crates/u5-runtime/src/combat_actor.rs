@@ -426,7 +426,14 @@ pub const COMBAT_ROUND_RESULT_DEFEAT: u8 = 1;
 pub const COMBAT_TARGET_GROUP_NEUTRAL: u8 = 2;
 pub const COMBAT_TARGET_GROUP_PARTY: u8 = 0;
 pub const COMBAT_TARGET_GROUP_MONSTER: u8 = 1;
-pub const COMBAT_HIDDEN_ACTIVE_OBJECT_TILE: u8 = 0x00;
+/// The suppressed-sprite value a hidden combatant's linked record displays.
+/// `catalogs/item-list.md` "Orange combat sleep presentation": "an actor
+/// still under the combat invisibility state uses tile `0x1D`". It must not
+/// be zero: `active-objects.md §7` allocates combat records by "taking the
+/// first record whose tile byte is zero", so a zero here handed a hidden
+/// seated member's record (and every record after it) to the monster placer
+/// (playtest J21).
+pub const COMBAT_HIDDEN_ACTIVE_OBJECT_TILE: u8 = COMBAT_POTION_INVISIBLE_WAKE_DISPLAY_TILE;
 pub const COMBAT_ARENA_CENTER_COORDINATE: u8 = (COMBAT_ARENA_SIDE / 2) as u8;
 
 pub const COMBAT_AI_ATTACK_COMMAND_KEY: char = 'A';

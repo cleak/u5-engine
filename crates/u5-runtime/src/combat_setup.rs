@@ -2895,6 +2895,37 @@ mod combat_setup_batch_tests {
         let _ = fs::remove_dir_all(dir);
     }
 
+    /// Playtest J21. `combat.md §5`: "A wearer of the Ring of Invisibility
+    /// is marked hidden and its presentation byte switched to the
+    /// suppressed-sprite value" - only the wearer. `active-objects.md §7`
+    /// gives monsters "the next free records", a free record being one whose
+    /// tile byte is zero, so a hidden seat must not read as free.
+    #[test]
+    fn an_invisibility_ring_hides_only_its_wearer_and_keeps_the_seat_allocated() {
+        let (mut state, dir) = batch_combat_state(&[b'G', b'G', b'G', b'G']);
+        state.party_equipment[0][EQUIP_SLOT_RING] = EQUIPMENT_ID_RING_INVISIBILITY as u8;
+
+        state
+            .enter_terrain_combat_from_world_object(&dir, WorldPlane::Britannia, 1, batch_trigger())
+            .unwrap();
+
+        let ring_kept =
+            state.party_equipment[0][EQUIP_SLOT_RING] == EQUIPMENT_ID_RING_INVISIBILITY as u8;
+        assert!(ring_kept, "fixture: the seeded vanish roll keeps the ring");
+        assert!(state.combat_actors[0].is_phase_suppressed());
+        assert_eq!(state.active_objects[0].tile, COMBAT_HIDDEN_ACTIVE_OBJECT_TILE);
+        assert_ne!(state.active_objects[0].type_byte, 0xc0);
+        for slot in 1..4 {
+            assert!(!state.combat_actors[slot].is_phase_suppressed(), "slot {slot}");
+            let record = state.active_objects[slot];
+            assert_eq!(record.tile, record.type_byte, "slot {slot} stays drawn");
+            assert_ne!(record.type_byte, 0xc0, "slot {slot} kept its party record");
+        }
+        let first_monster = state.combat_actors[COMBAT_PARTY_ACTOR_SLOTS];
+        assert_eq!(first_monster.active_object_slot, 4);
+        let _ = fs::remove_dir_all(dir);
+    }
+
     /// Distinguishable seats so a seat read by the packed descriptor
     /// index instead of by the roster index shows up as a wrong number.
     const BATCH_SEATS: [(u8, u8); COMBAT_PARTY_ACTOR_SLOTS] =
