@@ -1605,6 +1605,12 @@ pub enum PanelRefreshMode {
     /// until something unrelated repaints. The wishing well is the measured
     /// case: it "never repaints and never files a request on any arm".
     None,
+    /// The command repaints the whole panel inline whether or not one of its
+    /// numbers changed. §2.2.1's active-player digit keys are such a site:
+    /// the marker they move is drawn live, so the refresh is what reveals a
+    /// stale body - §2.4's "any inline repaint" (playtest J27) - and what runs
+    /// the three-digit-hull strip scroll of §2.1 (playtest J24).
+    Always,
 }
 
 /// The panel body as it was at the last refresh.

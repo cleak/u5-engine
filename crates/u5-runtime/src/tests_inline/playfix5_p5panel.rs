@@ -165,3 +165,63 @@ fn playfix5_j12_moonstone_and_sextant_results_close_their_row() {
     assert_eq!(p4window_rows_from(&p4window_rows(&sextant), ">Get-North"), expected);
     let _ = fs::remove_dir_all(dir);
 }
+
+#[test]
+fn playfix5_j27_an_active_player_digit_repaints_a_stale_gold_counter() {
+    // stats-panel.md §2.2.1: the active-player digit keys are an inline
+    // whole-panel repaint; §2.4: a debit nothing repainted "stays invisible
+    // until ... any inline repaint". The digit must reveal it.
+    let dir = debug_game_dir();
+    for key in ['1', '0'] {
+        let mut state = p4window_world_state();
+        state.active_player = None;
+        state.gold = 150;
+        state.repaint_stats_panel();
+        // The wishing well's debit: no repaint and no request.
+        state.gold = 149;
+        assert!(state.displayed_stats_panel().counter_row.contains("G:150"));
+        p4window_keys(&mut state, &dir, &[key]);
+        assert!(
+            state.displayed_stats_panel().counter_row.contains("G:149"),
+            "digit {key}: {:?}",
+            state.displayed_stats_panel().counter_row
+        );
+    }
+    // A rejected digit selects nothing and repaints nothing.
+    let mut state = p4window_world_state();
+    state.gold = 150;
+    state.repaint_stats_panel();
+    state.gold = 149;
+    p4window_keys(&mut state, &dir, &['9']);
+    assert!(state.displayed_stats_panel().counter_row.contains("G:150"));
+    let _ = fs::remove_dir_all(dir);
+}
+
+#[test]
+fn playfix5_j24_an_active_player_digit_with_a_three_digit_hull_lifts_the_history() {
+    // stats-panel.md §2.1 / §6: with a hull of 100 or more "a repaint in this
+    // state lifts the message window's painted history by one row every time
+    // it runs"; §2.2.1 makes the digit key such a repaint.
+    let dir = debug_game_dir();
+    let rows_after_digit = |hull: u8| {
+        let mut state = p4window_world_state();
+        state.player.transport = TransportState::Ship {
+            type_byte: TRANSPORT_MARKER_SHIP_FURLED_FIRST,
+            tile: FIRST_PLAYABLE_FRIGATE_TILE,
+            sails_hoisted: false,
+            hull,
+            skiffs: 1,
+        };
+        state.repaint_stats_panel();
+        let before = state.message_entries().len();
+        p4window_keys(&mut state, &dir, &['1']);
+        let added = state.message_entries().len() - before;
+        p4window_keys(&mut state, &dir, &[' ']);
+        (added, p4window_rows_from(&p4window_rows(&state), ">Set Active Plr:"))
+    };
+    let (lifted, lifted_rows) = rows_after_digit(150);
+    let (plain, plain_rows) = rows_after_digit(99);
+    assert_eq!(lifted, plain + 1, "one strip scroll");
+    assert_eq!(lifted_rows.len(), plain_rows.len() + 1, "{lifted_rows:?} vs {plain_rows:?}");
+    let _ = fs::remove_dir_all(dir);
+}
