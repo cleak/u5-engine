@@ -4377,9 +4377,14 @@ impl PlayState {
         // (§4); a missing row substitutes the domain's sentinel (§6).
         let base = look2_selected_string(look_table, tile as usize, 0);
 
+        // `view.md §3` rows 5a-5c "Append" to the printed base description:
+        // no separator and no brackets of their own. The shipped LOOK2 base
+        // strings for these rows end in their own space, so adding one here
+        // printed `dungeon  Doom`, and the clock time was wrapped in
+        // parentheses no spec text carries (playtest J02/J07).
         if matches!(tile, 0xfa | 0xfb) {
             format!(
-                "{base} ({}:{:02} {})",
+                "{base}{}:{:02} {}",
                 self.clock.display_hour(),
                 self.clock.minute,
                 self.clock.am_pm_suffix()
@@ -4397,7 +4402,7 @@ impl PlayState {
                 _ => SCENE_OVERWORLD,
             };
             match eternal_flame_word_for_scene(scene_byte) {
-                Some(word) => format!("{base} {word}"),
+                Some(word) => format!("{base}{word}"),
                 None => base,
             }
         } else if tile == WORD_OF_POWER_SEALED_TILE {
@@ -4407,7 +4412,7 @@ impl PlayState {
             // surface/town scene; an appender row even when it appends
             // nothing.
             match sealed_dungeon_name_for_x(target_x) {
-                Some(name) => format!("{base} {name}"),
+                Some(name) => format!("{base}{name}"),
                 None => base,
             }
         } else {

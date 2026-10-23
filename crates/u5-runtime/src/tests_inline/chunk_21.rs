@@ -1146,7 +1146,7 @@ fn town_look_telescope_is_tested_above_the_wishing_well_row() {
 
 #[test]
 fn look_clock_tiles_append_twelve_hour_time_context() {
-    let table = parse_look2_dat(&look2_bytes(&[(0xfa, "a clock")])).unwrap();
+    let table = parse_look2_dat(&look2_bytes(&[(0xfa, "a clock, showing: ")])).unwrap();
     let mut grid = open_grid();
     grid[2 * 32 + 1] = 0x05;
     let mut state = test_state(grid, 1, 1);
@@ -1154,19 +1154,19 @@ fn look_clock_tiles_append_twelve_hour_time_context() {
     state.clock = GameClock::new(0, 7).unwrap();
     assert_eq!(
         state.look_description(0xfa, Some(&table), 0),
-        "a clock (12:07 AM)"
+        "a clock, showing: 12:07 AM"
     );
 
     state.clock = GameClock::new(12, 0).unwrap();
     assert_eq!(
         state.look_description(0xfa, Some(&table), 0),
-        "a clock (12:00 PM)"
+        "a clock, showing: 12:00 PM"
     );
 
     state.clock = GameClock::new(23, 59).unwrap();
     assert_eq!(
         state.look_description(0xfa, Some(&table), 0),
-        "a clock (11:59 PM)"
+        "a clock, showing: 11:59 PM"
     );
 }
 
