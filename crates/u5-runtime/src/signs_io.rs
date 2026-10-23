@@ -80,6 +80,9 @@ pub const SIGN_BODY_END_OF_RECORD: u8 = 0x00;
 /// pauses sign rendering until the player presses a key and then
 /// resumes printing.
 pub const SIGN_BODY_PAUSE_FOR_KEY: u8 = 0x0D;
+/// `formats/signs-dat.md §4`/§6: an explicit line feed in the authored
+/// stream (low seven bits `0x0A`); also the alias-bridge separator (§3).
+pub const SIGN_BODY_LINE_FEED: u8 = 0x0A;
 /// `formats/signs-dat.md §4` first byte in the contiguous macro
 /// range (`0x29..=0x31`). Macro bytes select NUL-terminated
 /// decoration fragments from a small resident pool rather than
@@ -290,12 +293,17 @@ fn record_payload<'a>(bytes: &'a [u8], record: &RawSignRecord) -> &'a [u8] {
     &bytes[record.payload_start..record.payload_end]
 }
 
+/// `formats/signs-dat.md §3`: the formatter skips a six-byte alias bridge
+/// "while it sees the line-separator marker used by the sign stream". Every
+/// shipped bridge is a lone line feed (`0x0A`); the paired divider bytes are
+/// still accepted for authored fixtures.
 fn is_alias_bridge_payload(payload: &[u8]) -> bool {
     payload.len() == 1
-        && matches!(
-            payload[0],
-            SIGN_BODY_SEPARATOR_GLYPH_A | SIGN_BODY_SEPARATOR_GLYPH_B
-        )
+        && (payload[0] & SIGN_BODY_CHARACTER_MASK == SIGN_BODY_LINE_FEED
+            || matches!(
+                payload[0],
+                SIGN_BODY_SEPARATOR_GLYPH_A | SIGN_BODY_SEPARATOR_GLYPH_B
+            ))
 }
 
 pub fn decode_sign_payload(bytes: &[u8]) -> String {
@@ -305,6 +313,11 @@ pub fn decode_sign_payload(bytes: &[u8]) -> String {
         match low {
             0x00 => break,
             0x0d => out.push(char::from(crate::text_hold::TEXT_HOLD_WAIT_KEY_MARKER)),
+            // `formats/signs-dat.md §4`: "preserve explicit newlines". The
+            // shipped streams end most authored rows with a high-bit line
+            // feed (`0x8A`), which the per-cell emitter turns into a row
+            // break with a column reset (`text-output.md §5`).
+            SIGN_BODY_LINE_FEED => out.push('\n'),
             0x26 | 0x27 => out.push('-'),
             0x29..=0x31 => out.push('*'),
             ch if (0x20..=0x7e).contains(&ch) => out.push(ch as char),

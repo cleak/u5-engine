@@ -6745,13 +6745,23 @@ impl PlayState {
 /// Lay an authored `SIGNS.DAT` stream out as message-window rows the way
 /// the per-cell emitter does (`text-output.md §5`): every printed cell
 /// advances the cursor, and the cell that fills the row's last column carries
-/// the cursor onto the next row. Hold markers occupy no cell.
+/// the cursor onto the next row. A line feed returns the column to the left
+/// edge and steps down one row - after an edge wrap that is a second row
+/// step. Hold markers occupy no cell.
 pub fn sign_stream_rows(stream: &str) -> String {
     let mut out = String::with_capacity(stream.len() + stream.len() / 8);
     let mut column = 0usize;
     for ch in stream.chars() {
         if ch == char::from(crate::text_hold::TEXT_HOLD_WAIT_KEY_MARKER) {
             out.push(ch);
+            continue;
+        }
+        if ch == '\n' {
+            if column == crate::MESSAGE_WINDOW_WIDTH {
+                out.push('\n');
+            }
+            out.push('\n');
+            column = 0;
             continue;
         }
         if column == crate::MESSAGE_WINDOW_WIDTH {

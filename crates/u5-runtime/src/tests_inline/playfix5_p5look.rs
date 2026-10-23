@@ -104,6 +104,45 @@ fn playtest_j05_sign_look_prints_the_preamble_and_keeps_authored_rows() {
     let _ = fs::remove_dir_all(dir);
 }
 
+/// `formats/signs-dat.md §4`: a decoder "should preserve explicit
+/// newlines", and §3's alias bridge is the stream's "line-separator marker".
+/// Shipped signs narrower than the window end each authored row with a
+/// high-bit line feed (`0x8A`), and every shipped bridge is a lone `0x0A`.
+/// The line feed is a row break with a column reset (`text-output.md §5`),
+/// so the rows stay aligned instead of running on cell by cell (J05 review).
+#[test]
+fn playtest_j05_sign_line_feeds_break_rows_and_bridge_aliases() {
+    let mut bytes = vec![0u8; SIGNS_DAT_SCENE_DIRECTORY_BYTES];
+    let first = SIGNS_DAT_SCENE_DIRECTORY_BYTES as u16;
+    bytes[4 * 2..4 * 2 + 2].copy_from_slice(&first.to_le_bytes());
+    bytes.extend_from_slice(&[4, 0, 16, 28]);
+    bytes.extend_from_slice(&[0x0a, 0]);
+    bytes.extend_from_slice(&[4, 0, 14, 28]);
+    bytes.extend_from_slice(b"g ROW g");
+    bytes.push(0x8a);
+    bytes.extend_from_slice(b"g TWO g");
+    bytes.push(0);
+    bytes.push(0);
+
+    let records = parse_sign_records(&bytes).unwrap();
+    assert_eq!(
+        crate::signs_io::matching_sign_bodies(&records, 4, 0, 28, 14),
+        vec!["g ROW g\ng TWO g"]
+    );
+    assert_eq!(
+        crate::signs_io::matching_sign_bodies(&records, 4, 0, 28, 16),
+        vec!["g ROW g\ng TWO g"]
+    );
+
+    assert_eq!(crate::play_state_impl::sign_stream_rows("15-cells-wide-r\nnext"), "15-cells-wide-r\nnext");
+    // A line feed right after the sixteenth cell follows the edge wrap, so it
+    // steps down a second row.
+    assert_eq!(
+        crate::play_state_impl::sign_stream_rows("sixteen-cells-ab\nnext"),
+        "sixteen-cells-ab\n\nnext"
+    );
+}
+
 /// `view.md §3`: the entry dispatch prints the shared "thou dost see"
 /// preamble at row 3, before row 6's terrain path, whose row 2 sends a
 /// telescope to the sky renderer "instead of printing any description
