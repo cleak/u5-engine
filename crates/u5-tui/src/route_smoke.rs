@@ -8313,27 +8313,34 @@ fn validate_route_smoke_case_state(
             // floor byte (by flavour), the `#` wall lines in the flavour's
             // outline byte, `0xFF` corners, a per-side opening or seal
             // (playtest K20), and the centre icon. The fixture drops the
-            // monster beside the Deceit entrance whatever that cell is, so any
-            // of the 81 side combinations is accepted.
+            // monster beside the Deceit entrance whatever that cell is, so the
+            // expected side treatments are read back from the party's four
+            // wrapped dungeon neighbours (north, east, south, west).
             let ambush_floor = state.combat_terrain[2][2];
             let flavour_3 = ambush_floor == DUNGEON_AMBUSH_ARENA_FLAVOUR3_FLOOR_TILE;
             let ambush_terrain_ok = matches!(
                 ambush_floor,
                 DUNGEON_AMBUSH_ARENA_FLOOR_TILE | DUNGEON_AMBUSH_ARENA_FLAVOUR3_FLOOR_TILE
-            ) && {
-                use u5_runtime::DungeonAmbushSideTreatment as Side;
-                let mut terrain = state.combat_terrain;
-                terrain[5][5] = ambush_floor;
-                let treatments = [Side::SevenCellOpening, Side::FiveCellOpening, Side::Sealed];
-                (0..81usize).any(|code| {
-                    let sides = [0, 1, 2, 3].map(|side| treatments[code / 3usize.pow(side) % 3]);
+            ) && match state.area {
+                u5_runtime::Area::Dungeon { level, .. } => {
+                    let side = u5_runtime::DUNGEON_SIDE as isize;
+                    let sides = [(0isize, -1isize), (1, 0), (0, 1), (-1, 0)].map(|(dx, dy)| {
+                        let x = (state.player.x as isize + dx).rem_euclid(side) as usize;
+                        let y = (state.player.y as isize + dy).rem_euclid(side) as usize;
+                        u5_runtime::dungeon_ambush_side_treatment(
+                            u5_runtime::dungeon_cell_class_of(state.dungeon_cell(level, x, y)),
+                        )
+                    });
+                    let mut terrain = state.combat_terrain;
+                    terrain[5][5] = ambush_floor;
                     terrain
                         == u5_runtime::dungeon_ambush_arena_terrain(
                             ambush_floor,
                             u5_runtime::dungeon_ambush_arena_outline_tile(flavour_3),
                             sides,
                         )
-                })
+                }
+                _ => false,
             };
             let party_slots = state.party.len().min(COMBAT_PARTY_ACTOR_SLOTS);
             let party_on_entry_row = state

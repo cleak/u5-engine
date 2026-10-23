@@ -291,7 +291,9 @@ pub const fn dungeon_ambush_arena_terrain(
         let (from, to, at, byte) = match sides[side] {
             DungeonAmbushSideTreatment::SevenCellOpening => (2, 8, line_at, fill_byte),
             DungeonAmbushSideTreatment::FiveCellOpening => (3, 7, line_at, fill_byte),
-            DungeonAmbushSideTreatment::Sealed => (0, last, strip_at, DUNGEON_AMBUSH_ARENA_CORNER_TILE),
+            DungeonAmbushSideTreatment::Sealed => {
+                (0, last, strip_at, DUNGEON_AMBUSH_ARENA_CORNER_TILE)
+            }
         };
         let mut cell = from;
         while cell <= to {

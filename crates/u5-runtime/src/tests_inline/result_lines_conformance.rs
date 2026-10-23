@@ -698,6 +698,9 @@ fn dungeon_search_on_a_field_reuses_the_look_wording() {
         (0x8B, "an energy field"),
     ] {
         assert_eq!(dungeon_search_description(tile), line, "{tile:#04x}");
-        assert_eq!(dungeon_search_description(tile), dungeon_look_description(tile));
+        assert_eq!(
+            dungeon_search_description(tile),
+            dungeon_look_description(tile)
+        );
     }
 }

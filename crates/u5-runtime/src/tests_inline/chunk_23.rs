@@ -22097,7 +22097,9 @@ fn dungeon_ambush_arena_draws_wall_lines_and_treats_each_side_by_its_neighbour()
         level: 0,
     };
     state.player.facing = Direction::East;
-    state.enter_dungeon_active_monster_combat(0, object).unwrap();
+    state
+        .enter_dungeon_active_monster_combat(0, object)
+        .unwrap();
 
     let t = state.combat_terrain;
     let (fill, wall, dark) = (0x45, 0x4F, 0xFF);
@@ -22113,10 +22115,26 @@ fn dungeon_ambush_arena_draws_wall_lines_and_treats_each_side_by_its_neighbour()
     for y in 1..10 {
         let east_open = (2..=8).contains(&y);
         let west_open = (3..=7).contains(&y);
-        assert_eq!(t[y][9], if east_open { fill } else { wall }, "east line y={y}");
-        assert_eq!(t[y][1], if west_open { fill } else { wall }, "west line y={y}");
-        assert_eq!(t[y][10], if y == 1 || y == 9 { wall } else { fill }, "east strip y={y}");
-        assert_eq!(t[y][0], if y == 1 || y == 9 { wall } else { fill }, "west strip y={y}");
+        assert_eq!(
+            t[y][9],
+            if east_open { fill } else { wall },
+            "east line y={y}"
+        );
+        assert_eq!(
+            t[y][1],
+            if west_open { fill } else { wall },
+            "west line y={y}"
+        );
+        assert_eq!(
+            t[y][10],
+            if y == 1 || y == 9 { wall } else { fill },
+            "east strip y={y}"
+        );
+        assert_eq!(
+            t[y][0],
+            if y == 1 || y == 9 { wall } else { fill },
+            "west strip y={y}"
+        );
     }
     assert_eq!(t[5][5], fill);
     assert_eq!(t[4][4], fill);
