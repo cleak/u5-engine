@@ -3197,8 +3197,9 @@ impl PlayState {
     /// [`Self::advance_turn_with_minutes_policy`] with the town schedule pass
     /// optional. `town-mode.md §7`/§12 (issue #298 Q30, `RETRACTIONS.md`
     /// R538): the town-bed Hole-up's "ten-minute elapsed-time loop that
-    /// follows runs no schedule pass"; it is the only caller that passes
-    /// `run_town_schedules = false`.
+    /// follows runs no schedule pass". The arrest wait-to-morning loop is the
+    /// other caller passing `run_town_schedules = false` (`npc-schedules.md
+    /// §5`, playtest K05).
     pub(crate) fn advance_turn_with_minutes_policy_and_schedules(
         &mut self,
         minutes: u8,

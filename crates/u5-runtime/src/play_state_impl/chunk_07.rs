@@ -4920,13 +4920,19 @@ impl PlayState {
     /// points, eats no meal and leaves the turn-step counter alone - that
     /// counter's only increment is the upkeep pass (`formats/saved-gam.md`
     /// `0x02E5`) (playtest W1).
+    ///
+    /// Nor is it a schedule-processor caller: `npc-schedules.md §5` names
+    /// only the town turn loop and the H-Hole-Up burst, so the wait leaves
+    /// every NPC where the jail load placed it. Running the scheduler here
+    /// walked Yew's guards off their posts overnight (playtest K05).
     pub(crate) fn advance_town_arrest_wait_to_morning(&mut self) -> u16 {
         let mut cleanup_ticks = 0;
         while !town_arrest_release_loop_done(self.clock.hour) && cleanup_ticks < 96 {
-            self.advance_turn_with_minutes_policy(
+            self.advance_turn_with_minutes_policy_and_schedules(
                 TOWN_ARREST_CLEANUP_INCREMENT_MINUTES,
                 false,
                 true,
+                false,
                 false,
                 false,
             );

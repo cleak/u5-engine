@@ -70,3 +70,19 @@ fn p6town_entering_a_town_hosting_no_shadowlord_prints_no_air_line() {
         .any(|entry| entry.text.starts_with("An air of")));
     let _ = fs::remove_dir_all(dir);
 }
+
+/// Playtest K05. `time.md §10`: the surrender path "advances time in repeated
+/// twenty-minute cleanup calls until the hour byte reaches 08:00", and
+/// `npc-schedules.md §5` names the schedule processor's only callers as the
+/// town turn loop and the H-Hole-Up burst. The wait must not walk NPCs.
+#[test]
+fn p6town_arrest_wait_to_morning_runs_no_schedule_pass() {
+    // The same NPC engages and steps on a single schedule pass
+    // (`a133_mode_four_engages_from_the_waypoint_distance_alone`).
+    let mut state = g6_town_with(vec![g6_npc(1, 15, 5, 4, (6, 6, 0))], 5, 5);
+    state.clock = GameClock::new(6, 30).unwrap();
+    let ticks = state.advance_town_arrest_wait_to_morning();
+    assert!(ticks > 0);
+    assert_eq!(state.clock.hour, 8);
+    assert_eq!(g6_pos(&state, 0), (15, 5), "no NPC moves during the wait");
+}
