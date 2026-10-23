@@ -210,3 +210,23 @@ fn p6town_scare_talk_prints_no_invented_line() {
     assert!(state.diagnostics_contain("scare hand-off reached"));
     assert_eq!(&state.npcs[0].schedule[..3], &[3, 3, 3]);
 }
+
+/// Playtest K19. `view.md §3` step 3 reads the Look target "through the
+/// shared live-map tile query", and `town-mode.md §15` has that accessor
+/// return the loaded floor's `(31,31)` cell for any out-of-range coordinate,
+/// for "every caller". Look West from column 0 printed nothing at all.
+#[test]
+fn p6town_look_off_the_town_grid_describes_the_substituted_corner_cell() {
+    let mut grid = open_grid();
+    grid[31 * 32 + 31] = 0x05;
+    let mut state = test_state(grid, 0, 5);
+    assert!(matches!(state.area, Area::Town { .. }));
+    let expected = format!(
+        "{LOOK_RESULT_PREFIX}\n{}",
+        state.look_description(0x05, None, 31)
+    );
+
+    assert_eq!(state.look_direction_with_table(Direction::West, None), MoveOutcome::Observed);
+
+    assert_eq!(state.message, expected);
+}

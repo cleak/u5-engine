@@ -3952,14 +3952,28 @@ impl PlayState {
                 let (dx, dy) = direction.delta();
                 let x = self.player.x as isize + dx;
                 let y = self.player.y as isize + dy;
-                if !(0..32).contains(&x) || !(0..32).contains(&y) {
-                    // The border ring is the location's exit trigger, so a
-                    // look cannot be aimed off the grid from inside it.
+                if !self.surface_look_target_visible(x, y) {
                     self.message.clear();
                     return Ok(MoveOutcome::Observed);
                 }
-                if !self.surface_look_target_visible(x, y) {
-                    self.message.clear();
+                if !(0..32).contains(&x) || !(0..32).contains(&y) {
+                    // `view.md §3` step 3 reads the target through the shared
+                    // live-map tile query, and `town-mode.md §15`: asked for
+                    // "any coordinate outside 0..31 on either axis while a
+                    // location floor is loaded, the accessor returns the
+                    // loaded floor's (31,31) cell instead of failing ...
+                    // Every caller that asks the accessor for an
+                    // out-of-range coordinate ... takes the same
+                    // substitution". This arm used to print nothing at all
+                    // (playtest K19). No town actor has an off-grid
+                    // coordinate, so the per-map object row cannot match;
+                    // the terrain description of the substituted cell is
+                    // what Look reports.
+                    let tile = self.grid[TOWN_GRID_SIDE * TOWN_GRID_SIDE - 1];
+                    self.message = format!(
+                        "{LOOK_RESULT_PREFIX}\n{}",
+                        self.look_description(tile, look_table, TOWN_GRID_SIDE - 1)
+                    );
                     return Ok(MoveOutcome::Observed);
                 }
                 let x = x as usize;
