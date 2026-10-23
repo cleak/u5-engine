@@ -257,3 +257,28 @@ fn playfix5_j26_z_then_zero_closes_the_player_row_before_status() {
     assert_eq!(rows.len(), named_rows.len(), "{rows:?} vs {named_rows:?}");
     let _ = fs::remove_dir_all(dir);
 }
+
+#[test]
+fn playfix5_j28_zero_is_ignored_at_the_cast_search_and_new_order_selectors() {
+    // inventory.md §4.3: "`0` commits the explicit 'no one' answer only in the
+    // callers that allow it ... other callers ignore `0`"; commands.md §5.8:
+    // where that answer is not wired "the digit `0` ... is simply ignored".
+    let dir = debug_game_dir();
+    for (keys, target) in [
+        (vec!['C'], "Cast"),
+        (vec!['S', '\u{3}'], "Search"),
+        (vec!['N'], "New Order"),
+    ] {
+        let mut state = p5panel_three_member_state();
+        p4window_keys(&mut state, &dir, &keys);
+        assert!(state.active_party_selector.is_some(), "{target} opened the selector");
+        let before = p4window_rows(&state);
+        p4window_keys(&mut state, &dir, &['0']);
+        assert!(state.active_party_selector.is_some(), "{target}: 0 does not close it");
+        assert_eq!(p4window_rows(&state), before, "{target}: 0 prints nothing");
+        // Escape is still the cancel.
+        p4window_keys(&mut state, &dir, &['\u{1b}']);
+        assert!(state.active_party_selector.is_none(), "{target}: Escape cancels");
+    }
+    let _ = fs::remove_dir_all(dir);
+}

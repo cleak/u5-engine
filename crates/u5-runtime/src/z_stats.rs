@@ -1292,11 +1292,16 @@ impl PartySelectorTarget {
     /// in the callers that allow it ... other callers ignore `0`." The
     /// dungeon acting-member callers are among the others: `dungeon-mode.md
     /// §8.1` gives that prompt a pick, a re-prompt and a cancel only.
+    ///
+    /// Of this selector's callers only Z-stats is published as allowing it
+    /// (§4.3, R459: "Z uses that answer to open shared Equipment"); the
+    /// active-player prompt is the digit command, not this surface. Cast,
+    /// Search and New Order used to take `0` as a cancel and print `None!` /
+    /// `Swap nobody!`, but `commands.md §5.8` says "the digit `0` ... is
+    /// simply ignored" where the answer is not wired, and only Escape cancels
+    /// (playtest J28).
     pub const fn ignores_zero(self) -> bool {
-        matches!(
-            self,
-            Self::DungeonLook { .. } | Self::DungeonSearch | Self::CampWatch
-        )
+        !matches!(self, Self::ZStats)
     }
 
     pub fn prompt(self) -> &'static str {

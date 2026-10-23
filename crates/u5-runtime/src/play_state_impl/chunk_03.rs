@@ -1270,7 +1270,7 @@ impl PlayState {
             self.keep_party_selector_prompt(session);
             return true;
         }
-        if matches!(key, '\u{1b}' | '0') {
+        if key == '\u{1b}' {
             self.active_party_selector = None;
             let prompt = session.target.prompt();
             // `commands.md §5.3`: a prompt ending in a trailing space
