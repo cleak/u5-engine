@@ -476,23 +476,6 @@ impl PlayState {
     ) -> io::Result<bool> {
         let inline_rest = inline_rest.into();
         let turn_before = self.turn;
-        // `commands.md §3`: "Most letters discard whatever their handler
-        // returned and report the default \"acted\"", and the dungeon loop
-        // "[t]ests only \"is it non-zero\", which selects the dungeon's
-        // post-action pass". These letters neither forward (`A`, `B`, `C`,
-        // `K`, `Y`) nor are published "no action" producers (`D`, `W`, `Q`,
-        // dungeon `P`, digits); `E`'s dungeon refusal "retains the default
-        // acted result" and `dungeon-mode.md §12` says the same of L-Look
-        // "even if its focus prompt is cancelled". The command epilogue
-        // charges the turn once the letter's last prompt has closed if the
-        // handler did not (playtest J08).
-        if matches!(
-            key.to_ascii_lowercase(),
-            'e' | 'f' | 'g' | 'h' | 'i' | 'j' | 'l' | 'm' | 'n' | 'o' | 'r' | 's' | 't' | 'u'
-                | 'v' | 'x' | 'z'
-        ) {
-            self.dungeon_acted_turn_before = Some(turn_before);
-        }
         macro_rules! handled {
             ($outcome:expr) => {{
                 let outcome = $outcome;
