@@ -678,8 +678,11 @@ impl PlayState {
                 npc.active_object,
             )
         };
-        let should_render =
-            x < 32 && y < 32 && z == floor && (x, y) != (self.player.x, self.player.y);
+        // `npc-schedules.md §11`: an NPC "arriving on the player's floor, not
+        // yet linked" is allocated a slot - with no exception for the party's
+        // own cell; `active-objects.md §2` has the renderer paint slot zero
+        // over a co-located entity (playtest J17).
+        let should_render = x < 32 && y < 32 && z == floor;
         if let Some(slot) = active_object {
             if !should_render {
                 self.free_active_object_slot(slot);
@@ -756,11 +759,10 @@ impl PlayState {
         for index in 0..self.npcs.len() {
             self.npcs[index].active_object = None;
             let npc = &self.npcs[index];
-            if npc.x >= 32
-                || npc.y >= 32
-                || npc.z != floor
-                || (npc.x, npc.y) == (self.player.x, self.player.y)
-            {
+            // `npc-schedules.md §12`: the re-place pass "re-places each live
+            // scheduled NPC", and §11 links every one that lands on the
+            // player's floor - the party's own cell included (playtest J17).
+            if npc.x >= 32 || npc.y >= 32 || npc.z != floor {
                 continue;
             }
             let mut object = npc_active_object(npc.type_byte, npc.x, npc.y, npc.z);

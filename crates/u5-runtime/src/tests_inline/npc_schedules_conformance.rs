@@ -308,3 +308,31 @@ fn npc_standing_on_its_waypoint_does_not_refresh_the_cached_waypoint() {
     assert_eq!(state.npcs[0].state, NPC_STATE_IDLE);
     assert_eq!(state.npcs[0].cached_wp, 2);
 }
+
+#[test]
+fn npc_replaced_onto_the_party_cell_is_still_linked() {
+    // Playtest J17. npc-schedules.md §12: the clear-and-re-place pass
+    // "re-places each live scheduled NPC at the position its schedule gives
+    // for the current hour", and §11 links an NPC "arriving on the player's
+    // floor" with no exception for the party's own cell (the renderer paints
+    // slot zero over it). A town-bed Hole-up whose sleeper's waypoint is the
+    // party's bed must leave that sleeper linked, so Look sees it once the
+    // party steps away.
+    let mut state = test_state(npc_open_grid(), 4, 4);
+    state.area = Area::Town {
+        scene: Scene::new(0x11).unwrap(),
+        floor: 0,
+    };
+    state.npcs.push(scheduled_npc(3, 9, 9, 0, (4, 4, 0)));
+
+    state.clear_and_replace_scheduled_npcs();
+
+    assert_eq!((state.npcs[0].x, state.npcs[0].y), (4, 4));
+    let slot = state.npcs[0]
+        .active_object
+        .expect("the re-placed NPC is linked on the party's cell");
+    assert_eq!(
+        (state.active_objects[slot].x, state.active_objects[slot].y),
+        (4, 4)
+    );
+}
