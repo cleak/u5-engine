@@ -5794,13 +5794,8 @@ impl PlayState {
         }
         self.active_conversation = None;
         self.active_conversation_npc_slot = None;
-        let mut opening = conversation_opening_stopped_rendered(rendered);
-        if let Some(cleanup) = self.run_final_conversation_cleanup() {
-            if !opening.text.is_empty() {
-                opening.push_plain(" ");
-            }
-            opening.push_plain(&cleanup);
-        }
+        let opening = conversation_opening_stopped_rendered(rendered);
+        let _ = self.run_final_conversation_cleanup();
         opening
     }
 
@@ -6132,14 +6127,7 @@ impl PlayState {
             }
             self.active_conversation = None;
             self.active_conversation_npc_slot = None;
-            if let Some(cleanup) = self.run_final_conversation_cleanup() {
-                if !text.is_empty() {
-                    text.push(' ');
-                    rendered.push_plain(" ");
-                }
-                text.push_str(&cleanup);
-                rendered.push_plain(&cleanup);
-            }
+            let _ = self.run_final_conversation_cleanup();
         }
         debug_assert_eq!(rendered.text, text);
         self.emit_tlk_message(rendered);
@@ -6475,18 +6463,27 @@ impl PlayState {
         }
     }
 
-    /// Run the Shadowlord of Falsehood's post-conversation theft.
-    pub fn run_final_conversation_cleanup(&mut self) -> Option<String> {
+    /// Run the Shadowlord of Falsehood's post-conversation theft. Returns
+    /// whether the theft ran.
+    ///
+    /// `conversation.md §10` says the cleanup "prints the stolen-goods line",
+    /// but no spec document publishes that line's wording. The engine used to
+    /// print an invented ` Stolen goods.` here (playtest K14); the line is now
+    /// recorded as a diagnostic until the spec names it.
+    pub fn run_final_conversation_cleanup(&mut self) -> bool {
         self.run_final_conversation_cleanup_with_seed(host_clock_prng_seed_now())
     }
 
     /// Deterministic-seed form of [`Self::run_final_conversation_cleanup`].
     /// The production caller samples the host clock after the warning line and
     /// sound; tests can inject the same resulting 12-bit seed directly.
-    pub fn run_final_conversation_cleanup_with_seed(&mut self, host_seed: u16) -> Option<String> {
+    pub fn run_final_conversation_cleanup_with_seed(&mut self, host_seed: u16) -> bool {
         if self.resident_shadowlord != Some(SHADOWLORD_FALSEHOOD_INDEX) {
-            return None;
+            return false;
         }
+        self.push_diagnostic(
+            "Falsehood theft: stolen-goods line reached; its wording is not published".to_string(),
+        );
         self.emit_sound_effect(SoundEffect::ActionSnap);
 
         // `prng.md §3`: this sample precedes inventory inspection even when
@@ -6515,7 +6512,7 @@ impl PlayState {
             self.gold = self.gold.saturating_sub(debit);
         }
         self.mark_visibility_dirty();
-        Some("Stolen goods.".to_string())
+        true
     }
 
     pub fn apply_talk_action_grants(&mut self, actions: &[char]) {
