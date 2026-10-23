@@ -8310,15 +8310,30 @@ fn validate_route_smoke_case_state(
             let monster_on_published_source = (0..DUNGEON_ROOM_SOURCE_COUNT)
                 .any(|slot| source_x[slot] == monster_actor.x && source_y[slot] == monster_actor.y);
             // `dungeon-mode.md §14.1` step 3 (u5-spec#298 Q13): the room
-            // floor byte (by flavour), `0xFF` corners, and the centre icon.
-            let ambush_floor = state.combat_terrain[1][1];
+            // floor byte (by flavour), the `#` wall lines in the flavour's
+            // outline byte, `0xFF` corners, a per-side opening or seal
+            // (playtest K20), and the centre icon. The side the party faces
+            // (east, where the monster stood) is never sealed.
+            let ambush_floor = state.combat_terrain[2][2];
+            let flavour_3 = ambush_floor == DUNGEON_AMBUSH_ARENA_FLAVOUR3_FLOOR_TILE;
             let ambush_terrain_ok = matches!(
                 ambush_floor,
                 DUNGEON_AMBUSH_ARENA_FLOOR_TILE | DUNGEON_AMBUSH_ARENA_FLAVOUR3_FLOOR_TILE
             ) && {
+                use u5_runtime::DungeonAmbushSideTreatment as Side;
                 let mut terrain = state.combat_terrain;
                 terrain[5][5] = ambush_floor;
-                terrain == u5_runtime::dungeon_ambush_arena_terrain(ambush_floor)
+                let treatments = [Side::SevenCellOpening, Side::FiveCellOpening, Side::Sealed];
+                (0..81usize).any(|code| {
+                    let sides = [0, 1, 2, 3].map(|side| treatments[code / 3usize.pow(side) % 3]);
+                    sides[1] != Side::Sealed
+                        && terrain
+                            == u5_runtime::dungeon_ambush_arena_terrain(
+                                ambush_floor,
+                                u5_runtime::dungeon_ambush_arena_outline_tile(flavour_3),
+                                sides,
+                            )
+                })
             };
             let party_slots = state.party.len().min(COMBAT_PARTY_ACTOR_SLOTS);
             let party_on_entry_row = state

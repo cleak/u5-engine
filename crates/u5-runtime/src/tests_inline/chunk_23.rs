@@ -20027,6 +20027,8 @@ fn dungeon_ambush_arena_synthesises_published_metadata_band() {
 
     let record = CombatArenaRecord::synthesise_dungeon_ambush(
         DUNGEON_AMBUSH_ARENA_FLOOR_TILE,
+        DUNGEON_AMBUSH_ARENA_OUTLINE_TILE,
+        [DungeonAmbushSideTreatment::SevenCellOpening; 4],
         0,
         COMBAT_CLASS_BAT,
         3,
@@ -20123,6 +20125,8 @@ fn dungeon_ambush_source_rows_swap_by_facing() {
 
     let untouched = CombatArenaRecord::synthesise_dungeon_ambush(
         DUNGEON_AMBUSH_ARENA_FLOOR_TILE,
+        DUNGEON_AMBUSH_ARENA_OUTLINE_TILE,
+        [DungeonAmbushSideTreatment::SevenCellOpening; 4],
         4,
         COMBAT_CLASS_BAT,
         1,
@@ -22059,8 +22063,61 @@ fn dungeon_ambush_arena_uses_the_published_floor_corners_and_centre_icons() {
             for (x, y) in [(0, 0), (10, 0), (0, 10), (10, 10)] {
                 assert_eq!(terrain[y][x], 0xFF);
             }
-            assert_eq!(terrain[1][1], floor);
+            let outline = if floor == 0x45 { 0x4F } else { 0x4D };
+            assert_eq!(terrain[1][1], outline);
             assert_eq!(terrain[2][7], floor);
         }
     }
+}
+
+#[test]
+fn dungeon_ambush_arena_draws_wall_lines_and_treats_each_side_by_its_neighbour() {
+    // `dungeon-mode.md §14.1` steps 3.2 and 3.5 (playtest K20): `#` wall
+    // lines on rows/columns 1 and 9 in the outline byte (`0x4F` in Deceit),
+    // a passable neighbour carves seven cells, a door-family neighbour five,
+    // and a wall neighbour fills that side's outer strip with `0xFF`.
+    let object = ActiveObject {
+        type_byte: 0,
+        tile: 0,
+        x: 3,
+        y: 2,
+        z: 0,
+        phase: 0x60,
+        aux1: 20,
+        aux3: DUNGEON_MONSTER_FLOOR_DEP3,
+    };
+    let mut grid = open_dungeon_record();
+    grid[dungeon_cell_index(0, 2, 1)] = 0xB0; // north: wall
+    grid[dungeon_cell_index(0, 3, 2)] = 0x00; // east: passage
+    grid[dungeon_cell_index(0, 2, 3)] = 0xD0; // south: wall
+    grid[dungeon_cell_index(0, 1, 2)] = 0xF2; // west: room trigger (door family)
+    let mut state = dungeon_state(grid, 0, 2, 2);
+    state.area = Area::Dungeon {
+        scene: DungeonScene::new(33).unwrap(),
+        level: 0,
+    };
+    state.player.facing = Direction::East;
+    state.enter_dungeon_active_monster_combat(0, object).unwrap();
+
+    let t = state.combat_terrain;
+    let (fill, wall, dark) = (0x45, 0x4F, 0xFF);
+    for i in 0..11 {
+        // North and south: wall line intact, outer strips dark.
+        assert_eq!(t[0][i], dark, "north strip x={i}");
+        assert_eq!(t[10][i], dark, "south strip x={i}");
+        if i != 0 && i != 10 {
+            assert_eq!(t[1][i], wall, "north line x={i}");
+            assert_eq!(t[9][i], wall, "south line x={i}");
+        }
+    }
+    for y in 1..10 {
+        let east_open = (2..=8).contains(&y);
+        let west_open = (3..=7).contains(&y);
+        assert_eq!(t[y][9], if east_open { fill } else { wall }, "east line y={y}");
+        assert_eq!(t[y][1], if west_open { fill } else { wall }, "west line y={y}");
+        assert_eq!(t[y][10], if y == 1 || y == 9 { wall } else { fill }, "east strip y={y}");
+        assert_eq!(t[y][0], if y == 1 || y == 9 { wall } else { fill }, "west strip y={y}");
+    }
+    assert_eq!(t[5][5], fill);
+    assert_eq!(t[4][4], fill);
 }
