@@ -1249,6 +1249,19 @@ impl PlayState {
                 inventory_cursor: 0,
             };
             z_stats.open_shared_equipment();
+            // `commands.md §5.8`: the selector's "no selection" result
+            // "completes the row as `Player:_` plus a bare line feed". The
+            // page loop's `\nStatus:_` then spends one blank row, exactly as
+            // after a named member ([`Self::z_stats_for_party`]); the row
+            // used to be left open, so `Status:` sat directly beneath
+            // (playtest J26).
+            let prompt = session.target.prompt();
+            if prompt.ends_with(' ') {
+                let _ = self.complete_open_direction_echo(prompt, "");
+            }
+            if !self.message_transcript.is_empty() {
+                self.push_explicit_blank_message_entry();
+            }
             self.message = self.render_z_stats_session(&z_stats);
             self.active_z_stats = Some(z_stats);
             return true;

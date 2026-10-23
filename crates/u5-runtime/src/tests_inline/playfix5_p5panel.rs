@@ -225,3 +225,35 @@ fn playfix5_j24_an_active_player_digit_with_a_three_digit_hull_lifts_the_history
     assert_eq!(lifted_rows.len(), plain_rows.len() + 1, "{lifted_rows:?} vs {plain_rows:?}");
     let _ = fs::remove_dir_all(dir);
 }
+
+/// A world state with a three-member Good party, so the shared selector
+/// prints `Player: ` (commands.md §5.8).
+fn p5panel_three_member_state() -> PlayState {
+    let mut state = p4window_world_state();
+    state.active_player = None;
+    state.party.push(audit_g5_companion(1));
+    state.party.push(audit_g5_companion(2));
+    state.party_names = vec![*b"AVATAR\0\0\0", *b"SHAMINO\0\0", *b"IOLO\0\0\0\0\0"];
+    state
+}
+
+#[test]
+fn playfix5_j26_z_then_zero_closes_the_player_row_before_status() {
+    // commands.md §5.8: the no-selection result "completes the row as
+    // `Player:_` plus a bare line feed"; inventory.md §4.7's `\nStatus:_`
+    // then leaves one blank row, as it does after a named member.
+    let dir = debug_game_dir();
+    let mut named = p5panel_three_member_state();
+    p4window_keys(&mut named, &dir, &['Z', '\r']);
+    let named_rows = p4window_rows_from(&p4window_rows(&named), ">Z-stats...");
+    assert_eq!(named_rows.get(2).map(String::as_str), Some(""), "{named_rows:?}");
+
+    let mut zero = p5panel_three_member_state();
+    p4window_keys(&mut zero, &dir, &['Z', '0']);
+    assert!(zero.active_z_stats.is_some(), "0 opens shared Equipment");
+    let rows = p4window_rows_from(&p4window_rows(&zero), ">Z-stats...");
+    assert!(rows.get(1).is_some_and(|row| row.trim_end() == "Player:"), "{rows:?}");
+    assert_eq!(rows.get(2).map(String::as_str), Some(""), "{rows:?}");
+    assert_eq!(rows.len(), named_rows.len(), "{rows:?} vs {named_rows:?}");
+    let _ = fs::remove_dir_all(dir);
+}
