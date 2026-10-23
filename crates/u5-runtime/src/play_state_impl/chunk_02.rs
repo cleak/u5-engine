@@ -76,9 +76,15 @@ impl PlayState {
     /// the dungeon post-action pass runs. X-it has no working scene refusal.
     fn dungeon_exit_vehicle_command(&mut self, game_dir: &Path) -> io::Result<MoveOutcome> {
         let on_foot = self.player.transport.is_foot();
+        let turn_before = self.turn;
         let outcome = self.exit_vehicle_with_game_dir(Some(game_dir))?;
         if on_foot {
             self.advance_turn();
+        } else {
+            // `commands.md §3`: X is not one of the six forwarding routes, so
+            // the vehicle refusals - `Under sail!`, `No land nearby!`, `No
+            // skiffs on board!` - report "acted" as well (playtest K17).
+            self.charge_tile_command_acted_exit(turn_before);
         }
         Ok(outcome)
     }
@@ -775,7 +781,15 @@ impl PlayState {
             }
             'j' => self.jimmy_facing_with_game_dir(Some(game_dir))?,
             'k' => self.klimb_command(game_dir)?,
-            'x' => self.exit_vehicle_with_game_dir(Some(game_dir))?,
+            // `commands.md §3`: X is not one of the six forwarding routes, so
+            // every X-it exit - `Under sail!`, `No land nearby!`, `No skiffs
+            // on board!` included - reports the default "acted" and the mode
+            // loop runs its per-turn epilogue (playtest K17).
+            'x' => {
+                let outcome = self.exit_vehicle_with_game_dir(Some(game_dir))?;
+                self.charge_tile_command_acted_exit(turn_before);
+                outcome
+            }
             // See the `M` arm above: `M` is Mix Reagents everywhere.
             'm' => self.start_mix_reagents_prompt(),
             'z' => self.z_stats_command(),

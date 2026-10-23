@@ -315,7 +315,9 @@ fn xit_key_no_skiffs_refusal_leaves_one_blank_row_under_the_echo() {
         rows.ends_with(&["X-it ship!", "", "No skiffs on board!"]),
         "{rows:?}"
     );
-    assert_eq!(state.turn, 0);
+    // `commands.md §3`: X does not forward its handler's value, so the
+    // refusal reports "acted" and costs the outdoor turn (playtest K17).
+    assert_eq!(state.turn, 1);
 }
 
 #[test]

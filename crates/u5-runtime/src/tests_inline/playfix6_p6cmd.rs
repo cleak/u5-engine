@@ -140,3 +140,47 @@ fn playtest_k09_a_key_during_the_walk_in_only_dismisses_the_greeting_page() {
     }
     let _ = fs::remove_dir_all(dir);
 }
+
+/// `commands.md §3`: "Most letters discard whatever their handler returned
+/// and report the default \"acted\". Exactly six routes forward the
+/// handler's own value" - and X is not one of them, so the overworld loop's
+/// per-turn epilogue follows every X-it refusal. Playtest K17: `Under sail!`,
+/// `No land nearby!` and `No skiffs on board!` cost no turn.
+#[test]
+fn playtest_k17_overworld_xit_refusals_cost_the_outdoor_turn() {
+    let game_dir = Path::new("");
+    let transports = [
+        TransportState::Ship {
+            type_byte: SHIP_TRANSPORT_HOISTED_FIRST,
+            tile: FIRST_PLAYABLE_FRIGATE_TILE,
+            sails_hoisted: true,
+            hull: 77,
+            skiffs: 2,
+        },
+        TransportState::Ship {
+            type_byte: 168,
+            tile: 168,
+            sails_hoisted: false,
+            hull: 77,
+            skiffs: 0,
+        },
+        TransportState::Skiff {
+            type_byte: FIRST_PLAYABLE_SKIFF_TILE,
+            tile: FIRST_PLAYABLE_SKIFF_TILE,
+        },
+    ];
+    for transport in transports {
+        let mut state = world_state(vec![BRIT_DEEP_WATER_TILE; WORLD_CELLS], 5, 5);
+        state.player.transport = transport;
+        state.sync_player_object();
+        let clock = state.clock;
+
+        crate::input_dispatch::handle_play_key_input(&mut state, 'X', "", game_dir).unwrap();
+
+        assert_eq!(state.player.transport, transport, "the exit was refused");
+        assert_eq!(state.turn, 1, "{transport:?}");
+        let mut expected = clock;
+        expected.advance_minutes(2);
+        assert_eq!(state.clock, expected, "{transport:?}");
+    }
+}
