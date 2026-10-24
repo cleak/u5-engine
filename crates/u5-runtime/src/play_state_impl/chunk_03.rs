@@ -3035,8 +3035,15 @@ impl PlayState {
             for ch in std::iter::once(key).chain(suffix.chars()) {
                 match ch.to_ascii_uppercase() {
                     'Y' => {
+                        // `view.md` "Wishing-well text": the answer "is
+                        // appended immediately as `Yes\n`", and only then
+                        // does Yes with no gold return, "adding no no-money
+                        // or no-effect line" (playtest N03).
                         if self.gold == 0 {
-                            self.message.clear();
+                            self.commit_prompt_reply(
+                                WISHING_WELL_COIN_PROMPT,
+                                WISHING_WELL_COIN_YES_REPLY,
+                            );
                             return Some(MoveOutcome::Observed);
                         }
                         self.gold = self.gold.saturating_sub(1);

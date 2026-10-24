@@ -741,9 +741,11 @@ fn town_surface_wishing_well_decline_or_empty_purse_has_no_effect() {
     );
     assert!(empty.active_wishing_well.is_none());
     assert_eq!(empty.gold, 0);
-    // An empty purse cannot pay the coin; its own line is
-    // unmeasured, so nothing prints.
-    assert!(empty.message.is_empty());
+    // `view.md` "Wishing-well text": the `Yes` echo is appended first, and
+    // the empty purse then returns "adding no no-money or no-effect line"
+    // (playtest N03).
+    assert!(empty.message.ends_with(WISHING_WELL_COIN_YES_REPLY));
+    assert!(!empty.message.contains(WISHING_WELL_WISH_PROMPT));
     assert_eq!(empty.turn, 0);
 }
 
