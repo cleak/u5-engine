@@ -5671,7 +5671,14 @@ impl PlayState {
                     .duration(true)
                     .as_secs_f64();
                 self.stats_panel_hold = Some(self.stats_panel.clone());
-                self.staged_narration.push_secs(descent_secs, DROWNING_MESSAGE);
+                // `overworld.md §6.3` row 6: "`Ship sunk!\n` and then either
+                // `Abandon ship!\n` or `DROWNING!!!\n`". The feed closes the
+                // row, so the loop's passes run with the cursor on the row
+                // under it - measured on `sail-calm` (20261024-003707, beat
+                // `pass`): the stock holds an empty row under `DROWNING!!!`
+                // while the hit points fall.
+                self.staged_narration
+                    .push_secs(descent_secs, format!("{DROWNING_MESSAGE}\n"));
                 drowning = self.apply_ship_loss_drowning_paced();
             }
         }

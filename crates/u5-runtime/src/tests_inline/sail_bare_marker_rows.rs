@@ -324,6 +324,31 @@ fn ship_sunk_closes_its_row_before_the_drowning_descent() {
         "the descent holds the row `Ship sunk!`'s feed opened: {rows:?}"
     );
 
+    // Release only `DROWNING!!!`: the death loop's passes are still held.
+    // `overworld.md §6.3` row 6 gives the line as `DROWNING!!!\n`, so it
+    // closes its own row and the loop runs with the cursor on the row under
+    // it - measured on `sail-calm` (20261024-003707, beat `pass`): the stock
+    // window holds an empty row under `DROWNING!!!` while the hit points
+    // fall, where this engine left `DROWNING!!!` as the last row.
+    let descent = SoundEffect::LongDescent
+        .program(&mut crate::audio::RumbleJitter::default())
+        .duration(true)
+        .as_secs_f64();
+    state.advance_staged_narration_to(100.0);
+    state.advance_staged_narration_to(100.0 + descent + 0.01);
+    assert!(state.staged_narration_active(), "the passes are still held");
+    state.flush_message_slot();
+    let rows = drowning_layout(&state);
+    let sunk = rows
+        .iter()
+        .position(|row| row.1 == SHIP_SUNK_MESSAGE)
+        .unwrap_or_else(|| panic!("{rows:?}"));
+    assert_eq!(
+        &rows[sunk + 1..],
+        &[(false, DROWNING_MESSAGE.to_string()), (false, String::new())],
+        "`DROWNING!!!` on the row `Ship sunk!` opened, then its own feed's row: {rows:?}"
+    );
+
     state.flush_staged_narration();
     state.flush_message_slot();
     let rows = drowning_layout(&state);
