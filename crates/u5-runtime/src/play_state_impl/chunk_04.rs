@@ -2953,6 +2953,12 @@ impl PlayState {
     ) -> io::Result<()> {
         let prior_sound_serial = self.sound_effect_serial;
         self.cache_current_world_overlay();
+        // `overworld.md §9.2`: from the overworld "the warp writes the outdoor
+        // object table to the plane's canonical `.OOL` while Stage B still
+        // holds the marker at zero", so a save taken after a cross-plane
+        // warp still holds what was parked on the plane left behind
+        // (playtest L04).
+        self.write_current_world_plane_object_table(game_dir, true)?;
         let previous_turn = self.turn;
         // `overworld.md §9.2` (issue #299 Q26): "Transport therefore
         // survives a transit unchanged. The vehicle in use is not a separate

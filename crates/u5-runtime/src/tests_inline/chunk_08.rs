@@ -343,7 +343,7 @@
         assert_eq!(state.turn, 1);
         assert_eq!(
             state.message,
-            "\"Thou art not upon a Sacred Quest!\nPassage denied!\"\n"
+            "\n\"Thou art not upon a Sacred Quest!\nPassage denied!\"\n"
         );
         let _ = fs::remove_dir_all(dir);
     }
@@ -368,7 +368,7 @@
             (NARRATIVE_GATE_X as usize, NARRATIVE_GATE_Y as usize)
         );
         assert_eq!(state.turn, 1);
-        assert_eq!(state.message, "\"Pass, Seeker!\"\n");
+        assert_eq!(state.message, "\n\"Pass, Seeker!\"\n");
         let _ = fs::remove_dir_all(dir);
     }
 

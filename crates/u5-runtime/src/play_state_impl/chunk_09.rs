@@ -339,6 +339,14 @@ impl PlayState {
         let preserve_transport = entry.preserves_transport;
         let pre_transition_transport = self.player.transport;
         self.cache_current_world_overlay();
+        // `overworld.md §8.1` "The falls plane arm's disk handoff": the
+        // handler "writes the surface active-object file from the live
+        // object table" before re-initialising the overworld, and
+        // `formats/ool.md §6` has the save compose `SAVED.OOL` from the
+        // per-plane files, which "are kept current by the transition paths".
+        // Without this write a save taken on the destination plane commits a
+        // stale mirror for the plane just left (playtest L04).
+        self.write_current_world_plane_object_table(game_dir, false)?;
         self.area = Area::World {
             plane: entry.to_plane,
         };
@@ -387,6 +395,35 @@ impl PlayState {
         // line is printed by the chain before this call, and the whirlpool
         // prints nothing here at all. The coordinate narration this used to
         // emit had no counterpart in the original and is removed.
+        Ok(())
+    }
+
+    /// Write the complete live outdoor object table, slot zero included, to
+    /// the current plane's canonical `.OOL` (`formats/ool.md §11`: the
+    /// filename helper "chooses `BRIT.OOL` for the surface and `UNDER.OOL`
+    /// for the underworld"). Outside world mode this is a no-op.
+    ///
+    /// `zero_player_type` reproduces `overworld.md §9.2`'s saved-slot warp
+    /// detail: that write happens "while Stage B still holds the marker at
+    /// zero, so slot zero's type byte in that written table is zero";
+    /// `town-mode.md §15.1` step 4 re-synchronises it on the way back.
+    pub fn write_current_world_plane_object_table(
+        &self,
+        game_dir: &Path,
+        zero_player_type: bool,
+    ) -> io::Result<()> {
+        let Area::World { plane } = self.area else {
+            return Ok(());
+        };
+        let mut bytes = encode_active_object_table(&self.active_objects)?;
+        if zero_player_type && !self.active_objects.is_empty() {
+            bytes[0] = 0;
+        }
+        let file_name = match plane {
+            WorldPlane::Britannia => BRIT_OOL_FILENAME,
+            WorldPlane::Underworld => UNDER_OOL_FILENAME,
+        };
+        write_disk_file(&game_dir.join(file_name), bytes)?;
         Ok(())
     }
 

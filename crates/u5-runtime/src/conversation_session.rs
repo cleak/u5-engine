@@ -283,6 +283,32 @@ impl ConversationSessionOutput {
         }
     }
 
+    /// [`Self::close_framed_tail`] for a stream an ASK-WHO answer resumed,
+    /// whose acknowledgement fills `self.text[..acknowledgement_len]`.
+    ///
+    /// `conversation.md §7.6`: the handler's opening quote leaves the
+    /// last-printable record at a quote, "because the stored-text path used
+    /// for the question and the acknowledgements does not update that
+    /// record", so "Neither acknowledgement closes its quote". When the
+    /// resumed stream printed nothing - the record ends on the ASK-WHO byte -
+    /// the framing's closing quote is the next quote sentinel and is dropped
+    /// like the stream's own (`formats/tlk.md §9.2`); its two row breaks
+    /// still run (playtest L02/L03).
+    fn close_framed_tail_after_ask_who(&mut self, acknowledgement_len: usize) {
+        let is_hold = |byte: u8| crate::text_hold::TextHoldKind::from_marker(byte).is_some();
+        let resumed_printed = self
+            .text
+            .get(acknowledgement_len..)
+            .is_some_and(|resumed| resumed.bytes().any(|byte| !is_hold(byte)));
+        if resumed_printed {
+            self.close_framed_tail();
+            return;
+        }
+        while !self.text.ends_with("\n\n") {
+            self.push_plain_text("\n");
+        }
+    }
+
     /// The opening half of [`Self::push_framed_response`] for a response
     /// that reported a `0x82` stop. `conversation.md §7.2` (u5-spec#299 Q1):
     /// "The closing quote and the two row breaks that normally come before
@@ -322,6 +348,28 @@ impl ConversationSessionOutput {
         let keep = self.text.len() - (LONE_QUOTE_TAIL.len() - 1);
         self.text.truncate(keep);
         self.rendered_glyphs.truncate(keep);
+    }
+
+    /// Remove a double quote that is this output's first printable byte.
+    /// `formats/tlk.md §9.2`: the byte runner "suppresses a quote when the
+    /// previous printable byte was also a quote"; hold markers print nothing
+    /// and do not count.
+    fn drop_leading_quote(&mut self) {
+        let is_hold = |byte: u8| crate::text_hold::TextHoldKind::from_marker(byte).is_some();
+        let Some(index) = self.text.bytes().position(|byte| !is_hold(byte)) else {
+            return;
+        };
+        if self.text.as_bytes()[index] != b'"' {
+            return;
+        }
+        self.text.remove(index);
+        if self
+            .rendered_glyphs
+            .get(index)
+            .is_some_and(|glyph| glyph.byte == b'"')
+        {
+            self.rendered_glyphs.remove(index);
+        }
     }
 
     /// [`Self::push_framed_response`] for a fixed engine literal.
@@ -394,6 +442,13 @@ pub struct ConversationSession {
     /// breaks the opener prints after it - is owed once the resumed Name
     /// entry finishes without signalling a stop (playtest F04).
     introduction_ask_who: bool,
+    /// The pending `0x88` ASK-WHO was reached by the ordinary reserved `NAME`
+    /// response's Name entry outside any labelled block. `conversation.md
+    /// §6`: "On normal completion at the entry terminator, the response
+    /// handler requests a closing double quote and two newline operations",
+    /// so they are owed once the resumed entry reaches its NUL (playtest
+    /// L02).
+    name_response_ask_who: bool,
     /// `conversation.md §7.7` step 1 / `formats/tlk.md §9.2`: a label head
     /// is running and has emitted nothing since its own HEAD quote. The
     /// head's stream output starts empty, so a GOTO it meets at once must
@@ -425,6 +480,7 @@ impl ConversationSession {
             opening_goto: false,
             opening_ask_who: false,
             introduction_ask_who: false,
+            name_response_ask_who: false,
             head_quote_open: false,
             opening_prompt_opened: false,
         }
@@ -595,6 +651,7 @@ impl ConversationSession {
                 let slot = tlk_ask_who_match(&input, ctx.party_member_names);
                 let from_opening = std::mem::take(&mut self.opening_ask_who);
                 let from_introduction = std::mem::take(&mut self.introduction_ask_who);
+                let from_name_response = std::mem::take(&mut self.name_response_ask_who);
                 let frame = self.ask_who_frame.take();
                 self.phase = ConversationSessionPhase::AwaitingKeyword;
                 // §7.6: on a match ASK-WHO "sets the active scene's
@@ -644,6 +701,7 @@ impl ConversationSession {
                     TLK_ASK_WHO_AFFIRMATIVE_LINE
                 };
                 let mut rendered = TlkRenderedText::plain(&format!("\n\"{acknowledgement}"));
+                let acknowledgement_len = rendered.text.len();
                 rendered.push_rendered(&out.rendered_text().trimmed_ask_who_quote_pair());
                 out.text = rendered.text;
                 out.rendered_glyphs = rendered.glyphs;
@@ -654,13 +712,21 @@ impl ConversationSession {
                     // A second ASK-WHO in the same Name entry: the close is
                     // still owed after it.
                     self.introduction_ask_who = true;
+                } else if from_name_response && self.awaiting_ask_who() {
+                    self.name_response_ask_who = true;
                 } else if !stopped
                     && (from_introduction
                         || matches!(
                             self.phase,
                             ConversationSessionPhase::AwaitingScopedKeyword { .. }
                         )
-                        || (frame == Some(ScopedFrame::Arm) && end == StreamEnd::Nul))
+                        || (frame == Some(ScopedFrame::Arm) && end == StreamEnd::Nul)
+                        // `conversation.md §6` NAME framing: "On normal
+                        // completion at the entry terminator, the response
+                        // handler requests a closing double quote and two
+                        // newline operations" - owed after an ASK-WHO that
+                        // paused the Name entry too (playtest L02).
+                        || (from_name_response && end == StreamEnd::Nul))
                 {
                     // `conversation.md §9` step 3: the self-introduction's
                     // Name entry ran to its end, so the opener "closes the
@@ -672,7 +738,7 @@ impl ConversationSession {
                     // or default arm that does "Emit[s] the quote and two row
                     // breaks" before the top-level loop (Fenelon `wond`,
                     // Anthony `reci`, Sutek, Dryden).
-                    out.close_framed_tail();
+                    out.close_framed_tail_after_ask_who(acknowledgement_len);
                 }
                 // `conversation.md §9` step 2: "If the Description entry
                 // signals a stop, the opener returns and nothing further is
@@ -780,6 +846,11 @@ impl ConversationSession {
             out.push_plain_text(TLK_EMPTY_INPUT_BYE_MESSAGE);
         }
         let response = self.run_field_from(field_idx, 0, ctx, 0);
+        self.name_response_ask_who = matches!(
+            kind,
+            TlkPlayerInputKind::Reserved(ReservedKeywordEffect::NameEntry)
+        ) && self.awaiting_ask_who()
+            && self.ask_who_frame.is_none();
         // `conversation.md §6` step 6 / §9 step 5 (u5-spec#299 Q1, R564): a
         // keyword answer (or `NAME`/`JOB` response) that reports a `0x82`
         // stop ends the conversation at once, with no `BYE`, no Bye entry
@@ -1120,19 +1191,40 @@ impl ConversationSession {
         // only the calling stream's own text: when that is empty and the
         // caller is itself a head that jumped at once, the quote before it
         // is that head's (Gorn's block 3 head jumps straight to block 4).
-        let after_quote = if out.text.is_empty() {
-            self.head_quote_open
-        } else {
-            out.text.ends_with('"')
+        //
+        // `formats/tlk.md §9.2` keys the guard on "the previous printable
+        // byte", and a `0x83` PAUSE or `0x8F` WAIT-KEY prints nothing, so a
+        // hold marker is transparent to it (playtest L01: Lord Stuart's
+        // Greeting is a PAUSE and a GOTO).
+        let is_hold = |byte: u8| crate::text_hold::TextHoldKind::from_marker(byte).is_some();
+        let last_printable = out.text.bytes().rev().find(|byte| !is_hold(*byte));
+        let after_quote = match last_printable {
+            None => self.head_quote_open,
+            Some(byte) => byte == b'"',
         };
         if !after_quote {
-            out.push_plain_text("\"");
+            if last_printable.is_none() && !out.text.is_empty() {
+                // Only holds so far: the quote the framing puts in front of
+                // this stream stands before them, and the HEAD quote after
+                // the hold is that same quote dropped by the guard.
+                out.text.insert(0, '"');
+                let quote = crate::ordinary_glyphs_from_engine_text("\"");
+                out.rendered_glyphs.splice(0..0, quote);
+            } else {
+                out.push_plain_text("\"");
+            }
         }
         self.label_records_running.push((label, resume));
         let outer_head_quote_open = std::mem::replace(&mut self.head_quote_open, true);
-        let (nested, end) = self.run_blob_from(resume, ctx, 0);
+        let (mut nested, end) = self.run_blob_from(resume, ctx, 0);
         self.head_quote_open = outer_head_quote_open;
         self.label_records_running.pop();
+        // The head runs right after a quote - the HEAD's own, or the one it
+        // was dropped against - so a quote that opens the head is the next
+        // printable byte after a quote and is suppressed (`tlk.md §9.2`;
+        // playtest L01: Fumiko's Bye block head is a quote, a feed and a
+        // stop).
+        nested.drop_leading_quote();
         merge_session_output(out, nested);
         match end {
             // "If the head reaches its NUL, emit the quote and two row
@@ -2099,9 +2191,13 @@ mod tests {
         s.present_stranger_opening(&ctx(), true);
         assert!(s.awaiting_ask_who());
         let answered = s.submit_keyword("nobody", &ctx());
+        // `conversation.md §7.6`: "Neither acknowledgement closes its
+        // quote"; the Name entry ends on the ASK-WHO byte, so the opener's
+        // closing quote follows the handler's quote record and is dropped,
+        // leaving only its two row breaks (playtest L03).
         assert_eq!(
             answered.text,
-            format!("\n\"{}\"\n\n", crate::TLK_ASK_WHO_DISMISSIVE_LINE)
+            format!("\n\"{}\n\n", crate::TLK_ASK_WHO_DISMISSIVE_LINE)
         );
         assert_eq!(s.phase, ConversationSessionPhase::AwaitingKeyword);
     }
@@ -3601,5 +3697,131 @@ mod tests {
         let asked = s.submit_keyword("ask", &context);
         assert!(s.awaiting_ask_who());
         assert_eq!(asked.text, "\n");
+    }
+
+    /// Playtest L01 (Fumiko's Bye). `conversation.md §7.7` step 1: "Emit the
+    /// quote, then run the head", and the quote is the ordinary sentinel of
+    /// `formats/tlk.md §9.2`, which "suppresses a quote when the previous
+    /// printable byte was also a quote". A head that opens on its own quote
+    /// right after the HEAD quote shows one quote, not `""`.
+    #[test]
+    fn playtest_l01_a_head_opening_on_a_quote_after_the_head_quote_shows_one() {
+        let mut response = enc("Fare well.");
+        response.push(0x91);
+        let mut head = vec![TLK_CODE_LABEL_RECORD, 0x91];
+        head.extend(enc("\""));
+        head.extend([TLK_CODE_LITERAL_NEWLINE, TLK_CODE_END_STREAM]);
+        let mut s = label_session(response, vec![head]);
+        let out = s.submit_keyword("ask", &ctx());
+        assert!(!out.text.contains("\"\""), "{:?}", out.text);
+        assert!(out.text.starts_with("\n\"Fare well.\"\n"), "{:?}", out.text);
+        assert_eq!(out.rendered_text().glyphs.len(), out.text.len());
+    }
+
+    /// Playtest L01 (Lord Stuart's Greeting: a PAUSE, then a GOTO). A hold
+    /// prints nothing, so the HEAD quote after it still follows the opener's
+    /// quote and is dropped (`tlk.md §9.2`, `conversation.md §9` "The renderer
+    /// drops a quote that would immediately follow another quote"). One quote
+    /// opens the greeting, ahead of the hold.
+    #[test]
+    fn playtest_l01_a_hold_before_a_greeting_goto_does_not_double_the_quote() {
+        let mut head = vec![TLK_CODE_LABEL_RECORD, 0x91];
+        head.extend(enc("Hey, friend."));
+        let raw = vec![
+            enc("Ada"),
+            enc("a quiet smith"),
+            vec![TLK_CODE_PAUSE, 0x91],
+            enc("I mend gear."),
+            enc("Farewell."),
+            enc("ASK"),
+            enc("x"),
+            head,
+            enc("Pity."),
+        ];
+        let decoded = raw
+            .iter()
+            .map(|field| field.iter().map(|b| (b ^ TLK_TEXT_XOR_MASK) as char).collect())
+            .collect();
+        let mut s = ConversationSession::new(raw, decoded);
+        s.set_npc_slot(Some(3));
+        let out = s.present_greeting(&ctx());
+        assert!(out.text.starts_with('"'), "{:?}", out.text);
+        assert_eq!(
+            crate::text_hold::strip_hold_markers(&out.text),
+            "\"Hey, friend.\"\n\n"
+        );
+        assert_eq!(out.rendered_text().glyphs.len(), out.text.len());
+    }
+
+    /// Playtest L02. `conversation.md §6` NAME framing: "On normal completion
+    /// at the entry terminator, the response handler requests a closing
+    /// double quote and two newline operations". A Name entry shaped
+    /// `<name>" NL NL IF-ELSE(FF) ASK-WHO` resumes to its NUL after the
+    /// answer, so the two row breaks follow the acknowledgement; the quote
+    /// follows the handler's quote record and is dropped (§7.6).
+    #[test]
+    fn playtest_l02_name_entry_ending_in_ask_who_gets_its_row_breaks() {
+        let mut name = enc("Lord Stu\"");
+        name.extend([
+            TLK_CODE_LITERAL_NEWLINE,
+            TLK_CODE_LITERAL_NEWLINE,
+            TLK_CODE_IF_ELSE,
+            0xFF,
+            TLK_CODE_ASK_WHO,
+        ]);
+        let raw = vec![
+            name,
+            enc("a hungry man."),
+            enc("Eat!"),
+            enc("I eat."),
+            enc("Farewell."),
+        ];
+        let decoded = raw
+            .iter()
+            .map(|field| field.iter().map(|b| char::from(b ^ TLK_TEXT_XOR_MASK)).collect())
+            .collect();
+        let names: [&[u8]; 1] = [b"AVATAR"];
+        let context = party_ctx(&names);
+        let mut s = ConversationSession::new(raw, decoded);
+        s.set_npc_slot(Some(1));
+        s.present_stranger_opening(&context, false);
+        s.submit_keyword("name", &context);
+        assert!(s.awaiting_ask_who());
+        let answered = s.submit_keyword("avatar", &context);
+        assert_eq!(
+            answered.text,
+            format!("\n\"{}\n\n", crate::TLK_ASK_WHO_AFFIRMATIVE_LINE)
+        );
+        assert_eq!(answered.rendered_text().glyphs.len(), answered.text.len());
+        assert_eq!(s.phase, ConversationSessionPhase::AwaitingKeyword);
+    }
+
+    /// Playtest L03 (Margaret's default arm). `conversation.md §7.7` step 5
+    /// FALLBACK emits "the quote and two row breaks", and that quote is the
+    /// ordinary sentinel: after an arm that ends on the ASK-WHO byte it
+    /// follows the handler's quote record and is dropped, so the
+    /// acknowledgement stays open as §7.6 requires.
+    #[test]
+    fn playtest_l03_fallback_after_an_arm_ending_on_ask_who_adds_no_closing_quote() {
+        let mut head = vec![TLK_CODE_LABEL_RECORD, 0x91];
+        head.extend(enc("Seest thou?"));
+        let mut arm = enc("Hello, friend.\"");
+        arm.extend([
+            TLK_CODE_LITERAL_NEWLINE,
+            TLK_CODE_LITERAL_NEWLINE,
+            TLK_CODE_ASK_WHO,
+        ]);
+        let names: [&[u8]; 1] = [b"AVATAR"];
+        let context = party_ctx(&names);
+        let mut s = label_session(vec![0x91], vec![head, arm, enc("y"), enc("Good.")]);
+        s.submit_keyword("ask", &context);
+        s.submit_keyword("n", &context);
+        assert!(s.awaiting_ask_who());
+        let answered = s.submit_keyword("avatar", &context);
+        assert_eq!(
+            answered.text,
+            format!("\n\"{}\n\n", crate::TLK_ASK_WHO_AFFIRMATIVE_LINE)
+        );
+        assert_eq!(s.phase, ConversationSessionPhase::AwaitingKeyword);
     }
 }

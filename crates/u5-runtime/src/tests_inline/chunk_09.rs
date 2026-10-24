@@ -654,7 +654,10 @@ fn world_plane_transition_save_load_uses_live_table_and_staged_disk_mirrors() {
     let saved_ool = fs::read(dir.join(SAVED_OOL_FILENAME)).unwrap();
     let britannia_overlay = decode_ool_plane_objects(&saved_ool[..OOL_PLANE_LEN]).unwrap();
     let underworld_overlay = decode_ool_plane_objects(&saved_ool[OOL_PLANE_LEN..]).unwrap();
-    assert!(britannia_overlay[0].is_empty());
+    // `overworld.md §8.1`: the plane transition writes the surface file from
+    // the live table, so the surface half carries the object left behind
+    // (playtest L04); the underworld half is still the staged mirror.
+    assert_eq!(britannia_overlay[0], britannia_object);
     assert!(underworld_overlay[0].is_empty());
     assert_eq!(
         fs::read(dir.join(BRIT_OOL_FILENAME)).unwrap(),
