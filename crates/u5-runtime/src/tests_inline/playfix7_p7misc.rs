@@ -133,3 +133,25 @@ fn playtest_m5_an_unclassified_key_prints_nothing() {
     );
 }
 
+/// P27: `blackthorn.md §3` - audience setup "calls the shared
+/// moon-phase-row and scene-announce helpers ... and they blank the
+/// moon/date row and the wind-or-location row for the duration of the
+/// audience", and `moons.md §3`: the audience's first sky repaint "always
+/// takes the erase arm". The engine drew the sun and `South Winds` in the
+/// palace chrome.
+#[test]
+fn playtest_p27_the_blackthorn_audience_blanks_both_viewport_ribbons() {
+    let mut state = test_state(open_grid(), 1, 1);
+    state.clock = GameClock::new(12, 0).unwrap();
+    let ordinary = gameplay_chrome_content(&state);
+    assert!(matches!(ordinary.top, ChromeGap::SkyStrip(_)));
+    assert!(matches!(ordinary.bottom, ChromeGap::Label(_)));
+
+    state.blackthorn_audience_map = Some(MiscmapsCutsceneMap {
+        record_index: BLACKTHORN_AUDIENCE_CUTSCENE_MAP_RECORD,
+        tiles: vec![0x44; MISCMAPS_CUTSCENE_ROWS * MISCMAPS_CUTSCENE_VISIBLE_COLUMNS],
+    });
+    let audience = gameplay_chrome_content(&state);
+    assert_eq!(audience.top, ChromeGap::Unbroken);
+    assert_eq!(audience.bottom, ChromeGap::Unbroken);
+}
