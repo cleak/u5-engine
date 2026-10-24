@@ -1726,6 +1726,22 @@ impl PlayState {
 
     pub(crate) fn open_pending_combat_player_turn(&mut self, slot: Option<usize>) {
         self.pending_combat_actor_slot = slot;
+        self.open_combat_turn_marker_row(slot);
+    }
+
+    /// Print `slot`'s turn banner and open the marker row under it, without
+    /// opening the pending command slot.
+    ///
+    /// Shared by the prompted turn and the command handler's asleep arm. The
+    /// asleep arm's line stands on this same marker row: measured on
+    /// `asleep-overworld` (rc6 20261022-113904 and rc7 20261022-195206, beats
+    /// `arrival` and `pass7`), the stock reads `Short Sword:` / `>Zzzzz...`
+    /// and, under a banner whose last row is full, `with bare hands:` / blank
+    /// / `>Zzzzz...` - the same two shapes a ` Pass` echo takes. `combat.md
+    /// §8.1` says the sleeper gets "its full banner and then that line in
+    /// place of a command" without saying whether the marker is drawn; the
+    /// capture is what settles it here.
+    pub(crate) fn open_combat_turn_marker_row(&mut self, slot: Option<usize>) {
         let banner = slot.and_then(|slot| self.combat_turn_banner_for_actor(slot));
         self.combat_prompt_row_opened_by_banner = banner.is_some();
         if let Some(banner) = banner.as_deref() {
@@ -8497,15 +8513,24 @@ impl PlayState {
                 // draw that wakes below 16 (chance 1/16) with no message, then
                 // `Zzzzz...` whether or not it woke, and no key read. The
                 // `0..16` draw below belongs to self-acting slots only.
-                self.emit_combat_turn_banner_before_status_early_out(slot);
+                // The banner opens the marker row exactly as a prompted turn
+                // does (see `open_combat_turn_marker_row`), but no key is
+                // read, so the pending command slot stays closed.
+                self.open_combat_turn_marker_row(Some(slot));
                 let wake = self
                     .apply_combat_command_handler_asleep_arm(slot)
                     .expect("status-disabled actor should produce a wake dispatch");
                 // `rest-and-camp.md §4`: the sleeping combatant's line is
-                // "`Zzzzz...\n` (five z, three dots)". Its own feed closes
-                // the row, so the next banner's leading newline leaves the
-                // blank row every other turn result has (playtest F39).
-                self.emit_combat_print(&format!("{COMBAT_ASLEEP_TURN_LINE}\n"));
+                // "`Zzzzz...\n` (five z, three dots)". It stands on the
+                // marker row the banner opened, like a command echo, and its
+                // own feed closes the row, so the next banner's leading
+                // newline leaves the blank row every other turn result has
+                // (playtest F39).
+                self.emit_combat_command_echo_line(&format!("{COMBAT_ASLEEP_TURN_LINE}\n"));
+                // One-shot, as after any echo: the row after it is ordinary.
+                // The line's own feed closed its row.
+                self.combat_prompt_row_opened_by_banner = false;
+                self.message_row_open_mid_line = false;
                 wake
             } else {
                 let wake_roll = self.combat_sleep_wake_roll(slot);
