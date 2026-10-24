@@ -2566,6 +2566,9 @@ impl PlayState {
             facing: None,
             // Location setup clears only the previous-tile gate.
             door_tracker: self.inert_door_tracker(),
+            // The rebuilt state takes the preserved raw marker from
+            // `carry_session_settings_from` instead.
+            loaded_transport_marker: None,
             pending_vehicle: None,
             pending_vehicle_save: self.pending_vehicle_save,
             inn_registry: self.inn_registry.clone(),

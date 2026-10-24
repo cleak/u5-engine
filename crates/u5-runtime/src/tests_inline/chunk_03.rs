@@ -2887,6 +2887,7 @@ fn town_entry_applies_night_gate_substitution() {
         transport: TransportState::Foot,
         facing: None,
         door_tracker: None,
+        loaded_transport_marker: None,
         pending_vehicle: None,
         pending_vehicle_save: PendingVehicleSaveState::default(),
         inn_registry: Vec::new(),

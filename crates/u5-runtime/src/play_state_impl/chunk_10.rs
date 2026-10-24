@@ -90,7 +90,17 @@ impl PlayState {
             TransportState::Ship { hull, skiffs, .. } => Some((hull, skiffs)),
             _ => None,
         };
-        let marker = self.player.transport.save_marker();
+        // A transport change ends the preserved raw marker for good, so a
+        // later return to the decoded value writes the canonical byte.
+        if self
+            .preserved_transport_marker
+            .is_some_and(|(_, decoded)| decoded != self.player.transport)
+        {
+            self.preserved_transport_marker = None;
+        }
+        let marker = self
+            .preserved_raw_transport_marker()
+            .unwrap_or_else(|| self.player.transport.save_marker());
         let player_object = ActiveObject {
             type_byte: marker,
             tile: marker,

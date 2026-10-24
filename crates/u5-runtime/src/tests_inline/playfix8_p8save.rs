@@ -177,3 +177,102 @@ fn playtest_n24_combat_entry_records_the_pre_combat_scene() {
     );
     let _ = fs::remove_dir_all(dir);
 }
+
+/// N25: `formats/saved-gam.md §4` - "Byte-compatible readers must preserve
+/// unrecognized marker values" - and `save-load.md §4.2`: the load path
+/// "normalises no restored byte". A load followed by a save rewrote `0x1D`,
+/// `0x00` and unknown markers to `0x1C`. The raw byte now stands until the
+/// party's transport actually changes.
+#[test]
+fn playtest_n25_a_load_keeps_the_raw_transport_marker_until_it_changes() {
+    for raw in [0x1d_u8, 0x00, 0x50] {
+        let dir = debug_game_dir();
+        let mut template = saved_game_seed_bytes(0, 0, 10, 20);
+        template[SAVE_AVATAR_NAME_OFFSET] = b'A';
+        template[SAVE_TRANSPORT_MARKER_OFFSET] = raw;
+        fs::write(dir.join(SAVED_GAM_FILENAME), &template).unwrap();
+        fs::write(dir.join(SAVED_OOL_FILENAME), vec![0; SAVED_OOL_LEN]).unwrap();
+        write_empty_ool_mirrors(&dir);
+
+        let options = play_options_from_save_bytes(&template).unwrap();
+        assert_eq!(options.loaded_transport_marker, Some(raw));
+        let mut state = PlayState::load_world_scene(&dir, WorldPlane::Britannia, options).unwrap();
+        state.sync_player_object();
+        assert_eq!(
+            state.active_objects[0].type_byte, raw,
+            "{raw:#04x}: slot zero"
+        );
+        state.write_save_files(&dir).unwrap();
+        let saved = fs::read(dir.join(SAVED_GAM_FILENAME)).unwrap();
+        assert_eq!(
+            saved[SAVE_TRANSPORT_MARKER_OFFSET], raw,
+            "{raw:#04x}: 0x02D6"
+        );
+        assert_eq!(saved[SAVE_ACTIVE_OBJECTS_OFFSET], raw);
+        assert_eq!(saved[SAVE_ACTIVE_OBJECTS_OFFSET + 1], raw);
+
+        // Mount and dismount: the X-it path writes the canonical marker.
+        state.player.transport = TransportState::Horse {
+            type_byte: HORSE_MOUNTED_FIRST,
+            tile: FIRST_PLAYABLE_HORSE_TILE,
+        };
+        state.sync_player_object();
+        state.force_foot_transport();
+        state.sync_player_object();
+        state.write_save_files(&dir).unwrap();
+        let saved = fs::read(dir.join(SAVED_GAM_FILENAME)).unwrap();
+        assert_eq!(
+            saved[SAVE_TRANSPORT_MARKER_OFFSET], 0x1c,
+            "{raw:#04x}: after X-it"
+        );
+        let _ = fs::remove_dir_all(dir);
+    }
+}
+
+/// N25 (d): `active-objects.md §10` - "a save image carrying another
+/// transport value into a dungeon scene resumes with it". The dungeon load
+/// forced foot travel.
+#[test]
+fn playtest_n25_a_dungeon_load_resumes_with_the_saved_transport() {
+    let dir = debug_game_dir();
+    let scene = DungeonScene::new(33).unwrap();
+    let mut save = saved_game_seed_bytes(scene.byte, 0, 1, 1);
+    save[SAVE_AVATAR_NAME_OFFSET] = b'A';
+    save[SAVE_TRANSPORT_MARKER_OFFSET] = HORSE_MOUNTED_FIRST;
+    fs::write(dir.join("SAVED.GAM"), &save).unwrap();
+    fs::write(dir.join("SAVED.OOL"), vec![0; SAVED_OOL_LEN]).unwrap();
+
+    let options = load_play_options_from_save(&dir).unwrap();
+    let state = PlayState::load_dungeon_scene(&dir, scene, options).unwrap();
+    assert!(
+        state.player.transport.is_horse(),
+        "{:?}",
+        state.player.transport
+    );
+    assert_eq!(
+        state.preserved_raw_transport_marker(),
+        Some(HORSE_MOUNTED_FIRST)
+    );
+    let _ = fs::remove_dir_all(dir);
+}
+
+/// N25 (f): `formats/saved-gam.md §3.3` - "Preserve the marker byte-for-byte"
+/// - and §3.1: the marker "has no meaning for a travelling member". The inn
+/// registry writer zeroed the marker of every travelling record.
+#[test]
+fn playtest_n25_travelling_records_keep_their_inn_marker_byte() {
+    let mut bytes = saved_game_seed_bytes(0, 0, 10, 20);
+    bytes[SAVE_PARTY_SIZE_OFFSET] = 2;
+    bytes[inn_registry_marker_offset(0)] = 0x05;
+    bytes[inn_registry_marker_offset(1)] = 0x11;
+    // A non-travelling record whose guest the inn returned still loses it.
+    bytes[inn_registry_marker_offset(4)] = 0x11;
+    encode_inn_registry(&mut bytes, &[]);
+    assert_eq!(bytes[inn_registry_marker_offset(0)], 0x05, "the Avatar");
+    assert_eq!(
+        bytes[inn_registry_marker_offset(1)],
+        0x11,
+        "a travelling member"
+    );
+    assert_eq!(bytes[inn_registry_marker_offset(4)], 0, "a returned guest");
+}

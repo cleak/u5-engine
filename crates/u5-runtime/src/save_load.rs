@@ -346,6 +346,7 @@ pub fn play_options_from_save_bytes_named(
             transport_marker_facing(transport_marker)
         },
         door_tracker,
+        loaded_transport_marker: Some(transport_marker),
         pending_vehicle: PendingVehicleSaveState {
             x: bytes[SAVE_PENDING_VEHICLE_X_OFFSET],
             y: bytes[SAVE_PENDING_VEHICLE_Y_OFFSET],
@@ -709,7 +710,13 @@ pub fn encode_inn_registry(bytes: &mut [u8], registry: &[InnGuestRecord]) {
     }
 
     for (slot, slot_occupied) in occupied.iter().copied().enumerate() {
-        if slot_occupied {
+        // `formats/saved-gam.md` §3.1: a travelling record's marker "has no
+        // meaning for a travelling member", and §3.3 / Section 2 say to
+        // "Preserve the marker byte-for-byte". The returned-guest clear
+        // belongs to pickup, which already zeroes the record it returns, so
+        // the travelling prefix keeps whatever its records carry (playtest
+        // N25).
+        if slot_occupied || slot < active {
             continue;
         }
         let marker = inn_registry_marker_offset(slot);

@@ -517,7 +517,12 @@ impl PlayState {
         }
         save[SAVE_ACTIVE_PLAYER_OFFSET] = encode_active_player_slot(self.active_player);
         save[SAVE_COMBAT_ROUND_COUNTER_OFFSET] = self.combat_round_counter;
-        save[SAVE_TRANSPORT_MARKER_OFFSET] = if self.player.transport.is_foot() {
+        // `formats/saved-gam.md §4`: a loaded raw marker the transport still
+        // decodes from is written back as it was (playtest N25).
+        let preserved_marker = self.preserved_raw_transport_marker();
+        save[SAVE_TRANSPORT_MARKER_OFFSET] = if let Some(raw) = preserved_marker {
+            raw
+        } else if self.player.transport.is_foot() {
             self.player
                 .transport
                 .save_marker_with_facing(self.player.facing)
@@ -1029,6 +1034,9 @@ impl PlayState {
             town_hiccup_echo_continues: false,
             stats_panel_window_inverse: false,
             saved_scene_scratch: None,
+            preserved_transport_marker: options
+                .loaded_transport_marker
+                .map(|marker| (marker, options.transport)),
             staged_narration: Default::default(),
             pending_text_hold: None,
             pending_blackthorn_rescue: None,
@@ -1287,7 +1295,13 @@ impl PlayState {
                 x,
                 y,
                 facing: options.facing.unwrap_or(Direction::East),
-                transport: TransportState::Foot,
+                // `active-objects.md §10` (issue #299 Q7): "loading a save
+                // restores the state exactly as saved, with no
+                // normalization when resuming into a dungeon ... a save
+                // image carrying another transport value into a dungeon
+                // scene resumes with it" (playtest N25). Every in-session
+                // dungeon entry forces foot travel after this load.
+                transport: options.transport,
             },
             active_objects,
             npcs: Vec::new(),
@@ -1466,6 +1480,9 @@ impl PlayState {
             town_hiccup_echo_continues: false,
             stats_panel_window_inverse: false,
             saved_scene_scratch: None,
+            preserved_transport_marker: options
+                .loaded_transport_marker
+                .map(|marker| (marker, options.transport)),
             staged_narration: Default::default(),
             pending_text_hold: None,
             pending_blackthorn_rescue: None,
@@ -1919,6 +1936,9 @@ impl PlayState {
             town_hiccup_echo_continues: false,
             stats_panel_window_inverse: false,
             saved_scene_scratch: None,
+            preserved_transport_marker: options
+                .loaded_transport_marker
+                .map(|marker| (marker, options.transport)),
             staged_narration: Default::default(),
             pending_text_hold: None,
             pending_blackthorn_rescue: None,
