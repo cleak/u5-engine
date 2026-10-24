@@ -1197,4 +1197,5 @@ mod tests {
     include!("tests_inline/playfix6_p6cmd.rs");
     include!("tests_inline/playfix6_p6shop.rs");
     include!("tests_inline/playfix7_p7conv.rs");
+    include!("tests_inline/playfix7_p7misc.rs");
 }

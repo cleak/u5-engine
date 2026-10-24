@@ -1730,7 +1730,13 @@ impl PlayState {
         if self.message == MMIX_MIXING_MESSAGE {
             self.message.clear();
         }
-        self.emit_message_line(format!("{MMIX_MIXING_MESSAGE}\n"));
+        // Step 6's `Mixing...` ends in its own line feed; step 7's wrong-mix
+        // branch "then emits a line break" before the resolver, so the trap
+        // word sits one blank row under `Mixing...`, the same spacing the
+        // success branch's `Done!` gets (playtest M4). Both feeds leave the
+        // cursor at column 0 of a fresh row.
+        self.emit_message_line(format!("{MMIX_MIXING_MESSAGE}\n\n"));
+        self.message_row_open_mid_line = false;
         // What the resolver *returns* is an engine note naming the slot and
         // the damage; `finish_open_dungeon_chest` routes that to
         // `diagnostics` and so does this. It was being appended to the
@@ -1738,8 +1744,8 @@ impl PlayState {
         let trap = self.apply_shared_trap_effect_to_slot(target_slot);
         self.push_diagnostic(trap);
         // "emits a line break, [then] ... invokes the shared trap-effect
-        // resolver" - the break is the branch's whole contribution, and the
-        // resolver's own line is the last thing printed.
+        // resolver" - the break (emitted above) is the branch's whole
+        // contribution, and the resolver's own line is the last thing printed.
         String::new()
     }
 

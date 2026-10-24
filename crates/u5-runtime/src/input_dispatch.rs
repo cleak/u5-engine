@@ -605,6 +605,16 @@ fn handle_play_key_input_inner(
         state.run_under_sail_advance_body(Some(game_dir))?;
         return Ok(PlayInputDisposition::Continue);
     }
+    // `input.md §2` step 3: an extended key that does not classify "is
+    // returned as 'no key'", and the engine "treats them as 'no key' and
+    // continues polling". Nothing is printed, no turn passes, and the
+    // message window is left exactly as it was - `Input ignored.` and
+    // `Function key ignored.` stood here, and no spec text carries either
+    // (playtest M5). It is no command either, so it takes no drunken
+    // even-odds gate below.
+    if key == PLAY_IGNORED_INPUT_KEY {
+        return Ok(PlayInputDisposition::Continue);
+    }
     // `systems/shops.md` tavern drunkenness: every top-level town command
     // performs a fresh even-odds gate. Active prompts/sessions above consume
     // their own keys before this point and therefore are not commands.
@@ -625,14 +635,6 @@ fn handle_play_key_input_inner(
             key = char::from(INPUT_CODE_CARDINAL_FIRST + replacement);
             suffix = "";
         }
-    }
-    if key == PLAY_IGNORED_INPUT_KEY {
-        state.message = match suffix {
-            "function" => "Function key ignored.",
-            _ => "Input ignored.",
-        }
-        .to_string();
-        return Ok(PlayInputDisposition::Continue);
     }
     // `dungeon-mode.md §15`: the dungeon's minute advance "sits at the head
     // of each iteration ... so a command the dispatcher reports as \"no

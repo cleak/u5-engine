@@ -3562,7 +3562,26 @@ impl PlayState {
                 //
                 // The same shape as the Klimb arm above and the Push arm
                 // below, both of which were added from their own captures.
-                if matches!(session.kind, DirectionPromptKind::Search) {
+                //
+                // Look and Talk are on none of those lists either: `commands.md
+                // §3` - "`L` Look also retains the default acted result in
+                // overworld, town and dungeon routes, including cancellation
+                // inside the Look handler" - and `town-mode.md §10`, "Look
+                // consumes one ordinary town action, including when its
+                // direction prompt is cancelled". `T` is not one of the six
+                // forwarding routes, so its cancel keeps the default too. Town
+                // `A` forwards "'Acted', except the on-foot refusal"; a
+                // cancelled aim is not that refusal. Overworld `A` is "always
+                // no action" and stays free (playtest M1/M2).
+                let town_attack = matches!(session.kind, DirectionPromptKind::Attack)
+                    && matches!(self.area, Area::Town { .. });
+                if matches!(
+                    session.kind,
+                    DirectionPromptKind::Search
+                        | DirectionPromptKind::Look
+                        | DirectionPromptKind::Talk
+                ) || town_attack
+                {
                     match self.area {
                         Area::World { .. } => self.advance_turn(),
                         Area::Town { .. } => self.advance_turn_without_door_tick(),

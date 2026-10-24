@@ -1344,6 +1344,22 @@ pub fn gameplay_chrome_content(state: &crate::PlayState) -> GameplayChromeConten
     // the roster rows from the counters has nothing left to divide -
     // exactly the Z-stats page case.
     let stats_panel_single_box = panel_owned;
+    // `blackthorn.md §3`: audience setup "calls the shared moon-phase-row
+    // and scene-announce helpers ... and they blank the moon/date row and
+    // the wind-or-location row for the duration of the audience", and
+    // `moons.md §3`: the audience's one sky repaint "always takes the erase
+    // arm". Both viewport ribbons stay plain until the captive-cell handoff
+    // clears the audience map (playtest P27).
+    if state.blackthorn_audience_map.is_some() {
+        return GameplayChromeContent {
+            top: ChromeGap::Unbroken,
+            bottom: ChromeGap::Unbroken,
+            stats_label,
+            timing_glyph,
+            stats_panel_single_box,
+            picker_page_glyph,
+        };
+    }
     match state.area {
         crate::Area::Dungeon { level, .. } => GameplayChromeContent {
             top: ChromeGap::Label(dungeon_level_label(level)),
