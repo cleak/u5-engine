@@ -334,6 +334,9 @@ impl PlayState {
 
         let mut save = load_save_image_template(game_dir, self.save_template_source)?;
         save[SAVE_SCENE_OFFSET] = scene;
+        if let Some(pre_combat_scene) = self.saved_scene_scratch {
+            save[SAVE_SAVED_SCENE_SCRATCH_OFFSET] = pre_combat_scene;
+        }
         save[SAVE_Z_OFFSET] = z;
         save[SAVE_X_OFFSET] = x;
         save[SAVE_Y_OFFSET] = y;
@@ -1025,6 +1028,7 @@ impl PlayState {
             overworld_prompt_pair_suppressed: false,
             town_hiccup_echo_continues: false,
             stats_panel_window_inverse: false,
+            saved_scene_scratch: None,
             staged_narration: Default::default(),
             pending_text_hold: None,
             pending_blackthorn_rescue: None,
@@ -1461,6 +1465,7 @@ impl PlayState {
             overworld_prompt_pair_suppressed: false,
             town_hiccup_echo_continues: false,
             stats_panel_window_inverse: false,
+            saved_scene_scratch: None,
             staged_narration: Default::default(),
             pending_text_hold: None,
             pending_blackthorn_rescue: None,
@@ -1913,6 +1918,7 @@ impl PlayState {
             overworld_prompt_pair_suppressed: false,
             town_hiccup_echo_continues: false,
             stats_panel_window_inverse: false,
+            saved_scene_scratch: None,
             staged_narration: Default::default(),
             pending_text_hold: None,
             pending_blackthorn_rescue: None,

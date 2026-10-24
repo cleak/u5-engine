@@ -140,3 +140,40 @@ fn playtest_n23_town_exit_keeps_the_tracker_bytes_inert() {
         })
     );
 }
+
+/// N24: `formats/saved-gam.md §6` - `0x02EE` "Combat entry uses it to save
+/// the pre-combat scene for later restore". A save made after a fight kept
+/// whatever the template carried. Before any fight the template byte still
+/// round-trips (§10: it "must round-trip exactly").
+#[test]
+fn playtest_n24_combat_entry_records_the_pre_combat_scene() {
+    let dir = debug_game_dir();
+    let mut template = saved_game_seed_bytes(0x11, 0, 3, 4);
+    template[SAVE_AVATAR_NAME_OFFSET] = b'A';
+    template[SAVE_SAVED_SCENE_SCRATCH_OFFSET] = 0x33;
+    fs::write(dir.join(SAVED_GAM_FILENAME), template).unwrap();
+    fs::write(dir.join(SAVED_OOL_FILENAME), vec![0; SAVED_OOL_LEN]).unwrap();
+    write_empty_ool_mirrors(&dir);
+
+    let mut state = test_state(open_grid(), 3, 4);
+    state.write_save_files(&dir).unwrap();
+    let saved = fs::read(dir.join(SAVED_GAM_FILENAME)).unwrap();
+    assert_eq!(saved[SAVE_SAVED_SCENE_SCRATCH_OFFSET], 0x33, "no fight yet");
+
+    state
+        .enter_combat_frame(
+            vec![ActiveObject::empty(); OOL_SLOTS],
+            [CombatActorDescriptor::empty(); COMBAT_ACTOR_SLOTS],
+        )
+        .unwrap();
+    let snapshot = state.combat_frame_snapshot.take().unwrap();
+    state.restore_combat_frame(snapshot);
+    state.combat_active = false;
+    state.write_save_files(&dir).unwrap();
+    let saved = fs::read(dir.join(SAVED_GAM_FILENAME)).unwrap();
+    assert_eq!(
+        saved[SAVE_SAVED_SCENE_SCRATCH_OFFSET], 0x11,
+        "the town the fight was entered from"
+    );
+    let _ = fs::remove_dir_all(dir);
+}

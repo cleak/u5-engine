@@ -5574,6 +5574,10 @@ impl PlayState {
     pub(crate) fn carry_session_settings_from(&mut self, previous: &Self) {
         self.typeahead_buffer_enabled = previous.typeahead_buffer_enabled;
         self.music_enabled = previous.music_enabled;
+        // Not a setting, but the same kind of process-lifetime carry: the
+        // `0x02EE` pre-combat scene a fight wrote stays until the next
+        // fight rewrites it (playtest N24).
+        self.saved_scene_scratch = previous.saved_scene_scratch;
     }
 
     pub fn music_status_label(&self) -> &'static str {
