@@ -439,6 +439,7 @@ fn unclassified_escape_sequences_are_ignored_without_swallowing_escape_key() {
 fn unclassified_escape_input_is_no_turn_and_no_idle_tick() {
     let (key, suffix) = play_input_key_and_suffix("\x1b[99~\n").unwrap();
     let mut dungeon = dungeon_state(open_dungeon_record(), 0, 1, 1);
+    let message_before = dungeon.message.clone();
 
     assert_eq!(
         handle_play_key_input(&mut dungeon, key, &suffix, Path::new("")).unwrap(),
@@ -448,7 +449,9 @@ fn unclassified_escape_input_is_no_turn_and_no_idle_tick() {
     assert_eq!((dungeon.player.x, dungeon.player.y), (1, 1));
     assert_eq!(dungeon.turn, 0);
     assert_eq!(dungeon.animation.frame, 0);
-    assert_eq!(dungeon.message, "Input ignored.");
+    // `input.md §2` step 3: an unclassified key is "no key" and prints
+    // nothing (playtest M5).
+    assert_eq!(dungeon.message, message_before);
 }
 
 // from chunk_19

@@ -110,3 +110,26 @@ fn playtest_m4_a_wrong_mix_leaves_a_blank_row_before_the_trap_word() {
     }
 }
 
+/// M5: `input.md §2` step 3 - an extended key that does not classify "is
+/// returned as 'no key'", and `§2`'s byte table: "the engine treats them as
+/// 'no key' and continues polling". Nothing is printed; the engine wrote the
+/// invented sentence `Input ignored.`.
+#[test]
+fn playtest_m5_an_unclassified_key_prints_nothing() {
+    let mut state = world_state(open_world_grid(), 5, 5);
+    state.message = "Previous line".to_string();
+    let rows_before = state.message_transcript.len();
+    let turn_before = state.turn;
+
+    handle_play_key_input(&mut state, PLAY_IGNORED_INPUT_KEY, "escape", Path::new("")).unwrap();
+
+    assert_eq!(state.turn, turn_before);
+    assert_ne!(state.message, "Input ignored.");
+    assert!(
+        state.message_transcript[rows_before..]
+            .iter()
+            .all(|entry| entry.text != "Input ignored." && entry.text != "Function key ignored."),
+        "no invented line is printed"
+    );
+}
+
