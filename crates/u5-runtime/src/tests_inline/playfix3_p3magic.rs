@@ -115,12 +115,14 @@ fn playfix3_g06_a_wrong_recipe_prints_the_mixing_beat_once() {
             .map(|(index, _)| index)
             .collect();
         assert_eq!(mixing.len(), 1, "{suffix}: {rows:?}");
+        // Step 7's own line break leaves one blank row first (playtest M4).
+        assert_eq!(rows[mixing[0] + 1], "", "{suffix}: {rows:?}");
         assert!(
             matches!(
-                rows[mixing[0] + 1].as_str(),
+                rows[mixing[0] + 2].as_str(),
                 "ACID!" | "POISON!" | "BOMB!" | "GAS!"
             ),
-            "{suffix}: the trap word follows directly: {rows:?}"
+            "{suffix}: the trap word follows the break: {rows:?}"
         );
     }
 }

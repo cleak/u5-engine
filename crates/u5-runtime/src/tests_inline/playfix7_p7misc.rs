@@ -79,3 +79,34 @@ fn playtest_m2_cancelled_talk_and_town_attack_cost_their_turn() {
     );
 }
 
+/// M4: `magic.md §6` step 6 prints `Mixing...` (with its line feed), and
+/// step 7's wrong-mix branch "then emits a line break ... and invokes the
+/// shared trap-effect resolver". That break leaves one blank row between
+/// `Mixing...` and the trap word - the spacing `Done!` gets on success.
+#[test]
+fn playtest_m4_a_wrong_mix_leaves_a_blank_row_before_the_trap_word() {
+    for suffix in ["AS/0x80/1", "IL/0x41/1"] {
+        let mut state = test_state(open_grid(), 1, 1);
+        state.reagents = [5; REAGENT_COUNT];
+        assert_eq!(state.mix_reagents_from_suffix(suffix), MoveOutcome::Blocked);
+        state.flush_message_slot();
+        let rows: Vec<String> = state
+            .message_transcript
+            .iter()
+            .map(|entry| entry.text.clone())
+            .collect();
+        let mixing = rows
+            .iter()
+            .position(|row| row == MMIX_MIXING_MESSAGE)
+            .unwrap_or_else(|| panic!("{suffix}: {rows:?}"));
+        assert_eq!(rows[mixing + 1], "", "{suffix}: one blank row: {rows:?}");
+        assert!(
+            matches!(
+                rows[mixing + 2].as_str(),
+                "ACID!" | "POISON!" | "BOMB!" | "GAS!"
+            ),
+            "{suffix}: then the trap word: {rows:?}"
+        );
+    }
+}
+
