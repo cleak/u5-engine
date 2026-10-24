@@ -80,6 +80,9 @@
 # peal`, 22:42), and the engine's ends on `AVENTARI"` or `of thunder!` the
 # same way. The thunder beat lands within a screenshot's cost of the sample,
 # so a one-beat `text` difference at `t44` alone is the sample, not the hold.
+# The comparator can read the same one-line lag as `offset+N` when the extra
+# line scrolls the window (rc7 sweep 20261023-002202: engine ending on
+# `of thunder!`, stock on `AVENTARI"`, `offset+4`).
 #
 # The `t24` cursor (`cursor`, 2026-10-16 rc1, and three 2026-09-18 runs): with
 # the sweep over and the rescue not begun, the engine drew the barber pole

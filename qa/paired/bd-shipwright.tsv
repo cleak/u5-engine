@@ -22,6 +22,11 @@
 # probably get seasick, anyway."` and this engine with another member of the
 # same pool.
 #
+# A different greeting length also moves the entry prompt's colon (`shops.md`
+# Section 8.B makes it conditional on the finished greeting's column), so
+# `opened` reads `record-wide` rather than as a legal draw: rc7 sweep
+# 20261022-200525, where `yes` and `no` were legal draws.
+#
 # What this scenario pins is the offer itself: records 117/118 for the vessel
 # body and 126 for the confirmation, and the Intelligence-adjusted price
 # Section 6.1 requires.

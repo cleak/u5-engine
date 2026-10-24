@@ -7,6 +7,13 @@
 # sides never share a host clock, so the `"I am called <name>"` row is the
 # coin's and not the engine's, and a run that disagrees on it must be re-run.
 #
+# The NPC wanders as well. Between the Look and the Talk it can step off the
+# north cell on either side, and that side answers `Nobody's here!` and then
+# reads the typed keyword as commands, so `talk` and `name` differ wholesale.
+# rc6 20261022-121300 refused on the engine side, rc7 20261022-202950 on the
+# stock side, and 20261017-010359 talked on both and differed only on the
+# coin. A run where one side refused must be re-run.
+#
 # Talk to a castle NPC (`CASTLE.TLK`), seeded at Lord British's castle (15,25)
 # with a dialog-id 9 NPC directly north at (15,24) on ordinary floor. Companion
 # to `town-talk-speaker`, which does the same in a TOWNE scene. Filed against
