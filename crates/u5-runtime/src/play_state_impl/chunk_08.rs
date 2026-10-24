@@ -34,6 +34,10 @@ impl PlayState {
                 self.emit_message_line(format!(
                     "{HOLE_UP_REPAIR_BODY}\n{HOLE_UP_SAILS_MUST_BE_LOWERED}\n\n"
                 ));
+                // `commands.md §3`: H is not one of the six forwarding
+                // routes, so its refusals keep the default "acted" and the
+                // mode loop runs its per-turn epilogue (playtest N11).
+                self.charge_tile_command_acted_exit(self.turn);
                 return MoveOutcome::Blocked;
             }
             // `stats-panel.md §2.2.1` row 1: the ship-repair branch defers
@@ -67,7 +71,16 @@ impl PlayState {
         // party on land or aboard a ship; a horse, carpet or skiff is
         // neither, and this engine offered all three the hours prompt.
         if !self.player.transport.is_foot() {
-            self.message = HOLE_UP_ON_LAND_OR_SHIP_REFUSAL.to_string();
+            // `On_land_or_ship!\n\n`: the refusal completes the open
+            // `Hole up- ` echo row, and its second feed is the literal's own
+            // blank row (playtest N13). Emitted directly, as `lowered!\n\n`
+            // is: through the slot the acted charge's per-turn flush below
+            // (playtest N11) spent the trailing pair as the turn's own blank.
+            self.message_row_open_mid_line = true;
+            self.emit_message_line_continuing_row(HOLE_UP_ON_LAND_OR_SHIP_REFUSAL);
+            self.push_message_transcript_lines("\n\n");
+            self.message_row_open_mid_line = false;
+            self.charge_tile_command_acted_exit(self.turn);
             return MoveOutcome::Blocked;
         }
         let land_camp = !matches!(self.area, Area::Town { .. });

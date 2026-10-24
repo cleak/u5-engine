@@ -558,8 +558,12 @@ impl PlayState {
                 'H' => {
                     handled!(self.hole_up_command(game_dir, inline_rest)?);
                 }
+                // `commands.md §3`: I does not forward, so `None owned!`
+                // keeps the default "acted" (playtest N12).
                 'I' => {
-                    handled!(self.ignite_torch());
+                    let outcome = self.ignite_torch();
+                    self.charge_tile_command_acted_exit(turn_before);
+                    handled!(outcome);
                 }
                 'J' => {
                     if let Some(direction) = inline_direction {
@@ -742,7 +746,13 @@ impl PlayState {
                 self.charge_tile_command_acted_exit(turn_before);
                 outcome
             }
-            'i' => self.ignite_torch(),
+            // `commands.md §3`: I does not forward, so the `None owned!`
+            // refusal keeps the default "acted" as well (playtest N12).
+            'i' => {
+                let outcome = self.ignite_torch();
+                self.charge_tile_command_acted_exit(turn_before);
+                outcome
+            }
             'h' => self.hole_up_command(game_dir, inline_rest)?,
             'f' => {
                 let outcome = if let Some(direction) = inline_direction {
