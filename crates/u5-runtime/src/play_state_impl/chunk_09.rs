@@ -5672,7 +5672,14 @@ impl PlayState {
                     .duration(true)
                     .as_secs_f64();
                 self.stats_panel_hold = Some(self.stats_panel.clone());
-                self.staged_narration.push_secs(descent_secs, DROWNING_MESSAGE);
+                // `overworld.md §6.3` row 6: "`Ship sunk!\n` and then either
+                // `Abandon ship!\n` or `DROWNING!!!\n`". The feed closes the
+                // row, so the loop's passes run with the cursor on the row
+                // under it - measured on `sail-calm` (20261024-003707, beat
+                // `pass`): the stock holds an empty row under `DROWNING!!!`
+                // while the hit points fall.
+                self.staged_narration
+                    .push_secs(descent_secs, format!("{DROWNING_MESSAGE}\n"));
                 drowning = self.apply_ship_loss_drowning_paced();
             }
         }
@@ -5696,10 +5703,28 @@ impl PlayState {
     pub fn apply_ship_loss_drowning(&mut self) -> Vec<Vec<OutdoorImpactMemberDamage>> {
         let mut iterations = Vec::new();
         while self.party_has_drowning_loop_survivor() {
-            self.outdoor_impact_presentation();
+            self.drowning_pass_impact_presentation();
             iterations.push(self.apply_outdoor_impact_party_damage());
         }
         iterations
+    }
+
+    /// One drowning pass's impact presentation, with its rumble.
+    ///
+    /// `audio.md §8.9`: "the loop alternates the damage presentation, which
+    /// plays its own rumble on every pass, with unavoidable damage to every
+    /// non-Dead member". `overworld.md §6.2.4` stage one: "a short tone
+    /// plays". The rumble is the 300-update impact rumble rough seas plays
+    /// after the same impact figure (`§6.2.5`). Measured 2026-10-24 on
+    /// `drowning-collision` (20261022-212330, 20261023-070617), a solo
+    /// 51-HP Avatar: after the long descent the stock sounds one burst per
+    /// pass every 0.337 s - that rumble (220 ms) plus one member's damage
+    /// rumble (118 ms) - where this engine, playing the damage rumble alone,
+    /// ran each pass in under half that and the party died while the stock
+    /// was still on its third pass (`sail-calm`, every run since 2026-10-16).
+    fn drowning_pass_impact_presentation(&mut self) {
+        self.outdoor_impact_presentation();
+        self.emit_sound_effect(SoundEffect::RoughSeasImpactRumble);
     }
 
     /// [`Self::apply_ship_loss_drowning`], with each pass staged for the
@@ -5711,7 +5736,7 @@ impl PlayState {
         let mut iterations = Vec::new();
         while self.party_has_drowning_loop_survivor() {
             let serial = self.sound_effect_serial;
-            self.outdoor_impact_presentation();
+            self.drowning_pass_impact_presentation();
             iterations.push(self.apply_outdoor_impact_party_damage());
             let mut jitter = crate::audio::RumbleJitter::default();
             let secs: f64 = self

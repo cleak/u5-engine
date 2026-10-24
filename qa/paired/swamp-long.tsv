@@ -20,6 +20,18 @@
 # turn the probe fires on differs - so a difference here is the probe, not the
 # swamp.
 #
+# The fight itself is a lottery too. `formats/cbt.md` Section 6 picks the
+# outdoor arena from the world tile under the triggering monster, and the
+# spiders roam the swamp/grass edge, so either side can fight in the swamp
+# arena (whose tiles poison on contact) or the grass one, and either side can
+# then be poisoned, killed and rescued by `after40`: the stock in two runs
+# before 2026-10-16 and in 20261023-101254, the engine in the rc7 sweep
+# (20261023-002954). Each beat's row shape still agrees; only who was hit
+# differs. Arenas seen: engine swamp/stock grass (1016-210214, rc7 sweep),
+# both grass (1016-224432). The stock has not yet been seen in the swamp arena;
+# if a run shows the engine in it while the triggering spider stands on grass,
+# that is the arena pick to check, not this lottery.
+#
 # Seeded rather than walked to. The walk-up form of this scenario scripted its
 # way in from the town gate, and the resident walks its own schedule while
 # those steps run, so the two sides arrived with it in different cells and

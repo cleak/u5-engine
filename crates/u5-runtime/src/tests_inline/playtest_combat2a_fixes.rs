@@ -164,6 +164,46 @@ fn playtest_f39_a_blank_row_separates_the_asleep_line_from_the_next_banner() {
     );
 }
 
+/// `combat.md §8.1`: a sleeping combatant gets "its full banner and then that
+/// line in place of a command". Measured on `asleep-overworld` (rc6
+/// 20261022-113904, rc7 20261022-195206): the stock prints the line on the
+/// banner's marker row, as a command echo - `Short Sword:` / `>Zzzzz...`, and
+/// `with bare hands:` / blank / `>Zzzzz...` under a banner whose last row is
+/// full. The engine printed a bare `Zzzzz...` directly under every banner.
+#[test]
+fn a_sleeping_combatants_line_stands_on_the_banners_marker_row() {
+    // (party name, the banner's last row, a blank between it and the marker)
+    for (name, last_row, blank) in [
+        (*b"Avatar\0\0\0", "with bare hands:", true),
+        (*b"Iolo\0\0\0\0\0", "bare hands:", false),
+    ] {
+        let mut state = combat_state_after_the_conflict_banner(6, 5);
+        state.party_names[0] = name;
+        state.combat_actors[0].flags |= COMBAT_ACTOR_FLAG_STATUS_DISABLED;
+        state.combat_actors[0].phase_counter = 1;
+
+        let _ = state.apply_combat_actor_slot_dispatch(0, 30);
+
+        assert_eq!(
+            state.pending_combat_actor_slot, None,
+            "no key is read on the asleep arm"
+        );
+        assert!(!state.combat_prompt_row_opened_by_banner);
+        let rows = combat_message_window_rows(&state);
+        let asleep = rows
+            .iter()
+            .rposition(|row| row == &format!(">{COMBAT_ASLEEP_TURN_LINE}"))
+            .unwrap_or_else(|| panic!("the asleep line carries the marker: {rows:?}"));
+        let above = if blank {
+            assert_eq!(rows[asleep - 1], "", "rows: {rows:?}");
+            asleep - 2
+        } else {
+            asleep - 1
+        };
+        assert_eq!(rows[above], last_row, "rows: {rows:?}");
+    }
+}
+
 /// `inventory.md §5` step 2: with no displayable item R-Ready "prints the
 /// normal \"nothing to ready\" refusal and exits". Playtest F26: the picker
 /// stayed open behind the refusal and swallowed every key up to an Escape.

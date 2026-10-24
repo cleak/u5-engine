@@ -359,3 +359,51 @@ fn rc1_leaked_inverse_reports_the_effect_tag_cell_opaque() {
         vec![(39, 2)]
     );
 }
+
+/// `audio.md §8.9`: the drowning loop "alternates the damage presentation,
+/// which plays its own rumble on every pass, with unavoidable damage";
+/// `overworld.md §6.2.4` stage one plays "a short tone". Measured on
+/// `drowning-collision` (20261022-212330, 20261023-070617): a solo Avatar's
+/// stock passes sound every 0.337 s, the 300-update impact rumble plus one
+/// 160-update damage rumble. The engine played the damage rumble alone, so
+/// its party was dead while the stock was still on its third pass.
+#[test]
+fn each_drowning_pass_holds_for_the_impact_rumble_and_each_members_damage_rumble() {
+    for members in [1usize, 3] {
+        let mut state = world_state(open_world_grid(), 5, 5);
+        state.party = six_member_party(40);
+        state.party.truncate(members);
+        state.special_items[SPECIAL_ITEM_MAGIC_CARPET_INDEX] = 0;
+        aboard_frigate(&mut state, 1, 0);
+        let OutdoorImpactAbsorption::ShipDestroyed { drowning, .. } = state.apply_outdoor_impact()
+        else {
+            panic!("hull one is always destroyed");
+        };
+        let duration = |effect: SoundEffect| {
+            effect
+                .program(&mut crate::audio::RumbleJitter::default())
+                .duration(true)
+                .as_secs_f64()
+        };
+        let impact = duration(SoundEffect::RoughSeasImpactRumble);
+        let damage = duration(SoundEffect::DamageRumble);
+        let holds: Vec<f64> = state
+            .staged_narration
+            .beats()
+            .filter(|beat| beat.panel_repaint)
+            .map(|beat| beat.delay_secs)
+            .collect();
+        assert_eq!(holds.len(), drowning.len(), "one hold per pass");
+        // Every member is alive on the first pass.
+        let first = impact + damage * members as f64;
+        assert!(
+            (holds[0] - first).abs() < 1e-6,
+            "{members} member(s): first pass holds {} s, want {first} s",
+            holds[0]
+        );
+        assert!(
+            holds.iter().all(|hold| *hold >= impact + damage - 1e-6),
+            "every pass carries the impact rumble: {holds:?}"
+        );
+    }
+}

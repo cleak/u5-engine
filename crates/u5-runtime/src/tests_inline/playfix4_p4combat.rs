@@ -353,3 +353,64 @@ fn playtest_h32_every_letter_echoes_on_the_row_under_the_banner() {
         );
     }
 }
+
+/// `combat.md §11.1` census: "After any narrated hit on a **party** target |
+/// both | *no text* | full stats-panel redraw and a visibility pass - skipped
+/// on the graze arm and on the vanish arm", and "Order, stated once" step 6.
+/// Stock captures show the Avatar's hit points drop in the panel right under
+/// `Avatar hit!` (`combat-damage-narration` 20261016-220421,
+/// 20261022-122324). The engine left the repaint to the running command's
+/// own panel mechanism, so a hit could sit under a stale panel.
+#[test]
+fn a_narrated_hit_on_a_party_member_repaints_the_stats_panel() {
+    for (grazed, repaints) in [(false, true), (true, false)] {
+        let mut state = combat_state_after_the_conflict_banner(6, 5);
+        state.party[0].hp = 60;
+        state.party[0].max_hp = 60;
+        state.repaint_stats_panel();
+        let stale = state.stats_panel.clone();
+        // The damage application has already written the roster.
+        state.party[0].hp = if grazed { 60 } else { 53 };
+        let applied = if grazed { 0 } else { 7 };
+        let attacker_slot = COMBAT_PARTY_ACTOR_SLOTS;
+        let line = crate::input_dispatch::combat_monster_attack_result_message(
+            &mut state,
+            CombatMonsterAttackApplication {
+                attacker_slot,
+                target_slot: 0,
+                poison_status_outcome: None,
+                resolution: Some(CombatWeaponAttackResolution::Hit {
+                    route: CombatWeaponAttackRangeRoute::Melee,
+                    raw_damage: applied,
+                }),
+                damage_application: Some(CombatWeaponDamageApplication::Party {
+                    target_slot: 0,
+                    damage: CombatPartyDamageOutcome {
+                        raw_damage: applied,
+                        applied_damage: applied as u16,
+                        grazed,
+                        instant_kill: false,
+                        killed: false,
+                        status_before: b'G',
+                        status_after: b'G',
+                    },
+                }),
+                food_theft: None,
+                sleep_effect: None,
+                generic_chain_suppressed: false,
+            },
+        );
+        let expected_line = if grazed { "Avatar grazed!" } else { "Avatar hit!" };
+        assert_eq!(line.as_deref(), Some(expected_line));
+        if repaints {
+            assert_eq!(
+                state.stats_panel,
+                crate::stats_panel::stats_panel_snapshot_of(&state),
+                "the hit repaints the panel at once"
+            );
+            assert_ne!(state.stats_panel, stale);
+        } else {
+            assert_eq!(state.stats_panel, stale, "the graze arm skips the redraw");
+        }
+    }
+}

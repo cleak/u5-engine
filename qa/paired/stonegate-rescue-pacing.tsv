@@ -80,6 +80,18 @@
 # peal`, 22:42), and the engine's ends on `AVENTARI"` or `of thunder!` the
 # same way. The thunder beat lands within a screenshot's cost of the sample,
 # so a one-beat `text` difference at `t44` alone is the sample, not the hold.
+# The comparator can read the same one-line lag as `offset+N` when the extra
+# line scrolls the window (rc7 sweep 20261023-002202: engine ending on
+# `of thunder!`, stock on `AVENTARI"`, `offset+4`).
+#
+# Since 2026-10-20 the engine side has ended `t44` on `of thunder!` in all
+# eight runs and the stock on `AVENTARI"` in all eight, so the sample is no
+# longer split both ways. It is not the hold. Timed from 20261024-003321's
+# video at 2 fps: shout to thunder is 2.0 s on both sides (engine 74.5 to
+# 76.5 s, stock 75.0 to 77.0 s) and the verdict follows 2.5 s later on both
+# (79.0, 79.5 s). The engine runs the whole cinematic about 0.5 s ahead of the
+# stock from the trapdoor step on, and `t44` lands inside that half second.
+# A `t44` that differs by the thunder line alone is that lead.
 #
 # The `t24` cursor (`cursor`, 2026-10-16 rc1, and three 2026-09-18 runs): with
 # the sweep over and the rescue not begun, the engine drew the barber pole

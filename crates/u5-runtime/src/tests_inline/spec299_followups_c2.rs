@@ -202,3 +202,48 @@ fn spec299_q12_inverted_slot_caps_are_black_triangles_under_unchanged_strokes() 
         "with no effect running the band looks normal"
     );
 }
+
+/// `blackthorn.md §4.2` "Where the cursor is left": records `9` and `10`
+/// leave the cursor mid-row "through the beat, through the handoff, and into
+/// the next scene", so the captive cell's first command row sits directly
+/// under the record's last row. Measured on `bt-password` (20261024-001911,
+/// beat `onward`): stock `thee!"` with the marker row under it; the engine
+/// had a blank row between.
+#[test]
+fn a_solo_closing_record_keeps_its_row_open_into_the_captive_cell() {
+    // Record `9` takes the same helper; its text has no fallback without
+    // `MISCMSG.DAT`, so record `10`'s measured fallback carries the test.
+    for (answer, last_words) in [("IMPERA", "thee!")] {
+        let dir = debug_game_dir();
+        let mut state = test_state(open_grid(), 5, 5);
+        state.begin_blackthorn_audience_capture(&dir).unwrap();
+        while state.active_blackthorn.as_ref().is_some_and(|c| c.current_prompt().is_none()) {
+            state.submit_blackthorn_audience_answer("", &dir).unwrap();
+        }
+        state.submit_blackthorn_audience_answer(answer, &dir).unwrap();
+        state.flush_staged_narration();
+        let record = state
+            .message_entries()
+            .last()
+            .map(|entry| (entry.text.clone(), entry.leaves_row_open))
+            .unwrap();
+        assert!(record.0.contains(last_words), "{answer}: {record:?}");
+        assert!(record.1, "{answer}: the record's row is left open: {record:?}");
+
+        state.submit_blackthorn_audience_answer("", &dir).unwrap();
+        state.run_blackthorn_audience_exit_to_handoff(&dir).unwrap();
+
+        assert!(state.active_blackthorn.is_none(), "{answer}: in the captive cell");
+        let layout = rc4_message_layout(&state);
+        let text = |row: &crate::MessageWindowRow| -> String {
+            row.glyphs.iter().map(|glyph| glyph.byte as char).collect()
+        };
+        let rows: Vec<String> = layout.rows.iter().map(text).collect();
+        let command = layout.rows.last().expect("the cell's command row");
+        assert!(command.prefixed, "{answer}: a command row: {rows:?}");
+        let above = &layout.rows[layout.rows.len() - 2];
+        assert_eq!(above.row + 1, command.row, "{answer}: no blank between: {rows:?}");
+        assert!(text(above).trim_end().ends_with('"'), "{answer}: {rows:?}");
+        let _ = fs::remove_dir_all(dir);
+    }
+}

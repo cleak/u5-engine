@@ -11,6 +11,14 @@
 # `variant`. Its siblings `shop-arms-buy`, `shop-arms-menus` and
 # `shop-arms-sell` already carried this note.
 #
+# The Sell branch draws twice more (`shops.md` Section 8, Arms `S` row): the
+# sell-back quote uniformly from records `49..56`, and the continuation
+# question from its own four-member pool. The members wrap to different row
+# counts, so `declined` and `sold` read `record-wide` or `diverged` rather than
+# `variant`. rc7 sweep 20261023-000037: same 46 gp price, same one-row
+# `Deal?" No` and `Deal?" Yes`, same `"Done!"` attribution and gold change;
+# only the quote and continuation wording differed.
+#
 # Not a lottery, and fixed 2026-10-16 on branch `triage-shops`: from the
 # 2026-10-14 captures on the engine put the `Sell`, `No` and `Yes` echoes on
 # rows of their own and dropped the blank rows `shops.md` §8.1 publishes before
