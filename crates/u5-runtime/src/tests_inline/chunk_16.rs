@@ -2460,6 +2460,34 @@ BRITANNIA 11 21
         let _ = fs::remove_dir_all(dir);
     }
 
+    /// Playtest N04: `karma.md §7` awards the Avatar attributes at once, so
+    /// the live Strength/Intelligence mirrors that Z-stats and the Ready
+    /// burden gate read (`inventory.md §5`) must carry the award without a
+    /// save/reload.
+    #[test]
+    fn shrine_codex_turn_in_strength_and_intelligence_reach_live_party_mirrors() {
+        let dir = debug_game_dir();
+        let mut state = shrine_marker_state(&dir, ShrineVirtue::Honor);
+        let bit = ShrineVirtue::Honor.bit();
+        state.shrine_ordained_mask = bit;
+        state.shrine_codex_mask = bit;
+        state.avatar_stats = AvatarStats {
+            strength: 20,
+            dexterity: 20,
+            intelligence: 20,
+        };
+        state.party_strengths = vec![20; state.party.len()];
+        state.party_intelligence = vec![20; state.party.len()];
+
+        meditate_through_shrine_session(&mut state, &dir, "Honor", "Summ");
+
+        assert_eq!(state.avatar_stats.strength, 21);
+        assert_eq!(state.avatar_stats.intelligence, 21);
+        assert_eq!(state.party_strengths[0], 21);
+        assert_eq!(state.party_intelligence[0], 21);
+        let _ = fs::remove_dir_all(dir);
+    }
+
     /// `karma.md §7` quest-state rows: the turn-in arm is reached by "an
     /// accepted virtue answer plus all three accepted mantras" under the
     /// shared substring matcher, so a longer answer containing the mantra
