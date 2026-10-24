@@ -10461,6 +10461,21 @@ fn keys_pressed_in_typed_order(
 /// same "Disable the buffer flush" step, so the tavern's provision quantity
 /// and the mixer's honour the queue too, and the spell-name entry is a typed
 /// line.
+/// `input.md §6`: whether the read about to take a typed key leaves the rest
+/// of the queue for later reads.
+///
+/// A cinematic hold reads nothing, so what is typed during it stays queued.
+/// The rescue's verdict acknowledgement is not a hold: `blackthorn.md §7`
+/// step 19 is "the cinematic's only blocking key read", and it "uses the
+/// ordinary command reader", so with type-ahead off "the queue is emptied on
+/// every read". Treating it as a hold replayed the rest of a burst typed
+/// during the narration as commands after the hand-off (playtest N21).
+fn visual_read_honours_queue(state: &PlayState) -> bool {
+    state.typeahead_buffer_enabled
+        || visual_read_forces_typeahead(state)
+        || (state.cinematic_hold_owns_input() && !state.blackthorn_rescue_awaiting_acknowledgement())
+}
+
 fn visual_read_forces_typeahead(state: &PlayState) -> bool {
     visual_line_prompt_active_ignoring_text_hold(state)
         || state.active_conversation.is_some()
@@ -13682,9 +13697,7 @@ fn drive_visual(
         // `input.md §6`: "when the flush flag is set, drop all pending
         // keystrokes after consuming one; when the flag is clear, leave the
         // queue alone". A hold reads nothing, so a key it buffers is no read.
-        let honours_queue = visual.state.typeahead_buffer_enabled
-            || visual_read_forces_typeahead(&visual.state)
-            || visual.state.cinematic_hold_owns_input();
+        let honours_queue = visual_read_honours_queue(&visual.state);
         let effects_before = visual.state.sound_effect_serial;
         let read = if visual_line_prompt_active(&visual.state) {
             let game_dir = visual.game_dir.clone();
@@ -27588,6 +27601,24 @@ mod tests {
         handle_play_key_input(&mut state, PLAY_MUSIC_TOGGLE_KEY, "", Path::new("")).unwrap();
 
         assert!(summarize(&mut state, "", "").contains("music off"));
+    }
+
+    /// Playtest N21, `blackthorn.md §7` step 19: the verdict acknowledgement
+    /// "uses the ordinary command reader", so `input.md §6`'s Buffer Off rule
+    /// - "the queue is emptied on every read" - applies to it. The shell
+    /// treated it as a hold and kept the rest of a burst for later commands.
+    #[test]
+    fn playtest_n21_the_rescue_acknowledgement_is_an_ordinary_read() {
+        let mut state = test_state(open_grid(), 1, 1);
+        assert!(!state.typeahead_buffer_enabled);
+        state.pending_blackthorn_rescue =
+            Some(u5_runtime::blackthorn::BlackthornRescuePhase::Narration);
+        assert!(visual_read_honours_queue(&state), "a hold reads nothing");
+        state.pending_blackthorn_rescue =
+            Some(u5_runtime::blackthorn::BlackthornRescuePhase::AwaitingAcknowledgement);
+        assert!(!visual_read_honours_queue(&state));
+        state.typeahead_buffer_enabled = true;
+        assert!(visual_read_honours_queue(&state));
     }
 
     #[test]

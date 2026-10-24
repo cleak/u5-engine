@@ -166,3 +166,31 @@ fn playtest_n16_rescue_audio_follows_the_beats_it_belongs_to() {
         "the verdict follows the paired flash: {log:?}"
     );
 }
+
+/// N21: `blackthorn.md §7` step 19 - the verdict acknowledgement "uses the
+/// ordinary command reader", and `input.md §6`: with type-ahead off "the
+/// queue is emptied on every read". Keys typed during the narration were
+/// replayed as commands after the hand-off.
+#[test]
+fn playtest_n21_the_rescue_acknowledgement_empties_the_queue_with_buffer_off() {
+    let mut state = dungeon_state(open_dungeon_record(), 3, 1, 1);
+    state
+        .apply_blackthorn_rescue_refuge(Path::new("/nonexistent-p8visual"))
+        .unwrap();
+    let dir = Path::new("/nonexistent-p8visual");
+    // Two keys typed while the narration holds the loop are buffered.
+    handle_play_key_input(&mut state, 'Z', "", dir).unwrap();
+    handle_play_key_input(&mut state, 'Z', "", dir).unwrap();
+    assert_eq!(state.keys_buffered_during_hold.len(), 2);
+    state.flush_staged_narration();
+    state.step_blackthorn_rescue(dir, false).unwrap();
+    assert!(state.blackthorn_rescue_awaiting_acknowledgement());
+    assert!(!state.typeahead_buffer_enabled);
+
+    handle_play_key_input(&mut state, 'Z', "", dir).unwrap();
+    assert!(!state.blackthorn_rescue_awaiting_acknowledgement());
+    assert!(
+        state.keys_buffered_during_hold.is_empty(),
+        "the acknowledgement read emptied the queue"
+    );
+}
