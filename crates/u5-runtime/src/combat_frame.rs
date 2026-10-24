@@ -3144,15 +3144,18 @@ impl PlayState {
         // `Monster vanishes.` / `Monster reappears.` were invented wordings
         // with an invented punctuation mark and no name.
         //
-        // The missing trailing newline is a property of the *next* print, and
-        // this engine has no way to mark a line as leaving the cursor mid-row
-        // for a later, unrelated producer, so it is not modelled here - the
-        // same residue the `vanishes!` line above carries.
+        // `§11.1` "Messages that leave a row open": the boundary is
+        // `\n<monster> disappears!` (or `reappears!`), "no trailing
+        // newline", and "the open message cursor remains after its
+        // exclamation mark until another producer prints". As an arena
+        // print the leading feed spends a blank under a closed row and the
+        // next banner's own feed only closes this one (playtest N09).
         let name = crate::input_dispatch::combat_actor_display_name(self, actor_slot);
-        self.message = match visibility.visibility {
-            CombatLinkedVisibility::Hidden => format!("{name} disappears!"),
-            CombatLinkedVisibility::Visible => format!("{name} reappears!"),
+        let line = match visibility.visibility {
+            CombatLinkedVisibility::Hidden => format!("\n{name} disappears!"),
+            CombatLinkedVisibility::Visible => format!("\n{name} reappears!"),
         };
+        self.emit_combat_print(&line);
         Some(CombatAiSpecialApplication::Blink {
             actor_slot,
             visibility,

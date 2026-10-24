@@ -3904,7 +3904,11 @@ fn combat_ai_blink_special_toggles_linked_visibility_and_marks_dirty() {
         COMBAT_HIDDEN_ACTIVE_OBJECT_TILE
     );
     assert!(state.visibility_dirty);
-    assert_eq!(state.message, "Ghost disappears!");
+    // `combat.md §11.1` "Messages that leave a row open": `\n<monster>
+    // disappears!`, no trailing newline - the leading feed is the
+    // producer's own and the row is left open (playtest N09).
+    assert_eq!(state.message, "\nGhost disappears!");
+    assert!(state.combat_transcript_row_open);
 }
 
 #[test]
