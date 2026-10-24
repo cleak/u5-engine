@@ -75,6 +75,11 @@ reports. The repository must not include original game assets, raw map dumps,
 dialogue transcripts, binary offsets copied from private analysis, or
 copyrighted content.
 
+One user-approved exception (2026-10-23): the side-by-side comparison
+screenshots in `docs/screenshots/` (engine vs. stock DOSBox frames from paired
+captures) may be committed for the README. Keep that set small and curated; do
+not add other captured frames, video, or extracted images to the repository.
+
 ## Clean-Room Rules
 
 - Do not look directly at decompiled source.
