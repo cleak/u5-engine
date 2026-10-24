@@ -3204,14 +3204,15 @@ impl PlayState {
             self.mark_visibility_dirty();
             "\n\"Thou art not upon a Sacred Quest!\nPassage denied!\"\n"
         };
-        // The accepted step no longer leaves a line in the slot, so the
-        // narrative block must not open with the separator newline it used
-        // to need.
-        if self.message.is_empty() {
-            self.message = narrative.trim_start_matches('\n').to_string();
-        } else {
-            self.message.push_str(narrative);
-        }
+        // `overworld.md §9.3`: "These streams contain one leading LF and one
+        // trailing LF", printed after the step's closed `North` echo row, and
+        // the per-cell emitter has no column-zero suppression
+        // (`text-output.md §10.4`). The leading LF is therefore a blank row
+        // above the opening quote, even with the accepted step's echo
+        // already in the transcript (playtest L06).
+        self.message.push_str(narrative);
+        // The stream ends with its own line feed: the row is closed.
+        self.message_row_open_mid_line = false;
         true
     }
 }

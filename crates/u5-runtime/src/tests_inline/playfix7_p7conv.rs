@@ -89,3 +89,39 @@ fn playtest_l04_world_plane_transition_writes_the_departed_plane_ool() {
     assert_eq!(brit[1], horse);
     let _ = fs::remove_dir_all(dir);
 }
+
+/// `overworld.md §9.3`: the gate streams "contain one leading LF and one
+/// trailing LF" and run after the step's closed `North` echo, so one blank
+/// row separates the echo from the opening quote on both arms (L06).
+#[test]
+fn playtest_l06_codex_gate_keeps_its_leading_line_feed_as_a_blank_row() {
+    for (mask, first_row) in [
+        (0u8, "\"Thou art not upon a Sacred Quest!"),
+        (1u8, "\"Pass, Seeker!\""),
+    ] {
+        let dir = debug_game_dir();
+        let mut state = britannia_state(
+            open_world_grid(),
+            NARRATIVE_GATE_X as usize,
+            NARRATIVE_GATE_Y as usize + 1,
+        );
+        state.shrine_ordained_mask = mask;
+
+        handle_play_key_input(&mut state, '\u{3}', "", &dir).unwrap();
+        state.flush_message_slot();
+
+        let entries = state.message_entries();
+        let echo = entries
+            .iter()
+            .rposition(|entry| entry.is_command_echo && entry.text == "North")
+            .expect("North echo");
+        let texts: Vec<&str> = entries[echo + 1..]
+            .iter()
+            .map(|entry| entry.text.as_str())
+            .collect();
+        assert_eq!(texts.first(), Some(&""), "mask {mask}: {texts:?}");
+        assert_eq!(texts.get(1), Some(&first_row), "mask {mask}: {texts:?}");
+        assert!(!state.message_row_open_mid_line);
+        let _ = fs::remove_dir_all(dir);
+    }
+}
