@@ -10450,17 +10450,6 @@ fn keys_pressed_in_typed_order(
     ordered
 }
 
-/// `input.md §6`: whether a read in the current state honours the rest of the
-/// queue whatever the player's setting. "The free-text line reader saves the
-/// setting, forces type-ahead on for the duration of a typed line, and
-/// restores it afterwards", and a conversation keeps its keyword reader's
-/// gate cleared for the whole session (`conversation.md`, "Free-text input"),
-/// as the terminal shell's `play_state_free_text_line_reader` has it.
-///
-/// `input.md §8` builds the typed-number readers on the same routine with the
-/// same "Disable the buffer flush" step, so the tavern's provision quantity
-/// and the mixer's honour the queue too, and the spell-name entry is a typed
-/// line.
 /// `input.md §6`: whether the read about to take a typed key leaves the rest
 /// of the queue for later reads.
 ///
@@ -10476,6 +10465,17 @@ fn visual_read_honours_queue(state: &PlayState) -> bool {
         || (state.cinematic_hold_owns_input() && !state.blackthorn_rescue_awaiting_acknowledgement())
 }
 
+/// `input.md §6`: whether a read in the current state honours the rest of the
+/// queue whatever the player's setting. "The free-text line reader saves the
+/// setting, forces type-ahead on for the duration of a typed line, and
+/// restores it afterwards", and a conversation keeps its keyword reader's
+/// gate cleared for the whole session (`conversation.md`, "Free-text input"),
+/// as the terminal shell's `play_state_free_text_line_reader` has it.
+///
+/// `input.md §8` builds the typed-number readers on the same routine with the
+/// same "Disable the buffer flush" step, so the tavern's provision quantity
+/// and the mixer's honour the queue too, and the spell-name entry is a typed
+/// line.
 fn visual_read_forces_typeahead(state: &PlayState) -> bool {
     visual_line_prompt_active_ignoring_text_hold(state)
         || state.active_conversation.is_some()
@@ -13701,8 +13701,15 @@ fn drive_visual(
         // `conversation.md §7.3`: a key that ends a `0x83` PAUSE "is consumed
         // and ends the pause at once ... The keyboard type-ahead buffer is
         // emptied on either exit", whatever the setting and whatever reader
-        // follows (playtest N20).
-        let ends_text_hold = visual.state.text_hold_active();
+        // follows (playtest N20). Only the timed pause: `0x8F` WAIT-KEY is
+        // satisfied by "a key already waiting in the type-ahead buffer" and
+        // publishes no flush, so the ordinary queue rule above applies to it.
+        let ends_text_hold = visual
+            .state
+            .pending_text_hold
+            .as_ref()
+            .and_then(|hold| hold.current())
+            == Some(u5_runtime::text_hold::TextHoldKind::TimedPause);
         let effects_before = visual.state.sound_effect_serial;
         let read = if visual_line_prompt_active(&visual.state) {
             let game_dir = visual.game_dir.clone();
@@ -31322,6 +31329,37 @@ mod tests {
         assert!(shell.visual().state.active_yell.is_some());
         assert_eq!(shell.visual().input_line, "", "the prompt opens empty");
         assert!(shell.visual().typed_keys.is_empty());
+    }
+
+    /// `conversation.md §7.3`: only the `0x83` PAUSE empties the queue on
+    /// exit. `0x8F` WAIT-KEY is satisfied by "a key already waiting in the
+    /// type-ahead buffer" and publishes no flush, so behind a line reader
+    /// (which forces type-ahead on) the rest of the burst stays queued.
+    #[test]
+    #[cfg(feature = "original-asset-tests")]
+    fn a_key_that_ends_a_key_wait_leaves_the_queue_alone() {
+        use u5_runtime::text_hold::TextHoldKind;
+        use u5_runtime::tlk_runner::TlkRenderedText;
+        let mut shell = britannia_meadow_shell("wait-key-queue");
+        shell.ticks(60);
+        shell.tap(KeyCode::KeyY);
+        assert!(shell.visual().state.active_yell.is_some());
+        {
+            let mut visual = shell.visual_mut();
+            visual.state.message = "\"Some words".to_string();
+            // The reply's row is open mid-line, set by this caller.
+            visual.state.message_row_open_mid_line = true;
+            visual.state.begin_text_hold(
+                vec![(TextHoldKind::WaitKey, TlkRenderedText::plain("more\""))],
+                true,
+            );
+        }
+        shell.ticks(10);
+        assert!(shell.visual().state.text_hold_active());
+        shell.press_in_one_frame(&[KeyCode::KeyX, KeyCode::KeyY, KeyCode::KeyZ]);
+        shell.ticks(3);
+        assert!(!shell.visual().state.text_hold_active());
+        assert_eq!(shell.visual().input_line, "YZ");
     }
 
     /// Playtest H10, `input.md §6`: with type-ahead off (the default) "the
