@@ -5153,6 +5153,23 @@ impl PlayState {
         Ok(MoveOutcome::PromptDeclined)
     }
 
+    /// `blackthorn.md §4.2` "Where the cursor is left": "Records `9` and `10`
+    /// both end with a closing double quote followed by one trailing space,
+    /// and neither contains a line feed. The cursor is therefore left
+    /// mid-row, one cell past that trailing space, and it stays there through
+    /// the beat, through the handoff, and into the next scene."
+    ///
+    /// The print set the cursor state but not the transcript row's, so the
+    /// window derived `text-output.md §10.4`'s blank under the record and the
+    /// captive cell's first prompt sat a row low. Measured on `bt-password`
+    /// (20261024-001911, beat `onward`): the stock reads `thee!"` with the
+    /// cell's marker row directly under it. Stated here, per caller, rather
+    /// than inferred from the record's text.
+    fn leave_solo_closing_record_row_open(&mut self) {
+        self.message_row_open_mid_line = true;
+        self.leave_last_transcript_row_open();
+    }
+
     /// `blackthorn.md §4.1`'s reaction records. The measured constants are
     /// the fallbacks for the paths that run without `MISCMSG.DAT`.
     pub fn blackthorn_reaction_text(
@@ -5609,6 +5626,8 @@ impl PlayState {
                     }
                     self.pending_blackthorn_merciful_death = true;
                     self.stage_blackthorn_execution_hold(None);
+                } else {
+                    self.leave_solo_closing_record_row_open();
                 }
                 Ok(outcome)
             }
@@ -5647,7 +5666,9 @@ impl PlayState {
                         crate::MISCMSG_BLACKTHORN_DUNGEON_THREAT,
                         BLACKTHORN_DUNGEON_THREAT,
                     )?;
-                    return self.hold_blackthorn_closing(challenge, line);
+                    let outcome = self.hold_blackthorn_closing(challenge, line)?;
+                    self.leave_solo_closing_record_row_open();
+                    return Ok(outcome);
                 };
                 match challenge.wrong_escalation() {
                     // First wrong answer: a threat only. No tile is stamped
