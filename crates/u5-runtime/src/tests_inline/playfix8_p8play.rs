@@ -102,3 +102,74 @@ fn playtest_n13_on_land_or_ship_refusal_keeps_its_producer_blank_row() {
     assert!(next.explicit_blank && next.producer_blank, "{entries:?}");
     let _ = fs::remove_dir_all(dir);
 }
+
+/// `shops.md §8.C`: Accept is `Yes\n`, then affordability, and short funds
+/// prints record `163` (guild) or `147` (reagents). The engine's `Yes` echo
+/// leaves its feed to the next text, so a record that opens with its own
+/// line feed must still leave one blank row under `Yes`, as the paid
+/// `\n"Sold!"` / `\n"I thank thee!"` replies do (N02). The records here are
+/// synthetic stand-ins with the same leading feed.
+#[test]
+fn playtest_n02_guild_and_herbalist_short_funds_keep_the_blank_row() {
+    use crate::shop_runtime::{GuildShopState, ReagentShopState};
+    use crate::shop_session::ActiveShopSession;
+
+    let dir = debug_game_dir();
+    let shoppe = shoppe_dat_with_records(&[
+        (163, b"\n\"Guild short.\"".as_slice()),
+        (147, b"\n\"Herb short.\"".as_slice()),
+    ]);
+    std::fs::write(dir.join("SHOPPE.DAT"), shoppe).unwrap();
+    let rows_of = |state: &PlayState| -> Vec<String> {
+        state
+            .message_entries()
+            .iter()
+            .map(|entry| entry.text.trim_end().to_string())
+            .collect()
+    };
+
+    let mut guild = test_state(open_grid(), 1, 1);
+    guild.area = Area::Town {
+        scene: Scene::new(1).unwrap(),
+        floor: 0,
+    };
+    guild.gold = 0;
+    guild.active_shop = Some(ActiveShopSession::Guild(GuildShopState::Greeting {
+        shop: crate::shops::GuildShop::TheGuild,
+    }));
+    guild.emit_message_line("\n\"Welcome!\" ");
+    guild.open_message_row();
+    for key in ['Y', 'a', 'Y'] {
+        handle_play_key_input(&mut guild, key, "", &dir).unwrap();
+    }
+    let rows = rows_of(&guild);
+    let yes = rows
+        .iter()
+        .rposition(|row| row.ends_with("Yes"))
+        .unwrap_or_else(|| panic!("{rows:#?}"));
+    assert_eq!(rows[yes + 1], "", "{rows:#?}");
+    assert_eq!(rows[yes + 2], "\"Guild short.\"", "{rows:#?}");
+
+    let mut herb = test_state(open_grid(), 1, 1);
+    herb.area = Area::Town {
+        scene: Scene::new(1).unwrap(),
+        floor: 0,
+    };
+    herb.gold = 0;
+    herb.active_shop = Some(ActiveShopSession::Reagent(ReagentShopState::Greeting {
+        herbalist: Herbalist::TheHerbalist,
+    }));
+    herb.emit_message_line("\n\"Welcome!\" ");
+    herb.open_message_row();
+    for key in ['Y', 'A', 'Y'] {
+        handle_play_key_input(&mut herb, key, "", &dir).unwrap();
+    }
+    let rows = rows_of(&herb);
+    let yes = rows
+        .iter()
+        .rposition(|row| row.ends_with("Yes"))
+        .unwrap_or_else(|| panic!("{rows:#?}"));
+    assert_eq!(rows[yes + 1], "", "{rows:#?}");
+    assert_eq!(rows[yes + 2], "\"Herb short.\"", "{rows:#?}");
+    let _ = fs::remove_dir_all(dir);
+}
