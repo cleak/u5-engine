@@ -1935,7 +1935,13 @@ fn town_floor_reload_preserves_opened_secret_door_for_visit() {
     assert_eq!(state.grid[32 + 2], TOWN_DOOR_CLEARED_TILE);
     assert!(state.is_revealed_town_secret_door(scene, 0, 2, 1));
     assert!(state.is_recorded_open_town_door(scene, 0, 2, 1));
-    assert_eq!(state.door_tracker, None);
+    // The floor reload cancels the pending close; the other three bytes
+    // stay resident (playtest N23).
+    assert_eq!(state.door_tracker.map(|tracker| tracker.previous_tile), Some(0));
+    assert_eq!(
+        state.door_tracker.map(|tracker| (tracker.x, tracker.y)),
+        Some((2, 1))
+    );
     assert_eq!(state.turn, 4);
     let _ = fs::remove_dir_all(dir);
 }

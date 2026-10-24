@@ -1287,7 +1287,11 @@ impl PlayState {
             },
             active_objects,
             npcs: Vec::new(),
-            door_tracker: None,
+            // `save-load.md §4.2`: "The load path recomputes and normalises
+            // no restored byte", and only town location setup clears the
+            // previous-tile gate (`doors-and-z-transitions.md §5`). Outside
+            // a town the four bytes ride along untouched (playtest N23).
+            door_tracker: options.door_tracker,
             door_tracker_closed: false,
             opened_town_doors: Vec::new(),
             revealed_town_secret_doors: Vec::new(),
@@ -1735,7 +1739,11 @@ impl PlayState {
             },
             active_objects,
             npcs: Vec::new(),
-            door_tracker: None,
+            // `save-load.md §4.2`: "The load path recomputes and normalises
+            // no restored byte", and only town location setup clears the
+            // previous-tile gate (`doors-and-z-transitions.md §5`). Outside
+            // a town the four bytes ride along untouched (playtest N23).
+            door_tracker: options.door_tracker,
             door_tracker_closed: false,
             opened_town_doors: Vec::new(),
             revealed_town_secret_doors: Vec::new(),

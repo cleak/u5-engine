@@ -2564,7 +2564,8 @@ impl PlayState {
             combat_interference_sources: self.combat_interference_sources,
             transport: entering_transport,
             facing: None,
-            door_tracker: None,
+            // Location setup clears only the previous-tile gate.
+            door_tracker: self.inert_door_tracker(),
             pending_vehicle: None,
             pending_vehicle_save: self.pending_vehicle_save,
             inn_registry: self.inn_registry.clone(),

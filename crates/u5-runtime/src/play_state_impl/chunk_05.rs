@@ -577,8 +577,20 @@ impl PlayState {
             .retain(|entry| *entry != key);
     }
 
+    /// `doors-and-z-transitions.md §5` / `formats/saved-gam.md §10`: the
+    /// four tracker bytes are a resident block that only O-Open rewrites.
+    /// Leaving or resetting a location cancels a pending auto-close by
+    /// zeroing the previous-tile gate; the saved X, Y and countdown stay
+    /// resident and inert, as they do after Journey Onward (playtest N23).
+    pub fn inert_door_tracker(&self) -> Option<DoorTracker> {
+        self.door_tracker.map(|tracker| DoorTracker {
+            previous_tile: 0,
+            ..tracker
+        })
+    }
+
     pub fn clear_open_town_door_state(&mut self) {
-        self.door_tracker = None;
+        self.door_tracker = self.inert_door_tracker();
         self.door_tracker_closed = false;
         self.opened_town_doors.clear();
         self.revealed_town_secret_doors.clear();
@@ -592,7 +604,7 @@ impl PlayState {
     }
 
     pub fn clear_town_floor_reload_door_state(&mut self) {
-        self.door_tracker = None;
+        self.door_tracker = self.inert_door_tracker();
         self.door_tracker_closed = false;
         let revealed = self.revealed_town_secret_doors.clone();
         self.opened_town_doors

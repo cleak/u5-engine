@@ -73,3 +73,70 @@ fn playtest_n22_shipwright_delivery_faces_east() {
         Some(0x25)
     );
 }
+
+/// N23: `save-load.md §4.2` - "The load path recomputes and normalises no
+/// restored byte" - and `formats/saved-gam.md §10`: the door auto-close X and
+/// Y are "Restored verbatim", and Journey Onward "restores" the countdown.
+/// Only town location setup clears the previous-tile gate
+/// (`doors-and-z-transitions.md §5`). A load into the overworld or a dungeon
+/// used to drop the whole block, so the next save wrote `00 00 00 00`.
+#[test]
+fn playtest_n23_an_overworld_load_keeps_the_door_tracker_bytes() {
+    let tracker = DoorTracker {
+        previous_tile: 0,
+        x: 5,
+        y: 6,
+        turns_remaining: 0xfd,
+    };
+    let dir = debug_game_dir();
+    let world = PlayState::load_world_scene(
+        &dir,
+        WorldPlane::Britannia,
+        PlayOptions {
+            target: PlayTarget::World(WorldPlane::Britannia),
+            start: Some((10, 20)),
+            door_tracker: Some(tracker),
+            ..PlayOptions::default()
+        },
+    )
+    .unwrap();
+    assert_eq!(world.door_tracker, Some(tracker), "overworld load");
+    let _ = fs::remove_dir_all(dir);
+
+    // An armed gate rides along too, and never fires outside a town.
+    let armed = DoorTracker {
+        previous_tile: TOWN_DOOR_PLAIN_UNLOCKED_TILE,
+        turns_remaining: 1,
+        ..tracker
+    };
+    let mut state = world_state(open_world_grid(), 5, 5);
+    state.door_tracker = Some(armed);
+    let grid_before = state.grid.clone();
+    state.tick_door_tracker();
+    assert_eq!(state.grid, grid_before, "the overworld map is untouched");
+    assert_eq!(state.door_tracker, Some(armed));
+}
+
+/// N23, the stock half: leaving a town cancels a pending auto-close but
+/// leaves the X, Y and countdown resident, so a save made on the overworld
+/// afterwards still carries them.
+#[test]
+fn playtest_n23_town_exit_keeps_the_tracker_bytes_inert() {
+    let mut state = test_state(open_grid(), 3, 3);
+    state.door_tracker = Some(DoorTracker {
+        previous_tile: TOWN_DOOR_PLAIN_UNLOCKED_TILE,
+        x: 5,
+        y: 6,
+        turns_remaining: 2,
+    });
+    state.clear_town_visit_state();
+    assert_eq!(
+        state.door_tracker,
+        Some(DoorTracker {
+            previous_tile: 0,
+            x: 5,
+            y: 6,
+            turns_remaining: 2,
+        })
+    );
+}

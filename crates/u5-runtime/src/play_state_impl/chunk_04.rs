@@ -3050,7 +3050,8 @@ impl PlayState {
             // overworld entry re-syncs into slot zero (playtest F18).
             transport: arrival_transport,
             facing: Some(self.player.facing),
-            door_tracker: None,
+            // Location setup clears only the previous-tile gate.
+            door_tracker: self.inert_door_tracker(),
             pending_vehicle: None,
             pending_vehicle_save: self.pending_vehicle_save,
             inn_registry: self.inn_registry.clone(),
