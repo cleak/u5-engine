@@ -31097,7 +31097,8 @@ mod tests {
         }
         assert_eq!(
             shell.visual().input_line,
-            "a".repeat(u5_runtime::YELL_INPUT_MAX_LEN)
+            // Playtest N19: the reader uppercases keys.
+            "A".repeat(u5_runtime::YELL_INPUT_MAX_LEN)
         );
     }
 
@@ -31267,11 +31268,12 @@ mod tests {
     fn keys_typed_in_one_frame_reach_the_line_in_typed_order() {
         use KeyCode::*;
         for (keys, expected) in [
-            ([KeyB, KeyA], "ba"),
-            ([KeyA, KeyB], "ab"),
-            ([KeyO, KeyE], "oe"),
-            ([KeyE, KeyO], "eo"),
-            ([KeyH, KeyI], "hi"),
+            // Playtest N19: the reader uppercases keys.
+            ([KeyB, KeyA], "BA"),
+            ([KeyA, KeyB], "AB"),
+            ([KeyO, KeyE], "OE"),
+            ([KeyE, KeyO], "EO"),
+            ([KeyH, KeyI], "HI"),
         ] {
             let mut shell = britannia_meadow_shell("typed-order");
             shell.ticks(60);
