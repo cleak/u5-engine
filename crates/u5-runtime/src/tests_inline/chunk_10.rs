@@ -137,8 +137,8 @@ fn world_load_consumes_pending_frigate_into_first_free_object_slot() {
     assert_eq!(
         state.active_objects[2],
         ActiveObject {
-            type_byte: SHIP_PARKED_FIRST,
-            tile: SHIP_PARKED_FIRST,
+            type_byte: SHIP_PARKED_FIRST + DELIVERED_VEHICLE_FACING_INDEX,
+            tile: SHIP_PARKED_FIRST + DELIVERED_VEHICLE_FACING_INDEX,
             x: 12,
             y: 21,
             z: WorldPlane::Underworld.save_floor(),
@@ -187,8 +187,8 @@ fn world_load_consumes_pending_skiff_by_appending_slot() {
     assert_eq!(
         state.active_objects[1],
         ActiveObject {
-            type_byte: SKIFF_PARKED_FIRST,
-            tile: SKIFF_PARKED_FIRST,
+            type_byte: SKIFF_PARKED_FIRST + DELIVERED_VEHICLE_FACING_INDEX,
+            tile: SKIFF_PARKED_FIRST + DELIVERED_VEHICLE_FACING_INDEX,
             x: 12,
             y: 21,
             z: WorldPlane::Underworld.save_floor(),

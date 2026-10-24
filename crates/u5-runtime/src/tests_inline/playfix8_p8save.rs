@@ -42,3 +42,34 @@ fn playtest_n15_scene_rebuilds_keep_typeahead_and_sound() {
     assert!(!state.music_enabled, "transit keeps Sound Off");
     let _ = fs::remove_dir_all(dir);
 }
+
+/// N22: `shops.md §8.7` delivery step 2 - the vehicle tile goes into "both
+/// the object's type byte and its frame byte ... in both cases the east-facing
+/// member of the family (facing index `1`)". `vehicles.md §2` puts east at
+/// `1` in the low two bits, so the furled Frigate is `0x25` and the Skiff
+/// `0x29`. Both used to be delivered facing north (`0x24`, `0x28`).
+#[test]
+fn playtest_n22_shipwright_delivery_faces_east() {
+    let frigate = PendingVehicleAcquisition::Frigate {
+        x: 79,
+        y: 109,
+        skiffs: 2,
+    }
+    .active_object(0);
+    assert_eq!((frigate.type_byte, frigate.tile), (0x25, 0x25));
+    assert_eq!((frigate.aux1, frigate.aux3), (99, 2));
+    let skiff = PendingVehicleAcquisition::Skiff {
+        x: 79,
+        y: 109,
+        aux3: 0,
+    }
+    .active_object(0);
+    assert_eq!((skiff.type_byte, skiff.tile), (0x29, 0x29));
+    // Boarding copies the object byte into the marker: the party boards
+    // facing east.
+    assert_eq!(
+        transport_from_vehicle_object(frigate.type_byte, frigate.tile, frigate.aux1, frigate.aux3)
+            .map(|transport| transport.save_marker()),
+        Some(0x25)
+    );
+}

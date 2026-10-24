@@ -338,12 +338,17 @@ pub struct BoardVehicleCandidate {
     pub blocked_by_occupant: bool,
 }
 
+/// `shops.md §8.7` delivery step 2: the delivered vessel is "in both cases the
+/// east-facing member of the family (facing index `1` in the transport-marker
+/// convention of `systems/vehicles.md`)" - `0` north, `1` east (playtest N22).
+pub const DELIVERED_VEHICLE_FACING_INDEX: u8 = 1;
+
 impl PendingVehicleAcquisition {
     pub fn active_object(self, z: i8) -> ActiveObject {
         match self {
             Self::Frigate { x, y, skiffs } => ActiveObject {
-                type_byte: SHIP_PARKED_FIRST,
-                tile: SHIP_PARKED_FIRST,
+                type_byte: SHIP_PARKED_FIRST + DELIVERED_VEHICLE_FACING_INDEX,
+                tile: SHIP_PARKED_FIRST + DELIVERED_VEHICLE_FACING_INDEX,
                 x,
                 y,
                 z,
@@ -354,8 +359,8 @@ impl PendingVehicleAcquisition {
                 aux3: skiffs & 0x3f,
             },
             Self::Skiff { x, y, aux3 } => ActiveObject {
-                type_byte: SKIFF_PARKED_FIRST,
-                tile: SKIFF_PARKED_FIRST,
+                type_byte: SKIFF_PARKED_FIRST + DELIVERED_VEHICLE_FACING_INDEX,
+                tile: SKIFF_PARKED_FIRST + DELIVERED_VEHICLE_FACING_INDEX,
                 x,
                 y,
                 z,
