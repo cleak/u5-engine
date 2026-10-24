@@ -13698,6 +13698,11 @@ fn drive_visual(
         // keystrokes after consuming one; when the flag is clear, leave the
         // queue alone". A hold reads nothing, so a key it buffers is no read.
         let honours_queue = visual_read_honours_queue(&visual.state);
+        // `conversation.md §7.3`: a key that ends a `0x83` PAUSE "is consumed
+        // and ends the pause at once ... The keyboard type-ahead buffer is
+        // emptied on either exit", whatever the setting and whatever reader
+        // follows (playtest N20).
+        let ends_text_hold = visual.state.text_hold_active();
         let effects_before = visual.state.sound_effect_serial;
         let read = if visual_line_prompt_active(&visual.state) {
             let game_dir = visual.game_dir.clone();
@@ -13755,7 +13760,7 @@ fn drive_visual(
                 }
             }
         };
-        if read && !honours_queue {
+        if read && (!honours_queue || ends_text_hold) {
             visual.typed_keys.clear();
         }
         if visual.state.sound_effect_serial != effects_before {
@@ -31283,6 +31288,40 @@ mod tests {
             shell.ticks(3);
             assert_eq!(shell.visual().input_line, expected);
         }
+    }
+
+    /// Playtest N20, `conversation.md §7.3`: a key that ends a `0x83` PAUSE
+    /// "is consumed and ends the pause at once ... The keyboard type-ahead
+    /// buffer is emptied on either exit". With a line reader behind the pause
+    /// - which forces type-ahead on - the rest of a burst typed in the same
+    /// frame was typed into the prompt.
+    #[test]
+    #[cfg(feature = "original-asset-tests")]
+    fn a_key_that_ends_a_timed_pause_empties_the_queue() {
+        use u5_runtime::text_hold::TextHoldKind;
+        use u5_runtime::tlk_runner::TlkRenderedText;
+        let mut shell = britannia_meadow_shell("pause-flush");
+        shell.ticks(60);
+        shell.tap(KeyCode::KeyY);
+        assert!(shell.visual().state.active_yell.is_some());
+        {
+            let mut visual = shell.visual_mut();
+            visual.state.message = "\"Squeek...".to_string();
+            // The pause's row is open mid-line, set by this caller.
+            visual.state.message_row_open_mid_line = true;
+            visual.state.begin_text_hold(
+                vec![(TextHoldKind::TimedPause, TlkRenderedText::plain("\""))],
+                true,
+            );
+        }
+        shell.ticks(10);
+        assert!(shell.visual().state.text_hold_active());
+        shell.press_in_one_frame(&[KeyCode::KeyX, KeyCode::KeyY, KeyCode::KeyZ]);
+        shell.ticks(3);
+        assert!(!shell.visual().state.text_hold_active());
+        assert!(shell.visual().state.active_yell.is_some());
+        assert_eq!(shell.visual().input_line, "", "the prompt opens empty");
+        assert!(shell.visual().typed_keys.is_empty());
     }
 
     /// Playtest H10, `input.md §6`: with type-ahead off (the default) "the
