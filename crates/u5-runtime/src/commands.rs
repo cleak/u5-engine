@@ -1562,6 +1562,9 @@ pub const GET_TABLE_CANT_REACH_PLATE_LINE: &str = "\nCan\'t reach plate!";
 pub const HOLE_UP_NOT_IN_BED_REFUSAL: &str = "Only in bed!";
 /// `cleak/u5-spec#194` (black-box): `Enter ` with no entrance underfoot.
 pub const ENTER_NOTHING_REFUSAL: &str = "what?";
+/// `commands.md §5.5`: the ruined-shrine Enter arm prints `ruins` after
+/// `Enter_`, with no newline.
+pub const ENTER_RUINS_NARRATION: &str = "ruins";
 /// `cleak/u5-spec#194` capture (town) and `dungeon-mode.md` (dungeon):
 /// the Search result when nothing is found.
 /// `cleak/u5-spec#258`: the trailing feed closes this result's own row in

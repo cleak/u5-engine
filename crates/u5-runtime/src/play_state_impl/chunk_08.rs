@@ -1854,6 +1854,25 @@ impl PlayState {
             let _ = self.complete_open_direction_echo("Enter ", CODEX_SHRINE_ENTER_ECHO_TAIL);
             return self.read_codex_urn_after_entry(game_dir);
         }
+        // `commands.md §5.5` Enter class table: "| ruins | `ruins` with no
+        // newline; this is a direct non-transition arm |", and
+        // `catalogs/gazetteer.md` §5.1 names it "the direct non-transition
+        // arm for the blocked ruined-shrine tile". It is a live-tile arm, so
+        // no coordinate row is consulted. The spec gives it no turn cost, so
+        // it keeps the no-action result of the refusal it replaces
+        // (playtest L05).
+        if tile == WORLD_RUINED_SHRINE_TILE {
+            // No newline: the row stays open, so the next poll's leading feed
+            // closes it and no blank row is derived (`text-output.md §10.4`).
+            if self.complete_open_direction_echo("Enter ", ENTER_RUINS_NARRATION) {
+                self.leave_last_transcript_row_open();
+            } else {
+                self.message = format!("Enter {ENTER_RUINS_NARRATION}");
+                self.pending_entry_leaves_row_open = true;
+                self.open_message_row();
+            }
+            return Ok(MoveOutcome::Blocked);
+        }
         let Some(live_class) = WorldEntryNarrationClass::from_live_tile(tile) else {
             // `karma.md §8`: a tile with no entry handler (e.g. `0x41`)
             // "takes the ordinary `Enter what?\n` refusal" - lower-case

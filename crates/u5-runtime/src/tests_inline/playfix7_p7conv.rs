@@ -125,3 +125,34 @@ fn playtest_l06_codex_gate_keeps_its_leading_line_feed_as_a_blank_row() {
         let _ = fs::remove_dir_all(dir);
     }
 }
+
+/// `commands.md §5.5` Enter class table: "| ruins | `ruins` with no newline;
+/// this is a direct non-transition arm |". A ruined shrine underfoot is not
+/// the `What?` refusal (L05).
+#[test]
+fn playtest_l05_enter_on_a_ruined_shrine_prints_ruins_without_a_newline() {
+    let dir = debug_game_dir();
+    let mut grid = open_world_grid();
+    grid[world_cell_index(233, 66)] = WORLD_RUINED_SHRINE_TILE;
+    let mut state = britannia_state(grid, 233, 66);
+    let turn = state.turn;
+    state.begin_command_echo_for(Command::Enter);
+
+    let outcome = state.enter_current_location(&dir).unwrap();
+
+    assert_eq!(outcome, MoveOutcome::Blocked);
+    assert_eq!(state.message_entries()[0].text, "Enter ruins");
+    // `text-output.md §10.4`: a result with no trailing feed leaves its row
+    // open, so the next prompt lands directly beneath it.
+    assert!(state.message_entries()[0].leaves_row_open);
+    assert!(state.message_row_open_mid_line);
+    assert!(matches!(
+        state.area,
+        Area::World {
+            plane: WorldPlane::Britannia
+        }
+    ));
+    assert_eq!((state.player.x, state.player.y), (233, 66));
+    assert_eq!(state.turn, turn);
+    let _ = fs::remove_dir_all(dir);
+}
