@@ -3126,6 +3126,12 @@ impl PlayState {
         // session leaves odd parity again." A scene rebuild is none of those,
         // so a leaked highlight keeps the panel inverted across the entry.
         next.stats_panel_window_inverse = self.stats_panel_window_inverse;
+        // `input.md §6`: "Three things write the setting and nothing else
+        // does" - Ctrl+B, the combat toggle and the free-text reader's
+        // save/restore - and `audio.md §3` resets the sound setting only for
+        // a new process. A scene rebuild is neither, so both carry across
+        // (playtest N15).
+        next.carry_session_settings_from(self);
         // The message window is display state too: nothing in
         // `overworld.md §9.2`'s transit or the Gate Travel warp clears it,
         // and the rebuild used to arrive with an empty window (playtest

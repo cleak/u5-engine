@@ -5567,6 +5567,15 @@ impl PlayState {
         }
     }
 
+    /// Session settings that live for the whole process rather than one
+    /// scene: the Ctrl+B type-ahead setting (`input.md §6`) and the sound
+    /// toggle (`audio.md §3`). Every scene rebuild copies them from the
+    /// outgoing state.
+    pub(crate) fn carry_session_settings_from(&mut self, previous: &Self) {
+        self.typeahead_buffer_enabled = previous.typeahead_buffer_enabled;
+        self.music_enabled = previous.music_enabled;
+    }
+
     pub fn music_status_label(&self) -> &'static str {
         if self.music_enabled { "on" } else { "off" }
     }
