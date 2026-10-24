@@ -6487,8 +6487,10 @@ impl PlayState {
             .push(blackthorn_rescue_playback());
         // `audio.md §8.6.2`: after the refuge tableau first redraws the party
         // actor, run six independent envelope programs back-to-back. No visual
-        // operation or intentional hold occurs between rows.
-        self.emit_sound_effect(SoundEffect::BlackthornRescueEnvelopes);
+        // operation or intentional hold occurs between rows. They run when
+        // the third refuge fragment is released, not now: emitting them here
+        // played them under the darkness beat and the refuge narration
+        // (playtest N16). See [`Self::release_blackthorn_rescue_beat_audio`].
 
         // Steps 10-14: the shout, then six plus four plus four ticks across
         // the two Guardian reveals, then the thunder line.
@@ -6504,9 +6506,8 @@ impl PlayState {
                 + 2 * crate::blackthorn::BLACKTHORN_RESCUE_WAIT_CELL_REVEAL,
             crate::blackthorn::BLACKTHORN_RESCUE_THUNDER,
         );
-        // Step 15: the paired viewport flash.
-        self.emit_major_flash();
-        self.emit_major_flash();
+        // Step 15: the paired viewport flash runs once the thunder line has
+        // printed; see [`Self::release_blackthorn_rescue_beat_audio`].
 
         // Steps 16-18: `\n"`, the record, one `"`. One emission, because the
         // frame and the record share a row.
@@ -6528,6 +6529,32 @@ impl PlayState {
 
         self.pending_blackthorn_rescue = Some(crate::blackthorn::BlackthornRescuePhase::Narration);
         Ok(MoveOutcome::Observed)
+    }
+
+    /// The rescue's audio, run as the beat it follows is released.
+    ///
+    /// `blackthorn.md §7`'s print-and-wait order: "8. Print beat 4. 9. Install
+    /// the party-on-foot actor at the viewport centre and redraw; run the
+    /// six-row envelope sequence of Section 7.1", and `§7.1` item 4: "Print
+    /// the thunder line, then run the shared full-viewport flash/low-rumble
+    /// effect twice consecutively". `audio.md §2`: an effect owns the calling
+    /// thread, so the narration around it cannot advance underneath it. The
+    /// cinematic used to emit all of it in one batch as it started, so the
+    /// envelopes sounded under the darkness beat and the refuge fragments and
+    /// the flashes about nine seconds before the thunder line (playtest N16).
+    /// The holds that follow each release already carry the effects' length
+    /// ([`crate::blackthorn::BLACKTHORN_RESCUE_WAIT_ENVELOPE_SEQUENCE`],
+    /// [`crate::blackthorn::BLACKTHORN_RESCUE_WAIT_PAIRED_FLASH`]).
+    pub(crate) fn release_blackthorn_rescue_beat_audio(&mut self, text: &str) {
+        if self.pending_blackthorn_rescue.is_none() {
+            return;
+        }
+        if text == crate::blackthorn::BLACKTHORN_RESCUE_REFUGE_THIRD {
+            self.emit_sound_effect(SoundEffect::BlackthornRescueEnvelopes);
+        } else if text == crate::blackthorn::BLACKTHORN_RESCUE_THUNDER {
+            self.emit_major_flash();
+            self.emit_major_flash();
+        }
     }
 
     /// One world tick of the rescue figure's animator while the verdict's
