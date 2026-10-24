@@ -173,3 +173,37 @@ fn playtest_n02_guild_and_herbalist_short_funds_keep_the_blank_row() {
     assert_eq!(rows[yes + 2], "\"Herb short.\"", "{rows:#?}");
     let _ = fs::remove_dir_all(dir);
 }
+
+/// `town-mode.md §14` prints the arrest challenge and question once, then a
+/// `:` answer row that echoes `Yes` or `No!`; an unaccepted key is rejected
+/// by the yes/no wait, which keeps waiting (`npc-schedules.md §9.2`). Each
+/// stray key used to print the whole challenge block again (N26).
+#[test]
+fn playtest_n26_arrest_prompt_ignores_stray_keys_without_reprinting() {
+    let mut state = test_state(open_grid(), 1, 1);
+    // The contact turn has already printed into the slot, so the challenge
+    // is appended under it - which is what made a re-assigned slot differ
+    // from the flushed one.
+    state.message = "South".to_string();
+    state
+        .open_town_arrest(
+            crate::TownArrestPrompt {
+                scene_byte: crate::SCENE_MINOC,
+                floor: 0,
+                npc_slot: 1,
+            },
+            Some(Path::new("/")),
+        )
+        .unwrap();
+    state.flush_message_slot();
+    for key in ['1', 'Q', '\u{1b}', '\r'] {
+        handle_play_key_input(&mut state, key, "", Path::new("")).unwrap();
+    }
+    assert!(state.pending_town_arrest.is_some());
+    let challenge_rows = state
+        .message_entries()
+        .iter()
+        .filter(|entry| entry.text.contains("Thou art under arrest!"))
+        .count();
+    assert_eq!(challenge_rows, 1, "{:#?}", state.message_entries());
+}

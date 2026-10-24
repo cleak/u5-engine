@@ -4869,10 +4869,12 @@ impl PlayState {
                 self.message = String::new();
                 Ok(Some(MoveOutcome::Used))
             }
-            _ => {
-                self.message = TOWN_ARREST_SURRENDER_PROMPT.to_string();
-                Ok(Some(MoveOutcome::PromptDeclined))
-            }
+            // `town-mode.md §14` prints the challenge once; an unaccepted
+            // key is "rejected by the yes/no wait", which "continues to wait
+            // for a valid answer" (`npc-schedules.md §9.2`). Re-assigning
+            // the challenge to the slot printed the whole block again under
+            // the open `:` row on every stray key (playtest N26).
+            _ => Ok(Some(MoveOutcome::PromptDeclined)),
         }
     }
 

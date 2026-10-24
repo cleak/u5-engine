@@ -328,6 +328,8 @@ fn typeahead_buffer_pauses_during_modal_prompts() {
         floor: 0,
         npc_slot: 1,
     });
+    // As `open_town_arrest` does: the challenge is printed once.
+    state.message = TOWN_ARREST_SURRENDER_PROMPT.to_string();
 
     assert_eq!(play_input_typeahead_chars("12"), Some(vec!['1', '2']));
     assert!(!play_state_accepts_typeahead(&state));
@@ -492,6 +494,8 @@ fn pending_prompt_consumes_typeahead_toggle_without_changing_buffer_state() {
         floor: 0,
         npc_slot: 1,
     });
+    // As `open_town_arrest` does: the challenge is printed once.
+    prompted.message = TOWN_ARREST_SURRENDER_PROMPT.to_string();
 
     assert_eq!(
         handle_play_script_command(&mut prompted, "buffer", Path::new("")).unwrap(),
@@ -514,6 +518,8 @@ fn empty_play_input_repeats_pending_prompt_without_turn() {
         floor: 0,
         npc_slot: 1,
     });
+    // As `open_town_arrest` does: the challenge is printed once.
+    prompted.message = TOWN_ARREST_SURRENDER_PROMPT.to_string();
 
     handle_empty_play_input(&mut prompted, Path::new("")).unwrap();
 
@@ -698,6 +704,8 @@ fn play_script_idle_count_respects_pending_prompt_freeze() {
         floor: 0,
         npc_slot: 1,
     });
+    // As `open_town_arrest` does: the challenge is printed once.
+    prompted.message = TOWN_ARREST_SURRENDER_PROMPT.to_string();
 
     assert_eq!(
         handle_play_script_command(&mut prompted, "idle:2", Path::new("")).unwrap(),
