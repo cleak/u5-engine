@@ -866,7 +866,7 @@
                 x: 5,
                 y: 8,
                 z: 0,
-                phase: STEADY_PHASE,
+                phase: NPC_PLACEMENT_ACTIVE_OBJECT_PHASE,
                 aux1: 0,
                 aux3: 0,
             }
@@ -954,7 +954,7 @@
                 x: 4,
                 y: 5,
                 z: 0,
-                phase: STEADY_PHASE,
+                phase: NPC_PLACEMENT_ACTIVE_OBJECT_PHASE,
                 aux1: 0,
                 aux3: 0,
             }
@@ -1090,7 +1090,7 @@
                 x: 5,
                 y: 6,
                 z: 0,
-                phase: STEADY_PHASE,
+                phase: NPC_PLACEMENT_ACTIVE_OBJECT_PHASE,
                 aux1: 0,
                 aux3: 0,
             }

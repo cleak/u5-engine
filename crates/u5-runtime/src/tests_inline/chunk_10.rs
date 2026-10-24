@@ -1491,7 +1491,7 @@ fn town_entry_installs_living_shadowlord_for_matching_fresh_scene() {
             x: SHADOWLORD_TOWN_INSTALL_X,
             y: SHADOWLORD_TOWN_INSTALL_ROWS[0],
             z: 0,
-            phase: STEADY_PHASE,
+            phase: NPC_PLACEMENT_ACTIVE_OBJECT_PHASE,
             aux1: 0,
             aux3: 0,
         }
@@ -1995,7 +1995,7 @@ fn town_climb_relinks_npcs_for_reloaded_floor() {
             x: 6,
             y: 7,
             z: 1,
-            phase: STEADY_PHASE,
+            phase: NPC_PLACEMENT_ACTIVE_OBJECT_PHASE,
             aux1: 0,
             aux3: 0,
         }

@@ -564,6 +564,8 @@ pub fn npc_tile(type_byte: u8) -> u8 {
 /// allocated active-object slot "with the NPC's tile, type, and new
 /// coordinates" - the roster type byte and the derived sprite tile are
 /// two separate fields, and they differ for the tag-`0x01` sentinel.
+/// Byte 6 is not the freeze sentinel: see
+/// [`NPC_PLACEMENT_ACTIVE_OBJECT_PHASE`] (playtest N14).
 pub fn npc_active_object(type_byte: u8, x: usize, y: usize, z: u8) -> ActiveObject {
     let tile = npc_tile(type_byte);
     ActiveObject {
@@ -572,7 +574,7 @@ pub fn npc_active_object(type_byte: u8, x: usize, y: usize, z: u8) -> ActiveObje
         x,
         y,
         z: z as i8,
-        phase: STEADY_PHASE,
+        phase: NPC_PLACEMENT_ACTIVE_OBJECT_PHASE,
         aux1: 0,
         aux3: 0,
     }
