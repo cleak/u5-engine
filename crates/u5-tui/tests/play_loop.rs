@@ -560,6 +560,24 @@ fn empty_play_input_resolves_dungeon_room_trigger_before_pass() {
     assert!(!state.message.contains("Passed"));
 }
 
+/// Playtest N05: an empty line inside the room fight is the harness's Pass
+/// (`combat.md §8`: Space passes the actor). It used to re-resolve the room
+/// cell underfoot, re-running the entry and erasing the encounter.
+#[test]
+fn empty_play_input_inside_room_fight_does_not_reenter_the_room() {
+    let mut grid = open_dungeon_record();
+    grid[dungeon_cell_index(0, 1, 1)] = 0xf3;
+    let mut state = dungeon_state(grid, 0, 1, 1);
+    // Model a fight already running on the room cell (fixture states carry
+    // no room data, so the entry itself is not exercised here).
+    state.combat_active = true;
+
+    handle_empty_play_input(&mut state, Path::new("")).unwrap();
+
+    assert_ne!(state.message, DUNGEON_ROOM_ENTRY_NARRATION);
+    assert_eq!(state.grid[dungeon_cell_index(0, 1, 1)], 0xf3);
+}
+
 // from chunk_19
 #[test]
 fn play_script_command_routes_movement_pass_idle_and_quit() {

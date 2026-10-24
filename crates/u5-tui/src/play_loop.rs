@@ -651,9 +651,13 @@ pub fn unclassified_escape_sequence(input: &str) -> bool {
 pub fn handle_empty_play_input(state: &mut PlayState, game_dir: &Path) -> io::Result<()> {
     if !play_state_accepts_typeahead(state) {
         let _ = handle_play_key_input(state, '\n', "", game_dir)?;
-    } else if state
-        .resolve_current_dungeon_room_trigger(Some(game_dir))?
-        .is_none()
+    } else if state.combat_active
+        // Playtest N05: inside a room fight the party already stands on the
+        // room cell; re-resolving the trigger re-ran the room entry and
+        // erased the encounter. `combat.md §8`: Space passes the actor.
+        || state
+            .resolve_current_dungeon_room_trigger(Some(game_dir))?
+            .is_none()
     {
         // `commands.md §8.1`: "There is no distinct Pass input: Space is the
         // key and `Pass` is its echo." Dispatching the key rather than calling
