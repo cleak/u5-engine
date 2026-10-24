@@ -7595,6 +7595,17 @@ pub(crate) fn combat_landed_damage_result_line(
         )),
         CombatWeaponDamageApplication::Party { damage, .. } => {
             let target_name = combat_actor_display_name(state, target_slot);
+            // `combat.md §11.1` census: "After any narrated hit on a
+            // **party** target | both | *no text* | full stats-panel redraw
+            // and a visibility pass - skipped on the graze arm and on the
+            // vanish arm" ("Order, stated once", step 6). Immediate, so it
+            // does not wait on the running command's own panel mechanism:
+            // stock captures show the hit points drop right under the line
+            // (`combat-damage-narration` 20261016-220421, 20261022-122324).
+            // A vanish-gated result never reaches this producer's caller's
+            // print, but the vanish arm only fells monsters.
+            state.repaint_stats_panel();
+            state.mark_visibility_dirty();
             if damage.killed {
                 // "Target dies | both | `<target> killed!`"
                 return Some(format!("{target_name} killed!"));
