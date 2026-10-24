@@ -990,6 +990,30 @@
         assert_eq!(ordinary.party[0].status, b'G');
     }
 
+    /// Playtest N08: `combat.md §11.1`, Corpser row - the automatic
+    /// driver's landed hit on a party target "sets that bit on the target
+    /// and zeroes the sprite byte of the target's linked active-object
+    /// record", so the victim's own turns take the `ARGH!` arm (`§8.1`).
+    #[test]
+    fn a_corpser_driver_hit_drags_the_party_target_under() {
+        let mut state = combat_ai_turn_state(5, 6);
+        state.combat_actors[8].owner_target_class = COMBAT_CLASS_CORPSER;
+        state.party[0].status = b'G';
+        state.party[0].hp = 900;
+        state.party[0].max_hp = 900;
+
+        let application = state
+            .resolve_and_apply_combat_monster_attack(8, 0, 0, false, 0, Some(true))
+            .expect("the swing resolves");
+        assert!(matches!(
+            application.damage_application,
+            Some(CombatWeaponDamageApplication::Party { damage, .. })
+                if !damage.grazed && !damage.killed
+        ));
+        assert!(state.combat_actors[0].is_dragged_under());
+        assert_eq!(state.active_objects[0].tile, 0);
+    }
+
     #[test]
     fn the_active_effect_counter_ages_on_the_action_tail_and_not_on_the_round_wrap() {
         // `combat.md §12`: the shared active-effect counter's "other values

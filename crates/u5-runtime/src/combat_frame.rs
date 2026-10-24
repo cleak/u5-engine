@@ -5258,6 +5258,32 @@ impl PlayState {
         self.mark_visibility_dirty();
     }
 
+    /// The automatic actor driver applies its landed hits with no party
+    /// attacker credit, so the Corpser row of `combat.md §11.1` is read
+    /// from the attacking descriptor here: the narrator already printed
+    /// `<target> dragged under!` off the same attacker, but the bit was
+    /// never set and the victim kept its ordinary prompt (playtest N08).
+    fn apply_combat_monster_hit_corpser_drag(
+        &mut self,
+        attacker_slot: usize,
+        application: Option<&CombatWeaponDamageApplication>,
+    ) {
+        let Some(CombatWeaponDamageApplication::Party {
+            target_slot,
+            damage,
+        }) = application
+        else {
+            return;
+        };
+        let corpser = self
+            .combat_actors
+            .get(attacker_slot)
+            .is_some_and(|actor| actor.owner_target_class == COMBAT_CLASS_CORPSER);
+        if corpser && !damage.grazed && !damage.killed {
+            self.apply_combat_corpser_drag(*target_slot);
+        }
+    }
+
     /// `combat.md §8.1`, the dragged-under arm: after `ARGH!` "it draws
     /// one uniform `1..30` and compares it with the actor's **base
     /// step** ...; if the draw is **below** the base step the actor
@@ -6923,7 +6949,10 @@ impl PlayState {
         let resolution = resolve_combat_weapon_attack(input);
         let damage_application = match resolution {
             CombatWeaponAttackResolution::Hit { raw_damage, .. } => {
-                self.apply_combat_weapon_damage_to_target(None, target_slot, raw_damage, false)
+                let application =
+                    self.apply_combat_weapon_damage_to_target(None, target_slot, raw_damage, false);
+                self.apply_combat_monster_hit_corpser_drag(attacker_slot, application.as_ref());
+                application
             }
             // `combat.md §12`: "the **monster arm jumps directly onto**"
             // the sentinel test, "so a monster class whose attack byte is
@@ -7106,7 +7135,10 @@ impl PlayState {
         let resolution = resolve_combat_weapon_attack(input);
         let damage_application = match resolution {
             CombatWeaponAttackResolution::Hit { raw_damage, .. } => {
-                self.apply_combat_weapon_damage_to_target(None, target_slot, raw_damage, false)
+                let application =
+                    self.apply_combat_weapon_damage_to_target(None, target_slot, raw_damage, false);
+                self.apply_combat_monster_hit_corpser_drag(attacker_slot, application.as_ref());
+                application
             }
             // `combat.md §12`: "the **monster arm jumps directly onto**"
             // the sentinel test, "so a monster class whose attack byte is
