@@ -12699,7 +12699,9 @@ fn step_visual_intro_story_panel(
         return VisualIntroPanelOutcome::ReturnToMenu {
             subflow: IntroSubflow::StorySlides,
             result: IntroSubflowResult::ReturnedToMenu,
-            message: "Ultima V Introduction finished; returning to the intro menu.".to_string(),
+            // `systems/intro.md §10`: "one further keypress ends the
+            // sequence" - with no message of its own (playtest N18).
+            message: String::new(),
         };
     }
     *step += 1;
@@ -13199,6 +13201,20 @@ fn cancel_visual_intro_panel(intro: &mut VisualIntroState) -> bool {
     if matches!(intro.panel, VisualIntroPanel::U4Transfer { .. }) {
         return step_visual_intro_panel(intro, '\x1b');
     }
+    // `systems/chargen.md §2`: chargen "never returns control to the intro
+    // menu mid-run" - it leaves by completing or "if the player declines to
+    // enter a name". Escape at the name reader "erases the whole typed
+    // buffer" (`systems/text-output.md §10.6`), and the gender prompt loops
+    // "silently on any other key" (`§4`). `systems/intro.md §10`: every
+    // story step waits for "a non-zero key", and "the key that dismisses step
+    // n - 1 is the key that presents step n". Escape is an ordinary key in
+    // both, and neither has a cancel message (playtests N17, N18).
+    if matches!(
+        intro.panel,
+        VisualIntroPanel::CharacterCreation { .. } | VisualIntroPanel::Story { .. }
+    ) {
+        return step_visual_intro_panel(intro, '\x1b');
+    }
     // `systems/intro.md §11.2` step 7: `Esc` has no special meaning on
     // the acknowledgement screen — it is an ordinary key, and the close
     // and sink phases still play before the menu comes back.
@@ -13217,17 +13233,10 @@ fn cancel_visual_intro_panel(intro: &mut VisualIntroState) -> bool {
         VisualIntroPanel::MenuLabelHold { .. } => {
             unreachable!("the post-ignition hold queues Escape above")
         }
-        VisualIntroPanel::CharacterCreation { .. } => Some((
-            IntroSubflow::CharacterCreation,
-            IntroSubflowResult::Cancelled,
-            "Character creation cancelled; returning to the intro menu.",
-        )),
+        VisualIntroPanel::CharacterCreation { .. } | VisualIntroPanel::Story { .. } => {
+            unreachable!("chargen and the story treat Esc as an ordinary key above")
+        }
         VisualIntroPanel::U4Transfer { .. } => unreachable!("Esc is handled above"),
-        VisualIntroPanel::Story { .. } => Some((
-            IntroSubflow::StorySlides,
-            IntroSubflowResult::ReturnedToMenu,
-            "Ultima V Introduction cancelled; returning to the intro menu.",
-        )),
         VisualIntroPanel::Acknowledgements(_) => {
             unreachable!("acknowledgements treat Esc as an ordinary key above")
         }
@@ -13262,17 +13271,24 @@ fn step_visual_chargen_panel(
             '\r' | '\n' => {
                 let submitted = std::mem::take(input_line);
                 match session.submit_name(&submitted) {
+                    // `systems/chargen.md §4`: the empty-name abort "returns
+                    // to the intro menu", with no message (playtest N17).
                     ChargenSessionStep::Aborted => VisualIntroPanelOutcome::ReturnToMenu {
                         subflow: IntroSubflow::CharacterCreation,
                         result: IntroSubflowResult::Cancelled,
-                        message: "Character creation aborted; returning to the intro menu."
-                            .to_string(),
+                        message: String::new(),
                     },
                     _ => VisualIntroPanelOutcome::Stay,
                 }
             }
             '\u{8}' => {
                 input_line.pop();
+                VisualIntroPanelOutcome::Stay
+            }
+            // `systems/text-output.md §10.6`: Escape "erases the whole typed
+            // buffer" on every reader, and terminates nothing (playtest N17).
+            '\x1b' => {
+                input_line.clear();
                 VisualIntroPanelOutcome::Stay
             }
             _ if ch.is_ascii_graphic() || ch == ' ' => {
@@ -13304,7 +13320,7 @@ fn step_visual_chargen_panel(
         ChargenSessionStep::Aborted => VisualIntroPanelOutcome::ReturnToMenu {
             subflow: IntroSubflow::CharacterCreation,
             result: IntroSubflowResult::Cancelled,
-            message: "Character creation aborted; returning to the intro menu.".to_string(),
+            message: String::new(),
         },
         ChargenSessionStep::Ignored => {
             panic!("character creation ignored state is not a renderable panel step")
@@ -28572,7 +28588,9 @@ mod tests {
         // `systems/intro.md` section 10: the sequence returns to the intro
         // menu once the final story step is advanced.
         assert!(matches!(intro.panel, VisualIntroPanel::Menu));
-        assert!(intro.message.contains("Ultima V Introduction"));
+        // Playtest N18: no message of its own, and no extra key wait.
+        assert!(intro.message.is_empty());
+        assert!(!intro.message_waiting_for_key);
         let _ = fs::remove_dir_all(dir);
     }
 
@@ -29127,13 +29145,16 @@ mod tests {
         let _ = fs::remove_dir_all(dir);
     }
 
+    /// Playtest N17: `systems/chargen.md §2` - chargen "never returns
+    /// control to the intro menu mid-run" - and `systems/text-output.md
+    /// §10.6`: Escape at a reader "erases the whole typed buffer". Escape
+    /// closed chargen with an invented "Character creation cancelled" line.
     #[test]
-    #[cfg(feature = "original-asset-tests")]
-    fn visual_intro_character_creation_escape_returns_to_menu_without_save() {
-        let dir = debug_game_dir();
+    fn playtest_n17_escape_in_character_creation_is_an_ordinary_key() {
+        let dir = std::env::temp_dir().join("u5-p8visual-n17-escape");
         let session = ChargenSession::new(chargen_records(), (0u8..=127).collect()).unwrap();
-        let mut intro = visual_intro_state_with_panel(
-            dir.clone(),
+        let mut intro = read_only_intro_state_for_local_assets(
+            &dir,
             VisualIntroPanel::CharacterCreation {
                 session,
                 input_line: "Avatar".to_string(),
@@ -29142,23 +29163,85 @@ mod tests {
         intro.dispatch.submit_menu_key(b'C');
 
         assert!(cancel_visual_intro_panel(&mut intro));
-
-        assert!(matches!(intro.panel, VisualIntroPanel::Menu));
-        assert!(intro.message.contains("Character creation cancelled"));
-        assert!(intro.message_waiting_for_key);
-        assert!(step_visual_intro(&mut intro, ' '));
-        assert!(matches!(intro.panel, VisualIntroPanel::Menu));
-        assert!(intro.message.is_empty());
-        assert!(
-            !intro.message_waiting_for_key,
-            "the dismissal key must be consumed instead of reopening cached chargen"
-        );
-        assert!(!dir.join(SAVED_GAM_FILENAME).exists());
+        let VisualIntroPanel::CharacterCreation {
+            session,
+            input_line,
+        } = &intro.panel
+        else {
+            panic!("Escape at the name prompt must not leave chargen");
+        };
+        assert!(input_line.is_empty(), "Escape erases the typed buffer");
         assert!(matches!(
-            intro.dispatch.submit_menu_key(b'A'),
-            UnifiedMenuStep::EnteredSubflow(IntroSubflow::Acknowledgements)
+            session.current_step(),
+            ChargenSessionStep::PromptName
         ));
-        let _ = fs::remove_dir_all(dir);
+        assert!(intro.message.is_empty());
+        assert!(!intro.message_waiting_for_key);
+
+        for ch in ['b', 'o', 'b', '\r'] {
+            step_visual_intro_panel(&mut intro, ch);
+        }
+        // `systems/chargen.md §4`: the gender prompt loops "silently on any
+        // other key".
+        assert!(cancel_visual_intro_panel(&mut intro));
+        let VisualIntroPanel::CharacterCreation { session, .. } = &intro.panel else {
+            panic!("Escape at the gender prompt must not leave chargen");
+        };
+        assert!(matches!(
+            session.current_step(),
+            ChargenSessionStep::PromptGender
+        ));
+        assert!(intro.message.is_empty());
+        assert!(!dir.join(SAVED_GAM_FILENAME).exists());
+    }
+
+    /// Playtest N17: `systems/chargen.md §4` - Enter at the empty name
+    /// prompt "returns to the intro menu", with no message and no key wait.
+    #[test]
+    fn playtest_n17_empty_name_abort_returns_to_the_menu_silently() {
+        let dir = std::env::temp_dir().join("u5-p8visual-n17-empty");
+        let session = ChargenSession::new(chargen_records(), (0u8..=127).collect()).unwrap();
+        let mut intro = read_only_intro_state_for_local_assets(
+            &dir,
+            VisualIntroPanel::CharacterCreation {
+                session,
+                input_line: String::new(),
+            },
+        );
+        intro.dispatch.submit_menu_key(b'C');
+
+        assert!(step_visual_intro_panel(&mut intro, '\r'));
+        assert!(matches!(intro.panel, VisualIntroPanel::Menu));
+        assert!(intro.message.is_empty(), "{:?}", intro.message);
+        assert!(!intro.message_waiting_for_key);
+    }
+
+    /// Playtest N18: `systems/intro.md §10` - every story step waits for "a
+    /// non-zero key", and "the key that dismisses step n - 1 is the key that
+    /// presents step n". Escape aborted the story with an invented
+    /// "Ultima V Introduction cancelled" line.
+    #[test]
+    fn playtest_n18_escape_in_the_story_presents_the_next_step() {
+        let dir = std::env::temp_dir().join("u5-p8visual-n18");
+        let mut intro = read_only_intro_state_for_local_assets(
+            &dir,
+            VisualIntroPanel::Story {
+                records: StoryRecords {
+                    records: (0..20).map(|i| format!("Story record {i}")).collect(),
+                },
+                step: 3,
+                transition: None,
+            },
+        );
+        intro.dispatch.submit_menu_key(b'U');
+
+        assert!(cancel_visual_intro_panel(&mut intro));
+        let VisualIntroPanel::Story { step, .. } = &intro.panel else {
+            panic!("Escape must not abort the story");
+        };
+        assert_eq!(*step, 4);
+        assert!(intro.message.is_empty());
+        assert!(!intro.message_waiting_for_key);
     }
 
     /// A Return-to-View intro state with the IBM font slot loaded, which
