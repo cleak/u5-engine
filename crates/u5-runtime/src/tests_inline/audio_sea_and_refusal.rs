@@ -325,9 +325,26 @@ fn drowning_sounds_the_long_descent_before_the_death_loop() {
         "the sweep plays once, not once per loop pass"
     );
     // "the loop alternates the damage presentation, which plays its own rumble
-    // on every pass, with unavoidable damage to every living member".
-    assert!(effects[1..].iter().all(|effect| *effect
-        == SoundEffect::DamageRumble));
+    // on every pass, with unavoidable damage to every living member": each
+    // pass is the presentation's impact rumble, then each damaged member's
+    // damage rumble (measured on `drowning-collision`, 2026-10-24: a solo
+    // stock pass every 0.337 s, the two rumbles' sum).
+    let passes = effects[1..]
+        .split_inclusive(|effect| *effect == SoundEffect::RoughSeasImpactRumble)
+        .count();
+    assert_eq!(effects[1], SoundEffect::RoughSeasImpactRumble);
+    assert_eq!(
+        effects[1..]
+            .iter()
+            .filter(|effect| **effect == SoundEffect::RoughSeasImpactRumble)
+            .count(),
+        drowning.len(),
+        "one impact rumble per pass ({passes} groups)"
+    );
+    assert!(effects[1..].iter().all(|effect| matches!(
+        effect,
+        SoundEffect::RoughSeasImpactRumble | SoundEffect::DamageRumble
+    )));
     assert_eq!(state.player.transport, TransportState::SpriteSuppressed);
     // `DROWNING!!!` follows the descent: it is staged behind it.
     assert!(state.staged_narration_active());
