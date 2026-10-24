@@ -1895,11 +1895,9 @@
 
     #[test]
     fn inline_use_prompt_and_carpet_alias_remain_unambiguous() {
-        let prompt = use_prompt_message();
-        assert!(!prompt.contains("UT torch"));
-        assert!(!prompt.contains("UG gem"));
-        assert!(prompt.contains("UC carpet"));
-        assert!(prompt.contains("shard names"));
+        // The inline Use form prints no help sentence of its own
+        // (playtest N07); the alias itself is what stays unambiguous.
+        assert!(use_prompt_message().is_empty());
 
         let mut state = world_state(open_world_grid(), 5, 5);
         state.special_items[SPECIAL_ITEM_MAGIC_CARPET_INDEX] = 1;
