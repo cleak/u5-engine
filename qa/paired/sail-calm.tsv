@@ -30,6 +30,14 @@
 # `>BREAKING UP!` when the key's step is refused on the same command - the
 # refusal is written on the marker row the prompt drew before the
 # (echo-less) hoisted key.
+#
+# The `pass` beat lands in the drowning loop, whose passes each draw `1..8`
+# per member (`vehicles.md` Section 6), so the Avatar's hit points in the panel
+# are a roll on both sides. Until 2026-10-24 the engine read `0D` there on
+# every run: its passes held for the damage rumble alone and the loop was over
+# about 1.3 s after `DROWNING!!!`. With the impact rumble on every pass both
+# sides are mid-loop at `pass` (20261024-012310: every message-window beat
+# agrees; the panel reads the two sides' rolls).
 # requires-seed: profile `seed-sail-calm` (seed-drowning-collision with the wind byte set to Calm)
 both	wait	15000
 both	key	space
