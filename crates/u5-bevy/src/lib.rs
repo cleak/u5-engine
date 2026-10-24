@@ -19055,7 +19055,13 @@ fn handle_visual_line_key(
             if reader_cap.is_some_and(|cap| input_line.chars().count() >= cap) {
                 return Ok(Some(PlayInputDisposition::Continue));
             }
-            input_line.push(char::from(byte));
+            // `text-output.md §10.6`: the "General typed string" reader, "used
+            // for most free-text prompts", has "keys are uppercased"; only
+            // character names are "preserved as typed", and no gameplay line
+            // prompt reads one. `input.md §6`: "The rest of the engine sees
+            // only uppercase letters." The echo is drawn as each key arrives,
+            // so it cannot change case at Return (playtest N19).
+            input_line.push(char::from(byte.to_ascii_uppercase()));
             Ok(Some(PlayInputDisposition::Continue))
         }
         u5_runtime::FreeTextInputAction::Discard => Ok(None),
@@ -19116,8 +19122,9 @@ fn key_code_to_char(key: KeyCode, shift_pressed: bool, control_pressed: bool) ->
 }
 
 /// `input.md §6`: gameplay input folds ASCII letters to uppercase before
-/// movement or A-Z dispatch. Free-text and character-name entry use
-/// [`key_code_to_line_input_byte`] instead, preserving typed case there.
+/// movement or A-Z dispatch. Free-text entry uses
+/// [`key_code_to_line_input_byte`] instead, and folds case itself as each
+/// key is accepted (`text-output.md §10.6`, playtest N19).
 fn key_code_to_command_char(
     key: KeyCode,
     shift_pressed: bool,
@@ -25897,7 +25904,7 @@ mod tests {
         )
         .unwrap();
 
-        assert_eq!(input_line, "jo");
+        assert_eq!(input_line, "JO", "playtest N19: the reader uppercases keys");
         assert!(!transcript_contains(&state, "mend"));
 
         apply_visual_key_route_step(
@@ -27638,7 +27645,7 @@ mod tests {
         )
         .unwrap();
 
-        assert_eq!(input_line, "job");
+        assert_eq!(input_line, "JOB", "playtest N19: the reader uppercases keys");
         assert!(state.active_conversation.is_some());
         assert!(!transcript_contains(&state, "mend"));
 
@@ -27738,7 +27745,7 @@ mod tests {
         )
         .unwrap();
 
-        assert_eq!(input_line, "j");
+        assert_eq!(input_line, "J", "playtest N19: the reader uppercases keys");
         let summary = summarize(&mut state, "", &input_line);
         // Column 24 carries the ribbon end-cap sprite rather than an
         // ASCII "> ", so the echo starts at column 25 of the message
@@ -27746,9 +27753,9 @@ mod tests {
         let echo_column = usize::from(u5_runtime::MESSAGE_WINDOW_LEFT) + 1;
         let echo_row = summary
             .lines()
-            .find(|line| line.trim() == "j" && line.len() > echo_column)
+            .find(|line| line.trim() == "J" && line.len() > echo_column)
             .unwrap_or_else(|| panic!("{summary}"));
-        assert_eq!(echo_row.as_bytes()[echo_column], b'j', "{summary}");
+        assert_eq!(echo_row.as_bytes()[echo_column], b'J', "{summary}");
     }
 
     #[test]
@@ -27840,7 +27847,11 @@ mod tests {
                 .unwrap();
                 assert_eq!(typed, Some(PlayInputDisposition::Continue));
             }
-            assert_eq!(input_line, word);
+            assert_eq!(
+                input_line,
+                word.to_ascii_uppercase(),
+                "playtest N19: the reader uppercases keys"
+            );
 
             let submitted = handle_visual_line_key(
                 &mut state,
@@ -27883,7 +27894,7 @@ mod tests {
                     .unwrap();
             assert_eq!(typed, Some(PlayInputDisposition::Continue));
         }
-        assert_eq!(input_line, "spir");
+        assert_eq!(input_line, "SPIR", "playtest N19: the reader uppercases keys");
         assert!(
             state.typed_prompt_echo_uppercases(),
             "the sage topic row echoes upper-cased"
@@ -27961,7 +27972,7 @@ mod tests {
             handle_visual_line_key(&mut state, &mut input_line, key, false, false, &dir).unwrap();
         }
 
-        assert_eq!(input_line, "ahm");
+        assert_eq!(input_line, "AHM", "playtest N19: the reader uppercases keys");
         assert!(state.active_blackthorn.is_some());
         // blackthorn.md §4: the answer is not submitted until Enter, so
         // no shrine is ruined yet.
@@ -28123,7 +28134,7 @@ mod tests {
         for key in [KeyCode::KeyA, KeyCode::KeyH, KeyCode::KeyM] {
             handle_visual_line_key(&mut state, &mut input_line, key, false, false, &dir).unwrap();
         }
-        assert_eq!(input_line, "ahm");
+        assert_eq!(input_line, "AHM", "playtest N19: the reader uppercases keys");
         assert_eq!(state.shrine_ordained_mask, 0);
 
         // `karma.md §12`: three `Mantra:` asks, and only the third reaches
