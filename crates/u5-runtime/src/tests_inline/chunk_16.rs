@@ -1967,7 +1967,8 @@ BRITANNIA 11 21
             assert_eq!(state.shrine_ordained_mask, bit, "tile {tile:#04x}");
             assert!(state.active_shrine.is_none());
             assert!(state.pending_shrine_third_mantra.is_none());
-            assert!(state.message.contains("Mix syntax"), "{:?}", state.message);
+            // The unparseable inline Mix suffix prints nothing (playtest N07).
+            assert!(state.message.is_empty(), "{:?}", state.message);
         }
         let _ = fs::remove_dir_all(dir);
     }
@@ -2369,7 +2370,8 @@ BRITANNIA 11 21
             PlayInputDisposition::Continue
         );
         assert_eq!(state.shrine_ordained_mask, 0);
-        assert!(state.message.contains("Mix syntax"));
+        // The unparseable inline Mix suffix prints nothing (playtest N07).
+        assert!(state.message.is_empty(), "{:?}", state.message);
         let _ = fs::remove_dir_all(dir);
     }
 

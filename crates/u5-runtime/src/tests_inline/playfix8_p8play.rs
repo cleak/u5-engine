@@ -207,3 +207,33 @@ fn playtest_n26_arrest_prompt_ignores_stray_keys_without_reprinting() {
         .count();
     assert_eq!(challenge_rows, 1, "{:#?}", state.message_entries());
 }
+
+/// `commands.md §5` publishes each letter's echo and prompts; it has no
+/// help sentences for the harness's inline forms. A command letter typed
+/// with extra characters on the terminal harness's line used to print
+/// `New order? Use N12 ...`, `Use what? Use UK key ...`, `Mix syntax is ...`
+/// and `Ready syntax is ...` in the message window (N07).
+#[test]
+fn playtest_n07_inline_suffix_typos_print_no_invented_help() {
+    let invented = ["Use N12", "Use UK key", "Mix syntax", "Ready syntax", "Mix what?"];
+    for (key, suffix) in [('N', "9"), ('N', "ONE"), ('U', "zz"), ('M', "zz"), ('R', "zz")] {
+        let mut state = test_state(open_grid(), 1, 1);
+        state.reagents = [1; 8];
+        handle_play_key_input(&mut state, key, suffix, Path::new("")).unwrap();
+        state.flush_message_slot();
+        for entry in state.message_entries() {
+            for text in invented {
+                assert!(
+                    !entry.text.contains(text),
+                    "{key}{suffix} printed {:?}",
+                    entry.text
+                );
+            }
+        }
+        assert!(
+            !invented.iter().any(|text| state.message.contains(text)),
+            "{key}{suffix} left {:?}",
+            state.message
+        );
+    }
+}

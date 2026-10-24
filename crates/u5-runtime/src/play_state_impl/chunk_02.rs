@@ -1630,8 +1630,11 @@ impl PlayState {
                 self.message = mix_prompt_message();
                 return MoveOutcome::PromptDeclined;
             }
+            // An unparseable harness suffix is a diagnostic, not game text
+            // (playtest N07).
             Err(err) => {
-                self.message = format!("{err}");
+                self.push_diagnostic(format!("inline Mix: {err}"));
+                self.message.clear();
                 return MoveOutcome::Blocked;
             }
         };

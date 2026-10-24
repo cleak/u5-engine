@@ -528,8 +528,14 @@ pub fn parse_inline_shrine_request(value: &str) -> io::Result<Option<InlineShrin
     Ok(Some(InlineShrineRequest { mantra, offering }))
 }
 
+/// The inline harness forms' prompts. The terminal harness reads whole
+/// lines, so a player who types a command letter plus anything else reaches
+/// these; the spec publishes no such help sentences (`commands.md §5` gives
+/// only the letters' echoes and prompts), so they print nothing - the same
+/// treatment [`ready_prompt_message`] and the removed `Input ignored.` got
+/// (playtest N07, M5).
 pub fn mix_prompt_message() -> String {
-    "Mix what? Use M<spell>/<reagent-mask>/<quantity>, for example MIL/0x80/1.".to_string()
+    String::new()
 }
 
 pub fn shrine_prompt_message(virtue: ShrineVirtue) -> String {
@@ -546,13 +552,14 @@ pub fn cast_prompt_message() -> String {
         .to_string()
 }
 
+/// See [`mix_prompt_message`] (playtest N07).
 pub fn use_prompt_message() -> String {
-    "Use what? Use UK key, UC carpet, UP plans, US sextant, UW watch, UB box, USP Spyglass, UCR/UAM/USC/UBB regalia, scroll codes, potion colors, shard names, or U1..U8 Moonstone."
-        .to_string()
+    String::new()
 }
 
+/// See [`mix_prompt_message`] (playtest N07).
 pub fn new_order_prompt_message() -> String {
-    "New order? Use N12 to swap party slots 1 and 2.".to_string()
+    String::new()
 }
 
 /// The inline harness form's prompt. `R` from a keystroke opens the picker,

@@ -2725,10 +2725,8 @@
         let original = state.party.clone();
 
         assert_eq!(state.new_order_from_suffix(""), MoveOutcome::PromptDeclined);
-        assert_eq!(
-            state.message,
-            "New order? Use N12 to swap party slots 1 and 2."
-        );
+        // No invented help sentence (playtest N07).
+        assert!(state.message.is_empty(), "{:?}", state.message);
         assert_eq!(state.party, original);
         assert_eq!(state.turn, 0);
 
