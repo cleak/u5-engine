@@ -269,9 +269,13 @@ impl PlayState {
             }
             // `vehicles.md §4.1` (issue #299 Q25): "Dungeon scene |
             // `\nNot here!\n` | `Board`, then `Not here!`".
+            // `commands.md §3`: B is "Acted" on every path except the
+            // unknown-target fallthrough, and this refusal is not that
+            // fallthrough, so the epilogue charges its turn (playtest N06).
             'b' => {
                 self.message = BOARD_NOT_HERE_REFUSAL.to_string();
                 self.message_row_open_mid_line = false;
+                self.dungeon_acted_turn_before = Some(turn_before);
                 handled!();
             }
             // `commands.md §7` / `active-objects.md §10`: X-it reaches its
