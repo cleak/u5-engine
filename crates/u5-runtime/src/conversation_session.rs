@@ -324,6 +324,28 @@ impl ConversationSessionOutput {
         self.rendered_glyphs.truncate(keep);
     }
 
+    /// Remove a double quote that is this output's first printable byte.
+    /// `formats/tlk.md §9.2`: the byte runner "suppresses a quote when the
+    /// previous printable byte was also a quote"; hold markers print nothing
+    /// and do not count.
+    fn drop_leading_quote(&mut self) {
+        let is_hold = |byte: u8| crate::text_hold::TextHoldKind::from_marker(byte).is_some();
+        let Some(index) = self.text.bytes().position(|byte| !is_hold(byte)) else {
+            return;
+        };
+        if self.text.as_bytes()[index] != b'"' {
+            return;
+        }
+        self.text.remove(index);
+        if self
+            .rendered_glyphs
+            .get(index)
+            .is_some_and(|glyph| glyph.byte == b'"')
+        {
+            self.rendered_glyphs.remove(index);
+        }
+    }
+
     /// [`Self::push_framed_response`] for a fixed engine literal.
     fn set_framed_text(&mut self, text: &str) {
         self.text.clear();
@@ -1120,19 +1142,40 @@ impl ConversationSession {
         // only the calling stream's own text: when that is empty and the
         // caller is itself a head that jumped at once, the quote before it
         // is that head's (Gorn's block 3 head jumps straight to block 4).
-        let after_quote = if out.text.is_empty() {
-            self.head_quote_open
-        } else {
-            out.text.ends_with('"')
+        //
+        // `formats/tlk.md §9.2` keys the guard on "the previous printable
+        // byte", and a `0x83` PAUSE or `0x8F` WAIT-KEY prints nothing, so a
+        // hold marker is transparent to it (playtest L01: Lord Stuart's
+        // Greeting is a PAUSE and a GOTO).
+        let is_hold = |byte: u8| crate::text_hold::TextHoldKind::from_marker(byte).is_some();
+        let last_printable = out.text.bytes().rev().find(|byte| !is_hold(*byte));
+        let after_quote = match last_printable {
+            None => self.head_quote_open,
+            Some(byte) => byte == b'"',
         };
         if !after_quote {
-            out.push_plain_text("\"");
+            if last_printable.is_none() && !out.text.is_empty() {
+                // Only holds so far: the quote the framing puts in front of
+                // this stream stands before them, and the HEAD quote after
+                // the hold is that same quote dropped by the guard.
+                out.text.insert(0, '"');
+                let quote = crate::ordinary_glyphs_from_engine_text("\"");
+                out.rendered_glyphs.splice(0..0, quote);
+            } else {
+                out.push_plain_text("\"");
+            }
         }
         self.label_records_running.push((label, resume));
         let outer_head_quote_open = std::mem::replace(&mut self.head_quote_open, true);
-        let (nested, end) = self.run_blob_from(resume, ctx, 0);
+        let (mut nested, end) = self.run_blob_from(resume, ctx, 0);
         self.head_quote_open = outer_head_quote_open;
         self.label_records_running.pop();
+        // The head runs right after a quote - the HEAD's own, or the one it
+        // was dropped against - so a quote that opens the head is the next
+        // printable byte after a quote and is suppressed (`tlk.md §9.2`;
+        // playtest L01: Fumiko's Bye block head is a quote, a feed and a
+        // stop).
+        nested.drop_leading_quote();
         merge_session_output(out, nested);
         match end {
             // "If the head reaches its NUL, emit the quote and two row
@@ -3601,5 +3644,59 @@ mod tests {
         let asked = s.submit_keyword("ask", &context);
         assert!(s.awaiting_ask_who());
         assert_eq!(asked.text, "\n");
+    }
+
+    /// Playtest L01 (Fumiko's Bye). `conversation.md §7.7` step 1: "Emit the
+    /// quote, then run the head", and the quote is the ordinary sentinel of
+    /// `formats/tlk.md §9.2`, which "suppresses a quote when the previous
+    /// printable byte was also a quote". A head that opens on its own quote
+    /// right after the HEAD quote shows one quote, not `""`.
+    #[test]
+    fn playtest_l01_a_head_opening_on_a_quote_after_the_head_quote_shows_one() {
+        let mut response = enc("Fare well.");
+        response.push(0x91);
+        let mut head = vec![TLK_CODE_LABEL_RECORD, 0x91];
+        head.extend(enc("\""));
+        head.extend([TLK_CODE_LITERAL_NEWLINE, TLK_CODE_END_STREAM]);
+        let mut s = label_session(response, vec![head]);
+        let out = s.submit_keyword("ask", &ctx());
+        assert!(!out.text.contains("\"\""), "{:?}", out.text);
+        assert!(out.text.starts_with("\n\"Fare well.\"\n"), "{:?}", out.text);
+        assert_eq!(out.rendered_text().glyphs.len(), out.text.len());
+    }
+
+    /// Playtest L01 (Lord Stuart's Greeting: a PAUSE, then a GOTO). A hold
+    /// prints nothing, so the HEAD quote after it still follows the opener's
+    /// quote and is dropped (`tlk.md §9.2`, `conversation.md §9` "The renderer
+    /// drops a quote that would immediately follow another quote"). One quote
+    /// opens the greeting, ahead of the hold.
+    #[test]
+    fn playtest_l01_a_hold_before_a_greeting_goto_does_not_double_the_quote() {
+        let mut head = vec![TLK_CODE_LABEL_RECORD, 0x91];
+        head.extend(enc("Hey, friend."));
+        let raw = vec![
+            enc("Ada"),
+            enc("a quiet smith"),
+            vec![TLK_CODE_PAUSE, 0x91],
+            enc("I mend gear."),
+            enc("Farewell."),
+            enc("ASK"),
+            enc("x"),
+            head,
+            enc("Pity."),
+        ];
+        let decoded = raw
+            .iter()
+            .map(|field| field.iter().map(|b| (b ^ TLK_TEXT_XOR_MASK) as char).collect())
+            .collect();
+        let mut s = ConversationSession::new(raw, decoded);
+        s.set_npc_slot(Some(3));
+        let out = s.present_greeting(&ctx());
+        assert!(out.text.starts_with('"'), "{:?}", out.text);
+        assert_eq!(
+            crate::text_hold::strip_hold_markers(&out.text),
+            "\"Hey, friend.\"\n\n"
+        );
+        assert_eq!(out.rendered_text().glyphs.len(), out.text.len());
     }
 }
