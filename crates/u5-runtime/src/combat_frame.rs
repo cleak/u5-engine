@@ -5398,6 +5398,20 @@ impl PlayState {
         })
     }
 
+    /// The confirmed cursor's spell effect for the active-target attack
+    /// spells: the combat effect template's circle-scaled rumble lead
+    /// (`audio.md §6.1`), or the id's shared variant where it has one.
+    /// `§8.3`: "For combat cursor spells, confirmation plays the spell
+    /// effect before the coordinate/projectile-impact resolver."
+    pub(crate) fn emit_active_target_combat_spell_effect(&mut self, spell_index: usize) {
+        match audio::spell_shared_variant(spell_index) {
+            Some(variant) => self.emit_sound_effect(SoundEffect::SharedVariant { variant }),
+            None => self.emit_sound_effect(SoundEffect::CircleRumbleLead {
+                circle: audio::spell_circle(spell_index),
+            }),
+        }
+    }
+
     pub fn cast_active_target_combat_spell(
         &mut self,
         caster_index: usize,
@@ -5443,12 +5457,7 @@ impl PlayState {
         // fires inside one combat spell resolution" - "once per accepted target
         // cursor is what the code shape suggests, but that is not established".
         // This handler resolves exactly one accepted cursor, so it fires once.
-        match audio::spell_shared_variant(spell_index) {
-            Some(variant) => self.emit_sound_effect(SoundEffect::SharedVariant { variant }),
-            None => self.emit_sound_effect(SoundEffect::CircleRumbleLead {
-                circle: audio::spell_circle(spell_index),
-            }),
-        }
+        self.emit_active_target_combat_spell_effect(spell_index);
 
         // `RETRACTIONS.md` R446 / `magic.md §8`: "Kill does not use a separate
         // `Creature:` prompt, a protected-class rejection before resistance,
