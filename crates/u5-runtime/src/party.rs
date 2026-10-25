@@ -538,14 +538,17 @@ pub fn potion_colour_display_word(index: usize) -> &'static str {
 /// is reduced modulo [`POTION_VARIATION_DENOMINATOR`] (16) by masking
 /// the low four bits before the threshold compare.
 pub const POTION_VARIATION_ROLL_MASK: u8 = 0x0F;
-/// `inventory.md §7` last roll value (inclusive) that keeps the
-/// selected colour's effect. Fourteen of the sixteen outcomes
-/// (`0..=13`) preserve the chosen potion's effect; the remaining two
-/// outcomes force Orange or substitute a random potion.
-pub const POTION_VARIATION_SELECTED_THRESHOLD: u8 = 13;
-/// `inventory.md §7` exact roll value that forces the Orange sleep
-/// effect.
-pub const POTION_VARIATION_FORCED_ORANGE_ROLL: u8 = 14;
+/// `catalogs/item-list.md §7.2` "Draw order of the variation roll" (added
+/// 2026-10-25, u5-spec#300 Q23): of the first draw over `0..15`, "`0` forces
+/// the Orange effect and makes no further draw".
+pub const POTION_VARIATION_FORCED_ORANGE_ROLL: u8 = 0;
+/// `catalogs/item-list.md §7.2` (u5-spec#300 Q23): a first draw of exactly
+/// "`1` makes a **second draw**, uniform over `0..7`, whose value becomes the
+/// effect id".
+pub const POTION_VARIATION_RANDOM_ID_ROLL: u8 = 1;
+/// `catalogs/item-list.md §7.2` (u5-spec#300 Q23): first-draw values from
+/// this one up (`2..15`) "keep the selected colour".
+pub const POTION_VARIATION_SELECTED_FIRST: u8 = 2;
 /// `inventory.md §7` random-replacement mask. The random potion
 /// substitution masks the secondary roll to `POTION_COUNT - 1`
 /// (`0x07`) to pick uniformly from rows `0..=7`.
@@ -557,8 +560,10 @@ pub fn potion_effect_index_after_variation(
     random_roll: u8,
 ) -> usize {
     match variation_roll & POTION_VARIATION_ROLL_MASK {
-        roll if roll <= POTION_VARIATION_SELECTED_THRESHOLD => selected_index,
         POTION_VARIATION_FORCED_ORANGE_ROLL => POTION_ORANGE_INDEX,
-        _ => (random_roll as usize) & POTION_VARIATION_RANDOM_INDEX_MASK as usize,
+        POTION_VARIATION_RANDOM_ID_ROLL => {
+            (random_roll as usize) & POTION_VARIATION_RANDOM_INDEX_MASK as usize
+        }
+        _ => selected_index,
     }
 }

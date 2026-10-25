@@ -744,8 +744,9 @@ pub use outdoor_ranged_attack::{
 };
 pub use party::{
     Area, AvatarStats, LEVEL_FROM_EXPERIENCE_BASE_DIVISOR, LEVEL_FROM_EXPERIENCE_HALVING_STEP,
-    MoonstoneGateSlot, POTION_VARIATION_FORCED_ORANGE_ROLL, POTION_VARIATION_RANDOM_INDEX_MASK,
-    POTION_VARIATION_ROLL_MASK, POTION_VARIATION_SELECTED_THRESHOLD, PartyMember,
+    MoonstoneGateSlot, POTION_VARIATION_FORCED_ORANGE_ROLL, POTION_VARIATION_RANDOM_ID_ROLL,
+    POTION_VARIATION_RANDOM_INDEX_MASK, POTION_VARIATION_ROLL_MASK,
+    POTION_VARIATION_SELECTED_FIRST, PartyMember,
     PartyRosterRecord, Player, RESURRECTION_MAX_HP_PER_LEVEL, RESURRECTION_REBUILT_CURRENT_HP,
     class_refreshed_mana, default_party, default_party_experience, default_party_intelligence,
     default_party_names, default_party_roster, default_party_stay_counters,
@@ -840,10 +841,12 @@ pub use shrine_virtue::{
 };
 pub use signs_io::{
     SIGN_BODY_CHARACTER_MASK, SIGN_BODY_END_OF_RECORD, SIGN_BODY_MACRO_FIRST, SIGN_BODY_MACRO_LAST,
-    SIGN_BODY_PAUSE_FOR_KEY, SIGN_BODY_SEPARATOR_GLYPH_A, SIGN_BODY_SEPARATOR_GLYPH_B,
+    SIGN_BODY_PAUSE_FOR_KEY, SIGN_BODY_ROMAN_FONT_BIT, SIGN_BODY_SEPARATOR_GLYPH_A,
+    SIGN_BODY_SEPARATOR_GLYPH_B, SIGN_NO_RECORD_PLACARD_ROWS, SIGN_SEPARATOR_RUNIC_CODE_POINT,
     SIGNS_DAT_ALIAS_BRIDGE_LEN, SIGNS_DAT_FILE, SIGNS_DAT_RECORD_HEADER_LEN,
     SIGNS_DAT_SCENE_DIRECTORY_BYTES, SIGNS_DAT_SCENE_DIRECTORY_SLOTS, SignBodyByteKind, SignRecord,
     decode_sign_payload, find_sign, load_sign_records, parse_sign_records, sign_body_byte_kind,
+    sign_payload_rendered,
 };
 pub use sky_view::*;
 pub use start_validation::*;
@@ -956,10 +959,10 @@ pub use tlk_control_codes::{
     TLK_OPENING_DESCRIPTION_PREFIX, TLK_PRINTABLE_TEXT_FIRST, TLK_PRINTABLE_TEXT_LAST,
     TLK_RECRUIT_SPEAKER_FULL_PARTY_REFUSAL, TLK_RESERVED_REBUKE_MESSAGE,
     TLK_RESERVED_REBUKE_PAUSE_LIMIT, TLK_SENTINEL_NPC_ID, TLK_TEXT_XOR_MASK, TOWNE_TLK_NPCS,
-    TalkRefusal, TlkActionDispatchVerb, TlkByteKind, TlkByteRunnerClass, TlkFileClass,
+    TlkActionDispatchVerb, TlkByteKind, TlkByteRunnerClass, TlkFileClass,
     TlkLeadingEntry, TlkPlayerInputKind, TlkPrintMaskState, classify_tlk_byte, is_tlk_label_byte,
     reserved_functional_keyword_index, reserved_keyword_effect, reserved_rebuke_keyword_index,
-    shoppe_dictionary_index, talk_guard_sprite_dispatches, talk_liveness_refusal,
+    shoppe_dictionary_index, talk_guard_sprite_dispatches,
     talk_non_speaker_refusal, talk_non_speaker_refusal_for_sprite, talk_status_tile_refusal,
     tlk_action_dispatch_is_signal_flag, tlk_action_dispatch_verb, tlk_ask_who_match,
     tlk_byte_runner_class, tlk_class_for_scene, tlk_dictionary_index, tlk_gold_payment_amount,
@@ -997,7 +1000,7 @@ pub use town_mode::{
     TOWN_NPC_ALARM_GUARD_TYPE, TOWN_NPC_ALARM_LICH_TYPE, TOWN_NPC_BLOCK_BYTES,
     TOWN_NPC_BRUSHOFF_DIALOG_ID, TOWN_NPC_BRUSHOFF_LINE, TOWN_NPC_CONTACT_ATTACKED_LINE,
     TOWN_NPC_CONTACT_CONFLICT_ACTOR_FIRST, TOWN_NPC_COWERING_DIALOG_ID,
-    TOWN_NPC_COWERING_RESPONSE, TOWN_NPC_FORCED_FLIGHT_AI, TOWN_NPC_FORCED_PURSUIT_NEAR_AI,
+    TOWN_NPC_BRUSHOFF_RESPONSE, TOWN_NPC_COWERING_RESPONSE, TOWN_NPC_FORCED_FLIGHT_AI, TOWN_NPC_FORCED_PURSUIT_NEAR_AI,
     TOWN_NPC_FORCED_PURSUIT_NEAR_TYPE_CUTOFF, TOWN_NPC_FORCED_PURSUIT_RANDOM_AI,
     TOWN_NPC_ORDINARY_TYPE_FIRST, TOWN_NPC_ORDINARY_TYPE_LAST, TOWN_NPC_REGALIA_TYPE_FIRST,
     TOWN_NPC_REGALIA_TYPE_LAST, TOWN_NPC_ROSTER_SLOTS, TOWN_STAIR_TILE_FIRST, TOWN_STAIR_TILE_LAST,

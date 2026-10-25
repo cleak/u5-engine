@@ -47,7 +47,16 @@ pub const STONEGATE_TRAPDOOR_RUMBLE_BUDGET_UNITS: u16 = 3_000;
 /// `dosbox-fallen`): without this hold the rescue narration starts while the
 /// original is still sweeping, so the two windows show the same beats at
 /// different times. `cleak/u5-engine#38`.
-pub const STONEGATE_TRAPDOOR_DEATH_HOLD_BIOS_TICKS: u16 = 483;
+///
+/// Published since (`blackthorn.md §7.1` "Measured Stonegate segments",
+/// added 2026-10-25, u5-spec#301 Q5), on the emulated clock at a fixed
+/// 3000-cycle setting and timed from the Up key's `North` echo: the sweep
+/// starts at +0.10 s and the fall ends - "the last party member's rumble and
+/// stats repaint after the trapdoor sweep" - at **+27.52 s**. The hold runs
+/// from the step, so it is that 27.52 s: 501 ticks. This was the derived
+/// 26.5 s sweep alone (483 ticks), without the member rumbles. The table does
+/// not state the captured party's size.
+pub const STONEGATE_TRAPDOOR_DEATH_HOLD_BIOS_TICKS: u16 = 501;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct StonegateTrapdoorPlayback {

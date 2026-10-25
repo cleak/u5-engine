@@ -1220,8 +1220,9 @@ pub const INN_REGISTRY_CAP: usize = crate::SAVE_ROSTER_SLOT_COUNT;
 /// [`crate::SAVE_PARTY_SIZE_MAX`] so the inn gate and the save
 /// file's roster cap stay a single value.
 pub const INN_PARTY_CAP: usize = crate::SAVE_PARTY_SIZE_MAX as usize;
-/// `shops.md §8.4`: maximum value the inn's guest-stay counter
-/// can reach. The same counter is the character record's
+/// `shops.md §8.4`: the inn's guest-stay counter grows only while below
+/// this value (R587: a larger value, `0xFF` included, is left unchanged,
+/// not clamped). The same counter is the character record's
 /// month-counter byte that the 28-day rollover ages each month,
 /// so this cap is the same value as
 /// [`crate::CHARACTER_MONTH_COUNTER_CAP`]. Anchored through to
@@ -2863,7 +2864,10 @@ pub fn apply_inn_pickup_guest_with_bill(
     }
     party.push(member);
     party_names.push(guest.name);
-    party_stay_counters.push(guest.stay_counter.min(INN_STAY_COUNTER_CAP));
+    // `shops.md §8.4` `P`: "Every byte of every moved record travels with its
+    // record", and R587 leaves a counter of 25 or more unchanged, so the
+    // stay counter is carried as stored, not clamped.
+    party_stay_counters.push(guest.stay_counter);
     party_strengths.push(guest.strength);
     party_intelligence.push(guest.intelligence);
     party_experience.push(guest.experience);

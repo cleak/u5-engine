@@ -2590,12 +2590,14 @@ impl PlayState {
     /// sleep effect, and one chance in sixteen replaces the effect with a
     /// random potion id from `0..7`". `prng.md §1` puts such small game
     /// decisions on the shared range generator, so both rolls are draws from
-    /// it - never a hash of the turn, position and clock (playtest K21). The
-    /// random-id draw is taken only on the branch that uses it.
+    /// it - never a hash of the turn, position and clock (playtest K21).
+    /// "Draw order of the variation roll" (u5-spec#300 Q23): the first draw
+    /// over `0..15` gives Orange on `0`, and only a `1` makes the second draw
+    /// over `0..7`; `2..15` keep the selected colour.
     pub fn potion_effect_index_after_variation_roll(&mut self, selected_index: usize) -> usize {
         let variation_roll = self.potion_variation_roll();
         let random_roll = if variation_roll & POTION_VARIATION_ROLL_MASK
-            > POTION_VARIATION_FORCED_ORANGE_ROLL
+            == POTION_VARIATION_RANDOM_ID_ROLL
         {
             self.potion_random_effect_roll()
         } else {
@@ -4516,9 +4518,9 @@ impl PlayState {
         z: u8,
         y: u8,
         x: u8,
-    ) -> io::Result<Option<String>> {
+    ) -> io::Result<Option<crate::tlk_runner::TlkRenderedText>> {
         if let Some(message) = self.yew_wanted_poster_message(scene, z, y, x) {
-            return Ok(Some(message));
+            return Ok(Some(crate::tlk_runner::TlkRenderedText::plain(message)));
         }
         let Some(game_dir) = game_dir else {
             return Ok(None);
@@ -4526,38 +4528,82 @@ impl PlayState {
         let Some(records) = load_sign_records(game_dir)? else {
             return Ok(None);
         };
-        let bodies = crate::signs_io::matching_sign_bodies(&records, scene, z, y, x);
-        if bodies.is_empty() {
-            return Ok(None);
-        }
+        // `formats/signs-dat.md §5` step 6 (u5-spec#300 Q13, R598): only the
+        // first matching record is printed. Steps 3 and 7: a zero directory
+        // entry, or a window with no match, prints the §6 placard. The scan
+        // here stays inside the scene's own block: the spec says the read
+        // window runs on into later scenes' records, but its length "is not
+        // published" (R599), so how far it reaches is not modelled.
+        let Some(record) = find_sign(&records, scene, z, y, x) else {
+            return Ok(Some(sign_no_record_placard_rendered()));
+        };
         // `formats/signs-dat.md §6`: the stream is "already authored" and
         // a renderer should "[a]void proportional-font wrapping, implicit
-        // line breaking". The shipped bodies carry no line feeds: each
-        // authored row is exactly one message-window row wide and reaches
-        // the next row through the per-cell emitter's own edge wrap
-        // (`text-output.md §5`). Laying the stream out cell by cell keeps
-        // the rows intact; the word-wrap printer broke them mid-row
-        // (playtest J05).
-        Ok(Some(sign_stream_rows(&bodies.concat())))
+        // line breaking". Each authored row is laid out cell by cell and
+        // reaches the next row through the per-cell emitter's own edge wrap
+        // (`text-output.md §5`); the word-wrap printer broke them mid-row
+        // (playtest J05). Each cell keeps the font its byte's high bit
+        // selects (§4, R600).
+        Ok(Some(sign_stream_rows_rendered(&sign_payload_rendered(
+            &record.payload,
+        ))))
     }
 
-    /// Put a sign into the message slot. `formats/signs-dat.md §6`: "Pause on
-    /// the embedded pause code" - the sign prints up to its first `0x0D` and
-    /// the rest waits behind a key (see [`crate::text_hold`]).
+    /// Put a sign into the message window. `formats/signs-dat.md §6`: "Pause
+    /// on the embedded pause code" - the sign prints up to its first `0x0D`
+    /// and the rest waits behind a key (see [`crate::text_hold`]).
     ///
     /// `view.md §3` entry dispatch: row 3 prints the shared "thou dost see"
     /// preamble for rows 4, 5 and 6 alike, and row 5 then emits "a line
-    /// break, then render[s] the sign or poster". No `Sign:` label is
-    /// published (playtest J05). A coordinate with no record prints the
-    /// unpublished blank-sign fallback as nothing beyond that line break.
-    fn present_sign_message(&mut self, sign: Option<String>) {
-        let sign = format!("{LOOK_RESULT_PREFIX}\n{}", sign.unwrap_or_default());
-        let (first, rest) = crate::text_hold::split_rendered_at_holds(
-            &crate::tlk_runner::TlkRenderedText::plain(sign),
-        );
+    /// break, then render[s] the sign or poster". The preamble "is a line
+    /// feed, `Thou dost see`, then a line feed" and "the sign path's own line
+    /// break is a second, separate line feed", so a blank row stands between
+    /// `Thou dost see` and the sign rows (u5-spec#300 Q13). No `Sign:` label
+    /// is published (playtest J05).
+    fn present_sign_message(&mut self, sign: Option<crate::tlk_runner::TlkRenderedText>) {
+        let mut rendered =
+            crate::tlk_runner::TlkRenderedText::plain(format!("{LOOK_RESULT_PREFIX}\n\n"));
+        if let Some(sign) = sign {
+            rendered.push_rendered(&sign);
+        }
+        let (first, rest) = crate::text_hold::split_rendered_at_holds(&rendered);
         let row_open = !first.text.is_empty() && !first.text.ends_with('\n');
-        self.message = first.text;
+        // Commit the first page now, through the same slot flush the turn
+        // boundary would run, then give the sign rows back the per-cell font
+        // the flush flattened (`formats/signs-dat.md §4`, R600).
+        self.message = first.text.clone();
+        self.flush_message_slot();
+        self.restore_flushed_rows_fonts(&first);
+        // `formats/signs-dat.md §4` step 4 and §6: after a record the
+        // formatter prints a line feed if the cursor is off column 0, and
+        // every placard row carries its own feed, so the sign leaves the
+        // cursor at column 0. Set explicitly for this caller.
+        self.message_row_open_mid_line = false;
         self.begin_text_hold(rest, row_open);
+    }
+
+    /// Re-apply `rendered`'s per-cell fonts to the transcript rows a plain
+    /// slot flush has just pushed for it, newest row first, stopping at the
+    /// first row whose text does not match.
+    fn restore_flushed_rows_fonts(&mut self, rendered: &crate::tlk_runner::TlkRenderedText) {
+        let rows: Vec<&[crate::tlk_runner::TlkRenderedGlyph]> = rendered
+            .rendered_lines()
+            .filter(|row| !row.is_empty())
+            .collect();
+        let mut entries = self
+            .message_transcript
+            .iter_mut()
+            .rev()
+            .filter(|entry| !entry.text.is_empty());
+        for row in rows.into_iter().rev() {
+            let Some(entry) = entries.next() else {
+                break;
+            };
+            if entry.text.as_bytes() != row.iter().map(|glyph| glyph.byte).collect::<Vec<_>>() {
+                break;
+            }
+            entry.glyphs = row.to_vec();
+        }
     }
 
     fn yew_wanted_poster_message(&self, scene: u8, z: u8, y: u8, x: u8) -> Option<String> {
@@ -4572,7 +4618,7 @@ impl PlayState {
         game_dir: Option<&Path>,
         y: u8,
         x: u8,
-    ) -> io::Result<Option<String>> {
+    ) -> io::Result<Option<crate::tlk_runner::TlkRenderedText>> {
         match self.area {
             Area::Town { scene, floor } => {
                 self.sign_message_at(game_dir, scene.byte, floor as u8, y, x)
@@ -4687,9 +4733,9 @@ impl PlayState {
             }
             return Ok(MoveOutcome::Blocked);
         };
-        if self.talk_entry_gates_apply() && self.talk_liveness_blocked() {
-            return Ok(self.consume_ordinary_town_talk());
-        }
+        // `conversation.md §2` step 1 (u5-spec#300 Q12, R596): there is no
+        // "can talk now" liveness gate; provisions, party status, combat and
+        // conversation state are never tested.
         if let Some((dialog_id, target_x, target_y)) = self.talk_target_in_direction(direction)
             && matches!(
                 dialog_id,
@@ -4886,9 +4932,7 @@ impl PlayState {
             self.message = "Funny, no response!".to_string();
             return MoveOutcome::Blocked;
         }
-        if self.talk_liveness_blocked() {
-            return self.consume_ordinary_town_talk();
-        }
+        // `conversation.md §2` step 1: no liveness gate (u5-spec#300 Q12, R596).
 
         let Some((dialog_id, target_x, target_y)) = self.talk_target_in_direction(direction) else {
             self.message = crate::TALK_NOBODY_HERE_LINE.to_string();
@@ -5141,9 +5185,7 @@ impl PlayState {
             self.message = "Funny, no response!".to_string();
             return MoveOutcome::Blocked;
         }
-        if self.talk_entry_gates_apply() && self.talk_liveness_blocked() {
-            return self.consume_ordinary_town_talk();
-        }
+        // `conversation.md §2` step 1: no liveness gate (u5-spec#300 Q12, R596).
 
         let Some((dialog_id, target_x, target_y)) = self.talk_target_in_direction(direction) else {
             self.message = crate::TALK_NOBODY_HERE_LINE.to_string();
@@ -5751,7 +5793,10 @@ impl PlayState {
         if !matches!(self.area, Area::Town { .. }) {
             return None;
         }
-        if self.talk_liveness_blocked() {
+        // `conversation.md §2` step 1 has no liveness gate (u5-spec#300 Q12,
+        // R596). Refusing to open a second session over a live one is this
+        // engine's own session invariant, not a game rule.
+        if self.active_conversation.is_some() {
             return None;
         }
         let (dialog_id, target_x, target_y) = self.facing_talk_target()?;
@@ -5759,20 +5804,14 @@ impl PlayState {
             dialog_id,
             TOWN_NPC_COWERING_DIALOG_ID | TOWN_NPC_BRUSHOFF_DIALOG_ID
         ) {
-            if dialog_id == TOWN_NPC_BRUSHOFF_DIALOG_ID {
-                // `town-mode.md §14` (u5-spec#300 Q19, R601): the line, then
-                // "the whole-party damage pass ... then the forced-flight
-                // helper; on explicit Talk that helper is not given the
-                // talked-to NPC's number". Which NPC it rewrites is not
-                // established, so no NPC is rewritten here.
-                let _ = (target_x, target_y);
-                let _ = self.apply_outdoor_impact_party_damage();
-            }
             let text = town_npc_dispatcher_sentinel_line(dialog_id)
                 .expect("cowering and scare indices are dispatcher sentinels");
             self.active_conversation = None;
             self.active_conversation_npc_slot = None;
             self.message = text.clone();
+            if dialog_id == TOWN_NPC_BRUSHOFF_DIALOG_ID {
+                self.talk_scare_hand_off(target_x, target_y);
+            }
             return Some(text);
         }
         if dialog_id == 0 || talk_shop_trigger(dialog_id).is_some() {
@@ -5845,8 +5884,10 @@ impl PlayState {
         }
         self.active_conversation = None;
         self.active_conversation_npc_slot = None;
-        let opening = conversation_opening_stopped_rendered(rendered);
-        let _ = self.run_final_conversation_cleanup();
+        let mut opening = conversation_opening_stopped_rendered(rendered);
+        if self.run_final_conversation_cleanup() {
+            append_falsehood_stolen_goods_line(&mut opening);
+        }
         opening
     }
 
@@ -6178,7 +6219,10 @@ impl PlayState {
             }
             self.active_conversation = None;
             self.active_conversation_npc_slot = None;
-            let _ = self.run_final_conversation_cleanup();
+            if self.run_final_conversation_cleanup() {
+                append_falsehood_stolen_goods_line(&mut rendered);
+                text = rendered.text.clone();
+            }
         }
         debug_assert_eq!(rendered.text, text);
         self.emit_tlk_message(rendered);
@@ -6519,10 +6563,10 @@ impl PlayState {
     /// Run the Shadowlord of Falsehood's post-conversation theft. Returns
     /// whether the theft ran.
     ///
-    /// `conversation.md §10` says the cleanup "prints the stolen-goods line",
-    /// but no spec document publishes that line's wording. The engine used to
-    /// print an invented ` Stolen goods.` here (playtest K14); the line is now
-    /// recorded as a diagnostic until the spec names it.
+    /// `conversation.md §10` (added 2026-10-25, u5-spec#300 Q20): the cleanup
+    /// prints the stolen-goods line [`TLK_FALSEHOOD_STOLEN_GOODS_LINE`]; the
+    /// callers append it to the conversation's closing text when this returns
+    /// `true` (see [`append_falsehood_stolen_goods_line`]).
     pub fn run_final_conversation_cleanup(&mut self) -> bool {
         self.run_final_conversation_cleanup_with_seed(host_clock_prng_seed_now())
     }
@@ -6534,9 +6578,6 @@ impl PlayState {
         if self.resident_shadowlord != Some(SHADOWLORD_FALSEHOOD_INDEX) {
             return false;
         }
-        self.push_diagnostic(
-            "Falsehood theft: stolen-goods line reached; its wording is not published".to_string(),
-        );
         self.emit_sound_effect(SoundEffect::ActionSnap);
 
         // `prng.md §3`: this sample precedes inventory inspection even when
@@ -6622,19 +6663,53 @@ impl PlayState {
         let response = town_npc_dispatcher_sentinel_line(dialog_id)?;
         match dialog_id {
             TOWN_NPC_COWERING_DIALOG_ID => {}
-            TOWN_NPC_BRUSHOFF_DIALOG_ID => {
-                // `town-mode.md §14` (u5-spec#300 Q19, R601): the line, the
-                // whole-party damage pass, and a flight helper that is not
-                // given the talked-to NPC's number (its target is not
-                // established), so no NPC is rewritten here.
-                let _ = (target_x, target_y);
-                let _ = self.apply_outdoor_impact_party_damage();
-            }
+            TOWN_NPC_BRUSHOFF_DIALOG_ID => {}
             _ => return None,
+        }
+        // `conversation.md §2` step 5 (u5-spec#300 Q19): the damage pass and
+        // the flight helper run inside Talk, ahead of the turn epilogue, so
+        // their draws and the flight rewrite precede its scheduler work.
+        if dialog_id == TOWN_NPC_BRUSHOFF_DIALOG_ID {
+            self.talk_scare_hand_off(target_x, target_y);
         }
         self.advance_talk_turn();
         self.message = response;
         Some(MoveOutcome::Talked)
+    }
+
+    /// `conversation.md §2` step 5, the scare index row (added 2026-10-25,
+    /// u5-spec#300 Q19, `RETRACTIONS.md` R601): after `"Begone,` ⏎
+    /// `vermin!"`, "the whole-party damage pass, then the forced-flight
+    /// helper"; "each party slot below the party count whose status is not
+    /// Dead takes its own uniform `1..8`" - the `overworld.md §6.2.4` pass.
+    ///
+    /// "On automatic conversation contact the flight helper receives the
+    /// contacting NPC. **On an explicit typed Talk it does not receive the
+    /// talked-to NPC's number**, and which record, if any, it rewrites there
+    /// is not established"; static reading suggests the talked-to NPC is never
+    /// rewritten. Conservatively, an explicit Talk rewrites no record.
+    fn talk_scare_hand_off(&mut self, target_x: usize, target_y: usize) {
+        let applied = self.apply_outdoor_impact_party_damage();
+        for entry in applied {
+            self.push_diagnostic(format!(
+                "scare brush-off: party slot {} took {} HP ({} HP left)",
+                entry.slot, entry.applied, entry.hp_after
+            ));
+        }
+        if !self.talk_entered_by_contact {
+            return;
+        }
+        let target_slot = self
+            .talk_record_at(target_x, target_y)
+            .map(|npc| npc.slot);
+        if let Some(index) = self
+            .npcs
+            .iter()
+            .position(|npc| Some(npc.slot) == target_slot)
+        {
+            let _ = self.npcs[index].force_town_flight();
+            self.record_town_npc_mutation(index);
+        }
     }
 
     pub(crate) fn begin_blackthorn_guard_demand(
@@ -6754,27 +6829,13 @@ impl PlayState {
 
     /// `conversation.md §2` step 5: "The dispatcher in step 5 is also called
     /// by the NPC's automatic conversation-contact event, without steps 1–4."
-    /// Contact therefore takes neither the step-1 liveness gate nor the
+    /// Contact therefore takes neither the step-1 direction prompt nor the
     /// step-4 mirror/bed status-tile gate. The step-3 lookup is kept only as
     /// this engine's way of resolving the contacting NPC: the producer is
     /// orthogonally adjacent by construction (`npc-schedules.md §9.2`) and the
     /// direction is derived from it, so the lookup lands on that NPC.
     pub(crate) fn talk_entry_gates_apply(&self) -> bool {
         !self.talk_entered_by_contact
-    }
-
-    pub fn talk_liveness_blocked(&self) -> bool {
-        let active_asleep = self
-            .active_player
-            .and_then(|index| self.party.get(index))
-            .is_some_and(|member| member.status == b'S');
-        talk_liveness_refusal(
-            self.combat_active,
-            active_asleep,
-            self.food == 0,
-            self.active_conversation.is_some(),
-        )
-        .is_some()
     }
 
     pub fn talk_branch_slot_for_scene(&self, scene: Scene) -> u32 {
@@ -6817,28 +6878,61 @@ impl PlayState {
 /// the cursor onto the next row. A line feed returns the column to the left
 /// edge and steps down one row - after an edge wrap that is a second row
 /// step. Hold markers occupy no cell.
+#[cfg(test)]
 pub fn sign_stream_rows(stream: &str) -> String {
-    let mut out = String::with_capacity(stream.len() + stream.len() / 8);
+    sign_stream_rows_rendered(&crate::tlk_runner::TlkRenderedText::plain(stream)).text
+}
+
+/// [`sign_stream_rows`] over font-carrying cells: the inserted edge-wrap
+/// breaks are ordinary line feeds and every cell keeps its font.
+pub fn sign_stream_rows_rendered(
+    stream: &crate::tlk_runner::TlkRenderedText,
+) -> crate::tlk_runner::TlkRenderedText {
+    use crate::tlk_runner::{TlkRenderedGlyph, TlkRenderedText};
+    let mut out = TlkRenderedText::default();
+    let mut push = |glyph: TlkRenderedGlyph| {
+        out.text.push(char::from(glyph.byte));
+        out.glyphs.push(glyph);
+    };
     let mut column = 0usize;
-    for ch in stream.chars() {
-        if ch == char::from(crate::text_hold::TEXT_HOLD_WAIT_KEY_MARKER) {
-            out.push(ch);
+    for &glyph in &stream.glyphs {
+        if glyph.byte == crate::text_hold::TEXT_HOLD_WAIT_KEY_MARKER {
+            push(glyph);
             continue;
         }
-        if ch == '\n' {
+        if glyph.byte == b'\n' {
             if column == crate::MESSAGE_WINDOW_WIDTH {
-                out.push('\n');
+                push(TlkRenderedGlyph::ordinary(b'\n'));
             }
-            out.push('\n');
+            push(glyph);
             column = 0;
             continue;
         }
         if column == crate::MESSAGE_WINDOW_WIDTH {
-            out.push('\n');
+            push(TlkRenderedGlyph::ordinary(b'\n'));
             column = 0;
         }
-        out.push(ch);
+        push(glyph);
         column += 1;
+    }
+    out
+}
+
+/// `formats/signs-dat.md §6` "The no-record placard" (u5-spec#300 Q13): six
+/// sixteen-cell rows in the runic font, each ending with its own line feed.
+pub fn sign_no_record_placard_rendered() -> crate::tlk_runner::TlkRenderedText {
+    use crate::tlk_runner::{TlkGlyphFont, TlkRenderedGlyph, TlkRenderedText};
+    let mut out = TlkRenderedText::default();
+    for row in SIGN_NO_RECORD_PLACARD_ROWS {
+        for byte in row.bytes() {
+            out.text.push(char::from(byte));
+            out.glyphs.push(TlkRenderedGlyph {
+                byte,
+                font: TlkGlyphFont::Runic,
+            });
+        }
+        out.text.push('\n');
+        out.glyphs.push(TlkRenderedGlyph::ordinary(b'\n'));
     }
     out
 }
@@ -7824,6 +7918,29 @@ fn conversation_opening_rendered(
     }
     rendered.push_plain(prompt);
     rendered
+}
+
+/// `conversation.md §10` (added 2026-10-25, u5-spec#300 Q20): "the single
+/// stored line `Something was stolen!`, with no leading spaces, which begins
+/// and ends with its own line feed, so one blank row separates it from the
+/// conversation's last row and the cursor is left at column 0 of the row
+/// below it".
+pub const TLK_FALSEHOOD_STOLEN_GOODS_LINE: &str = "\nSomething was stolen!\n";
+
+/// Append [`TLK_FALSEHOOD_STOLEN_GOODS_LINE`] to a conversation's closing text.
+/// The closing text already ends at column 0 under one blank row (the feed
+/// pair this engine closes every conversation with), so the line's own
+/// leading feed is that blank row: the trailing feeds are trimmed back to the
+/// conversation's last row, the stored line follows its closing feed, and the
+/// same closing blank row follows the line.
+fn append_falsehood_stolen_goods_line(rendered: &mut crate::tlk_runner::TlkRenderedText) {
+    while rendered.glyphs.last().is_some_and(|glyph| glyph.byte == b'\n') {
+        rendered.glyphs.pop();
+        rendered.text.pop();
+    }
+    rendered.push_plain("\n");
+    rendered.push_plain(TLK_FALSEHOOD_STOLEN_GOODS_LINE);
+    rendered.push_plain("\n");
 }
 
 /// An opening whose entry reported a `0x82` stop (u5-spec#299 Q1): the same

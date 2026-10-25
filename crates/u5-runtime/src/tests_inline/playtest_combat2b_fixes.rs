@@ -84,7 +84,7 @@ fn playtest_f28_a_combat_potion_binds_the_acting_combatant_without_on_who() {
         .find(|seed| {
             let mut probe = state.clone();
             probe.prng_state = *seed;
-            probe.potion_variation_roll() <= POTION_VARIATION_SELECTED_THRESHOLD
+            probe.potion_variation_roll() >= POTION_VARIATION_SELECTED_FIRST
         })
         .expect("some seed keeps the selected colour");
     state.prng_state = seed;
@@ -416,7 +416,7 @@ fn playtest_f28_a_combat_potion_binds_the_roster_member_of_a_packed_descriptor()
         .find(|seed| {
             let mut probe = state.clone();
             probe.prng_state = *seed;
-            probe.potion_variation_roll() <= POTION_VARIATION_SELECTED_THRESHOLD
+            probe.potion_variation_roll() >= POTION_VARIATION_SELECTED_FIRST
         })
         .expect("some seed keeps the selected colour");
     state.prng_state = seed;

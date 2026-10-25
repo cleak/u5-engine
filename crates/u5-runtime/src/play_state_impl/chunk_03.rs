@@ -5396,17 +5396,13 @@ impl PlayState {
                 // selector, name - not an invented `Name: count` (playtest
                 // H43).
                 //
-                // §4.5 measures every spell-charge name "at one-, two- and
-                // three-digit quantities" and finds that **none** takes a
-                // second display line, so a spell label ends before window
-                // column 15 even after a three-cell quantity: ten cells at
-                // most. The 48 spell-charge label literals themselves are not
-                // published. Of the per-spell names `catalogs/spell-list.md`
-                // §5 publishes, only the compact parser code fits (the common
-                // names and rune phrases run to sixteen cells), so the row
-                // carries the code alone. The engine's own `<code> <name>`
-                // label wrapped `Magic Missile` onto a second line.
-                (count > 0).then(|| z_stats_counted_row(count, SPELL_CODES[index]))
+                // §4.7 (added 2026-10-25, u5-spec#300 Q11): each row is
+                // `[count][-][label]` with the published ten-cell label, used
+                // verbatim (`_5-Grav Por`, `100-In Zu Grav`); no label exceeds
+                // ten cells, so no spell-charge row takes a second line. The
+                // engine showed the parser code while the labels were
+                // unpublished.
+                (count > 0).then(|| z_stats_counted_row(count, Z_STATS_SPELL_LABELS[index]))
             })
             .collect::<Vec<_>>()
     }

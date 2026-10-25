@@ -1930,8 +1930,9 @@ impl PlayState {
                 // grant dispatcher's selector". The separate visual filter
                 // this used to apply first is withdrawn, so the handler takes
                 // the record at the cell and lets its class decide - including
-                // deciding to refuse.
-                self.object_occupies(*object, x, y)
+                // deciding to refuse. A staged body is skipped before that
+                // (`containers.md §3`, u5-spec#300 Q2).
+                self.object_occupies(*object, x, y) && !staged_hidden_treasure_body(*object)
             })?;
 
         let Some(grant) = native_object_pickup_grant(object) else {
@@ -2323,7 +2324,13 @@ impl PlayState {
         if let Some(outcome) = self.get_native_object_pickup_at(tx, ty) {
             return Ok(outcome);
         }
-        if self.blocking_object_at(tx, ty).is_some() {
+        // `containers.md §3` (u5-spec#300 Q2): a staged rotting body or
+        // moldy corpse is skipped like an actor, so it does not stop Get
+        // from reaching the live-tile cascade below.
+        if self
+            .blocking_object_at(tx, ty)
+            .is_some_and(|object| !staged_hidden_treasure_body(*object))
+        {
             self.message = GET_NOTHING_REFUSAL.to_string();
             return Ok(MoveOutcome::Blocked);
         }
@@ -2837,13 +2844,16 @@ impl PlayState {
         let mut matching_entries = FIXED_HIDDEN_TREASURES.iter().copied().filter(|entry| {
             entry.target == target && entry.floor == floor && entry.x == x && entry.y == y
         });
-        let Some(entry) = matching_entries.find(|entry| {
-            if self.fixed_hidden_treasure_pickup_exists(entry.record) {
-                true
-            } else {
-                self.fixed_hidden_treasure_rule_allows(*entry, x, y)
-            }
-        }) else {
+        // `hidden-treasures.md §3` "Shared cells" (added 2026-10-25,
+        // u5-spec#300 Q1): "One Search stages at most one record: the first
+        // record in table order on that cell that is not yet found", so on a
+        // two-record cell the second Search stages the other record even
+        // while the first one's object still lies there. A record that is
+        // still open and already lying on the floor (the key-gated record 13
+        // keeps no found bit) meets the duplicate guard below.
+        let Some(entry) =
+            matching_entries.find(|entry| self.fixed_hidden_treasure_rule_allows(*entry, x, y))
+        else {
             return None;
         };
         if self.fixed_hidden_treasure_pickup_exists(entry.record) {
@@ -3024,7 +3034,7 @@ impl PlayState {
             .enumerate()
             .skip(1)
             .find_map(|(object_slot, object)| {
-                if self.object_occupies(*object, x, y) {
+                if self.object_occupies(*object, x, y) && !staged_hidden_treasure_body(*object) {
                     object
                         .fixed_hidden_treasure_record()
                         .map(|record| (object_slot, record))
@@ -3529,6 +3539,24 @@ impl PlayState {
         };
         MoveOutcome::Searched
     }
+}
+
+/// `containers.md §3` "A staged rotting body or moldy corpse is not
+/// Get-acceptable" (added 2026-10-25, u5-spec#300 Q2): classes 30 and 31 are
+/// "neither below sixteen nor one of the Moonstone, carpet or regalia/shard
+/// classes, so step 3 skips such an object exactly as it skips an actor, and
+/// keeps scanning the other objects at the coordinate. Nothing is printed at
+/// that point". With nothing else acceptable Get falls through to the
+/// live-tile cascade, and the body stays on the cell.
+fn staged_hidden_treasure_body(object: ActiveObject) -> bool {
+    object.fixed_hidden_treasure_record().is_some_and(|record| {
+        FIXED_HIDDEN_TREASURES.get(record).is_some_and(|entry| {
+            matches!(
+                entry.pickup,
+                HiddenTreasurePickup::MoldyCorpse | HiddenTreasurePickup::RottingBody
+            )
+        })
+    })
 }
 
 /// `hidden-treasures.md §2`: "The `State` column is the per-record pickup
@@ -4099,8 +4127,8 @@ pub const FIXED_HIDDEN_TREASURES: &[FixedHiddenTreasureEntry] = &[
         12,
         HiddenTreasureTarget::Town(21),
         0,
-        2,
         15,
+        2,
         HiddenTreasurePickup::Scroll,
         255,
         HiddenTreasureRule::OneShot,
@@ -4109,8 +4137,8 @@ pub const FIXED_HIDDEN_TREASURES: &[FixedHiddenTreasureEntry] = &[
         13,
         HiddenTreasureTarget::Town(18),
         -1,
-        6,
         8,
+        6,
         HiddenTreasurePickup::RingOfKeys,
         9,
         HiddenTreasureRule::KeyNpcGated,
@@ -4129,8 +4157,8 @@ pub const FIXED_HIDDEN_TREASURES: &[FixedHiddenTreasureEntry] = &[
         15,
         HiddenTreasureTarget::World(WorldPlane::Britannia),
         0,
-        80,
         64,
+        80,
         HiddenTreasurePickup::Weapon,
         39,
         HiddenTreasureRule::SingleUseNpcGated,
@@ -4139,8 +4167,8 @@ pub const FIXED_HIDDEN_TREASURES: &[FixedHiddenTreasureEntry] = &[
         16,
         HiddenTreasureTarget::Town(18),
         1,
-        6,
         7,
+        6,
         HiddenTreasurePickup::Weapon,
         35,
         HiddenTreasureRule::OneShot,
@@ -4149,8 +4177,8 @@ pub const FIXED_HIDDEN_TREASURES: &[FixedHiddenTreasureEntry] = &[
         17,
         HiddenTreasureTarget::Town(18),
         1,
-        6,
         23,
+        6,
         HiddenTreasurePickup::Weapon,
         40,
         HiddenTreasureRule::OneShot,
@@ -4159,8 +4187,8 @@ pub const FIXED_HIDDEN_TREASURES: &[FixedHiddenTreasureEntry] = &[
         18,
         HiddenTreasureTarget::Town(1),
         0,
-        5,
         8,
+        5,
         HiddenTreasurePickup::Gem,
         1,
         HiddenTreasureRule::OneShot,
@@ -4169,8 +4197,8 @@ pub const FIXED_HIDDEN_TREASURES: &[FixedHiddenTreasureEntry] = &[
         19,
         HiddenTreasureTarget::Town(1),
         0,
-        6,
         25,
+        6,
         HiddenTreasurePickup::Armour,
         10,
         HiddenTreasureRule::OneShot,
@@ -4179,8 +4207,8 @@ pub const FIXED_HIDDEN_TREASURES: &[FixedHiddenTreasureEntry] = &[
         20,
         HiddenTreasureTarget::Town(1),
         0,
-        8,
         25,
+        8,
         HiddenTreasurePickup::Armour,
         10,
         HiddenTreasureRule::OneShot,
@@ -4189,8 +4217,8 @@ pub const FIXED_HIDDEN_TREASURES: &[FixedHiddenTreasureEntry] = &[
         21,
         HiddenTreasureTarget::Town(1),
         0,
-        5,
         23,
+        5,
         HiddenTreasurePickup::Potion,
         5,
         HiddenTreasureRule::OneShot,
@@ -4209,8 +4237,8 @@ pub const FIXED_HIDDEN_TREASURES: &[FixedHiddenTreasureEntry] = &[
         23,
         HiddenTreasureTarget::Town(1),
         0,
-        13,
         14,
+        13,
         HiddenTreasurePickup::Potion,
         7,
         HiddenTreasureRule::OneShot,
@@ -4219,8 +4247,8 @@ pub const FIXED_HIDDEN_TREASURES: &[FixedHiddenTreasureEntry] = &[
         24,
         HiddenTreasureTarget::Town(1),
         0,
-        13,
         16,
+        13,
         HiddenTreasurePickup::Scroll,
         5,
         HiddenTreasureRule::OneShot,
@@ -4229,8 +4257,8 @@ pub const FIXED_HIDDEN_TREASURES: &[FixedHiddenTreasureEntry] = &[
         25,
         HiddenTreasureTarget::Town(1),
         0,
-        13,
         17,
+        13,
         HiddenTreasurePickup::Scroll,
         7,
         HiddenTreasureRule::OneShot,
@@ -4239,8 +4267,8 @@ pub const FIXED_HIDDEN_TREASURES: &[FixedHiddenTreasureEntry] = &[
         26,
         HiddenTreasureTarget::Town(1),
         1,
-        19,
         24,
+        19,
         HiddenTreasurePickup::Food,
         10,
         HiddenTreasureRule::OneShot,
@@ -4249,8 +4277,8 @@ pub const FIXED_HIDDEN_TREASURES: &[FixedHiddenTreasureEntry] = &[
         27,
         HiddenTreasureTarget::Town(1),
         0,
-        3,
         27,
+        3,
         HiddenTreasurePickup::Torches,
         3,
         HiddenTreasureRule::OneShot,
@@ -4259,8 +4287,8 @@ pub const FIXED_HIDDEN_TREASURES: &[FixedHiddenTreasureEntry] = &[
         28,
         HiddenTreasureTarget::Town(1),
         0,
-        29,
         27,
+        29,
         HiddenTreasurePickup::Ring,
         42,
         HiddenTreasureRule::OneShot,
@@ -4269,8 +4297,8 @@ pub const FIXED_HIDDEN_TREASURES: &[FixedHiddenTreasureEntry] = &[
         29,
         HiddenTreasureTarget::Town(2),
         0,
-        1,
         2,
+        1,
         HiddenTreasurePickup::Food,
         5,
         HiddenTreasureRule::OneShot,
@@ -4279,8 +4307,8 @@ pub const FIXED_HIDDEN_TREASURES: &[FixedHiddenTreasureEntry] = &[
         30,
         HiddenTreasureTarget::Town(2),
         0,
-        26,
         6,
+        26,
         HiddenTreasurePickup::Weapon,
         20,
         HiddenTreasureRule::OneShot,
@@ -4289,8 +4317,8 @@ pub const FIXED_HIDDEN_TREASURES: &[FixedHiddenTreasureEntry] = &[
         31,
         HiddenTreasureTarget::Town(2),
         1,
-        6,
         24,
+        6,
         HiddenTreasurePickup::Ring,
         43,
         HiddenTreasureRule::OneShot,
@@ -4299,8 +4327,8 @@ pub const FIXED_HIDDEN_TREASURES: &[FixedHiddenTreasureEntry] = &[
         32,
         HiddenTreasureTarget::Town(3),
         0,
-        16,
         21,
+        16,
         HiddenTreasurePickup::Scroll,
         1,
         HiddenTreasureRule::OneShot,
@@ -4309,8 +4337,8 @@ pub const FIXED_HIDDEN_TREASURES: &[FixedHiddenTreasureEntry] = &[
         33,
         HiddenTreasureTarget::Town(3),
         0,
-        10,
         20,
+        10,
         HiddenTreasurePickup::Food,
         5,
         HiddenTreasureRule::OneShot,
@@ -4319,8 +4347,8 @@ pub const FIXED_HIDDEN_TREASURES: &[FixedHiddenTreasureEntry] = &[
         34,
         HiddenTreasureTarget::Town(3),
         0,
-        1,
         29,
+        1,
         HiddenTreasurePickup::Food,
         10,
         HiddenTreasureRule::OneShot,
@@ -4329,8 +4357,8 @@ pub const FIXED_HIDDEN_TREASURES: &[FixedHiddenTreasureEntry] = &[
         35,
         HiddenTreasureTarget::Town(3),
         0,
-        23,
         30,
+        23,
         HiddenTreasurePickup::Weapon,
         38,
         HiddenTreasureRule::OneShot,
@@ -4339,8 +4367,8 @@ pub const FIXED_HIDDEN_TREASURES: &[FixedHiddenTreasureEntry] = &[
         36,
         HiddenTreasureTarget::Town(3),
         0,
-        29,
         1,
+        29,
         HiddenTreasurePickup::Torches,
         4,
         HiddenTreasureRule::OneShot,
@@ -4349,8 +4377,8 @@ pub const FIXED_HIDDEN_TREASURES: &[FixedHiddenTreasureEntry] = &[
         37,
         HiddenTreasureTarget::Town(4),
         0,
-        11,
         29,
+        11,
         HiddenTreasurePickup::Weapon,
         18,
         HiddenTreasureRule::OneShot,
@@ -4359,8 +4387,8 @@ pub const FIXED_HIDDEN_TREASURES: &[FixedHiddenTreasureEntry] = &[
         38,
         HiddenTreasureTarget::Town(4),
         0,
-        26,
         22,
+        26,
         HiddenTreasurePickup::Potion,
         3,
         HiddenTreasureRule::OneShot,
@@ -4369,8 +4397,8 @@ pub const FIXED_HIDDEN_TREASURES: &[FixedHiddenTreasureEntry] = &[
         39,
         HiddenTreasureTarget::Town(4),
         0,
-        26,
         1,
+        26,
         HiddenTreasurePickup::Scroll,
         4,
         HiddenTreasureRule::OneShot,
@@ -4379,8 +4407,8 @@ pub const FIXED_HIDDEN_TREASURES: &[FixedHiddenTreasureEntry] = &[
         40,
         HiddenTreasureTarget::Town(4),
         0,
-        2,
         13,
+        2,
         HiddenTreasurePickup::MoldyCorpse,
         0,
         HiddenTreasureRule::OneShot,
@@ -4389,8 +4417,8 @@ pub const FIXED_HIDDEN_TREASURES: &[FixedHiddenTreasureEntry] = &[
         41,
         HiddenTreasureTarget::Town(4),
         0,
-        2,
         14,
+        2,
         HiddenTreasurePickup::MoldyCorpse,
         0,
         HiddenTreasureRule::OneShot,
@@ -4399,8 +4427,8 @@ pub const FIXED_HIDDEN_TREASURES: &[FixedHiddenTreasureEntry] = &[
         42,
         HiddenTreasureTarget::Town(4),
         0,
-        4,
         14,
+        4,
         HiddenTreasurePickup::RottingBody,
         0,
         HiddenTreasureRule::OneShot,
@@ -4409,8 +4437,8 @@ pub const FIXED_HIDDEN_TREASURES: &[FixedHiddenTreasureEntry] = &[
         43,
         HiddenTreasureTarget::Town(4),
         0,
-        3,
         16,
+        3,
         HiddenTreasurePickup::RottingBody,
         0,
         HiddenTreasureRule::OneShot,
@@ -4419,8 +4447,8 @@ pub const FIXED_HIDDEN_TREASURES: &[FixedHiddenTreasureEntry] = &[
         44,
         HiddenTreasureTarget::Town(4),
         0,
-        2,
         18,
+        2,
         HiddenTreasurePickup::RottingBody,
         0,
         HiddenTreasureRule::OneShot,
@@ -4429,8 +4457,8 @@ pub const FIXED_HIDDEN_TREASURES: &[FixedHiddenTreasureEntry] = &[
         45,
         HiddenTreasureTarget::Town(4),
         0,
-        3,
         16,
+        3,
         HiddenTreasurePickup::Weapon,
         21,
         HiddenTreasureRule::OneShot,
@@ -4439,8 +4467,8 @@ pub const FIXED_HIDDEN_TREASURES: &[FixedHiddenTreasureEntry] = &[
         46,
         HiddenTreasureTarget::Town(4),
         -1,
-        22,
         27,
+        22,
         HiddenTreasurePickup::Weapon,
         37,
         HiddenTreasureRule::OneShot,
@@ -4449,8 +4477,8 @@ pub const FIXED_HIDDEN_TREASURES: &[FixedHiddenTreasureEntry] = &[
         47,
         HiddenTreasureTarget::Town(4),
         -1,
-        22,
         20,
+        22,
         HiddenTreasurePickup::RingOfKeys,
         5,
         HiddenTreasureRule::OneShot,
@@ -4459,8 +4487,8 @@ pub const FIXED_HIDDEN_TREASURES: &[FixedHiddenTreasureEntry] = &[
         48,
         HiddenTreasureTarget::Town(5),
         0,
-        8,
         27,
+        8,
         HiddenTreasurePickup::SackOfGold,
         99,
         HiddenTreasureRule::OneShot,
@@ -4469,8 +4497,8 @@ pub const FIXED_HIDDEN_TREASURES: &[FixedHiddenTreasureEntry] = &[
         49,
         HiddenTreasureTarget::Town(5),
         1,
-        11,
         13,
+        11,
         HiddenTreasurePickup::Scroll,
         1,
         HiddenTreasureRule::OneShot,
@@ -4479,8 +4507,8 @@ pub const FIXED_HIDDEN_TREASURES: &[FixedHiddenTreasureEntry] = &[
         50,
         HiddenTreasureTarget::Town(5),
         1,
-        11,
         12,
+        11,
         HiddenTreasurePickup::Scroll,
         1,
         HiddenTreasureRule::OneShot,
@@ -4489,8 +4517,8 @@ pub const FIXED_HIDDEN_TREASURES: &[FixedHiddenTreasureEntry] = &[
         51,
         HiddenTreasureTarget::Town(5),
         1,
-        21,
         8,
+        21,
         HiddenTreasurePickup::Potion,
         1,
         HiddenTreasureRule::OneShot,
@@ -4499,8 +4527,8 @@ pub const FIXED_HIDDEN_TREASURES: &[FixedHiddenTreasureEntry] = &[
         52,
         HiddenTreasureTarget::Town(5),
         1,
-        23,
         8,
+        23,
         HiddenTreasurePickup::Potion,
         2,
         HiddenTreasureRule::OneShot,
@@ -4509,8 +4537,8 @@ pub const FIXED_HIDDEN_TREASURES: &[FixedHiddenTreasureEntry] = &[
         53,
         HiddenTreasureTarget::Town(5),
         1,
-        23,
         7,
+        23,
         HiddenTreasurePickup::Scroll,
         6,
         HiddenTreasureRule::OneShot,
@@ -4519,8 +4547,8 @@ pub const FIXED_HIDDEN_TREASURES: &[FixedHiddenTreasureEntry] = &[
         54,
         HiddenTreasureTarget::Town(6),
         1,
-        6,
         24,
+        6,
         HiddenTreasurePickup::Gem,
         4,
         HiddenTreasureRule::OneShot,
@@ -4529,8 +4557,8 @@ pub const FIXED_HIDDEN_TREASURES: &[FixedHiddenTreasureEntry] = &[
         55,
         HiddenTreasureTarget::Town(7),
         0,
-        2,
         5,
+        2,
         HiddenTreasurePickup::RottingBody,
         0,
         HiddenTreasureRule::OneShot,
@@ -4539,8 +4567,8 @@ pub const FIXED_HIDDEN_TREASURES: &[FixedHiddenTreasureEntry] = &[
         56,
         HiddenTreasureTarget::Town(7),
         0,
-        7,
         6,
+        7,
         HiddenTreasurePickup::Potion,
         1,
         HiddenTreasureRule::OneShot,
@@ -4549,8 +4577,8 @@ pub const FIXED_HIDDEN_TREASURES: &[FixedHiddenTreasureEntry] = &[
         57,
         HiddenTreasureTarget::Town(8),
         1,
-        18,
         21,
+        18,
         HiddenTreasurePickup::Potion,
         3,
         HiddenTreasureRule::OneShot,
@@ -4559,8 +4587,8 @@ pub const FIXED_HIDDEN_TREASURES: &[FixedHiddenTreasureEntry] = &[
         58,
         HiddenTreasureTarget::Town(8),
         1,
-        21,
         25,
+        21,
         HiddenTreasurePickup::RingOfKeys,
         7,
         HiddenTreasureRule::OneShot,
@@ -4569,8 +4597,8 @@ pub const FIXED_HIDDEN_TREASURES: &[FixedHiddenTreasureEntry] = &[
         59,
         HiddenTreasureTarget::Town(9),
         0,
-        12,
         10,
+        12,
         HiddenTreasurePickup::Torches,
         9,
         HiddenTreasureRule::OneShot,
@@ -4579,8 +4607,8 @@ pub const FIXED_HIDDEN_TREASURES: &[FixedHiddenTreasureEntry] = &[
         60,
         HiddenTreasureTarget::Town(11),
         0,
-        15,
         21,
+        15,
         HiddenTreasurePickup::Potion,
         0,
         HiddenTreasureRule::OneShot,
@@ -4589,8 +4617,8 @@ pub const FIXED_HIDDEN_TREASURES: &[FixedHiddenTreasureEntry] = &[
         61,
         HiddenTreasureTarget::Town(11),
         0,
-        9,
         14,
+        9,
         HiddenTreasurePickup::Gem,
         5,
         HiddenTreasureRule::OneShot,
@@ -4599,8 +4627,8 @@ pub const FIXED_HIDDEN_TREASURES: &[FixedHiddenTreasureEntry] = &[
         62,
         HiddenTreasureTarget::Town(11),
         0,
-        12,
         16,
+        12,
         HiddenTreasurePickup::SackOfGold,
         50,
         HiddenTreasureRule::OneShot,
@@ -4609,8 +4637,8 @@ pub const FIXED_HIDDEN_TREASURES: &[FixedHiddenTreasureEntry] = &[
         63,
         HiddenTreasureTarget::Town(13),
         0,
-        2,
         24,
+        2,
         HiddenTreasurePickup::Potion,
         7,
         HiddenTreasureRule::OneShot,
@@ -4619,8 +4647,8 @@ pub const FIXED_HIDDEN_TREASURES: &[FixedHiddenTreasureEntry] = &[
         64,
         HiddenTreasureTarget::Town(14),
         0,
-        12,
         16,
+        12,
         HiddenTreasurePickup::Scroll,
         5,
         HiddenTreasureRule::OneShot,
@@ -4629,8 +4657,8 @@ pub const FIXED_HIDDEN_TREASURES: &[FixedHiddenTreasureEntry] = &[
         65,
         HiddenTreasureTarget::Town(14),
         0,
-        16,
         14,
+        16,
         HiddenTreasurePickup::Amulet,
         45,
         HiddenTreasureRule::OneShot,
@@ -4639,8 +4667,8 @@ pub const FIXED_HIDDEN_TREASURES: &[FixedHiddenTreasureEntry] = &[
         66,
         HiddenTreasureTarget::Town(14),
         0,
-        12,
         17,
+        12,
         HiddenTreasurePickup::Scroll,
         7,
         HiddenTreasureRule::OneShot,
@@ -4649,8 +4677,8 @@ pub const FIXED_HIDDEN_TREASURES: &[FixedHiddenTreasureEntry] = &[
         67,
         HiddenTreasureTarget::Town(14),
         0,
-        12,
         14,
+        12,
         HiddenTreasurePickup::Potion,
         4,
         HiddenTreasureRule::OneShot,
@@ -4659,8 +4687,8 @@ pub const FIXED_HIDDEN_TREASURES: &[FixedHiddenTreasureEntry] = &[
         68,
         HiddenTreasureTarget::Town(17),
         0,
-        7,
         20,
+        7,
         HiddenTreasurePickup::Armour,
         10,
         HiddenTreasureRule::OneShot,
@@ -4669,8 +4697,8 @@ pub const FIXED_HIDDEN_TREASURES: &[FixedHiddenTreasureEntry] = &[
         69,
         HiddenTreasureTarget::Town(17),
         0,
-        7,
         21,
+        7,
         HiddenTreasurePickup::Armour,
         11,
         HiddenTreasureRule::OneShot,
@@ -4679,8 +4707,8 @@ pub const FIXED_HIDDEN_TREASURES: &[FixedHiddenTreasureEntry] = &[
         70,
         HiddenTreasureTarget::Town(17),
         0,
-        7,
         22,
+        7,
         HiddenTreasurePickup::Armour,
         9,
         HiddenTreasureRule::OneShot,
@@ -4689,8 +4717,8 @@ pub const FIXED_HIDDEN_TREASURES: &[FixedHiddenTreasureEntry] = &[
         71,
         HiddenTreasureTarget::Town(17),
         0,
-        7,
         23,
+        7,
         HiddenTreasurePickup::Armour,
         12,
         HiddenTreasureRule::OneShot,
@@ -4699,8 +4727,8 @@ pub const FIXED_HIDDEN_TREASURES: &[FixedHiddenTreasureEntry] = &[
         72,
         HiddenTreasureTarget::Town(17),
         1,
-        13,
         21,
+        13,
         HiddenTreasurePickup::Weapon,
         30,
         HiddenTreasureRule::OneShot,
@@ -4709,8 +4737,8 @@ pub const FIXED_HIDDEN_TREASURES: &[FixedHiddenTreasureEntry] = &[
         73,
         HiddenTreasureTarget::Town(17),
         -1,
-        18,
         7,
+        18,
         HiddenTreasurePickup::RingOfKeys,
         7,
         HiddenTreasureRule::OneShot,
@@ -4719,8 +4747,8 @@ pub const FIXED_HIDDEN_TREASURES: &[FixedHiddenTreasureEntry] = &[
         74,
         HiddenTreasureTarget::Town(17),
         -1,
-        23,
         20,
+        23,
         HiddenTreasurePickup::Ring,
         44,
         HiddenTreasureRule::OneShot,
@@ -4729,8 +4757,8 @@ pub const FIXED_HIDDEN_TREASURES: &[FixedHiddenTreasureEntry] = &[
         75,
         HiddenTreasureTarget::Town(18),
         1,
-        18,
         17,
+        18,
         HiddenTreasurePickup::Potion,
         3,
         HiddenTreasureRule::OneShot,
@@ -4739,8 +4767,8 @@ pub const FIXED_HIDDEN_TREASURES: &[FixedHiddenTreasureEntry] = &[
         76,
         HiddenTreasureTarget::Town(18),
         2,
-        6,
         13,
+        6,
         HiddenTreasurePickup::Scroll,
         5,
         HiddenTreasureRule::OneShot,
@@ -4749,8 +4777,8 @@ pub const FIXED_HIDDEN_TREASURES: &[FixedHiddenTreasureEntry] = &[
         77,
         HiddenTreasureTarget::Town(18),
         2,
-        6,
         14,
+        6,
         HiddenTreasurePickup::Scroll,
         5,
         HiddenTreasureRule::OneShot,
@@ -4759,8 +4787,8 @@ pub const FIXED_HIDDEN_TREASURES: &[FixedHiddenTreasureEntry] = &[
         78,
         HiddenTreasureTarget::Town(18),
         2,
-        6,
         16,
+        6,
         HiddenTreasurePickup::Scroll,
         2,
         HiddenTreasureRule::OneShot,
@@ -4769,8 +4797,8 @@ pub const FIXED_HIDDEN_TREASURES: &[FixedHiddenTreasureEntry] = &[
         79,
         HiddenTreasureTarget::Town(18),
         2,
-        6,
         17,
+        6,
         HiddenTreasurePickup::Scroll,
         7,
         HiddenTreasureRule::OneShot,
@@ -4779,8 +4807,8 @@ pub const FIXED_HIDDEN_TREASURES: &[FixedHiddenTreasureEntry] = &[
         80,
         HiddenTreasureTarget::Town(18),
         2,
-        7,
         19,
+        7,
         HiddenTreasurePickup::Ring,
         43,
         HiddenTreasureRule::OneShot,
@@ -4789,8 +4817,8 @@ pub const FIXED_HIDDEN_TREASURES: &[FixedHiddenTreasureEntry] = &[
         81,
         HiddenTreasureTarget::Town(19),
         0,
-        2,
         3,
+        2,
         HiddenTreasurePickup::RottingBody,
         0,
         HiddenTreasureRule::OneShot,
@@ -4799,8 +4827,8 @@ pub const FIXED_HIDDEN_TREASURES: &[FixedHiddenTreasureEntry] = &[
         82,
         HiddenTreasureTarget::Town(19),
         0,
-        7,
         5,
+        7,
         HiddenTreasurePickup::RottingBody,
         0,
         HiddenTreasureRule::OneShot,
@@ -4819,8 +4847,8 @@ pub const FIXED_HIDDEN_TREASURES: &[FixedHiddenTreasureEntry] = &[
         84,
         HiddenTreasureTarget::Town(19),
         0,
-        2,
         7,
+        2,
         HiddenTreasurePickup::RottingBody,
         0,
         HiddenTreasureRule::OneShot,
@@ -4829,8 +4857,8 @@ pub const FIXED_HIDDEN_TREASURES: &[FixedHiddenTreasureEntry] = &[
         85,
         HiddenTreasureTarget::Town(19),
         0,
-        7,
         5,
+        7,
         HiddenTreasurePickup::Scroll,
         6,
         HiddenTreasureRule::OneShot,
@@ -4839,8 +4867,8 @@ pub const FIXED_HIDDEN_TREASURES: &[FixedHiddenTreasureEntry] = &[
         86,
         HiddenTreasureTarget::Town(19),
         0,
-        2,
         3,
+        2,
         HiddenTreasurePickup::Ring,
         44,
         HiddenTreasureRule::OneShot,
@@ -4849,8 +4877,8 @@ pub const FIXED_HIDDEN_TREASURES: &[FixedHiddenTreasureEntry] = &[
         87,
         HiddenTreasureTarget::Town(20),
         0,
-        25,
         18,
+        25,
         HiddenTreasurePickup::Gem,
         3,
         HiddenTreasureRule::OneShot,
@@ -4859,8 +4887,8 @@ pub const FIXED_HIDDEN_TREASURES: &[FixedHiddenTreasureEntry] = &[
         88,
         HiddenTreasureTarget::Town(21),
         0,
-        2,
         13,
+        2,
         HiddenTreasurePickup::Scroll,
         1,
         HiddenTreasureRule::OneShot,
@@ -4869,8 +4897,8 @@ pub const FIXED_HIDDEN_TREASURES: &[FixedHiddenTreasureEntry] = &[
         89,
         HiddenTreasureTarget::Town(21),
         0,
-        2,
         14,
+        2,
         HiddenTreasurePickup::Scroll,
         1,
         HiddenTreasureRule::OneShot,
@@ -4879,8 +4907,8 @@ pub const FIXED_HIDDEN_TREASURES: &[FixedHiddenTreasureEntry] = &[
         90,
         HiddenTreasureTarget::Town(21),
         0,
-        2,
         16,
+        2,
         HiddenTreasurePickup::Scroll,
         1,
         HiddenTreasureRule::OneShot,
@@ -4899,8 +4927,8 @@ pub const FIXED_HIDDEN_TREASURES: &[FixedHiddenTreasureEntry] = &[
         92,
         HiddenTreasureTarget::Town(22),
         0,
-        12,
         3,
+        12,
         HiddenTreasurePickup::RingOfKeys,
         5,
         HiddenTreasureRule::OneShot,
@@ -4909,8 +4937,8 @@ pub const FIXED_HIDDEN_TREASURES: &[FixedHiddenTreasureEntry] = &[
         93,
         HiddenTreasureTarget::Town(23),
         0,
-        1,
         15,
+        1,
         HiddenTreasurePickup::Amulet,
         47,
         HiddenTreasureRule::OneShot,
@@ -4919,8 +4947,8 @@ pub const FIXED_HIDDEN_TREASURES: &[FixedHiddenTreasureEntry] = &[
         94,
         HiddenTreasureTarget::Town(24),
         0,
-        22,
         19,
+        22,
         HiddenTreasurePickup::RingOfKeys,
         1,
         HiddenTreasureRule::OneShot,
@@ -4929,8 +4957,8 @@ pub const FIXED_HIDDEN_TREASURES: &[FixedHiddenTreasureEntry] = &[
         95,
         HiddenTreasureTarget::Town(24),
         0,
-        22,
         19,
+        22,
         HiddenTreasurePickup::Potion,
         3,
         HiddenTreasureRule::OneShot,
@@ -4939,8 +4967,8 @@ pub const FIXED_HIDDEN_TREASURES: &[FixedHiddenTreasureEntry] = &[
         96,
         HiddenTreasureTarget::Town(25),
         0,
-        16,
         25,
+        16,
         HiddenTreasurePickup::Scroll,
         1,
         HiddenTreasureRule::OneShot,
@@ -4949,8 +4977,8 @@ pub const FIXED_HIDDEN_TREASURES: &[FixedHiddenTreasureEntry] = &[
         97,
         HiddenTreasureTarget::Town(26),
         0,
-        4,
         11,
+        4,
         HiddenTreasurePickup::Amulet,
         46,
         HiddenTreasureRule::OneShot,
@@ -4959,8 +4987,8 @@ pub const FIXED_HIDDEN_TREASURES: &[FixedHiddenTreasureEntry] = &[
         98,
         HiddenTreasureTarget::Town(27),
         0,
-        17,
         11,
+        17,
         HiddenTreasurePickup::Potion,
         5,
         HiddenTreasureRule::OneShot,
@@ -4969,8 +4997,8 @@ pub const FIXED_HIDDEN_TREASURES: &[FixedHiddenTreasureEntry] = &[
         99,
         HiddenTreasureTarget::Town(27),
         0,
-        17,
         10,
+        17,
         HiddenTreasurePickup::Potion,
         4,
         HiddenTreasureRule::OneShot,
@@ -4979,8 +5007,8 @@ pub const FIXED_HIDDEN_TREASURES: &[FixedHiddenTreasureEntry] = &[
         100,
         HiddenTreasureTarget::Town(28),
         0,
-        22,
         19,
+        22,
         HiddenTreasurePickup::Scroll,
         5,
         HiddenTreasureRule::OneShot,
@@ -4989,8 +5017,8 @@ pub const FIXED_HIDDEN_TREASURES: &[FixedHiddenTreasureEntry] = &[
         101,
         HiddenTreasureTarget::Town(30),
         2,
-        9,
         23,
+        9,
         HiddenTreasurePickup::Ring,
         42,
         HiddenTreasureRule::OneShot,
@@ -4999,8 +5027,8 @@ pub const FIXED_HIDDEN_TREASURES: &[FixedHiddenTreasureEntry] = &[
         102,
         HiddenTreasureTarget::Town(30),
         2,
-        7,
         23,
+        7,
         HiddenTreasurePickup::Amulet,
         46,
         HiddenTreasureRule::OneShot,
@@ -5009,8 +5037,8 @@ pub const FIXED_HIDDEN_TREASURES: &[FixedHiddenTreasureEntry] = &[
         103,
         HiddenTreasureTarget::Town(30),
         2,
-        7,
         20,
+        7,
         HiddenTreasurePickup::Potion,
         7,
         HiddenTreasureRule::OneShot,
@@ -5019,8 +5047,8 @@ pub const FIXED_HIDDEN_TREASURES: &[FixedHiddenTreasureEntry] = &[
         104,
         HiddenTreasureTarget::Town(30),
         1,
-        19,
         22,
+        19,
         HiddenTreasurePickup::Weapon,
         18,
         HiddenTreasureRule::OneShot,
@@ -5029,8 +5057,8 @@ pub const FIXED_HIDDEN_TREASURES: &[FixedHiddenTreasureEntry] = &[
         105,
         HiddenTreasureTarget::Town(30),
         1,
-        17,
         22,
+        17,
         HiddenTreasurePickup::Amulet,
         46,
         HiddenTreasureRule::OneShot,
@@ -5039,8 +5067,8 @@ pub const FIXED_HIDDEN_TREASURES: &[FixedHiddenTreasureEntry] = &[
         106,
         HiddenTreasureTarget::Town(31),
         0,
-        3,
         6,
+        3,
         HiddenTreasurePickup::Potion,
         1,
         HiddenTreasureRule::OneShot,
@@ -5049,8 +5077,8 @@ pub const FIXED_HIDDEN_TREASURES: &[FixedHiddenTreasureEntry] = &[
         107,
         HiddenTreasureTarget::Town(31),
         0,
-        7,
         19,
+        7,
         HiddenTreasurePickup::Food,
         20,
         HiddenTreasureRule::OneShot,
@@ -5059,8 +5087,8 @@ pub const FIXED_HIDDEN_TREASURES: &[FixedHiddenTreasureEntry] = &[
         108,
         HiddenTreasureTarget::Town(32),
         1,
-        21,
         8,
+        21,
         HiddenTreasurePickup::Potion,
         7,
         HiddenTreasureRule::OneShot,
@@ -5069,8 +5097,8 @@ pub const FIXED_HIDDEN_TREASURES: &[FixedHiddenTreasureEntry] = &[
         109,
         HiddenTreasureTarget::Town(1),
         1,
-        24,
         19,
+        24,
         HiddenTreasurePickup::Food,
         16,
         HiddenTreasureRule::OneShot,
@@ -5079,8 +5107,8 @@ pub const FIXED_HIDDEN_TREASURES: &[FixedHiddenTreasureEntry] = &[
         110,
         HiddenTreasureTarget::Town(1),
         1,
-        24,
         20,
+        24,
         HiddenTreasurePickup::Food,
         13,
         HiddenTreasureRule::OneShot,
@@ -5180,6 +5208,41 @@ mod hidden_treasure_record_15_spec_tests {
         // Even a stale bit (e.g. from an older save) does not close it.
         state.set_fixed_hidden_treasure_found(entry.record);
         assert!(state.fixed_hidden_treasure_rule_allows(entry, entry.x, entry.y));
+    }
+
+    /// `hidden-treasures.md §3` "Shared cells" and "Body cells with an item"
+    /// (added 2026-10-25, u5-spec#300 Q1): Yew records 43 (rotting body) and
+    /// 45 (Spear) share X 16, Y 3. The first Search stages 43, the second 45
+    /// while 43 still lies there, a third finds nothing; Get skips the body
+    /// and takes the Spear.
+    #[test]
+    fn spec300_q1_shared_cell_stages_each_record_in_turn() {
+        let target = super::HiddenTreasureTarget::Town(4);
+        let mut state = crate::test_fixtures::test_state(crate::test_fixtures::open_grid(), 15, 3);
+        state.area = Area::Town {
+            scene: Scene::new(4).unwrap(),
+            floor: 0,
+        };
+
+        assert_eq!(
+            state.search_fixed_hidden_treasure_at(target, 0, 16, 3),
+            Some(MoveOutcome::Searched)
+        );
+        assert!(state.fixed_hidden_treasure_pickup_exists(43));
+        assert_eq!(
+            state.search_fixed_hidden_treasure_at(target, 0, 16, 3),
+            Some(MoveOutcome::Searched)
+        );
+        assert!(state.fixed_hidden_treasure_pickup_exists(45));
+        assert_eq!(state.search_fixed_hidden_treasure_at(target, 0, 16, 3), None);
+
+        assert_eq!(
+            state.get_fixed_hidden_treasure_pickup_at(16, 3),
+            Some(MoveOutcome::Got)
+        );
+        assert_eq!(state.message, "\nSpear!");
+        assert!(state.fixed_hidden_treasure_pickup_exists(43));
+        assert!(!state.fixed_hidden_treasure_pickup_exists(45));
     }
 }
 

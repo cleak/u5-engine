@@ -153,10 +153,10 @@ fn inn_pickup_from_a_far_slot_rotates_records_and_registry_slots() {
     let tail = SAVE_CHARACTER_RECORD_LEN - 1;
     assert_eq!(saved[SAVE_PARTY_SIZE_OFFSET], 2);
     for (saved_slot, template_slot) in [(1, 3), (2, 1), (3, 2)] {
-        let mut expected = roster_record_bytes(&template, template_slot).to_vec();
-        if template_slot == 3 {
-            expected[SAVE_CHARACTER_STAY_COUNTER_OFFSET] = 25;
-        }
+        // `shops.md §8.4` `P`: every byte of the moved record travels with
+        // it, and R587 leaves a counter of 25 or more - the shipped `0xFF`
+        // included - unchanged, so pickup does not clamp it to 25.
+        let expected = roster_record_bytes(&template, template_slot).to_vec();
         assert_eq!(
             &roster_record_bytes(&saved, saved_slot)[..tail],
             &expected[..tail],

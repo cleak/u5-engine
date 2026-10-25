@@ -233,6 +233,53 @@ fn spec300_q19_scare_talk_prints_begone_vermin_and_damages_the_party() {
     assert_eq!(&state.npcs[0].schedule[..3], &[7, 7, 7]);
 }
 
+/// `conversation.md §2` step 5, the scare index row (added 2026-10-25,
+/// u5-spec#300 Q19, R601): Talk on `0xFE` prints `"Begone,` / `vermin!"`
+/// after the dispatcher's feed, then runs the whole-party damage pass (each
+/// non-Dead slot takes its own `1..8`) and the flight helper. On an explicit
+/// Talk the helper does not get the talked-to NPC, so that record keeps its
+/// schedule; on automatic contact it is the contacting NPC.
+#[test]
+fn p6town_scare_talk_prints_begone_and_damages_the_living_party() {
+    let npcs = [
+        NpcSlot { slot: 0, type_byte: 0, dialog_id: 0, schedule: [0; 16], name: None },
+        NpcSlot {
+            slot: 1,
+            type_byte: 0x50,
+            dialog_id: TOWN_NPC_BRUSHOFF_DIALOG_ID,
+            schedule: [7, 7, 7, 2, 2, 2, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0],
+            name: None,
+        },
+    ];
+    let mut state = test_state(open_grid(), 1, 1);
+    state.player.facing = Direction::East;
+    let template = state.party[0].clone();
+    state.party[0].hp = 100;
+    state.party.push(PartyMember { slot: 1, hp: 100, status: b'D', ..template.clone() });
+    state.party.push(PartyMember { slot: 2, hp: 100, status: b'S', ..template });
+    state.load_scheduled_npcs(&npcs);
+
+    assert_eq!(state.talk_facing_with_dialogue(&HashMap::new()), MoveOutcome::Talked);
+
+    assert_eq!(state.message, format!("\n{TOWN_NPC_BRUSHOFF_RESPONSE}"));
+    assert_eq!(TOWN_NPC_BRUSHOFF_RESPONSE, "\"Begone,\nvermin!\"");
+    for slot in [0, 2] {
+        let lost = 100 - state.party[slot].hp;
+        assert!((1..=8).contains(&lost), "slot {slot} lost {lost}");
+    }
+    assert_eq!(state.party[1].hp, 100, "a Dead slot is skipped");
+    assert_eq!(&state.npcs[0].schedule[..3], &[7, 7, 7]);
+
+    // Automatic conversation contact hands the flight helper the contacting NPC.
+    let mut state = test_state(open_grid(), 1, 1);
+    state.player.facing = Direction::East;
+    state.load_scheduled_npcs(&npcs);
+    state.talk_entered_by_contact = true;
+    state.talk_facing_with_dialogue(&HashMap::new());
+    state.talk_entered_by_contact = false;
+    assert_eq!(&state.npcs[0].schedule[..3], &[3, 3, 3]);
+}
+
 /// Playtest K19. `view.md §3` step 3 reads the Look target "through the
 /// shared live-map tile query", and `town-mode.md §15` has that accessor
 /// return the loaded floor's `(31,31)` cell for any out-of-range coordinate,

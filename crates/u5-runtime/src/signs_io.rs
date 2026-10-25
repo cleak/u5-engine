@@ -4,17 +4,20 @@
 //! of 33 scene-block offsets, variable-size scene blocks of records, and
 //! per-record `[scene, z, x, y]` headers followed by NUL-terminated payloads.
 //!
-//! The decoder produces a printable approximation of the on-disk payload:
+//! The decoder produces a printable approximation of the on-disk payload
+//! (`formats/signs-dat.md §4`, corrected 2026-10-25, u5-spec#300 Q13/Q21,
+//! `RETRACTIONS.md` R600). The control tests compare the **raw** byte:
 //! - `0x00` ends the record;
-//! - `0x0D` becomes a [`crate::text_hold`] wait-key marker: §4 "pauses for
-//!   a keypress and then resumes printing", so the Look path holds the rest
-//!   of the sign behind a key;
-//! - `0x29..=0x31` decoration-fragment bytes are emitted as a single ASCII
+//! - raw `0x0D` becomes a [`crate::text_hold`] wait-key marker: it "switches
+//!   to the Roman font and waits for a key";
+//! - raw `0x29..=0x31` decoration-fragment bytes are emitted as a single ASCII
 //!   sentinel character because the resident macro pool is not in the public
 //!   spec; consumers that need the original glyph must resolve fragments at
 //!   render time;
-//! - `0x26` and `0x27` divider bytes both become `'-'`;
-//! - other bytes are emitted as their low-seven-bit character.
+//! - raw `0x26` and `0x27` divider bytes both print the runic `l` bar (`'-'`
+//!   in the plain-text view);
+//! - every other byte prints its low seven bits, in the runic font when its
+//!   high bit is clear and the Roman font when set ([`sign_payload_rendered`]).
 
 use std::io;
 use std::path::Path;
@@ -66,9 +69,9 @@ pub enum SignBodyByteKind {
     /// `0x26` or `0x27` — separator glyph used as a decorative
     /// divider in shipped records.
     SeparatorGlyph,
-    /// Anything else — print the low-seven-bit character value;
-    /// the high bit controls a presentation-mode toggle in the
-    /// text-output layer rather than the printed glyph.
+    /// Anything else — print the low-seven-bit character value, in the
+    /// font the byte's high bit selects (clear: runic, set: Roman;
+    /// `formats/signs-dat.md §4`, R600).
     Character(u8),
 }
 
@@ -76,9 +79,9 @@ pub enum SignBodyByteKind {
 /// terminates the current sign record; the record scanner advances
 /// to the next record after seeing it.
 pub const SIGN_BODY_END_OF_RECORD: u8 = 0x00;
-/// `formats/signs-dat.md §4` pause-for-key byte. The byte `0x0D`
-/// pauses sign rendering until the player presses a key and then
-/// resumes printing.
+/// `formats/signs-dat.md §4` pause-for-key byte. Only the raw byte `0x0D`
+/// pauses sign rendering until the player presses a key; `0x8D` is an
+/// ordinary byte that reaches the cell emitter as a carriage return (R600).
 pub const SIGN_BODY_PAUSE_FOR_KEY: u8 = 0x0D;
 /// `formats/signs-dat.md §4`/§6: an explicit line feed in the authored
 /// stream (low seven bits `0x0A`); also the alias-bridge separator (§3).
@@ -94,13 +97,33 @@ pub const SIGN_BODY_MACRO_LAST: u8 = 0x31;
 /// Shipped records pair this with `SIGN_BODY_SEPARATOR_GLYPH_B` as
 /// a decorative divider; both render the same separator glyph.
 pub const SIGN_BODY_SEPARATOR_GLYPH_A: u8 = 0x26;
+/// `formats/signs-dat.md §4`: a separator "prints one cell in the runic font
+/// at the code point of lowercase `l`, which in that font is a full-width
+/// horizontal bar" (u5-spec#300 Q13).
+pub const SIGN_SEPARATOR_RUNIC_CODE_POINT: u8 = b'l';
+/// `formats/signs-dat.md §4` high bit: set selects the Roman text font, clear
+/// selects the runic font (u5-spec#300 Q13, R600).
+pub const SIGN_BODY_ROMAN_FONT_BIT: u8 = 0x80;
+/// `formats/signs-dat.md §6` "The no-record placard" (added 2026-10-25,
+/// u5-spec#300 Q13): "a fixed six-row framed placard from resident text, in
+/// the runic font" whose inner rows read "LIVE BY THE / EIGHT LAWS". Each row
+/// is sixteen cells "and ends with a line feed carried in the same stored
+/// string".
+pub const SIGN_NO_RECORD_PLACARD_ROWS: [&str; 6] = [
+    "abbbbbbbbbbbbbbc",
+    "g              g",
+    "g  LIVE@BY@[E  g",
+    "g  EIGHT@LAWS  g",
+    "g              g",
+    "deeeeeeeeeeeeeef",
+];
 /// `formats/signs-dat.md §4` second separator-glyph byte (`0x27`).
 /// Anchored to SIGN_BODY_SEPARATOR_GLYPH_A + 1 so the paired
 /// adjacent bytes have one source of truth.
 pub const SIGN_BODY_SEPARATOR_GLYPH_B: u8 = SIGN_BODY_SEPARATOR_GLYPH_A + 1;
 /// `formats/signs-dat.md §4` low-seven-bit character mask. Ordinary
-/// printable bytes render the low seven bits; the high bit is a
-/// presentation-mode toggle owned by the surrounding Look renderer.
+/// printable bytes render the low seven bits; the high bit selects the font
+/// for that byte (R600), and is removed only when printing an ordinary byte.
 pub const SIGN_BODY_CHARACTER_MASK: u8 = 0x7F;
 
 /// `formats/signs-dat.md §4`: classify a single payload byte for
@@ -124,6 +147,9 @@ pub struct SignRecord {
     pub y: u8,
     pub x: u8,
     pub body: String,
+    /// The raw payload bytes behind `body` (alias bridges resolved), kept so
+    /// the per-byte font of `formats/signs-dat.md §4` survives decoding.
+    pub payload: Vec<u8>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -207,13 +233,14 @@ fn parse_scene_block(
         if cursor >= end || bytes[cursor] == 0 {
             for index in 0..raw_records.len() {
                 let raw = &raw_records[index];
-                let body = resolve_sign_body(bytes, &raw_records, index, directory_scene)?;
+                let payload = resolve_sign_body(bytes, &raw_records, index, directory_scene)?;
                 out.push(SignRecord {
                     scene: raw.scene,
                     z: raw.z,
                     y: raw.y,
                     x: raw.x,
-                    body,
+                    body: decode_sign_payload(&payload),
+                    payload,
                 });
             }
             return Ok(());
@@ -267,7 +294,7 @@ fn resolve_sign_body(
     raw_records: &[RawSignRecord],
     index: usize,
     directory_scene: u8,
-) -> io::Result<String> {
+) -> io::Result<Vec<u8>> {
     let mut resolved_index = index;
     while is_alias_bridge_payload(record_payload(bytes, &raw_records[resolved_index])) {
         let next_index = resolved_index + 1;
@@ -283,10 +310,7 @@ fn resolve_sign_body(
         }
         resolved_index = next_index;
     }
-    Ok(decode_sign_payload(record_payload(
-        bytes,
-        &raw_records[resolved_index],
-    )))
+    Ok(record_payload(bytes, &raw_records[resolved_index]).to_vec())
 }
 
 fn record_payload<'a>(bytes: &'a [u8], record: &RawSignRecord) -> &'a [u8] {
@@ -309,51 +333,83 @@ fn is_alias_bridge_payload(payload: &[u8]) -> bool {
 pub fn decode_sign_payload(bytes: &[u8]) -> String {
     let mut out = String::with_capacity(bytes.len());
     for &byte in bytes {
-        // `formats/signs-dat.md §4`: "Bytes `0x29..0x31`" select macro
-        // fragments and "Bytes `0x26` and `0x27`" the separator glyph; "Other
-        // bytes print as their low-seven-bit character value", and the high
-        // bit "does not change which low-seven-bit character is emitted". The
-        // macro and separator tests are on the raw byte, as
-        // [`sign_body_byte_kind`] already classifies them: masking first
+        // `formats/signs-dat.md §4` (u5-spec#300 Q21, R600): "the control
+        // tests then compare the raw byte, high bit included". Masking first
         // turned high-bit `,` `.` `/` `0` `1` (`0xAC..0xB1`) into macro stars
-        // and a high-bit `'` into a separator (playtest K01).
+        // and a high-bit `'` into a separator (playtest K01). The plain-text
+        // view draws the runic bar as `-`; [`sign_payload_rendered`] carries
+        // the fonts.
         match byte {
-            SIGN_BODY_SEPARATOR_GLYPH_A | SIGN_BODY_SEPARATOR_GLYPH_B => {
-                out.push('-');
-                continue;
+            SIGN_BODY_END_OF_RECORD => break,
+            SIGN_BODY_PAUSE_FOR_KEY => {
+                out.push(char::from(crate::text_hold::TEXT_HOLD_WAIT_KEY_MARKER))
             }
-            SIGN_BODY_MACRO_FIRST..=SIGN_BODY_MACRO_LAST => {
-                out.push('*');
-                continue;
-            }
-            _ => {}
-        }
-        let low = byte & 0x7f;
-        match low {
-            0x00 => break,
-            0x0d => out.push(char::from(crate::text_hold::TEXT_HOLD_WAIT_KEY_MARKER)),
-            // `formats/signs-dat.md §4`: "preserve explicit newlines". The
-            // shipped streams end most authored rows with a high-bit line
-            // feed (`0x8A`), which the per-cell emitter turns into a row
-            // break with a column reset (`text-output.md §5`).
-            SIGN_BODY_LINE_FEED => out.push('\n'),
-            ch if (0x20..=0x7e).contains(&ch) => out.push(ch as char),
-            _ => {}
+            SIGN_BODY_SEPARATOR_GLYPH_A | SIGN_BODY_SEPARATOR_GLYPH_B => out.push('-'),
+            SIGN_BODY_MACRO_FIRST..=SIGN_BODY_MACRO_LAST => out.push('*'),
+            // Every other byte prints its low seven bits; `0x8D` is a
+            // carriage return, not a pause (see [`sign_payload_rendered`]).
+            _ => match byte & SIGN_BODY_CHARACTER_MASK {
+                SIGN_BODY_LINE_FEED => out.push('\n'),
+                ch if (0x20..=0x7e).contains(&ch) => out.push(ch as char),
+                _ => {}
+            },
         }
     }
     out
 }
 
+/// `formats/signs-dat.md §4` (corrected 2026-10-25, u5-spec#300 Q13 and Q21,
+/// `RETRACTIONS.md` R600): decode a payload into display cells, each carrying
+/// its font. "The high bit selects the font for that byte" (clear: runic,
+/// set: Roman), "the control tests then compare the raw byte, high bit
+/// included", and the high bit "is removed only when printing an ordinary
+/// byte". So `0xA6`/`0xA7` print the Roman `&`/`'`, `0xA9..0xB1` the Roman
+/// characters at `0x29..0x31`, and `0x8D` "reaches the cell emitter as a
+/// carriage return (column reset, no glyph), not a pause"; no shipped record
+/// carries one, and this string model has no overwrite, so it emits nothing.
+pub fn sign_payload_rendered(bytes: &[u8]) -> crate::tlk_runner::TlkRenderedText {
+    use crate::tlk_runner::{TlkGlyphFont, TlkRenderedGlyph, TlkRenderedText};
+    let mut out = TlkRenderedText::default();
+    let mut push = |byte: u8, font: TlkGlyphFont| {
+        out.text.push(char::from(byte));
+        out.glyphs.push(TlkRenderedGlyph { byte, font });
+    };
+    for &byte in bytes {
+        match byte {
+            SIGN_BODY_END_OF_RECORD => break,
+            SIGN_BODY_PAUSE_FOR_KEY => push(
+                crate::text_hold::TEXT_HOLD_WAIT_KEY_MARKER,
+                TlkGlyphFont::Ordinary,
+            ),
+            SIGN_BODY_SEPARATOR_GLYPH_A | SIGN_BODY_SEPARATOR_GLYPH_B => {
+                push(SIGN_SEPARATOR_RUNIC_CODE_POINT, TlkGlyphFont::Runic)
+            }
+            SIGN_BODY_MACRO_FIRST..=SIGN_BODY_MACRO_LAST => push(b'*', TlkGlyphFont::Ordinary),
+            _ => {
+                let font = if byte & SIGN_BODY_ROMAN_FONT_BIT != 0 {
+                    TlkGlyphFont::Ordinary
+                } else {
+                    TlkGlyphFont::Runic
+                };
+                match byte & SIGN_BODY_CHARACTER_MASK {
+                    // `text-output.md §5`: a line feed is a row break with a
+                    // column reset, drawn in neither font.
+                    SIGN_BODY_LINE_FEED => push(b'\n', TlkGlyphFont::Ordinary),
+                    ch if (0x20..=0x7e).contains(&ch) => push(ch, font),
+                    _ => {}
+                }
+            }
+        }
+    }
+    out
+}
+
+/// `formats/signs-dat.md §5` step 6 (corrected 2026-10-25, u5-spec#300 Q13,
+/// `RETRACTIONS.md` R598): "The first matching record is printed through the
+/// sign formatter and the scan stops; a later record with the same coordinate
+/// is never shown."
 pub fn find_sign(records: &[SignRecord], scene: u8, z: u8, y: u8, x: u8) -> Option<&SignRecord> {
     records
         .iter()
         .find(|r| r.scene == scene && r.z == z && r.y == y && r.x == x)
-}
-
-pub fn matching_sign_bodies(records: &[SignRecord], scene: u8, z: u8, y: u8, x: u8) -> Vec<&str> {
-    records
-        .iter()
-        .filter(|r| r.scene == scene && r.z == z && r.y == y && r.x == x)
-        .map(|r| r.body.as_str())
-        .collect()
 }

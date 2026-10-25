@@ -29,6 +29,21 @@ pub const Z_STATS_NONE_OWNED_PLACEHOLDER: &str = "(None owned!)";
 pub const Z_STATS_EQUIPMENT_SLOTS: usize = 6;
 pub const Z_STATS_ARMAMENTS_SLOTS: usize = 48;
 pub const Z_STATS_SPELLS_SLOTS: usize = 48;
+
+/// `inventory.md` §4.7 "The Spells page rows and their labels" (added
+/// 2026-10-25, u5-spec#300 Q11): each spell's label, indexed by spell id, "the
+/// rune phrases of `catalogs/spell-list.md` cut to ten cells, stored that way
+/// rather than shortened at run time. Some cuts fall mid-word and some keep
+/// only initials; use them exactly as given."
+pub const Z_STATS_SPELL_LABELS: [&str; Z_STATS_SPELLS_SLOTS] = [
+    "In Lor", "Grav Por", "An Zu", "An Nox", "Mani", "An Ylem", "An Sanct", "An Xen Cor",
+    "Rel Hur", "In Wis", "Kal Xen", "In Xen Man", "Vas Lor", "Vas Flam", "In Flam Gr",
+    "In Nox Gr", "In Zu Grav", "In Por", "An Grav", "In Sanct", "In Sanct G", "Uus Por",
+    "Des Por", "Wis Quas", "In Bet Xen", "An Ex Por", "In Ex Por", "Vas Mani", "In Zu",
+    "Rel Tym", "In Vas P Y", "Quas An Wi", "In An", "Wis An Yle", "An Xen Ex", "Rel Xen Be",
+    "Sanct Lo", "Xen Corp", "In Quas Xe", "In Quas Wi", "In Nox Hur", "In Quas Co",
+    "In Mani Co", "Kal Xen Co", "In Vas G C", "In Flam Hu", "Vas Rel Po", "An Tym",
+];
 pub const Z_STATS_REAGENTS_SLOTS: usize = 8;
 pub const Z_STATS_ITEMS_SLOTS: usize = 38;
 

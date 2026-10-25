@@ -530,21 +530,24 @@ pub const TOWN_NPC_BRUSHOFF_DIALOG_ID: u8 = 0xFE;
 /// refusal (playtest K12).
 pub const TOWN_NPC_COWERING_RESPONSE: &str = "\"Don't hurt me!\nPlease go away!\"";
 
+/// `conversation.md §2` step 5, "The dispatcher's own lines" (added
+/// 2026-10-25, u5-spec#300 Q19): the scare index (`0xFE`) prints
+/// `"Begone,` ⏎ `vermin!"` - "the double quotes are part of the literal and
+/// its own line feed ends the second row". As with
+/// [`TOWN_NPC_COWERING_RESPONSE`], the closing line feed comes from the
+/// message-row framing.
+pub const TOWN_NPC_BRUSHOFF_RESPONSE: &str = "\"Begone,\nvermin!\"";
+
 /// `conversation.md §2` step 5: the cowering and scare indices are two of the
 /// five dispatcher branches, "and every one of them follows the dispatcher's
 /// own leading line feed".
 ///
-/// The scare index then "hand[s] off to the town scare-and-flee helper ...
-/// neither hand-off was entered in this pass, so no literals are established"
-/// (`OPEN-QUESTIONS.md`). The engine used to print an invented
-/// `Begone, vermin!` there (playtest K13); it now prints only the leading
-/// feed and leaves the hand-off's own text as an open spec question.
+/// The scare index then runs the whole-party damage pass and the forced-flight
+/// helper (`town-mode.md` Section 14); the caller owns both.
 pub fn town_npc_dispatcher_sentinel_line(dialog_id: u8) -> Option<String> {
     match dialog_id {
         TOWN_NPC_COWERING_DIALOG_ID => Some(format!("\n{TOWN_NPC_COWERING_RESPONSE}")),
-        // `town-mode.md §14` / `conversation.md §2` (u5-spec#300 Q19): the
-        // dispatcher's leading line feed and `"Begone,` / `vermin!"`.
-        TOWN_NPC_BRUSHOFF_DIALOG_ID => Some(format!("\n{TOWN_NPC_BRUSHOFF_LINE}")),
+        TOWN_NPC_BRUSHOFF_DIALOG_ID => Some(format!("\n{TOWN_NPC_BRUSHOFF_RESPONSE}")),
         _ => None,
     }
 }

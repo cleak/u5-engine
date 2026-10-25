@@ -3117,7 +3117,7 @@ fn inn_party_cap_anchors_to_save_party_size_max() {
 #[test]
 fn inn_stay_counter_month_rollover_cap_anchors_to_persistence_cap() {
     // shops.md §6 & §8.4: the inn registry's stored stay counter
-    // is bumped each 28-day month rollover and capped at 25; the
+    // is bumped each 28-day month rollover while below 25 (R587); the
     // persistence path clamps the same counter to the same value
     // when serializing the inn registry. The two constants must
     // stay coupled — INN_STAY_COUNTER_MAX is now anchored to
@@ -6128,38 +6128,50 @@ fn rare_reagent_harvest_quantity_span_matches_min_max_band() {
     }
 }
 
+/// `catalogs/item-list.md §7.2` "Draw order of the variation roll" (added
+/// 2026-10-25, u5-spec#300 Q23): first draw `0` forces Orange, `1` takes the
+/// second draw's id, `2..15` keep the selected colour.
 #[test]
 fn potion_variation_threshold_constants_match_spec() {
-    // inventory.md §7: the consumed-potion variation roll has
-    // fourteen of sixteen outcomes (0..=13) preserve the chosen
-    // colour's effect; roll value 14 forces Orange sleep; the
-    // remaining outcome (15) substitutes a uniformly random
-    // potion id from `0..=7`. Promote the threshold, the forced-
-    // Orange exact roll, and the random-substitution mask so
-    // potion_effect_index_after_variation does not bake `13`,
-    // `14`, `0x0F`, and `0x07` as bare literals.
     assert_eq!(POTION_VARIATION_ROLL_MASK, 0x0F);
-    assert_eq!(POTION_VARIATION_SELECTED_THRESHOLD, 13);
-    assert_eq!(POTION_VARIATION_FORCED_ORANGE_ROLL, 14);
+    assert_eq!(POTION_VARIATION_FORCED_ORANGE_ROLL, 0);
+    assert_eq!(POTION_VARIATION_RANDOM_ID_ROLL, 1);
+    assert_eq!(POTION_VARIATION_SELECTED_FIRST, 2);
     assert_eq!(POTION_VARIATION_RANDOM_INDEX_MASK, 0x07);
-    // Roll 0..=13 -> selected colour.
-    for roll in 0u8..=POTION_VARIATION_SELECTED_THRESHOLD {
+    for roll in POTION_VARIATION_SELECTED_FIRST..=15 {
         assert_eq!(
             potion_effect_index_after_variation(POTION_RED_INDEX, roll, 0),
             POTION_RED_INDEX
         );
     }
-    // Roll 14 -> Orange.
     assert_eq!(
-        potion_effect_index_after_variation(POTION_RED_INDEX, 14, 0),
+        potion_effect_index_after_variation(POTION_RED_INDEX, 0, 3),
         POTION_ORANGE_INDEX
     );
-    // Roll 15 -> random potion (the helper masks the random byte
-    // to POTION_VARIATION_RANDOM_INDEX_MASK).
     assert_eq!(
-        potion_effect_index_after_variation(POTION_RED_INDEX, 15, 3),
+        potion_effect_index_after_variation(POTION_RED_INDEX, 1, 3),
         3
     );
+}
+
+/// u5-spec#300 Q23: "A use therefore consumes one gameplay draw, or two when
+/// the first result is exactly `1`."
+#[test]
+fn potion_variation_makes_the_second_draw_only_after_a_first_draw_of_one() {
+    let mut state = test_state(open_grid(), 1, 1);
+    for seed in 1..=512u16 {
+        state.prng_state = seed;
+        let mut first = state.clone();
+        let roll = first.potion_variation_roll();
+        let after_first = first.prng_state;
+        state.prng_state = seed;
+        let _ = state.potion_effect_index_after_variation_roll(POTION_RED_INDEX);
+        if roll == POTION_VARIATION_RANDOM_ID_ROLL {
+            assert_ne!(state.prng_state, after_first, "seed {seed}");
+        } else {
+            assert_eq!(state.prng_state, after_first, "seed {seed}");
+        }
+    }
 }
 
 #[test]
@@ -9165,6 +9177,10 @@ fn chargen_seed_inventory_constants_match_published_seed() {
     assert_eq!(CHARGEN_SEED_REAGENT_MANDRAKE, 0);
 }
 
+/// `time.md §8` (corrected 2026-10-25, u5-spec#300 Q8, R587): the rollover
+/// adds one only below 25; 25 or more, the shipped `0xFF` included, is left
+/// unchanged rather than clamped (executed on 0, 1, 24, 25, 26, 127, 128,
+/// 255).
 #[test]
 fn age_character_month_counter_adds_one_only_below_twenty_five() {
     // time.md §8 (u5-spec#300 Q8, R587): "Executed on the original clock
@@ -9183,6 +9199,26 @@ fn age_character_month_counter_adds_one_only_below_twenty_five() {
     for counter in [26u8, 127, 128, u8::MAX] {
         assert_eq!(age_character_month_counter(counter), counter);
     }
+    assert_eq!(CHARACTER_MONTH_COUNTER_CAP, 25);
+}
+
+#[test]
+fn age_character_month_counter_advances_only_below_twenty_five() {
+    for (before, after) in [
+        (0u8, 1u8),
+        (1, 2),
+        (24, 25),
+        (25, 25),
+        (26, 26),
+        (127, 127),
+        (128, 128),
+        (255, 255),
+    ] {
+        assert_eq!(age_character_month_counter(before), after, "{before}");
+    }
+    let mut counters = [0u8, 24, 25, 0xFF];
+    age_stay_counters_month(&mut counters);
+    assert_eq!(counters, [1, 25, 25, 0xFF]);
     assert_eq!(CHARACTER_MONTH_COUNTER_CAP, 25);
 }
 
@@ -17996,45 +18032,6 @@ fn apply_timing_tag_increment_matches_spec_rules() {
     // T tag: suppress entirely
     assert_eq!(apply_timing_tag_increment(2, b'T'), None);
     assert_eq!(apply_timing_tag_increment(20, b'T'), None);
-}
-
-#[test]
-fn talk_liveness_gate_refusals_match_spec_priorities() {
-    // conversation.md §2
-    // Gate accepts when no refusal applies.
-    assert_eq!(talk_liveness_refusal(false, false, false, false), None);
-    // Single-condition refusals
-    assert_eq!(
-        talk_liveness_refusal(true, false, false, false),
-        Some(TalkRefusal::InCombat)
-    );
-    assert_eq!(
-        talk_liveness_refusal(false, true, false, false),
-        Some(TalkRefusal::Asleep)
-    );
-    assert_eq!(
-        talk_liveness_refusal(false, false, true, false),
-        Some(TalkRefusal::Starving)
-    );
-    assert_eq!(
-        talk_liveness_refusal(false, false, false, true),
-        Some(TalkRefusal::AlreadyInConversation)
-    );
-    // Combat takes priority over the others.
-    assert_eq!(
-        talk_liveness_refusal(true, true, true, true),
-        Some(TalkRefusal::InCombat)
-    );
-    // Asleep beats Starving + AlreadyInConversation.
-    assert_eq!(
-        talk_liveness_refusal(false, true, true, true),
-        Some(TalkRefusal::Asleep)
-    );
-    // Starving beats AlreadyInConversation.
-    assert_eq!(
-        talk_liveness_refusal(false, false, true, true),
-        Some(TalkRefusal::Starving)
-    );
 }
 
 #[test]

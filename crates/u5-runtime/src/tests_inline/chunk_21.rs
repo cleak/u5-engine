@@ -329,14 +329,22 @@ fn town_look_sign_terrain_tile_reads_signs_dat_or_the_blank_sign() {
     let mut state = test_state(grid, 1, 1);
 
     state.look_direction_with_game_dir(Direction::East, &dir).unwrap();
-    assert_eq!(state.message, format!("{LOOK_RESULT_PREFIX}\nPosted notice"));
+    assert_eq!(state.message, format!("{LOOK_RESULT_PREFIX}\n\nPosted notice"));
 
     state.look_direction_with_game_dir(Direction::South, &dir).unwrap();
     assert_eq!(state.message, format!("{LOOK_RESULT_PREFIX}\na sign"));
 
+    // `formats/signs-dat.md §6` (u5-spec#300 Q13): no record prints the
+    // six-row "LIVE BY THE / EIGHT LAWS" placard.
     state.player.y = 2;
     state.look_direction_with_game_dir(Direction::South, &dir).unwrap();
-    assert_eq!(state.message, format!("{LOOK_RESULT_PREFIX}\n"));
+    assert_eq!(
+        state.message,
+        format!(
+            "{LOOK_RESULT_PREFIX}\n\n{}\n",
+            SIGN_NO_RECORD_PLACARD_ROWS.join("\n")
+        )
+    );
     let _ = fs::remove_dir_all(dir);
 }
 
@@ -396,6 +404,9 @@ fn yew_wanted_poster_exception_uses_party_names_without_signs_dat() {
         state.message,
         [
             LOOK_RESULT_PREFIX,
+            // Row 5's own line break after the preamble's feed: one blank row
+            // (u5-spec#300 Q13).
+            "",
             "abbbbbbbbbbbbbc",
             "g   Wanted:   g",
             "g             g",
@@ -996,7 +1007,7 @@ fn town_look_renders_matching_signs_dat_record_and_spends_its_turn() {
         MoveOutcome::Observed
     );
 
-    assert_eq!(state.message, format!("{LOOK_RESULT_PREFIX}\nNorth Road"));
+    assert_eq!(state.message, format!("{LOOK_RESULT_PREFIX}\n\nNorth Road"));
     assert_eq!(state.turn, 1);
     assert_eq!(state.clock, GameClock::new(12, 1).unwrap());
     let _ = fs::remove_dir_all(dir);
@@ -2819,19 +2830,18 @@ fn town_talk_reports_nobody_and_still_spends_the_ordinary_turn() {
     assert_eq!(state.clock, GameClock::new(12, 1).unwrap());
 }
 
+/// `conversation.md §2` step 1 (corrected 2026-10-25, u5-spec#300 Q12,
+/// `RETRACTIONS.md` R596): there is no "can talk now" liveness gate. Talk
+/// tests no provisions, party status, combat or conversation state, so an
+/// asleep active member and a provision counter of zero still talk normally.
 #[test]
-fn town_talk_liveness_gate_blocks_before_lookup_without_printing() {
+fn town_talk_has_no_liveness_gate_for_starving_or_asleep_party() {
     let dialogue = parse_tlk_bytes(&tlk_bytes(&[(
         2,
         &["Ada", "a test smith", "Greetings", "I mend gear", "Bye"],
     )]))
     .unwrap();
-    let mut state = test_state(open_grid(), 1, 1);
-    state.message = "previous line".to_string();
-    state.player.facing = Direction::East;
-    state.active_player = Some(0);
-    state.party[0].status = b'S';
-    state.load_scheduled_npcs(&[
+    let npcs = [
         NpcSlot {
             slot: 0,
             type_byte: 0,
@@ -2846,15 +2856,25 @@ fn town_talk_liveness_gate_blocks_before_lookup_without_printing() {
             schedule: [0, 0, 0, 2, 2, 2, 1, 1, 1, 0, 0, 0, 0, 8, 16, 20],
             name: Some("Ada".to_string()),
         },
-    ]);
+    ];
+    for (food, asleep) in [(0u16, false), (0, true), (1, true)] {
+        let mut state = test_state(open_grid(), 1, 1);
+        state.message = "previous line".to_string();
+        state.player.facing = Direction::East;
+        state.food = food;
+        state.active_player = Some(0);
+        if asleep {
+            state.party[0].status = b'S';
+        }
+        state.load_scheduled_npcs(&npcs);
 
-    assert_eq!(
-        state.talk_facing_with_dialogue(&dialogue),
-        MoveOutcome::Blocked
-    );
-
-    assert_eq!(state.message, "previous line");
-    assert_eq!(state.turn, 1);
+        assert_eq!(
+            state.talk_facing_with_dialogue(&dialogue),
+            MoveOutcome::Talked,
+            "food {food}, asleep {asleep}"
+        );
+        assert!(state.message.contains("Greetings"), "food {food}, asleep {asleep}");
+    }
 }
 
 #[test]
@@ -4370,10 +4390,10 @@ fn active_conversation_keeps_numeric_signal_separate_from_falsehood_theft() {
     assert!(ended);
     assert!(state.active_conversation.is_none());
     assert_eq!(state.conversation_signal_flags[5], 1);
-    // Playtest K14: the stolen-goods line's wording is unpublished, so the
-    // farewell is not followed by an invented ` Stolen goods.`.
-    assert_eq!(text, "\n\"Farewell\"\n\n");
-    assert!(state.diagnostics_contain("stolen-goods line reached"));
+    // `conversation.md §10` (u5-spec#300 Q20): `Something was stolen!`, one
+    // blank row under the farewell, with its own closing line feed.
+    assert_eq!(text, "\n\"Farewell\"\n\nSomething was stolen!\n\n");
+    assert_eq!(crate::play_state_impl::TLK_FALSEHOOD_STOLEN_GOODS_LINE, "\nSomething was stolen!\n");
 }
 
 #[test]
@@ -6478,7 +6498,7 @@ fn cowering_talk_is_canned_without_a_tlk_record() {
 }
 
 #[test]
-fn brush_off_talk_skips_tlk_loading_and_attempts_forced_flight() {
+fn brush_off_talk_skips_tlk_loading_and_leaves_the_talked_to_npc_alone() {
     let dir = debug_game_dir();
     let mut state = test_state(open_grid(), 1, 1);
     state.player.facing = Direction::East;
@@ -6503,9 +6523,10 @@ fn brush_off_talk_skips_tlk_loading_and_attempts_forced_flight() {
         state.talk_facing_with_game_dir(&dir).unwrap(),
         MoveOutcome::Talked
     );
-    // u5-spec#300 Q19 (R601): the line prints, and the flight helper is not
-    // given the talked-to NPC's number, so that NPC keeps its schedule.
-    assert_eq!(state.message, format!("\n{TOWN_NPC_BRUSHOFF_LINE}"));
+    // `conversation.md §2` step 5 (u5-spec#300 Q19): the dispatcher's feed,
+    // then `"Begone,` / `vermin!"`. On an explicit typed Talk the flight
+    // helper does not receive the talked-to NPC, so its record is left alone.
+    assert_eq!(state.message, "\n\"Begone,\nvermin!\"");
     assert_eq!(state.npcs[0].dialog_id, TOWN_NPC_BRUSHOFF_DIALOG_ID);
     assert_eq!(&state.npcs[0].schedule[..3], &[7, 7, 7]);
     assert_eq!(state.turn, 1);

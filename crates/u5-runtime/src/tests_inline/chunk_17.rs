@@ -247,7 +247,7 @@
             state.active_z_stats.as_ref().map(|session| session.page),
             Some(ZStatsPage::Spells)
         );
-        assert!(z_stats_panel_text(&state).split('|').any(|line| line.trim_end() == " 2-IL"));
+        assert!(z_stats_panel_text(&state).split('|').any(|line| line.trim_end() == " 2-In Lor"));
         // No page counter, and none of the forty-seven zero-charge slots.
         assert!(
             !z_stats_panel_text(&state).contains("Rows"),
@@ -260,7 +260,7 @@
         // One displayable slot, so a forward scan finds no next non-zero slot
         // and the band stays where it is.
         assert!(state.step_active_z_stats(']', ""));
-        assert!(z_stats_panel_text(&state).split('|').any(|line| line.trim_end() == " 2-IL"));
+        assert!(z_stats_panel_text(&state).split('|').any(|line| line.trim_end() == " 2-In Lor"));
         assert!(!z_stats_panel_text(&state).contains("Rows"));
 
         // Ten displayable slots on a forty-eight-slot band: the panel holds
@@ -274,7 +274,7 @@
         // fit wraps, so an entry is recognised by its first display line.
         let shows = |state: &PlayState, index: usize| {
             let count = if index == 0 { 2 } else { 1 };
-            let head = format!("{count:>2}-{}", SPELL_CODES[index]);
+            let head = format!("{count:>2}-{}", Z_STATS_SPELL_LABELS[index]);
             let session = state.active_z_stats.clone().unwrap();
             state.z_stats_panel_rows(&session).iter().any(|row| {
                 row.strip_prefix(&head)
@@ -5615,9 +5615,9 @@ fn z_stats_shared_inventory_pages_use_the_counted_picker_row_and_wrap_long_label
     state.spell_charges[IN_LOR_SPELL_INDEX] = 99;
     open_z_stats_page_for_test(&mut state, ZStatsPage::Spells);
     let rows = z_stats_page_rows_for_test(&state);
-    // `inventory.md §4.5`: no spell-charge entry takes a second display
-    // line, so the label is the compact code (see `rc6_residuals.rs`).
-    assert_eq!(rows[0], "99-IL", "rows: {rows:?}");
+    // `inventory.md §4.7` (u5-spec#300 Q11): the published ten-cell label,
+    // which never takes a second display line (see `rc6_residuals.rs`).
+    assert_eq!(rows[0], "99-In Lor", "rows: {rows:?}");
 
     let helm = EQUIPMENT_NAMES.iter().position(|name| *name == "Leather Helm").unwrap();
     let shield = EQUIPMENT_NAMES.iter().position(|name| *name == "Spiked Shield").unwrap();

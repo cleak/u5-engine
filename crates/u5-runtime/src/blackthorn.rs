@@ -1577,7 +1577,12 @@ pub const BLACKTHORN_RESCUE_WAIT_AFTER_VERTIGO: u16 = 4;
 /// wall clock, because each beat also pays for two screenshots, and
 /// `StagedNarration` only advances when the frontend looks. There is no
 /// reliable tick-to-millisecond conversion to reason from here.
-pub const BLACKTHORN_RESCUE_WAIT_VIEWPORT_DISSOLVE: u16 = 60;
+/// Published since (`blackthorn.md §7.1` "Measured Stonegate segments",
+/// added 2026-10-25, u5-spec#301 Q5): at a fixed 3000-cycle emulator setting
+/// the "First dissolve, to black" ran from +28.20 to +29.86 s, **1.65 s**,
+/// with beat 2 at +29.89 s; 1.65 s at `narration::BIOS_TICK_SECS` is 30
+/// ticks. The bracketed sixty is withdrawn.
+pub const BLACKTHORN_RESCUE_WAIT_VIEWPORT_DISSOLVE: u16 = 30;
 
 /// `blackthorn.md §7` step 4's "three cell reveals", as a hold.
 ///
@@ -1643,7 +1648,24 @@ pub const BLACKTHORN_RESCUE_WAIT_CELL_REVEAL: u16 = 17;
 ///
 /// This was a measured 110 ticks (about 6 s), bracketed against the withdrawn
 /// "floor of roughly five seconds" that added the stings on top of the waits.
-pub const BLACKTHORN_AUDIENCE_EXIT_BEAT_BIOS_TICKS: u16 = 72;
+///
+/// Re-measured on the emulated clock (`blackthorn.md §4.2`, corrected
+/// 2026-10-25, u5-spec#301 Q4, `RETRACTIONS.md` R613): "At 3000 cycles the
+/// script ends about 4.02 s after the key, about 73 tick periods: the 72 of
+/// the floor plus one overflow tick taken by the opening repetitions' long
+/// gaps." This was the bare 72-tick floor.
+pub const BLACKTHORN_AUDIENCE_EXIT_BEAT_BIOS_TICKS: u16 = 73;
+
+/// `blackthorn.md §4.2` (added 2026-10-25, u5-spec#301 Q4): the handoff and
+/// the captive-cell entry setup that follow the exit script contain no tick
+/// wait, key wait or print; "their cost is untimed work ... On the emulated
+/// clock it measured about 0.27 s (about 5 tick periods) at 3000 cycles", the
+/// cycle class this crate's other rescue and audience holds model. "An
+/// implementation that hands off exactly 72 tick periods after the key ...
+/// and shows the cell at once is about 0.34 s ahead of that run"; with this
+/// and the 73 above the cell appears 78 tick periods (4.28 s) after the key,
+/// against the published 4.29 s.
+pub const BLACKTHORN_CAPTIVE_CELL_HANDOFF_BIOS_TICKS: u16 = 5;
 
 /// Where a rescue cinematic has got to.
 ///
