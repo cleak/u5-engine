@@ -2353,13 +2353,8 @@ impl PlayState {
         if let Some(grant) = entry.grant {
             self.apply_get_tile_grant(grant);
         }
-        if self
-            .door_tracker
-            .is_some_and(|tracker| tracker.x == tx && tracker.y == ty)
-        {
-            self.door_tracker = None;
-            self.door_tracker_closed = false;
-        }
+        // No auto-close cancellation here: `doors-and-z-transitions.md §5`
+        // publishes none for Get (playtest Q04).
         self.forget_open_town_door(scene, floor, tx, ty);
         self.forget_revealed_town_secret_door(scene, floor, tx, ty);
         self.mark_visibility_dirty();

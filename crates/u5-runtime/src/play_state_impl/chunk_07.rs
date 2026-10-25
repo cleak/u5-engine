@@ -3604,12 +3604,11 @@ impl PlayState {
         self.forget_open_town_door(scene, floor, px, py);
         self.forget_revealed_town_secret_door(scene, floor, tx, ty);
         self.forget_revealed_town_secret_door(scene, floor, px, py);
-        if self.door_tracker.is_some_and(|tracker| {
-            (tracker.x == tx && tracker.y == ty) || (tracker.x == px && tracker.y == py)
-        }) {
-            self.door_tracker = None;
-            self.door_tracker_closed = false;
-        }
+        // `doors-and-z-transitions.md §5`: the auto-close block is cancelled
+        // only by a second Open, combat, the town reload and the cannon's
+        // destroyed door. A push or pull through the tracked doorway leaves
+        // it running, so the countdown still writes the door back (playtest
+        // Q04).
         self.player.x = tx;
         self.player.y = ty;
         self.sync_player_object();

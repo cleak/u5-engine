@@ -1484,10 +1484,50 @@ fn town_push_runs_door_close_preflight_before_resolving_destination() {
 
     assert_eq!(state.grid[32 + 2], PUSHABLE_GENERIC_FLOOR_STAMP);
     assert_eq!(state.grid[32 + 3], 0x91);
-    assert_eq!(state.door_tracker, None);
+    // The preflight's crossing closed the door; the block itself is never
+    // cleared by a push (`doors-and-z-transitions.md §5`, playtest Q04).
+    assert!(state.door_tracker_closed);
+    assert_eq!(
+        state.door_tracker.map(|tracker| tracker.turns_remaining),
+        Some(0)
+    );
     assert_eq!((state.player.x, state.player.y), (2, 1));
     assert_eq!(state.turn, 1);
     assert_eq!(state.message, "East\nPushed!");
+    let _ = fs::remove_dir_all(dir);
+}
+
+#[test]
+fn town_push_into_the_tracked_doorway_keeps_the_auto_close_running() {
+    // `doors-and-z-transitions.md §5`: "when it hits zero the engine writes
+    // the previous-tile byte back to the saved cell". Only a second Open,
+    // combat, the town reload and the cannon cancel it; a push that lands
+    // in the open doorway does not (playtest Q04).
+    const DOOR_TILE: u8 = 0xB8;
+    let dir = debug_game_dir();
+    let mut grid = open_grid();
+    grid[32 + 2] = 0x90;
+    grid[32 + 3] = PUSHABLE_GENERIC_FLOOR_STAMP;
+    let mut state = test_state(grid, 1, 1);
+    state.player.facing = Direction::East;
+    state.door_tracker = Some(DoorTracker {
+        previous_tile: DOOR_TILE,
+        x: 3,
+        y: 1,
+        turns_remaining: 4,
+    });
+
+    assert_eq!(
+        state.push_facing_with_game_dir(&dir).unwrap(),
+        MoveOutcome::Pushed
+    );
+    assert_eq!(state.grid[32 + 3], 0x91);
+    assert!(state.door_tracker.is_some());
+
+    for _ in 0..4 {
+        state.pass_turn();
+    }
+    assert_eq!(state.grid[32 + 3], DOOR_TILE);
     let _ = fs::remove_dir_all(dir);
 }
 
