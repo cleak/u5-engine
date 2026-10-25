@@ -1577,7 +1577,12 @@ pub const BLACKTHORN_RESCUE_WAIT_AFTER_VERTIGO: u16 = 4;
 /// wall clock, because each beat also pays for two screenshots, and
 /// `StagedNarration` only advances when the frontend looks. There is no
 /// reliable tick-to-millisecond conversion to reason from here.
-pub const BLACKTHORN_RESCUE_WAIT_VIEWPORT_DISSOLVE: u16 = 60;
+/// Published since (`blackthorn.md §7.1` "Measured Stonegate segments",
+/// added 2026-10-25, u5-spec#301 Q5): at a fixed 3000-cycle emulator setting
+/// the "First dissolve, to black" ran from +28.20 to +29.86 s, **1.65 s**,
+/// with beat 2 at +29.89 s; 1.65 s at `narration::BIOS_TICK_SECS` is 30
+/// ticks. The bracketed sixty is withdrawn.
+pub const BLACKTHORN_RESCUE_WAIT_VIEWPORT_DISSOLVE: u16 = 30;
 
 /// `blackthorn.md §7` step 4's "three cell reveals", as a hold.
 ///

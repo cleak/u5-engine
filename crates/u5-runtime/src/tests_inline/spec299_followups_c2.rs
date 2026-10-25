@@ -252,3 +252,16 @@ fn a_solo_closing_record_keeps_its_row_open_into_the_captive_cell() {
         let _ = fs::remove_dir_all(dir);
     }
 }
+
+/// u5-spec#301 Q5, `blackthorn.md §7.1` "Measured Stonegate segments" (3000
+/// cycles, from the `North` echo): the fall ends at +27.52 s and the first
+/// dissolve to black takes 1.65 s. Both holds were measured or derived
+/// figures (483 and a bracketed 60 ticks) before the table was published.
+#[test]
+fn spec301_q5_stonegate_holds_use_the_published_segments() {
+    let tick = crate::narration::BIOS_TICK_SECS;
+    let fall = f64::from(crate::STONEGATE_TRAPDOOR_DEATH_HOLD_BIOS_TICKS) * tick;
+    assert!((fall - 27.52).abs() < tick, "{fall}");
+    let dissolve = f64::from(crate::blackthorn::BLACKTHORN_RESCUE_WAIT_VIEWPORT_DISSOLVE) * tick;
+    assert!((dissolve - 1.65).abs() < tick, "{dissolve}");
+}
