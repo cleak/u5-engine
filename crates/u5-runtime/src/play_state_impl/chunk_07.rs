@@ -7491,11 +7491,8 @@ impl PlayState {
             recovered_hp += hp;
             recovered_mana += mana;
         }
-        // `npc-schedules.md §12`: the H-Hole-Up hours command is the second
-        // of the clear-and-re-place pass's three callers, and it runs "when
-        // it finishes its rested hours". An interrupted rest returns above
-        // and never reaches it.
-        self.clear_and_replace_scheduled_npcs();
+        // `npc-schedules.md §12` (u5-spec#300 Q6, R586): the reseat runs
+        // after every ten-minute step inside the loop, not once here.
         let woke = self.wake_town_rest_sleepers();
         // `rest-and-camp.md §4`: the town-bed surface prints its own
         // seven-z sleep line and nothing else. The hours and the recovery
@@ -7545,6 +7542,12 @@ impl PlayState {
             // and a nine-hour rest crosses both.
             self.refresh_cached_moon_glyphs_at_scene_entry();
             ticks += 1;
+            // `npc-schedules.md §12` / `rest-and-camp.md §4` (u5-spec#300
+            // Q6, R586): the bed loop "reseats the town's NPCs after every
+            // ten-minute step, before that step's bed test", after the
+            // step's dawn/dusk gate pass (run inside the clock advance
+            // above). R586 withdrew "when it finishes its rested hours".
+            self.clear_and_replace_scheduled_npcs();
             if !self.town_rest_bed_still_accepts(entries, scene, floor) {
                 return false;
             }

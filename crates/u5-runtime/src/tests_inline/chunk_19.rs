@@ -680,6 +680,59 @@
         let _ = fs::remove_dir_all(dir);
     }
 
+    /// `npc-schedules.md §12` / `rest-and-camp.md §4` (u5-spec#300 Q6,
+    /// R586): the bed loop "reseats the town's NPCs after every ten-minute
+    /// step, before that step's bed test", so even a sleep thrown out in its
+    /// first step leaves a mid-route NPC on its scheduled cell. R586 withdrew
+    /// the once-at-the-end reseat.
+    #[test]
+    fn spec300_q6_town_bed_reseats_npcs_on_every_step_before_the_bed_test() {
+        let dir = debug_game_dir();
+        fs::write(dir.join(TOWN_REST_BED_TABLE_FILE), "CASTLE:0 0 1 1 55\n").unwrap();
+        let mut grid = npc_open_grid();
+        grid[1] = 0x87;
+        grid[32 + 1] = 55;
+        let mut state = test_state(grid, 1, 1);
+        state.clock = GameClock::new(19, 50).unwrap();
+        let slots = vec![
+            NpcSlot {
+                slot: 0,
+                type_byte: 0,
+                dialog_id: 0,
+                schedule: [0; 16],
+                name: None,
+            },
+            NpcSlot {
+                slot: 1,
+                type_byte: 1,
+                dialog_id: 0,
+                schedule: [0, 0, 0, 0, 2, 4, 1, 1, 1, 0, 0, 0, 8, 12, 18, 22],
+                name: None,
+            },
+        ];
+        state.load_scheduled_npcs(&slots);
+        let mut reseated = state.clone();
+        reseated.clear_and_replace_scheduled_npcs();
+        let scheduled = (reseated.npcs[0].x, reseated.npcs[0].y);
+        // Strand the NPC far from its scheduled cell.
+        state.npcs[0].x = 28;
+        state.npcs[0].y = 28;
+        state.active_objects[1].x = 28;
+        state.active_objects[1].y = 28;
+
+        assert_eq!(
+            state.hole_up_command(&dir, Some(2)).unwrap(),
+            MoveOutcome::Blocked
+        );
+        assert_eq!(state.clock, GameClock::new(20, 0).unwrap());
+        assert_eq!((state.npcs[0].x, state.npcs[0].y), scheduled);
+        assert_eq!(
+            (state.active_objects[1].x, state.active_objects[1].y),
+            scheduled
+        );
+        let _ = fs::remove_dir_all(dir);
+    }
+
     #[test]
     fn town_hole_up_advances_time_without_direct_recovery() {
         let dir = debug_game_dir();
