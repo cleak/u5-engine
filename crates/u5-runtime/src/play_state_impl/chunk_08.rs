@@ -1871,9 +1871,10 @@ impl PlayState {
         // newline; this is a direct non-transition arm |", and
         // `catalogs/gazetteer.md` §5.1 names it "the direct non-transition
         // arm for the blocked ruined-shrine tile". It is a live-tile arm, so
-        // no coordinate row is consulted. The spec gives it no turn cost, so
-        // it keeps the no-action result of the refusal it replaces
-        // (playtest L05).
+        // no coordinate row is consulted. `commands.md §5.5` and §3
+        // (u5-spec#300 Q28): "It is acted: it spends the outdoor turn (clock
+        // and upkeep pass) as `Pass` does" (executed); the engine kept the
+        // free result of the refusal it replaces (playtest L05).
         if tile == WORLD_RUINED_SHRINE_TILE {
             // No newline: the row stays open, so the next poll's leading feed
             // closes it and no blank row is derived (`text-output.md §10.4`).
