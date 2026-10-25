@@ -6487,7 +6487,7 @@ fn cowering_talk_is_canned_without_a_tlk_record() {
 }
 
 #[test]
-fn brush_off_talk_skips_tlk_loading_and_attempts_forced_flight() {
+fn brush_off_talk_skips_tlk_loading_and_leaves_the_talked_to_npc_alone() {
     let dir = debug_game_dir();
     let mut state = test_state(open_grid(), 1, 1);
     state.player.facing = Direction::East;
@@ -6512,9 +6512,12 @@ fn brush_off_talk_skips_tlk_loading_and_attempts_forced_flight() {
         state.talk_facing_with_game_dir(&dir).unwrap(),
         MoveOutcome::Talked
     );
-    assert_eq!(state.message, "\n");
-    assert_eq!(state.npcs[0].dialog_id, TOWN_NPC_COWERING_DIALOG_ID);
-    assert_eq!(&state.npcs[0].schedule[..3], &[3, 3, 3]);
+    // `conversation.md §2` step 5 (u5-spec#300 Q19): the dispatcher's feed,
+    // then `"Begone,` / `vermin!"`. On an explicit typed Talk the flight
+    // helper does not receive the talked-to NPC, so its record is left alone.
+    assert_eq!(state.message, "\n\"Begone,\nvermin!\"");
+    assert_eq!(state.npcs[0].dialog_id, TOWN_NPC_BRUSHOFF_DIALOG_ID);
+    assert_eq!(&state.npcs[0].schedule[..3], &[7, 7, 7]);
     assert_eq!(state.turn, 1);
     let _ = fs::remove_dir_all(dir);
 }

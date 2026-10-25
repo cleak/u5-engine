@@ -5732,27 +5732,14 @@ impl PlayState {
             dialog_id,
             TOWN_NPC_COWERING_DIALOG_ID | TOWN_NPC_BRUSHOFF_DIALOG_ID
         ) {
-            if dialog_id == TOWN_NPC_BRUSHOFF_DIALOG_ID {
-                let target_slot = self
-                    .talk_record_at(target_x, target_y)
-                    .map(|npc| npc.slot);
-                if let Some(index) = self
-                    .npcs
-                    .iter()
-                    .position(|npc| Some(npc.slot) == target_slot)
-                {
-                    let _ = self.npcs[index].force_town_flight();
-                    self.record_town_npc_mutation(index);
-                }
-                self.push_diagnostic(
-                    "scare hand-off reached; its line is not published".to_string(),
-                );
-            }
             let text = town_npc_dispatcher_sentinel_line(dialog_id)
                 .expect("cowering and scare indices are dispatcher sentinels");
             self.active_conversation = None;
             self.active_conversation_npc_slot = None;
             self.message = text.clone();
+            if dialog_id == TOWN_NPC_BRUSHOFF_DIALOG_ID {
+                self.talk_scare_hand_off(target_x, target_y);
+            }
             return Some(text);
         }
         if dialog_id == 0 || talk_shop_trigger(dialog_id).is_some() {
@@ -6602,27 +6589,50 @@ impl PlayState {
         let response = town_npc_dispatcher_sentinel_line(dialog_id)?;
         match dialog_id {
             TOWN_NPC_COWERING_DIALOG_ID => {}
-            TOWN_NPC_BRUSHOFF_DIALOG_ID => {
-                let target_slot = self
-                    .talk_record_at(target_x, target_y)
-                    .map(|npc| npc.slot);
-                if let Some(index) = self
-                    .npcs
-                    .iter()
-                    .position(|npc| Some(npc.slot) == target_slot)
-                {
-                    let _ = self.npcs[index].force_town_flight();
-                    self.record_town_npc_mutation(index);
-                }
-                self.push_diagnostic(
-                    "scare hand-off reached; its line is not published".to_string(),
-                );
-            }
+            TOWN_NPC_BRUSHOFF_DIALOG_ID => {}
             _ => return None,
         }
         self.advance_talk_turn();
         self.message = response;
+        if dialog_id == TOWN_NPC_BRUSHOFF_DIALOG_ID {
+            self.talk_scare_hand_off(target_x, target_y);
+        }
         Some(MoveOutcome::Talked)
+    }
+
+    /// `conversation.md §2` step 5, the scare index row (added 2026-10-25,
+    /// u5-spec#300 Q19, `RETRACTIONS.md` R601): after `"Begone,` ⏎
+    /// `vermin!"`, "the whole-party damage pass, then the forced-flight
+    /// helper"; "each party slot below the party count whose status is not
+    /// Dead takes its own uniform `1..8`" - the `overworld.md §6.2.4` pass.
+    ///
+    /// "On automatic conversation contact the flight helper receives the
+    /// contacting NPC. **On an explicit typed Talk it does not receive the
+    /// talked-to NPC's number**, and which record, if any, it rewrites there
+    /// is not established"; static reading suggests the talked-to NPC is never
+    /// rewritten. Conservatively, an explicit Talk rewrites no record.
+    fn talk_scare_hand_off(&mut self, target_x: usize, target_y: usize) {
+        let applied = self.apply_outdoor_impact_party_damage();
+        for entry in applied {
+            self.push_diagnostic(format!(
+                "scare brush-off: party slot {} took {} HP ({} HP left)",
+                entry.slot, entry.applied, entry.hp_after
+            ));
+        }
+        if !self.talk_entered_by_contact {
+            return;
+        }
+        let target_slot = self
+            .talk_record_at(target_x, target_y)
+            .map(|npc| npc.slot);
+        if let Some(index) = self
+            .npcs
+            .iter()
+            .position(|npc| Some(npc.slot) == target_slot)
+        {
+            let _ = self.npcs[index].force_town_flight();
+            self.record_town_npc_mutation(index);
+        }
     }
 
     pub(crate) fn begin_blackthorn_guard_demand(

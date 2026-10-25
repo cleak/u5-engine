@@ -186,16 +186,15 @@ fn p6town_cowering_and_scare_talk_follow_the_dispatchers_leading_feed() {
     }
 }
 
-/// Playtest K13. `conversation.md §2` step 5: the scare index "hand[s] off to
-/// the town scare-and-flee helper ... no literals are established", and
-/// `OPEN-QUESTIONS.md` lists the gap. The engine printed an invented
-/// `Begone, vermin!`; it now prints nothing past the dispatcher's feed and
-/// still applies the flight rewrite.
+/// `conversation.md §2` step 5, the scare index row (added 2026-10-25,
+/// u5-spec#300 Q19, R601): Talk on `0xFE` prints `"Begone,` / `vermin!"`
+/// after the dispatcher's feed, then runs the whole-party damage pass (each
+/// non-Dead slot takes its own `1..8`) and the flight helper. On an explicit
+/// Talk the helper does not get the talked-to NPC, so that record keeps its
+/// schedule; on automatic contact it is the contacting NPC.
 #[test]
-fn p6town_scare_talk_prints_no_invented_line() {
-    let mut state = test_state(open_grid(), 1, 1);
-    state.player.facing = Direction::East;
-    state.load_scheduled_npcs(&[
+fn p6town_scare_talk_prints_begone_and_damages_the_living_party() {
+    let npcs = [
         NpcSlot { slot: 0, type_byte: 0, dialog_id: 0, schedule: [0; 16], name: None },
         NpcSlot {
             slot: 1,
@@ -204,10 +203,33 @@ fn p6town_scare_talk_prints_no_invented_line() {
             schedule: [7, 7, 7, 2, 2, 2, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0],
             name: None,
         },
-    ]);
+    ];
+    let mut state = test_state(open_grid(), 1, 1);
+    state.player.facing = Direction::East;
+    let template = state.party[0].clone();
+    state.party[0].hp = 100;
+    state.party.push(PartyMember { slot: 1, hp: 100, status: b'D', ..template.clone() });
+    state.party.push(PartyMember { slot: 2, hp: 100, status: b'S', ..template });
+    state.load_scheduled_npcs(&npcs);
+
+    assert_eq!(state.talk_facing_with_dialogue(&HashMap::new()), MoveOutcome::Talked);
+
+    assert_eq!(state.message, format!("\n{TOWN_NPC_BRUSHOFF_RESPONSE}"));
+    assert_eq!(TOWN_NPC_BRUSHOFF_RESPONSE, "\"Begone,\nvermin!\"");
+    for slot in [0, 2] {
+        let lost = 100 - state.party[slot].hp;
+        assert!((1..=8).contains(&lost), "slot {slot} lost {lost}");
+    }
+    assert_eq!(state.party[1].hp, 100, "a Dead slot is skipped");
+    assert_eq!(&state.npcs[0].schedule[..3], &[7, 7, 7]);
+
+    // Automatic conversation contact hands the flight helper the contacting NPC.
+    let mut state = test_state(open_grid(), 1, 1);
+    state.player.facing = Direction::East;
+    state.load_scheduled_npcs(&npcs);
+    state.talk_entered_by_contact = true;
     state.talk_facing_with_dialogue(&HashMap::new());
-    assert_eq!(state.message.trim(), "");
-    assert!(state.diagnostics_contain("scare hand-off reached"));
+    state.talk_entered_by_contact = false;
     assert_eq!(&state.npcs[0].schedule[..3], &[3, 3, 3]);
 }
 
