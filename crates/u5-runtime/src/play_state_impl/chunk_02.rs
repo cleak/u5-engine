@@ -2581,6 +2581,7 @@ impl PlayState {
     /// seeded straight onto Britannia `(233, 233)`: record `46`, then `37`,
     /// `38` and the page, each behind its own key.
     pub fn read_codex_urn_after_entry(&mut self, game_dir: &Path) -> io::Result<MoveOutcome> {
+        self.capture_presentation_entry_chrome();
         self.shrine_presentation_map =
             load_miscmaps_cutscene_map(game_dir, CODEX_PRESENTATION_CUTSCENE_MAP_RECORD)?;
         let mut walk = crate::shrine_presentation::ShrineApproachWalk::codex();

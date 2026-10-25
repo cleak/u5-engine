@@ -894,6 +894,15 @@ pub struct PlayState {
     /// The BIOS tick the audience's composite pass last ran on.
     pub blackthorn_audience_composite_tick: Option<u64>,
     pub shrine_presentation_map: Option<MiscmapsCutsceneMap>,
+    /// `karma.md §7` "Entry pacing": "The only route from a world step to the
+    /// text printer is the ambient wind-and-location row, and that row
+    /// returns immediately while the scene byte is at or above the
+    /// ordinary-scene threshold - which the presentation's suspended sentinel
+    /// is ... no row draw ... no panel repaint occurs anywhere in the entry".
+    /// The wind drift may still store a new wind (`weather.md §2.1`), but the
+    /// ribbon gaps keep what the scene drew at entry until the presentation
+    /// ends. Captured when a shrine or Codex presentation opens (p10 R06).
+    pub presentation_entry_chrome: Option<(ChromeGap, ChromeGap)>,
     /// `karma.md §7`'s approach walk, while the shrine presentation is up.
     pub shrine_approach_walk: Option<crate::shrine_presentation::ShrineApproachWalk>,
     /// `karma.md §7.2`: the offering and Codex turn-in arms XOR-invert the

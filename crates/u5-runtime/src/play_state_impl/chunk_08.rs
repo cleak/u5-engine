@@ -1756,6 +1756,7 @@ impl PlayState {
         // `cleak/u5-spec#273` published both, and §7's "The two poses,
         // exactly" table now carries their atlas indices and every cell
         // of the path. See `crate::shrine_presentation`.
+        self.capture_presentation_entry_chrome();
         self.shrine_presentation_map =
             load_miscmaps_cutscene_map(game_dir, SHRINE_PRESENTATION_CUTSCENE_MAP_RECORD)?;
         // §7's approach walk, which `cleak/u5-spec#273` unblocked by

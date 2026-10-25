@@ -1369,6 +1369,24 @@ pub fn gameplay_chrome_content(state: &crate::PlayState) -> GameplayChromeConten
     // words it as. The captures win; the gaps are frozen at combat entry.
     // A fixture that raises `combat_active` without framing an arena has no
     // snapshot and falls through to its scene's chrome.
+    // `karma.md §7` "Entry pacing": while a shrine or Codex presentation
+    // runs, no world step draws the wind-and-location row and "no panel
+    // repaint occurs anywhere in the entry", so a wind the drift stores
+    // mid-entry is not shown until the presentation ends (p10 R06).
+    if (state.shrine_presentation_map.is_some() || state.shrine_approach_walk.is_some())
+        && !state.combat_active
+    {
+        if let Some((top, bottom)) = state.presentation_entry_chrome.clone() {
+            return GameplayChromeContent {
+                top,
+                bottom,
+                stats_label,
+                timing_glyph,
+                stats_panel_single_box,
+                picker_page_glyph,
+            };
+        }
+    }
     if state.combat_active {
         if let Some((top, bottom)) = state.combat_entry_chrome.clone() {
             return GameplayChromeContent {
