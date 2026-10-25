@@ -527,3 +527,21 @@ fn endgame_waiting_walk_steps_one_actor_per_beat_in_round_order() {
     );
     let _ = fs::remove_dir_all(dir);
 }
+
+/// `endgame.md §3` "The viewport ribbons are left as the dungeon drew them"
+/// (added 2026-10-25, u5-spec#300 Q5): the top band keeps the final room's
+/// level label (`L8` on the deepest Doom level, zero-based seven) and the
+/// bottom band the `Dir:` facing the party fell in with; nothing blanks them
+/// or draws an endgame caption.
+#[test]
+fn spec300_q5_endgame_keeps_the_dungeon_level_and_facing_bands() {
+    let mut state = dungeon_state(open_dungeon_record(), 7, 1, 1);
+    state.player.facing = Direction::North;
+    state.party_names = vec![*b"Avatar\0\0\0"];
+    state.enter_endgame_with_messages(Some(endgame_window_synthetic_messages()));
+    endgame_window_settle(&mut state);
+
+    let chrome = gameplay_chrome_content(&state);
+    assert_eq!(chrome.top, ChromeGap::Label("L8".to_string()));
+    assert_eq!(chrome.bottom, ChromeGap::Label(dungeon_direction_label("North")));
+}
