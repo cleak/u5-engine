@@ -744,8 +744,9 @@ pub use outdoor_ranged_attack::{
 };
 pub use party::{
     Area, AvatarStats, LEVEL_FROM_EXPERIENCE_BASE_DIVISOR, LEVEL_FROM_EXPERIENCE_HALVING_STEP,
-    MoonstoneGateSlot, POTION_VARIATION_FORCED_ORANGE_ROLL, POTION_VARIATION_RANDOM_INDEX_MASK,
-    POTION_VARIATION_ROLL_MASK, POTION_VARIATION_SELECTED_THRESHOLD, PartyMember,
+    MoonstoneGateSlot, POTION_VARIATION_FORCED_ORANGE_ROLL, POTION_VARIATION_RANDOM_ID_ROLL,
+    POTION_VARIATION_RANDOM_INDEX_MASK, POTION_VARIATION_ROLL_MASK,
+    POTION_VARIATION_SELECTED_FIRST, PartyMember,
     PartyRosterRecord, Player, RESURRECTION_MAX_HP_PER_LEVEL, RESURRECTION_REBUILT_CURRENT_HP,
     class_refreshed_mana, default_party, default_party_experience, default_party_intelligence,
     default_party_names, default_party_roster, default_party_stay_counters,

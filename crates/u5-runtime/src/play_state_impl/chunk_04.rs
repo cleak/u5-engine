@@ -2577,12 +2577,14 @@ impl PlayState {
     /// sleep effect, and one chance in sixteen replaces the effect with a
     /// random potion id from `0..7`". `prng.md §1` puts such small game
     /// decisions on the shared range generator, so both rolls are draws from
-    /// it - never a hash of the turn, position and clock (playtest K21). The
-    /// random-id draw is taken only on the branch that uses it.
+    /// it - never a hash of the turn, position and clock (playtest K21).
+    /// "Draw order of the variation roll" (u5-spec#300 Q23): the first draw
+    /// over `0..15` gives Orange on `0`, and only a `1` makes the second draw
+    /// over `0..7`; `2..15` keep the selected colour.
     pub fn potion_effect_index_after_variation_roll(&mut self, selected_index: usize) -> usize {
         let variation_roll = self.potion_variation_roll();
         let random_roll = if variation_roll & POTION_VARIATION_ROLL_MASK
-            > POTION_VARIATION_FORCED_ORANGE_ROLL
+            == POTION_VARIATION_RANDOM_ID_ROLL
         {
             self.potion_random_effect_roll()
         } else {

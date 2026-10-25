@@ -621,16 +621,17 @@ fn potions_debit_before_target_and_effect_variation_gates() {
     assert_eq!(missing_stock.message, "");
     assert_eq!(missing_stock.turn, 0);
 
+    // `catalogs/item-list.md §7.2` draw order (u5-spec#300 Q23).
     assert_eq!(
-        potion_effect_index_after_variation(POTION_RED_INDEX, 0, 7),
+        potion_effect_index_after_variation(POTION_RED_INDEX, 2, 7),
         POTION_RED_INDEX
     );
     assert_eq!(
-        potion_effect_index_after_variation(POTION_RED_INDEX, 14, 7),
+        potion_effect_index_after_variation(POTION_RED_INDEX, 0, 7),
         POTION_ORANGE_INDEX
     );
     assert_eq!(
-        potion_effect_index_after_variation(POTION_RED_INDEX, 15, 6),
+        potion_effect_index_after_variation(POTION_RED_INDEX, 1, 6),
         POTION_BLACK_INDEX
     );
 }
