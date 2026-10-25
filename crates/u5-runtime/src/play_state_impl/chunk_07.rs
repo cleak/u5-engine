@@ -7434,6 +7434,11 @@ impl PlayState {
             if !self.complete_open_direction_echo("Hole up- ", HOLE_UP_NOT_IN_BED_REFUSAL) {
                 self.message = format!("Hole up- {HOLE_UP_NOT_IN_BED_REFUSAL}");
             }
+            // `town-mode.md §12` / `rest-and-camp.md §3` (u5-spec#300 Q8,
+            // Q14; R588, R603): the off-bed refusal "returns the ordinary
+            // acted result, so the refusal costs the normal one-minute town
+            // turn and runs the epilogue" (executed).
+            self.charge_tile_command_acted_exit(self.turn);
             return Ok(MoveOutcome::Blocked);
         }
         let Some(hours) = hours else {
@@ -7474,14 +7479,16 @@ impl PlayState {
         self.mark_town_rest_sleepers();
         if !self.advance_town_rest_until_target_hour(hours, entries.as_deref(), scene, floor) {
             let woke = self.wake_town_rest_sleepers();
-            // `rest-and-camp.md §6`: "Town/inn rest can instead produce a
-            // local refusal or \"thrown out\" style result depending on the
-            // caller context" - the wording is not published, so the engine
-            // records what happened rather than inventing a sentence.
             self.diagnostics.push(format!(
                 "town-bed rest interrupted; woke {woke} asleep member(s)"
             ));
-            self.message.clear();
+            // `rest-and-camp.md §4` (u5-spec#300 Q8): the members are put to
+            // sleep and only then does `Zzzzzzz...` print, ahead of the
+            // ten-minute loop; a failed bed test in a step prints the
+            // published refusal `Thrown_out_of_bed!\n` (`commands.md §5.5`).
+            self.emit_message_line(format!("{}\n", crate::commands::TOWN_BED_REST_SLEEP_LINE));
+            self.message = crate::commands::TOWN_BED_THROWN_OUT_LINE.to_string();
+            self.message_row_open_mid_line = false;
             return Ok(MoveOutcome::Blocked);
         }
         let mut recovered_hp = 0;

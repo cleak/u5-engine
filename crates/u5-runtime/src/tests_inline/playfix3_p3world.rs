@@ -58,7 +58,8 @@ fn p3w_w2_town_bed_hours_prompt_echoes_the_accepted_digit() {
     assert!(state.active_rest.is_some());
     handle_play_key_input(&mut state, '3', "", &dir).unwrap();
     let rows = p3w_rows(&state);
-    let prompt_row = format!("Hole up- {REST_HOURS_PROMPT}3");
+    // `rest-and-camp.md §4` (u5-spec#300 Q8): no `(1-9)` at the bed.
+    let prompt_row = format!("Hole up- {}3", crate::commands::TOWN_BED_HOURS_PROMPT);
     let at = rows
         .iter()
         .position(|row| *row == prompt_row)
@@ -72,26 +73,33 @@ fn p3w_w2_town_bed_hours_prompt_echoes_the_accepted_digit() {
 }
 
 #[test]
-fn p3w_w2_town_bed_hours_prompt_zero_echoes_and_aborts_without_none() {
-    // `rest-and-camp.md §4`: the resident handler "accepts the same visible
-    // duration shape as the town-hours path: Space and `0` cancel", and the
-    // resident shape echoes the key "followed by one line feed; Space ... or
-    // `0` ... then aborts with no further output" (`dungeon-mode.md §11`).
-    let (mut state, dir) = p3w_town_bed_state();
-    let clock = state.clock;
-    handle_play_key_input(&mut state, 'H', "", &dir).unwrap();
-    handle_play_key_input(&mut state, '0', "", &dir).unwrap();
-    assert!(state.active_rest.is_none(), "`0` cancels");
-    let rows = p3w_rows(&state);
-    assert_eq!(
-        rows.last().cloned(),
-        Some(format!("Hole up- {REST_HOURS_PROMPT}0")),
-        "{rows:?}"
-    );
-    assert!(!rows.iter().any(|row| row.contains("None!")), "{rows:?}");
-    assert!(!state.message_slot_needs_flush());
-    assert_eq!(state.clock, clock, "no rest elapsed");
-    let _ = std::fs::remove_dir_all(dir);
+fn p3w_w2_town_bed_hours_prompt_zero_cancels_silently_and_spends_the_turn() {
+    // `rest-and-camp.md §4` (u5-spec#300 Q8): "Space or `0` cancels, also
+    // silently. Neither key is echoed and no line feed prints ... The command
+    // still reports acted, so a cancel costs the ordinary one-minute town
+    // turn". Escape is discarded and the prompt keeps waiting.
+    for cancel in ['0', ' '] {
+        let (mut state, dir) = p3w_town_bed_state();
+        let mut clock = state.clock;
+        handle_play_key_input(&mut state, 'H', "", &dir).unwrap();
+        handle_play_key_input(&mut state, '\u{1b}', "", &dir).unwrap();
+        assert!(state.active_rest.is_some(), "Escape is discarded");
+        handle_play_key_input(&mut state, cancel, "", &dir).unwrap();
+        assert!(state.active_rest.is_none(), "{cancel:?} cancels");
+        let rows = p3w_rows(&state);
+        let prompt_row = format!("Hole up- {}", crate::commands::TOWN_BED_HOURS_PROMPT);
+        assert!(rows.iter().any(|row| *row == prompt_row), "{rows:?}");
+        assert!(!rows.iter().any(|row| row.contains("None!")), "{rows:?}");
+        assert!(
+            !rows.iter().any(|row| row.ends_with(&format!("hours? {cancel}"))
+                && cancel != ' '),
+            "{rows:?}"
+        );
+        clock.advance_minutes(1);
+        assert_eq!(state.clock, clock, "the cancel is acted");
+        assert_eq!(state.turn, 1);
+        let _ = std::fs::remove_dir_all(dir);
+    }
 }
 
 #[test]
@@ -165,4 +173,39 @@ fn p3w_w6_month_rollover_ages_every_character_record() {
         .map(|record| record.stay_counter)
         .collect();
     assert_eq!(inactive, [0xFF, 4]);
+}
+
+/// `rest-and-camp.md §4` (u5-spec#300 Q8): the bed prompt shows as
+/// `Hole up- For` / `how many hours?`; after a cancel "the next command
+/// prompt starts on the row after `how many hours?`".
+#[test]
+fn spec300_q8_town_bed_prompt_and_cancel_window_rows() {
+    let (mut state, dir) = p3w_town_bed_state();
+    handle_play_key_input(&mut state, 'H', "", &dir).unwrap();
+    handle_play_key_input(&mut state, '0', "", &dir).unwrap();
+    assert_eq!(
+        p4window_rows_from(&p4window_rows(&state), ">Hole up- For"),
+        [">Hole up- For", "how many hours?", ">"]
+    );
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+/// `commands.md §5.8` (u5-spec#300 Q22, R605): the off-bed refusal wraps
+/// as `Hole up- Only` / `in bed!`, then the ordinary blank row, and it
+/// spends the one-minute town turn (Q14, R588).
+#[test]
+fn spec300_q22_town_off_bed_refusal_wraps_and_is_acted() {
+    let dir = debug_game_dir();
+    let mut grid = open_grid();
+    grid[32 + 1] = 16;
+    let mut state = test_state(grid, 1, 1);
+    let mut clock = state.clock;
+    handle_play_key_input(&mut state, 'H', "", &dir).unwrap();
+    assert_eq!(
+        p4window_rows_from(&p4window_rows(&state), ">Hole up- Only"),
+        [">Hole up- Only", "in bed!", "", ">"]
+    );
+    clock.advance_minutes(1);
+    assert_eq!((state.turn, state.clock), (1, clock));
+    let _ = std::fs::remove_dir_all(dir);
 }

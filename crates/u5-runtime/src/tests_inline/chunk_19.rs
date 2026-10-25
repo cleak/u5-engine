@@ -438,7 +438,7 @@
     }
 
     #[test]
-    fn town_hole_up_requires_hours_and_clean_bed_without_turn() {
+    fn town_hole_up_requires_hours_and_clean_bed_and_refusal_is_acted() {
         let dir = debug_game_dir();
         let mut grid = open_grid();
         grid[32 + 1] = 55;
@@ -457,7 +457,9 @@
             format!("Hole up- {HOLE_UP_NOT_IN_BED_REFUSAL}")
         );
         assert!(state.active_rest.is_none());
-        assert_eq!(state.turn, 0);
+        // u5-spec#300 Q8/Q14 (R588, R603): the off-bed refusal is acted and
+        // costs the one-minute town turn.
+        assert_eq!(state.turn, 1);
 
         fs::write(dir.join(TOWN_REST_BED_TABLE_FILE), "CASTLE:0 0 1 1 55\n").unwrap();
         assert_eq!(
@@ -466,7 +468,7 @@
         );
         assert!(state.message.contains("how many hours"));
         assert!(state.active_rest.is_some());
-        assert_eq!(state.turn, 0);
+        assert_eq!(state.turn, 1);
         state.active_rest = None;
 
         fs::write(dir.join(TOWN_REST_BED_TABLE_FILE), "CASTLE:0 0 1 1 56\n").unwrap();
@@ -478,8 +480,10 @@
             state.message,
             format!("Hole up- {HOLE_UP_NOT_IN_BED_REFUSAL}")
         );
-        assert_eq!(state.turn, 0);
-        assert_eq!(state.clock, GameClock::default());
+        assert_eq!(state.turn, 2);
+        let mut expected = GameClock::default();
+        expected.advance_minutes(2);
+        assert_eq!(state.clock, expected);
         let _ = fs::remove_dir_all(dir);
     }
 
@@ -530,8 +534,11 @@
             state.message,
             format!("Hole up- {HOLE_UP_NOT_IN_BED_REFUSAL}")
         );
-        assert_eq!(state.turn, 0);
-        assert_eq!(state.clock, GameClock::default());
+        // u5-spec#300 Q8/Q14 (R588): the refusal costs the town minute.
+        assert_eq!(state.turn, 1);
+        let mut expected = GameClock::default();
+        expected.advance_minutes(1);
+        assert_eq!(state.clock, expected);
         let _ = fs::remove_dir_all(dir);
     }
 
@@ -662,9 +669,13 @@
         assert_eq!(state.party[0].status, b'G');
         assert_eq!(state.party[0].hp, 5);
         assert_eq!(state.party[0].mana, 0);
-        // The interruption wording is unpublished (`rest-and-camp.md §6`), so
-        // the engine records it rather than inventing a sentence.
-        assert!(state.message.is_empty());
+        // `commands.md §5.5` (u5-spec#300 Q8): `Zzzzzzz...` printed before
+        // the loop, then the published `Thrown out of bed!`.
+        assert_eq!(state.message, crate::commands::TOWN_BED_THROWN_OUT_LINE);
+        assert!(state
+            .message_transcript
+            .iter()
+            .any(|entry| entry.text == crate::commands::TOWN_BED_REST_SLEEP_LINE));
         assert!(
             state
                 .diagnostics
@@ -1073,8 +1084,9 @@
         );
         assert!(state.active_rest.is_some());
         // The bed path keeps the `Hole up- ` argument form, so its prompt
-        // opens on the next row with no extra feed.
-        assert_eq!(state.message, REST_HOURS_PROMPT);
+        // opens on the next row with no extra feed. It carries no `(1-9)`
+        // (`rest-and-camp.md §4`, u5-spec#300 Q8).
+        assert_eq!(state.message, crate::commands::TOWN_BED_HOURS_PROMPT);
         assert_eq!(state.turn, 0);
 
         assert_eq!(

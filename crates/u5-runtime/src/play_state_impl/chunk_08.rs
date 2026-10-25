@@ -109,6 +109,11 @@ impl PlayState {
 
     fn render_rest_session(&self, session: &RestSession) -> String {
         match session.phase {
+            // `rest-and-camp.md §4` (u5-spec#300 Q8): the town bed's prompt
+            // carries no `(1-9)`.
+            RestPhase::Hours if matches!(self.area, Area::Town { .. }) => {
+                crate::commands::TOWN_BED_HOURS_PROMPT.to_string()
+            }
             RestPhase::Hours => REST_HOURS_PROMPT.to_string(),
             RestPhase::WatchYesNo => REST_WATCH_PROMPT.to_string(),
             RestPhase::WatchSlot => REST_WATCH_MEMBER_PROMPT.to_string(),
@@ -133,14 +138,11 @@ impl PlayState {
             match session.phase {
                 RestPhase::Hours => {
                     // `dungeon-mode.md §11`: the camp's hours prompt "loops
-                    // until a digit or Space"; Escape is neither, so off
-                    // the town-bed path it is re-read like any other key
-                    // (playtest E15 dungeon, E31 overworld camp).
-                    let camp = !matches!(self.area, Area::Town { .. });
-                    if ch == '\u{1b}' && !camp {
-                        self.message = "None!".to_string();
-                        return Ok(None);
-                    }
+                    // until a digit or Space"; Escape is neither, so it is
+                    // re-read like any other key (playtest E15 dungeon, E31
+                    // overworld camp). The town bed is the same: "Every
+                    // other key is discarded silently, Escape included"
+                    // (`rest-and-camp.md §4`, u5-spec#300 Q8).
                     let duration_input = if ch.is_ascii() {
                         rest_duration_input(ch as u8)
                     } else {
@@ -181,6 +183,22 @@ impl PlayState {
                         // town-hours path: Space and `0` cancel", so the
                         // town bed takes the same echo-and-abort; no
                         // `None!` is published for either (playtest W2).
+                        // `rest-and-camp.md §4` (u5-spec#300 Q8): at the
+                        // town bed "Space or `0` cancels, also silently.
+                        // Neither key is echoed and no line feed prints",
+                        // and "The command still reports acted, so a cancel
+                        // costs the ordinary one-minute town turn". The
+                        // prompt's trailing space filled its row, so "the
+                        // next command prompt starts on the row after `how
+                        // many hours?`" with no blank row: the next poll's
+                        // feed is the only one, as after `Enter ruins`.
+                        RestDurationInput::Cancel if matches!(self.area, Area::Town { .. }) => {
+                            let logged_prompt = self.rest_hours_logged_prompt();
+                            self.commit_prompt_reply(&logged_prompt, "");
+                            self.leave_last_transcript_row_open();
+                            self.charge_tile_command_acted_exit(self.turn);
+                            return Ok(None);
+                        }
                         RestDurationInput::Cancel => {
                             let logged_prompt = self.rest_hours_logged_prompt();
                             self.commit_prompt_reply(&logged_prompt, &ch.to_string());
@@ -282,10 +300,15 @@ impl PlayState {
     /// camp logs `For how many hours? (1-9) ` as its own row; the town bed
     /// logs it after the `Hole up- ` verb echo on one row.
     fn rest_hours_logged_prompt(&self) -> String {
+        let prompt = if matches!(self.area, Area::Town { .. }) {
+            crate::commands::TOWN_BED_HOURS_PROMPT
+        } else {
+            REST_HOURS_PROMPT
+        };
         self.message_transcript
             .last()
-            .filter(|entry| !entry.explicit_blank && entry.text.ends_with(REST_HOURS_PROMPT))
-            .map_or_else(|| REST_HOURS_PROMPT.to_string(), |entry| entry.text.clone())
+            .filter(|entry| !entry.explicit_blank && entry.text.ends_with(prompt))
+            .map_or_else(|| prompt.to_string(), |entry| entry.text.clone())
     }
 
     fn finish_active_rest(
@@ -1885,6 +1908,7 @@ impl PlayState {
                 self.pending_entry_leaves_row_open = true;
                 self.open_message_row();
             }
+            self.charge_tile_command_acted_exit(self.turn);
             return Ok(MoveOutcome::Blocked);
         }
         let Some(live_class) = WorldEntryNarrationClass::from_live_tile(tile) else {

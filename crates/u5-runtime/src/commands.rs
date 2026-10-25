@@ -1529,6 +1529,13 @@ pub const PAID_INN_REST_SLEEP_LINE: &str = "Zzzzzz....";
 pub const PAID_INN_REST_MORNING_LINE: &str = "Morning!";
 
 pub const TOWN_BED_REST_SLEEP_LINE: &str = "Zzzzzzz...";
+/// `commands.md §5.5` / `rest-and-camp.md §4` (u5-spec#300 Q8): the town
+/// bed prompt is `For_how_many_hours?_` "with no range text", printed after
+/// `Hole up- ` on the same line.
+pub const TOWN_BED_HOURS_PROMPT: &str = "For how many hours? ";
+/// `commands.md §5.5` (u5-spec#300 Q8): the town-bed loop's refusal
+/// `Thrown_out_of_bed!\n`, printed when a ten-minute step's bed test fails.
+pub const TOWN_BED_THROWN_OUT_LINE: &str = "Thrown out of bed!";
 
 pub const USE_PICKER_NO_QUANTITY: u8 = 255;
 
