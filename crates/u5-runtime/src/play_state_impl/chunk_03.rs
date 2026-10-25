@@ -3695,7 +3695,8 @@ impl PlayState {
                 // down-direction code for down; Space for pass" (handled
                 // above). The direction codes are the shared reader's: the
                 // Up and Down arrows, keypad 8 and 2, and top-row `8`/`2`
-                // with Shift or NumLock - the frontends deliver all of those
+                // with NumLock on (Shift with a top-row key is punctuation,
+                // u5-spec#300 Q15, R589) - the frontends deliver all of those
                 // as [`INPUT_CODE_NORTH`]/[`INPUT_CODE_SOUTH`]. "Every other
                 // key is ignored and read again with no echo and no tone,
                 // including `<`, `>`, Esc, Enter, the period, the Left and
