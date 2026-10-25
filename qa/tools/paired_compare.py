@@ -17,6 +17,9 @@ recovers the same text `IBM.CH`/`RUNES.CH` matching reads off the DOSBox side.
 So this compares them. Only the sixteen-by-thirteen message window: the
 viewport carries host-clock NPC positions and the wind banner drifts on its own
 roll, both of which the README documents as legitimately different.
+(Since then the roster panel, the map viewport and the screen chrome are
+compared too, each counted on its own; the chrome comparison masks only the
+wind banner's direction word - see `chrome_differences`.)
 
 Reads captures and prints agreement; writes nothing. The decoded text stays in
 the process - it is game text, and only the verdict leaves.
@@ -792,7 +795,7 @@ def compare_cached(artifact: pathlib.Path, cache: dict) -> tuple:
 
 
 # Bump when a classifier change would alter a cached verdict.
-CACHE_VERSION = 36
+CACHE_VERSION = 37
 
 
 # A scenario whose *roster panel* is a lottery and whose message window is
@@ -1118,6 +1121,262 @@ def collapse_repeated_units(rows: list[str]) -> list[str]:
     return folded
 
 
+# The screen chrome: the ribbon border, its top gap (the sky strip, or the
+# dungeon level label) and its bottom gap (the wind banner, or the dungeon
+# facing label). None of the decoders above reads it - the text decoders
+# threshold at brightness, which makes the blue ribbon and a black gap read
+# alike - so until 2026-10-25 an engine change that blanked the chrome in
+# combat arenas, against stock captures that all kept it, still read `match`.
+#
+# Geometry is `display-driver.md §7` as `gameplay_chrome.rs` carries it, in
+# 8x8 cells of the 320x200 frame:
+#
+#   - the top strip is row 0, columns 0..23 (the viewport's width). The sky
+#     strip's twelve cells sit at columns 6..17 with caps at 5 and 18
+#     (`moons.md §2`); the dungeon `L#` label is centred in the same span;
+#   - the bottom strip is row 23, columns 0..23. The wind banner's eleven
+#     cells sit at 7..17 with caps at 6 and 18 (`weather.md §2.1`): a
+#     five-cell direction field at 7..11, then ` Winds` at 12..17. The
+#     dungeon `Dir:` label shares the left anchor (`dungeon-mode.md §4.1`);
+#   - the frame is the rest of the border: columns 0 and 23 down the
+#     viewport's sides, row 24 under everything, and the stats panel's
+#     ribbon - row 0 and column 39 above the message window, and the two
+#     divider bands, rows 7 and 10.
+#
+# Each cell is compared pixel by pixel in palette colour, so the ribbon, a
+# black gap and the glyphs drawn into it are all told apart.
+CHROME_TOP_ROW, CHROME_BOTTOM_ROW = 0, 23
+CHROME_STRIP_COLS = range(0, 24)
+SKY_STRIP_COLS = range(6, 18)
+WIND_WORD_COLS = range(7, 12)
+WIND_SUFFIX_COLS = range(13, 18)
+FACING_LABEL_COLS = range(7, 11)
+CHROME_FRAME_CELLS: tuple[tuple[int, int], ...] = tuple(
+    sorted(
+        {(0, row) for row in range(1, 23)}
+        | {(23, row) for row in range(1, 23)}
+        | {(col, 24) for col in range(40)}
+        | {(col, 0) for col in range(24, 40)}
+        | {(39, row) for row in range(1, 11)}
+        | {(col, row) for col in range(24, 39) for row in (7, 10)}
+    )
+)
+CHROME_RIBBON = (0, 0, 170)
+# Pixels of one 64-pixel cell that may disagree before the cell differs. The
+# sampling is exact on both capture shapes (measured on rc12 artifacts: the
+# chrome rows of matching beats agree pixel for pixel), so this only absorbs
+# a stray edge sample, never a glyph.
+CHROME_CELL_TOLERANCE = 4
+
+
+class FrameSampler:
+    """The 320x200 frame's pixels, read through a capture's letterbox."""
+
+    def __init__(self, image: "Image.Image") -> None:
+        self.image = image.convert("RGB")
+        self.size = self.image.size
+        self.pixels = self.image.load()
+        self.rect = frame_rect(self.size)
+
+    @classmethod
+    def open(cls, path: pathlib.Path) -> "FrameSampler | None":
+        try:
+            image = Image.open(path).convert("RGB")
+        except OSError:
+            return None
+        if image.size[0] < 320 or image.size[1] < 200:
+            return None
+        if not capture_is_frame_filling(image):
+            return None
+        return cls(image)
+
+    def cell(self, col: int, row: int) -> tuple:
+        origin_x, origin_y, scale_x, scale_y = self.rect
+        width, height = self.size
+        return tuple(
+            self.pixels[
+                min(max(int(origin_x + (col * 8 + i + 0.5) * scale_x), 0), width - 1),
+                min(max(int(origin_y + (row * 8 + j + 0.5) * scale_y), 0), height - 1),
+            ]
+            for j in range(8)
+            for i in range(8)
+        )
+
+
+def _cells_differ(a: tuple, b: tuple) -> bool:
+    return sum(1 for x, y in zip(a, b) if x != y) > CHROME_CELL_TOLERANCE
+
+
+def _cell_is(cell: tuple, colour: tuple) -> bool:
+    return sum(1 for pixel in cell if pixel == colour) * 2 > len(cell)
+
+
+def _cell_black(cell: tuple) -> bool:
+    return all(sum(pixel) < 60 for pixel in cell)
+
+
+def _cell_glyph(cell: tuple) -> int | None:
+    """The `IBM.CH` code a cell's bright pixels draw, if any reads cleanly."""
+    bits = tuple(1 if sum(pixel) > 200 else 0 for pixel in cell)
+    best = None
+    for code, glyph in TABLES["ibm"].items():
+        score = sum(
+            1 for index, bit in enumerate(bits) if glyph[index // 8][index % 8] == bit
+        )
+        if best is None or score > best[0]:
+            best = (score, code)
+    return best[1] if best and best[0] >= 62 else None
+
+
+def _cells_read(sampler: FrameSampler, row: int, cols: range, text: str) -> bool:
+    return all(
+        _cell_glyph(sampler.cell(col, row)) == ord(char)
+        for col, char in zip(cols, text)
+    )
+
+
+def has_gameplay_frame(sampler: FrameSampler) -> bool:
+    """Is the gameplay border on screen at all?
+
+    The left ribbon band, column 0 down the viewport's side, is drawn on every
+    gameplay screen and on no full-screen surface: the title screen's lower
+    box starts at row 13 and the character-creation art never reaches the
+    column. Without this gate the chrome comparison read the title flame and
+    the virtue-card art as border cells (`chargen-journey-basics`, rc12).
+    """
+    ribbon = sum(
+        1 for row in range(1, 23) if _cell_is(sampler.cell(0, row), CHROME_RIBBON)
+    )
+    return ribbon >= 18
+
+
+def read_top_strip(sampler: FrameSampler) -> str:
+    """What the top gap shows, as a category - never as game text.
+
+    `ribbon` is an unbroken band, `blank` is no chrome at all, `L<n>` the
+    dungeon level label, and `sky[n]` the sky strip with `n` lit cells.
+    """
+    cells = [sampler.cell(col, CHROME_TOP_ROW) for col in CHROME_STRIP_COLS]
+    if all(_cell_black(cell) for cell in cells):
+        return "blank"
+    if all(_cell_is(cells[col], CHROME_RIBBON) for col in range(5, 19)):
+        return "ribbon"
+    if _cell_glyph(cells[11]) == ord("L"):
+        digit = _cell_glyph(cells[12])
+        if digit is not None and chr(digit).isdigit():
+            return f"L{chr(digit)}"
+    lit = sum(1 for col in SKY_STRIP_COLS if not _cell_black(cells[col]))
+    return f"sky[{lit}]"
+
+
+def read_bottom_strip(sampler: FrameSampler) -> str:
+    """What the bottom gap shows: `wind`, `facing`, `ribbon`, `blank` or `other`."""
+    cells = [sampler.cell(col, CHROME_BOTTOM_ROW) for col in CHROME_STRIP_COLS]
+    if all(_cell_black(cell) for cell in cells):
+        return "blank"
+    if all(_cell_is(cells[col], CHROME_RIBBON) for col in range(6, 19)):
+        return "ribbon"
+    if _cells_read(sampler, CHROME_BOTTOM_ROW, WIND_SUFFIX_COLS, "Winds"):
+        return "wind"
+    if _cells_read(sampler, CHROME_BOTTOM_ROW, FACING_LABEL_COLS, "Dir:"):
+        return "facing"
+    return "other"
+
+
+# Beats whose sky-strip icon positions a scenario's own header declares
+# random, one by one:
+#
+#     # random-sky-beats: arena look
+#
+# On a declared beat the sky strip's twelve content cells are compared for
+# their structure only - where the ribbon is and is not, and whether any icon
+# is lit at all - so a sun or moon one cell over agrees, while a strip present
+# on one side and blank or unbroken on the other still differs. Nothing is
+# masked unless the header says so: the sky strip is deterministic from the
+# clock (`moons.md §2`), and two sides on one save agree on it.
+RANDOM_SKY_MARKER = "# random-sky-beats:"
+
+
+def random_sky_beats(scenario: str) -> frozenset[str]:
+    return _declared_beats(scenario, RANDOM_SKY_MARKER)
+
+
+def chrome_differences(
+    stock: FrameSampler,
+    engine: FrameSampler,
+    *,
+    random_sky: bool = False,
+    skip_rows: frozenset[int] = frozenset(),
+) -> dict[str, list]:
+    """The chrome cells that differ, by region: `top`, `bottom`, `frame`.
+
+    Two things are masked, and neither ever masks a whole strip:
+
+      - the wind banner's direction word, columns 7..11 of row 23, when
+        *both* sides show the banner. `weather.md` rolls the wind per side
+        off the host-clock generator (`prng.md §3`), so the word is a draw;
+        the caps, the suffix and the banner's presence are still compared.
+        The dungeon `Dir:` facing is deterministic and is never masked.
+      - with `random_sky`, the sky strip's icon positions, as described at
+        `RANDOM_SKY_MARKER`.
+
+    `skip_rows` drops frame cells on rows a caller has masked elsewhere
+    (the title-screen flame band).
+
+    A beat where *neither* side shows the gameplay border (`has_gameplay_frame`)
+    has no chrome to compare and returns no differences. One side is enough:
+    a border on one side and none on the other is compared, and differs.
+    """
+    if not (has_gameplay_frame(stock) or has_gameplay_frame(engine)):
+        return {"top": [], "bottom": [], "frame": [], "readings": ["none"] * 4}
+    top_stock, top_engine = read_top_strip(stock), read_top_strip(engine)
+    bottom_stock, bottom_engine = read_bottom_strip(stock), read_bottom_strip(engine)
+    wind_masked = bottom_stock == bottom_engine == "wind"
+    sky_masked = random_sky and top_stock.startswith("sky") and top_engine.startswith("sky")
+    found: dict[str, list] = {"top": [], "bottom": [], "frame": []}
+    for col in CHROME_STRIP_COLS:
+        a = stock.cell(col, CHROME_TOP_ROW)
+        b = engine.cell(col, CHROME_TOP_ROW)
+        if sky_masked and col in SKY_STRIP_COLS:
+            a = tuple(pixel == CHROME_RIBBON for pixel in a)
+            b = tuple(pixel == CHROME_RIBBON for pixel in b)
+        if _cells_differ(a, b):
+            found["top"].append(col)
+    if sky_masked and (top_stock == "sky[0]") != (top_engine == "sky[0]"):
+        found["top"].append("icons")
+    for col in CHROME_STRIP_COLS:
+        if wind_masked and col in WIND_WORD_COLS:
+            continue
+        if _cells_differ(
+            stock.cell(col, CHROME_BOTTOM_ROW), engine.cell(col, CHROME_BOTTOM_ROW)
+        ):
+            found["bottom"].append(col)
+    for col, row in CHROME_FRAME_CELLS:
+        if row in skip_rows:
+            continue
+        if _cells_differ(stock.cell(col, row), engine.cell(col, row)):
+            found["frame"].append((col, row))
+    found["readings"] = [top_stock, top_engine, bottom_stock, bottom_engine]
+    return found
+
+
+def describe_chrome(found: dict[str, list]) -> str | None:
+    """One report line's worth of a `chrome_differences` result, or None."""
+    parts = []
+    top_stock, top_engine, bottom_stock, bottom_engine = found["readings"]
+    if found["top"]:
+        parts.append(
+            f"top {top_stock}/{top_engine} cols {found['top']}"
+        )
+    if found["bottom"]:
+        parts.append(
+            f"bottom {bottom_stock}/{bottom_engine} cols {found['bottom']}"
+        )
+    if found["frame"]:
+        parts.append(f"frame {len(found['frame'])} cell(s)")
+    return "; ".join(parts) if parts else None
+
+
 def is_probe(scenario: str) -> bool:
     """Is this scenario a probe rather than a comparison?
 
@@ -1135,10 +1394,10 @@ def is_probe(scenario: str) -> bool:
     return "# not-a-comparison:" in _scenario_header(scenario)
 
 
-def compare(artifact: pathlib.Path) -> tuple[int, int, int, int, int]:
+def compare(artifact: pathlib.Path) -> tuple[int, int, int, int, int, int, int]:
     record = json.loads((artifact / "record.json").read_text())
     scenario = record.get("scenario", artifact.name)
-    same = differ = skipped = idle = panel = viewport = 0
+    same = differ = skipped = idle = panel = viewport = chrome = 0
     labels = {capture.get("label") for capture in record.get("captures", [])}
     for capture in record.get("captures", []):
         label = capture.get("label")
@@ -1231,6 +1490,21 @@ def compare(artifact: pathlib.Path) -> tuple[int, int, int, int, int]:
                 f"  view   {scenario}/{label}: "
                 f"{viewport_cells_differing} viewport cell(s)"
             )
+        # The screen chrome, counted on its own like the panel and the
+        # viewport. Readings are `stock/engine`.
+        stock_frame, engine_frame = FrameSampler.open(stock), FrameSampler.open(engine)
+        if stock_frame is not None and engine_frame is not None:
+            chrome_found = describe_chrome(
+                chrome_differences(
+                    stock_frame,
+                    engine_frame,
+                    random_sky=label in random_sky_beats(scenario),
+                    skip_rows=TITLE_FLAME_ROWS if flame_masked else frozenset(),
+                )
+            )
+            if chrome_found:
+                chrome += 1
+                print(f"  chrome {scenario}/{label}: {chrome_found}")
         rows = [
             index
             for index, (a, b) in enumerate(zip(left, right))
@@ -1294,7 +1568,7 @@ def compare(artifact: pathlib.Path) -> tuple[int, int, int, int, int]:
             )
         else:
             same += 1
-    return same, differ, skipped, idle, panel, viewport
+    return same, differ, skipped, idle, panel, viewport, chrome
 
 
 KINDS: dict[str, int] = {}
@@ -1340,10 +1614,10 @@ def main() -> None:
     args = sys.argv[1:]
     if args[0] == "--latest":
         args = [str(path) for path in latest_artifacts(args[1:])]
-    total = [0, 0, 0, 0, 0, 0]
+    total = [0, 0, 0, 0, 0, 0, 0]
     cache = _cache_load()
     for arg in args:
-        same, differ, skipped, idle, panel, viewport = compare_cached(
+        same, differ, skipped, idle, panel, viewport, chrome = compare_cached(
             pathlib.Path(arg), cache
         )
         # A run carrying idle beats is not a verdict either way: it needs
@@ -1357,7 +1631,7 @@ def main() -> None:
         # counter, because `magic.md` gives Create Food "a uniform
         # food/provisions delta in `[1, 3]`". Gating this on the message-window
         # count alone reported that as a plain difference.
-        lottery = (differ or panel or viewport) and is_lottery(scenario)
+        lottery = (differ or panel or viewport or chrome) and is_lottery(scenario)
         status = (
             "PROBE"
             if is_probe(scenario)
@@ -1372,23 +1646,25 @@ def main() -> None:
             if idle or lottery
             else (
                 "match"
-                if differ == 0 and panel == 0 and viewport == 0
+                if differ == 0 and panel == 0 and viewport == 0 and chrome == 0
                 else "DIFFER"
             )
         )
         print(
             f"{status} {pathlib.Path(arg).name}: {same} beat(s) agree, "
             f"{differ} differ, {skipped} skipped, {idle} idle, {panel} panel, "
-            f"{viewport} viewport"
+            f"{viewport} viewport, {chrome} chrome"
         )
-        for index, value in enumerate((same, differ, skipped, idle, panel, viewport)):
+        for index, value in enumerate(
+            (same, differ, skipped, idle, panel, viewport, chrome)
+        ):
             total[index] += value
     _cache_save(cache)
     print(
         f"\n{total[0]} beat(s) agree, {total[1]} differ, "
         f"{total[2]} skipped, {total[3]} idle (re-run); "
         f"{total[4]} beat(s) differ in the roster panel, "
-        f"{total[5]} in the map viewport"
+        f"{total[5]} in the map viewport, {total[6]} in the screen chrome"
     )
     if KINDS:
         # `stock-idle`/`engine-idle` are re-run candidates, `offset`/`cursor`
