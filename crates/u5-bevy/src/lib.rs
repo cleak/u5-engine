@@ -9654,6 +9654,20 @@ fn apply_visual_route_command(
         }
         return Ok(PlayInputDisposition::Continue);
     }
+    // A route script answers an open `Direction-` prompt with a compass
+    // digit, which stands for the keypad key with NumLock on: `input.md §5`
+    // translates that one into a direction code before any prompt sees it,
+    // while "Plain unmodified top-row digits remain ordinary text input" and
+    // no longer answer the prompt (R589). Deliver the translated code, as the
+    // live shell's keypad does. Digits anywhere else (a member picker, say)
+    // stay digits.
+    if state.active_direction_prompt.is_some() {
+        if let [digit @ b'1'..=b'9'] = command.as_bytes() {
+            if let Some(code) = u5_runtime::input_keypad_digit_direction_code(digit - b'0') {
+                return handle_play_key_input(state, char::from(code), "", game_dir);
+            }
+        }
+    }
     let mut chars = command.chars();
     let Some(key) = chars.next() else {
         return handle_play_key_input(state, '\n', "", game_dir);
@@ -31501,6 +31515,12 @@ mod tests {
             state.potion_stock.fill(0);
             state.potion_stock[u5_runtime::POTION_YELLOW_INDEX] = 1;
             state.party[0].hp = 5;
+            // `catalogs/item-list.md §7.2` (u5-spec#300 Q23): a first
+            // variation draw of `0` forces Orange and `1` a random id, so
+            // the drink only heals on a seed whose draw keeps Yellow. The
+            // shell's default stream stopped doing so when that draw order
+            // landed; pin one that does.
+            state.prng_state = 0x1234;
         }
         shell.ticks(10);
         assert!(!shell.speaker_busy());
