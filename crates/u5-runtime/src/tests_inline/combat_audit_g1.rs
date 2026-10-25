@@ -677,3 +677,61 @@ fn party_direction_melee_takes_the_flee_classifier_at_hit_time_not_in_the_narrat
         "the narrator must not take the morale draw a second time"
     );
 }
+
+/// A two-member arena with the second member standing in the caster's
+/// north cone, for the friendly-fire Sleep and Poison Wind arms.
+fn p10_friendly_fire_state(spell: usize) -> PlayState {
+    let mut state = combat_ai_turn_state(12, 12);
+    state.party[0].status = b'G';
+    state.party[0].mana = 99;
+    state.party[0].level = 8;
+    let mut second = state.party[0].clone();
+    second.slot = 1;
+    state.party.push(second);
+    state.party_intelligence = vec![31, 1];
+    state.party_combat_defense = vec![0; 2];
+    state.spell_charges[spell] = 9;
+    state.combat_actors[8] = CombatActorDescriptor::empty();
+    state.active_objects[8] = ActiveObject::empty();
+    state.active_objects[1] = ActiveObject {
+        type_byte: 0x80,
+        tile: 0x80,
+        x: 5,
+        y: 4,
+        ..ActiveObject::empty()
+    };
+    state.combat_actors[1] =
+        CombatActorDescriptor::from_row([20, 1, COMBAT_ACTOR_FLAG_SELECTABLE_80, 1, 1, 0, 5, 4]);
+    state
+}
+
+/// p10 R09. `combat.md §6.2`'s party row: In Zu on a party member writes
+/// the `'S'` letter **and** the descriptor's disabled bit, which is what
+/// routes the sleeper to `§8.1`'s asleep arm. The production cast wrote only
+/// the letter, so the sleeper kept being prompted and never printed
+/// `Zzzzz...`.
+#[test]
+fn in_zu_friendly_fire_sets_the_party_members_asleep_bit() {
+    let spell = spell_index_from_code("IZ").unwrap();
+    let mut slept = false;
+    for seed in 0..256u16 {
+        let mut state = p10_friendly_fire_state(spell);
+        state.prng_state = seed.wrapping_mul(0x9E37);
+        let _ = state.cast_directed_combat_spell(
+            0,
+            spell,
+            CombatDirectedSpellEffect::Sleep,
+            Some(Direction::North),
+        );
+        if state.party[1].status != b'S' {
+            continue;
+        }
+        slept = true;
+        assert!(
+            state.combat_actors[1].is_status_disabled(),
+            "seed {seed}: the slept member's descriptor carries bit 0x08"
+        );
+        break;
+    }
+    assert!(slept, "no seed let In Zu land on the party member");
+}

@@ -5962,8 +5962,13 @@ impl PlayState {
                         continue;
                     }
                     if slot < COMBAT_PARTY_ACTOR_SLOTS {
-                        if let Some(member) = self.party.get_mut(slot) {
-                            let _ = apply_combat_sleep_to_party_target(member);
+                        // `combat.md §6.2`'s party row: the status byte, the
+                        // descriptor's disabled bit, the prone marker, the
+                        // active-player clear and the panel redraw - the
+                        // shared sleep writer. Writing only the roster letter
+                        // never set bit `0x08`, so `§8.1`'s asleep arm never
+                        // ran and the sleeper kept being prompted (p10 R09).
+                        if self.apply_combat_sleep_effect_to_target(slot).is_some() {
                             affected = true;
                         }
                     } else {
