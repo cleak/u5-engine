@@ -2003,12 +2003,18 @@
 
         // npc-schedules.md §9.2: the schedule pass produces the event.
         state.advance_npc_schedules();
+        let hp_before = state.party[0].hp;
         assert_eq!(
             state.apply_town_npc_contact_event(scene, 0, Path::new("")).unwrap(),
             Some(MoveOutcome::Used)
         );
-        // Playtest K13: the shouted line's wording is unpublished.
-        assert!(state.message.is_empty(), "{:?}", state.message);
+        // u5-spec#300 Q19: "one line feed, the line, the same damage pass,
+        // then flight for that NPC".
+        assert!(state
+            .message_entries()
+            .iter()
+            .any(|entry| entry.text == TOWN_NPC_BRUSHOFF_LINE));
+        assert!((1..=8).contains(&(hp_before - state.party[0].hp)));
         assert!(state.diagnostics_contain("shouts the brush-off"));
         assert_eq!(&state.npcs[0].schedule[..3], &[3, 3, 3]);
         assert_eq!(state.npcs[0].dialog_id, TOWN_NPC_COWERING_DIALOG_ID);

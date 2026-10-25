@@ -542,7 +542,9 @@ pub const TOWN_NPC_COWERING_RESPONSE: &str = "\"Don't hurt me!\nPlease go away!\
 pub fn town_npc_dispatcher_sentinel_line(dialog_id: u8) -> Option<String> {
     match dialog_id {
         TOWN_NPC_COWERING_DIALOG_ID => Some(format!("\n{TOWN_NPC_COWERING_RESPONSE}")),
-        TOWN_NPC_BRUSHOFF_DIALOG_ID => Some("\n".to_string()),
+        // `town-mode.md §14` / `conversation.md §2` (u5-spec#300 Q19): the
+        // dispatcher's leading line feed and `"Begone,` / `vermin!"`.
+        TOWN_NPC_BRUSHOFF_DIALOG_ID => Some(format!("\n{TOWN_NPC_BRUSHOFF_LINE}")),
         _ => None,
     }
 }
@@ -552,6 +554,11 @@ pub fn town_npc_dispatcher_sentinel_line(dialog_id: u8) -> Option<String> {
 pub const TOWN_NPC_CONTACT_CONFLICT_ACTOR_FIRST: u8 = 0x40;
 /// `town-mode.md §14`: the conflict outcome's printed line.
 pub const TOWN_NPC_CONTACT_ATTACKED_LINE: &str = "Attacked!";
+/// `town-mode.md §14` / `npc-schedules.md` producer table (u5-spec#300
+/// Q19): the shouted brush-off of dialogue `0xFE`, "quotes included, ending
+/// in its own line feed"; the sixteen-column window wraps it as `"Begone,`
+/// / `vermin!"`.
+pub const TOWN_NPC_BRUSHOFF_LINE: &str = "\"Begone, vermin!\"";
 /// Slot zero of every sub-map is the unused-sentinel slot the schedule
 /// processor skips; effective capacity per sub-map is therefore 31.
 pub const NPC_SENTINEL_SLOT: usize = 0;

@@ -4677,14 +4677,16 @@ impl PlayState {
             && let Some(index) = self.npcs.iter().position(|npc| npc.slot == npc_slot)
             && self.npcs[index].dialog_id == TOWN_NPC_BRUSHOFF_DIALOG_ID
         {
+            // `town-mode.md §14` / `npc-schedules.md` producer table
+            // (u5-spec#300 Q19): "one line feed, the line, the same damage
+            // pass, then flight for that NPC. There is no `Attacked!`, no
+            // conflict and no arrest."
+            self.message_row_open_mid_line = false;
+            self.emit_message_line(format!("\n{TOWN_NPC_BRUSHOFF_LINE}\n"));
+            let _ = self.apply_outdoor_impact_party_damage();
             let _ = self.npcs[index].force_town_flight();
             self.record_town_npc_mutation(index);
-            // The shouted line's wording is not published
-            // (`conversation.md §2` step 5, `OPEN-QUESTIONS.md`), so it is
-            // recorded rather than invented (playtest K13).
-            self.push_diagnostic(format!(
-                "NPC slot {npc_slot} shouts the brush-off; its line is not published"
-            ));
+            self.push_diagnostic(format!("NPC slot {npc_slot} shouts the brush-off"));
             return Ok(Some(MoveOutcome::Used));
         }
         // Measured 2026-09-08 at Minoc's gate at 16:00

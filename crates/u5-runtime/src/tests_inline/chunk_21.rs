@@ -6503,9 +6503,11 @@ fn brush_off_talk_skips_tlk_loading_and_attempts_forced_flight() {
         state.talk_facing_with_game_dir(&dir).unwrap(),
         MoveOutcome::Talked
     );
-    assert_eq!(state.message, "\n");
-    assert_eq!(state.npcs[0].dialog_id, TOWN_NPC_COWERING_DIALOG_ID);
-    assert_eq!(&state.npcs[0].schedule[..3], &[3, 3, 3]);
+    // u5-spec#300 Q19 (R601): the line prints, and the flight helper is not
+    // given the talked-to NPC's number, so that NPC keeps its schedule.
+    assert_eq!(state.message, format!("\n{TOWN_NPC_BRUSHOFF_LINE}"));
+    assert_eq!(state.npcs[0].dialog_id, TOWN_NPC_BRUSHOFF_DIALOG_ID);
+    assert_eq!(&state.npcs[0].schedule[..3], &[7, 7, 7]);
     assert_eq!(state.turn, 1);
     let _ = fs::remove_dir_all(dir);
 }

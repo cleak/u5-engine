@@ -5738,20 +5738,13 @@ impl PlayState {
             TOWN_NPC_COWERING_DIALOG_ID | TOWN_NPC_BRUSHOFF_DIALOG_ID
         ) {
             if dialog_id == TOWN_NPC_BRUSHOFF_DIALOG_ID {
-                let target_slot = self
-                    .talk_record_at(target_x, target_y)
-                    .map(|npc| npc.slot);
-                if let Some(index) = self
-                    .npcs
-                    .iter()
-                    .position(|npc| Some(npc.slot) == target_slot)
-                {
-                    let _ = self.npcs[index].force_town_flight();
-                    self.record_town_npc_mutation(index);
-                }
-                self.push_diagnostic(
-                    "scare hand-off reached; its line is not published".to_string(),
-                );
+                // `town-mode.md §14` (u5-spec#300 Q19, R601): the line, then
+                // "the whole-party damage pass ... then the forced-flight
+                // helper; on explicit Talk that helper is not given the
+                // talked-to NPC's number". Which NPC it rewrites is not
+                // established, so no NPC is rewritten here.
+                let _ = (target_x, target_y);
+                let _ = self.apply_outdoor_impact_party_damage();
             }
             let text = town_npc_dispatcher_sentinel_line(dialog_id)
                 .expect("cowering and scare indices are dispatcher sentinels");
@@ -6608,20 +6601,12 @@ impl PlayState {
         match dialog_id {
             TOWN_NPC_COWERING_DIALOG_ID => {}
             TOWN_NPC_BRUSHOFF_DIALOG_ID => {
-                let target_slot = self
-                    .talk_record_at(target_x, target_y)
-                    .map(|npc| npc.slot);
-                if let Some(index) = self
-                    .npcs
-                    .iter()
-                    .position(|npc| Some(npc.slot) == target_slot)
-                {
-                    let _ = self.npcs[index].force_town_flight();
-                    self.record_town_npc_mutation(index);
-                }
-                self.push_diagnostic(
-                    "scare hand-off reached; its line is not published".to_string(),
-                );
+                // `town-mode.md §14` (u5-spec#300 Q19, R601): the line, the
+                // whole-party damage pass, and a flight helper that is not
+                // given the talked-to NPC's number (its target is not
+                // established), so no NPC is rewritten here.
+                let _ = (target_x, target_y);
+                let _ = self.apply_outdoor_impact_party_damage();
             }
             _ => return None,
         }

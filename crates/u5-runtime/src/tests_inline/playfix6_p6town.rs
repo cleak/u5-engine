@@ -207,13 +207,13 @@ fn p6town_cowering_and_scare_talk_follow_the_dispatchers_leading_feed() {
     }
 }
 
-/// Playtest K13. `conversation.md §2` step 5: the scare index "hand[s] off to
-/// the town scare-and-flee helper ... no literals are established", and
-/// `OPEN-QUESTIONS.md` lists the gap. The engine printed an invented
-/// `Begone, vermin!`; it now prints nothing past the dispatcher's feed and
-/// still applies the flight rewrite.
+/// `town-mode.md §14` (u5-spec#300 Q19, R601): Talk on dialogue `0xFE`
+/// prints the dispatcher's leading line feed and `"Begone,` / `vermin!"`,
+/// then runs the whole-party damage pass (each non-Dead slot takes `1..8`);
+/// the flight helper is not given the talked-to NPC's number, so that NPC
+/// is not rewritten. Playtest K13 had printed nothing and rewritten it.
 #[test]
-fn p6town_scare_talk_prints_no_invented_line() {
+fn spec300_q19_scare_talk_prints_begone_vermin_and_damages_the_party() {
     let mut state = test_state(open_grid(), 1, 1);
     state.player.facing = Direction::East;
     state.load_scheduled_npcs(&[
@@ -226,10 +226,11 @@ fn p6town_scare_talk_prints_no_invented_line() {
             name: None,
         },
     ]);
+    let hp = state.party[0].hp;
     state.talk_facing_with_dialogue(&HashMap::new());
-    assert_eq!(state.message.trim(), "");
-    assert!(state.diagnostics_contain("scare hand-off reached"));
-    assert_eq!(&state.npcs[0].schedule[..3], &[3, 3, 3]);
+    assert_eq!(state.message, format!("\n{TOWN_NPC_BRUSHOFF_LINE}"));
+    assert!((1..=8).contains(&(hp - state.party[0].hp)));
+    assert_eq!(&state.npcs[0].schedule[..3], &[7, 7, 7]);
 }
 
 /// Playtest K19. `view.md §3` step 3 reads the Look target "through the
