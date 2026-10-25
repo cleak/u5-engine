@@ -1360,6 +1360,24 @@ pub fn gameplay_chrome_content(state: &crate::PlayState) -> GameplayChromeConten
             picker_page_glyph,
         };
     }
+    // `moons.md §3`: "The renderer is suppressed for dungeon-class views,
+    // combat, and the underworld presentation ... Combat and the underworld
+    // leave both gaps as plain chrome." `§2.2` puts combat outside the
+    // renderer's scene gate ("nothing is drawn"), and `weather.md §2.1`:
+    // "The banner is not drawn in combat-class scenes". The arena kept the
+    // underlying scene's live, clock-driven strip and wind banner - or the
+    // dungeon's level and facing labels - because this switch reads only
+    // the area (playtest Q10).
+    if state.combat_active {
+        return GameplayChromeContent {
+            top: ChromeGap::Unbroken,
+            bottom: ChromeGap::Unbroken,
+            stats_label,
+            timing_glyph,
+            stats_panel_single_box,
+            picker_page_glyph,
+        };
+    }
     match state.area {
         crate::Area::Dungeon { level, .. } => GameplayChromeContent {
             top: ChromeGap::Label(dungeon_level_label(level)),

@@ -169,3 +169,36 @@ fn playtest_q19_aimed_spell_confirmed_on_an_empty_cell_still_plays_its_effect() 
     assert!(cancelled.active_cast_followup.is_none());
     assert!(cancelled.sound_effects_after(serial).is_empty());
 }
+
+/// `moons.md §3`: "Combat and the underworld leave both gaps as plain
+/// chrome"; `§2.2` keeps combat outside the strip renderer's scene gate and
+/// `weather.md §2.1` says "The banner is not drawn in combat-class scenes".
+/// An arena fought in a town, on the surface or in a dungeon room kept the
+/// underlying scene's live strip and wind banner, or its level and facing
+/// labels (Q10).
+#[test]
+fn playtest_q10_combat_arena_leaves_both_ribbon_gaps_plain() {
+    let mut town = test_state(open_grid(), 1, 1);
+    town.wind = WindState::South;
+    town.wind_save_byte = WindState::South.save_byte();
+    assert!(matches!(
+        gameplay_chrome_content(&town).top,
+        ChromeGap::SkyStrip(_)
+    ));
+    town.combat_active = true;
+    let arena = gameplay_chrome_content(&town);
+    assert_eq!(arena.top, ChromeGap::Unbroken);
+    assert_eq!(arena.bottom, ChromeGap::Unbroken);
+
+    let mut surface = world_state(open_world_grid(), 10, 20);
+    surface.combat_active = true;
+    let arena = gameplay_chrome_content(&surface);
+    assert_eq!(arena.top, ChromeGap::Unbroken);
+    assert_eq!(arena.bottom, ChromeGap::Unbroken);
+
+    let mut room = dungeon_state(open_dungeon_record(), 0, 1, 1);
+    room.combat_active = true;
+    let arena = gameplay_chrome_content(&room);
+    assert_eq!(arena.top, ChromeGap::Unbroken);
+    assert_eq!(arena.bottom, ChromeGap::Unbroken);
+}
