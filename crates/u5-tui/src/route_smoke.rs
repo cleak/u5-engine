@@ -3078,11 +3078,11 @@ fn append_harpsichord_route_smoke_cases(cases: &mut Vec<RouteSmokeCase>, castle:
             // Off the chair the digits reach the resident dispatcher,
             // where `commands.md §5.2` gives them to Set Active Player:
             // neither `8` nor `5` names a slot this party has, so both
-            // answer `Invalid!` and neither costs a turn.
+            // answer `Invalid!`, which reports acted (u5-spec#300 Q34).
             "castle-harpsichord-digit-is-an-ordinary-command-off-the-chair",
             off_chair,
             &["8", "5"][..],
-            0,
+            2,
         ),
         (
             "castle-harpsichord-passage-lost-on-floor-round-trip",
@@ -6899,9 +6899,10 @@ fn validate_route_smoke_case_state(
             // Both digits reached the ordinary dispatcher, where
             // `commands.md §5.2` gives them to Set Active Player: neither
             // names a slot this party has, so both answer `Invalid!`, the
-            // party has not moved and no turn was spent.
+            // party has not moved and each spent the acted town turn
+            // (u5-spec#300 Q34).
             let passage = harpsichord_route_passage_tile(state);
-            if state.turn != 0
+            if state.turn != 2
                 || state.player.x != HARPSICHORD_ROUTE_X
                 || state.player.y != HARPSICHORD_ROUTE_OFF_CHAIR_Y
                 || state.harpsichord_progress() != 0

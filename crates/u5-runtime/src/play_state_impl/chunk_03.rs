@@ -1084,10 +1084,10 @@ impl PlayState {
     /// it. Measured against the original with a two-member party: `0`
     /// answers `None!` and clears the selection, `1` answers `Avatar`
     /// and sets it, and `9` answers `Invalid!` and changes nothing. Turn
-    /// cost follows the mode: in town an ordinary selection reports
-    /// "acted" (`town-mode.md §7.2`), so the per-turn epilogue runs; the
-    /// deselect, a rejected digit, the dungeon and the overworld take no
-    /// world time (see the charge below).
+    /// cost (`town-mode.md §7.2`, `overworld.md §5` step 5): `None!` and a
+    /// successful selection are free, while `Invalid!` reports "acted" and
+    /// runs the mode's per-turn epilogue in town and on the overworld
+    /// (see the charge below).
     pub fn set_active_player_command(&mut self, digit: char) -> MoveOutcome {
         self.begin_command_echo_for(Command::SetActivePlayer);
         let slot = digit.to_digit(10).map(|digit| digit as usize);
@@ -1137,15 +1137,15 @@ impl PlayState {
         if selected {
             self.stats_panel_command_refresh = crate::stats_panel::PanelRefreshMode::Always;
         }
-        // `town-mode.md §7.2`: away from the harpsichord the town digit
-        // handler "falls through to the ordinary solo-member selector, which
-        // reports \"acted\" for an ordinary selection and \"no action\" for
-        // the deselect-to-whole-party case", and `commands.md §3` runs the
-        // per-turn epilogue on "acted" (playtest Q14). The dungeon always
-        // reports "no action" (`dungeon-mode.md §4` step 3); the overworld
-        // routes digits to a speed selector whose status is unpublished, and
-        // a rejected digit is neither case, so both keep the free answer.
-        if selected && slot != Some(0) && matches!(self.area, Area::Town { .. }) {
+        // `town-mode.md §7.2` (u5-spec#300 Q34, R616): town digits away from
+        // the harpsichord and overworld digits (`overworld.md §5` step 5,
+        // R618: there is no speed selector) reach one shared active-player
+        // selector. `None!` and a successful selection report "no action"
+        // and are free; `Invalid!` reports "acted", so the town epilogue
+        // (one minute) or the overworld per-turn block (two minutes) runs.
+        // The dungeon route stays "always no action" (`dungeon-mode.md §4`
+        // step 3), which the spec flags as under review, not changed.
+        if !selected && matches!(self.area, Area::Town { .. } | Area::World { .. }) {
             self.charge_tile_command_acted_exit(self.turn);
         }
         // `commands.md §5`'s `0` row: every answer - `None!`, `Invalid!` or

@@ -43,12 +43,12 @@ fn town_digit_falls_through_to_the_ordinary_dispatcher_when_not_seated() {
 
     // Away from the chair the digit is forwarded to the resident
     // dispatcher, which answers Set Active Player: `6` and `5` both name
-    // slots this one-member party does not have, so both are `Invalid!`
-    // and neither costs a turn or moves the party.
+    // slots this one-member party does not have, so both are `Invalid!`,
+    // which reports acted (u5-spec#300 Q34) and does not move the party.
     play_digits(&mut state, &[6]);
     assert_eq!(state.message, SET_ACTIVE_PLAYER_INVALID_REPLY);
     assert_eq!((state.player.x, state.player.y), (10, 10));
-    assert_eq!(state.turn, 0);
+    assert_eq!(state.turn, 1);
 
     play_digits(&mut state, &[5]);
     assert_eq!(state.message, SET_ACTIVE_PLAYER_INVALID_REPLY);
