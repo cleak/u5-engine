@@ -1703,22 +1703,29 @@ pub const fn dungeon_room_post_combat_patch_byte(tile: u8) -> Option<u8> {
 
 /// `dungeon-mode.md §4.1`: maximum random placement attempts the
 /// dungeon active-object setup helper makes on the current 8x8 level
-/// before clearing the active-object coordinates and sprite marker.
+/// before writing the inactive record.
 pub const DUNGEON_ACTIVE_OBJECT_PLACEMENT_ATTEMPTS: u8 = 8;
 
-/// `dungeon-mode.md §4.1`: first tile id in the dungeon active-object
-/// spawn family. The placement helper accepts only cells whose byte
-/// falls in the pit (`0x6?`) or corridor (`0x7?`) classes.
-pub const DUNGEON_ACTIVE_OBJECT_SPAWN_TILE_FIRST: u8 = 0x60;
-/// `dungeon-mode.md §4.1`: last tile id in the dungeon active-object
-/// spawn family.
-pub const DUNGEON_ACTIVE_OBJECT_SPAWN_TILE_LAST: u8 = 0x7F;
+/// `dungeon-mode.md §4.1`: the one rejected class below the first rejected
+/// band - the pit `0x6?` (u5-spec#300 Q24, R610).
+pub const DUNGEON_ACTIVE_OBJECT_SPAWN_REJECTED_PIT_CLASS: u8 = 0x6;
+/// `dungeon-mode.md §4.1`: high nibbles from this one up (energy fields,
+/// the room/door classes and the walls) are rejected (R610).
+pub const DUNGEON_ACTIVE_OBJECT_SPAWN_REJECTED_CLASS_FIRST: u8 = 0x8;
+/// `dungeon-mode.md §4.1`: the inactive record's off-grid X and Y. "X and
+/// Y of both the active-object record and the first dungeon creature slot
+/// ... are set to 255, outside the 0..7 grid" (u5-spec#300 Q24).
+pub const DUNGEON_ACTIVE_OBJECT_INACTIVE_COORDINATE: usize = 255;
 
-/// `dungeon-mode.md §4.1`: returns `true` when `tile` is a legal cell
-/// for dungeon active-object placement (pit/corridor classes only).
-/// The party's current cell must still be rejected by the caller.
+/// `dungeon-mode.md §4.1` (u5-spec#300 Q24, R610): "A candidate cell is
+/// accepted when its high nibble is `0x0` through `0x5` or `0x7` (passage,
+/// the three ladder classes, closed chest, fountain, open chest) and
+/// rejected when it is `0x6` (pit) or `0x8` and above". The party's row and
+/// column must still be rejected by the caller.
 pub const fn dungeon_active_object_spawn_accepts(tile: u8) -> bool {
-    tile >= DUNGEON_ACTIVE_OBJECT_SPAWN_TILE_FIRST && tile <= DUNGEON_ACTIVE_OBJECT_SPAWN_TILE_LAST
+    let class = tile >> 4;
+    class != DUNGEON_ACTIVE_OBJECT_SPAWN_REJECTED_PIT_CLASS
+        && class < DUNGEON_ACTIVE_OBJECT_SPAWN_REJECTED_CLASS_FIRST
 }
 
 /// `dungeon-mode.md §3`: L-Look description-byte normalisation. The

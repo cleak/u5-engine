@@ -1424,7 +1424,12 @@ impl PlayState {
         for _ in 0..DUNGEON_ACTIVE_OBJECT_PLACEMENT_ATTEMPTS {
             let x = usize::from(self.random_range_u8(0, (DUNGEON_SIDE - 1) as u8));
             let y = usize::from(self.random_range_u8(0, (DUNGEON_SIDE - 1) as u8));
-            if (x, y) == (self.player.x, self.player.y)
+            // `dungeon-mode.md §4.1` (u5-spec#300 Q24, R610): "a candidate
+            // is also rejected when it shares the party's X **or** the
+            // party's Y, so the party's whole row and whole column are
+            // excluded, not only its own cell".
+            if x == self.player.x
+                || y == self.player.y
                 || !dungeon_active_object_spawn_accepts(self.dungeon_cell(level, x, y))
             {
                 continue;
@@ -1442,11 +1447,22 @@ impl PlayState {
             object.aux3 = DUNGEON_MONSTER_UPPER_DEP3;
         }
         if !placed {
+            // `dungeon-mode.md §4.1` (u5-spec#300 Q24): "X and Y of both the
+            // active-object record and the first dungeon creature slot ...
+            // are set to 255, outside the 0..7 grid; then type and tile are
+            // set to zero and the class byte to the inactive marker `0xFF`.
+            // The sprite-state byte, the placement selector ... and the
+            // stamped level are left as the roll wrote them." A zeroed X/Y
+            // "would be a live record at cell (0, 0)".
             object.type_byte = 0;
             object.tile = 0;
-            object.x = 0;
-            object.y = 0;
+            object.x = DUNGEON_ACTIVE_OBJECT_INACTIVE_COORDINATE;
+            object.y = DUNGEON_ACTIVE_OBJECT_INACTIVE_COORDINATE;
             object.aux1 = DUNGEON_MONSTER_INACTIVE_DEP1;
+            self.dungeon_monster_previous_cell = Some((
+                DUNGEON_ACTIVE_OBJECT_INACTIVE_COORDINATE,
+                DUNGEON_ACTIVE_OBJECT_INACTIVE_COORDINATE,
+            ));
         }
 
         if self.active_objects.len() <= DUNGEON_ACTIVE_MONSTER_SLOT {

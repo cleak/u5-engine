@@ -6442,33 +6442,20 @@ fn tile_passability_bitset_uses_msb_first_packing() {
 
 #[test]
 fn dungeon_active_object_spawn_band_matches_spec() {
-    // dungeon-mode.md §4.1: dungeon view initialisation accepts
-    // only cells in the pit (0x6?) or corridor (0x7?) classes
-    // when placing the active-object, and bails after eight
-    // random attempts. Promote both edges of the spawn band and
-    // the attempt cap to named constants.
+    // dungeon-mode.md §4.1 (u5-spec#300 Q24, R610): placement accepts high
+    // nibbles `0x0`..`0x5` and `0x7` and rejects `0x6` (pit) and `0x8` and
+    // above, and bails after eight random attempts.
     assert_eq!(DUNGEON_ACTIVE_OBJECT_PLACEMENT_ATTEMPTS, 8);
-    assert_eq!(DUNGEON_ACTIVE_OBJECT_SPAWN_TILE_FIRST, 0x60);
-    assert_eq!(DUNGEON_ACTIVE_OBJECT_SPAWN_TILE_LAST, 0x7F);
-    // Every tile in the band is a legal spawn target.
-    for tile in DUNGEON_ACTIVE_OBJECT_SPAWN_TILE_FIRST..=DUNGEON_ACTIVE_OBJECT_SPAWN_TILE_LAST {
-        assert!(
-            dungeon_active_object_spawn_accepts(tile),
-            "tile {tile:#04x}"
-        );
+    for class in 0u8..=0xF {
+        for low in [0u8, 0x9, 0xF] {
+            let tile = (class << 4) | low;
+            assert_eq!(
+                dungeon_active_object_spawn_accepts(tile),
+                matches!(class, 0x0..=0x5 | 0x7),
+                "tile {tile:#04x}"
+            );
+        }
     }
-    // Tiles just outside the band are rejected: 0x5F (fountain)
-    // and 0x80 (sleep field).
-    assert!(!dungeon_active_object_spawn_accepts(
-        DUNGEON_ACTIVE_OBJECT_SPAWN_TILE_FIRST - 1
-    ));
-    assert!(!dungeon_active_object_spawn_accepts(
-        DUNGEON_ACTIVE_OBJECT_SPAWN_TILE_LAST + 1
-    ));
-    // Passage (0x00) and wall classes are rejected too — only
-    // the pit/corridor band is a legal spawn cell.
-    assert!(!dungeon_active_object_spawn_accepts(0x00));
-    assert!(!dungeon_active_object_spawn_accepts(0xB0));
 }
 
 #[test]
@@ -6484,7 +6471,9 @@ fn fresh_dungeon_monster_setup_writes_the_public_record_shape() {
     assert_eq!(object.aux1, DUNGEON_MONSTER_COMBAT_CLASSES[family]);
     assert_eq!(object.phase, DUNGEON_MONSTER_INITIAL_STATES[family]);
     assert_eq!(object.z, 3);
-    assert_ne!((object.x, object.y), (state.player.x, state.player.y));
+    // R610: the party's whole row and column are rejected.
+    assert_ne!(object.x, state.player.x);
+    assert_ne!(object.y, state.player.y);
     assert!(dungeon_active_object_spawn_accepts(
         state.dungeon_cell(3, object.x, object.y)
     ));
@@ -6499,15 +6488,19 @@ fn fresh_dungeon_monster_setup_writes_the_public_record_shape() {
 
 #[test]
 fn failed_dungeon_monster_setup_uses_dep1_as_the_inactive_marker() {
-    let mut state = dungeon_state(open_dungeon_record(), 0, 1, 1);
+    // An all-pit level rejects every candidate (R610), so placement fails.
+    let mut state = dungeon_state(vec![0x60; DUNGEON_RECORD_LEN], 0, 1, 1);
 
     assert!(!state.setup_dungeon_active_monster_fresh());
 
+    // `dungeon-mode.md §4.1` (u5-spec#300 Q24): the inactive form writes
+    // X = Y = 255 into the record and the first creature slot.
     let object = state.active_objects[DUNGEON_ACTIVE_MONSTER_SLOT];
     assert_eq!(
         (object.type_byte, object.tile, object.x, object.y),
-        (0, 0, 0, 0)
+        (0, 0, 255, 255)
     );
+    assert_eq!(state.dungeon_monster_previous_cell, Some((255, 255)));
     assert_eq!(object.aux1, DUNGEON_MONSTER_INACTIVE_DEP1);
     assert!(!dungeon_monster_record_active(object));
 }
