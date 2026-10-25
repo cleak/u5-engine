@@ -548,6 +548,7 @@ fn playfix_e31_hours_prompt_zero_echoes_and_escape_is_read_past() {
     let dir = debug_game_dir();
     for cancel in ['0', ' '] {
         let mut state = world_state(open_world_grid(), 5, 5);
+        state.clock = GameClock::new(12, 0).unwrap();
         handle_play_key_input(&mut state, 'H', "", &dir).unwrap();
         assert!(state.active_rest.is_some());
         let before = state.message_transcript.len();
@@ -567,6 +568,11 @@ fn playfix_e31_hours_prompt_zero_echoes_and_escape_is_read_past() {
             "{cancel:?} is echoed on the prompt row: {rows:?}"
         );
         assert!(!state.message_row_open_mid_line);
+        // `commands.md §3` (issue #300 Q14): `H` "spends a turn on every
+        // path, including its own refusals and cancelled prompts" - here the
+        // ordinary outdoor turn (p10 R02).
+        assert_eq!(state.turn, 1, "{cancel:?} spends the outdoor turn");
+        assert_eq!(state.clock, GameClock::new(12, 2).unwrap());
     }
 
     let mut state = world_state(open_world_grid(), 5, 5);

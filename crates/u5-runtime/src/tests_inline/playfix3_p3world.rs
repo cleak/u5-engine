@@ -90,7 +90,11 @@ fn p3w_w2_town_bed_hours_prompt_zero_echoes_and_aborts_without_none() {
     );
     assert!(!rows.iter().any(|row| row.contains("None!")), "{rows:?}");
     assert!(!state.message_slot_needs_flush());
-    assert_eq!(state.clock, clock, "no rest elapsed");
+    // `commands.md §3` (issue #300 Q14): the cancelled prompt still spends
+    // the ordinary one-minute town turn - and no rest (p10 R02).
+    assert_eq!(state.turn, 1, "the cancelled prompt spends the town turn");
+    assert_eq!(state.clock, GameClock::new(10, 1).unwrap());
+    let _ = clock;
     let _ = std::fs::remove_dir_all(dir);
 }
 

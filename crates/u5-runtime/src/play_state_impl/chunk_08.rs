@@ -139,7 +139,10 @@ impl PlayState {
                     let camp = !matches!(self.area, Area::Town { .. });
                     if ch == '\u{1b}' && !camp {
                         self.message = "None!".to_string();
-                        return Ok(None);
+                        // `commands.md §3`: `H` spends a turn on every path,
+                        // cancelled prompts included (p10 R02).
+                        self.charge_tile_command_acted_exit(self.turn);
+                        return Ok(Some(MoveOutcome::Blocked));
                     }
                     let duration_input = if ch.is_ascii() {
                         rest_duration_input(ch as u8)
@@ -181,11 +184,18 @@ impl PlayState {
                         // town-hours path: Space and `0` cancel", so the
                         // town bed takes the same echo-and-abort; no
                         // `None!` is published for either (playtest W2).
+                        //
+                        // `commands.md §3` (issue #300 Q14): `H` is not a
+                        // forwarded route, so it "spends the turn on every
+                        // path, including its own refusals and cancelled
+                        // prompts" - the outdoor turn on a camp, the town
+                        // minute on a bed (p10 R02).
                         RestDurationInput::Cancel => {
                             let logged_prompt = self.rest_hours_logged_prompt();
                             self.commit_prompt_reply(&logged_prompt, &ch.to_string());
                             self.message_row_open_mid_line = false;
-                            return Ok(None);
+                            self.charge_tile_command_acted_exit(self.turn);
+                            return Ok(Some(MoveOutcome::Blocked));
                         }
                         RestDurationInput::Discard => {}
                     }
