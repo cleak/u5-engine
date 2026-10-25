@@ -3117,7 +3117,7 @@ fn inn_party_cap_anchors_to_save_party_size_max() {
 #[test]
 fn inn_stay_counter_month_rollover_cap_anchors_to_persistence_cap() {
     // shops.md §6 & §8.4: the inn registry's stored stay counter
-    // is bumped each 28-day month rollover and capped at 25; the
+    // is bumped each 28-day month rollover while below 25 (R587); the
     // persistence path clamps the same counter to the same value
     // when serializing the inn registry. The two constants must
     // stay coupled — INN_STAY_COUNTER_MAX is now anchored to

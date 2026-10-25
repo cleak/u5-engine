@@ -212,7 +212,7 @@ fn player_record_bytes_five_and_seven_round_trip_off_a_ship() {
 }
 
 /// `time.md §8`: "Each of the sixteen character record slots carries a
-/// one-byte counter. The month rollover increments it, capped at 25", and
+/// one-byte counter"; the rollover adds one while it is below 25 (R587), and
 /// `formats/saved-gam.md §3.1` +0x17 has the time system increment "every
 /// character-record slot". Unrecruited records age with the party and the
 /// lodged guests, and the next save writes the aged bytes (playtest G28).

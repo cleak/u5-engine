@@ -584,8 +584,8 @@ impl PlayState {
                 roster_record.experience,
             );
             // `formats/saved-gam.md` §3.1: the per-character month counter is
-            // "capped at 25" by *the time system* when it increments at the
-            // 28-day rollover. Clamping again on write mutates an inherited
+            // advanced by *the time system* at the 28-day rollover, only while
+            // below 25 (u5-spec#300 Q8, R587). Clamping again on write mutates an inherited
             // byte the engine only read - the shipped seed carries `0xFF`
             // here - so the raw value round-trips and the cap stays in the
             // ageing pass that owns it.
