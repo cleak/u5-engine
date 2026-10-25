@@ -320,4 +320,26 @@ mod arena_animation_conformance {
         assert_eq!(state.active_objects[5].tile, 0x20);
         assert!(!state.visibility_dirty);
     }
+
+    /// `active-objects.md §8` early-out 4 (u5-spec#300 Q16, R608): the
+    /// animator skips a slot whose frame byte is exactly `0x00`, `0x1D` (a
+    /// party combatant's invisibility frame) or `0x1E` (a party combatant's
+    /// asleep frame); "No other frame value is exempt". A sleeping party
+    /// combatant's record keeps its asleep frame and draws no coin.
+    #[test]
+    fn spec300_q16_asleep_and_invisible_party_frames_are_parked() {
+        let party = combat_party_actor_byte(b'F');
+        for parked in [COMBAT_POTION_SLEEP_DISPLAY_TILE, COMBAT_POTION_INVISIBLE_WAKE_DISPLAY_TILE] {
+            let mut record = arena_record(party, 4, 4, 0);
+            record.tile = parked;
+            let mut state = arena_animation_state(&[(1, record)]);
+            state.prng_state = 0x1234;
+            let prng_before = state.prng_state;
+            for _ in 0..64 {
+                state.animate_active_objects();
+                assert_eq!(state.active_objects[1].tile, parked);
+            }
+            assert_eq!(state.prng_state, prng_before, "{parked:#04x} drew no coin");
+        }
+    }
 }

@@ -5030,14 +5030,17 @@ impl PlayState {
         if object.tile == 0 || object.tile == ACTOR_TILE_TRANSPARENT_BYTE {
             return;
         }
-        // `active-objects.md §8` early-out 4: "A slot whose displayed-frame
-        // byte is the hidden value ... is skipped. This is how gameplay parks
-        // an actor." The arena's hidden value is non-zero since playtest J21
-        // (`COMBAT_HIDDEN_ACTIVE_OBJECT_TILE`), so it needs its own test here,
-        // ahead of the coin: otherwise the script rewrites a hidden
-        // combatant's frame back to a drawn sprite and draws a coin the
-        // parked slot never spends.
-        if self.combat_active && object.tile == crate::COMBAT_HIDDEN_ACTIVE_OBJECT_TILE {
+        // `active-objects.md §8` early-out 4 (u5-spec#300 Q16, R608): "A slot
+        // whose displayed-frame byte is exactly one of three values is
+        // skipped: `0x00`, the hidden value; `0x1D`, the party combatant's
+        // invisibility frame ...; or `0x1E`, a party combatant's asleep
+        // frame ... No other frame value is exempt; in particular the
+        // moldy-corpse value `0x1F` is not." The zero value returned above.
+        // Tested ahead of the coin, so a parked slot draws none.
+        if matches!(
+            object.tile,
+            crate::COMBAT_POTION_INVISIBLE_WAKE_DISPLAY_TILE | crate::COMBAT_POTION_SLEEP_DISPLAY_TILE
+        ) {
             return;
         }
         let Some(script) = active_object_animation_script(object.type_byte) else {
