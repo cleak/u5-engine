@@ -1404,10 +1404,17 @@ impl PlayState {
             })
     }
 
+    ///
+    /// `npc-schedules.md §9`: values 3 and 6 "share a dispatch handler ...
+    /// but the step chooser tests the mode again and gives them opposite
+    /// directions" - one chooser, testing "legal orthogonal neighbours in
+    /// **east, north, west, south** order", where "mode 3 retreats". So the
+    /// retreat walks the same order and an equal-distance tie goes east; it
+    /// used to walk west, south, east, north (p10 R15).
     pub fn town_npc_flee_step(&self, npc_index: usize, floor: u8) -> Option<(usize, usize)> {
         let mut best = None;
         let mut best_distance = self.town_npc_player_distance(npc_index);
-        for direction in TOWN_NPC_CARDINAL_DIRECTIONS {
+        for direction in TOWN_NPC_APPROACH_DIRECTIONS {
             if let Some((nx, ny)) = self.town_npc_step_in_direction_toward(
                 npc_index,
                 floor,
@@ -1941,12 +1948,6 @@ const TOWN_NPC_WANDER_DIRECTION_DRAW_MAX: u8 = 64;
 /// and the engagement path is "while the player is four or more tiles from
 /// the *waypoint*".
 const TOWN_NPC_APPROACH_ENGAGE_WAYPOINT_DISTANCE: usize = 4;
-const TOWN_NPC_CARDINAL_DIRECTIONS: [Direction; 4] = [
-    Direction::West,
-    Direction::South,
-    Direction::East,
-    Direction::North,
-];
 
 /// `npc-schedules.md §9.2`: "AI 4 or 5 | Zero live dialogue | No contact
 /// event; continue movement selection." Values 6/7 carry no dialogue

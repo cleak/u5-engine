@@ -70,6 +70,18 @@ fn g6_pos(state: &PlayState, index: usize) -> (usize, usize) {
     (state.npcs[index].x, state.npcs[index].y)
 }
 
+/// p10 R15. `npc-schedules.md §9`: values 3 and 6 share one step chooser,
+/// which tests "legal orthogonal neighbours in **east, north, west, south**
+/// order", and "mode 3 retreats". With east, north and west all tied at the
+/// farthest distance, the retreat takes east; it used to take west.
+#[test]
+fn a_fleeing_npc_breaks_a_distance_tie_east_first() {
+    // Party at (5,8), NPC at (5,5): east (6,5), north (5,4) and west (4,5)
+    // all reach distance 4.
+    let state = g6_town_with(vec![g6_npc(1, 5, 5, 3, (5, 5, 0))], 5, 8);
+    assert_eq!(state.town_npc_flee_step(0, 0), Some((6, 5)));
+}
+
 #[test]
 fn a133_modes_three_and_six_act_only_strictly_inside_four() {
     // npc-schedules.md §9 "The engagement step": "Values 3/6 use a
