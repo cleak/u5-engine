@@ -404,7 +404,8 @@ BRITANNIA 11 21
 
         assert_eq!(state.spell_charges[IN_LOR_SPELL_INDEX], 0);
         assert_eq!(state.party[0].mana, 0);
-        assert_eq!(state.light_spell_counter, IN_LOR_LIGHT_DURATION);
+        // `lighting.md §5`: the cast turn's cleanup ages the new counter (Q09).
+        assert_eq!(state.light_spell_counter, IN_LOR_LIGHT_DURATION - 1);
         assert_eq!(IN_LOR_LIGHT_DURATION, 100);
         assert_eq!(state.ambient_light, LIGHT_SPELL_FLOOR);
         assert_eq!(state.turn, 1);
@@ -629,6 +630,27 @@ BRITANNIA 11 21
         assert_eq!(blackthorn.message, "Absorbed!");
     }
 
+    /// `lighting.md §5`: "a normal overworld turn spends two" units, and the
+    /// cast turn's cleanup ages In Lor's 100 the same way it ages Ignite's
+    /// 240 (playtest Q09).
+    #[test]
+    fn cast_in_lor_on_the_overworld_is_aged_by_its_own_turn() {
+        let mut state = world_state(open_world_grid(), 5, 5);
+        state.spell_charges[IN_LOR_SPELL_INDEX] = 1;
+        state.party[0].mana = 1;
+        state.party[0].level = 1;
+        state.clock = GameClock::new(22, 0).unwrap();
+
+        assert_eq!(
+            handle_play_key_input(&mut state, 'C', "1LI", Path::new("")).unwrap(),
+            PlayInputDisposition::Continue
+        );
+
+        assert_eq!(state.spell_charges[IN_LOR_SPELL_INDEX], 0);
+        assert_eq!(state.clock, GameClock::new(22, 2).unwrap());
+        assert_eq!(state.light_spell_counter, IN_LOR_LIGHT_DURATION - 2);
+    }
+
     #[test]
     fn blackthorn_cast_absorption_clears_after_crown_ownership() {
         let mut state = test_state(open_grid(), 5, 5);
@@ -648,7 +670,8 @@ BRITANNIA 11 21
 
         assert_eq!(state.spell_charges[IN_LOR_SPELL_INDEX], 0);
         assert_eq!(state.party[0].mana, 0);
-        assert_eq!(state.light_spell_counter, IN_LOR_LIGHT_DURATION);
+        // `lighting.md §5`: the cast turn's cleanup ages the new counter (Q09).
+        assert_eq!(state.light_spell_counter, IN_LOR_LIGHT_DURATION - 1);
         assert_eq!(state.turn, 1);
         // Measured: the light *spell* prints no result line; `Light!`
         // is the Great Light scroll's banner.

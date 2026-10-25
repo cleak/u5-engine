@@ -2224,9 +2224,12 @@ impl PlayState {
                 self.grid[idx] = GET_TILE_WALL_TORCH_REPLACEMENT;
                 self.stats_panel_command_refresh = crate::stats_panel::PanelRefreshMode::Deferred;
                 self.mark_visibility_dirty();
+                // The counter is written inside dispatch, so the turn's
+                // cleanup ages it like any other torch write (`lighting.md
+                // §5`, playtest Q09).
+                self.apply_borrowed_lit_fixture_light(tile);
                 self.advance_turn();
                 self.message = GET_TILE_BORROWED_LINE.to_string();
-                self.apply_borrowed_lit_fixture_light(tile);
                 // audio.md §8.1 borrowed fixed object: the 40-update action
                 // snap after the line.
                 self.emit_sound_effect(SoundEffect::ActionSnap);

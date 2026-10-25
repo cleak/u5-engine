@@ -551,7 +551,8 @@
         assert!(state.active_cast.is_none());
         assert_eq!(state.spell_charges[IN_LOR_SPELL_INDEX], 0);
         assert_eq!(state.party[0].mana, 0);
-        assert_eq!(state.light_spell_counter, IN_LOR_LIGHT_DURATION);
+        // `lighting.md §5`: the cast turn's cleanup ages the new counter (Q09).
+        assert_eq!(state.light_spell_counter, IN_LOR_LIGHT_DURATION - 1);
         assert_eq!(state.turn, 1);
         // Measured: the light *spell* prints no result line; `Light!`
         // is the Great Light scroll's banner.
@@ -4506,7 +4507,8 @@
 
         assert_eq!(state.spell_charges[VAS_LOR_SPELL_INDEX], 0);
         assert_eq!(state.party[0].mana, 0);
-        assert_eq!(state.light_spell_counter, VAS_LOR_LIGHT_DURATION);
+        // `lighting.md §5`: the cast turn's cleanup ages the new counter (Q09).
+        assert_eq!(state.light_spell_counter, VAS_LOR_LIGHT_DURATION - 1);
         assert_eq!(VAS_LOR_LIGHT_DURATION, 255);
         assert_eq!(state.ambient_light, LIGHT_SPELL_FLOOR);
         assert_eq!(state.turn, 1);
