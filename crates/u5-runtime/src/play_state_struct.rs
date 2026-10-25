@@ -437,6 +437,20 @@ pub struct PlayState {
     /// messages do not clear it ... It flips back only when a later picker
     /// session leaves odd parity again."
     pub stats_panel_window_inverse: bool,
+    /// `formats/saved-gam.md §6`, `0x02EE`: "Combat entry uses it to save
+    /// the pre-combat scene for later restore". `None` until this process
+    /// enters a fight, so the save template's byte round-trips untouched;
+    /// afterwards the save writes the scene the last fight was entered from
+    /// (playtest N24).
+    pub saved_scene_scratch: Option<u8>,
+    /// `formats/saved-gam.md §4`: "Byte-compatible readers must preserve
+    /// unrecognized marker values", and `save-load.md §4.2`: the load path
+    /// "normalises no restored byte". The raw `0x02D6` marker a save was
+    /// loaded with, paired with the transport the engine decoded from it.
+    /// While the party's transport is still that decoded value the raw byte
+    /// is what slot zero and the save carry (`0x1D`, `0x00`, or an unknown
+    /// value); the first transport change drops it for good (playtest N25).
+    pub preserved_transport_marker: Option<(u8, TransportState)>,
     /// Narration this presentation is printing on a timer rather than all at
     /// once. `main-loop.md §9`: "presentations, cutscene beats and paced turn
     /// loops call [the world tick] directly", so a handler with waits between

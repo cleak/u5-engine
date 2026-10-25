@@ -179,6 +179,8 @@ pub fn test_state(grid: Vec<u8>, x: usize, y: usize) -> PlayState {
         overworld_prompt_pair_suppressed: false,
         town_hiccup_echo_continues: false,
         stats_panel_window_inverse: false,
+        saved_scene_scratch: None,
+        preserved_transport_marker: None,
         staged_narration: Default::default(),
         pending_text_hold: None,
         pending_blackthorn_rescue: None,
@@ -442,6 +444,8 @@ pub fn dungeon_state(grid: Vec<u8>, level: u8, x: usize, y: usize) -> PlayState 
         overworld_prompt_pair_suppressed: false,
         town_hiccup_echo_continues: false,
         stats_panel_window_inverse: false,
+        saved_scene_scratch: None,
+        preserved_transport_marker: None,
         staged_narration: Default::default(),
         pending_text_hold: None,
         pending_blackthorn_rescue: None,
@@ -711,6 +715,8 @@ pub fn world_state(grid: Vec<u8>, x: usize, y: usize) -> PlayState {
         overworld_prompt_pair_suppressed: false,
         town_hiccup_echo_continues: false,
         stats_panel_window_inverse: false,
+        saved_scene_scratch: None,
+        preserved_transport_marker: None,
         staged_narration: Default::default(),
         pending_text_hold: None,
         pending_blackthorn_rescue: None,
@@ -984,6 +990,10 @@ pub fn saved_game_seed_bytes(scene: u8, z: u8, x: u8, y: u8) -> Vec<u8> {
     bytes[SAVE_Z_OFFSET] = z;
     bytes[SAVE_X_OFFSET] = x;
     bytes[SAVE_Y_OFFSET] = y;
+    // The factory seed's on-foot marker (`vehicles.md §2`: `0x1C` is "the
+    // clean seed and default state"). A load now preserves the raw byte
+    // (playtest N25), so a zero here would read as the drowning state.
+    bytes[SAVE_TRANSPORT_MARKER_OFFSET] = 0x1c;
     write_u16_at(&mut bytes, SAVE_FOOD_STOCK_OFFSET, DEFAULT_FOOD_STOCK);
     write_u16_at(&mut bytes, SAVE_GOLD_STOCK_OFFSET, DEFAULT_GOLD_STOCK);
     bytes[SAVE_KEY_STOCK_OFFSET] = DEFAULT_KEY_STOCK;

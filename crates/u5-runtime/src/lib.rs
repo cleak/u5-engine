@@ -1027,6 +1027,7 @@ pub use town_tables_io_movement::*;
 pub use transport::{
     ABANDON_SHIP_MESSAGE, BoardVehicleCandidate, BoardableFamily, CARPET_BOARDING_EAST_MARKER,
     CARPET_BOARDING_NORTH_MARKER, CARPET_MARKER_FRAMES, CARPET_MOUNTED, CARPET_PARKED,
+    DELIVERED_VEHICLE_FACING_INDEX,
     DROWNING_MESSAGE, FRIGATE_PURCHASE_HULL, FRIGATE_PURCHASE_SKIFFS, HORSE_MOUNTED_FIRST,
     HORSE_MOUNTED_LAST, HORSE_PARKED_FIRST, HORSE_PARKED_LAST, OVERWORLD_PIER_TILE,
     PendingVehicleAcquisition, PendingVehicleSaveState, SHIP_BOARDING_HULL_WARNING_THRESHOLD,
@@ -1200,4 +1201,5 @@ mod tests {
     include!("tests_inline/playfix7_p7misc.rs");
     include!("tests_inline/playfix8_p8play.rs");
     include!("tests_inline/playfix8_p8visual.rs");
+    include!("tests_inline/playfix8_p8save.rs");
 }

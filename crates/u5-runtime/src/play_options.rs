@@ -111,6 +111,11 @@ pub struct PlayOptions {
     pub transport: TransportState,
     pub facing: Option<Direction>,
     pub door_tracker: Option<DoorTracker>,
+    /// The raw `0x02D6` transport/action marker of the save this start was
+    /// decoded from. `formats/saved-gam.md §4`: "Byte-compatible readers
+    /// must preserve unrecognized marker values"; `transport` keeps the
+    /// engine's semantic reading of it (playtest N25).
+    pub loaded_transport_marker: Option<u8>,
     pub pending_vehicle: Option<PendingVehicleAcquisition>,
     pub pending_vehicle_save: PendingVehicleSaveState,
     pub inn_registry: Vec<InnGuestRecord>,
@@ -204,6 +209,7 @@ impl Default for PlayOptions {
             transport: TransportState::Foot,
             facing: None,
             door_tracker: None,
+            loaded_transport_marker: None,
             pending_vehicle: None,
             pending_vehicle_save: PendingVehicleSaveState::default(),
             inn_registry: Vec::new(),

@@ -15,6 +15,13 @@ impl PlayState {
         if tracker.previous_tile == 0 {
             return;
         }
+        // `doors-and-z-transitions.md §5`: "The pass is suppressed in dungeon
+        // mode", and the tracker's cell is a town-grid cell. A save carrying
+        // the block into the overworld or a dungeon keeps it verbatim
+        // (playtest N23) but must never write it into that scene's map.
+        if !matches!(self.area, Area::Town { .. }) {
+            return;
+        }
         // `doors-and-z-transitions.md §5`: "Each turn that consumes a turn
         // decrements the countdown; when it hits zero the engine writes the
         // previous-tile byte back to the saved cell and the door silently
@@ -83,7 +90,17 @@ impl PlayState {
             TransportState::Ship { hull, skiffs, .. } => Some((hull, skiffs)),
             _ => None,
         };
-        let marker = self.player.transport.save_marker();
+        // A transport change ends the preserved raw marker for good, so a
+        // later return to the decoded value writes the canonical byte.
+        if self
+            .preserved_transport_marker
+            .is_some_and(|(_, decoded)| decoded != self.player.transport)
+        {
+            self.preserved_transport_marker = None;
+        }
+        let marker = self
+            .preserved_raw_transport_marker()
+            .unwrap_or_else(|| self.player.transport.save_marker());
         let player_object = ActiveObject {
             type_byte: marker,
             tile: marker,

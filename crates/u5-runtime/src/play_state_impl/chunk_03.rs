@@ -5578,6 +5578,31 @@ impl PlayState {
         }
     }
 
+    /// State that lives for the whole process rather than one scene: the
+    /// Ctrl+B type-ahead setting (`input.md §6`), the sound toggle
+    /// (`audio.md §3`) and the save bytes no scene change writes. Every
+    /// scene rebuild copies them from the outgoing state.
+    pub(crate) fn carry_session_settings_from(&mut self, previous: &Self) {
+        self.typeahead_buffer_enabled = previous.typeahead_buffer_enabled;
+        self.music_enabled = previous.music_enabled;
+        // Not a setting, but the same kind of process-lifetime carry: the
+        // `0x02EE` pre-combat scene a fight wrote stays until the next
+        // fight rewrites it (playtest N24).
+        self.saved_scene_scratch = previous.saved_scene_scratch;
+        // A location entry copies the marker byte, so a preserved raw value
+        // rides along while the transport is unchanged (playtest N25).
+        self.preserved_transport_marker = previous.preserved_transport_marker;
+    }
+
+    /// The raw loaded `0x02D6` marker, while the party's transport is still
+    /// the value decoded from it (see
+    /// [`PlayState::preserved_transport_marker`]).
+    pub fn preserved_raw_transport_marker(&self) -> Option<u8> {
+        self.preserved_transport_marker
+            .filter(|(_, decoded)| *decoded == self.player.transport)
+            .map(|(raw, _)| raw)
+    }
+
     pub fn music_status_label(&self) -> &'static str {
         if self.music_enabled { "on" } else { "off" }
     }

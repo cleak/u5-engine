@@ -2577,7 +2577,11 @@ impl PlayState {
             combat_interference_sources: self.combat_interference_sources,
             transport: entering_transport,
             facing: None,
-            door_tracker: None,
+            // Location setup clears only the previous-tile gate.
+            door_tracker: self.inert_door_tracker(),
+            // The rebuilt state takes the preserved raw marker from
+            // `carry_session_settings_from` instead.
+            loaded_transport_marker: None,
             pending_vehicle: None,
             pending_vehicle_save: self.pending_vehicle_save,
             inn_registry: self.inn_registry.clone(),
@@ -2744,6 +2748,12 @@ impl PlayState {
         // session leaves odd parity again." A scene rebuild is none of those,
         // so a leaked highlight keeps the panel inverted across the entry.
         next.stats_panel_window_inverse = self.stats_panel_window_inverse;
+        // `input.md §6`: "Three things write the setting and nothing else
+        // does" - Ctrl+B, the combat toggle and the free-text reader's
+        // save/restore - and `audio.md §3` resets the sound setting only for
+        // a new process. A scene rebuild is neither, so both carry across
+        // (playtest N15).
+        next.carry_session_settings_from(self);
         *self = next;
         Ok(match target {
             PlayTarget::Town(scene) => {

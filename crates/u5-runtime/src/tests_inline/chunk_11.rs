@@ -953,7 +953,18 @@
                 plane: WorldPlane::Britannia
             }
         );
-        assert_eq!(state.door_tracker, None);
+        // `doors-and-z-transitions.md §5`: the pending auto-close is
+        // cancelled (the previous-tile gate is zero); X, Y and the countdown
+        // stay resident and inert (playtest N23).
+        assert_eq!(
+            state.door_tracker,
+            Some(DoorTracker {
+                previous_tile: 0,
+                x: 3,
+                y: 1,
+                turns_remaining: 4,
+            })
+        );
         assert!(state.opened_town_doors.is_empty());
         assert!(state.revealed_town_secret_doors.is_empty());
         let _ = fs::remove_dir_all(dir);

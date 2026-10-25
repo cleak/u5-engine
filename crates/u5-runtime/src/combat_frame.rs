@@ -4443,6 +4443,11 @@ impl PlayState {
             dungeon_post_combat: None,
             any_foe_seated: combat_side_census(&actors).foes_remain(),
         };
+        // `formats/saved-gam.md §6`: "Combat entry uses it [`0x02EE`] to
+        // save the pre-combat scene for later restore" (playtest N24).
+        if let Some((scene, ..)) = self.current_save_location() {
+            self.saved_scene_scratch = Some(scene);
+        }
         self.active_objects = active_objects;
         // `combat.md §16.1`: the player-command handler's "one gate is the
         // active-player sentinel: while the sentinel is unset - **its state on

@@ -1229,8 +1229,14 @@ fn play_state_shipwright_purchase_restores_pending_delivery_to_world() {
         }
     );
     assert_eq!(state.active_objects.len(), 2);
-    assert_eq!(state.active_objects[1].type_byte, SHIP_PARKED_FIRST);
-    assert_eq!(state.active_objects[1].tile, SHIP_PARKED_FIRST);
+    assert_eq!(
+        state.active_objects[1].type_byte,
+        SHIP_PARKED_FIRST + DELIVERED_VEHICLE_FACING_INDEX
+    );
+    assert_eq!(
+        state.active_objects[1].tile,
+        SHIP_PARKED_FIRST + DELIVERED_VEHICLE_FACING_INDEX
+    );
     assert_eq!(
         (state.active_objects[1].x, state.active_objects[1].y),
         (12, 21)
