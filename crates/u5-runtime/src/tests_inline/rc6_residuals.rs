@@ -7,8 +7,8 @@
 /// framer" from inside the dispatch; `combat.md §4`: "combat is a function
 /// call" and "the only time a fight adds is its round-wrap minutes";
 /// `dungeon-mode.md §15`: the dungeon's one minute is charged at the head of
-/// the loop iteration and §4 step 6's post-action pass runs after the
-/// dispatch returns. The engine's dungeon arm advanced the turn (and its
+/// the loop iteration, and (u5-spec#300 Q10) the post-action pass does not
+/// run for A-Attack at all. The engine's dungeon arm advanced the turn (and its
 /// upkeep) before framing the arena, the sibling of playtest H21's overworld
 /// arm.
 #[test]
@@ -45,15 +45,12 @@ fn rc6_dungeon_attack_spends_no_turn_before_the_arena() {
     assert_eq!(state.clock, after_wrap);
     let turn_in_arena = state.turn;
 
-    // The exit spends the attack's turn, with no minute of its own: the
-    // iteration's minute was charged at the loop head.
+    // u5-spec#300 Q10: A-Attack "reports \"no action\" and calls no clock
+    // before or after the fight", and "must not run the post-action pass
+    // after the fight" - the exit spends no turn and no minute.
     state.apply_combat_round_loop_exit(CombatRoundLoopExit::LeaveCombat);
     assert!(!state.combat_active);
-    assert_eq!(
-        state.turn,
-        turn_in_arena + 1,
-        "the turn is spent after the arena"
-    );
+    assert_eq!(state.turn, turn_in_arena, "no turn is spent after the arena");
     assert_eq!(state.clock, after_wrap);
 }
 

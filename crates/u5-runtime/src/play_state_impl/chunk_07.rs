@@ -2464,13 +2464,13 @@ impl PlayState {
             self.mark_visibility_dirty();
             // `dungeon-mode.md §10`/§14.1 and `combat.md §4`: the arena is
             // entered from inside the A-Attack dispatch ("combat is a
-            // function call"), and the dungeon loop's only per-turn work -
-            // the loop-head minute (§15) and the post-action pass (§4 step
-            // 6) - sits before and after that dispatch. So nothing of the
-            // turn is spent here; the arena path leaves it to the round
-            // loop's exit (`apply_combat_round_loop_exit_inner`), which
-            // finds the loop-head minute still charged and adds none. The
-            // overworld arm made the same correction in playtest H21.
+            // function call"). u5-spec#300 Q10: "No turn is spent by the
+            // command itself. On every path, a match or `What?`, A-Attack
+            // reports \"no action\" and calls no clock before or after the
+            // fight", so the post-action pass does not run for it either; the
+            // only minute is the loop head's (§15). The round loop's exit
+            // (`apply_combat_round_loop_exit_inner`) therefore spends no turn
+            // for this fight.
             // `dungeon-mode.md §14.1`: "Presentation remains caller-owned. The
             // A-Attack path keeps its ordinary Attack command transcript before
             // the matching forward contact", and "Neither caller prints the
@@ -2488,9 +2488,8 @@ impl PlayState {
                 ));
                 return Ok(MoveOutcome::Used);
             }
-            // No arena: the attack acted without a fight, so its turn is
-            // spent now.
-            self.advance_turn();
+            // No arena (an object with no published class): u5-spec#300
+            // Q10 makes every A-Attack path "no action" with no clock call.
             self.push_diagnostic(format!(
                 "attacked dungeon object tile {} at ({x}, {y}) on {} level {level}; no published combat class",
                 object.tile,

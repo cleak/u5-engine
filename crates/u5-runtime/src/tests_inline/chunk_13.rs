@@ -25693,7 +25693,8 @@ fn dungeon_attack_forward_non_class_object_reports_no_combat_class() {
 
     assert!(state.handle_dungeon_key('A', Path::new("")).unwrap());
 
-    assert_eq!(state.turn, 1);
+    // u5-spec#300 Q10: every A-Attack path is "no action".
+    assert_eq!(state.turn, 0);
     assert!(!state.combat_active);
     assert!(state.active_objects[1].is_empty());
     assert!(

@@ -4689,6 +4689,13 @@ impl PlayState {
                         .as_ref()
                         .is_some_and(|snapshot| snapshot.exit_announced)
                     && !combat_has_active_not_dead_non_party_actor(&self.combat_actors));
+        // u5-spec#300 Q10 (`dungeon-mode.md §10`, `RETRACTIONS.md` R595):
+        // dungeon A-Attack "reports \"no action\" and calls no clock before
+        // or after the fight", and an implementation "must not run the
+        // post-action pass after the fight".
+        let dungeon_attack_fight = self.combat_frame_snapshot.as_ref().is_some_and(|snapshot| {
+            snapshot.dungeon_post_combat == Some(DungeonPostCombatApplier::AttackLevelsOnly)
+        });
         let restored_snapshot = if let Some(snapshot) = self.combat_frame_snapshot.take() {
             let enter_endgame_after_restore =
                 snapshot.enter_endgame_after_successful_combat && body_retrieval_exit;
@@ -4738,8 +4745,11 @@ impl PlayState {
         // the ordinary world turn advance, so its draws are the ones that
         // advance owns (NPC schedules and the active-object epilogue).
         // `§5.3` attaches no condition to it, so every way the round loop
-        // ends reaches it.
-        self.advance_turn();
+        // ends reaches it - except a dungeon A-Attack fight, whose only
+        // minute was the loop head's (u5-spec#300 Q10): it spends no turn.
+        if !dungeon_attack_fight {
+            self.advance_turn();
+        }
         self.apply_pending_world_object_walker_pass();
         CombatRoundLoopExitApplication {
             exit,
