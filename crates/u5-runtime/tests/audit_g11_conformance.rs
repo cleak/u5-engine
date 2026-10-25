@@ -250,7 +250,8 @@ fn a064_crops_and_wall_torches_are_tile_class_get_rules() {
     );
     assert_eq!(state.grid[2 * 32 + 1], 0x44);
     assert_eq!(state.message, GET_TILE_BORROWED_LINE);
-    assert_eq!(state.torch_counter, 100);
+    // `lighting.md §5`: the borrow turn's cleanup ages the 100 (playtest Q09).
+    assert_eq!(state.torch_counter, 99);
 }
 
 fn combat_snapshot(state: &PlayState, exit_announced: bool, any_foe_seated: bool) -> CombatFrameSnapshot {
