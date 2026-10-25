@@ -209,3 +209,108 @@ fn spec300_q22_town_off_bed_refusal_wraps_and_is_acted() {
     assert_eq!((state.turn, state.clock), (1, clock));
     let _ = std::fs::remove_dir_all(dir);
 }
+
+fn spec300_arrest_state(dir: &std::path::Path) -> PlayState {
+    let record = synthetic_combat_arena_record();
+    std::fs::write(dir.join(BRIT_CBT_FILE), record.repeat(BRIT_CBT_RECORDS)).unwrap();
+    let mut state = test_state(open_grid(), 5, 5);
+    state.load_scheduled_npcs(&[
+        NpcSlot { slot: 0, type_byte: 0, dialog_id: 0, schedule: [0; 16], name: None },
+        NpcSlot {
+            slot: 2,
+            type_byte: 0x70,
+            dialog_id: 0,
+            schedule: [6, 6, 6, 6, 6, 6, 5, 5, 5, 0, 0, 0, 0, 8, 16, 20],
+            name: None,
+        },
+    ]);
+    state.pass_turn_with_game_dir(Some(dir)).unwrap();
+    assert!(state.pending_town_arrest.is_some());
+    state
+}
+
+/// `town-mode.md §14` (u5-spec#300 Q7, R591, R592): the refusal echo is
+/// `No`; "a blank row, `"Then defend thyself, rogue!"` and the alarm sweep",
+/// then cleanup "prints `Attacked!` with its leading line feed and enters the
+/// NPC-conflict chain, an ordinary town arena fight". Only `Y`/`y`/`N`/`n`
+/// answer.
+#[test]
+fn spec300_q7_arrest_refusal_echoes_no_and_fights_the_guard() {
+    let dir = debug_game_dir();
+    let mut state = spec300_arrest_state(&dir);
+    handle_play_key_input(&mut state, 'x', "", &dir).unwrap();
+    assert!(state.pending_town_arrest.is_some(), "other keys are ignored");
+    let turn = state.turn;
+    handle_play_key_input(&mut state, 'N', "", &dir).unwrap();
+    assert!(state.pending_town_arrest.is_none());
+    let rows: Vec<String> = state
+        .message_transcript
+        .iter()
+        .map(|entry| entry.text.clone())
+        .collect();
+    let at = rows.iter().position(|row| row == ":No").expect("`:No` row");
+    assert_eq!(rows[at + 1], "", "{rows:?}");
+    assert_eq!(
+        rows[at + 2],
+        crate::commands::TOWN_ARREST_REFUSAL_CHALLENGE,
+        "{rows:?}"
+    );
+    assert!(rows[at + 3..].iter().any(|row| row == "Attacked!"), "{rows:?}");
+    assert!(state.combat_active, "the refusal is followed by the fight");
+    assert_eq!(
+        state.pending_town_conflict.map(|pending| pending.npc_slot),
+        Some(2)
+    );
+    assert_eq!(state.turn, turn, "no further epilogue");
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+/// `town-mode.md §14` (u5-spec#300 Q7, Q33, R617): surrender prints the
+/// knockout line, a blank row and `Thou dost awaken to...`, and the party
+/// wakes at 08:(arrest minute mod 20) - an arrest at 14:39 woke at 08:19 the
+/// next day after 53 steps.
+#[test]
+fn spec300_q33_surrender_awakening_line_and_wake_minute() {
+    let dir = debug_game_dir();
+    let mut state = test_state(open_grid(), 5, 5);
+    state.clock = GameClock::new(14, 39).unwrap();
+    let day = state.clock.day;
+    assert_eq!(state.advance_town_arrest_wait_to_morning(), 53);
+    assert_eq!((state.clock.hour, state.clock.minute), (8, 19));
+    assert_ne!(state.clock.day, day);
+
+    let _ = std::fs::remove_dir_all(dir);
+
+    // End to end against the configured original assets (skipped when
+    // `U5_TEST_ASSET_DIR` is unset; read-only).
+    let Some(assets) = crate::test_fixtures::configured_original_asset_dir() else {
+        return;
+    };
+    let mut state = test_state(open_grid(), 5, 5);
+    state.clock = GameClock::new(14, 39).unwrap();
+    state.pending_town_arrest = Some(TownArrestPrompt {
+        scene_byte: 1,
+        floor: 0,
+        npc_slot: 2,
+    });
+    state.emit_message_line(TOWN_ARREST_SURRENDER_PROMPT);
+    state.open_message_row();
+    handle_play_key_input(&mut state, 'Y', "", &assets).unwrap();
+    state.flush_message_slot();
+    let rows: Vec<String> = state
+        .message_transcript
+        .iter()
+        .map(|entry| entry.text.clone())
+        .collect();
+    let at = rows.iter().position(|row| row == ":Yes").expect("`:Yes` row");
+    assert_eq!(
+        rows[at + 1..],
+        [
+            String::new(),
+            TOWN_ARREST_KNOCKOUT_MESSAGE.to_string(),
+            String::new(),
+            crate::commands::TOWN_ARREST_AWAKENING_MESSAGE.to_string(),
+        ]
+    );
+    assert_eq!((state.clock.hour, state.clock.minute), (8, 19));
+}

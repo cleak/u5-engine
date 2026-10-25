@@ -4863,6 +4863,9 @@ impl PlayState {
                 // or `No!`", so the accepted key completes the open row
                 // before the outcome prints on the next one.
                 self.commit_prompt_reply(":", TOWN_ARREST_YES_REPLY);
+                // `town-mode.md §14` (u5-spec#300 Q33): `:Yes`, then a blank
+                // row before the knockout line - the echo ends its row.
+                self.message_row_open_mid_line = false;
                 self.pending_town_arrest = None;
                 if prompt.scene_byte == BLACKTHORN_CAPTIVE_CELL_SCENE {
                     return self.begin_blackthorn_audience_capture(game_dir);
@@ -4870,20 +4873,29 @@ impl PlayState {
                 self.apply_town_arrest_surrender(game_dir)
             }
             'n' => {
-                self.commit_prompt_reply(":", TOWN_ARREST_NO_REPLY);
+                // `town-mode.md §14` (u5-spec#300 Q7, R592): "The refusal
+                // echo is `No`, not `No!`".
+                self.commit_prompt_reply(":", crate::commands::TOWN_ARREST_REFUSAL_NO_REPLY);
+                self.message_row_open_mid_line = false;
                 self.pending_town_arrest = None;
                 let scene = Scene::new(prompt.scene_byte)?;
+                // "the colon row completes with `No`, then a blank row,
+                // `"Then defend thyself, rogue!"` and the alarm sweep".
+                self.emit_message_line(format!(
+                    "\n{}\n",
+                    crate::commands::TOWN_ARREST_REFUSAL_CHALLENGE
+                ));
                 let (pursued, fled) =
                     self.town_alarm_sweep(scene, prompt.floor, Some(prompt.npc_slot));
                 self.push_diagnostic(format!(
                     "Refused surrender; alarm raised ({pursued} pursuing, {fled} fleeing)."
                 ));
-                // `town-mode.md §1123`: "Refusing prints the guards'
-                // challenge". That literal is unpublished and unmeasured,
-                // so the engine prints nothing rather than inventing it;
-                // the alarm sweep still runs. cleak/u5-spec#198 tracks
-                // the measurement.
-                self.message = String::new();
+                // "Post-action cleanup then takes its conflict follow-up:
+                // when the linked object's actor byte is at least `0x40`
+                // (a guard's always is) it prints `Attacked!` with its
+                // leading line feed and enters the NPC-conflict chain, an
+                // ordinary town arena fight" (R591 recorded the omission).
+                self.start_town_arrest_refusal_conflict(scene, prompt.floor, prompt.npc_slot, game_dir)?;
                 Ok(Some(MoveOutcome::Used))
             }
             // `town-mode.md §14` prints the challenge once; an unaccepted
@@ -4943,15 +4955,77 @@ impl PlayState {
             self.player.y,
             self.clock.hour
         ));
-        // `town-mode.md §1123`: "surrendering prints the knockout and
-        // awakening lines"; the knockout line is now published as `The
-        // guard strikes thee unconscious!` (spec issue #206). The
-        // awakening line still is not, so the engine prints the one it
-        // has and stops rather than inventing the other.
-        self.message = TOWN_ARREST_KNOCKOUT_MESSAGE.to_string();
+        // `town-mode.md §14` (u5-spec#300 Q7, Q33): "the colon row
+        // completes with `Yes`; a blank row and `The guard strikes thee
+        // unconscious!`; the fade; a blank row and `Thou dost awaken
+        // to...`". Each literal is a line feed, the text, a line feed.
+        self.message = format!(
+            "\n{TOWN_ARREST_KNOCKOUT_MESSAGE}\n\n{}",
+            crate::commands::TOWN_ARREST_AWAKENING_MESSAGE
+        );
         Ok(Some(MoveOutcome::Transition(
             AreaTransition::EnteredLocation(scene),
         )))
+    }
+
+    /// `town-mode.md §14` (u5-spec#300 Q7): the refusal's conflict
+    /// follow-up. The fight's target is "the roster index held in the
+    /// retained contact state"; when its linked actor byte is at least
+    /// `0x40`, `Attacked!` prints and the ordinary town arena fight starts,
+    /// as the contact arm of post-action cleanup does.
+    fn start_town_arrest_refusal_conflict(
+        &mut self,
+        scene: Scene,
+        floor: i8,
+        npc_slot: usize,
+        game_dir: &Path,
+    ) -> io::Result<()> {
+        let Some((type_byte, object_slot, object)) = self.npcs.iter().find_map(|npc| {
+            (npc.slot == npc_slot)
+                .then_some(npc.active_object)
+                .flatten()
+                .and_then(|slot| {
+                    self.active_objects
+                        .get(slot)
+                        .copied()
+                        .filter(|object| !object.is_empty())
+                        .map(|object| (npc.type_byte, slot, object))
+                })
+        }) else {
+            return Ok(());
+        };
+        if object.type_byte < TOWN_NPC_CONTACT_CONFLICT_ACTOR_FIRST {
+            return Ok(());
+        }
+        self.mark_visibility_dirty();
+        self.emit_message_line(TOWN_NPC_CONTACT_ATTACKED_LINE);
+        let trigger = ActiveObject {
+            type_byte,
+            tile: type_byte,
+            ..object
+        };
+        if game_dir.join(BRIT_CBT_FILE).exists() && terrain_combat_base_class(trigger).is_some() {
+            self.pending_town_conflict = Some(PendingTownConflict {
+                scene_byte: scene.byte,
+                floor,
+                npc_slot,
+                type_byte,
+                awaiting_floor_reload: false,
+                // The turn was already spent by the epilogue that reached
+                // cleanup; nothing of it runs again after the fight.
+                owes_turn_epilogue: false,
+            });
+            let hostile_terrain = self.grid[object.y * TOWN_GRID_SIDE + object.x];
+            let _setup_report = self.enter_terrain_combat_from_object_in_scene_with_terrain(
+                game_dir,
+                WorldPlane::Britannia,
+                object_slot,
+                trigger,
+                scene.byte,
+                hostile_terrain,
+            )?;
+        }
+        Ok(())
     }
 
     /// The arrest wait-to-morning loop (`time.md §10`: "advances time in

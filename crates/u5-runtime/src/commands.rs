@@ -1457,11 +1457,22 @@ pub const LOOK_RESULT_PREFIX: &str = "\nThou dost see";
 pub const TOWN_ARREST_SURRENDER_PROMPT: &str =
     "\"Thou art under arrest!\"\n\n\"Wilt thou come quietly?\"\n\n:";
 /// `town-mode.md §1123`: "the surrender line is `The guard strikes thee
-/// unconscious!`". The awakening line the same sentence mentions is
-/// still unpublished, so the engine prints this one and stops.
+/// unconscious!`".
 pub const TOWN_ARREST_KNOCKOUT_MESSAGE: &str = "The guard strikes thee unconscious!";
-/// `town-mode.md §1123`: the `:` answer row echoes `Yes` or `No!`.
+/// `town-mode.md §14` (u5-spec#300 Q33): the awakening literal is
+/// `Thou dost awaken to...`, "the complete literal, ending with its
+/// ellipsis"; nothing completes it.
+pub const TOWN_ARREST_AWAKENING_MESSAGE: &str = "Thou dost awaken to...";
+/// `town-mode.md §14` (u5-spec#300 Q7): the refusal's challenge,
+/// `"Then defend thyself, rogue!"`, after a blank row.
+pub const TOWN_ARREST_REFUSAL_CHALLENGE: &str = "\"Then defend thyself, rogue!\"";
+/// `town-mode.md §1123`: the `:` answer row echoes `Yes` or `No`.
 pub const TOWN_ARREST_YES_REPLY: &str = "Yes";
+/// `town-mode.md §14` (u5-spec#300 Q7, R592): "The refusal echo is `No`,
+/// not `No!`".
+pub const TOWN_ARREST_REFUSAL_NO_REPLY: &str = "No";
+/// `blackthorn.md §7a`: the Blackthorn payment prompt's refusal echo,
+/// `No!` - "a different prompt and is unchanged" by R592.
 pub const TOWN_ARREST_NO_REPLY: &str = "No!";
 /// `cleak/u5-spec#194` (black-box): X-it on foot completes its own
 /// `X-it ` echo line with `what?`.
