@@ -2033,17 +2033,18 @@ impl PlayState {
                 self.special_items[SPECIAL_ITEM_WOODEN_BOX_INDEX] =
                     self.special_items[SPECIAL_ITEM_WOODEN_BOX_INDEX].max(SPECIAL_ITEM_OWNED_VALUE);
             }
+            // `inventory.md §4.5`: "normal acquisition gives each of these
+            // the no-quantity value instead" of one (R456) - so the U-Use
+            // picker shows an uncounted Amulet/Crown/Sceptre row (playtest
+            // Q12). Every reader only tests these flags for nonzero.
             ObjectPickupKind::CrownOfLordBritish => {
-                self.special_items[SPECIAL_ITEM_CROWN_LB_INDEX] =
-                    self.special_items[SPECIAL_ITEM_CROWN_LB_INDEX].max(SPECIAL_ITEM_OWNED_VALUE);
+                self.special_items[SPECIAL_ITEM_CROWN_LB_INDEX] = crate::commands::USE_PICKER_NO_QUANTITY;
             }
             ObjectPickupKind::SceptreOfLordBritish => {
-                self.special_items[SPECIAL_ITEM_SCEPTRE_LB_INDEX] =
-                    self.special_items[SPECIAL_ITEM_SCEPTRE_LB_INDEX].max(SPECIAL_ITEM_OWNED_VALUE);
+                self.special_items[SPECIAL_ITEM_SCEPTRE_LB_INDEX] = crate::commands::USE_PICKER_NO_QUANTITY;
             }
             ObjectPickupKind::AmuletOfLordBritish => {
-                self.special_items[SPECIAL_ITEM_AMULET_LB_INDEX] =
-                    self.special_items[SPECIAL_ITEM_AMULET_LB_INDEX].max(SPECIAL_ITEM_OWNED_VALUE);
+                self.special_items[SPECIAL_ITEM_AMULET_LB_INDEX] = crate::commands::USE_PICKER_NO_QUANTITY;
             }
             ObjectPickupKind::ShadowlordShard(index) => {
                 // `containers.md §8` class `0xB4`: "Writes the no-quantity
