@@ -5439,12 +5439,15 @@ impl PlayState {
         }
     }
 
-    /// `overworld.md §6.2.4` shared impact payload, both stages.
+    /// `overworld.md §6.2.4` shared impact payload, as the whirlpool,
+    /// sand-trap and generic adjacent-hostile callers reach it.
     ///
-    /// This is the whole payload, and it is shared: besides the two ranged
-    /// attacks it is reached "from the sand-trap adjacency reaction and
-    /// from the whirlpool engagement", and the drowning rung of
-    /// `vehicles.md §6` runs its second stage directly.
+    /// Those callers "enter at stage two, the absorption stage. They draw
+    /// no impact figure and play no impact rumble" (`RETRACTIONS.md` R612,
+    /// u5-spec#301 Q3; `audio.md §8.9` Whirlpool row). The figure is not
+    /// drawn by the engine and [`Self::outdoor_impact_presentation`] makes no
+    /// sound, so this stays silent; the ranged attacks, rough seas and the
+    /// drowning passes play stage one's rumble at their own call sites.
     ///
     /// It does **not** route through the combat damage-and-status
     /// resolver: §6.2.4 states positively that "[n]o attacker identity,
