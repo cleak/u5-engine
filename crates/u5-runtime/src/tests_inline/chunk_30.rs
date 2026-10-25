@@ -1095,3 +1095,42 @@ fn draw_nothing_actor_cell_keeps_the_previous_frame_pixels() {
 
     assert_eq!(cell_pixels(&second, 6, 5), before);
 }
+
+/// `town-mode.md §14` starts the arrest after the player's action and
+/// `commands.md §5` keeps that action's echo and result. When the step's
+/// `Blocked!` already reached the transcript before the guard's contact, the
+/// challenge prints beneath it once - it must not flush `Blocked!` a second
+/// time (playtest Q03).
+#[test]
+fn arrest_after_a_flushed_result_does_not_repeat_the_result_line() {
+    let mut state = test_state(open_grid(), 5, 5);
+    state.emit_message_line("Blocked!");
+    let row_open = state.message_row_open_mid_line;
+
+    state
+        .open_town_arrest(
+            TownArrestPrompt {
+                scene_byte: 0x11,
+                floor: 0,
+                npc_slot: 3,
+            },
+            None,
+        )
+        .unwrap();
+    state.flush_message_slot();
+
+    let lines: Vec<&str> = state
+        .message_entries()
+        .iter()
+        .map(|entry| entry.text.as_str())
+        .collect();
+    assert_eq!(
+        lines.iter().filter(|line| **line == "Blocked!").count(),
+        1,
+        "{lines:?}"
+    );
+    let at = lines.iter().position(|line| *line == "Blocked!").unwrap();
+    assert!(lines[at + 1].starts_with("\"Thou art under"), "{lines:?}");
+    assert!(state.pending_town_arrest.is_some());
+    assert_eq!(state.message_row_open_mid_line, row_open);
+}

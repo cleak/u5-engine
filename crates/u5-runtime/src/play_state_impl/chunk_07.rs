@@ -5008,6 +5008,21 @@ impl PlayState {
         // The challenge opens on its own row: it is a fresh two-line
         // exchange, not a tail appended to whatever the contact
         // already printed.
+        //
+        // When the turn's own result is already in the transcript (the
+        // step's `Blocked!` was flushed before the post-action cleanup
+        // reached the guard), re-prefixing the slot would flush that line a
+        // second time - the doubled `Blocked!` above the challenge in
+        // playtest Q03. Print the challenge beneath it instead. The row
+        // state is set explicitly to what the slot path below leaves (it
+        // never touches the flag), so the `:` answer row lays out the same
+        // either way.
+        if !self.message.is_empty() && self.message == self.message_flushed {
+            let row_open = self.message_row_open_mid_line;
+            self.emit_message_line(TOWN_ARREST_SURRENDER_PROMPT);
+            self.message_row_open_mid_line = row_open;
+            return Ok(MoveOutcome::Used);
+        }
         self.message = if self.message.is_empty() {
             TOWN_ARREST_SURRENDER_PROMPT.to_string()
         } else {
