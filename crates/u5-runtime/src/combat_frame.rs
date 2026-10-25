@@ -70,6 +70,11 @@ pub enum DungeonPostCombatApplier {
 /// is not published; any value outside `1..=6` behaves the same.
 pub const DUNGEON_FIRST_PARTY_EXIT_ABSORBED: u8 = 0xFF;
 
+/// `combat.md §11`, the party-side boundary note (answered 2026-09-04): the
+/// fixed id Section 6.1a's controlled party-side strike hands the shared
+/// attack primitive "is item id **33**, the two-handed sword's id".
+const COMBAT_FIXED_MAGIC_STRIKE_ITEM_ID: usize = 33;
+
 /// `combat.md §3`/`§8`: the departure lines an accepted party departure
 /// prints (an edge step or, in a dungeon arena, an in-arena K), and the
 /// room-encounter refusal.
@@ -6616,19 +6621,145 @@ impl PlayState {
         )
     }
 
+    /// `combat.md §6.1a`, "**The attack driver — party-side slots only.**" A
+    /// party-side actor carrying bit `0x01` on the automatic driver - Sword of
+    /// Chaos compulsion, monster possession, a Charm accepted on a party
+    /// slot - resolves an adjacent target with "the shared
+    /// attack-application primitive, which plays the hit sound, runs the
+    /// ordinary to-hit roll and damage feeder with that same fixed id as the
+    /// attack flavour, and narrates hit or miss". Further away "the actor's
+    /// turn produces **no action at all**". The pre-attack animation, the
+    /// attacker back-link, the class-specific overrides, the poison/status
+    /// branch and the monster ranged-spell branch are all skipped.
+    ///
+    /// `combat.md §11` (answered 2026-09-04): "that fixed id is item id
+    /// **33**, the two-handed sword's id, and it reaches the rating selector as
+    /// a real weapon id ... the selector returns the attacker's own **combat
+    /// weight** ... the to-hit does **not** collapse to 15, and the damage
+    /// draw is the per-weapon byte for id 33, a uniform `1..20`".
+    ///
+    /// The descriptor's class byte is not consulted: on a party slot it holds
+    /// the roster index, not a monster class, which is why this branch is
+    /// resolved ahead of the monster class-row lookups.
+    fn resolve_and_apply_combat_fixed_magic_strike(
+        &mut self,
+        attacker_slot: usize,
+        target_slot: usize,
+        draws: CombatMonsterAttackDraws,
+    ) -> Option<CombatMonsterAttackApplication> {
+        let attacker = *self.combat_actors.get(attacker_slot)?;
+        let target = *self.combat_actors.get(target_slot)?;
+        let target_range = attacker.range_to(target);
+        // A record comparison, not a branch the original draws for, so an
+        // out-of-range controlled attacker spends nothing from the shared
+        // stream - and plays nothing - on the attempt it abandons.
+        if target_range != 1 {
+            return None;
+        }
+        self.emit_sound_effect(SoundEffect::MonsterAttackSwing);
+        let defender_rating = self.combat_target_weight(target_slot)?;
+        let defence_rating = self.combat_actor_defence_rating(target_slot)?;
+        let attacker_rating = combat_party_attacker_rating(
+            Some(COMBAT_FIXED_MAGIC_STRIKE_ITEM_ID),
+            0,
+            self.combat_target_weight(attacker_slot)?,
+        );
+        let (hit_raw_roll_0_to_60, forced_hit) = match draws {
+            CombatMonsterAttackDraws::Fixed {
+                hit_raw_roll_0_to_60,
+                forced_hit,
+                ..
+            } => (hit_raw_roll_0_to_60, forced_hit),
+            CombatMonsterAttackDraws::SharedPrng => (self.combat_monster_hit_roll(), None),
+        };
+        let mut input = CombatWeaponAttackInput {
+            source: CombatAttackerDamageSource::PartyItem {
+                item_id: COMBAT_FIXED_MAGIC_STRIKE_ITEM_ID,
+            },
+            target_range,
+            range_cap: 1,
+            effect_code: 0,
+            attacker_rating,
+            defender_rating,
+            defence_rating,
+            hit_raw_roll_0_to_60,
+            damage_roll: 0,
+            defence_roll: 0,
+            forced_hit,
+        };
+        // `combat.md §12`: the party arm's stage-one `1..Attack max` draw and
+        // the stage-two defence draw, both taken only by an attempt that
+        // reaches the roller.
+        if combat_weapon_attack_takes_damage_draw(input) {
+            input.damage_roll = self.random_range_u8(0, u8::MAX);
+        }
+        if combat_weapon_attack_takes_defence_draw(input) {
+            input.defence_roll = self.combat_defence_roll(defence_rating);
+        }
+        let resolution = resolve_combat_weapon_attack(input);
+        // The damage stays fed as magical, as the pre-existing strike did:
+        // the published flavour is a magic strike, not a weapon blow.
+        let damage_application = match resolution {
+            CombatWeaponAttackResolution::Hit { raw_damage, .. } => {
+                self.apply_combat_weapon_damage_to_target(None, target_slot, raw_damage, true)
+            }
+            CombatWeaponAttackResolution::Special { .. } => self
+                .apply_combat_weapon_damage_to_target(
+                    None,
+                    target_slot,
+                    COMBAT_INSTANT_KILL_DAMAGE,
+                    true,
+                ),
+            CombatWeaponAttackResolution::OutOfRange { .. }
+            | CombatWeaponAttackResolution::NoOrdinaryDamage { .. }
+            | CombatWeaponAttackResolution::Miss { .. } => None,
+        };
+        Some(self.apply_combat_monster_attack_narrator_gate(
+            CombatMonsterAttackApplication {
+                attacker_slot,
+                target_slot,
+                poison_status_outcome: None,
+                resolution: Some(resolution),
+                damage_application,
+                food_theft: None,
+                sleep_effect: None,
+                generic_chain_suppressed: false,
+            },
+        ))
+    }
+
     fn resolve_and_apply_combat_monster_attack_inner(
         &mut self,
         attacker_slot: usize,
         target_slot: usize,
         draws: CombatMonsterAttackDraws,
     ) -> Option<CombatMonsterAttackApplication> {
-        if attacker_slot < COMBAT_PARTY_ACTOR_SLOTS || attacker_slot >= COMBAT_ACTOR_SLOTS {
+        if attacker_slot >= COMBAT_ACTOR_SLOTS {
             return None;
         }
         let attacker = *self.combat_actors.get(attacker_slot)?;
+        // `combat.md §6.1a`, "**The attack driver — party-side slots only.**"
+        // The fixed magic strike serves exactly the party-side descriptors the
+        // round walker sends to the automatic driver - "Sword-of-Chaos
+        // compulsion, monster possession, and a Charm accepted on a party-side
+        // slot" - and those sit in the party slots. Every other attacker this
+        // primitive accepts is monster-side, so the party slots stay closed to
+        // it unless they take that branch.
+        if attacker_slot < COMBAT_PARTY_ACTOR_SLOTS
+            && !(attacker.is_controlled() && attacker.is_party_side())
+        {
+            return None;
+        }
         let target = *self.combat_actors.get(target_slot)?;
         if !combat_actor_is_active_not_dead(attacker) || !combat_actor_is_active_not_dead(target) {
             return None;
+        }
+        if attacker.is_controlled() && attacker.is_party_side() {
+            return self.resolve_and_apply_combat_fixed_magic_strike(
+                attacker_slot,
+                target_slot,
+                draws,
+            );
         }
 
         let attacker_stats = combat_class_stats(attacker.owner_target_class)?;
@@ -6642,17 +6773,14 @@ impl PlayState {
         // "returns silently ... with no narration at all, **on its melee
         // arm**".
         self.emit_sound_effect(SoundEffect::MonsterAttackSwing);
-        // `combat.md §6.1a`, the attack driver reader: the fixed magic strike
-        // is **party-slot-only** (`RETRACTIONS.md` R378).
-        let fixed_magic_strike = attacker.is_controlled() && attacker.is_party_side();
         // `magic.md §7`: ordinary automatic adjacent attacks install their
         // source before the hit test, so misses and poison-special returns
         // record exactly like ordinary hits. `combat.md §6.1a`: the
         // controlled/charmed actor's fixed magic strike explicitly skips the
         // attacker back-link, so it never writes this map - and that branch is
-        // **party-slot-only** (`RETRACTIONS.md` R378), so a controlled
-        // *monster* records its source like any other attacker.
-        if target_range == 1 && !fixed_magic_strike {
+        // **party-slot-only** (`RETRACTIONS.md` R378) and returned above, so a
+        // controlled *monster* records its source like any other attacker.
+        if target_range == 1 {
             self.combat_interference_sources[target_slot] = attacker_slot as u8;
         }
         // `combat.md §11` selector, defender arm: "every ordinary melee and
@@ -6673,28 +6801,8 @@ impl PlayState {
             attacker.owner_target_class,
             self.combat_target_weight(attacker_slot)?,
         )?;
-        // `combat.md §6.1a`: the controlled actor's fixed magic strike "requires
-        // straight-line distance exactly one", and further away "the turn
-        // produces no action at all". That refusal is a record comparison, not
-        // a branch the original would have drawn for, so it is taken here -
-        // above the attempt's to-hit draw, so an out-of-range controlled
-        // attacker spends nothing from the shared stream on an attempt it
-        // abandons.
-        //
-        // **The branch is party-slot-only.** "It lives inside the automatic
-        // driver's attack path and is reached from nowhere else, so only slots
-        // the round walker sends to that driver can take it - party-side
-        // descriptors carrying the bit ... A **monster-side** slot carrying
-        // the bit goes to the player-command handler and never enters the
-        // branch: it attacks through the prompted path, where the same
-        // distance-one number is the **targeting cursor's range clamp**"
-        // (`RETRACTIONS.md` R378). Applying it to a controlled monster is
-        // exactly the behaviour R377 and R378 withdraw together.
-        if fixed_magic_strike && target_range != 1 {
-            return None;
-        }
-        // Every early return above is a record lookup or that range refusal,
-        // not a branch the original would have drawn for, so the attempt's own
+        // Every early return above is a record lookup, not a branch the
+        // original would have drawn for, so the attempt's own
         // to-hit draw is taken here - past the last of them and inside the
         // accepted attempt, which is where `combat.md §11` puts it.
         //
@@ -6713,70 +6821,6 @@ impl PlayState {
             } => (hit_raw_roll_0_to_60, forced_hit),
             CombatMonsterAttackDraws::SharedPrng => (self.combat_monster_hit_roll(), None),
         };
-
-        // `combat.md §6.1a`, "**The attack driver — party-side slots only.**"
-        // A controlled party-side actor's
-        // attack is a fixed magic strike resolved by the shared
-        // attack-application primitive. It requires straight-line distance
-        // exactly one, and the pre-attack animation, the attacker back-link
-        // (skipped above), the class-specific attack overrides, the
-        // poison/status branch and the monster ranged-spell branch are all
-        // skipped. Only the shared to-hit roll, damage feeder and hit/miss
-        // narration run. The renderer's fixed magic-strike action-tile id is
-        // not published in any current spec document, so no tile marker is
-        // stamped here; the damage is fed as magical because the published
-        // flavour is a magic strike, not a weapon blow.
-        if fixed_magic_strike {
-            let mut input = CombatWeaponAttackInput {
-                source: CombatAttackerDamageSource::MonsterFlat {
-                    attack_value: attacker_stats.attack_value,
-                },
-                target_range,
-                range_cap: 1,
-                effect_code: 0,
-                attacker_rating,
-                defender_rating,
-                defence_rating,
-                hit_raw_roll_0_to_60,
-                damage_roll: 0,
-                defence_roll: 0,
-                forced_hit,
-            };
-            if combat_weapon_attack_takes_defence_draw(input) {
-                input.defence_roll = self.combat_defence_roll(defence_rating);
-            }
-            let resolution = resolve_combat_weapon_attack(input);
-            let damage_application = match resolution {
-                CombatWeaponAttackResolution::Hit { raw_damage, .. } => {
-                    self.apply_combat_weapon_damage_to_target(None, target_slot, raw_damage, true)
-                }
-                // `combat.md §12`: the sentinel "is a property of the
-                // merged attack value, not of the party arm", and it kills
-                // "on the party and monster arms alike".
-                CombatWeaponAttackResolution::Special { .. } => self
-                    .apply_combat_weapon_damage_to_target(
-                        None,
-                        target_slot,
-                        COMBAT_INSTANT_KILL_DAMAGE,
-                        true,
-                    ),
-                CombatWeaponAttackResolution::OutOfRange { .. }
-                | CombatWeaponAttackResolution::NoOrdinaryDamage { .. }
-                | CombatWeaponAttackResolution::Miss { .. } => None,
-            };
-            return Some(self.apply_combat_monster_attack_narrator_gate(
-                CombatMonsterAttackApplication {
-                    attacker_slot,
-                    target_slot,
-                    poison_status_outcome: None,
-                    resolution: Some(resolution),
-                    damage_application,
-                    food_theft: None,
-                    sleep_effect: None,
-                    generic_chain_suppressed: false,
-                },
-            ));
-        }
 
         let mut poison_status_outcome = None;
         if target_range <= 1 {
