@@ -2536,7 +2536,8 @@ impl PlayState {
                         return Ok(MoveOutcome::Used);
                     }
                 }
-                self.advance_turn();
+                // `commands.md §3` (u5-spec#300 Q14): the overworld `A`
+                // reports "no action" on every path, so this refusal is free.
                 let note = self.terrain_encounter_note(game_dir, plane, object)?;
                 // `combat.md §8.2`: the shipped game's whole attack vocabulary
                 // is `Attack-`, `Nothing to attack!`, `Attacked!` and
@@ -2696,7 +2697,12 @@ impl PlayState {
             return Ok(MoveOutcome::Used);
         }
 
-        self.advance_turn();
+        // `commands.md §3` (u5-spec#300 Q14): town `Nothing to attack!` is
+        // acted (executed); the overworld `A` reports "no action" on every
+        // path, so its refusal is free.
+        if matches!(self.area, Area::Town { .. }) {
+            self.advance_turn();
+        }
         // Measured: `A` into an empty adjacent cell prints `Attack-North`
         // and then this refusal - not a composed line naming the cell.
         self.message = ATTACK_NOTHING_TO_ATTACK_REFUSAL.to_string();

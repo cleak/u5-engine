@@ -262,3 +262,20 @@ fn spec300_q29_new_order_cancel_and_leader_refusal_spend_the_turn() {
     }
     let _ = fs::remove_dir_all(dir);
 }
+
+/// `commands.md §3` (u5-spec#300 Q14): the overworld `A` reports "no
+/// action" on every path, so `Nothing to attack!` there is free, while town
+/// `Nothing to attack!` is acted (executed).
+#[test]
+fn spec300_q14_overworld_attack_refusal_is_free_and_town_refusal_is_acted() {
+    let dir = debug_game_dir();
+    let mut world = world_state(open_world_grid(), 5, 5);
+    handle_play_key_input(&mut world, 'A', "8", &dir).unwrap();
+    assert_eq!(world.message, ATTACK_NOTHING_TO_ATTACK_REFUSAL);
+    assert_eq!(world.turn, 0);
+    let mut town = test_state(open_grid(), 5, 5);
+    handle_play_key_input(&mut town, 'A', "8", &dir).unwrap();
+    assert_eq!(town.message, ATTACK_NOTHING_TO_ATTACK_REFUSAL);
+    assert_eq!(town.turn, 1);
+    let _ = fs::remove_dir_all(dir);
+}
