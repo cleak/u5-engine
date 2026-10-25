@@ -443,26 +443,37 @@ fn healer_member_selector_moves_on_digits_and_commits_on_return() {
     ));
 }
 
-/// Review follow-up to E43: a lodged guest is a whole roster record, so a
-/// recruitment that pulls a reserve record into the next active slot
-/// (`conversation.md §7.6`) shifts the records between - and the guests' registry
-/// slots must shift with them, or the save writer stores the guest over
-/// whichever companion now sits at its stale slot.
+/// Review follow-up to E43, corrected by playtest Q15: a lodged guest is a
+/// whole roster record, and a recruitment swaps the matched reserve record
+/// with the active-party insertion slot's occupant (`conversation.md §7.6`:
+/// "the matched roster record is swapped into the active-party insertion
+/// slot"). Every other record - a lodged guest among them - stays put, and a
+/// guest lodged in either swapped record follows it.
 #[test]
-fn recruitment_rotation_carries_lodged_guest_registry_slots() {
+fn recruitment_swap_carries_lodged_guest_registry_slots() {
     let mut template = saved_game_seed_bytes(0, 0, 15, 15);
     write_shipped_roster_layout(&mut template);
     template[SAVE_PARTY_SIZE_OFFSET] = 1;
-    // Iolo (record 2) is lodged at scene 7.
+    // Iolo (record 2) is lodged at scene 7; Shamino (record 1, the
+    // insertion slot) at scene 9.
     template[inn_registry_marker_offset(2)] = 7;
+    template[inn_registry_marker_offset(1)] = 9;
     let dir = shipped_layout_save_dir(&template);
 
     let options = load_play_options_from_save(&dir).unwrap();
     let mut state = PlayState::load_scene(&dir, options).unwrap();
-    assert_eq!(state.inn_registry[0].registry_slot, 2);
+    // The fixture repeats its eight names, so the from-the-last-slot scan
+    // finds Mariah in record 11 (an identical copy of record 3).
     assert!(state.apply_conversation_join_candidate("Mariah", 0).is_some());
-    // Mariah moved from record 3 to record 1; Shamino and Iolo moved down one.
-    assert_eq!(state.inn_registry[0].registry_slot, 3);
+    let slot_of = |state: &PlayState, name: &[u8]| {
+        state
+            .inn_registry
+            .iter()
+            .find(|guest| guest.name[..name.len()] == *name)
+            .map(|guest| guest.registry_slot)
+    };
+    assert_eq!(slot_of(&state, b"Iolo"), Some(2));
+    assert_eq!(slot_of(&state, b"Shamino"), Some(11));
     assert_eq!(
         state.save_game_command(&dir, Some(true)).unwrap(),
         MoveOutcome::Saved
@@ -470,18 +481,20 @@ fn recruitment_rotation_carries_lodged_guest_registry_slots() {
     let saved = fs::read(dir.join(SAVED_GAM_FILENAME)).unwrap();
     let tail = SAVE_CHARACTER_RECORD_LEN - 1;
     assert_eq!(saved[SAVE_PARTY_SIZE_OFFSET], 2);
-    for (saved_slot, template_slot) in [(1, 3), (2, 1), (3, 2)] {
+    for saved_slot in 0..SAVE_ROSTER_SLOT_COUNT {
+        let template_slot = match saved_slot {
+            1 => 11,
+            11 => 1,
+            other => other,
+        };
         assert_eq!(
             &roster_record_bytes(&saved, saved_slot)[..tail],
             &roster_record_bytes(&template, template_slot)[..tail],
             "saved roster record {saved_slot}"
         );
     }
-    assert_eq!(saved[inn_registry_marker_offset(3)], 7);
-    let registry = decode_inn_registry(&saved);
-    assert_eq!(registry.len(), 1);
-    assert_eq!(registry[0].registry_slot, 3);
-    assert_eq!(&registry[0].name[..4], b"Iolo");
+    assert_eq!(saved[inn_registry_marker_offset(2)], 7);
+    assert_eq!(saved[inn_registry_marker_offset(11)], 9);
     let _ = fs::remove_dir_all(dir);
 }
 

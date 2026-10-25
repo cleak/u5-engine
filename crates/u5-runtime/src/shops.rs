@@ -3668,6 +3668,24 @@ impl PlayState {
         }
     }
 
+    /// The registry side of a two-record roster swap (`conversation.md
+    /// §7.6` recruit): a guest lodged in either record follows it.
+    pub(crate) fn swap_inn_registry_slots(&mut self, first: usize, second: usize) {
+        for guest in self.inn_registry.iter_mut() {
+            let slot = usize::from(guest.registry_slot);
+            let moved = if slot == first {
+                second
+            } else if slot == second {
+                first
+            } else {
+                continue;
+            };
+            if let Ok(moved) = u8::try_from(moved) {
+                guest.registry_slot = moved;
+            }
+        }
+    }
+
     pub fn pickup_inn_guest(
         &mut self,
         scene_marker: u8,
