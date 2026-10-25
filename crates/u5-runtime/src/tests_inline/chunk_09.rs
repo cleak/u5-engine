@@ -353,6 +353,33 @@ fn falls_chain_fires_underfoot_on_a_brink_that_never_reaches_the_gate() {
 }
 
 #[test]
+fn falls_chain_damage_repaints_the_stats_panel_immediately() {
+    // `overworld.md §6.2.4`: the shared damage helper "performs a complete
+    // stats-panel repaint ... This is an **immediate** repaint made by the
+    // helper itself as its last act" - a member the fall kills shows Dead at
+    // once, not after a reload (playtest Q11).
+    let dir = debug_game_dir();
+    let mut grid = open_world_grid();
+    grid[world_cell_index(46, 90)] = WATERFALL_TILE_LAST;
+    let mut state = britannia_state(grid, 46, 90);
+    state.party[0].hp = 1;
+    state.party[0].climb_stat = 0;
+    state.repaint_stats_panel();
+    let before = state.stats_panel.clone();
+
+    state.pass_turn_with_game_dir(Some(&dir)).unwrap();
+
+    assert_eq!(state.party[0].hp, 0);
+    assert_eq!(state.party[0].status, b'D');
+    assert_ne!(state.stats_panel, before);
+    assert_eq!(
+        state.stats_panel,
+        crate::stats_panel::stats_panel_snapshot_of(&state)
+    );
+    let _ = fs::remove_dir_all(dir);
+}
+
+#[test]
 fn falls_chain_plays_the_published_descending_sweep_once() {
     // `audio.md` Section 10.6: one site, played once per fall, and it fires
     // "on every waterfall brink on either plane, including the ones that

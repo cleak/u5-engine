@@ -101,6 +101,12 @@ pub struct PlayState {
     /// [`WaterScrollClock`] this cannot be a phase counter. It rides the
     /// same driver pass on the same tick - see [`crate::fire_flicker`].
     pub fire_flicker: FireFlickerClock,
+    /// The last map-view frame this state painted. `active-objects.md §12`:
+    /// a cell whose actor carries the draw-nothing byte `0x16` "keeps
+    /// whatever was already painted there rather than showing terrain", so
+    /// the renderer copies that cell from here instead of leaving the fresh
+    /// buffer's black (playtest Q06).
+    pub top_down_previous_viewport: Option<TileViewport>,
     /// `dungeon-mode.md §6.7`: shared three-frame fountain-water phase,
     /// advanced once per point-blank corridor paint.
     pub dungeon_fountain_frame: u8,

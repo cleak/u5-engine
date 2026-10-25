@@ -6087,8 +6087,13 @@ impl PlayState {
             self.emit_sound_effect(SoundEffect::SharedVariant { variant });
         }
 
-        self.advance_turn();
+        // `lighting.md §5`: "the per-turn cleanup decays the counters by the
+        // same effective increment it just applied to the clock", and
+        // `magic.md §5` runs the effect handler inside dispatch, ahead of
+        // that cleanup - so the new counter is aged on its own turn exactly
+        // like Ignite's and the Light scroll's (playtest Q09).
         self.light_spell_counter = duration;
+        self.advance_turn();
         self.recompute_daylight();
         // `magic.md §5` step 8 lists `Light!` among the handlers' success
         // messages, but that banner belongs to the Great Light *scroll*

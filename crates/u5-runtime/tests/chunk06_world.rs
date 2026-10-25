@@ -181,8 +181,10 @@ fn getting_a_lit_fixture_tile_sets_the_borrowed_fixture_torch_counter() {
         MoveOutcome::Got
     );
 
-    assert_eq!(state.torch_counter, BORROWED_FIXTURE_TORCH_DURATION);
-    assert_eq!(state.torch_counter, 100);
+    // `lighting.md §5`: the write lands inside dispatch, so this overworld
+    // turn's cleanup ages it by two (playtest Q09).
+    assert_eq!(state.torch_counter, BORROWED_FIXTURE_TORCH_DURATION - 2);
+    assert_eq!(BORROWED_FIXTURE_TORCH_DURATION, 100);
     // Consumes no carried torch and adds no inventory item.
     assert_eq!(state.torches, 4);
     // Does not debit the shared moral-standing selector.

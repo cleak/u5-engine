@@ -3604,12 +3604,11 @@ impl PlayState {
         self.forget_open_town_door(scene, floor, px, py);
         self.forget_revealed_town_secret_door(scene, floor, tx, ty);
         self.forget_revealed_town_secret_door(scene, floor, px, py);
-        if self.door_tracker.is_some_and(|tracker| {
-            (tracker.x == tx && tracker.y == ty) || (tracker.x == px && tracker.y == py)
-        }) {
-            self.door_tracker = None;
-            self.door_tracker_closed = false;
-        }
+        // `doors-and-z-transitions.md §5`: the auto-close block is cancelled
+        // only by a second Open, combat, the town reload and the cannon's
+        // destroyed door. A push or pull through the tracked doorway leaves
+        // it running, so the countdown still writes the door back (playtest
+        // Q04).
         self.player.x = tx;
         self.player.y = ty;
         self.sync_player_object();
@@ -5009,6 +5008,21 @@ impl PlayState {
         // The challenge opens on its own row: it is a fresh two-line
         // exchange, not a tail appended to whatever the contact
         // already printed.
+        //
+        // When the turn's own result is already in the transcript (the
+        // step's `Blocked!` was flushed before the post-action cleanup
+        // reached the guard), re-prefixing the slot would flush that line a
+        // second time - the doubled `Blocked!` above the challenge in
+        // playtest Q03. Print the challenge beneath it instead. The row
+        // state is set explicitly to what the slot path below leaves (it
+        // never touches the flag), so the `:` answer row lays out the same
+        // either way.
+        if !self.message.is_empty() && self.message == self.message_flushed {
+            let row_open = self.message_row_open_mid_line;
+            self.emit_message_line(TOWN_ARREST_SURRENDER_PROMPT);
+            self.message_row_open_mid_line = row_open;
+            return Ok(MoveOutcome::Used);
+        }
         self.message = if self.message.is_empty() {
             TOWN_ARREST_SURRENDER_PROMPT.to_string()
         } else {

@@ -929,7 +929,8 @@
         assert_eq!(state.message, GET_TILE_BORROWED_LINE);
         assert_eq!(state.grid[32 * 3 + 2], GET_TILE_WALL_TORCH_REPLACEMENT);
         assert_eq!(state.moral_standing, 5, "no debit for the borrow");
-        assert_eq!(state.torch_counter, BORROWED_FIXTURE_TORCH_DURATION);
+        // `lighting.md §5`: the borrow turn's cleanup ages the new counter (Q09).
+        assert_eq!(state.torch_counter, BORROWED_FIXTURE_TORCH_DURATION - 1);
 
         let mut world_grid = open_world_grid();
         world_grid[world_cell_index(6, 5)] = GET_TILE_CROPS_SOURCE;

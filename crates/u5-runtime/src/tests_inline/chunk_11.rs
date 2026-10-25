@@ -633,6 +633,46 @@
         let _ = fs::remove_dir_all(dir);
     }
 
+    /// `catalogs/quest-graph.md §5` + `active-objects.md §11`: the outdoor
+    /// setup pass that places the shards and the Amulet runs after every
+    /// return to the overworld, so leaving Ararat for the Underworld places
+    /// them (playtest Q13).
+    #[test]
+    fn ararat_exit_runs_the_underworld_fixed_placement() {
+        let dir = debug_game_dir();
+        let scene = Scene::new(TOWN_EXIT_UNDERWORLD_SCENE).unwrap();
+        fs::write(
+            dir.join(WORLD_LOCATION_TABLE_FILE),
+            format!("UNDERWORLD 49 58 {}\n", PlayTarget::Town(scene).key()),
+        )
+        .unwrap();
+        let mut state = test_state(open_grid(), 0, 0);
+        state.area = Area::Town { scene, floor: 0 };
+        state.special_items = [0; SPECIAL_ITEM_COUNT];
+        state.shadowlord_hideouts = DEFAULT_SHADOWLORD_HIDEOUTS;
+
+        state
+            .resolve_town_boundary_exit_transition(&dir, scene)
+            .unwrap();
+
+        assert_eq!(
+            state.area,
+            Area::World {
+                plane: WorldPlane::Underworld
+            }
+        );
+        for (x, y) in [(105, 225), (192, 80), (130, 65), (176, 184)] {
+            assert!(
+                state
+                    .active_objects
+                    .iter()
+                    .any(|object| object.x == x && object.y == y && !object.is_empty()),
+                "nothing placed at ({x}, {y})"
+            );
+        }
+        let _ = fs::remove_dir_all(dir);
+    }
+
     #[test]
     fn town_boundary_exit_uses_clean_location_table_without_return_snapshot() {
         let dir = debug_game_dir();

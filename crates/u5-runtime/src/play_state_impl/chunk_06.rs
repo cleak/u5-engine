@@ -2033,17 +2033,18 @@ impl PlayState {
                 self.special_items[SPECIAL_ITEM_WOODEN_BOX_INDEX] =
                     self.special_items[SPECIAL_ITEM_WOODEN_BOX_INDEX].max(SPECIAL_ITEM_OWNED_VALUE);
             }
+            // `inventory.md §4.5`: "normal acquisition gives each of these
+            // the no-quantity value instead" of one (R456) - so the U-Use
+            // picker shows an uncounted Amulet/Crown/Sceptre row (playtest
+            // Q12). Every reader only tests these flags for nonzero.
             ObjectPickupKind::CrownOfLordBritish => {
-                self.special_items[SPECIAL_ITEM_CROWN_LB_INDEX] =
-                    self.special_items[SPECIAL_ITEM_CROWN_LB_INDEX].max(SPECIAL_ITEM_OWNED_VALUE);
+                self.special_items[SPECIAL_ITEM_CROWN_LB_INDEX] = crate::commands::USE_PICKER_NO_QUANTITY;
             }
             ObjectPickupKind::SceptreOfLordBritish => {
-                self.special_items[SPECIAL_ITEM_SCEPTRE_LB_INDEX] =
-                    self.special_items[SPECIAL_ITEM_SCEPTRE_LB_INDEX].max(SPECIAL_ITEM_OWNED_VALUE);
+                self.special_items[SPECIAL_ITEM_SCEPTRE_LB_INDEX] = crate::commands::USE_PICKER_NO_QUANTITY;
             }
             ObjectPickupKind::AmuletOfLordBritish => {
-                self.special_items[SPECIAL_ITEM_AMULET_LB_INDEX] =
-                    self.special_items[SPECIAL_ITEM_AMULET_LB_INDEX].max(SPECIAL_ITEM_OWNED_VALUE);
+                self.special_items[SPECIAL_ITEM_AMULET_LB_INDEX] = crate::commands::USE_PICKER_NO_QUANTITY;
             }
             ObjectPickupKind::ShadowlordShard(index) => {
                 // `containers.md §8` class `0xB4`: "Writes the no-quantity
@@ -2224,9 +2225,12 @@ impl PlayState {
                 self.grid[idx] = GET_TILE_WALL_TORCH_REPLACEMENT;
                 self.stats_panel_command_refresh = crate::stats_panel::PanelRefreshMode::Deferred;
                 self.mark_visibility_dirty();
+                // The counter is written inside dispatch, so the turn's
+                // cleanup ages it like any other torch write (`lighting.md
+                // §5`, playtest Q09).
+                self.apply_borrowed_lit_fixture_light(tile);
                 self.advance_turn();
                 self.message = GET_TILE_BORROWED_LINE.to_string();
-                self.apply_borrowed_lit_fixture_light(tile);
                 // audio.md §8.1 borrowed fixed object: the 40-update action
                 // snap after the line.
                 self.emit_sound_effect(SoundEffect::ActionSnap);
@@ -2349,13 +2353,8 @@ impl PlayState {
         if let Some(grant) = entry.grant {
             self.apply_get_tile_grant(grant);
         }
-        if self
-            .door_tracker
-            .is_some_and(|tracker| tracker.x == tx && tracker.y == ty)
-        {
-            self.door_tracker = None;
-            self.door_tracker_closed = false;
-        }
+        // No auto-close cancellation here: `doors-and-z-transitions.md §5`
+        // publishes none for Get (playtest Q04).
         self.forget_open_town_door(scene, floor, tx, ty);
         self.forget_revealed_town_secret_door(scene, floor, tx, ty);
         self.mark_visibility_dirty();

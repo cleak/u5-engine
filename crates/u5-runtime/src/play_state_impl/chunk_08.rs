@@ -2940,6 +2940,12 @@ impl PlayState {
             place_pending_vehicle_acquisition(&mut self.active_objects, plane, pending)?;
             self.pending_vehicle_save = self.pending_vehicle_save.clear_class();
         }
+        // `catalogs/quest-graph.md §5`: the shards and the Amulet are placed
+        // "by the outdoor setup pass that runs whenever the party is on a
+        // non-surface outdoor plane", and `active-objects.md §11` runs that
+        // setup after every return to the overworld, the town return
+        // included - so leaving Ararat places them too (playtest Q13).
+        self.place_underworld_fixed_objects(plane);
         self.cache_current_world_overlay();
         self.clear_town_visit_state();
         self.return_world = None;
