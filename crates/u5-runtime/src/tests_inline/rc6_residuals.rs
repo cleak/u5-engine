@@ -109,7 +109,24 @@ fn rc6_z_stats_spell_charge_entries_never_take_a_second_row() {
         inventory_cursor: 0,
         ..session
     });
-    assert_eq!(rows[0], " 5-GP", "rows: {rows:?}");
+    // `inventory.md §4.7` (u5-spec#300 Q11): the published ten-cell labels,
+    // `_5-Grav_Por`, `10-In_Flam_Gr`, `100-In_Zu_Grav`.
+    assert_eq!(rows[0], " 5-Grav Por", "rows: {rows:?}");
+    assert!(
+        Z_STATS_SPELL_LABELS
+            .iter()
+            .all(|label| (4..=10).contains(&label.len()) && label.bytes().all(|b| b.is_ascii_graphic() || b == b' ')),
+        "{Z_STATS_SPELL_LABELS:?}"
+    );
+    state.spell_charges = [0; SPELL_COUNT];
+    state.spell_charges[14] = 10;
+    state.spell_charges[16] = 100;
+    let rows = state.z_stats_panel_rows(&ZStatsSession {
+        inventory_cursor: 0,
+        ..state.active_z_stats.clone().unwrap()
+    });
+    assert_eq!(rows[0], "10-In Flam Gr", "rows: {rows:?}");
+    assert_eq!(rows[1], "100-In Zu Grav", "rows: {rows:?}");
 }
 
 /// `inventory.md §4.4`: the render loop "terminates on the cursor's row, not
