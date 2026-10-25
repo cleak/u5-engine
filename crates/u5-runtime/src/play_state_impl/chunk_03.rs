@@ -1136,6 +1136,17 @@ impl PlayState {
         if selected {
             self.stats_panel_command_refresh = crate::stats_panel::PanelRefreshMode::Always;
         }
+        // `town-mode.md §7.2`: away from the harpsichord the town digit
+        // handler "falls through to the ordinary solo-member selector, which
+        // reports \"acted\" for an ordinary selection and \"no action\" for
+        // the deselect-to-whole-party case", and `commands.md §3` runs the
+        // per-turn epilogue on "acted" (playtest Q14). The dungeon always
+        // reports "no action" (`dungeon-mode.md §4` step 3); the overworld
+        // routes digits to a speed selector whose status is unpublished, and
+        // a rejected digit is neither case, so both keep the free answer.
+        if selected && slot != Some(0) && matches!(self.area, Area::Town { .. }) {
+            self.charge_tile_command_acted_exit(self.turn);
+        }
         // `commands.md §5`'s `0` row: every answer - `None!`, `Invalid!` or
         // the member's name - is followed by a line feed, so the row is
         // closed when the panel repaints (and when the next command prints).

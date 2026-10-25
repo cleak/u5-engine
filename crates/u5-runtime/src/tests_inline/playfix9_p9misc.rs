@@ -40,3 +40,39 @@ fn playtest_q07_discarded_key_after_shortfall_does_not_reprint_the_prompt() {
     );
     let _ = fs::remove_dir_all(dir);
 }
+
+/// `town-mode.md §7.2`: away from the harpsichord the town digit handler
+/// "falls through to the ordinary solo-member selector, which reports
+/// \"acted\" for an ordinary selection and \"no action\" for the
+/// deselect-to-whole-party case"; `commands.md §3` runs the per-turn
+/// epilogue on "acted" (Q14).
+#[test]
+fn playtest_q14_town_digit_selection_reports_acted_and_zero_does_not() {
+    let dir = debug_game_dir();
+    let mut state = test_state(open_grid(), 5, 5);
+    state.party.push(PartyMember {
+        slot: 1,
+        class_byte: b'F',
+        status: b'G',
+        climb_stat: DEFAULT_CLIMB_STAT,
+        mana: 0,
+        hp: 20,
+        max_hp: 20,
+        level: 1,
+    });
+    state.party_names = vec![*b"AVATAR\0\0\0", *b"SHAMINO\0\0"];
+    let clock_before = state.clock;
+
+    handle_play_key_input(&mut state, '2', "", &dir).unwrap();
+    assert_eq!(state.active_player, Some(1));
+    assert_eq!(state.turn, 1, "an ordinary town selection reports acted");
+    let mut expected = clock_before;
+    expected.advance_minutes(1);
+    assert_eq!(state.clock, expected);
+
+    handle_play_key_input(&mut state, '0', "", &dir).unwrap();
+    assert_eq!(state.active_player, None);
+    assert_eq!(state.turn, 1, "the deselect reports no action");
+    assert_eq!(state.clock, expected);
+    let _ = fs::remove_dir_all(dir);
+}
