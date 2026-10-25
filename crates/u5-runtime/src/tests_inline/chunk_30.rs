@@ -1055,3 +1055,43 @@ mod moongate_transit_transition {
         assert_eq!(animation, AnimationClock::at_static_tile_phase(1));
     }
 }
+
+/// `active-objects.md §12`: an actor carrying the draw-nothing byte `0x16`
+/// leaves "the cell [keeping] whatever was already painted there rather than
+/// showing terrain"; `visibility.md §9` skips the cell. A fresh frame buffer
+/// must not turn that into a black square that walks with the actor
+/// (playtest Q06).
+#[test]
+fn draw_nothing_actor_cell_keeps_the_previous_frame_pixels() {
+    fn cell_pixels(viewport: &TileViewport, cell_x: usize, cell_y: usize) -> Vec<u8> {
+        (0..TILE_ATLAS_SIDE)
+            .flat_map(|row| {
+                let start = (cell_y * TILE_ATLAS_SIDE + row) * viewport.width
+                    + cell_x * TILE_ATLAS_SIDE;
+                viewport.pixels[start..start + TILE_ATLAS_SIDE].to_vec()
+            })
+            .collect()
+    }
+    let atlas = synthetic_tile_atlas(TileGraphicsDepth::Ega16);
+    // Grass: the synthetic EGA atlas paints floor `16` as pixel zero, which
+    // could not tell a kept cell from a cleared one.
+    let mut state = test_state(vec![5; 1024], 1, 1);
+    let first = state.render_top_down_frame(5, &atlas).unwrap().unwrap();
+    let before = cell_pixels(&first, 6, 5);
+    assert!(before.iter().any(|&pixel| pixel != 0));
+
+    state.active_objects.push(ActiveObject {
+        type_byte: 0x90,
+        tile: ACTOR_TILE_TRANSPARENT_BYTE,
+        x: 2,
+        y: 1,
+        z: 0,
+        phase: STEADY_PHASE,
+        aux1: 0,
+        aux3: 0,
+    });
+    state.mark_visibility_dirty();
+    let second = state.render_top_down_frame(5, &atlas).unwrap().unwrap();
+
+    assert_eq!(cell_pixels(&second, 6, 5), before);
+}

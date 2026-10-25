@@ -664,10 +664,12 @@ impl PlayState {
 
         if self.combat_active {
             self.render_combat_viewport(&mut viewport, atlas)?;
+            self.top_down_previous_viewport = Some(viewport.clone());
             return Ok(Some(viewport));
         }
 
         let Some(area) = self.top_down_render_area() else {
+            self.top_down_previous_viewport = None;
             return self
                 .render_dungeon_viewport(
                     radius,
@@ -720,6 +722,9 @@ impl PlayState {
                     continue;
                 }
                 let Some(tile_id) = cell.tile_id() else {
+                    // The draw-nothing actor byte: `visibility.md §9` skips
+                    // the cell, so it shows the previous pass's pixels.
+                    self.keep_previous_top_down_cell(&mut viewport, cell_x, cell_y);
                     continue;
                 };
                 // `animation.md §12.2/§12.3`: the display driver rotates
@@ -739,7 +744,39 @@ impl PlayState {
                 )?;
             }
         }
+        self.top_down_previous_viewport = Some(viewport.clone());
         Ok(Some(viewport))
+    }
+
+    /// Copy one cell of the previous map-view frame into `viewport`.
+    ///
+    /// `active-objects.md §12`: the draw-nothing byte `0x16` leaves "the cell
+    /// [keeping] whatever was already painted there rather than showing
+    /// terrain". The engine builds each frame in a fresh buffer, so "already
+    /// painted" is the last frame this state rendered; with none of the same
+    /// shape (the first pass after load or a mode change) the cell stays
+    /// cleared.
+    fn keep_previous_top_down_cell(
+        &self,
+        viewport: &mut TileViewport,
+        cell_x: usize,
+        cell_y: usize,
+    ) {
+        let Some(previous) = self.top_down_previous_viewport.as_ref() else {
+            return;
+        };
+        if previous.width != viewport.width
+            || previous.height != viewport.height
+            || previous.depth != viewport.depth
+        {
+            return;
+        }
+        let x = cell_x * TILE_ATLAS_SIDE;
+        for row in 0..TILE_ATLAS_SIDE {
+            let start = (cell_y * TILE_ATLAS_SIDE + row) * viewport.width + x;
+            viewport.pixels[start..start + TILE_ATLAS_SIDE]
+                .copy_from_slice(&previous.pixels[start..start + TILE_ATLAS_SIDE]);
+        }
     }
 
     /// `overworld.md §9.1` (spec HEAD c00bf63): is this cell's **live

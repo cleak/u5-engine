@@ -909,6 +909,7 @@ impl PlayState {
             // and the frame selector, which are visible as a cadence, are
             // carried.
             fire_flicker: FireFlickerClock::default(),
+            top_down_previous_viewport: None,
             dungeon_fountain_frame: 0,
             dungeon_monster_previous_cell: None,
             pending_dungeon_surface_exit: None,
@@ -1355,6 +1356,7 @@ impl PlayState {
             // and the frame selector, which are visible as a cadence, are
             // carried.
             fire_flicker: FireFlickerClock::default(),
+            top_down_previous_viewport: None,
             dungeon_fountain_frame: 0,
             dungeon_monster_previous_cell: None,
             pending_dungeon_surface_exit: None,
@@ -1811,6 +1813,7 @@ impl PlayState {
             // and the frame selector, which are visible as a cadence, are
             // carried.
             fire_flicker: FireFlickerClock::default(),
+            top_down_previous_viewport: None,
             dungeon_fountain_frame: 0,
             dungeon_monster_previous_cell: None,
             pending_dungeon_surface_exit: None,
