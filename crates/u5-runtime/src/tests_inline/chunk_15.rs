@@ -2010,10 +2010,18 @@
         );
         // u5-spec#300 Q19: "one line feed, the line, the same damage pass,
         // then flight for that NPC".
-        assert!(state
+        // `conversation.md §2` step 5: `"Begone,` ⏎ `vermin!"`, two rows.
+        let rows: Vec<&str> = state
             .message_entries()
             .iter()
-            .any(|entry| entry.text == TOWN_NPC_BRUSHOFF_LINE));
+            .map(|entry| entry.text.as_str())
+            .collect();
+        assert!(
+            rows.windows(2)
+                .any(|pair| pair == ["\"Begone,", "vermin!\""]),
+            "{rows:?}"
+        );
+        assert!(TOWN_NPC_BRUSHOFF_LINE.starts_with("\"Begone,\n"));
         assert!((1..=8).contains(&(hp_before - state.party[0].hp)));
         assert!(state.diagnostics_contain("shouts the brush-off"));
         assert_eq!(&state.npcs[0].schedule[..3], &[3, 3, 3]);

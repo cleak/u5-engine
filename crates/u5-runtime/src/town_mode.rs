@@ -559,9 +559,11 @@ pub const TOWN_NPC_CONTACT_CONFLICT_ACTOR_FIRST: u8 = 0x40;
 pub const TOWN_NPC_CONTACT_ATTACKED_LINE: &str = "Attacked!";
 /// `town-mode.md §14` / `npc-schedules.md` producer table (u5-spec#300
 /// Q19): the shouted brush-off of dialogue `0xFE`, "quotes included, ending
-/// in its own line feed"; the sixteen-column window wraps it as `"Begone,`
-/// / `vermin!"`.
-pub const TOWN_NPC_BRUSHOFF_LINE: &str = "\"Begone, vermin!\"";
+/// in its own line feed". It is the one literal `conversation.md §2` step 5
+/// gives as `"Begone,` ⏎ `vermin!"` - with its line feed after the comma, not
+/// a wrap - so the contact path and Talk print the same
+/// [`TOWN_NPC_BRUSHOFF_RESPONSE`].
+pub const TOWN_NPC_BRUSHOFF_LINE: &str = TOWN_NPC_BRUSHOFF_RESPONSE;
 /// Slot zero of every sub-map is the unused-sentinel slot the schedule
 /// processor skips; effective capacity per sub-map is therefore 31.
 pub const NPC_SENTINEL_SLOT: usize = 0;
