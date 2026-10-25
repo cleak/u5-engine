@@ -1182,6 +1182,9 @@ impl PlayState {
                     state.message.push('\n');
                 }
                 state.message.push_str(&line);
+                // `town-mode.md §13` (u5-spec#300 Q4, Q17): "After the text,
+                // the notice plays one software envelope".
+                state.emit_sound_effect(SoundEffect::ShadowlordPresenceNotice);
             }
             // The installed actor's slot is an engine internal. It used to be
             // appended to the notice as a second sentence, which put a line

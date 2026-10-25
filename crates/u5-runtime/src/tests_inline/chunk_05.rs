@@ -1743,13 +1743,12 @@ fn stonegate_entry_presentation_uses_sceptre_and_living_shadowlord_slots() {
 
     state.append_stonegate_entry_presentation_message();
 
-    // The Sceptre-gated prelude row's text is not published, so reaching it
-    // is recorded as a diagnostic rather than printed.
+    // u5-spec#300 Q4 (R590): the Sceptre gates no prelude row at all.
     assert!(
-        state
+        !state
             .diagnostics
             .iter()
-            .any(|note| note.contains("Sceptre-gated prelude row reached"))
+            .any(|note| note.contains("prelude"))
     );
     assert!(state.message.contains("An air of\nfalsehood doth"));
     assert!(!state.message.contains("hatred doth"));

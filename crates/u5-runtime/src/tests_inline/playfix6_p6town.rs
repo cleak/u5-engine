@@ -35,12 +35,22 @@ fn p6town_entering_a_hideout_town_prints_its_air_line() {
         .iter()
         .rposition(|row| *row == "BRITAIN")
         .expect("entry narration row");
+    // u5-spec#300 Q4: one blank row between the centred name and `An air
+    // of`, then the notice's tone (`(1, 2000, 60000, 1, 6600)`), once.
     assert_eq!(
         &rows[name + 1..],
-        &["An air of", "falsehood doth", "surround thee..."]
+        &["", "An air of", "falsehood doth", "surround thee..."]
     );
     assert!(state.message_row_open_mid_line);
     assert!(!state.message.contains("hatred"));
+    assert_eq!(
+        state
+            .sound_effects_after(0)
+            .iter()
+            .filter(|effect| **effect == SoundEffect::ShadowlordPresenceNotice)
+            .count(),
+        1
+    );
     let _ = fs::remove_dir_all(dir);
 }
 

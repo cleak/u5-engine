@@ -2262,9 +2262,8 @@ impl PlayState {
     ///
     /// This used to return an engine summary - `Stonegate entry: Sceptre
     /// prelude; air of Hatred.` - which is a sentence the original never
-    /// prints. The rows themselves are the presentation; the Sceptre-gated
-    /// prelude row's *text* is not published, so it stays a diagnostic
-    /// rather than an invented line.
+    /// prints. The rows themselves are the presentation. R590 (u5-spec#300
+    /// Q4) withdrew the "Sceptre-gated prelude row" outright.
     pub fn stonegate_entry_presentation_message(&self) -> Option<String> {
         let Area::Town { scene, .. } = self.area else {
             return None;
@@ -2283,14 +2282,10 @@ impl PlayState {
         if scene.byte != STONEGATE_SCENE_BYTE {
             return;
         }
-        if self.special_items[SPECIAL_ITEM_SCEPTRE_LB_INDEX] != 0 {
-            // §13: "the town setup path can play a Sceptre-gated prelude row
-            // when the party carries the Sceptre of Lord British". The row's
-            // text is not published, so this records that it was reached
-            // instead of inventing one.
-            self.diagnostics
-                .push("Stonegate Sceptre-gated prelude row reached".to_string());
-        }
+        // `town-mode.md §13` (u5-spec#300 Q4, R590): "The published
+        // \"Sceptre-gated prelude row\" does not exist." The silent removal
+        // of the Sceptre figure (roster slot 9) that replaces it is static
+        // reading only and not established, so nothing is done for it.
         for index in (0..SHADOWLORD_COUNT).rev() {
             if self.shadowlord_alive(index) {
                 let title = Self::shadowlord_title_for_index(index).unwrap_or("Shadowlord");
@@ -2312,6 +2307,12 @@ impl PlayState {
             false => format!("{}\n\n{note}", self.message),
         };
         self.emit_message_line(composed);
+        // `town-mode.md §13` (u5-spec#300 Q4, Q17): each notice plays its
+        // tone, "each tone finishes before the next notice's text"; the
+        // envelope is the same constant one for all three Shadowlords.
+        for _ in self.stonegate_entry_presentation_lines() {
+            self.emit_sound_effect(SoundEffect::ShadowlordPresenceNotice);
+        }
     }
 
     pub fn current_shadowlord_hideout_id(&self) -> Option<u8> {

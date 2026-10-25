@@ -300,6 +300,13 @@ pub struct EnvelopeSegment {
     pub period: u16,
 }
 
+/// `town-mode.md §13` / `audio.md §8.6` (u5-spec#300 Q4, Q17): "After the
+/// text, the notice plays one software envelope, `(1, 2000, 60000, 1,
+/// 6600)` in the tuple order of `systems/audio.md` Section 5.4. The five
+/// values are constants: they do not depend on which Shadowlord is named".
+pub const SHADOWLORD_PRESENCE_NOTICE_ENVELOPE: EnvelopeSegment =
+    EnvelopeSegment::new(1, 2000, 60_000, 1, 6600);
+
 impl EnvelopeSegment {
     pub const fn new(
         delta: i32,
@@ -2003,6 +2010,11 @@ pub enum SoundEffect {
     /// camp event's software envelopes - the apparition call, the six-note
     /// figure and each living member's two-envelope sting.
     LordBritishCampEnvelope(EnvelopeSegment),
+    /// `town-mode.md §13` / `audio.md §8.6` (u5-spec#300 Q4, Q17): the
+    /// Shadowlord presence notice's tone, played after each notice's text in
+    /// a hideout town and in Stonegate. See
+    /// [`SHADOWLORD_PRESENCE_NOTICE_ENVELOPE`].
+    ShadowlordPresenceNotice,
     /// `§8.4` shared major full-viewport flash. `bands` holds the 1,856
     /// gameplay-PRNG-drawn frequencies, already consumed from the gameplay
     /// stream by [`draw_major_flash_bands`].
@@ -2171,6 +2183,9 @@ impl SoundEffect {
             SoundEffect::PlayerSummon => envelope_program(PLAYER_SUMMON_ENVELOPE),
             SoundEffect::MoongateTransit => envelope_program(MOONGATE_TRANSIT_ENVELOPE),
             SoundEffect::LordBritishCampEnvelope(segment) => envelope_program(*segment),
+            SoundEffect::ShadowlordPresenceNotice => {
+                envelope_program(SHADOWLORD_PRESENCE_NOTICE_ENVELOPE)
+            }
             SoundEffect::MajorFlash { bands } => major_flash_program(bands),
             SoundEffect::StonegateDescent => stonegate_descent_program(),
             SoundEffect::StonegateMemberDeath => trap_rumble(jitter),

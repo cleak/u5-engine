@@ -2724,6 +2724,10 @@ impl PlayState {
                     .and_then(Self::shadowlord_air_line_for_index)
             });
             if let Some(note) = note {
+                // `town-mode.md §13` (u5-spec#300 Q4): every notice begins
+                // with its own line feed, so "exactly **one** blank row"
+                // stands between the centred name and `An air of`.
+                let note = format!("\n{note}");
                 next.message_row_open_mid_line = false;
                 next.push_message_transcript_lines(&note);
                 next.message_row_open_mid_line = true;
