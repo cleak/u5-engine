@@ -4359,9 +4359,33 @@ impl PlayState {
     }
 
     pub fn combat_legal_cell_mask(&self) -> [[bool; COMBAT_ARENA_SIDE]; COMBAT_ARENA_SIDE] {
+        self.combat_legal_cell_mask_over(&self.combat_actors)
+    }
+
+    /// `combat.md §12`, "Where the clone goes" (u5-spec#300 Q9): the split
+    /// clone's cell takes "the same arena-cell acceptance test a combat step
+    /// uses", in which "no live combatant may stand there (a dead or
+    /// dragged-under combatant does not block, an asleep one does)". The
+    /// shared [`Self::combat_legal_cell_mask`] still treats a dragged-under
+    /// combatant as blocking, so the split drops those occupants first.
+    fn combat_split_legal_cell_mask(&self) -> [[bool; COMBAT_ARENA_SIDE]; COMBAT_ARENA_SIDE] {
+        let actors = self.combat_actors.map(|actor| {
+            if actor.is_dragged_under() {
+                CombatActorDescriptor::empty()
+            } else {
+                actor
+            }
+        });
+        self.combat_legal_cell_mask_over(&actors)
+    }
+
+    fn combat_legal_cell_mask_over(
+        &self,
+        actors: &[CombatActorDescriptor],
+    ) -> [[bool; COMBAT_ARENA_SIDE]; COMBAT_ARENA_SIDE] {
         let mut legal_cells = build_combat_ai_legal_cell_mask(
             &self.combat_terrain,
-            &self.combat_actors,
+            actors,
             is_combat_arena_tile_walkable,
         );
         for object in self.active_objects.iter().take(OOL_SLOTS) {
@@ -5186,7 +5210,7 @@ impl PlayState {
             .get(usize::from(parent.active_object_slot))
             .map(|object| object.z)
             .unwrap_or_default();
-        let legal_cells = self.combat_legal_cell_mask();
+        let legal_cells = self.combat_split_legal_cell_mask();
         let mut placed = None;
         for _ in 0..COMBAT_SPLIT_PLACEMENT_ATTEMPTS {
             let (x, y) = loop {

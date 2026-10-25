@@ -77,16 +77,17 @@ impl PlayState {
             self.player.y = ny;
             self.sync_player_object();
             self.mark_visibility_dirty();
-            self.player.x = origin_x;
-            self.player.y = origin_y;
-            self.sync_player_object();
-            self.mark_visibility_dirty();
             // `audio.md §8.2` (added 2026-10-25, u5-spec#300 Q32): "Once per
             // contact, after the viewport flash and before the push-back, the
             // 500-update 100..20000 Hz rumble `(1, 500, 20000)`"; the
             // whole-party damage pass that follows adds each damaged
-            // member's own damage rumble.
+            // member's own damage rumble. So it sounds while the party still
+            // stands on the field cell, before the reversal below.
             self.emit_sound_effect(SoundEffect::DungeonElectricPushBack);
+            self.player.x = origin_x;
+            self.player.y = origin_y;
+            self.sync_player_object();
+            self.mark_visibility_dirty();
             let _ = self.apply_dungeon_field_effect_at(
                 level,
                 nx,

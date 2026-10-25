@@ -293,6 +293,55 @@
     }
 
     #[test]
+    fn split_clone_may_take_a_dragged_under_combatants_cell_but_not_a_sleepers() {
+        // `combat.md §12` "Where the clone goes" (issue #300 Q9): "no live
+        // combatant may stand there (a dead or dragged-under combatant does
+        // not block, an asleep one does)". The only open neighbour holds a
+        // party member, dragged under in one arm and asleep in the other.
+        for (status_flag, may_place) in [
+            (COMBAT_ACTOR_FLAG_DRAGGED_UNDER, true),
+            (COMBAT_ACTOR_FLAG_STATUS_DISABLED, false),
+        ] {
+            let mut divided = 0;
+            for seed in 0..64u16 {
+                let mut state = combat_frame_conformance_state();
+                state.prng_state = seed.wrapping_mul(997).wrapping_add(1);
+                let parent_slot = COMBAT_PARTY_ACTOR_SLOTS;
+                place_death_side_effect_monster(&mut state, 24, parent_slot, 10);
+                let wall = (0..=u8::MAX)
+                    .find(|tile| !is_combat_arena_tile_walkable(*tile))
+                    .unwrap();
+                for (x, y) in [(3, 4), (4, 4), (5, 4), (3, 5), (5, 5), (3, 6), (4, 6)] {
+                    state.combat_terrain[y][x] = wall;
+                }
+                state.combat_actors[0] = CombatActorDescriptor::from_row([
+                    30,
+                    10,
+                    COMBAT_ACTOR_FLAG_SELECTABLE_80 | status_flag,
+                    0,
+                    20,
+                    0,
+                    5,
+                    6,
+                ]);
+                state
+                    .apply_combat_weapon_damage_to_target(None, parent_slot, 1, false)
+                    .unwrap();
+                let children: Vec<_> = (COMBAT_PARTY_ACTOR_SLOTS..COMBAT_ACTOR_SLOTS)
+                    .filter(|slot| *slot != parent_slot && !state.combat_actors[*slot].is_empty())
+                    .map(|slot| state.combat_actors[slot])
+                    .collect();
+                if let Some(child) = children.first() {
+                    assert!(may_place, "seed {seed}: an asleep combatant blocks");
+                    assert_eq!((child.x, child.y), (5, 6), "seed {seed}");
+                    divided += 1;
+                }
+            }
+            assert_eq!(divided > 0, may_place, "status flag {status_flag:#04x}");
+        }
+    }
+
+    #[test]
     fn split_with_every_monster_slot_full_draws_all_eight_attempts_and_prints_nothing() {
         // `combat.md §12` (issue #300 Q9): "with all twenty-six monster
         // slots in use, all eight attempts are still drawn and every one

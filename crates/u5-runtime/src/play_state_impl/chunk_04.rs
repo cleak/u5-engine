@@ -294,6 +294,17 @@ impl PlayState {
         // out-of-range byte reads as Calm, and a drift to a real Calm must
         // still store `0` over it (`weather.md §2.1`, out-of-range values).
         let out_of_range_byte = self.wind_save_byte > 4;
+        // `moons.md §3` (u5-spec#300 Q35): after a surface-overworld fight
+        // the banner "keeps the pre-combat wind until the next drift hit,
+        // Wind Change, scene entry or load". This setter is the banner's
+        // repaint helper, so any call outside combat ends the hold for good
+        // - even one that stores the wind already in force, and even if a
+        // later change returns to the wind the hold was keyed on.
+        if !self.combat_active
+            && let Some(hold) = self.post_combat_ribbon_hold.as_mut()
+        {
+            hold.bottom = None;
+        }
         if self.wind == WindState::Calm && wind == WindState::Calm && !out_of_range_byte {
             return false;
         }

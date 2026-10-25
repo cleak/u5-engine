@@ -3775,6 +3775,13 @@ impl PlayState {
     /// mode-zero firing below crosses no hour, so it stays on the two
     /// time-advancing paths that do.
     fn fire_hour_change_bundle(&mut self) {
+        // `moons.md §3` (u5-spec#300 Q35): a post-combat strip stays frozen
+        // only "until the next hour change". Once this hook has run, the
+        // held strip is gone for good - it must not come back when the
+        // clock later returns to the same hour.
+        if let Some(hold) = self.post_combat_ribbon_hold.as_mut() {
+            hold.top = None;
+        }
         self.refresh_cached_moon_glyphs();
         self.write_twelve_hour_audio_repeats();
     }

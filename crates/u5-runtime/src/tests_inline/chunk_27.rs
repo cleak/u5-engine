@@ -425,6 +425,55 @@ fn spec300_q35_surface_overworld_gaps_stay_frozen_after_combat_until_their_own_t
     assert_eq!(after.bottom, ChromeGap::Label("South Winds".to_string()));
 }
 
+/// `moons.md §3` (u5-spec#300 Q35): the frozen strip lasts "until the next
+/// hour change", and the frozen banner "until the next drift hit, Wind
+/// Change, scene entry or load". Once its trigger has run, a held gap must
+/// not reappear when the clock comes back round to the exit hour or the
+/// wind drifts back to the exit wind.
+#[test]
+fn spec300_q35_a_released_ribbon_hold_never_comes_back() {
+    let mut state = britannia_state(open_world_grid(), 10, 20);
+    state.clock.hour = 10;
+    state.clock.minute = 30;
+    state.wind = WindState::South;
+    state.wind_save_byte = WindState::South.save_byte();
+    let before = gameplay_chrome_content(&state);
+    state
+        .enter_combat_frame(
+            vec![ActiveObject::empty(); OOL_SLOTS],
+            [CombatActorDescriptor::empty(); COMBAT_ACTOR_SLOTS],
+        )
+        .expect("combat frame should enter");
+    state.clock.hour = 11;
+    state.clock.minute = 5;
+    state.wind = WindState::North;
+    state.wind_save_byte = WindState::North.save_byte();
+    let snapshot = state.combat_frame_snapshot.take().unwrap();
+    state.restore_combat_frame(snapshot);
+    assert_eq!(gameplay_chrome_content(&state).top, before.top, "held after the fight");
+    assert_eq!(gameplay_chrome_content(&state).bottom, before.bottom);
+
+    // A full day of hour changes brings the clock back to 11:05.
+    for _ in 0..24 {
+        state.advance_clock_half(60);
+    }
+    assert_eq!((state.clock.hour, state.clock.minute), (11, 5));
+    assert_ne!(
+        gameplay_chrome_content(&state).top,
+        before.top,
+        "the strip repainted at the first hour change and stays live"
+    );
+
+    // A drift away from North and back again.
+    state.apply_wind_state_without_sound(WindState::East);
+    state.apply_wind_state_without_sound(WindState::North);
+    assert_ne!(
+        gameplay_chrome_content(&state).bottom,
+        before.bottom,
+        "the banner repainted at the first drift and stays live"
+    );
+}
+
 #[test]
 fn gameplay_chrome_content_maps_modal_stats_labels_and_browser_page_badge() {
     let mut selector = test_state(open_grid(), 1, 1);
