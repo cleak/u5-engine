@@ -18359,6 +18359,13 @@ fn directed_spell_status_application_applies_sleep_to_party_and_reports_non_part
         })
     );
     assert_eq!(state.party[0].status, b'S');
+    // p10 R09. `combat.md §6.2`'s party row also sets the descriptor's
+    // disabled bit, which is what routes the sleeper to `§8.1`'s asleep arm
+    // (`Zzzzz...`, no key read) instead of a command prompt.
+    assert!(
+        state.combat_actors[0].is_status_disabled(),
+        "the slept party member's descriptor carries the asleep bit"
+    );
     assert!(state.combat_actors[target_slot].is_status_disabled());
     assert_eq!(
         state.apply_directed_combat_spell_status(

@@ -5729,6 +5729,25 @@ impl PlayState {
             let application = match effect {
                 CombatDirectedSpellEffect::Sleep if slot < COMBAT_PARTY_ACTOR_SLOTS => {
                     let outcome = apply_combat_sleep_to_party_target(self.party.get_mut(slot)?);
+                    // `combat.md §6.2`'s party row: "the status byte becomes
+                    // `'S'`, the descriptor's disabled bit is set, the
+                    // presentation record shows the prone marker, the
+                    // active-player sentinel is cleared if that member held
+                    // it ... the party stats panel is redrawn" - the same
+                    // writer [`Self::apply_combat_sleep_effect_to_target`]
+                    // runs. Writing only the roster letter left the slot
+                    // without bit `0x08`, so `§8.1`'s asleep arm never ran
+                    // and the sleeper kept getting command prompts (p10 R09).
+                    if matches!(outcome, CombatPartySleepOutcome::SleptPartyMember { .. }) {
+                        if !self.apply_combat_party_sleep_presentation(slot) {
+                            self.set_combat_actor_status_disabled(slot);
+                        }
+                        if self.active_player == Some(slot) {
+                            self.active_player = None;
+                        }
+                        self.request_party_stats_panel_refresh();
+                        self.mark_visibility_dirty();
+                    }
                     CombatDirectedSpellSlotStatusApplication::PartySleep {
                         target_slot: slot,
                         outcome,
