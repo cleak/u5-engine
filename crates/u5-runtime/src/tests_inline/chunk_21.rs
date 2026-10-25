@@ -329,14 +329,22 @@ fn town_look_sign_terrain_tile_reads_signs_dat_or_the_blank_sign() {
     let mut state = test_state(grid, 1, 1);
 
     state.look_direction_with_game_dir(Direction::East, &dir).unwrap();
-    assert_eq!(state.message, format!("{LOOK_RESULT_PREFIX}\nPosted notice"));
+    assert_eq!(state.message, format!("{LOOK_RESULT_PREFIX}\n\nPosted notice"));
 
     state.look_direction_with_game_dir(Direction::South, &dir).unwrap();
     assert_eq!(state.message, format!("{LOOK_RESULT_PREFIX}\na sign"));
 
+    // `formats/signs-dat.md §6` (u5-spec#300 Q13): no record prints the
+    // six-row "LIVE BY THE / EIGHT LAWS" placard.
     state.player.y = 2;
     state.look_direction_with_game_dir(Direction::South, &dir).unwrap();
-    assert_eq!(state.message, format!("{LOOK_RESULT_PREFIX}\n"));
+    assert_eq!(
+        state.message,
+        format!(
+            "{LOOK_RESULT_PREFIX}\n\n{}\n",
+            SIGN_NO_RECORD_PLACARD_ROWS.join("\n")
+        )
+    );
     let _ = fs::remove_dir_all(dir);
 }
 
@@ -396,6 +404,9 @@ fn yew_wanted_poster_exception_uses_party_names_without_signs_dat() {
         state.message,
         [
             LOOK_RESULT_PREFIX,
+            // Row 5's own line break after the preamble's feed: one blank row
+            // (u5-spec#300 Q13).
+            "",
             "abbbbbbbbbbbbbc",
             "g   Wanted:   g",
             "g             g",
@@ -996,7 +1007,7 @@ fn town_look_renders_matching_signs_dat_record_and_spends_its_turn() {
         MoveOutcome::Observed
     );
 
-    assert_eq!(state.message, format!("{LOOK_RESULT_PREFIX}\nNorth Road"));
+    assert_eq!(state.message, format!("{LOOK_RESULT_PREFIX}\n\nNorth Road"));
     assert_eq!(state.turn, 1);
     assert_eq!(state.clock, GameClock::new(12, 1).unwrap());
     let _ = fs::remove_dir_all(dir);

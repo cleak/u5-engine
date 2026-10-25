@@ -43,10 +43,10 @@ fn playtest_j02_look_appenders_add_no_separator_or_brackets() {
 }
 
 /// `formats/signs-dat.md §5`: "The active scene indexes the `SIGNS.DAT`
-/// scene directory", that one block is scanned, and "[e]very matching
-/// record is printed". Shipped blocks are back to back with no sentinel
-/// between them; a scene-k record must still be collected once, not once
-/// per non-empty directory slot at or before k (J04).
+/// scene directory" and the first matching record is printed (R598).
+/// Shipped blocks are back to back with no sentinel between them; a scene-k
+/// record must still be collected once, not once per non-empty directory
+/// slot at or before k (J04).
 #[test]
 fn playtest_j04_sign_scene_blocks_stop_at_the_next_block() {
     let mut bytes = vec![0u8; SIGNS_DAT_SCENE_DIRECTORY_BYTES];
@@ -66,13 +66,14 @@ fn playtest_j04_sign_scene_blocks_stop_at_the_next_block() {
 
     let records = parse_sign_records(&bytes).unwrap();
     assert_eq!(records.len(), 3);
-    assert_eq!(crate::signs_io::matching_sign_bodies(&records, 3, 0, 28, 15), vec!["Thr"]);
-    assert_eq!(crate::signs_io::matching_sign_bodies(&records, 4, 0, 17, 17), vec!["Fou"]);
+    assert_eq!(find_sign(&records, 3, 0, 28, 15).map(|r| r.body.as_str()), Some("Thr"));
+    assert_eq!(find_sign(&records, 4, 0, 17, 17).map(|r| r.body.as_str()), Some("Fou"));
 }
 
 /// `view.md §3` entry dispatch: row 3 prints the shared "thou dost see"
 /// preamble for the sign row too, and row 5 "emit[s] a line break, then
-/// render[s] the sign". `formats/signs-dat.md §6`: the authored stream is laid
+/// render[s] the sign" - a second feed after the preamble's own, so a blank
+/// row stands under `Thou dost see` (u5-spec#300 Q13). `formats/signs-dat.md §6`: the authored stream is laid
 /// out without "proportional-font wrapping, implicit line breaking", so its
 /// sixteen-cell rows stay intact rather than being re-flowed at word breaks.
 /// No `Sign:` label is published (J05).
@@ -99,7 +100,7 @@ fn playtest_j05_sign_look_prints_the_preamble_and_keeps_authored_rows() {
 
     assert_eq!(
         state.message,
-        format!("{LOOK_RESULT_PREFIX}\ng LAW OF VALOR g\ngDEATH OR THOU  \ng")
+        format!("{LOOK_RESULT_PREFIX}\n\ng LAW OF VALOR g\ngDEATH OR THOU  \ng")
     );
     let _ = fs::remove_dir_all(dir);
 }
@@ -126,12 +127,12 @@ fn playtest_j05_sign_line_feeds_break_rows_and_bridge_aliases() {
 
     let records = parse_sign_records(&bytes).unwrap();
     assert_eq!(
-        crate::signs_io::matching_sign_bodies(&records, 4, 0, 28, 14),
-        vec!["g ROW g\ng TWO g"]
+        find_sign(&records, 4, 0, 28, 14).map(|r| r.body.as_str()),
+        Some("g ROW g\ng TWO g")
     );
     assert_eq!(
-        crate::signs_io::matching_sign_bodies(&records, 4, 0, 28, 16),
-        vec!["g ROW g\ng TWO g"]
+        find_sign(&records, 4, 0, 28, 16).map(|r| r.body.as_str()),
+        Some("g ROW g\ng TWO g")
     );
 
     assert_eq!(crate::play_state_impl::sign_stream_rows("15-cells-wide-r\nnext"), "15-cells-wide-r\nnext");
@@ -265,5 +266,73 @@ fn playtest_j29_lowercase_diagonal_letters_echo_their_verb() {
         top_down_command_echo('Z').map(|echo| echo.text),
         "{texts:?}"
     );
+    let _ = fs::remove_dir_all(dir);
+}
+
+/// `formats/signs-dat.md §4` (corrected 2026-10-25, u5-spec#300 Q13 and Q21,
+/// `RETRACTIONS.md` R600): the high bit selects the font per byte (clear:
+/// runic, set: Roman), the control tests use the raw byte, and `0x8D` is a
+/// carriage return, not a pause.
+#[test]
+fn spec300_q13_sign_bytes_pick_their_font_and_only_raw_controls_act() {
+    use crate::tlk_runner::TlkGlyphFont::{Ordinary, Runic};
+    let rendered = sign_payload_rendered(&[b'A', b'A' | 0x80, 0x26, 0x27, 0xa6, 0xa7, 0xa9, 0x8d, b'B']);
+    let cells: Vec<(u8, _)> = rendered.glyphs.iter().map(|g| (g.byte, g.font)).collect();
+    assert_eq!(
+        cells,
+        vec![
+            (b'A', Runic),
+            (b'A', Ordinary),
+            (SIGN_SEPARATOR_RUNIC_CODE_POINT, Runic),
+            (SIGN_SEPARATOR_RUNIC_CODE_POINT, Runic),
+            (b'&', Ordinary),
+            (b'\'', Ordinary),
+            (b')', Ordinary),
+            (b'B', Runic),
+        ]
+    );
+    // Only raw `0x0D` pauses.
+    assert!(
+        sign_payload_rendered(&[b'A', 0x0d, b'B'])
+            .glyphs
+            .iter()
+            .any(|g| g.byte == crate::text_hold::TEXT_HOLD_WAIT_KEY_MARKER)
+    );
+    assert_eq!(decode_sign_payload(&[b'A', 0x8d, b'B']), "AB");
+}
+
+/// `formats/signs-dat.md §5` step 6 (u5-spec#300 Q13, R598): only the first
+/// matching record is printed; §4: the sign rows keep their runic cells in
+/// the message window.
+#[test]
+fn spec300_q13_look_prints_only_the_first_match_in_its_own_font() {
+    let dir = debug_game_dir();
+    fs::write(dir.join(LOOK2_DAT_FILE), look2_bytes(&[])).unwrap();
+    fs::write(
+        dir.join(SIGNS_DAT_FILE),
+        signs_dat_bytes_for_test(&[(17, 0, 1, 2, b"FIRST"), (17, 0, 1, 2, b"SECOND")]),
+    )
+    .unwrap();
+    let mut grid = open_grid();
+    grid[32 + 2] = 0xa0;
+    let mut state = test_state(grid, 1, 1);
+
+    state.look_direction_with_game_dir(Direction::East, &dir).unwrap();
+
+    assert_eq!(state.message, format!("{LOOK_RESULT_PREFIX}\n\nFIRST"));
+    let row = state
+        .message_entries()
+        .iter()
+        .rev()
+        .find(|entry| entry.text == "FIRST")
+        .expect("the sign row reached the transcript");
+    assert!(
+        row.glyphs
+            .iter()
+            .all(|glyph| glyph.font == crate::tlk_runner::TlkGlyphFont::Runic),
+        "{:?}",
+        row.glyphs
+    );
+    assert!(!state.message_row_open_mid_line);
     let _ = fs::remove_dir_all(dir);
 }

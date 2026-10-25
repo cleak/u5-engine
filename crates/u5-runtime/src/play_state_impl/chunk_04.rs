@@ -4490,9 +4490,9 @@ impl PlayState {
         z: u8,
         y: u8,
         x: u8,
-    ) -> io::Result<Option<String>> {
+    ) -> io::Result<Option<crate::tlk_runner::TlkRenderedText>> {
         if let Some(message) = self.yew_wanted_poster_message(scene, z, y, x) {
-            return Ok(Some(message));
+            return Ok(Some(crate::tlk_runner::TlkRenderedText::plain(message)));
         }
         let Some(game_dir) = game_dir else {
             return Ok(None);
@@ -4500,38 +4500,82 @@ impl PlayState {
         let Some(records) = load_sign_records(game_dir)? else {
             return Ok(None);
         };
-        let bodies = crate::signs_io::matching_sign_bodies(&records, scene, z, y, x);
-        if bodies.is_empty() {
-            return Ok(None);
-        }
+        // `formats/signs-dat.md §5` step 6 (u5-spec#300 Q13, R598): only the
+        // first matching record is printed. Steps 3 and 7: a zero directory
+        // entry, or a window with no match, prints the §6 placard. The scan
+        // here stays inside the scene's own block: the spec says the read
+        // window runs on into later scenes' records, but its length "is not
+        // published" (R599), so how far it reaches is not modelled.
+        let Some(record) = find_sign(&records, scene, z, y, x) else {
+            return Ok(Some(sign_no_record_placard_rendered()));
+        };
         // `formats/signs-dat.md §6`: the stream is "already authored" and
         // a renderer should "[a]void proportional-font wrapping, implicit
-        // line breaking". The shipped bodies carry no line feeds: each
-        // authored row is exactly one message-window row wide and reaches
-        // the next row through the per-cell emitter's own edge wrap
-        // (`text-output.md §5`). Laying the stream out cell by cell keeps
-        // the rows intact; the word-wrap printer broke them mid-row
-        // (playtest J05).
-        Ok(Some(sign_stream_rows(&bodies.concat())))
+        // line breaking". Each authored row is laid out cell by cell and
+        // reaches the next row through the per-cell emitter's own edge wrap
+        // (`text-output.md §5`); the word-wrap printer broke them mid-row
+        // (playtest J05). Each cell keeps the font its byte's high bit
+        // selects (§4, R600).
+        Ok(Some(sign_stream_rows_rendered(&sign_payload_rendered(
+            &record.payload,
+        ))))
     }
 
-    /// Put a sign into the message slot. `formats/signs-dat.md §6`: "Pause on
-    /// the embedded pause code" - the sign prints up to its first `0x0D` and
-    /// the rest waits behind a key (see [`crate::text_hold`]).
+    /// Put a sign into the message window. `formats/signs-dat.md §6`: "Pause
+    /// on the embedded pause code" - the sign prints up to its first `0x0D`
+    /// and the rest waits behind a key (see [`crate::text_hold`]).
     ///
     /// `view.md §3` entry dispatch: row 3 prints the shared "thou dost see"
     /// preamble for rows 4, 5 and 6 alike, and row 5 then emits "a line
-    /// break, then render[s] the sign or poster". No `Sign:` label is
-    /// published (playtest J05). A coordinate with no record prints the
-    /// unpublished blank-sign fallback as nothing beyond that line break.
-    fn present_sign_message(&mut self, sign: Option<String>) {
-        let sign = format!("{LOOK_RESULT_PREFIX}\n{}", sign.unwrap_or_default());
-        let (first, rest) = crate::text_hold::split_rendered_at_holds(
-            &crate::tlk_runner::TlkRenderedText::plain(sign),
-        );
+    /// break, then render[s] the sign or poster". The preamble "is a line
+    /// feed, `Thou dost see`, then a line feed" and "the sign path's own line
+    /// break is a second, separate line feed", so a blank row stands between
+    /// `Thou dost see` and the sign rows (u5-spec#300 Q13). No `Sign:` label
+    /// is published (playtest J05).
+    fn present_sign_message(&mut self, sign: Option<crate::tlk_runner::TlkRenderedText>) {
+        let mut rendered =
+            crate::tlk_runner::TlkRenderedText::plain(format!("{LOOK_RESULT_PREFIX}\n\n"));
+        if let Some(sign) = sign {
+            rendered.push_rendered(&sign);
+        }
+        let (first, rest) = crate::text_hold::split_rendered_at_holds(&rendered);
         let row_open = !first.text.is_empty() && !first.text.ends_with('\n');
-        self.message = first.text;
+        // Commit the first page now, through the same slot flush the turn
+        // boundary would run, then give the sign rows back the per-cell font
+        // the flush flattened (`formats/signs-dat.md §4`, R600).
+        self.message = first.text.clone();
+        self.flush_message_slot();
+        self.restore_flushed_rows_fonts(&first);
+        // `formats/signs-dat.md §4` step 4 and §6: after a record the
+        // formatter prints a line feed if the cursor is off column 0, and
+        // every placard row carries its own feed, so the sign leaves the
+        // cursor at column 0. Set explicitly for this caller.
+        self.message_row_open_mid_line = false;
         self.begin_text_hold(rest, row_open);
+    }
+
+    /// Re-apply `rendered`'s per-cell fonts to the transcript rows a plain
+    /// slot flush has just pushed for it, newest row first, stopping at the
+    /// first row whose text does not match.
+    fn restore_flushed_rows_fonts(&mut self, rendered: &crate::tlk_runner::TlkRenderedText) {
+        let rows: Vec<&[crate::tlk_runner::TlkRenderedGlyph]> = rendered
+            .rendered_lines()
+            .filter(|row| !row.is_empty())
+            .collect();
+        let mut entries = self
+            .message_transcript
+            .iter_mut()
+            .rev()
+            .filter(|entry| !entry.text.is_empty());
+        for row in rows.into_iter().rev() {
+            let Some(entry) = entries.next() else {
+                break;
+            };
+            if entry.text.as_bytes() != row.iter().map(|glyph| glyph.byte).collect::<Vec<_>>() {
+                break;
+            }
+            entry.glyphs = row.to_vec();
+        }
     }
 
     fn yew_wanted_poster_message(&self, scene: u8, z: u8, y: u8, x: u8) -> Option<String> {
@@ -4546,7 +4590,7 @@ impl PlayState {
         game_dir: Option<&Path>,
         y: u8,
         x: u8,
-    ) -> io::Result<Option<String>> {
+    ) -> io::Result<Option<crate::tlk_runner::TlkRenderedText>> {
         match self.area {
             Area::Town { scene, floor } => {
                 self.sign_message_at(game_dir, scene.byte, floor as u8, y, x)
@@ -6803,28 +6847,61 @@ impl PlayState {
 /// the cursor onto the next row. A line feed returns the column to the left
 /// edge and steps down one row - after an edge wrap that is a second row
 /// step. Hold markers occupy no cell.
+#[cfg(test)]
 pub fn sign_stream_rows(stream: &str) -> String {
-    let mut out = String::with_capacity(stream.len() + stream.len() / 8);
+    sign_stream_rows_rendered(&crate::tlk_runner::TlkRenderedText::plain(stream)).text
+}
+
+/// [`sign_stream_rows`] over font-carrying cells: the inserted edge-wrap
+/// breaks are ordinary line feeds and every cell keeps its font.
+pub fn sign_stream_rows_rendered(
+    stream: &crate::tlk_runner::TlkRenderedText,
+) -> crate::tlk_runner::TlkRenderedText {
+    use crate::tlk_runner::{TlkRenderedGlyph, TlkRenderedText};
+    let mut out = TlkRenderedText::default();
+    let mut push = |glyph: TlkRenderedGlyph| {
+        out.text.push(char::from(glyph.byte));
+        out.glyphs.push(glyph);
+    };
     let mut column = 0usize;
-    for ch in stream.chars() {
-        if ch == char::from(crate::text_hold::TEXT_HOLD_WAIT_KEY_MARKER) {
-            out.push(ch);
+    for &glyph in &stream.glyphs {
+        if glyph.byte == crate::text_hold::TEXT_HOLD_WAIT_KEY_MARKER {
+            push(glyph);
             continue;
         }
-        if ch == '\n' {
+        if glyph.byte == b'\n' {
             if column == crate::MESSAGE_WINDOW_WIDTH {
-                out.push('\n');
+                push(TlkRenderedGlyph::ordinary(b'\n'));
             }
-            out.push('\n');
+            push(glyph);
             column = 0;
             continue;
         }
         if column == crate::MESSAGE_WINDOW_WIDTH {
-            out.push('\n');
+            push(TlkRenderedGlyph::ordinary(b'\n'));
             column = 0;
         }
-        out.push(ch);
+        push(glyph);
         column += 1;
+    }
+    out
+}
+
+/// `formats/signs-dat.md §6` "The no-record placard" (u5-spec#300 Q13): six
+/// sixteen-cell rows in the runic font, each ending with its own line feed.
+pub fn sign_no_record_placard_rendered() -> crate::tlk_runner::TlkRenderedText {
+    use crate::tlk_runner::{TlkGlyphFont, TlkRenderedGlyph, TlkRenderedText};
+    let mut out = TlkRenderedText::default();
+    for row in SIGN_NO_RECORD_PLACARD_ROWS {
+        for byte in row.bytes() {
+            out.text.push(char::from(byte));
+            out.glyphs.push(TlkRenderedGlyph {
+                byte,
+                font: TlkGlyphFont::Runic,
+            });
+        }
+        out.text.push('\n');
+        out.glyphs.push(TlkRenderedGlyph::ordinary(b'\n'));
     }
     out
 }

@@ -781,7 +781,7 @@ fn audit_a012_sign_pause_byte_waits_for_a_key_before_the_rest() {
     state.player.facing = Direction::East;
     state.look_facing_with_game_dir(&dir).unwrap();
     state.flush_message_slot();
-    assert_eq!(state.message, format!("{LOOK_RESULT_PREFIX}\nRead"));
+    assert_eq!(state.message, format!("{LOOK_RESULT_PREFIX}\n\nRead"));
     assert!(state.text_hold_active());
     assert!(state.advance_text_hold_to(1_000.0), "a key wait never times out");
     assert!(!audit_g5_transcript(&state).contains("More"));

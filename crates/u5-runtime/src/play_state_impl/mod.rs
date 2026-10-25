@@ -22,7 +22,9 @@ mod chunk_12;
 // the shop render sites in `input_dispatch.rs` read the same table.
 #[cfg(test)]
 pub(crate) use chunk_04::TLK_FALSEHOOD_STOLEN_GOODS_LINE;
-pub(crate) use chunk_04::{shop_vendor_name_for_scene, sign_stream_rows};
+pub(crate) use chunk_04::shop_vendor_name_for_scene;
+#[cfg(test)]
+pub(crate) use chunk_04::sign_stream_rows;
 pub(crate) use chunk_09::surface_local_light_mask_index;
 pub use chunk_09::{
     outdoor_active_object_step_accepts_tile, town_free_roaming_direction,
