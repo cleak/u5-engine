@@ -5812,8 +5812,10 @@ impl PlayState {
         }
         self.active_conversation = None;
         self.active_conversation_npc_slot = None;
-        let opening = conversation_opening_stopped_rendered(rendered);
-        let _ = self.run_final_conversation_cleanup();
+        let mut opening = conversation_opening_stopped_rendered(rendered);
+        if self.run_final_conversation_cleanup() {
+            append_falsehood_stolen_goods_line(&mut opening);
+        }
         opening
     }
 
@@ -6145,7 +6147,10 @@ impl PlayState {
             }
             self.active_conversation = None;
             self.active_conversation_npc_slot = None;
-            let _ = self.run_final_conversation_cleanup();
+            if self.run_final_conversation_cleanup() {
+                append_falsehood_stolen_goods_line(&mut rendered);
+                text = rendered.text.clone();
+            }
         }
         debug_assert_eq!(rendered.text, text);
         self.emit_tlk_message(rendered);
@@ -6486,10 +6491,10 @@ impl PlayState {
     /// Run the Shadowlord of Falsehood's post-conversation theft. Returns
     /// whether the theft ran.
     ///
-    /// `conversation.md §10` says the cleanup "prints the stolen-goods line",
-    /// but no spec document publishes that line's wording. The engine used to
-    /// print an invented ` Stolen goods.` here (playtest K14); the line is now
-    /// recorded as a diagnostic until the spec names it.
+    /// `conversation.md §10` (added 2026-10-25, u5-spec#300 Q20): the cleanup
+    /// prints the stolen-goods line [`TLK_FALSEHOOD_STOLEN_GOODS_LINE`]; the
+    /// callers append it to the conversation's closing text when this returns
+    /// `true` (see [`append_falsehood_stolen_goods_line`]).
     pub fn run_final_conversation_cleanup(&mut self) -> bool {
         self.run_final_conversation_cleanup_with_seed(host_clock_prng_seed_now())
     }
@@ -6501,9 +6506,6 @@ impl PlayState {
         if self.resident_shadowlord != Some(SHADOWLORD_FALSEHOOD_INDEX) {
             return false;
         }
-        self.push_diagnostic(
-            "Falsehood theft: stolen-goods line reached; its wording is not published".to_string(),
-        );
         self.emit_sound_effect(SoundEffect::ActionSnap);
 
         // `prng.md §3`: this sample precedes inventory inspection even when
@@ -7808,6 +7810,29 @@ fn conversation_opening_rendered(
     }
     rendered.push_plain(prompt);
     rendered
+}
+
+/// `conversation.md §10` (added 2026-10-25, u5-spec#300 Q20): "the single
+/// stored line `Something was stolen!`, with no leading spaces, which begins
+/// and ends with its own line feed, so one blank row separates it from the
+/// conversation's last row and the cursor is left at column 0 of the row
+/// below it".
+pub const TLK_FALSEHOOD_STOLEN_GOODS_LINE: &str = "\nSomething was stolen!\n";
+
+/// Append [`TLK_FALSEHOOD_STOLEN_GOODS_LINE`] to a conversation's closing text.
+/// The closing text already ends at column 0 under one blank row (the feed
+/// pair this engine closes every conversation with), so the line's own
+/// leading feed is that blank row: the trailing feeds are trimmed back to the
+/// conversation's last row, the stored line follows its closing feed, and the
+/// same closing blank row follows the line.
+fn append_falsehood_stolen_goods_line(rendered: &mut crate::tlk_runner::TlkRenderedText) {
+    while rendered.glyphs.last().is_some_and(|glyph| glyph.byte == b'\n') {
+        rendered.glyphs.pop();
+        rendered.text.pop();
+    }
+    rendered.push_plain("\n");
+    rendered.push_plain(TLK_FALSEHOOD_STOLEN_GOODS_LINE);
+    rendered.push_plain("\n");
 }
 
 /// An opening whose entry reported a `0x82` stop (u5-spec#299 Q1): the same

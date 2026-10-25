@@ -4379,10 +4379,10 @@ fn active_conversation_keeps_numeric_signal_separate_from_falsehood_theft() {
     assert!(ended);
     assert!(state.active_conversation.is_none());
     assert_eq!(state.conversation_signal_flags[5], 1);
-    // Playtest K14: the stolen-goods line's wording is unpublished, so the
-    // farewell is not followed by an invented ` Stolen goods.`.
-    assert_eq!(text, "\n\"Farewell\"\n\n");
-    assert!(state.diagnostics_contain("stolen-goods line reached"));
+    // `conversation.md §10` (u5-spec#300 Q20): `Something was stolen!`, one
+    // blank row under the farewell, with its own closing line feed.
+    assert_eq!(text, "\n\"Farewell\"\n\nSomething was stolen!\n\n");
+    assert_eq!(crate::play_state_impl::TLK_FALSEHOOD_STOLEN_GOODS_LINE, "\nSomething was stolen!\n");
 }
 
 #[test]
