@@ -49,6 +49,9 @@ fn cli_parser_accepts_play_scene_floor_and_start() {
     assert_eq!(args.play_options.start, Some((5, 11)));
     assert_eq!(args.play_options.clock, GameClock::new(18, 30).unwrap());
     assert_eq!(args.play_options.wind, WindState::West);
+    // p10 R07: a seeded `--wind west` carries the West byte, so
+    // `--write-seed` no longer writes Calm.
+    assert_eq!(args.play_options.wind_save_byte, 4);
     assert_eq!(args.play_options.climbing_gear, 2);
     assert_eq!(args.game_dir, PathBuf::from(r"C:\Games\U5-Clean"));
 }
@@ -175,7 +178,7 @@ fn cli_parser_can_seed_play_from_init_gam_without_chargen() {
 
 // from chunk_02
 #[test]
-fn cli_wind_override_applies_after_save_load_and_preserves_raw_non_calm_byte() {
+fn cli_wind_override_applies_after_save_load_and_stores_the_requested_byte() {
     let dir = debug_game_dir();
     let mut save = saved_game_seed_bytes(0, 0xff, 10, 20);
     save[SAVE_AVATAR_NAME_OFFSET] = b'A';
@@ -192,7 +195,10 @@ fn cli_wind_override_applies_after_save_load_and_preserves_raw_non_calm_byte() {
     ])
     .unwrap();
     assert_eq!(args.play_options.wind, WindState::East);
-    assert_eq!(args.play_options.wind_save_byte, 0x7a);
+    // p10 R07: the override writes the requested wind's byte rather than
+    // keeping the save's stale (here out-of-range) one, so the banner, the
+    // State line and the next save all agree (`weather.md §2`/§9).
+    assert_eq!(args.play_options.wind_save_byte, WindState::East.save_byte());
 
     let calm = parse_cli_args([
         "--play",

@@ -102,6 +102,47 @@ fn playtest_h21_overworld_attack_spends_no_turn_before_the_arena() {
     let _ = fs::remove_dir_all(dir);
 }
 
+/// p10 R11. `commands.md §3`: "`A` overworld | Always \"no action\",
+/// including the successful attack that enters combat", and `combat.md §4`:
+/// the exit's clock call has "a **zero** increment ... so the only time a
+/// fight adds is its round-wrap minutes". The round loop's exit used to run
+/// a full outdoor turn after the fight, so the attack cost two minutes and a
+/// turn after all.
+#[test]
+fn overworld_attack_fight_exit_spends_no_outdoor_turn() {
+    let dir = debug_game_dir();
+    fs::write(
+        dir.join(BRIT_CBT_FILE),
+        synthetic_combat_arena_record().repeat(BRIT_CBT_RECORDS),
+    )
+    .unwrap();
+    let mut state = world_state(open_world_grid(), 5, 5);
+    state.active_objects.push(ActiveObject {
+        type_byte: 0x80,
+        tile: 0x80,
+        x: 6,
+        y: 5,
+        z: WorldPlane::Underworld.save_floor(),
+        phase: 0,
+        aux1: 0,
+        aux3: 0,
+    });
+    let turn = state.turn;
+
+    handle_play_key_input(&mut state, 'A', "", &dir).unwrap();
+    handle_play_key_input(&mut state, char::from(INPUT_CODE_EAST), "", &dir).unwrap();
+    assert!(state.combat_active, "the attack frames the arena");
+    let clock_in_arena = (state.clock.hour, state.clock.minute);
+
+    state.apply_combat_round_loop_exit(CombatRoundLoopExit::LeaveCombat);
+
+    assert!(!state.combat_active);
+    assert_eq!(state.turn, turn, "the fight's exit owes no outdoor turn");
+    assert_eq!((state.clock.hour, state.clock.minute), clock_in_arena);
+    assert!(!state.combat_exit_skips_world_turn, "the marker is consumed");
+    let _ = fs::remove_dir_all(dir);
+}
+
 /// `combat.md §11.1`, census: "Monster damaged, split class | party attacker
 /// | `<monster> divides!` inside the damage handler, and the ordinary result
 /// line **still** prints after it"; `Order, stated once` step 4 then step 5.

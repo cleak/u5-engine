@@ -722,10 +722,13 @@ where
         options = load_play_options_from_init(&game_dir)?;
     }
     if let Some(wind) = wind_override {
+        // `weather.md §2`/§9: the wind is one saved byte, the banner is drawn
+        // from it and save/load copy it verbatim. The override is a request
+        // for that wind, so it stores the byte the in-game setter would; it
+        // used to keep a stale byte for every non-Calm direction, so a
+        // `--write-seed --wind west` seed started Calm (p10 R07).
         options.wind = wind;
-        if wind == WindState::Calm {
-            options.wind_save_byte = 0;
-        }
+        options.wind_save_byte = wind.save_byte();
     }
     if let Some(climbing_gear) = climbing_gear_override {
         options.climbing_gear = climbing_gear;

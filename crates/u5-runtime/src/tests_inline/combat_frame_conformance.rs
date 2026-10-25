@@ -517,6 +517,199 @@
         );
     }
 
+    /// `combat.md §6.1a`: a **possessed party member** - a party-side
+    /// descriptor in a *party* slot carrying bit `0x01` - takes its turn on
+    /// the automatic driver, and with an adjacent target "the strike is
+    /// resolved by the shared attack-application primitive, which plays the
+    /// hit sound, runs the ordinary to-hit roll and damage feeder with that
+    /// same fixed id as the attack flavour, and narrates hit or miss". The
+    /// scope note names "monster possession" among the users of the branch.
+    ///
+    /// The engine used to refuse every attacker below the monster slots
+    /// before reaching the branch, so a possessed member picked its target
+    /// and then did nothing, round after round - and a Gazer fight whose
+    /// party was all possessed or asleep could never end (p10 R04/R05).
+    #[test]
+    fn a_possessed_party_member_in_a_party_slot_strikes_its_adjacent_companion() {
+        let mut state = combat_ai_turn_state(12, 12);
+        state.party = (0..2)
+            .map(|slot| PartyMember {
+                slot,
+                class_byte: 1,
+                status: b'G',
+                climb_stat: 0,
+                mana: 0,
+                hp: 30,
+                max_hp: 30,
+                level: 1,
+            })
+            .collect();
+        state.party_combat_defense = vec![0; 2];
+        state.combat_actors[0] = CombatActorDescriptor::from_row([
+            20,
+            1,
+            COMBAT_ACTOR_FLAG_SELECTABLE_80 | COMBAT_ACTOR_FLAG_CONTROLLED,
+            0,
+            0,
+            0,
+            5,
+            5,
+        ]);
+        state.combat_actors[1] =
+            CombatActorDescriptor::from_row([20, 1, COMBAT_ACTOR_FLAG_SELECTABLE_80, 1, 1, 0, 6, 6]);
+
+        let strike = state
+            .resolve_and_apply_combat_monster_attack(0, 1, 0, false, 0, Some(true))
+            .expect("a possessed party slot resolves the fixed magic strike");
+        assert!(
+            matches!(strike.resolution, Some(CombatWeaponAttackResolution::Hit { .. })),
+            "the forced hit lands: {strike:?}"
+        );
+        assert!(
+            matches!(
+                strike.damage_application,
+                Some(CombatWeaponDamageApplication::Party { target_slot: 1, .. })
+            ),
+            "the strike wounds the adjacent companion: {strike:?}"
+        );
+
+        // Out of range there is "no action at all".
+        state.combat_actors[1].x = 8;
+        assert!(
+            state
+                .resolve_and_apply_combat_monster_attack(0, 1, 0, false, 0, Some(true))
+                .is_none()
+        );
+
+        // An ordinary (uncontrolled) party slot still never enters the
+        // monster-side primitive.
+        state.combat_actors[1].x = 6;
+        state.combat_actors[0].flags = COMBAT_ACTOR_FLAG_SELECTABLE_80;
+        assert!(
+            state
+                .resolve_and_apply_combat_monster_attack(0, 1, 0, false, 0, Some(true))
+                .is_none()
+        );
+    }
+
+    /// `combat.md §12`: "a Gazer swinging at a defender that is already
+    /// asleep falls through to ordinary melee damage", and §9's target
+    /// selection does not remove sleepers. The attack primitive used to
+    /// refuse any defender carrying the asleep bit `0x08`, so once a Gazer
+    /// fight left every party member asleep or possessed nothing could hurt
+    /// anyone and the round walker cycled forever (p10 R05).
+    #[test]
+    fn an_asleep_party_defender_is_still_struck() {
+        // A Gazer on an already-asleep party member: ordinary melee damage.
+        let mut gazer = combat_ai_turn_state(6, 5);
+        gazer.combat_actors[8].owner_target_class = COMBAT_CLASS_GAZER;
+        gazer.party = vec![PartyMember {
+            slot: 0,
+            class_byte: 1,
+            status: b'S',
+            climb_stat: 0,
+            mana: 0,
+            hp: 30,
+            max_hp: 30,
+            level: 1,
+        }];
+        gazer.combat_actors[0].flags |= COMBAT_ACTOR_FLAG_STATUS_DISABLED;
+        let attack = gazer
+            .resolve_and_apply_combat_monster_attack(8, 0, 0, false, 0, Some(true))
+            .expect("an asleep defender is still a legal target");
+        assert!(attack.sleep_effect.is_none(), "{attack:?}");
+        assert!(
+            matches!(
+                attack.damage_application,
+                Some(CombatWeaponDamageApplication::Party { target_slot: 0, .. })
+            ),
+            "the swing falls through to ordinary melee damage: {attack:?}"
+        );
+
+        // A possessed member's fixed magic strike on a sleeping companion.
+        let mut possessed = combat_ai_turn_state(12, 12);
+        possessed.party = (0..2)
+            .map(|slot| PartyMember {
+                slot,
+                class_byte: 1,
+                status: if slot == 1 { b'S' } else { b'G' },
+                climb_stat: 0,
+                mana: 0,
+                hp: 30,
+                max_hp: 30,
+                level: 1,
+            })
+            .collect();
+        possessed.party_combat_defense = vec![0; 2];
+        possessed.combat_actors[0].flags =
+            COMBAT_ACTOR_FLAG_SELECTABLE_80 | COMBAT_ACTOR_FLAG_CONTROLLED;
+        possessed.combat_actors[1] = CombatActorDescriptor::from_row([
+            20,
+            1,
+            COMBAT_ACTOR_FLAG_SELECTABLE_80 | COMBAT_ACTOR_FLAG_STATUS_DISABLED,
+            1,
+            1,
+            0,
+            6,
+            6,
+        ]);
+        let strike = possessed
+            .resolve_and_apply_combat_monster_attack(0, 1, 0, false, 0, Some(true))
+            .expect("the possessed member strikes its sleeping companion");
+        assert!(
+            matches!(
+                strike.damage_application,
+                Some(CombatWeaponDamageApplication::Party { target_slot: 1, .. })
+            ),
+            "{strike:?}"
+        );
+    }
+
+    /// The production driver end to end: the possessed member's automatic
+    /// turn targets its companion and its attack resolves.
+    #[test]
+    fn a_possessed_party_members_automatic_turn_resolves_an_attack() {
+        let mut state = combat_ai_turn_state(12, 12);
+        state.party = (0..2)
+            .map(|slot| PartyMember {
+                slot,
+                class_byte: 1,
+                status: b'G',
+                climb_stat: 0,
+                mana: 0,
+                hp: 30,
+                max_hp: 30,
+                level: 1,
+            })
+            .collect();
+        state.party_combat_defense = vec![0; 2];
+        state.combat_actors[0] = CombatActorDescriptor::from_row([
+            20,
+            1,
+            COMBAT_ACTOR_FLAG_SELECTABLE_80 | COMBAT_ACTOR_FLAG_CONTROLLED,
+            0,
+            0,
+            0,
+            5,
+            5,
+        ]);
+        state.combat_actors[1] =
+            CombatActorDescriptor::from_row([20, 1, COMBAT_ACTOR_FLAG_SELECTABLE_80, 1, 1, 0, 6, 5]);
+
+        let turn = state
+            .apply_combat_ai_turn(0)
+            .expect("the possessed member takes an automatic turn");
+        assert_eq!(
+            turn.target,
+            CombatAiTargetResolution::ChosenActor { slot: 1, x: 6, y: 5 }
+        );
+        let attack = turn
+            .monster_attack
+            .expect("the adjacent possessed member strikes rather than doing nothing");
+        assert_eq!(attack.target_slot, 1);
+        assert!(attack.resolution.is_some());
+    }
+
     /// The positive half of `combat.md §6.1a`'s "**The attack driver —
     /// party-side slots only.**" The three behaviours the test above withdraws
     /// from a monster-side slot still hold for the slot the section keeps them
@@ -584,24 +777,40 @@
         // 3. `§6.1a`: "the damage is fed as magical because the published
         //    flavour is a magic strike, not a weapon blow", so a
         //    half-physical-damage class takes the full number. A Daemon
-        //    (class 38) carries `physical_half`.
-        let mut magical = combat_ai_turn_state(6, 5);
-        magical.combat_actors[8].owner_target_class = COMBAT_CLASS_TROLL;
-        magical.combat_actors[8].flags =
-            COMBAT_ACTOR_FLAG_SELECTABLE_80 | COMBAT_ACTOR_FLAG_CONTROLLED;
-        magical.combat_actors[9] =
-            CombatActorDescriptor::from_row([40, 1, COMBAT_ACTOR_FLAG_SELECTABLE_40, 38, 9, 0, 7, 5]);
+        //    (class 38) carries `physical_half`. The stage-one draw is the
+        //    id-33 `1..20` party roll (`§11`), so the fixture walks seeds
+        //    until it rolls a halvable number.
         assert!(
             combat_class_traits(38).unwrap().physical_half,
             "the target class must halve ordinary physical damage"
         );
-
-        let strike = magical
-            .resolve_and_apply_combat_monster_attack(8, 9, 0, false, 0, Some(true))
-            .expect("an adjacent party-side controlled attacker resolves an attack");
-        let Some(CombatWeaponAttackResolution::Hit { raw_damage, .. }) = strike.resolution else {
-            panic!("the forced hit must resolve as a hit: {strike:?}");
-        };
+        let (strike, raw_damage) = (0..64u16)
+            .find_map(|seed| {
+                let mut magical = combat_ai_turn_state(6, 5);
+                magical.prng_state = seed;
+                magical.combat_actors[8].owner_target_class = COMBAT_CLASS_TROLL;
+                magical.combat_actors[8].flags =
+                    COMBAT_ACTOR_FLAG_SELECTABLE_80 | COMBAT_ACTOR_FLAG_CONTROLLED;
+                magical.combat_actors[9] = CombatActorDescriptor::from_row([
+                    40,
+                    1,
+                    COMBAT_ACTOR_FLAG_SELECTABLE_40,
+                    38,
+                    9,
+                    0,
+                    7,
+                    5,
+                ]);
+                let strike = magical
+                    .resolve_and_apply_combat_monster_attack(8, 9, 0, false, 0, Some(true))
+                    .expect("an adjacent party-side controlled attacker resolves an attack");
+                let Some(CombatWeaponAttackResolution::Hit { raw_damage, .. }) = strike.resolution
+                else {
+                    panic!("the forced hit must resolve as a hit: {strike:?}");
+                };
+                (raw_damage > 1).then_some((strike, raw_damage))
+            })
+            .expect("some seed rolls a halvable strike");
         let Some(CombatWeaponDamageApplication::Monster { damage, .. }) = strike.damage_application
         else {
             panic!("the strike must apply monster damage: {strike:?}");

@@ -453,6 +453,29 @@ fn playfix_e29_interrupted_camp_prints_ambushed_once_and_no_rested_line() {
     let _ = fs::remove_dir_all(dir);
 }
 
+/// p10 R16. `time.md §5`: the party status/provision pass owns "a step
+/// counter that saturates at 255" and "does not run inside the wilderness
+/// camp loop, which advances the clock in five-minute steps without entering
+/// this pass"; `formats/saved-gam.md` `0x02E5` makes that pass the counter's
+/// only increment. Each five-minute camp step used to age it, so a 9-hour
+/// camp unlocked the 100-turn almsgiving milestone.
+#[test]
+fn wilderness_camp_steps_do_not_age_the_turn_step_counter() {
+    let dir = debug_game_dir();
+    let mut state = world_state(open_world_grid(), 5, 5);
+    state.clock = GameClock::new(13, 0).unwrap();
+    state.toll_progress = 0;
+    assert_eq!(state.start_rest_prompt(), MoveOutcome::Observed);
+    let _ = state.step_active_rest('5', "", &dir).unwrap();
+    assert!(state.active_rest.is_none(), "the camp ran");
+    assert!(
+        state.toll_progress <= 1,
+        "at most the H command's own turn ages it: {}",
+        state.toll_progress
+    );
+    let _ = fs::remove_dir_all(dir);
+}
+
 /// E30: `dungeon-mode.md §11` (resident Hole-up prompts, shared by the
 /// overworld per `commands.md §5.5`): "after `Yes`, `Who will stand guard? `,
 /// where a cancel or an ineligible pick prints `None posted!\n\n` and
@@ -548,6 +571,7 @@ fn playfix_e31_hours_prompt_zero_echoes_and_escape_is_read_past() {
     let dir = debug_game_dir();
     for cancel in ['0', ' '] {
         let mut state = world_state(open_world_grid(), 5, 5);
+        state.clock = GameClock::new(12, 0).unwrap();
         handle_play_key_input(&mut state, 'H', "", &dir).unwrap();
         assert!(state.active_rest.is_some());
         let before = state.message_transcript.len();
@@ -567,6 +591,11 @@ fn playfix_e31_hours_prompt_zero_echoes_and_escape_is_read_past() {
             "{cancel:?} is echoed on the prompt row: {rows:?}"
         );
         assert!(!state.message_row_open_mid_line);
+        // `commands.md §3` (issue #300 Q14): `H` "spends a turn on every
+        // path, including its own refusals and cancelled prompts" - here the
+        // ordinary outdoor turn (p10 R02).
+        assert_eq!(state.turn, 1, "{cancel:?} spends the outdoor turn");
+        assert_eq!(state.clock, GameClock::new(12, 2).unwrap());
     }
 
     let mut state = world_state(open_world_grid(), 5, 5);

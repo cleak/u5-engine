@@ -2252,6 +2252,41 @@ BRITANNIA 11 21
         let _ = fs::remove_dir_all(dir);
     }
 
+    /// p10 R06. `karma.md §7` "Entry pacing": "The only route from a world
+    /// step to the text printer is the ambient wind-and-location row, and
+    /// that row returns immediately while the scene byte is at or above the
+    /// ordinary-scene threshold ... no row draw ... no panel repaint occurs
+    /// anywhere in the entry." A wind the drift stores during the entry is
+    /// stored, not drawn: the banner keeps the wind it showed on entry.
+    #[test]
+    fn the_wind_banner_stays_frozen_through_a_shrine_entry() {
+        let dir = debug_game_dir();
+        let mut drifted = false;
+        for seed in 0..64u16 {
+            let mut state = shrine_marker_state(&dir, ShrineVirtue::Honesty);
+            state.wind = WindState::Calm;
+            state.wind_save_byte = 0;
+            state.prng_state = seed.wrapping_mul(0x9E37);
+            let before = crate::gameplay_chrome::gameplay_chrome_content(&state).bottom;
+
+            handle_play_key_input(&mut state, 'E', "", &dir).unwrap();
+            state.flush_staged_narration();
+            assert!(state.active_shrine.is_some());
+            if state.wind == WindState::Calm {
+                continue;
+            }
+            drifted = true;
+            assert_eq!(
+                crate::gameplay_chrome::gameplay_chrome_content(&state).bottom,
+                before,
+                "seed {seed}: the banner is not repainted mid-presentation"
+            );
+            break;
+        }
+        assert!(drifted, "no seed drifted the wind during the entry");
+        let _ = fs::remove_dir_all(dir);
+    }
+
     /// `karma.md §7.2`'s window table: "World steps | 61" on the ordination
     /// arm, from the key that dismisses the quest page to the next prompt,
     /// each with its wind draw.

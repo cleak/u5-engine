@@ -25,6 +25,13 @@ impl PlayState {
     /// Run the shared exploration-loop gate immediately before a command is
     /// accepted. Frontends call this only between commands, never while a
     /// prompt or blocking presentation owns input.
+    /// Freeze the ribbon gaps for a shrine or Codex presentation; see
+    /// [`PlayState::presentation_entry_chrome`].
+    pub(crate) fn capture_presentation_entry_chrome(&mut self) {
+        let chrome = crate::gameplay_chrome::gameplay_chrome_content(self);
+        self.presentation_entry_chrome = Some((chrome.top, chrome.bottom));
+    }
+
     pub fn apply_exploration_turn_gate(
         &mut self,
         game_dir: &std::path::Path,
@@ -69,6 +76,7 @@ impl PlayState {
             && !self.staged_narration_active()
         {
             self.shrine_presentation_map = None;
+            self.presentation_entry_chrome = None;
             self.shrine_approach_walk = None;
         }
         // A rescue cinematic is already running for this defeat. The roster

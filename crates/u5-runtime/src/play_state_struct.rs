@@ -857,6 +857,13 @@ pub struct PlayState {
     /// `moons.md §3` (u5-spec#300 Q35, R619): the surface-overworld gaps
     /// left frozen after a fight; see [`crate::PostCombatRibbonHold`].
     pub post_combat_ribbon_hold: Option<PostCombatRibbonHold>,
+    /// `commands.md §3`: "`A` overworld | Always \"no action\", including
+    /// the successful attack that enters combat", and `combat.md §4`: the
+    /// exit's clock call has "a **zero** increment ... so the only time a
+    /// fight adds is its round-wrap minutes". Set when an overworld A-Attack
+    /// opens the arena, so the round loop's exit owes no outdoor turn for it
+    /// (p10 R11); consumed by that exit.
+    pub combat_exit_skips_world_turn: bool,
     /// `karma.md §7` "Entry pacing": the shrine presentation's own display.
     ///
     /// Meditation does not happen on the overworld map. The presentation
@@ -893,6 +900,15 @@ pub struct PlayState {
     /// The BIOS tick the audience's composite pass last ran on.
     pub blackthorn_audience_composite_tick: Option<u64>,
     pub shrine_presentation_map: Option<MiscmapsCutsceneMap>,
+    /// `karma.md §7` "Entry pacing": "The only route from a world step to the
+    /// text printer is the ambient wind-and-location row, and that row
+    /// returns immediately while the scene byte is at or above the
+    /// ordinary-scene threshold - which the presentation's suspended sentinel
+    /// is ... no row draw ... no panel repaint occurs anywhere in the entry".
+    /// The wind drift may still store a new wind (`weather.md §2.1`), but the
+    /// ribbon gaps keep what the scene drew at entry until the presentation
+    /// ends. Captured when a shrine or Codex presentation opens (p10 R06).
+    pub presentation_entry_chrome: Option<(ChromeGap, ChromeGap)>,
     /// `karma.md §7`'s approach walk, while the shrine presentation is up.
     pub shrine_approach_walk: Option<crate::shrine_presentation::ShrineApproachWalk>,
     /// `karma.md §7.2`: the offering and Codex turn-in arms XOR-invert the

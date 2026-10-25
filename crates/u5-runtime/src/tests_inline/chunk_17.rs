@@ -651,8 +651,18 @@
         assert!(state.active_cast_followup.is_some());
         assert!(state.message.starts_with("Direction-"));
 
+        // `input.md §5`/§11: an unmodified top-row digit is an ordinary
+        // digit, which this prompt ignores (p10 R13).
+        assert!(
+            state
+                .step_active_cast_followup('6', "", Path::new(""))
+                .unwrap()
+                .is_none()
+        );
+        assert!(state.active_cast_followup.is_some());
+
         let result = state
-            .step_active_cast_followup('6', "", Path::new(""))
+            .step_active_cast_followup(char::from(INPUT_CODE_EAST), "", Path::new(""))
             .unwrap()
             .expect("east direction should finish Blink");
         assert_eq!(result.0, MoveOutcome::Cast);
@@ -1039,6 +1049,43 @@
         assert!(state.active_yell.is_none());
         assert_eq!(state.turn, 1);
         assert!(state.message.ends_with(YELL_NO_EFFECT_MESSAGE));
+    }
+
+    /// p10 R12. `dungeon-mode.md §15`: one minute per dungeon loop
+    /// iteration, charged at its head and "not gate[d] ... on whether the
+    /// command consumed a turn". `P;Z;Esc` and `Space;Z;Esc` are both two
+    /// iterations, but a `Z` after the no-action `P` used to spend nothing.
+    #[test]
+    fn dungeon_z_stats_after_a_no_action_command_still_spends_its_minute() {
+        let run = |first: char| {
+            let mut state = dungeon_state(open_dungeon_record(), 0, 1, 1);
+            handle_play_key_input(&mut state, first, "", Path::new("")).unwrap();
+            handle_play_key_input(&mut state, 'Z', "", Path::new("")).unwrap();
+            for _ in 0..3 {
+                handle_play_key_input(&mut state, '\u{1b}', "", Path::new("")).unwrap();
+            }
+            state.clock
+        };
+        let start = dungeon_state(open_dungeon_record(), 0, 1, 1).clock;
+        let after_pass = run(' ');
+        assert_eq!(run('P'), after_pass, "P;Z and Space;Z are both two iterations");
+        // Absolute charge, with no trailing keys: a lone `Z` is one
+        // iteration (its loop-head minute and its own acted advance must not
+        // both charge), and `Space;Z` / `P;Z` are two.
+        let clock_after = |keys: &[char]| {
+            let mut state = dungeon_state(open_dungeon_record(), 0, 1, 1);
+            for key in keys {
+                handle_play_key_input(&mut state, *key, "", Path::new("")).unwrap();
+            }
+            state.clock
+        };
+        let mut one_minute = start;
+        one_minute.advance_minutes(1);
+        let mut two_minutes = start;
+        two_minutes.advance_minutes(2);
+        assert_eq!(clock_after(&['Z']), one_minute, "Z alone spends one minute");
+        assert_eq!(clock_after(&[' ', 'Z']), two_minutes);
+        assert_eq!(clock_after(&['P', 'Z']), two_minutes);
     }
 
     #[test]

@@ -2560,7 +2560,7 @@ impl PlayState {
             return Ok(MoveOutcome::PromptDeclined);
         };
         let Some((x, y)) = self.adjacent_target(direction) else {
-            self.advance_turn();
+            self.advance_attack_turn_unless_overworld();
             self.message = ATTACK_NOTHING_TO_ATTACK_REFUSAL.to_string();
             return Ok(MoveOutcome::Blocked);
         };
@@ -2588,6 +2588,10 @@ impl PlayState {
                             object_slot,
                             object,
                         )?;
+                        // `commands.md §3`: the attack that enters combat is
+                        // still "no action", so the exit owes no outdoor turn
+                        // either (p10 R11).
+                        self.combat_exit_skips_world_turn = self.combat_active;
                         return Ok(MoveOutcome::Used);
                     }
                 }
@@ -2764,16 +2768,23 @@ impl PlayState {
             return Ok(MoveOutcome::Used);
         }
 
-        // `commands.md §3` (u5-spec#300 Q14): town `Nothing to attack!` is
-        // acted (executed); the overworld `A` reports "no action" on every
-        // path, so its refusal is free.
-        if matches!(self.area, Area::Town { .. }) {
-            self.advance_turn();
-        }
+        self.advance_attack_turn_unless_overworld();
         // Measured: `A` into an empty adjacent cell prints `Attack-North`
         // and then this refusal - not a composed line naming the cell.
         self.message = ATTACK_NOTHING_TO_ATTACK_REFUSAL.to_string();
         Ok(MoveOutcome::Blocked)
+    }
+
+    /// `commands.md §3`, the forwarded-route table: "`A` overworld | Always
+    /// \"no action\", including the successful attack that enters combat"
+    /// - "Zero skips the whole per-turn epilogue" - while "`A` town |
+    /// \"Acted\" ... The nothing-to-attack message still counts as acted."
+    /// So a refused overworld attack spends no outdoor turn (p10 R01); the
+    /// town refusal keeps its minute.
+    fn advance_attack_turn_unless_overworld(&mut self) {
+        if !matches!(self.area, Area::World { .. }) {
+            self.advance_turn();
+        }
     }
 
     pub fn dungeon_forward_target(&self) -> Option<(usize, usize)> {

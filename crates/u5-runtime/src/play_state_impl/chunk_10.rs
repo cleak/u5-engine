@@ -1119,14 +1119,12 @@ impl PlayState {
     ) -> NpcScheduleStepOutcome {
         let start = (self.npcs[npc_index].x, self.npcs[npc_index].y);
         let target = (target_x, target_y);
-        let direct_step = step_toward(start, target).filter(|(nx, ny)| {
-            self.npc_can_step_toward(npc_index, *nx, *ny, floor, target_x, target_y)
-        });
-        if let Some((nx, ny)) = direct_step {
-            return NpcScheduleStepOutcome::from_moved(self.commit_npc_schedule_position(
-                npc_index, waypoint, target_x, target_y, target_z, floor, nx, ny, target_z,
-            ));
-        }
+        // `npc-schedules.md §7`: state 2 runs "search, route, step" - "There
+        // is no per-direction sweep and no direction-priority ordering in
+        // these states". A greedy direct step used to run here ahead of the
+        // search budget and the §9.1 stuck-counter bands, so a blocked NPC
+        // in the `200..204` aging band stepped straight back and had its
+        // counter zeroed, re-planning every other turn (p10 R14).
         if *searched {
             // `npc-schedules.md §7`: "At most one NPC per tick may start a
             // fresh search ... every later slot in the same tick that would
@@ -1404,10 +1402,17 @@ impl PlayState {
             })
     }
 
+    ///
+    /// `npc-schedules.md §9`: values 3 and 6 "share a dispatch handler ...
+    /// but the step chooser tests the mode again and gives them opposite
+    /// directions" - one chooser, testing "legal orthogonal neighbours in
+    /// **east, north, west, south** order", where "mode 3 retreats". So the
+    /// retreat walks the same order and an equal-distance tie goes east; it
+    /// used to walk west, south, east, north (p10 R15).
     pub fn town_npc_flee_step(&self, npc_index: usize, floor: u8) -> Option<(usize, usize)> {
         let mut best = None;
         let mut best_distance = self.town_npc_player_distance(npc_index);
-        for direction in TOWN_NPC_CARDINAL_DIRECTIONS {
+        for direction in TOWN_NPC_APPROACH_DIRECTIONS {
             if let Some((nx, ny)) = self.town_npc_step_in_direction_toward(
                 npc_index,
                 floor,
@@ -1941,12 +1946,6 @@ const TOWN_NPC_WANDER_DIRECTION_DRAW_MAX: u8 = 64;
 /// and the engagement path is "while the player is four or more tiles from
 /// the *waypoint*".
 const TOWN_NPC_APPROACH_ENGAGE_WAYPOINT_DISTANCE: usize = 4;
-const TOWN_NPC_CARDINAL_DIRECTIONS: [Direction; 4] = [
-    Direction::West,
-    Direction::South,
-    Direction::East,
-    Direction::North,
-];
 
 /// `npc-schedules.md §9.2`: "AI 4 or 5 | Zero live dialogue | No contact
 /// event; continue movement selection." Values 6/7 carry no dialogue

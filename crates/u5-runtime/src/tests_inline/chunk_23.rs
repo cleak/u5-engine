@@ -17007,7 +17007,12 @@ fn combat_cast_directed_sleep_and_poison_wind_mutate_party_targets() {
     assert_eq!(poison.spell_charges[POISON_WIND_SPELL_INDEX], 0);
     assert_eq!(poison.party[0].mana, 0);
     assert_eq!(poison.party[2].status, b'P');
-    assert_eq!(poison.message, "");
+    // `magic.md §8` "Directed-effect narration": the poison helper itself
+    // prints `<target> is poisoned!` on the Good party arm (p10 R10); the
+    // silence this used to pin was not published.
+    // (The fixture's descriptor names roster slot 0, so the line carries
+    // that member's name.)
+    assert!(poison.message.ends_with(" is poisoned!"), "{}", poison.message);
 }
 
 #[test]
@@ -18365,6 +18370,13 @@ fn directed_spell_status_application_applies_sleep_to_party_and_reports_non_part
         })
     );
     assert_eq!(state.party[0].status, b'S');
+    // p10 R09. `combat.md §6.2`'s party row also sets the descriptor's
+    // disabled bit, which is what routes the sleeper to `§8.1`'s asleep arm
+    // (`Zzzzz...`, no key read) instead of a command prompt.
+    assert!(
+        state.combat_actors[0].is_status_disabled(),
+        "the slept party member's descriptor carries the asleep bit"
+    );
     assert!(state.combat_actors[target_slot].is_status_disabled());
     assert_eq!(
         state.apply_directed_combat_spell_status(

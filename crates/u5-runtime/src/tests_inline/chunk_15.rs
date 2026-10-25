@@ -1257,14 +1257,17 @@
 
         assert_eq!(state.clock, GameClock::new(18, 0).unwrap());
         assert_eq!((state.npcs[0].x, state.npcs[0].y), (3, 1));
-        assert_eq!(state.npcs[0].state, NPC_STATE_INPLANE_MOVE);
+        // `npc-schedules.md §7`: state 2 runs "search, route, step", and "once
+        // the pathfinder produces a route, subsequent ticks dequeue and apply"
+        // in state 3 - there is no greedy direct step (p10 R14).
+        assert_eq!(state.npcs[0].state, NPC_STATE_REPLAY_QUEUE);
         assert_eq!(state.npcs[0].cached_wp, 1);
 
         state.clock = GameClock::new(19, 0).unwrap();
         state.advance_npc_schedules();
 
         assert_eq!((state.npcs[0].x, state.npcs[0].y), (4, 1));
-        assert_eq!(state.npcs[0].state, NPC_STATE_INPLANE_MOVE);
+        assert_eq!(state.npcs[0].state, NPC_STATE_REPLAY_QUEUE);
         assert_eq!(state.npcs[0].cached_wp, 1);
     }
 
