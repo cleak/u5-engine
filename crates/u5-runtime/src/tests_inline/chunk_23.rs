@@ -11212,11 +11212,13 @@ fn combat_klimb_vertical_suffix_exits_from_ladder_tile() {
 
     assert!(state.diagnostics.iter().any(|n| n.contains("klimbed up from combat")), "{:?}", state.diagnostics);
         assert!(state.message.is_empty(), "message: {}", state.message);
-    // `combat.md §5.3`, closing line: "the turn-clock advance run after
-    // combat ends is itself a draw consumer, sitting between the encounter
-    // and the next outdoor turn". That advance ages the timed effect a
-    // second time, so a three-tick Quickness leaves combat at one.
-    assert_eq!(state.active_effect_counter, 1);
+    // `combat.md §4`: the framer exit's clock call has "a **zero**
+    // increment"; the turn-clock advance `§5.3` places after a fight is the
+    // calling loop's own per-turn work, which this synthetic arena has no
+    // caller to run. So only the klimb's own action ages the timed effect,
+    // and a three-tick Quickness leaves combat at two (it was one while the
+    // exit ran a whole extra turn).
+    assert_eq!(state.active_effect_counter, 2);
     assert!(!state.combat_active);
     assert_eq!(state.pending_combat_actor_slot, None);
 }

@@ -4718,13 +4718,6 @@ impl PlayState {
                         .as_ref()
                         .is_some_and(|snapshot| snapshot.exit_announced)
                     && !combat_has_active_not_dead_non_party_actor(&self.combat_actors));
-        // u5-spec#300 Q10 (`dungeon-mode.md §10`, `RETRACTIONS.md` R595):
-        // dungeon A-Attack "reports \"no action\" and calls no clock before
-        // or after the fight", and an implementation "must not run the
-        // post-action pass after the fight".
-        let dungeon_attack_fight = self.combat_frame_snapshot.as_ref().is_some_and(|snapshot| {
-            snapshot.dungeon_post_combat == Some(DungeonPostCombatApplier::AttackLevelsOnly)
-        });
         let restored_snapshot = if let Some(snapshot) = self.combat_frame_snapshot.take() {
             let enter_endgame_after_restore =
                 snapshot.enter_endgame_after_successful_combat && body_retrieval_exit;
@@ -4764,29 +4757,41 @@ impl PlayState {
             self.repaint_stats_panel();
             false
         };
-        // `combat.md §5.3`, closing line: "One consumer outside this
-        // window, for completeness: the turn-clock advance run after
-        // combat ends is itself a draw consumer, sitting between the
-        // encounter and the next outdoor turn."
+        // `combat.md §4`: "The exit work does call the shared per-turn clock
+        // helper, but with a **zero** increment, alongside its light-radius
+        // refresh: that call recomputes daylight and the dirty flag and adds
+        // no minute, so the only time a fight adds is its round-wrap minutes
+        // (Section 15)." That holds for every fight origin; what a fight
+        // costs beyond its round wraps is the cost of the command or pass
+        // that opened it, charged by that caller and never again here:
         //
-        // It runs after the framer's restore phase - the world clock it
-        // advances is the restored world's, not the arena's - and it is
-        // the ordinary world turn advance, so its draws are the ones that
-        // advance owns (NPC schedules and the active-object epilogue).
-        // `§5.3` attaches no condition to it, so every way the round loop
-        // ends reaches it - except a dungeon A-Attack fight, whose only
-        // minute was the loop head's (u5-spec#300 Q10): it spends no turn;
-        // and a fight an overworld A-Attack opened: `commands.md §3` makes
-        // that attack "no action, including the successful attack that
-        // enters combat", and `§4` gives the exit's own clock call "a
-        // **zero** increment" (p10 R11).
-        let overworld_attack_fight = std::mem::take(&mut self.combat_exit_skips_world_turn);
-        if dungeon_attack_fight {
-        } else if overworld_attack_fight {
-            self.recompute_daylight();
-        } else {
-            self.advance_turn();
-        }
+        // - dungeon A-Attack: "no action", no clock before or after the
+        //   fight, only the loop-head minute (`dungeon-mode.md §10`,
+        //   u5-spec#300 Q10);
+        // - dungeon contact and room fights: raised inside the turn whose
+        //   loop-head minute and post-action pass were already spent;
+        //   "Neither handler advances the world clock itself"
+        //   (`dungeon-mode.md §14.1`, §15);
+        // - overworld A-Attack: "Always \"no action\", including the
+        //   successful attack that enters combat" (`commands.md §3`, p10
+        //   R11); a bump, `Attacked at entrance!` or an epilogue `Attacked!`
+        //   spends the one outdoor turn its own command or pass spent;
+        // - town A-Attack: its epilogue "runs **once**, after the fight"
+        //   (`town-mode.md §7` step 4), which
+        //   [`PlayState::run_town_attack_epilogue_after_combat`] owns; a
+        //   contact or arrest-refusal fight "comes after that turn's
+        //   epilogue, and nothing of the epilogue runs after it";
+        // - camp ambush (overworld or dungeon `H`): only the camp's own
+        //   five-minute steps up to the interruption; "the camp wrapper makes
+        //   no trailing clock call" (`moons.md §3`, `rest-and-camp.md §6`).
+        //
+        // This exit used to run a whole extra turn (`advance_turn`) for every
+        // origin but the two A-Attacks, so a bump, a town attack and an
+        // ambush paid a second turn and a dungeon room or contact fight a
+        // second minute. `combat_exit_skips_world_turn` (p10 R11) is still
+        // consumed so it cannot leak into a later fight.
+        let _ = std::mem::take(&mut self.combat_exit_skips_world_turn);
+        self.recompute_daylight();
         self.apply_pending_world_object_walker_pass();
         CombatRoundLoopExitApplication {
             exit,
@@ -10423,27 +10428,43 @@ mod combat_death_batch_tests {
     /// outdoor turn."
     #[test]
     fn combat_exit_runs_the_post_combat_turn_clock_advance() {
-        for exit in [
-            CombatRoundLoopExit::LeaveCombat,
-            CombatRoundLoopExit::Victory,
-            CombatRoundLoopExit::Defeat,
-        ] {
-            let mut state = framed_combat_state();
-            let turn_before = state.turn;
-            let clock_before = (state.clock.day, state.clock.hour, state.clock.minute);
+        // `combat.md §4`: "The exit work does call the shared per-turn clock
+        // helper, but with a **zero** increment ... that call recomputes
+        // daylight and the dirty flag and adds no minute, so the only time a
+        // fight adds is its round-wrap minutes". This test used to require a
+        // whole extra turn at every exit; the clock call it names is the
+        // zero-increment one, in the world, a town and a dungeon alike.
+        for area in ["world", "town", "dungeon"] {
+            for exit in [
+                CombatRoundLoopExit::LeaveCombat,
+                CombatRoundLoopExit::Victory,
+                CombatRoundLoopExit::Defeat,
+            ] {
+                let mut state = match area {
+                    "world" => world_state(open_world_grid(), 10, 20),
+                    "town" => crate::test_fixtures::test_state(crate::test_fixtures::open_grid(), 5, 5),
+                    _ => crate::test_fixtures::dungeon_state(
+                        crate::test_fixtures::open_dungeon_record(),
+                        0,
+                        1,
+                        1,
+                    ),
+                };
+                state
+                    .enter_combat_frame(
+                        vec![ActiveObject::empty(); COMBAT_ACTOR_SLOTS],
+                        [CombatActorDescriptor::empty(); COMBAT_ACTOR_SLOTS],
+                    )
+                    .unwrap();
+                let turn_before = state.turn;
+                let clock_before = state.clock;
 
-            state.apply_combat_round_loop_exit(exit);
+                state.apply_combat_round_loop_exit(exit);
 
-            assert_eq!(
-                state.turn,
-                turn_before + 1,
-                "{exit:?}: the post-combat turn advance did not run"
-            );
-            assert_ne!(
-                (state.clock.day, state.clock.hour, state.clock.minute),
-                clock_before,
-                "{exit:?}: the turn *clock* did not advance"
-            );
+                assert!(!state.combat_active, "{area} {exit:?}");
+                assert_eq!(state.turn, turn_before, "{area} {exit:?}: no turn at exit");
+                assert_eq!(state.clock, clock_before, "{area} {exit:?}: no minute at exit");
+            }
         }
     }
 

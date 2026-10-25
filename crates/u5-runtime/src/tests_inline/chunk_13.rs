@@ -27792,3 +27792,202 @@ fn dungeon_look_prints_the_published_per_class_line() {
         );
     }
 }
+
+/// Residual 5, per fight origin in a dungeon. `combat.md §4`: the framer
+/// exit's clock call has "a **zero** increment ... so the only time a fight
+/// adds is its round-wrap minutes"; `dungeon-mode.md §15`: the dungeon's one
+/// minute is the loop head's, "not gated on whether the command consumed a
+/// turn". So each dungeon fight, from the key that opens it to the arena
+/// closing, costs exactly that one loop-head minute plus its round wraps:
+///
+/// - contact (`§14.1`: "Neither handler advances the world clock itself"):
+///   the pass that raised it is the turn, and nothing follows the exit;
+/// - room trigger (`§4`: the room-entry helper "hands off to combat"): the
+///   step is the turn, and nothing follows the exit;
+/// - A-Attack (`§10`, u5-spec#300 Q10): "no action", so no turn at all and
+///   "no clock before or after the fight".
+///
+/// The exit used to run a whole extra turn after the contact and room
+/// fights, a second dungeon minute.
+#[test]
+fn dungeon_fight_charges_one_loop_head_minute_per_origin() {
+    #[derive(Debug, Clone, Copy)]
+    enum Origin {
+        Contact,
+        Room,
+        Attack,
+    }
+    for origin in [Origin::Contact, Origin::Room, Origin::Attack] {
+        let dir = debug_game_dir();
+        fs::write(
+            dir.join(DUNGEON_CBT_FILE),
+            synthetic_combat_arena_record().repeat(DUNGEON_CBT_RECORDS),
+        )
+        .unwrap();
+        let wandering_monster = ActiveObject {
+            type_byte: 0,
+            tile: 0,
+            x: 2,
+            y: 1,
+            z: 0,
+            phase: 0x20,
+            aux1: 20,
+            aux3: 0,
+        };
+        let mut state = match origin {
+            Origin::Contact => {
+                let grid = dungeon_grid_with_single_open_neighbour(2, 1, Direction::West);
+                let mut state = dungeon_state(grid, 0, 1, 1);
+                state.player.facing = Direction::North;
+                state.active_objects.push(wandering_monster);
+                state
+            }
+            Origin::Room => {
+                let mut grid = open_dungeon_record();
+                grid[dungeon_cell_index(0, 2, 1)] = 0xf7;
+                let mut state = dungeon_state(grid, 0, 1, 1);
+                state.area = Area::Dungeon {
+                    scene: DungeonScene::new(35).unwrap(),
+                    level: 0,
+                };
+                state
+            }
+            Origin::Attack => {
+                let mut state = dungeon_state(open_dungeon_record(), 0, 1, 1);
+                state.player.facing = Direction::East;
+                state.active_objects.push(wandering_monster);
+                state
+            }
+        };
+        let (turn_before, clock_before) = (state.turn, state.clock);
+
+        let expected_turns = match origin {
+            Origin::Contact => {
+                state.pass_turn_with_game_dir(Some(&dir)).unwrap();
+                1
+            }
+            Origin::Room => {
+                state.step_with_game_dir(Direction::East, Some(&dir)).unwrap();
+                1
+            }
+            Origin::Attack => {
+                assert!(state.handle_dungeon_key('A', &dir).unwrap());
+                0
+            }
+        };
+        assert!(state.combat_active, "{origin:?}: the arena is open");
+        let post_combat = state.combat_frame_snapshot.as_ref().unwrap().dungeon_post_combat;
+        match origin {
+            Origin::Contact => {
+                assert_eq!(post_combat, Some(DungeonPostCombatApplier::MovementApplier));
+            }
+            Origin::Attack => {
+                assert_eq!(post_combat, Some(DungeonPostCombatApplier::AttackLevelsOnly));
+            }
+            Origin::Room => {}
+        }
+        let mut loop_head = clock_before;
+        loop_head.advance_minutes(1);
+        assert_eq!(state.clock, loop_head, "{origin:?}: one loop-head minute");
+        assert_eq!(state.turn, turn_before + expected_turns, "{origin:?}");
+
+        // A round wrap inside the fight adds its own minutes (`combat.md
+        // §15`), and those are the only minutes the fight adds.
+        state.combat_round_counter = COMBAT_ROUND_COUNTER_WRAP - 1;
+        state.advance_combat_round_counter();
+        let mut after_wrap = loop_head;
+        after_wrap.advance_minutes(COMBAT_ROUND_WRAP_TIME_ADVANCE_MINUTES);
+        assert_eq!(state.clock, after_wrap, "{origin:?}: the round wrap");
+        let turn_in_arena = state.turn;
+
+        state.apply_combat_round_loop_exit(CombatRoundLoopExit::LeaveCombat);
+        assert!(!state.combat_active, "{origin:?}");
+        assert_eq!(state.turn, turn_in_arena, "{origin:?}: no turn at the exit");
+        assert_eq!(state.clock, after_wrap, "{origin:?}: no minute at the exit");
+        let _ = fs::remove_dir_all(dir);
+    }
+}
+
+/// Residual 5, the outdoor origins that are not an A-Attack (that one is
+/// `overworld_attack_fight_exit_spends_no_outdoor_turn`). A bump into a
+/// hostile spends the one outdoor turn its own command spent
+/// (`commands.md §3`: the move is acted) and the exit adds nothing
+/// (`combat.md §4`: "a **zero** increment"). A camp ambush costs only the
+/// camp's own five-minute steps: "the camp wrapper makes no trailing clock
+/// call" (`moons.md §3`), and the interrupted rest "stops immediately"
+/// (`rest-and-camp.md §6`). The exit used to run a second outdoor turn after
+/// both.
+#[test]
+fn overworld_bump_and_camp_ambush_fights_charge_no_turn_at_the_exit() {
+    // Bump.
+    let dir = debug_game_dir();
+    fs::write(
+        dir.join(BRIT_CBT_FILE),
+        synthetic_combat_arena_record().repeat(BRIT_CBT_RECORDS),
+    )
+    .unwrap();
+    let mut state = world_state(open_world_grid(), 5, 5);
+    state.active_objects.push(ActiveObject {
+        type_byte: 0x80,
+        tile: 0x80,
+        x: 6,
+        y: 5,
+        z: WorldPlane::Underworld.save_floor(),
+        phase: 0,
+        aux1: 0,
+        aux3: 0,
+    });
+    let turn_before = state.turn;
+    handle_play_key_input(&mut state, char::from(INPUT_CODE_EAST), "", &dir).unwrap();
+    assert!(state.combat_active, "the bump frames the arena");
+    assert_eq!(state.turn, turn_before + 1, "the bump's own outdoor turn");
+    let (turn_in_arena, clock_in_arena) = (state.turn, state.clock);
+    state.apply_combat_round_loop_exit(CombatRoundLoopExit::Victory);
+    assert!(!state.combat_active);
+    assert_eq!(
+        (state.turn, state.clock),
+        (turn_in_arena, clock_in_arena),
+        "bump: nothing at the exit"
+    );
+    let _ = fs::remove_dir_all(dir);
+
+    // Camp ambush.
+    let dir = debug_game_dir();
+    fs::write(
+        dir.join(BRIT_CBT_FILE),
+        synthetic_combat_arena_record().repeat(BRIT_CBT_RECORDS),
+    )
+    .unwrap();
+    let mut checked = false;
+    for seed in 0u32..4096 {
+        let mut state = world_state(open_world_grid(), 5, 5);
+        state.clock = GameClock::new(12, 0).unwrap();
+        state.prng_state = seed as _;
+        if state
+            .rest_with_watch(
+                InlineRestRequest {
+                    hours: Some(9),
+                    watcher: None,
+                },
+                &dir,
+            )
+            .is_err()
+            || !state.combat_active
+        {
+            continue;
+        }
+        checked = true;
+        assert_eq!(state.clock.minute % 5, 0, "seed {seed}: five-minute camp steps only");
+        let (turn_in_arena, clock_in_arena) = (state.turn, state.clock);
+        state.apply_combat_round_loop_exit(CombatRoundLoopExit::LeaveCombat);
+        assert!(!state.combat_active);
+        assert_eq!(
+            (state.turn, state.clock),
+            (turn_in_arena, clock_in_arena),
+            "seed {seed}: camp ambush: nothing at the exit"
+        );
+        break;
+    }
+    assert!(checked, "no seed in range ambushed the camp");
+    let _ = fs::remove_dir_all(dir);
+}

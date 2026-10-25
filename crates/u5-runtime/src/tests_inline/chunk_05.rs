@@ -3075,8 +3075,12 @@ fn town_attack_spends_its_turn_once_after_the_arena_not_before() {
     assert_eq!(state.clock, clock_before, "no minute is spent before the arena");
     assert!(state.pending_town_conflict.is_some_and(|pending| pending.owes_turn_epilogue));
 
+    let (turn_in_fight, clock_in_fight) = (state.turn, state.clock);
     state.apply_combat_round_loop_exit(CombatRoundLoopExit::Victory);
     assert!(!state.combat_active);
+    // `combat.md §4`: the exit adds no minute and spends no turn; it used to
+    // run a whole town turn here, so the attack paid two.
+    assert_eq!((state.turn, state.clock), (turn_in_fight, clock_in_fight));
     let (turn_after_fight, clock_after_fight) = (state.turn, state.clock);
     state.run_town_attack_epilogue_after_combat(&dir).unwrap();
     assert_eq!(state.turn, turn_after_fight + 1, "the epilogue runs once");
