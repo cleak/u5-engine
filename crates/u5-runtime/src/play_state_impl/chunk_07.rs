@@ -4022,8 +4022,10 @@ impl PlayState {
         // `overworld.md §8` correction: both marker arms reach the shared
         // §6.2.4 impact payload. On foot this is the whole-party damage pass;
         // it skips only the transition and does not clear the whirlpool slot.
+        // `overworld.md §6.2.4` (u5-spec#301 Q3, R612): both whirlpool arms
+        // enter the payload at stage two, with no impact figure or rumble.
         if self.player.transport.is_foot() {
-            self.apply_outdoor_impact();
+            self.apply_outdoor_impact_absorption();
             return Ok(MoveOutcome::Used);
         }
 
@@ -4066,7 +4068,8 @@ impl PlayState {
         self.mark_visibility_dirty();
         // Step 6: the Section 6.2.4 impact payload, "which may add
         // `Ship sunk!` and then either `Abandon ship!` or `DROWNING!!!`".
-        self.apply_outdoor_impact();
+        // It enters at the absorption stage (R612, u5-spec#301 Q3).
+        self.apply_outdoor_impact_absorption();
         // Step 7: "The plane write and the move to `(34, 18)` ... This runs
         // **unconditionally** after step 6, including after the drowning
         // arm." It prints nothing of its own: the banner above is the first
@@ -4118,7 +4121,9 @@ impl PlayState {
 
     fn apply_world_sand_trap_slot_engagement(&mut self, sand_trap_slot: usize) {
         let _ = sand_trap_slot;
-        self.apply_outdoor_impact();
+        // `active-objects.md §8` (u5-spec#301 Q3, R612): "no impact figure
+        // or impact rumble" - the payload's absorption stage only.
+        self.apply_outdoor_impact_absorption();
     }
 
     pub fn apply_town_post_turn_effects_after_turn(

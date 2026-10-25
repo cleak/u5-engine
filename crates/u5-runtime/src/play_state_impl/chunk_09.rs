@@ -5519,8 +5519,8 @@ impl PlayState {
             return None;
         }
         self.push_impact_line("Rough seas!");
+        // Stage one plays the impact rumble itself (R611).
         self.outdoor_impact_presentation();
-        self.emit_sound_effect(SoundEffect::RoughSeasImpactRumble);
         // `overworld.md §6.2.5`: "Order is `Rough seas!`, impact figure at
         // the party cell, impact rumble, one world repaint tick, then
         // absorption." The same section scopes the whole sequence's cost
@@ -5539,12 +5539,16 @@ impl PlayState {
     }
 
     /// `overworld.md §6.2.4` stage one — impact presentation. "An impact
-    /// figure is drawn at the party's own map coordinates ..., a short
-    /// tone plays, and the viewport is rebuilt. This stage writes no
-    /// character state and no vehicle state, and prints no narration
-    /// line."
+    /// figure (figure zero) is drawn at the party's own map coordinates ...,
+    /// the **impact rumble** plays - a random rumble of step 10, target
+    /// 3000, pitch drawn from the inclusive range 100..2000 Hz, 300 updates
+    /// ... - and one world tick repaints the viewport." It "is one fixed
+    /// routine, so the sound is identical on every caller: both outdoor
+    /// ranged attacks ..., rough seas and every drowning pass" (u5-spec#300
+    /// Q27, #301 Q3; R611 withdrew "a short tone plays").
     fn outdoor_impact_presentation(&mut self) {
         self.mark_visibility_dirty();
+        self.emit_sound_effect(SoundEffect::RoughSeasImpactRumble);
     }
 
     /// `overworld.md §6.2.4` stage two — impact absorption. The stage
@@ -5838,8 +5842,8 @@ impl PlayState {
     /// ran each pass in under half that and the party died while the stock
     /// was still on its third pass (`sail-calm`, every run since 2026-10-16).
     fn drowning_pass_impact_presentation(&mut self) {
+        // Stage one plays the impact rumble itself (R611, #301 Q3).
         self.outdoor_impact_presentation();
-        self.emit_sound_effect(SoundEffect::RoughSeasImpactRumble);
     }
 
     /// [`Self::apply_ship_loss_drowning`], with each pass staged for the
@@ -6383,7 +6387,10 @@ impl PlayState {
         let party_terrain = self.grid[world_cell_index(self.player.x, self.player.y)];
         if generic_adjacent_hostile_uses_impact(party_terrain, self.player.transport.save_marker())
         {
-            self.apply_outdoor_impact();
+            // `overworld.md §6.2.4` / `active-objects.md §8` (u5-spec#301
+            // Q3, R612): this arm enters at stage two - "no impact figure is
+            // drawn and no impact rumble plays".
+            self.apply_outdoor_impact_absorption();
             return Ok(Some(MoveOutcome::Used));
         }
 

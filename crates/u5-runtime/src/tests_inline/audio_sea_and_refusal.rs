@@ -303,7 +303,7 @@ fn drowning_sounds_the_long_descent_before_the_death_loop() {
 
     let OutdoorImpactAbsorption::ShipDestroyed {
         fallback, drowning, ..
-    } = state.apply_outdoor_impact()
+    } = state.apply_outdoor_impact_absorption()
     else {
         panic!("hull one is always destroyed");
     };
@@ -373,7 +373,8 @@ fn a_skiff_aboard_suppresses_the_drowning_long_descent() {
     aboard_frigate(&mut state, 1, 2);
     let serial = state.sound_effect_serial;
 
-    let OutdoorImpactAbsorption::ShipDestroyed { fallback, .. } = state.apply_outdoor_impact()
+    let OutdoorImpactAbsorption::ShipDestroyed { fallback, .. } =
+        state.apply_outdoor_impact_absorption()
     else {
         panic!("hull one is always destroyed");
     };
@@ -397,7 +398,8 @@ fn a_carried_carpet_suppresses_the_drowning_long_descent() {
     aboard_frigate(&mut state, 1, 0);
     let serial = state.sound_effect_serial;
 
-    let OutdoorImpactAbsorption::ShipDestroyed { fallback, .. } = state.apply_outdoor_impact()
+    let OutdoorImpactAbsorption::ShipDestroyed { fallback, .. } =
+        state.apply_outdoor_impact_absorption()
     else {
         panic!("hull one is always destroyed");
     };
@@ -424,4 +426,44 @@ fn the_long_descent_has_exactly_the_two_published_trigger_sites() {
             .matches("SoundEffect::LongDescent")
             .count();
     assert_eq!(sources, 2, "§8.9 attributes the recipe to two sites only");
+}
+
+/// `overworld.md §6.2.4` stage one (u5-spec#300 Q27, #301 Q3, R611): the
+/// impact presentation plays the impact rumble `(10, 3000, 2000)` on every
+/// stage-one caller, the ranged attacks included; R612: the sand-trap,
+/// whirlpool and generic adjacent-hostile arms enter at stage two with "no
+/// impact figure and no impact rumble".
+#[test]
+fn spec301_q3_stage_one_plays_the_impact_rumble_and_stage_two_callers_do_not() {
+    let mut state = world_state(open_world_grid(), 5, 5);
+    state.party = six_member_party(40);
+    let serial = state.sound_effect_serial;
+    let _ = state.apply_outdoor_impact();
+    let effects = state.sound_effects_after(serial);
+    assert_eq!(effects.first(), Some(&SoundEffect::RoughSeasImpactRumble));
+    assert_eq!(
+        effects
+            .iter()
+            .filter(|effect| **effect == SoundEffect::RoughSeasImpactRumble)
+            .count(),
+        1
+    );
+
+    let mut state = world_state(open_world_grid(), 5, 5);
+    state.party = six_member_party(40);
+    state.active_objects.push(ActiveObject {
+        type_byte: 0xE0,
+        tile: 0xE0,
+        x: 6,
+        y: 5,
+        z: 0,
+        phase: 0,
+        aux1: 0,
+        aux3: 0,
+    });
+    let serial = state.sound_effect_serial;
+    assert!(state.apply_world_sand_trap_engagement(WorldPlane::Britannia).is_some());
+    assert!(!state
+        .sound_effects_after(serial)
+        .contains(&SoundEffect::RoughSeasImpactRumble));
 }
