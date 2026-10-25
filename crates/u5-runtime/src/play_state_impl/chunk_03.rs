@@ -1302,6 +1302,12 @@ impl PlayState {
             } else {
                 self.message = cancel_reply.to_string();
             }
+            // `commands.md §6` (u5-spec#300 Q29, R607): New Order is not a
+            // forwarding route, so `Swap nobody!` at either prompt reports
+            // acted and spends the ordinary turn (executed).
+            if matches!(session.target, PartySelectorTarget::NewOrder { .. }) {
+                self.charge_tile_command_acted_exit(self.turn);
+            }
             return true;
         }
         // `inventory.md §4.3`: "Number keys `1` through `6` select
@@ -1398,7 +1404,7 @@ impl PlayState {
             PartySelectorTarget::NewOrder { first: None } => {
                 // `commands.md §6`: "If either selected slot is slot zero,
                 // the command refuses because the leader must remain
-                // first" - without consuming a turn.
+                // first"; the refusal is not free (R607).
                 if index == 0 {
                     // `text-output.md §10.4`: the refusal prints under the
                     // prompt row the pick completed, so it opens with a
@@ -1410,6 +1416,9 @@ impl PlayState {
                         "\n{}",
                         new_order_leader_refusal(&self.party_member_display_name(0))
                     );
+                    // `commands.md §6` (u5-spec#300 Q29, R607): the leader
+                    // refusal at either prompt spends the ordinary turn.
+                    self.charge_tile_command_acted_exit(self.turn);
                 } else {
                     self.start_party_selector(PartySelectorTarget::NewOrder { first: Some(index) });
                 }
@@ -1426,6 +1435,9 @@ impl PlayState {
                         "\n{}",
                         new_order_leader_refusal(&self.party_member_display_name(0))
                     );
+                    // `commands.md §6` (u5-spec#300 Q29, R607): the leader
+                    // refusal at either prompt spends the ordinary turn.
+                    self.charge_tile_command_acted_exit(self.turn);
                 } else {
                     // The result completes the `with ` line with `!`; the
                     // shared swap routine moves the whole records and
@@ -5712,10 +5724,11 @@ impl PlayState {
             return MoveOutcome::Blocked;
         }
         // commands.md §6: if either selected slot is slot zero, the command
-        // refuses because the leader must remain first, and it returns
-        // without consuming a turn.
+        // refuses because the leader must remain first. Every outcome
+        // spends the ordinary turn (u5-spec#300 Q29, R607).
         if first == 0 || second == 0 {
             self.message = new_order_leader_refusal(&self.party_member_display_name(0));
+            self.advance_turn();
             return MoveOutcome::Blocked;
         }
         // commands.md §6: picking the same nonzero slot twice is accepted as

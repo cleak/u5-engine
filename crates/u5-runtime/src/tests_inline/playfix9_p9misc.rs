@@ -222,3 +222,43 @@ fn playtest_q16_inn_solo_leave_without_shoppe_dat_shows_no_transcribed_record() 
         "{rows:?}"
     );
 }
+
+/// `commands.md §6` (u5-spec#300 Q29, R607): New Order is not a forwarding
+/// route, so `Swap nobody!` and `<leader> must lead!` at either prompt spend
+/// the ordinary turn (executed: Escape at the first prompt and the leader
+/// picked first, overworld and town).
+#[test]
+fn spec300_q29_new_order_cancel_and_leader_refusal_spend_the_turn() {
+    let dir = debug_game_dir();
+    for town in [true, false] {
+        for keys in [&['\u{1b}'][..], &['\r'][..]] {
+            let mut state = if town {
+                test_state(open_grid(), 5, 5)
+            } else {
+                world_state(open_world_grid(), 5, 5)
+            };
+            state.party.push(PartyMember {
+                slot: 1,
+                class_byte: b'F',
+                status: b'G',
+                climb_stat: DEFAULT_CLIMB_STAT,
+                mana: 0,
+                hp: 20,
+                max_hp: 20,
+                level: 1,
+            });
+            state.party_names = vec![*b"AVATAR\0\0\0", *b"SHAMINO\0\0"];
+            let mut clock = state.clock;
+            handle_play_key_input(&mut state, 'N', "", &dir).unwrap();
+            assert_eq!(state.turn, 0);
+            for key in keys {
+                handle_play_key_input(&mut state, *key, "", &dir).unwrap();
+            }
+            assert!(state.active_party_selector.is_none());
+            assert_eq!(state.turn, 1, "town {town} keys {keys:?}");
+            clock.advance_minutes(if town { 1 } else { 2 });
+            assert_eq!(state.clock, clock, "town {town} keys {keys:?}");
+        }
+    }
+    let _ = fs::remove_dir_all(dir);
+}

@@ -517,17 +517,17 @@ pub const fn new_order_swap_accepted(slot_a: usize, slot_b: usize) -> bool {
 }
 
 /// `commands.md §6` resolved outcome for one N-New Order command.
-/// Cancellation of either prompt or a leader-slot selection both
-/// abort without consuming a turn; only a successful non-leader
-/// pair consumes the turn (same-slot pairs included — the swap is a
-/// behavioural no-op but the turn is still consumed).
+/// New Order is not a forwarding route, so every outcome reports acted
+/// and spends the ordinary turn: cancellation of either prompt, a
+/// leader-slot selection and a swap (same-slot pairs included). R607
+/// (u5-spec#300 Q29) withdrew "without consuming a turn".
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum NewOrderOutcome {
     /// Either prompt was cancelled. The command prints the
-    /// no-selection result and returns without consuming a turn.
+    /// no-selection result; the turn is still spent (R607).
     Cancelled,
     /// At least one selected slot is the leader (slot 0). The
-    /// command refuses and returns without consuming a turn.
+    /// command refuses; the turn is still spent (R607).
     LeaderRefusal,
     /// Both selections are non-leader slots. The handler exchanges
     /// the two roster records and consumes the turn. Same-slot pairs

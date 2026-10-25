@@ -8551,10 +8551,10 @@ fn town_cannon_tile_fire_direction_uses_low_two_facing_bits() {
 
 #[test]
 fn new_order_outcome_resolves_cancellation_refusal_and_swap() {
-    // commands.md §6: cancelling either selector prompt aborts
-    // without consuming a turn; a leader-slot selection refuses
-    // the swap with the leader-must-remain-first rule; otherwise
-    // the two roster records exchange and the turn is consumed.
+    // commands.md §6: cancelling either selector prompt aborts; a
+    // leader-slot selection refuses the swap with the
+    // leader-must-remain-first rule; otherwise the two roster records
+    // exchange. Every outcome spends the turn (u5-spec#300 Q29, R607).
     use NewOrderOutcome::*;
 
     // Cancellation on either side.
