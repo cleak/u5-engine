@@ -725,6 +725,15 @@ fn handle_play_key_input_inner(
         return Ok(handle_combat_key_input(state, key, suffix));
     }
     if key == 'Z' {
+        // `dungeon-mode.md §15`: the dungeon's minute "sits at the head of
+        // each iteration ... [and] does **not** gate that call on whether the
+        // command consumed a turn". `Z` is read by this shared intercept
+        // rather than the dungeon handler, so it runs that loop head itself;
+        // otherwise a `Z` after a no-action command found the previous
+        // iteration's charge still standing and spent no minute (p10 R12).
+        if matches!(state.area, Area::Dungeon { .. }) {
+            state.advance_dungeon_loop_minute();
+        }
         state.begin_command_echo_for(Command::ZStats);
         state.z_stats_command();
         return Ok(PlayInputDisposition::Continue);

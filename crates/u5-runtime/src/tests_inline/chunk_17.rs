@@ -1051,6 +1051,25 @@
         assert!(state.message.ends_with(YELL_NO_EFFECT_MESSAGE));
     }
 
+    /// p10 R12. `dungeon-mode.md §15`: one minute per dungeon loop
+    /// iteration, charged at its head and "not gate[d] ... on whether the
+    /// command consumed a turn". `P;Z;Esc` and `Space;Z;Esc` are both two
+    /// iterations, but a `Z` after the no-action `P` used to spend nothing.
+    #[test]
+    fn dungeon_z_stats_after_a_no_action_command_still_spends_its_minute() {
+        let run = |first: char| {
+            let mut state = dungeon_state(open_dungeon_record(), 0, 1, 1);
+            handle_play_key_input(&mut state, first, "", Path::new("")).unwrap();
+            handle_play_key_input(&mut state, 'Z', "", Path::new("")).unwrap();
+            for _ in 0..3 {
+                handle_play_key_input(&mut state, '\u{1b}', "", Path::new("")).unwrap();
+            }
+            state.clock
+        };
+        let after_pass = run(' ');
+        assert_eq!(run('P'), after_pass, "P;Z and Space;Z are both two iterations");
+    }
+
     #[test]
     fn active_direction_prompt_routes_attack_and_cancel() {
         let mut state = world_state(open_world_grid(), 5, 5);
