@@ -2819,19 +2819,18 @@ fn town_talk_reports_nobody_and_still_spends_the_ordinary_turn() {
     assert_eq!(state.clock, GameClock::new(12, 1).unwrap());
 }
 
+/// `conversation.md §2` step 1 (corrected 2026-10-25, u5-spec#300 Q12,
+/// `RETRACTIONS.md` R596): there is no "can talk now" liveness gate. Talk
+/// tests no provisions, party status, combat or conversation state, so an
+/// asleep active member and a provision counter of zero still talk normally.
 #[test]
-fn town_talk_liveness_gate_blocks_before_lookup_without_printing() {
+fn town_talk_has_no_liveness_gate_for_starving_or_asleep_party() {
     let dialogue = parse_tlk_bytes(&tlk_bytes(&[(
         2,
         &["Ada", "a test smith", "Greetings", "I mend gear", "Bye"],
     )]))
     .unwrap();
-    let mut state = test_state(open_grid(), 1, 1);
-    state.message = "previous line".to_string();
-    state.player.facing = Direction::East;
-    state.active_player = Some(0);
-    state.party[0].status = b'S';
-    state.load_scheduled_npcs(&[
+    let npcs = [
         NpcSlot {
             slot: 0,
             type_byte: 0,
@@ -2846,15 +2845,25 @@ fn town_talk_liveness_gate_blocks_before_lookup_without_printing() {
             schedule: [0, 0, 0, 2, 2, 2, 1, 1, 1, 0, 0, 0, 0, 8, 16, 20],
             name: Some("Ada".to_string()),
         },
-    ]);
+    ];
+    for (food, asleep) in [(0u16, false), (0, true), (1, true)] {
+        let mut state = test_state(open_grid(), 1, 1);
+        state.message = "previous line".to_string();
+        state.player.facing = Direction::East;
+        state.food = food;
+        state.active_player = Some(0);
+        if asleep {
+            state.party[0].status = b'S';
+        }
+        state.load_scheduled_npcs(&npcs);
 
-    assert_eq!(
-        state.talk_facing_with_dialogue(&dialogue),
-        MoveOutcome::Blocked
-    );
-
-    assert_eq!(state.message, "previous line");
-    assert_eq!(state.turn, 1);
+        assert_eq!(
+            state.talk_facing_with_dialogue(&dialogue),
+            MoveOutcome::Talked,
+            "food {food}, asleep {asleep}"
+        );
+        assert!(state.message.contains("Greetings"), "food {food}, asleep {asleep}");
+    }
 }
 
 #[test]

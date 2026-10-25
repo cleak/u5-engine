@@ -4661,9 +4661,9 @@ impl PlayState {
             }
             return Ok(MoveOutcome::Blocked);
         };
-        if self.talk_entry_gates_apply() && self.talk_liveness_blocked() {
-            return Ok(self.consume_ordinary_town_talk());
-        }
+        // `conversation.md §2` step 1 (u5-spec#300 Q12, R596): there is no
+        // "can talk now" liveness gate; provisions, party status, combat and
+        // conversation state are never tested.
         if let Some((dialog_id, target_x, target_y)) = self.talk_target_in_direction(direction)
             && matches!(
                 dialog_id,
@@ -4860,9 +4860,7 @@ impl PlayState {
             self.message = "Funny, no response!".to_string();
             return MoveOutcome::Blocked;
         }
-        if self.talk_liveness_blocked() {
-            return self.consume_ordinary_town_talk();
-        }
+        // `conversation.md §2` step 1: no liveness gate (u5-spec#300 Q12, R596).
 
         let Some((dialog_id, target_x, target_y)) = self.talk_target_in_direction(direction) else {
             self.message = crate::TALK_NOBODY_HERE_LINE.to_string();
@@ -5115,9 +5113,7 @@ impl PlayState {
             self.message = "Funny, no response!".to_string();
             return MoveOutcome::Blocked;
         }
-        if self.talk_entry_gates_apply() && self.talk_liveness_blocked() {
-            return self.consume_ordinary_town_talk();
-        }
+        // `conversation.md §2` step 1: no liveness gate (u5-spec#300 Q12, R596).
 
         let Some((dialog_id, target_x, target_y)) = self.talk_target_in_direction(direction) else {
             self.message = crate::TALK_NOBODY_HERE_LINE.to_string();
@@ -5725,7 +5721,10 @@ impl PlayState {
         if !matches!(self.area, Area::Town { .. }) {
             return None;
         }
-        if self.talk_liveness_blocked() {
+        // `conversation.md §2` step 1 has no liveness gate (u5-spec#300 Q12,
+        // R596). Refusing to open a second session over a live one is this
+        // engine's own session invariant, not a game rule.
+        if self.active_conversation.is_some() {
             return None;
         }
         let (dialog_id, target_x, target_y) = self.facing_talk_target()?;
@@ -6743,27 +6742,13 @@ impl PlayState {
 
     /// `conversation.md §2` step 5: "The dispatcher in step 5 is also called
     /// by the NPC's automatic conversation-contact event, without steps 1–4."
-    /// Contact therefore takes neither the step-1 liveness gate nor the
+    /// Contact therefore takes neither the step-1 direction prompt nor the
     /// step-4 mirror/bed status-tile gate. The step-3 lookup is kept only as
     /// this engine's way of resolving the contacting NPC: the producer is
     /// orthogonally adjacent by construction (`npc-schedules.md §9.2`) and the
     /// direction is derived from it, so the lookup lands on that NPC.
     pub(crate) fn talk_entry_gates_apply(&self) -> bool {
         !self.talk_entered_by_contact
-    }
-
-    pub fn talk_liveness_blocked(&self) -> bool {
-        let active_asleep = self
-            .active_player
-            .and_then(|index| self.party.get(index))
-            .is_some_and(|member| member.status == b'S');
-        talk_liveness_refusal(
-            self.combat_active,
-            active_asleep,
-            self.food == 0,
-            self.active_conversation.is_some(),
-        )
-        .is_some()
     }
 
     pub fn talk_branch_slot_for_scene(&self, scene: Scene) -> u32 {
