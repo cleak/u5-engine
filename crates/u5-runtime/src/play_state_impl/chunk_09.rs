@@ -3196,17 +3196,25 @@ impl PlayState {
     /// action counter is not bumped and no post-action pass is entered. The
     /// iteration's minute is flagged so the dispatched command's own
     /// `advance_turn` does not charge it a second time.
+    ///
+    /// `dungeon-mode.md §4` step 1 (u5-spec#300 Q10, R595): the call "is
+    /// gated on the shared timed-effect tag ... and on nothing else. While
+    /// Negate Time (`T`) is active the call is not made at all ... While
+    /// Quickness (`Q`) is active the call is made only on every other
+    /// iteration, so dungeon time passes at half rate; a call that is made
+    /// still advances one minute". Which iteration of each pair spends the
+    /// minute is not established; this engine spends it on the odd ones.
     pub fn advance_dungeon_loop_minute(&mut self) {
         let minutes = self.turn_minute_increment();
-        let effective_minutes = if self.negate_time_active() {
-            0
-        } else {
-            TimingStatusTag::from_save_byte(self.active_effect_tag.unwrap_or(0))
-                .effective_minutes(minutes)
-        };
+        let tag = TimingStatusTag::from_save_byte(self.active_effect_tag.unwrap_or(0));
         self.dungeon_loop_minute_charged = true;
         self.dungeon_loop_iteration = self.dungeon_loop_iteration.wrapping_add(1);
-        self.advance_clock_half(effective_minutes);
+        if self.negate_time_active()
+            || (tag == TimingStatusTag::HalfTime && self.dungeon_loop_iteration % 2 == 0)
+        {
+            return;
+        }
+        self.advance_clock_half(tag.effective_minutes(minutes));
     }
 
     /// The clock half of a turn shared by [`Self::advance_dungeon_loop_minute`]

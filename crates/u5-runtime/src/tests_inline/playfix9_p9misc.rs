@@ -279,3 +279,26 @@ fn spec300_q14_overworld_attack_refusal_is_free_and_town_refusal_is_acted() {
     assert_eq!(town.turn, 1);
     let _ = fs::remove_dir_all(dir);
 }
+
+/// `dungeon-mode.md §4` step 1 and §15 (u5-spec#300 Q10, R595): the dungeon
+/// loop-head clock call is made on every iteration normally, not at all
+/// under Negate Time, and only on every other iteration under Quickness ("so
+/// dungeon time passes at half rate; a call that is made still advances one
+/// minute"). R595 withdrew the "Q-quest mode pendulum" that "stays disabled".
+#[test]
+fn spec300_q10_dungeon_loop_minute_follows_quickness_and_negate_time() {
+    for (tag, expected) in [
+        (None, 4u8),
+        (Some(QUICKNESS_ACTIVE_EFFECT_TAG), 2),
+        (Some(NEGATE_TIME_ACTIVE_EFFECT_TAG), 0),
+    ] {
+        let mut state = dungeon_state(open_dungeon_record(), 0, 1, 1);
+        state.clock = GameClock::new(10, 0).unwrap();
+        state.active_effect_tag = tag;
+        state.active_effect_counter = 50;
+        for _ in 0..4 {
+            state.advance_dungeon_loop_minute();
+        }
+        assert_eq!(state.clock.minute, expected, "tag {tag:?}");
+    }
+}
