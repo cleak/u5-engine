@@ -7993,13 +7993,31 @@ fn drive_combat_round_walk_and_append_message(state: &mut PlayState) {
         return;
     }
 
-    for _ in 0..COMBAT_ROUND_WALK_DRAIN_LIMIT {
+    // `combat.md §7` restarts the table walk whenever slot 32 is reached
+    // with actors still present, so the walk runs until a keyboard-driven
+    // actor needs a key. The drain limit only guards against a walk that
+    // makes no progress; it has to count walks in which nothing acted, not
+    // every walk. A dragged-under victim's `ARGH!` turns (`§8.1`) and the
+    // foes' turns around them can outlast thirty-seven tables, and the
+    // walker then stopped mid-fight with no prompt open: the rest of the
+    // round - a last foe's `escapes!` and `VICTORY!` - only printed once
+    // the next key arrived (playtest Q02).
+    let mut idle_walks = 0;
+    for _ in 0..COMBAT_ROUND_WALK_PROGRESS_LIMIT {
+        if idle_walks >= COMBAT_ROUND_WALK_DRAIN_LIMIT {
+            break;
+        }
         let start_slot = state.next_combat_actor_slot.min(COMBAT_ACTOR_SLOTS);
         let application = if state.pace_combat_presentations {
             state.apply_combat_round_walk_from_slot_paced(start_slot, COMBAT_PHASE_REFRESH_CONSTANT)
         } else {
             state.apply_combat_round_walk_from_slot(start_slot, COMBAT_PHASE_REFRESH_CONSTANT)
         };
+        if combat_round_walk_dispatched_an_action(&application) {
+            idle_walks = 0;
+        } else {
+            idle_walks += 1;
+        }
         append_combat_round_walk_messages(state, &application);
         state.next_combat_actor_slot = match application.stop_reason {
             CombatRoundWalkStopReason::EndOfRound => 0,
@@ -8032,6 +8050,28 @@ fn drive_combat_round_walk_and_append_message(state: &mut PlayState) {
             break;
         }
     }
+}
+
+/// Upper bound on the walks one drive runs while actors keep acting - an
+/// engine-only non-termination guard far above any fight's length between
+/// two keyboard turns.
+const COMBAT_ROUND_WALK_PROGRESS_LIMIT: usize = 4096;
+
+/// Whether any slot in `application` took a turn: anything but an empty
+/// slot, a counting-down phase counter or an active-player skip.
+fn combat_round_walk_dispatched_an_action(application: &CombatRoundWalkApplication) -> bool {
+    application.applications.iter().any(|entry| {
+        matches!(
+            entry,
+            CombatActorSlotDispatchApplication::Slot { action, .. }
+                if !matches!(
+                    action,
+                    CombatActorDispatchAction::Inactive
+                        | CombatActorDispatchAction::Waiting
+                        | CombatActorDispatchAction::ActivePlayerSentinelSkipped
+                )
+        )
+    })
 }
 
 /// `combat.md §8.1` / `dungeon-mode.md §8.1` (issue #210): once a fight is

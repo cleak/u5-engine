@@ -64,3 +64,44 @@ fn playtest_q18_bare_handed_attack_plays_the_party_melee_swing() {
     ));
     assert!(far.sound_effects_after(serial).is_empty());
 }
+
+/// `combat.md §7` restarts the table walk at slot 32 while actors remain, and
+/// `§8.1`'s dragged-under arm ends each held turn "with no command read", so
+/// the walk carries on until a keyboard-driven actor actually needs a key.
+/// The driver's non-termination guard counted every table walk, so a victim
+/// held for a few turns exhausted it and the walk stopped with no prompt
+/// open - the round's remaining output (a last foe's `escapes!` and
+/// `VICTORY!`) then printed only after the next key (Q02).
+#[test]
+fn playtest_q02_dragged_under_turns_do_not_stall_the_round_walk() {
+    let mut longest_hold = 0;
+    for seed in 0..64u16 {
+        let mut state = worked_bat_arena(&[], 0);
+        state.prng_state = seed.wrapping_mul(2_654).wrapping_add(1);
+        state.combat_actors[0].flags |= COMBAT_ACTOR_FLAG_DRAGGED_UNDER;
+        state.active_objects[0].tile = 0;
+
+        open_owed_combat_player_turn(&mut state);
+
+        let held_turns = state
+            .message_entries()
+            .iter()
+            .filter(|entry| entry.text.starts_with(COMBAT_DRAGGED_UNDER_TURN_LINE))
+            .count();
+        longest_hold = longest_hold.max(held_turns);
+        assert!(
+            !state.combat_actors[0].is_dragged_under(),
+            "seed {seed}: the walk stopped while the victim was still held \
+             after {held_turns} ARGH! turns"
+        );
+        assert_eq!(
+            state.pending_combat_actor_slot,
+            Some(0),
+            "seed {seed}: the released victim's prompt is open"
+        );
+    }
+    assert!(
+        longest_hold >= 3,
+        "some seed must hold the victim past the old thirty-seven-walk guard"
+    );
+}
