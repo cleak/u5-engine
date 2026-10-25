@@ -328,6 +328,8 @@ fn typeahead_buffer_pauses_during_modal_prompts() {
         floor: 0,
         npc_slot: 1,
     });
+    // As `open_town_arrest` does: the challenge is printed once.
+    state.message = TOWN_ARREST_SURRENDER_PROMPT.to_string();
 
     assert_eq!(play_input_typeahead_chars("12"), Some(vec!['1', '2']));
     assert!(!play_state_accepts_typeahead(&state));
@@ -492,6 +494,8 @@ fn pending_prompt_consumes_typeahead_toggle_without_changing_buffer_state() {
         floor: 0,
         npc_slot: 1,
     });
+    // As `open_town_arrest` does: the challenge is printed once.
+    prompted.message = TOWN_ARREST_SURRENDER_PROMPT.to_string();
 
     assert_eq!(
         handle_play_script_command(&mut prompted, "buffer", Path::new("")).unwrap(),
@@ -514,6 +518,8 @@ fn empty_play_input_repeats_pending_prompt_without_turn() {
         floor: 0,
         npc_slot: 1,
     });
+    // As `open_town_arrest` does: the challenge is printed once.
+    prompted.message = TOWN_ARREST_SURRENDER_PROMPT.to_string();
 
     handle_empty_play_input(&mut prompted, Path::new("")).unwrap();
 
@@ -558,6 +564,24 @@ fn empty_play_input_resolves_dungeon_room_trigger_before_pass() {
     assert_eq!(state.grid[dungeon_cell_index(0, 1, 1)], 0xa3);
     assert_eq!(state.message, DUNGEON_ROOM_ENTRY_NARRATION);
     assert!(!state.message.contains("Passed"));
+}
+
+/// Playtest N05: an empty line inside the room fight is the harness's Pass
+/// (`combat.md §8`: Space passes the actor). It used to re-resolve the room
+/// cell underfoot, re-running the entry and erasing the encounter.
+#[test]
+fn empty_play_input_inside_room_fight_does_not_reenter_the_room() {
+    let mut grid = open_dungeon_record();
+    grid[dungeon_cell_index(0, 1, 1)] = 0xf3;
+    let mut state = dungeon_state(grid, 0, 1, 1);
+    // Model a fight already running on the room cell (fixture states carry
+    // no room data, so the entry itself is not exercised here).
+    state.combat_active = true;
+
+    handle_empty_play_input(&mut state, Path::new("")).unwrap();
+
+    assert_ne!(state.message, DUNGEON_ROOM_ENTRY_NARRATION);
+    assert_eq!(state.grid[dungeon_cell_index(0, 1, 1)], 0xf3);
 }
 
 // from chunk_19
@@ -680,6 +704,8 @@ fn play_script_idle_count_respects_pending_prompt_freeze() {
         floor: 0,
         npc_slot: 1,
     });
+    // As `open_town_arrest` does: the challenge is printed once.
+    prompted.message = TOWN_ARREST_SURRENDER_PROMPT.to_string();
 
     assert_eq!(
         handle_play_script_command(&mut prompted, "idle:2", Path::new("")).unwrap(),

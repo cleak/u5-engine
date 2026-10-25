@@ -3210,7 +3210,9 @@ impl PlayState {
                 // no longer re-enters this corpse path.
                 object.aux3 = 0;
             }
-            self.message = format!("Thou dost find\n{}!\n", if food { "food" } else { "gold" });
+            // `commands.md §5.8`: every corpse row is built on the shared
+            // `\nThou_dost_find\n` preamble, `[blank]` first (playtest N10).
+            self.message = format!("{SEARCH_PREAMBLE}{}!\n", if food { "food" } else { "gold" });
             self.mark_visibility_dirty();
             return;
         }
@@ -3222,7 +3224,7 @@ impl PlayState {
         {
             // The line is visible before the blocking rumble; status changes
             // only after the effect returns.
-            self.message = "Thou dost find\nPlague!\n".to_string();
+            self.message = format!("{SEARCH_PREAMBLE}Plague!\n");
             self.emit_sound_effect(SoundEffect::CorpsePlagueRumble);
             if let Some(member) = self.party.get_mut(searching_member) {
                 member.status = b'P';
@@ -3238,7 +3240,7 @@ impl PlayState {
         let upper_bound = self.random_range_u8(0, 3);
         let selector = self.random_range_u8(0, upper_bound);
         self.message = format!(
-            "Thou dost find\n{}\n",
+            "{SEARCH_PREAMBLE}{}\n",
             CORPSE_SEARCH_NOTHING_MESSAGES[usize::from(selector)]
         );
     }

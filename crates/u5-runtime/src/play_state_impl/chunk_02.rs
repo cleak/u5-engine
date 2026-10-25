@@ -269,9 +269,13 @@ impl PlayState {
             }
             // `vehicles.md §4.1` (issue #299 Q25): "Dungeon scene |
             // `\nNot here!\n` | `Board`, then `Not here!`".
+            // `commands.md §3`: B is "Acted" on every path except the
+            // unknown-target fallthrough, and this refusal is not that
+            // fallthrough, so the epilogue charges its turn (playtest N06).
             'b' => {
                 self.message = BOARD_NOT_HERE_REFUSAL.to_string();
                 self.message_row_open_mid_line = false;
+                self.dungeon_acted_turn_before = Some(turn_before);
                 handled!();
             }
             // `commands.md §7` / `active-objects.md §10`: X-it reaches its
@@ -554,8 +558,12 @@ impl PlayState {
                 'H' => {
                     handled!(self.hole_up_command(game_dir, inline_rest)?);
                 }
+                // `commands.md §3`: I does not forward, so `None owned!`
+                // keeps the default "acted" (playtest N12).
                 'I' => {
-                    handled!(self.ignite_torch());
+                    let outcome = self.ignite_torch();
+                    self.charge_tile_command_acted_exit(turn_before);
+                    handled!(outcome);
                 }
                 'J' => {
                     if let Some(direction) = inline_direction {
@@ -738,7 +746,13 @@ impl PlayState {
                 self.charge_tile_command_acted_exit(turn_before);
                 outcome
             }
-            'i' => self.ignite_torch(),
+            // `commands.md §3`: I does not forward, so the `None owned!`
+            // refusal keeps the default "acted" as well (playtest N12).
+            'i' => {
+                let outcome = self.ignite_torch();
+                self.charge_tile_command_acted_exit(turn_before);
+                outcome
+            }
             'h' => self.hole_up_command(game_dir, inline_rest)?,
             'f' => {
                 let outcome = if let Some(direction) = inline_direction {
@@ -1616,8 +1630,11 @@ impl PlayState {
                 self.message = mix_prompt_message();
                 return MoveOutcome::PromptDeclined;
             }
+            // An unparseable harness suffix is a diagnostic, not game text
+            // (playtest N07).
             Err(err) => {
-                self.message = format!("{err}");
+                self.push_diagnostic(format!("inline Mix: {err}"));
+                self.message.clear();
                 return MoveOutcome::Blocked;
             }
         };
@@ -2988,7 +3005,12 @@ impl PlayState {
     // the stat write is capped. The engine used to gate the line on the
     // increase succeeding, and to abbreviate it as `STR +1`.
     pub fn add_avatar_strength_reward(&mut self, notes: &mut Vec<String>) {
+        // Playtest N04: the live per-member mirror (Z-stats, the Ready burden
+        // gate) must see the award at once, as the camp apparition's does.
         let _ = self.avatar_stats.increase_strength();
+        if let Some(strength) = self.party_strengths.get_mut(0) {
+            *strength = self.avatar_stats.strength;
+        }
         notes.push(crate::commands::SHRINE_REWARD_STRENGTH_LINE.to_string());
     }
 
@@ -3001,6 +3023,9 @@ impl PlayState {
 
     pub fn add_avatar_intelligence_reward(&mut self, notes: &mut Vec<String>) {
         let _ = self.avatar_stats.increase_intelligence();
+        if let Some(intelligence) = self.party_intelligence.get_mut(0) {
+            *intelligence = self.avatar_stats.intelligence;
+        }
         notes.push(crate::commands::SHRINE_REWARD_INTELLIGENCE_LINE.to_string());
     }
 

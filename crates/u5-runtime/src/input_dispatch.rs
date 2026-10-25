@@ -5543,7 +5543,11 @@ fn format_reagent_outcome(
             )
         }
         // "Short funds | Record `147`; visit ends without ordinary farewell".
-        RefusedShortFunds { cost } => render(REAGENT_SHORT_FUNDS_RECORD, cost, 0),
+        // The engine's `Yes` echo leaves its `\n` to the next text (the
+        // paid arm's leading `\n\n` above), so that feed is supplied here
+        // and the record's own leading feed still spends its blank row
+        // (playtest N02).
+        RefusedShortFunds { cost } => format!("\n{}", render(REAGENT_SHORT_FUNDS_RECORD, cost, 0)),
         // "Decline | `No\n\n"What else?\n\n`, then stock".
         Declined { herbalist } => format!(
             "\n\n\"What else?\n\n{}",
@@ -5876,7 +5880,9 @@ fn format_guild_outcome(
             )
         }
         // "Short funds | Record `163`; visit ends without ordinary farewell".
-        RefusedShortFunds { cost } => render(GUILD_SHORT_FUNDS_RECORD, None, cost),
+        // As the reagent arm: the `Yes\n` echo's feed comes first, so the
+        // record's own leading feed spends the blank row (playtest N02).
+        RefusedShortFunds { cost } => format!("\n{}", render(GUILD_SHORT_FUNDS_RECORD, None, cost)),
         // "Decline | `No\n\n"What else, then?\n\n`, then stock menu".
         Declined => format!("\n\n{GUILD_MENU_AGAIN_HEADING}\n\n{}", guild_stock_menu()),
         // Closing barks are rendered by the caller through the shared

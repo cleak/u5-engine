@@ -3144,15 +3144,18 @@ impl PlayState {
         // `Monster vanishes.` / `Monster reappears.` were invented wordings
         // with an invented punctuation mark and no name.
         //
-        // The missing trailing newline is a property of the *next* print, and
-        // this engine has no way to mark a line as leaving the cursor mid-row
-        // for a later, unrelated producer, so it is not modelled here - the
-        // same residue the `vanishes!` line above carries.
+        // `§11.1` "Messages that leave a row open": the boundary is
+        // `\n<monster> disappears!` (or `reappears!`), "no trailing
+        // newline", and "the open message cursor remains after its
+        // exclamation mark until another producer prints". As an arena
+        // print the leading feed spends a blank under a closed row and the
+        // next banner's own feed only closes this one (playtest N09).
         let name = crate::input_dispatch::combat_actor_display_name(self, actor_slot);
-        self.message = match visibility.visibility {
-            CombatLinkedVisibility::Hidden => format!("{name} disappears!"),
-            CombatLinkedVisibility::Visible => format!("{name} reappears!"),
+        let line = match visibility.visibility {
+            CombatLinkedVisibility::Hidden => format!("\n{name} disappears!"),
+            CombatLinkedVisibility::Visible => format!("\n{name} reappears!"),
         };
+        self.emit_combat_print(&line);
         Some(CombatAiSpecialApplication::Blink {
             actor_slot,
             visibility,
@@ -5258,6 +5261,32 @@ impl PlayState {
         self.mark_visibility_dirty();
     }
 
+    /// The automatic actor driver applies its landed hits with no party
+    /// attacker credit, so the Corpser row of `combat.md §11.1` is read
+    /// from the attacking descriptor here: the narrator already printed
+    /// `<target> dragged under!` off the same attacker, but the bit was
+    /// never set and the victim kept its ordinary prompt (playtest N08).
+    fn apply_combat_monster_hit_corpser_drag(
+        &mut self,
+        attacker_slot: usize,
+        application: Option<&CombatWeaponDamageApplication>,
+    ) {
+        let Some(CombatWeaponDamageApplication::Party {
+            target_slot,
+            damage,
+        }) = application
+        else {
+            return;
+        };
+        let corpser = self
+            .combat_actors
+            .get(attacker_slot)
+            .is_some_and(|actor| actor.owner_target_class == COMBAT_CLASS_CORPSER);
+        if corpser && !damage.grazed && !damage.killed {
+            self.apply_combat_corpser_drag(*target_slot);
+        }
+    }
+
     /// `combat.md §8.1`, the dragged-under arm: after `ARGH!` "it draws
     /// one uniform `1..30` and compares it with the actor's **base
     /// step** ...; if the draw is **below** the base step the actor
@@ -6923,7 +6952,10 @@ impl PlayState {
         let resolution = resolve_combat_weapon_attack(input);
         let damage_application = match resolution {
             CombatWeaponAttackResolution::Hit { raw_damage, .. } => {
-                self.apply_combat_weapon_damage_to_target(None, target_slot, raw_damage, false)
+                let application =
+                    self.apply_combat_weapon_damage_to_target(None, target_slot, raw_damage, false);
+                self.apply_combat_monster_hit_corpser_drag(attacker_slot, application.as_ref());
+                application
             }
             // `combat.md §12`: "the **monster arm jumps directly onto**"
             // the sentinel test, "so a monster class whose attack byte is
@@ -7106,7 +7138,10 @@ impl PlayState {
         let resolution = resolve_combat_weapon_attack(input);
         let damage_application = match resolution {
             CombatWeaponAttackResolution::Hit { raw_damage, .. } => {
-                self.apply_combat_weapon_damage_to_target(None, target_slot, raw_damage, false)
+                let application =
+                    self.apply_combat_weapon_damage_to_target(None, target_slot, raw_damage, false);
+                self.apply_combat_monster_hit_corpser_drag(attacker_slot, application.as_ref());
+                application
             }
             // `combat.md §12`: "the **monster arm jumps directly onto**"
             // the sentinel test, "so a monster class whose attack byte is

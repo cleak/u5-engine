@@ -19,6 +19,8 @@
             npc_slot: 1,
         };
         prompted.pending_town_arrest = Some(prompt);
+        // As `open_town_arrest` does: the challenge is printed once.
+        prompted.message = TOWN_ARREST_SURRENDER_PROMPT.to_string();
 
         assert_eq!(
             handle_play_key_input(&mut prompted, 'q', "", Path::new("")).unwrap(),
@@ -243,6 +245,8 @@
             npc_slot: 1,
         };
         prompted.pending_town_arrest = Some(prompt);
+        // As `open_town_arrest` does: the challenge is printed once.
+        prompted.message = TOWN_ARREST_SURRENDER_PROMPT.to_string();
         prompted.active_objects.push(ActiveObject {
             type_byte: 168,
             tile: 168,

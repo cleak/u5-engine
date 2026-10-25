@@ -239,7 +239,7 @@ fn corpse_search_fixture_is_really_on_the_corpse_path() {
         state.search_active_object_treasure_marker_at(6, 5),
         Some(MoveOutcome::Searched)
     );
-    assert!(state.message.starts_with("Thou dost find\n"));
+    assert!(state.message.starts_with("\nThou dost find\n"));
     assert!(state.message.ends_with('\n'));
 }
 
@@ -261,7 +261,7 @@ fn native_moldy_corpse_enters_the_branch_but_rotting_body_does_not() {
         moldy.search_active_object_treasure_marker_at(6, 5),
         Some(MoveOutcome::Searched)
     );
-    assert!(moldy.message.starts_with("Thou dost find\n"));
+    assert!(moldy.message.starts_with("\nThou dost find\n"));
 
     let mut rotting = world_state(open_underworld_grid(), 5, 5);
     rotting.active_objects.push(ActiveObject {
@@ -294,21 +294,21 @@ fn corpse_search_census(samples: u16) -> (u32, u32, [u32; 4]) {
             // The minority arm leaves the slot in place.
             assert!(matches!(
                 message.as_str(),
-                "Thou dost find\nfood!\n" | "Thou dost find\ngold!\n"
+                "\nThou dost find\nfood!\n" | "\nThou dost find\ngold!\n"
             ));
         } else {
             // Every majority-arm outcome — plague included — leaves the slot
             // cleared and stages neither food nor gold.
             assert!(slot_cleared, "majority arm kept the slot: {message}");
-            if message == "Thou dost find\nPlague!\n" {
+            if message == "\nThou dost find\nPlague!\n" {
                 plague += 1;
-            } else if message == "Thou dost find\nnothing!\n" {
+            } else if message == "\nThou dost find\nnothing!\n" {
                 nothing[0] += 1;
-            } else if message == "Thou dost find\nworms!\n" {
+            } else if message == "\nThou dost find\nworms!\n" {
                 nothing[1] += 1;
-            } else if message == "Thou dost find\nguts!\n" {
+            } else if message == "\nThou dost find\nguts!\n" {
                 nothing[2] += 1;
-            } else if message == "Thou dost find\na bloody pulp!\n" {
+            } else if message == "\nThou dost find\na bloody pulp!\n" {
                 nothing[3] += 1;
             } else {
                 panic!("unclassified corpse-search narration: {message}");
@@ -400,7 +400,7 @@ fn corpse_search_plague_sounds_then_overwrites_the_selected_member_status() {
         let hp_before = state.party[0].hp;
         let serial_before = state.sound_effect_serial;
         state.resolve_corpse_search(1, 0);
-        if state.message != "Thou dost find\nPlague!\n" {
+        if state.message != "\nThou dost find\nPlague!\n" {
             continue;
         }
         observed = true;
@@ -436,7 +436,7 @@ fn corpse_search_narration_uses_the_published_upper_then_selector_tree() {
 
         let mut state = corpse_search_state(seed);
         state.search_active_object_treasure_marker_at(6, 5);
-        assert_eq!(state.message, format!("Thou dost find\n{expected}\n"));
+        assert_eq!(state.message, format!("\nThou dost find\n{expected}\n"));
         assert_eq!(state.prng_state, expected_state);
     }
 }
