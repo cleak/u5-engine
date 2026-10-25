@@ -5601,6 +5601,13 @@ impl PlayState {
         if stats_panel_active_cursor_resets(self, self.active_player) {
             self.active_player = None;
         }
+        // `overworld.md §6.2.4`: "performs a complete stats-panel repaint,
+        // after all HP clamp, Dead-status, and death-triggered selector
+        // writes above. This is an **immediate** repaint made by the helper
+        // itself as its last act" - so a caller outside any refreshing
+        // command (the falls chain's post-action arm) still shows the new HP
+        // and the Dead letter at once (playtest Q11).
+        self.repaint_stats_panel();
         OutdoorImpactMemberDamage {
             slot,
             roll: amount,
