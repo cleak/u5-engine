@@ -2034,12 +2034,6 @@ impl PlayState {
         true
     }
 
-    pub fn shrine_prompt_at_current_position(&self, game_dir: &Path) -> io::Result<Option<String>> {
-        Ok(self
-            .current_shrine_entry(game_dir)?
-            .map(|entry| shrine_prompt_message(entry.virtue)))
-    }
-
     pub fn start_shrine_prompt_at_current_position(
         &mut self,
         game_dir: &Path,

@@ -3,6 +3,23 @@
 // Each test names the published sentence it pins and the playtest id whose
 // reproduction it captures.
 
+/// `magic.md §5` Step 2: the dispatcher prints `Spell name:` and a colon
+/// prompt; no spec document carries a `Cast what? Use C1IL/...` help
+/// sentence. A `C` suffix with no selector letters prints nothing, the same
+/// treatment playtest N07 gave the N/U/M/R suffixes (Q01).
+#[test]
+fn playtest_q01_cast_suffix_without_letters_prints_no_help_sentence() {
+    let dir = debug_game_dir();
+    let mut state = world_state(open_world_grid(), 5, 5);
+    for suffix in ["9", "-"] {
+        let outcome = state.cast_spell_from_suffix(suffix, &dir).unwrap();
+        assert_eq!(outcome, MoveOutcome::Blocked);
+        assert!(state.message.is_empty(), "{suffix:?}: {:?}", state.message);
+    }
+    assert!(cast_prompt_message().is_empty());
+    let _ = fs::remove_dir_all(dir);
+}
+
 /// `magic.md §6` step 4: after the shortfall notice the quantity prompt "is
 /// asked again" once, and in its key table "Anything else - space, letter,
 /// punctuation - Discarded: no echo, no other effect, prompt still waiting".
