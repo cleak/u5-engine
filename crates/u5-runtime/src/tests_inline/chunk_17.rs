@@ -651,8 +651,18 @@
         assert!(state.active_cast_followup.is_some());
         assert!(state.message.starts_with("Direction-"));
 
+        // `input.md §5`/§11: an unmodified top-row digit is an ordinary
+        // digit, which this prompt ignores (p10 R13).
+        assert!(
+            state
+                .step_active_cast_followup('6', "", Path::new(""))
+                .unwrap()
+                .is_none()
+        );
+        assert!(state.active_cast_followup.is_some());
+
         let result = state
-            .step_active_cast_followup('6', "", Path::new(""))
+            .step_active_cast_followup(char::from(INPUT_CODE_EAST), "", Path::new(""))
             .unwrap()
             .expect("east direction should finish Blink");
         assert_eq!(result.0, MoveOutcome::Cast);

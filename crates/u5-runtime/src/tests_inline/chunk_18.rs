@@ -733,7 +733,7 @@
         assert_eq!(state.party[0].mana, 2);
 
         let result = state
-            .step_active_cast_followup('6', "", Path::new(""))
+            .step_active_cast_followup(char::from(INPUT_CODE_EAST), "", Path::new(""))
             .unwrap()
             .expect("east finishes Rel Hur");
         assert_eq!(result.0, MoveOutcome::Cast);

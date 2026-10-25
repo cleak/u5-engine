@@ -1939,8 +1939,18 @@ impl PlayState {
                         }
                         return Ok(None);
                     }
-                    let Some(direction) =
-                        Direction::from_prompt_key(ch).filter(|direction| direction.is_cardinal())
+                    // `input.md §5`: only a translated key - the scancode
+                    // table or a digit typed with a modifier, which arrive
+                    // here as direction codes - is a direction; "With no
+                    // modifier held the same keys are ordinary digits", and
+                    // at this prompt "Other keys are ignored and the prompt
+                    // reads again" (`§11`). A plain `8`/`2`/`4`/`6` used to
+                    // answer it (p10 R13).
+                    let Some(direction) = u8::try_from(u32::from(ch))
+                        .ok()
+                        .filter(|byte| crate::input_code_direction(*byte).is_some())
+                        .and_then(|_| Direction::from_play_key(ch))
+                        .filter(|direction| direction.is_cardinal())
                     else {
                         continue;
                     };
