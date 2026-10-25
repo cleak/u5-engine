@@ -1066,8 +1066,26 @@
             }
             state.clock
         };
+        let start = dungeon_state(open_dungeon_record(), 0, 1, 1).clock;
         let after_pass = run(' ');
         assert_eq!(run('P'), after_pass, "P;Z and Space;Z are both two iterations");
+        // Absolute charge, with no trailing keys: a lone `Z` is one
+        // iteration (its loop-head minute and its own acted advance must not
+        // both charge), and `Space;Z` / `P;Z` are two.
+        let clock_after = |keys: &[char]| {
+            let mut state = dungeon_state(open_dungeon_record(), 0, 1, 1);
+            for key in keys {
+                handle_play_key_input(&mut state, *key, "", Path::new("")).unwrap();
+            }
+            state.clock
+        };
+        let mut one_minute = start;
+        one_minute.advance_minutes(1);
+        let mut two_minutes = start;
+        two_minutes.advance_minutes(2);
+        assert_eq!(clock_after(&['Z']), one_minute, "Z alone spends one minute");
+        assert_eq!(clock_after(&[' ', 'Z']), two_minutes);
+        assert_eq!(clock_after(&['P', 'Z']), two_minutes);
     }
 
     #[test]
