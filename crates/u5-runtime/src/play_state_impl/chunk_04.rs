@@ -6379,12 +6379,14 @@ impl PlayState {
         let joined_name = party_name_to_string(&self.party_roster[target_index].name)
             .unwrap_or_else(|| candidate_name.trim().to_string());
         if active_len < SAVE_PARTY_SIZE_MAX as usize {
-            let joining = self.party_roster.remove(target_index);
-            let joining_name = joining.name;
-            self.party_roster.insert(active_len, joining);
-            // Lodged guests are whole roster records; the reserve records
-            // this rotation shifts carry their registry slots with them.
-            self.shift_inn_registry_for_roster_move(target_index, active_len);
+            let joining_name = self.party_roster[target_index].name;
+            // §7.6: "the matched roster record is swapped into the
+            // active-party insertion slot" - a swap with that slot's
+            // occupant, not a shift of the reserve records between
+            // (playtest Q15). Lodged guests are whole roster records, so
+            // the two swapped records carry their registry slots with them.
+            self.party_roster.swap(active_len, target_index);
+            self.swap_inn_registry_slots(active_len, target_index);
             // §7.6: "that record's inn-lodging marker is cleared" - the
             // record's own byte `0x1F` (`formats/saved-gam.md` §3.3), which
             // this engine also mirrors in its registry entry for the

@@ -7203,6 +7203,14 @@ fn end_to_end_shipwright_greeting_opens_the_menu_without_a_dungeon_return() {
     use crate::shop_runtime::ShipBrokerState;
     use crate::shop_session::ActiveShopSession;
 
+    // A synthetic record `119`: the engine carries no copy of the shipped
+    // menu text (playtest Q16), so the menu needs a `SHOPPE.DAT`.
+    let dir = debug_game_dir();
+    let shoppe = shoppe_dat_with_records(&[(
+        crate::shops::SHOPPE_RECORD_SHIPWRIGHT_MENU,
+        b"\n\n\"Menu line.\"".as_slice(),
+    )]);
+    std::fs::write(dir.join("SHOPPE.DAT"), shoppe).unwrap();
     let mut state = test_state(open_grid(), 3, 4);
     state.gold = 700;
     state.active_shop = Some(ActiveShopSession::ShipBroker(
@@ -7211,12 +7219,13 @@ fn end_to_end_shipwright_greeting_opens_the_menu_without_a_dungeon_return() {
     // A town visit, so there is no dungeon return record.
     state.return_world = None;
 
-    handle_play_key_input(&mut state, 'Y', "", Path::new("")).unwrap();
+    handle_play_key_input(&mut state, 'Y', "", &dir).unwrap();
     assert!(
-        !state.message.trim().is_empty(),
+        state.message.contains("Menu line."),
         "Y at the greeting must print the Frigate/Skiff menu, got {:?}",
         state.message
     );
+    let _ = fs::remove_dir_all(dir);
 }
 
 #[test]

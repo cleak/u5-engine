@@ -538,18 +538,11 @@ pub fn mix_prompt_message() -> String {
     String::new()
 }
 
-pub fn shrine_prompt_message(virtue: ShrineVirtue) -> String {
-    format!(
-        "Meditate at the Shrine of {}? Use M{} or M{}/<offering-digit>.",
-        virtue.name(),
-        virtue.mantra(),
-        virtue.mantra()
-    )
-}
-
+/// See [`mix_prompt_message`]: `magic.md §5` Step 2 prints only `Spell
+/// name:` and its colon prompt, so a `C` suffix with no selector letters
+/// prints nothing either (playtest N07, Q01).
 pub fn cast_prompt_message() -> String {
-    "Cast what? Use C1IL/C1AZ/C1AN2/C1M2/C1AY6/C1MV2/C1CIM2/C1IS/C1RT/C1AI/C1IW/C1IMX/C1AS6/C1LV/C1HR/C1IP6/C1PU/C1DP/C1AG6/C1AEP/C1EIP/C1IQW/C1AWY/C1PRV2/C1AT."
-        .to_string()
+    String::new()
 }
 
 /// See [`mix_prompt_message`] (playtest N07).

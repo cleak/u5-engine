@@ -3749,7 +3749,13 @@ impl PlayState {
         let Some(report) = self.pending_hourly_status_message.take() else {
             return;
         };
-        if self.message.is_empty() {
+        // A slot the transcript already carries (the command's own result,
+        // flushed or committed onto its echo row while the turn advanced)
+        // is spent: appending to it made the next flush log the whole slot
+        // again, so `Shamino` / `Thou dost see cobble` printed twice above
+        // `Starving!` (review of playtest Q14). The report takes the slot on
+        // its own instead.
+        if self.message.is_empty() || self.message == self.message_flushed {
             self.message = report;
         } else {
             self.message.push(' ');
