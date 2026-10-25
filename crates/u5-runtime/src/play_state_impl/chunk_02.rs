@@ -975,7 +975,7 @@ impl PlayState {
                     self.request_cast_argument(CastArgumentRequest::Caster);
                     return Ok(MoveOutcome::Blocked);
                 };
-                Ok(self.cast_dispel_field(caster_index, parse_inline_cardinal_direction(suffix)))
+                Ok(self.cast_dispel_field(caster_index, parse_inline_cast_direction(suffix)))
             }
             "AEP" => {
                 let Some(caster_index) = parse_inline_party_index(suffix) else {
@@ -984,7 +984,7 @@ impl PlayState {
                 };
                 self.cast_magic_lock(
                     caster_index,
-                    parse_inline_cardinal_direction(suffix),
+                    parse_inline_cast_direction(suffix),
                     inline_explicit_pass(suffix),
                     game_dir,
                 )
@@ -1007,7 +1007,7 @@ impl PlayState {
                 };
                 self.cast_open_spell(
                     caster_index,
-                    parse_inline_cardinal_direction(suffix),
+                    parse_inline_cast_direction(suffix),
                     inline_explicit_pass(suffix),
                     game_dir,
                 )
@@ -1033,7 +1033,7 @@ impl PlayState {
                 };
                 Ok(self.cast_vanish(
                     caster_index,
-                    parse_inline_cardinal_direction(suffix),
+                    parse_inline_cast_direction(suffix),
                     inline_explicit_pass(suffix),
                 ))
             }
@@ -1191,7 +1191,7 @@ impl PlayState {
                     caster_index,
                     FIRE_FIELD_SPELL_INDEX,
                     FIELD_SPELL_COST,
-                    parse_inline_cardinal_direction(suffix),
+                    parse_inline_cast_direction(suffix),
                     0x82,
                     0x8a,
                     "Fire field",
@@ -1215,7 +1215,7 @@ impl PlayState {
                     caster_index,
                     POISON_FIELD_SPELL_INDEX,
                     FIELD_SPELL_COST,
-                    parse_inline_cardinal_direction(suffix),
+                    parse_inline_cast_direction(suffix),
                     0x81,
                     0x89,
                     "Poison field",
@@ -1239,7 +1239,7 @@ impl PlayState {
                     caster_index,
                     SLEEP_FIELD_SPELL_INDEX,
                     FIELD_SPELL_COST,
-                    parse_inline_cardinal_direction(suffix),
+                    parse_inline_cast_direction(suffix),
                     0x80,
                     0x88,
                     "Sleep field",
@@ -1283,7 +1283,7 @@ impl PlayState {
                     caster_index,
                     ENERGY_FIELD_SPELL_INDEX,
                     ENERGY_FIELD_COST,
-                    parse_inline_cardinal_direction(suffix),
+                    parse_inline_cast_direction(suffix),
                     0x83,
                     0x8b,
                     "Energy field",
@@ -1333,9 +1333,9 @@ impl PlayState {
                 }
                 self.cast_blink(
                     caster_index,
-                    parse_inline_cardinal_direction(suffix),
+                    parse_inline_cast_direction(suffix),
                     inline_explicit_pass(suffix)
-                        && parse_inline_cardinal_direction(suffix).is_none(),
+                        && parse_inline_cast_direction(suffix).is_none(),
                     game_dir,
                 )
             }
@@ -1355,7 +1355,7 @@ impl PlayState {
                     self.message = "Not here!".to_string();
                     return Ok(MoveOutcome::Blocked);
                 }
-                let Some(direction) = parse_inline_cardinal_direction(suffix) else {
+                let Some(direction) = parse_inline_cast_direction(suffix) else {
                     self.request_cast_argument(CastArgumentRequest::Direction);
                     return Ok(MoveOutcome::Blocked);
                 };
@@ -1396,7 +1396,7 @@ impl PlayState {
                     self.message = "Not here!".to_string();
                     return Ok(MoveOutcome::Blocked);
                 }
-                let Some(direction) = parse_inline_cardinal_direction(suffix) else {
+                let Some(direction) = parse_inline_cast_direction(suffix) else {
                     self.request_cast_argument(CastArgumentRequest::Direction);
                     return Ok(MoveOutcome::Blocked);
                 };
@@ -1412,7 +1412,7 @@ impl PlayState {
                     self.request_cast_argument(CastArgumentRequest::Caster);
                     return Ok(MoveOutcome::Blocked);
                 };
-                let direction = parse_inline_cardinal_direction(suffix);
+                let direction = parse_inline_cast_direction(suffix);
                 Ok(self.cast_rel_hur(
                     caster_index,
                     direction,
@@ -1460,7 +1460,7 @@ impl PlayState {
                 };
                 self.cast_unlock_magic(
                     caster_index,
-                    parse_inline_cardinal_direction(suffix),
+                    parse_inline_cast_direction(suffix),
                     inline_explicit_pass(suffix),
                     game_dir,
                 )
@@ -1492,7 +1492,7 @@ impl PlayState {
                     self.message = "Not here!".to_string();
                     return Ok(MoveOutcome::Blocked);
                 }
-                let Some(direction) = parse_inline_cardinal_direction(suffix) else {
+                let Some(direction) = parse_inline_cast_direction(suffix) else {
                     self.request_cast_argument(CastArgumentRequest::Direction);
                     return Ok(MoveOutcome::Blocked);
                 };
@@ -1519,7 +1519,7 @@ impl PlayState {
                     self.message = "Not here!".to_string();
                     return Ok(MoveOutcome::Blocked);
                 }
-                let Some(direction) = parse_inline_cardinal_direction(suffix) else {
+                let Some(direction) = parse_inline_cast_direction(suffix) else {
                     self.request_cast_argument(CastArgumentRequest::Direction);
                     return Ok(MoveOutcome::Blocked);
                 };

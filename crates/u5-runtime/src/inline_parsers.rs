@@ -298,6 +298,17 @@ pub fn parse_inline_cardinal_direction(value: &str) -> Option<Direction> {
     })
 }
 
+/// The direction answer of a composed cast suffix, `<caster digit><spell
+/// code><answer>`. The leading caster number is the party slot, not a key
+/// the player pressed: `commands.md §5` makes a digit at the command prompt
+/// "Set Active Player", and `input.md §5` says an unmodified digit is never
+/// a direction. Scanning the whole suffix read a caster `2`/`4`/`6`/`8` as
+/// South/West/East/North, so the spell skipped its `Direction-` prompt
+/// (p10 R08).
+pub fn parse_inline_cast_direction(value: &str) -> Option<Direction> {
+    parse_inline_cardinal_direction(value.trim_start_matches(|ch: char| ch.is_ascii_digit()))
+}
+
 pub fn parse_inline_blink_combat_coordinate(value: &str) -> Option<(u8, u8)> {
     parse_inline_combat_spell_coordinate(value, "IP")
 }

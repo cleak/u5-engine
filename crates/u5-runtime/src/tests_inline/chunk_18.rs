@@ -748,6 +748,37 @@
             .any(|entry| entry.text == format!("{SPELL_DIRECTION_PROMPT_PREFIX}East")));
     }
 
+    /// p10 R08. `commands.md §5`: a digit at the command prompt only selects
+    /// the active player, and `input.md §5`: an unmodified digit is never a
+    /// direction. A caster in party slot 2 used to have its own slot number
+    /// read as South, so Rel Hur changed the wind with no `Direction-`
+    /// prompt at all.
+    #[test]
+    fn cast_rel_hur_by_a_second_member_still_prompts_for_its_direction() {
+        let mut state = britannia_state(open_world_grid(), 5, 5);
+        let mut second = state.party[0].clone();
+        second.slot = 1;
+        state.party.push(second);
+        state.spell_charges[REL_HUR_SPELL_INDEX] = 2;
+        for member in &mut state.party {
+            member.mana = 4;
+            member.level = 2;
+        }
+        state.wind = WindState::Calm;
+
+        state.active_player = Some(1);
+        assert_eq!(state.start_cast_spell_prompt(), MoveOutcome::Observed);
+        assert!(state.step_active_cast('H', "R", Path::new("")).unwrap().is_none());
+        assert!(state.step_active_cast(' ', "", Path::new("")).unwrap().is_none());
+        assert!(
+            state.active_cast_followup.is_some(),
+            "the caster's slot digit is not a direction"
+        );
+        assert_eq!(state.message, SPELL_DIRECTION_PROMPT_PREFIX);
+        assert_eq!(state.wind, WindState::Calm);
+        assert_eq!(state.turn, 0);
+    }
+
     #[test]
     fn cast_rel_hur_pass_consumes_cast_without_changing_wind() {
         let mut state = britannia_state(open_world_grid(), 5, 5);
