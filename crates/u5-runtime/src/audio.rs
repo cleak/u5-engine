@@ -1954,6 +1954,17 @@ pub enum SoundEffect {
     ShipCollisionRumble,
     /// `§7.4` rough-seas impact before party damage.
     RoughSeasImpactRumble,
+    /// `§5.3` / `§8.2` (added 2026-10-25, u5-spec#300 Q31): a combat hit
+    /// landing on a party target inside the arena, "between the two halves
+    /// of the target member's stats-row flash" - step 40, target 3000,
+    /// 100..500 Hz, 75 updates. "It has the same numbers as the trap row
+    /// but is a separate call from the combat hit presentation, not the
+    /// shared trap resolver."
+    CombatPartyHitBurst,
+    /// `§5.3` / `§8.2` (added 2026-10-25, u5-spec#300 Q31): a combat hit
+    /// on a monster target, or any target outside the arena - the
+    /// 300-update impact rumble `(10, 3000, 2000)`, with no flash.
+    CombatMonsterHitBurst,
     /// `§5.3` dungeon sleep or poison field hit, once per member whose save
     /// fails (u5-spec#298 Q7; `dungeon-mode.md §8.1`).
     StatusFieldRumble,
@@ -2157,6 +2168,8 @@ impl SoundEffect {
             SoundEffect::DamageRumble => damage_rumble(jitter),
             SoundEffect::ShipCollisionRumble => ship_collision_rumble(jitter),
             SoundEffect::RoughSeasImpactRumble => rough_seas_impact_rumble(jitter),
+            SoundEffect::CombatPartyHitBurst => trap_rumble(jitter),
+            SoundEffect::CombatMonsterHitBurst => rough_seas_impact_rumble(jitter),
             SoundEffect::StatusFieldRumble => status_field_rumble(jitter),
             SoundEffect::SharedVariant { variant } => shared_variant(*variant, jitter),
             SoundEffect::CircleRumbleLead { circle } => circle_rumble_lead(*circle, jitter),
@@ -3087,6 +3100,8 @@ mod tests {
             SoundEffect::DamageRumble,
             SoundEffect::ShipCollisionRumble,
             SoundEffect::RoughSeasImpactRumble,
+            SoundEffect::CombatPartyHitBurst,
+            SoundEffect::CombatMonsterHitBurst,
             SoundEffect::StatusFieldRumble,
             SoundEffect::CorpsePlagueRumble,
             SoundEffect::SharedVariant { variant: 0 },

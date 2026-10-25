@@ -239,3 +239,58 @@ fn playtest_q10_combat_arena_keeps_the_pre_combat_ribbon_gaps_frozen() {
     let arena = gameplay_chrome_content(&room);
     assert_eq!((arena.top, arena.bottom), (before.top, before.bottom));
 }
+
+/// `combat.md §11.1` "Order, stated once" step 2 and `audio.md §5.3` / `§8.2`
+/// (added 2026-10-25, u5-spec#300 Q31, `RETRACTIONS.md` R614): a landed hit
+/// plays the impact burst before the damage - "for a **party** target that
+/// member's stats row is flashed around a 75-update noise burst (random
+/// rumble step 40, target 3000, 100..500 Hz)", "for a **monster** target ...
+/// a 300-update noise burst alone (step 10, target 3000, 100..2000 Hz)". A
+/// miss plays no burst. The engine played nothing at all on a landed hit.
+#[test]
+fn spec300_q31_a_landed_hit_plays_the_target_sides_impact_burst() {
+    let new_jitter = audio::RumbleJitter::new;
+    assert_eq!(
+        SoundEffect::CombatPartyHitBurst.program(&mut new_jitter()),
+        audio::random_rumble(40, 3000, 500, &mut new_jitter())
+    );
+    assert_eq!(
+        SoundEffect::CombatMonsterHitBurst.program(&mut new_jitter()),
+        audio::random_rumble(10, 3000, 2000, &mut new_jitter())
+    );
+
+    // A party member's landed hit on a monster: the monster form.
+    for forced_hit in [true, false] {
+        let mut state = combat_ai_turn_state(6, 5);
+        let serial = state.sound_effect_serial;
+        state
+            .resolve_and_apply_combat_bare_handed_attack(0, 8, 30, 10, 0, Some(forced_hit))
+            .expect("an adjacent bare-handed attempt resolves");
+        let sounds = state.sound_effects_after(serial);
+        assert_eq!(
+            sounds.iter().filter(|e| **e == SoundEffect::CombatMonsterHitBurst).count(),
+            usize::from(forced_hit),
+            "forced_hit {forced_hit}: {sounds:?}"
+        );
+        assert!(!sounds.contains(&SoundEffect::CombatPartyHitBurst));
+        if forced_hit {
+            assert_eq!(sounds[1], SoundEffect::CombatMonsterHitBurst, "{sounds:?}");
+        }
+    }
+
+    // A monster's landed hit on a party member: the party form, and no
+    // second damage rumble ("a party hit in combat sounds this one burst").
+    let mut state = combat_ai_turn_state(6, 5);
+    let serial = state.sound_effect_serial;
+    state
+        .resolve_and_apply_combat_monster_attack(8, 0, 30, false, 0, Some(true))
+        .expect("an adjacent monster attack resolves");
+    let sounds = state.sound_effects_after(serial);
+    assert_eq!(
+        sounds.iter().filter(|e| **e == SoundEffect::CombatPartyHitBurst).count(),
+        1,
+        "{sounds:?}"
+    );
+    assert!(!sounds.contains(&SoundEffect::CombatMonsterHitBurst));
+    assert!(!sounds.contains(&SoundEffect::DamageRumble));
+}

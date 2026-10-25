@@ -5239,6 +5239,40 @@ impl PlayState {
         }
     }
 
+    /// `combat.md §11.1`, "Order, stated once" step 2 (corrected 2026-10-25,
+    /// u5-spec#300 Q31, `RETRACTIONS.md` R614): when a hit lands, "the
+    /// impact presentation runs first": "for a **party** target that
+    /// member's stats row is flashed around a 75-update noise burst (random
+    /// rumble step 40, target 3000, 100..500 Hz ...), which is the only
+    /// sound of a combat party hit ...; for a **monster** target, or any
+    /// target outside the arena, a 300-update noise burst alone (step 10,
+    /// target 3000, 100..2000 Hz) with no flash; the party form is selected
+    /// by the target descriptor's party-side bit". It precedes the hit
+    /// newline and the damage, and neither form touches the gameplay
+    /// generator. The engine models no separate row-flash raster, so only
+    /// the burst is recorded.
+    pub(crate) fn emit_combat_hit_presentation(
+        &mut self,
+        target_slot: usize,
+        resolution: &CombatWeaponAttackResolution,
+    ) {
+        if !matches!(
+            resolution,
+            CombatWeaponAttackResolution::Hit { .. } | CombatWeaponAttackResolution::Special { .. }
+        ) {
+            return;
+        }
+        let party_target = self
+            .combat_actors
+            .get(target_slot)
+            .is_some_and(|actor| actor.is_party_side());
+        self.emit_sound_effect(if party_target {
+            SoundEffect::CombatPartyHitBurst
+        } else {
+            SoundEffect::CombatMonsterHitBurst
+        });
+    }
+
     /// `combat.md` 11.1, census row "Damage zero or negative | both |
     /// `<target> grazed!` **and nothing else** ... | the rising action-snap cue
     /// (`audio.md`, 1200 toward 2000 Hz)", and 12: the marker's "first [reader]
@@ -6487,6 +6521,7 @@ impl PlayState {
             input.defence_roll = self.combat_defence_roll(defence_rating);
         }
         let resolution = resolve_combat_weapon_attack(input);
+        self.emit_combat_hit_presentation(target_slot, &resolution);
         let damage_application = match resolution {
             CombatWeaponAttackResolution::Hit { raw_damage, .. } => self
                 .apply_combat_weapon_damage_to_target(
@@ -6759,6 +6794,7 @@ impl PlayState {
                 input.defence_roll = self.combat_defence_roll(defence_rating);
             }
             let resolution = resolve_combat_weapon_attack(input);
+            self.emit_combat_hit_presentation(target_slot, &resolution);
             let damage_application = match resolution {
                 CombatWeaponAttackResolution::Hit { raw_damage, .. } => {
                     self.apply_combat_weapon_damage_to_target(None, target_slot, raw_damage, true)
@@ -6982,6 +7018,7 @@ impl PlayState {
             input.defence_roll = self.combat_defence_roll(defence_rating);
         }
         let resolution = resolve_combat_weapon_attack(input);
+        self.emit_combat_hit_presentation(target_slot, &resolution);
         let damage_application = match resolution {
             CombatWeaponAttackResolution::Hit { raw_damage, .. } => {
                 let application =
@@ -7168,6 +7205,7 @@ impl PlayState {
             input.defence_roll = self.combat_defence_roll(defence_rating);
         }
         let resolution = resolve_combat_weapon_attack(input);
+        self.emit_combat_hit_presentation(target_slot, &resolution);
         let damage_application = match resolution {
             CombatWeaponAttackResolution::Hit { raw_damage, .. } => {
                 let application =
@@ -7931,6 +7969,7 @@ impl PlayState {
             input.defence_roll = self.combat_defence_roll(defence_rating);
         }
         let resolution = resolve_combat_weapon_attack(input);
+        self.emit_combat_hit_presentation(target_slot, &resolution);
         let damage_application = match resolution {
             CombatWeaponAttackResolution::Hit { raw_damage, .. } => self
                 .apply_combat_weapon_damage_to_target(
