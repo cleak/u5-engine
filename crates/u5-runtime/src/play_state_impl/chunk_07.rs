@@ -4910,11 +4910,13 @@ impl PlayState {
         self.sync_player_object();
         self.mark_visibility_dirty();
         self.advance_town_arrest_wait_to_morning();
-        // `moons.md §3` (issue #190): "The town arrest jail relocation
-        // refreshes. The relocation arm - the one that moves the party to
-        // the Yew jail, runs the clock forward to 08:00 in repeated
-        // twenty-minute cleanup calls (`systems/town-mode.md` Section 14)
-        // and sets the floor byte to the entry floor - ends by running the
+        // `moons.md §3` (issue #190; wake time corrected 2026-10-25,
+        // u5-spec#300 Q33, `RETRACTIONS.md` R617): "The town arrest jail
+        // relocation refreshes. The relocation arm - the one that moves the
+        // party to the Yew jail, runs the clock forward into the 08:00 hour
+        // in repeated twenty-minute cleanup calls" - so the wake is 08:00 to
+        // 08:19, which the loop above already does by testing the hour
+        // before each step - "and sets the floor byte to the entry floor - ends by running the
         // town entry pass, so it reaches the floor loader and repaints
         // unconditionally; because it clears the floor byte first, that
         // repaint takes the **normal** arm rather than the erase arm."

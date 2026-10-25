@@ -11478,6 +11478,20 @@ fn town_arrest_release_loop_constants_match_spec() {
 }
 
 #[test]
+fn town_arrest_wakes_at_eight_plus_the_arrest_minute_mod_twenty() {
+    // `RETRACTIONS.md` R617 (u5-spec#300 Q33; `moons.md §3` jail relocation
+    // paragraph): the loop "stops at the first step landing in the 08:00
+    // hour, so the party wakes at 08:(arrest minute modulo 20)". Executed:
+    // "an arrest at 14:39 woke at 08:19 the next day after 53 steps".
+    let mut state = test_state(open_grid(), 1, 1);
+    state.clock.hour = 14;
+    state.clock.minute = 39;
+    let steps = state.advance_town_arrest_wait_to_morning();
+    assert_eq!((state.clock.hour, state.clock.minute), (8, 19));
+    assert_eq!(steps, 53);
+}
+
+#[test]
 fn sea_creature_spawn_aux_seed_only_for_water_creature_facing_frames() {
     // encounters.md §4: only the pirate-ship / water-creature facing-frame
     // family 0x2C..=0x2F receives the 100-unit aux seed at spawn time.
