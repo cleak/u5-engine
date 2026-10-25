@@ -304,6 +304,9 @@ pub struct EnvelopeSegment {
 /// text, the notice plays one software envelope, `(1, 2000, 60000, 1,
 /// 6600)` in the tuple order of `systems/audio.md` Section 5.4. The five
 /// values are constants: they do not depend on which Shadowlord is named".
+/// `audio.md §8.6` (added 2026-10-25): it is "a hideout town's entry notice
+/// and each Stonegate notice"; one fixed pitch that swells and fades,
+/// blocking.
 pub const SHADOWLORD_PRESENCE_NOTICE_ENVELOPE: EnvelopeSegment =
     EnvelopeSegment::new(1, 2000, 60_000, 1, 6600);
 
@@ -1251,13 +1254,6 @@ pub const MOONGATE_TRANSIT_ENVELOPE: EnvelopeSegment =
 /// period".
 pub const SHADOWLORD_YELL_SUMMON_ENVELOPE: EnvelopeSegment =
     EnvelopeSegment::new(2, 2000, 30_000, 1, 10_400);
-/// `audio.md §8.6` (added 2026-10-25, u5-spec#300 Q4 and Q17): the
-/// Shadowlord presence notice - "a hideout town's entry notice and each
-/// Stonegate notice" - runs `(1, 2000, 60000, 1, 6600)` "After the notice
-/// text prints". "The five values are constants, the same for all three
-/// Shadowlords"; one fixed pitch that swells and fades, blocking.
-pub const SHADOWLORD_PRESENCE_NOTICE_ENVELOPE: EnvelopeSegment =
-    EnvelopeSegment::new(1, 2000, 60_000, 1, 6600);
 /// `audio.md §6.1`'s absorb cue, the manual envelope every absorbed cast
 /// plays: "phase increment 9800, idle count 1, 28000 iterations, initial
 /// comparison 1000 and comparison increment 2."
@@ -2157,9 +2153,6 @@ pub enum SoundEffect {
     /// Yell, after `\nA_shadowlord_appears\n` prints and before the
     /// single-cell converge. See [`SHADOWLORD_YELL_SUMMON_ENVELOPE`].
     ShadowlordYellSummon,
-    /// `§8.6` (added 2026-10-25, u5-spec#300 Q4/Q17): one Shadowlord
-    /// presence notice tone. See [`SHADOWLORD_PRESENCE_NOTICE_ENVELOPE`].
-    ShadowlordPresenceNotice,
     /// `§8.10` ambient scenery tick, grandfather-clock tick-tock: a blocking
     /// tone of 3000 Hz for 3 units at sub-counter residue 0 and 2000 Hz at
     /// residue 4, while the hour-chime countdown is zero.
@@ -2294,9 +2287,6 @@ impl SoundEffect {
                 }
             }
             SoundEffect::ShadowlordYellSummon => envelope_program(SHADOWLORD_YELL_SUMMON_ENVELOPE),
-            SoundEffect::ShadowlordPresenceNotice => {
-                envelope_program(SHADOWLORD_PRESENCE_NOTICE_ENVELOPE)
-            }
             SoundEffect::AmbientClockChime => envelope_program(AMBIENT_CLOCK_CHIME_ENVELOPE),
             SoundEffect::AmbientWaterfallRumble => random_rumble(20, 60, 10_000, jitter),
             SoundEffect::AmbientFountainRumble => random_rumble(10, 30, 25_000, jitter),
