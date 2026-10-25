@@ -378,6 +378,21 @@ pub const PLAYER_ACTIVE_OBJECT_PHASE: u8 = 0x00;
 /// [`STEADY_PHASE`] here instead freezes every arena sprite for the whole
 /// fight, which is exactly what the pre-fix engine did.
 pub const COMBAT_PLACEMENT_ACTIVE_OBJECT_PHASE: u8 = 0x00;
+/// Phase byte (`+0x06`) a town-family NPC record carries when the
+/// world-mutation helper links it to an active-object slot.
+///
+/// `active-objects.md §4`: the initialiser "writes them into the first six
+/// bytes of the record in one pass, leaving the animation and auxiliary bytes
+/// to the caller or later animator", and `npc-schedules.md §11` fills the slot
+/// only "with the NPC's tile, type, and new coordinates". Nothing publishes
+/// the freeze sentinel for an NPC slot; `active-objects.md §8` reserves it for
+/// a slot that "Only gameplay can release". `animation.md §13.4` records the
+/// capture: "town NPCs animated in place without ever stepping", and "a pair
+/// of stationary castle guards each advanced one frame per **eight** ticks".
+/// Seeding [`STEADY_PHASE`] froze the whole town cast (playtest N14), the
+/// same mistake [`COMBAT_PLACEMENT_ACTIVE_OBJECT_PHASE`] fixed for arenas.
+/// Zero routes the slot straight to its script's first step.
+pub const NPC_PLACEMENT_ACTIVE_OBJECT_PHASE: u8 = 0x00;
 /// `systems/chargen.md §6` / `systems/save-load.md`: the canonical
 /// campaign start date. The year/month/day match the chargen
 /// starting date documented in chargen.md; the start hour is

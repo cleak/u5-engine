@@ -694,7 +694,18 @@ impl PlayState {
                 object.tile = NPC_HIDDEN_SPRITE_TILE;
             }
             if let Some(active_object) = self.active_objects.get_mut(slot) {
-                *active_object = object;
+                // `npc-schedules.md §11`: "Moving on the player's floor,
+                // already linked. Update the linked slot's coordinates." The
+                // displayed frame and the packed phase byte belong to the
+                // animator (`active-objects.md §8`), so a step must not
+                // restart the sprite's script (playtest N14).
+                if active_object.type_byte == type_byte {
+                    active_object.x = x;
+                    active_object.y = y;
+                    active_object.z = z as i8;
+                } else {
+                    *active_object = object;
+                }
             } else if let Some(slot) = self.allocate_active_object_slot(object) {
                 self.npcs[index].active_object = Some(slot);
             } else {

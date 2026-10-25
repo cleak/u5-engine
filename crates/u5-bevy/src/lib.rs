@@ -10450,6 +10450,21 @@ fn keys_pressed_in_typed_order(
     ordered
 }
 
+/// `input.md §6`: whether the read about to take a typed key leaves the rest
+/// of the queue for later reads.
+///
+/// A cinematic hold reads nothing, so what is typed during it stays queued.
+/// The rescue's verdict acknowledgement is not a hold: `blackthorn.md §7`
+/// step 19 is "the cinematic's only blocking key read", and it "uses the
+/// ordinary command reader", so with type-ahead off "the queue is emptied on
+/// every read". Treating it as a hold replayed the rest of a burst typed
+/// during the narration as commands after the hand-off (playtest N21).
+fn visual_read_honours_queue(state: &PlayState) -> bool {
+    state.typeahead_buffer_enabled
+        || visual_read_forces_typeahead(state)
+        || (state.cinematic_hold_owns_input() && !state.blackthorn_rescue_awaiting_acknowledgement())
+}
+
 /// `input.md §6`: whether a read in the current state honours the rest of the
 /// queue whatever the player's setting. "The free-text line reader saves the
 /// setting, forces type-ahead on for the duration of a typed line, and
@@ -12699,7 +12714,9 @@ fn step_visual_intro_story_panel(
         return VisualIntroPanelOutcome::ReturnToMenu {
             subflow: IntroSubflow::StorySlides,
             result: IntroSubflowResult::ReturnedToMenu,
-            message: "Ultima V Introduction finished; returning to the intro menu.".to_string(),
+            // `systems/intro.md §10`: "one further keypress ends the
+            // sequence" - with no message of its own (playtest N18).
+            message: String::new(),
         };
     }
     *step += 1;
@@ -13199,6 +13216,20 @@ fn cancel_visual_intro_panel(intro: &mut VisualIntroState) -> bool {
     if matches!(intro.panel, VisualIntroPanel::U4Transfer { .. }) {
         return step_visual_intro_panel(intro, '\x1b');
     }
+    // `systems/chargen.md §2`: chargen "never returns control to the intro
+    // menu mid-run" - it leaves by completing or "if the player declines to
+    // enter a name". Escape at the name reader "erases the whole typed
+    // buffer" (`systems/text-output.md §10.6`), and the gender prompt loops
+    // "silently on any other key" (`§4`). `systems/intro.md §10`: every
+    // story step waits for "a non-zero key", and "the key that dismisses step
+    // n - 1 is the key that presents step n". Escape is an ordinary key in
+    // both, and neither has a cancel message (playtests N17, N18).
+    if matches!(
+        intro.panel,
+        VisualIntroPanel::CharacterCreation { .. } | VisualIntroPanel::Story { .. }
+    ) {
+        return step_visual_intro_panel(intro, '\x1b');
+    }
     // `systems/intro.md §11.2` step 7: `Esc` has no special meaning on
     // the acknowledgement screen — it is an ordinary key, and the close
     // and sink phases still play before the menu comes back.
@@ -13217,17 +13248,10 @@ fn cancel_visual_intro_panel(intro: &mut VisualIntroState) -> bool {
         VisualIntroPanel::MenuLabelHold { .. } => {
             unreachable!("the post-ignition hold queues Escape above")
         }
-        VisualIntroPanel::CharacterCreation { .. } => Some((
-            IntroSubflow::CharacterCreation,
-            IntroSubflowResult::Cancelled,
-            "Character creation cancelled; returning to the intro menu.",
-        )),
+        VisualIntroPanel::CharacterCreation { .. } | VisualIntroPanel::Story { .. } => {
+            unreachable!("chargen and the story treat Esc as an ordinary key above")
+        }
         VisualIntroPanel::U4Transfer { .. } => unreachable!("Esc is handled above"),
-        VisualIntroPanel::Story { .. } => Some((
-            IntroSubflow::StorySlides,
-            IntroSubflowResult::ReturnedToMenu,
-            "Ultima V Introduction cancelled; returning to the intro menu.",
-        )),
         VisualIntroPanel::Acknowledgements(_) => {
             unreachable!("acknowledgements treat Esc as an ordinary key above")
         }
@@ -13262,17 +13286,24 @@ fn step_visual_chargen_panel(
             '\r' | '\n' => {
                 let submitted = std::mem::take(input_line);
                 match session.submit_name(&submitted) {
+                    // `systems/chargen.md §4`: the empty-name abort "returns
+                    // to the intro menu", with no message (playtest N17).
                     ChargenSessionStep::Aborted => VisualIntroPanelOutcome::ReturnToMenu {
                         subflow: IntroSubflow::CharacterCreation,
                         result: IntroSubflowResult::Cancelled,
-                        message: "Character creation aborted; returning to the intro menu."
-                            .to_string(),
+                        message: String::new(),
                     },
                     _ => VisualIntroPanelOutcome::Stay,
                 }
             }
             '\u{8}' => {
                 input_line.pop();
+                VisualIntroPanelOutcome::Stay
+            }
+            // `systems/text-output.md §10.6`: Escape "erases the whole typed
+            // buffer" on every reader, and terminates nothing (playtest N17).
+            '\x1b' => {
+                input_line.clear();
                 VisualIntroPanelOutcome::Stay
             }
             _ if ch.is_ascii_graphic() || ch == ' ' => {
@@ -13304,7 +13335,7 @@ fn step_visual_chargen_panel(
         ChargenSessionStep::Aborted => VisualIntroPanelOutcome::ReturnToMenu {
             subflow: IntroSubflow::CharacterCreation,
             result: IntroSubflowResult::Cancelled,
-            message: "Character creation aborted; returning to the intro menu.".to_string(),
+            message: String::new(),
         },
         ChargenSessionStep::Ignored => {
             panic!("character creation ignored state is not a renderable panel step")
@@ -13666,9 +13697,19 @@ fn drive_visual(
         // `input.md §6`: "when the flush flag is set, drop all pending
         // keystrokes after consuming one; when the flag is clear, leave the
         // queue alone". A hold reads nothing, so a key it buffers is no read.
-        let honours_queue = visual.state.typeahead_buffer_enabled
-            || visual_read_forces_typeahead(&visual.state)
-            || visual.state.cinematic_hold_owns_input();
+        let honours_queue = visual_read_honours_queue(&visual.state);
+        // `conversation.md §7.3`: a key that ends a `0x83` PAUSE "is consumed
+        // and ends the pause at once ... The keyboard type-ahead buffer is
+        // emptied on either exit", whatever the setting and whatever reader
+        // follows (playtest N20). Only the timed pause: `0x8F` WAIT-KEY is
+        // satisfied by "a key already waiting in the type-ahead buffer" and
+        // publishes no flush, so the ordinary queue rule above applies to it.
+        let ends_text_hold = visual
+            .state
+            .pending_text_hold
+            .as_ref()
+            .and_then(|hold| hold.current())
+            == Some(u5_runtime::text_hold::TextHoldKind::TimedPause);
         let effects_before = visual.state.sound_effect_serial;
         let read = if visual_line_prompt_active(&visual.state) {
             let game_dir = visual.game_dir.clone();
@@ -13726,7 +13767,7 @@ fn drive_visual(
                 }
             }
         };
-        if read && !honours_queue {
+        if read && (!honours_queue || ends_text_hold) {
             visual.typed_keys.clear();
         }
         if visual.state.sound_effect_serial != effects_before {
@@ -19039,7 +19080,13 @@ fn handle_visual_line_key(
             if reader_cap.is_some_and(|cap| input_line.chars().count() >= cap) {
                 return Ok(Some(PlayInputDisposition::Continue));
             }
-            input_line.push(char::from(byte));
+            // `text-output.md §10.6`: the "General typed string" reader, "used
+            // for most free-text prompts", has "keys are uppercased"; only
+            // character names are "preserved as typed", and no gameplay line
+            // prompt reads one. `input.md §6`: "The rest of the engine sees
+            // only uppercase letters." The echo is drawn as each key arrives,
+            // so it cannot change case at Return (playtest N19).
+            input_line.push(char::from(byte.to_ascii_uppercase()));
             Ok(Some(PlayInputDisposition::Continue))
         }
         u5_runtime::FreeTextInputAction::Discard => Ok(None),
@@ -19100,8 +19147,9 @@ fn key_code_to_char(key: KeyCode, shift_pressed: bool, control_pressed: bool) ->
 }
 
 /// `input.md §6`: gameplay input folds ASCII letters to uppercase before
-/// movement or A-Z dispatch. Free-text and character-name entry use
-/// [`key_code_to_line_input_byte`] instead, preserving typed case there.
+/// movement or A-Z dispatch. Free-text entry uses
+/// [`key_code_to_line_input_byte`] instead, and folds case itself as each
+/// key is accepted (`text-output.md §10.6`, playtest N19).
 fn key_code_to_command_char(
     key: KeyCode,
     shift_pressed: bool,
@@ -25881,7 +25929,7 @@ mod tests {
         )
         .unwrap();
 
-        assert_eq!(input_line, "jo");
+        assert_eq!(input_line, "JO", "playtest N19: the reader uppercases keys");
         assert!(!transcript_contains(&state, "mend"));
 
         apply_visual_key_route_step(
@@ -27567,6 +27615,24 @@ mod tests {
         assert!(summarize(&mut state, "", "").contains("music off"));
     }
 
+    /// Playtest N21, `blackthorn.md §7` step 19: the verdict acknowledgement
+    /// "uses the ordinary command reader", so `input.md §6`'s Buffer Off rule
+    /// - "the queue is emptied on every read" - applies to it. The shell
+    /// treated it as a hold and kept the rest of a burst for later commands.
+    #[test]
+    fn playtest_n21_the_rescue_acknowledgement_is_an_ordinary_read() {
+        let mut state = test_state(open_grid(), 1, 1);
+        assert!(!state.typeahead_buffer_enabled);
+        state.pending_blackthorn_rescue =
+            Some(u5_runtime::blackthorn::BlackthornRescuePhase::Narration);
+        assert!(visual_read_honours_queue(&state), "a hold reads nothing");
+        state.pending_blackthorn_rescue =
+            Some(u5_runtime::blackthorn::BlackthornRescuePhase::AwaitingAcknowledgement);
+        assert!(!visual_read_honours_queue(&state));
+        state.typeahead_buffer_enabled = true;
+        assert!(visual_read_honours_queue(&state));
+    }
+
     #[test]
     fn visual_line_input_caps_conversation_keyword_at_fifteen() {
         // `conversation.md §6` step 2: "accepts up to fifteen characters".
@@ -27622,7 +27688,7 @@ mod tests {
         )
         .unwrap();
 
-        assert_eq!(input_line, "job");
+        assert_eq!(input_line, "JOB", "playtest N19: the reader uppercases keys");
         assert!(state.active_conversation.is_some());
         assert!(!transcript_contains(&state, "mend"));
 
@@ -27722,7 +27788,7 @@ mod tests {
         )
         .unwrap();
 
-        assert_eq!(input_line, "j");
+        assert_eq!(input_line, "J", "playtest N19: the reader uppercases keys");
         let summary = summarize(&mut state, "", &input_line);
         // Column 24 carries the ribbon end-cap sprite rather than an
         // ASCII "> ", so the echo starts at column 25 of the message
@@ -27730,9 +27796,9 @@ mod tests {
         let echo_column = usize::from(u5_runtime::MESSAGE_WINDOW_LEFT) + 1;
         let echo_row = summary
             .lines()
-            .find(|line| line.trim() == "j" && line.len() > echo_column)
+            .find(|line| line.trim() == "J" && line.len() > echo_column)
             .unwrap_or_else(|| panic!("{summary}"));
-        assert_eq!(echo_row.as_bytes()[echo_column], b'j', "{summary}");
+        assert_eq!(echo_row.as_bytes()[echo_column], b'J', "{summary}");
     }
 
     #[test]
@@ -27824,7 +27890,11 @@ mod tests {
                 .unwrap();
                 assert_eq!(typed, Some(PlayInputDisposition::Continue));
             }
-            assert_eq!(input_line, word);
+            assert_eq!(
+                input_line,
+                word.to_ascii_uppercase(),
+                "playtest N19: the reader uppercases keys"
+            );
 
             let submitted = handle_visual_line_key(
                 &mut state,
@@ -27867,7 +27937,7 @@ mod tests {
                     .unwrap();
             assert_eq!(typed, Some(PlayInputDisposition::Continue));
         }
-        assert_eq!(input_line, "spir");
+        assert_eq!(input_line, "SPIR", "playtest N19: the reader uppercases keys");
         assert!(
             state.typed_prompt_echo_uppercases(),
             "the sage topic row echoes upper-cased"
@@ -27945,7 +28015,7 @@ mod tests {
             handle_visual_line_key(&mut state, &mut input_line, key, false, false, &dir).unwrap();
         }
 
-        assert_eq!(input_line, "ahm");
+        assert_eq!(input_line, "AHM", "playtest N19: the reader uppercases keys");
         assert!(state.active_blackthorn.is_some());
         // blackthorn.md §4: the answer is not submitted until Enter, so
         // no shrine is ruined yet.
@@ -28107,7 +28177,7 @@ mod tests {
         for key in [KeyCode::KeyA, KeyCode::KeyH, KeyCode::KeyM] {
             handle_visual_line_key(&mut state, &mut input_line, key, false, false, &dir).unwrap();
         }
-        assert_eq!(input_line, "ahm");
+        assert_eq!(input_line, "AHM", "playtest N19: the reader uppercases keys");
         assert_eq!(state.shrine_ordained_mask, 0);
 
         // `karma.md §12`: three `Mantra:` asks, and only the third reaches
@@ -28572,7 +28642,9 @@ mod tests {
         // `systems/intro.md` section 10: the sequence returns to the intro
         // menu once the final story step is advanced.
         assert!(matches!(intro.panel, VisualIntroPanel::Menu));
-        assert!(intro.message.contains("Ultima V Introduction"));
+        // Playtest N18: no message of its own, and no extra key wait.
+        assert!(intro.message.is_empty());
+        assert!(!intro.message_waiting_for_key);
         let _ = fs::remove_dir_all(dir);
     }
 
@@ -29127,13 +29199,16 @@ mod tests {
         let _ = fs::remove_dir_all(dir);
     }
 
+    /// Playtest N17: `systems/chargen.md §2` - chargen "never returns
+    /// control to the intro menu mid-run" - and `systems/text-output.md
+    /// §10.6`: Escape at a reader "erases the whole typed buffer". Escape
+    /// closed chargen with an invented "Character creation cancelled" line.
     #[test]
-    #[cfg(feature = "original-asset-tests")]
-    fn visual_intro_character_creation_escape_returns_to_menu_without_save() {
-        let dir = debug_game_dir();
+    fn playtest_n17_escape_in_character_creation_is_an_ordinary_key() {
+        let dir = std::env::temp_dir().join("u5-p8visual-n17-escape");
         let session = ChargenSession::new(chargen_records(), (0u8..=127).collect()).unwrap();
-        let mut intro = visual_intro_state_with_panel(
-            dir.clone(),
+        let mut intro = read_only_intro_state_for_local_assets(
+            &dir,
             VisualIntroPanel::CharacterCreation {
                 session,
                 input_line: "Avatar".to_string(),
@@ -29142,23 +29217,85 @@ mod tests {
         intro.dispatch.submit_menu_key(b'C');
 
         assert!(cancel_visual_intro_panel(&mut intro));
-
-        assert!(matches!(intro.panel, VisualIntroPanel::Menu));
-        assert!(intro.message.contains("Character creation cancelled"));
-        assert!(intro.message_waiting_for_key);
-        assert!(step_visual_intro(&mut intro, ' '));
-        assert!(matches!(intro.panel, VisualIntroPanel::Menu));
-        assert!(intro.message.is_empty());
-        assert!(
-            !intro.message_waiting_for_key,
-            "the dismissal key must be consumed instead of reopening cached chargen"
-        );
-        assert!(!dir.join(SAVED_GAM_FILENAME).exists());
+        let VisualIntroPanel::CharacterCreation {
+            session,
+            input_line,
+        } = &intro.panel
+        else {
+            panic!("Escape at the name prompt must not leave chargen");
+        };
+        assert!(input_line.is_empty(), "Escape erases the typed buffer");
         assert!(matches!(
-            intro.dispatch.submit_menu_key(b'A'),
-            UnifiedMenuStep::EnteredSubflow(IntroSubflow::Acknowledgements)
+            session.current_step(),
+            ChargenSessionStep::PromptName
         ));
-        let _ = fs::remove_dir_all(dir);
+        assert!(intro.message.is_empty());
+        assert!(!intro.message_waiting_for_key);
+
+        for ch in ['b', 'o', 'b', '\r'] {
+            step_visual_intro_panel(&mut intro, ch);
+        }
+        // `systems/chargen.md §4`: the gender prompt loops "silently on any
+        // other key".
+        assert!(cancel_visual_intro_panel(&mut intro));
+        let VisualIntroPanel::CharacterCreation { session, .. } = &intro.panel else {
+            panic!("Escape at the gender prompt must not leave chargen");
+        };
+        assert!(matches!(
+            session.current_step(),
+            ChargenSessionStep::PromptGender
+        ));
+        assert!(intro.message.is_empty());
+        assert!(!dir.join(SAVED_GAM_FILENAME).exists());
+    }
+
+    /// Playtest N17: `systems/chargen.md §4` - Enter at the empty name
+    /// prompt "returns to the intro menu", with no message and no key wait.
+    #[test]
+    fn playtest_n17_empty_name_abort_returns_to_the_menu_silently() {
+        let dir = std::env::temp_dir().join("u5-p8visual-n17-empty");
+        let session = ChargenSession::new(chargen_records(), (0u8..=127).collect()).unwrap();
+        let mut intro = read_only_intro_state_for_local_assets(
+            &dir,
+            VisualIntroPanel::CharacterCreation {
+                session,
+                input_line: String::new(),
+            },
+        );
+        intro.dispatch.submit_menu_key(b'C');
+
+        assert!(step_visual_intro_panel(&mut intro, '\r'));
+        assert!(matches!(intro.panel, VisualIntroPanel::Menu));
+        assert!(intro.message.is_empty(), "{:?}", intro.message);
+        assert!(!intro.message_waiting_for_key);
+    }
+
+    /// Playtest N18: `systems/intro.md §10` - every story step waits for "a
+    /// non-zero key", and "the key that dismisses step n - 1 is the key that
+    /// presents step n". Escape aborted the story with an invented
+    /// "Ultima V Introduction cancelled" line.
+    #[test]
+    fn playtest_n18_escape_in_the_story_presents_the_next_step() {
+        let dir = std::env::temp_dir().join("u5-p8visual-n18");
+        let mut intro = read_only_intro_state_for_local_assets(
+            &dir,
+            VisualIntroPanel::Story {
+                records: StoryRecords {
+                    records: (0..20).map(|i| format!("Story record {i}")).collect(),
+                },
+                step: 3,
+                transition: None,
+            },
+        );
+        intro.dispatch.submit_menu_key(b'U');
+
+        assert!(cancel_visual_intro_panel(&mut intro));
+        let VisualIntroPanel::Story { step, .. } = &intro.panel else {
+            panic!("Escape must not abort the story");
+        };
+        assert_eq!(*step, 4);
+        assert!(intro.message.is_empty());
+        assert!(!intro.message_waiting_for_key);
     }
 
     /// A Return-to-View intro state with the IBM font slot loaded, which
@@ -30972,7 +31109,8 @@ mod tests {
         }
         assert_eq!(
             shell.visual().input_line,
-            "a".repeat(u5_runtime::YELL_INPUT_MAX_LEN)
+            // Playtest N19: the reader uppercases keys.
+            "A".repeat(u5_runtime::YELL_INPUT_MAX_LEN)
         );
     }
 
@@ -31142,11 +31280,12 @@ mod tests {
     fn keys_typed_in_one_frame_reach_the_line_in_typed_order() {
         use KeyCode::*;
         for (keys, expected) in [
-            ([KeyB, KeyA], "ba"),
-            ([KeyA, KeyB], "ab"),
-            ([KeyO, KeyE], "oe"),
-            ([KeyE, KeyO], "eo"),
-            ([KeyH, KeyI], "hi"),
+            // Playtest N19: the reader uppercases keys.
+            ([KeyB, KeyA], "BA"),
+            ([KeyA, KeyB], "AB"),
+            ([KeyO, KeyE], "OE"),
+            ([KeyE, KeyO], "EO"),
+            ([KeyH, KeyI], "HI"),
         ] {
             let mut shell = britannia_meadow_shell("typed-order");
             shell.ticks(60);
@@ -31156,6 +31295,71 @@ mod tests {
             shell.ticks(3);
             assert_eq!(shell.visual().input_line, expected);
         }
+    }
+
+    /// Playtest N20, `conversation.md §7.3`: a key that ends a `0x83` PAUSE
+    /// "is consumed and ends the pause at once ... The keyboard type-ahead
+    /// buffer is emptied on either exit". With a line reader behind the pause
+    /// - which forces type-ahead on - the rest of a burst typed in the same
+    /// frame was typed into the prompt.
+    #[test]
+    #[cfg(feature = "original-asset-tests")]
+    fn a_key_that_ends_a_timed_pause_empties_the_queue() {
+        use u5_runtime::text_hold::TextHoldKind;
+        use u5_runtime::tlk_runner::TlkRenderedText;
+        let mut shell = britannia_meadow_shell("pause-flush");
+        shell.ticks(60);
+        shell.tap(KeyCode::KeyY);
+        assert!(shell.visual().state.active_yell.is_some());
+        {
+            let mut visual = shell.visual_mut();
+            visual.state.message = "\"Squeek...".to_string();
+            // The pause's row is open mid-line, set by this caller.
+            visual.state.message_row_open_mid_line = true;
+            visual.state.begin_text_hold(
+                vec![(TextHoldKind::TimedPause, TlkRenderedText::plain("\""))],
+                true,
+            );
+        }
+        shell.ticks(10);
+        assert!(shell.visual().state.text_hold_active());
+        shell.press_in_one_frame(&[KeyCode::KeyX, KeyCode::KeyY, KeyCode::KeyZ]);
+        shell.ticks(3);
+        assert!(!shell.visual().state.text_hold_active());
+        assert!(shell.visual().state.active_yell.is_some());
+        assert_eq!(shell.visual().input_line, "", "the prompt opens empty");
+        assert!(shell.visual().typed_keys.is_empty());
+    }
+
+    /// `conversation.md §7.3`: only the `0x83` PAUSE empties the queue on
+    /// exit. `0x8F` WAIT-KEY is satisfied by "a key already waiting in the
+    /// type-ahead buffer" and publishes no flush, so behind a line reader
+    /// (which forces type-ahead on) the rest of the burst stays queued.
+    #[test]
+    #[cfg(feature = "original-asset-tests")]
+    fn a_key_that_ends_a_key_wait_leaves_the_queue_alone() {
+        use u5_runtime::text_hold::TextHoldKind;
+        use u5_runtime::tlk_runner::TlkRenderedText;
+        let mut shell = britannia_meadow_shell("wait-key-queue");
+        shell.ticks(60);
+        shell.tap(KeyCode::KeyY);
+        assert!(shell.visual().state.active_yell.is_some());
+        {
+            let mut visual = shell.visual_mut();
+            visual.state.message = "\"Some words".to_string();
+            // The reply's row is open mid-line, set by this caller.
+            visual.state.message_row_open_mid_line = true;
+            visual.state.begin_text_hold(
+                vec![(TextHoldKind::WaitKey, TlkRenderedText::plain("more\""))],
+                true,
+            );
+        }
+        shell.ticks(10);
+        assert!(shell.visual().state.text_hold_active());
+        shell.press_in_one_frame(&[KeyCode::KeyX, KeyCode::KeyY, KeyCode::KeyZ]);
+        shell.ticks(3);
+        assert!(!shell.visual().state.text_hold_active());
+        assert_eq!(shell.visual().input_line, "YZ");
     }
 
     /// Playtest H10, `input.md §6`: with type-ahead off (the default) "the

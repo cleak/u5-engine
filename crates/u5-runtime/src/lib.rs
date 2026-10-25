@@ -1199,4 +1199,5 @@ mod tests {
     include!("tests_inline/playfix7_p7conv.rs");
     include!("tests_inline/playfix7_p7misc.rs");
     include!("tests_inline/playfix8_p8play.rs");
+    include!("tests_inline/playfix8_p8visual.rs");
 }

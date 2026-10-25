@@ -452,6 +452,13 @@ fn handle_play_key_input_inner(
     // returned key is discarded rather than interpreted as a command".
     if state.blackthorn_rescue_awaiting_acknowledgement() {
         let _ = state.step_blackthorn_rescue(game_dir, true)?;
+        // It is an ordinary read (it "uses the ordinary command reader"), so
+        // `input.md §6` applies: with type-ahead off "the queue is emptied on
+        // every read". Keys typed during the narration must not run as
+        // commands after the hand-off (playtest N21).
+        if !state.typeahead_buffer_enabled {
+            state.keys_buffered_during_hold.clear();
+        }
         return Ok(PlayInputDisposition::Continue);
     }
     // Every other cinematic phase is a hold that polls no keyboard. What is

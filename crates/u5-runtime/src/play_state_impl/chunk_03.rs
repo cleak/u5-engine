@@ -686,7 +686,9 @@ impl PlayState {
             if beat.text.is_empty() {
                 continue;
             }
+            let text = beat.text.clone();
             self.emit_staged_beat(beat);
+            self.release_blackthorn_rescue_beat_audio(&text);
         }
         if self.staged_narration.is_empty() {
             self.end_stats_panel_hold();
@@ -730,7 +732,9 @@ impl PlayState {
             self.release_blackthorn_execution_hold();
             self.run_presentation_world_steps(beat.world_steps);
             self.presentation_viewport_inverted = false;
+            let text = beat.text.clone();
             self.emit_staged_beat(beat);
+            self.release_blackthorn_rescue_beat_audio(&text);
         }
     }
 
