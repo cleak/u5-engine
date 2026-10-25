@@ -1067,7 +1067,8 @@
             PlayInputDisposition::Continue
         );
         assert!(state.active_direction_prompt.is_none());
-        assert_eq!(state.turn, 1);
+        // `commands.md §3`: overworld `A` is always "no action" (p10 R01).
+        assert_eq!(state.turn, 0);
         assert_eq!(state.message, ATTACK_NOTHING_TO_ATTACK_REFUSAL);
 
         assert_eq!(
@@ -1079,7 +1080,7 @@
             PlayInputDisposition::Continue
         );
         assert!(state.active_direction_prompt.is_none());
-        assert_eq!(state.turn, 1);
+        assert_eq!(state.turn, 0);
         // `commands.md` section 5.4: `Space` prints the cancel word on
         // the open verb line - "A cancelled Look therefore renders as the
         // verb, the hyphen and the cancel word on one line." Push already

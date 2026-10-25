@@ -1825,6 +1825,42 @@ fn a_attack_inline_direction_consumes_turn_without_moving() {
     assert_eq!(state.message, ATTACK_NOTHING_TO_ATTACK_REFUSAL);
 }
 
+/// p10 R01. `commands.md §3`, the forwarded-route table: "`A` overworld |
+/// Always \"no action\", including the successful attack that enters
+/// combat", and the overworld loop "Tests only \"is it zero\". Zero skips
+/// the whole per-turn epilogue". An overworld `Nothing to attack!` used to
+/// spend the two-minute outdoor turn; the town refusal (above) stays acted.
+#[test]
+fn overworld_a_attack_refusal_spends_no_outdoor_turn() {
+    let mut state = world_state(open_world_grid(), 5, 5);
+    let clock_before = state.clock;
+
+    assert_eq!(
+        handle_play_key_input(&mut state, 'A', "6", Path::new("")).unwrap(),
+        PlayInputDisposition::Continue
+    );
+
+    assert_eq!(state.message, ATTACK_NOTHING_TO_ATTACK_REFUSAL);
+    assert_eq!(state.turn, 0, "overworld A is always \"no action\"");
+    assert_eq!(state.clock, clock_before);
+
+    // The arm that finds an object but cannot reach an arena is free too.
+    state.active_objects.push(ActiveObject {
+        type_byte: 0xc0,
+        tile: 0xc0,
+        x: 6,
+        y: 5,
+        z: WorldPlane::Underworld.save_floor(),
+        phase: STEADY_PHASE,
+        aux1: 0,
+        aux3: 0,
+    });
+    assert_eq!(state.attack_command(Some(Direction::East)), MoveOutcome::Used);
+    assert_eq!(state.message, ATTACK_NOTHING_TO_ATTACK_REFUSAL);
+    assert_eq!(state.turn, 0);
+    assert_eq!(state.clock, clock_before);
+}
+
 #[test]
 fn a_attack_adjacent_non_npc_object_reports_no_town_target() {
     let mut state = test_state(open_grid(), 5, 5);
