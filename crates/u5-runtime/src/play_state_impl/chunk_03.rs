@@ -689,6 +689,7 @@ impl PlayState {
             let text = beat.text.clone();
             self.emit_staged_beat(beat);
             self.release_blackthorn_rescue_beat_audio(&text);
+            self.release_stonegate_notice_beat_audio(&text);
         }
         if self.staged_narration.is_empty() {
             self.end_stats_panel_hold();
@@ -735,6 +736,7 @@ impl PlayState {
             let text = beat.text.clone();
             self.emit_staged_beat(beat);
             self.release_blackthorn_rescue_beat_audio(&text);
+            self.release_stonegate_notice_beat_audio(&text);
         }
     }
 

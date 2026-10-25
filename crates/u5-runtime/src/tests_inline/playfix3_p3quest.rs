@@ -159,6 +159,17 @@ fn spec300_q17_each_stonegate_notice_plays_the_presence_tone() {
     let serial = state.sound_effect_serial;
 
     state.enter_current_location(&dir).unwrap();
+    // `audio.md §8.6`: the first tone plays at once; the second notice and
+    // its tone are staged behind it.
+    assert_eq!(
+        state
+            .sound_effects_after(serial)
+            .iter()
+            .filter(|effect| **effect == SoundEffect::ShadowlordPresenceNotice)
+            .count(),
+        1
+    );
+    state.flush_staged_narration();
 
     let tones = state
         .sound_effects_after(serial)

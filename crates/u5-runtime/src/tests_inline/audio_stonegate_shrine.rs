@@ -56,6 +56,81 @@ fn stonegate_entry_presentation_plays_one_notice_tone_per_living_shadowlord() {
     );
 }
 
+/// `audio.md §8.6` / `town-mode.md §13` (u5-spec#300 Q4/Q17): with all three
+/// Shadowlords living, Stonegate prints cowardice, hatred, falsehood, and each
+/// notice's blocking tone plays after its text and before the next notice's
+/// text - text, tone, text, tone, text, tone - not all text then all tones.
+#[test]
+fn stonegate_entry_notices_interleave_text_and_blocking_tone() {
+    let scene = Scene::new(STONEGATE_SCENE_BYTE).unwrap();
+    let mut state = test_state(open_grid(), 1, 1);
+    state.area = Area::Town { scene, floor: 0 };
+    state.shadowlord_hideouts = [1, 2, 3];
+    state.message = "Entered KEEP:4.".to_string();
+    let serial = state.sound_effect_serial;
+
+    state.append_stonegate_entry_presentation_message();
+
+    // Only the first notice and its tone are out; the rest wait behind it.
+    let tone = vec![SoundEffect::ShadowlordPresenceNotice];
+    assert_eq!(state.sound_effects_after(serial), tone);
+    let shown = |state: &PlayState| -> String {
+        let mut text: Vec<String> = state
+            .message_entries()
+            .iter()
+            .map(|entry| entry.text.clone())
+            .collect();
+        text.push(state.message.clone());
+        text.join("\n")
+    };
+    assert!(shown(&state).contains("cowardice doth"));
+    assert!(!shown(&state).contains("hatred doth"));
+    let tone_secs = SoundEffect::ShadowlordPresenceNotice
+        .program(&mut crate::audio::RumbleJitter::default())
+        .duration(true)
+        .as_secs_f64();
+    let beats: Vec<_> = state.staged_narration.beats().cloned().collect();
+    assert_eq!(beats.len(), 2);
+    assert!(beats.iter().all(|beat| (beat.delay_secs - tone_secs).abs() < 1e-9));
+
+    // The hold is the first tone; the second notice then prints, then its tone.
+    state.advance_staged_narration_to(0.0);
+    assert!(!shown(&state).contains("hatred doth"));
+    state.advance_staged_narration_to(tone_secs + 1e-6);
+    assert!(shown(&state).contains("hatred doth"));
+    assert!(!shown(&state).contains("falsehood doth"));
+    assert_eq!(state.sound_effects_after(serial), vec![tone[0].clone(); 2]);
+    state.advance_staged_narration_to(2.0 * tone_secs + 2e-6);
+    assert!(shown(&state).contains("falsehood doth"));
+    assert_eq!(state.sound_effects_after(serial), vec![tone[0].clone(); 3]);
+    assert!(state.staged_narration.is_empty());
+
+    // The rows match the single composed print the engine used to make.
+    let mut composed = test_state(open_grid(), 1, 1);
+    composed.message = "Entered KEEP:4.".to_string();
+    composed.emit_message_line(format!(
+        "Entered KEEP:4.\n\n{}",
+        composed_lines().join("\n\n")
+    ));
+    composed.flush_message_slot();
+    state.flush_message_slot();
+    let rows = |state: &PlayState| -> Vec<String> {
+        state
+            .message_transcript
+            .iter()
+            .map(|entry| entry.text.clone())
+            .collect()
+    };
+    assert_eq!(rows(&state), rows(&composed));
+}
+
+fn composed_lines() -> Vec<String> {
+    (0..SHADOWLORD_COUNT)
+        .rev()
+        .filter_map(PlayState::shadowlord_air_line_for_index)
+        .collect()
+}
+
 #[test]
 fn successful_ruined_shrine_restoration_flashes_a_second_time() {
     // `audio.md §8.4`: the recognized Word flashes before the location test,

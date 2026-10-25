@@ -2344,13 +2344,21 @@ impl PlayState {
                     .push(format!("Stonegate entry: {title} still alive"));
             }
         }
-        let Some(note) = self.stonegate_entry_presentation_message() else {
+        if self.stonegate_entry_presentation_message().is_none() {
+            return;
+        }
+        // `audio.md §8.6` / `town-mode.md §13` (u5-spec#300 Q4/Q17): the
+        // producer walks the slots and, for each living Shadowlord, "prints
+        // that Shadowlord's notice and plays its tone"; the tone runs "After
+        // the notice text prints" and "blocks", so each tone finishes before
+        // the next notice's text. The first notice and its tone go out now;
+        // every later notice is staged behind the previous tone's length and
+        // plays its own tone as it is released
+        // ([`Self::release_stonegate_notice_beat_audio`]).
+        let mut lines = self.stonegate_entry_presentation_lines().into_iter();
+        let Some(first) = lines.next() else {
             return;
         };
-        // `audio.md §8.6` (u5-spec#300 Q4/Q17): every Stonegate notice plays
-        // the presence tone `(1, 2000, 60000, 1, 6600)` after its text, each
-        // finishing before the next notice.
-        let notices = self.stonegate_entry_presentation_lines().len();
         // This has to go through the transcript, not the bare message slot.
         // The gameplay window renders from `message_entries()`, so a line
         // written straight into `self.message` during scene load never
@@ -2358,14 +2366,38 @@ impl PlayState {
         // summary this replaced was never visible in a capture despite
         // having tests over it.
         let composed = match self.message.is_empty() {
-            true => note,
-            false => format!("{}\n\n{note}", self.message),
+            true => first,
+            false => format!("{}\n\n{first}", self.message),
         };
         self.emit_message_line(composed);
-        // `town-mode.md §13` (u5-spec#300 Q4, Q17): each notice plays its
-        // tone, "each tone finishes before the next notice's text"; the
-        // envelope is the same constant one for all three Shadowlords.
-        for _ in 0..notices {
+        self.emit_sound_effect(SoundEffect::ShadowlordPresenceNotice);
+        let tone_secs = SoundEffect::ShadowlordPresenceNotice
+            .program(&mut crate::audio::RumbleJitter::default())
+            .duration(true)
+            .as_secs_f64();
+        for line in lines {
+            // Each notice "carries its own leading blank row". The notice
+            // before it ended on `surround thee...` with no feed of its own
+            // here, so the emit above left that row open mid-line; say so
+            // rather than infer it. The first feed closes that row and the
+            // second spends the blank.
+            self.staged_narration.push_secs(tone_secs, format!("\n\n{line}"));
+        }
+        self.message_row_open_mid_line = true;
+    }
+
+    /// The tone of a staged Stonegate notice, played as its text is released
+    /// (`audio.md §8.6`: "After the notice text prints, run `(1, 2000, 60000,
+    /// 1, 6600)`"). Only Stonegate stages these notices; a hideout town's
+    /// single notice plays its tone at once.
+    pub(crate) fn release_stonegate_notice_beat_audio(&mut self, text: &str) {
+        let Some(line) = text.strip_prefix("\n\n") else {
+            return;
+        };
+        if (0..SHADOWLORD_COUNT)
+            .filter_map(Self::shadowlord_air_line_for_index)
+            .any(|notice| notice == line)
+        {
             self.emit_sound_effect(SoundEffect::ShadowlordPresenceNotice);
         }
     }

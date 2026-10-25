@@ -1750,9 +1750,17 @@ fn stonegate_entry_presentation_uses_sceptre_and_living_shadowlord_slots() {
             .iter()
             .any(|note| note.contains("prelude"))
     );
-    assert!(state.message.contains("An air of\nfalsehood doth"));
-    assert!(!state.message.contains("hatred doth"));
-    assert!(state.message.contains("An air of\ncowardice doth"));
+    // `audio.md §8.6`: later notices are staged behind the earlier tone.
+    state.flush_staged_narration();
+    state.flush_message_slot();
+    let rows: Vec<String> = state
+        .message_transcript
+        .iter()
+        .map(|entry| entry.text.clone())
+        .collect();
+    assert!(rows.iter().any(|row| row == "falsehood doth"), "{rows:?}");
+    assert!(!rows.iter().any(|row| row == "hatred doth"), "{rows:?}");
+    assert!(rows.iter().any(|row| row == "cowardice doth"), "{rows:?}");
 
     state.area = Area::Town {
         scene: Scene::new(17).unwrap(),
