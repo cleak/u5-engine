@@ -5470,15 +5470,17 @@ impl PlayState {
             // §4.2: "After the key, the beat hands the exit vector to the
             // cutscene script VM" - §6.3's audience-exit row, whose stingers
             // are emitted and whose final frame clears the tableau slot. The
-            // hold is §4.2's published "about 72 tick periods" (u5-spec#299
-            // Q10, R568).
+            // hold is §4.2's re-measured "about 73 tick periods" to the end of
+            // the script, then the handoff and cell-entry setup's untimed
+            // "about 0.27 s (about 5 tick periods)" (u5-spec#301 Q4, R613).
             let vm = self.run_blackthorn_cutscene_beat(BlackthornCutsceneBeat::AudienceExit);
             self.push_diagnostic(format!(
                 "Blackthorn audience exit beat: {} stings, {} world ticks.",
                 vm.stinger_count, vm.world_ticks
             ));
             self.staged_narration.push_ticks(
-                crate::blackthorn::BLACKTHORN_AUDIENCE_EXIT_BEAT_BIOS_TICKS,
+                crate::blackthorn::BLACKTHORN_AUDIENCE_EXIT_BEAT_BIOS_TICKS
+                    + crate::blackthorn::BLACKTHORN_CAPTIVE_CELL_HANDOFF_BIOS_TICKS,
                 String::new(),
             );
             self.pending_blackthorn_audience_exit = true;

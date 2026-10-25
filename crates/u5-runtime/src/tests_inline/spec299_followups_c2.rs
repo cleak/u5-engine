@@ -5,8 +5,13 @@
 /// the exit beat runs for **about 4 s** from the key to the end of the script
 /// on a fast enough host". The engine held a measured 110 ticks (about 6 s)
 /// against the withdrawn five-second floor.
+///
+/// Re-measured (u5-spec#301 Q4, `RETRACTIONS.md` R613): the script ends about
+/// 73 tick periods after the key at 3000 cycles, and the untimed handoff and
+/// cell-entry setup add about 0.27 s (about 5 tick periods), so the cell
+/// appears 78 tick periods (about 4.29 s) after the key.
 #[test]
-fn spec299_q10_audience_exit_beat_holds_seventy_two_tick_periods() {
+fn spec299_q10_audience_exit_beat_holds_until_the_captive_cell() {
     let dir = debug_game_dir();
     let mut state = test_state(open_grid(), 5, 5);
     state.begin_blackthorn_audience_capture(&dir).unwrap();
@@ -20,12 +25,12 @@ fn spec299_q10_audience_exit_beat_holds_seventy_two_tick_periods() {
     assert!(state.staged_narration_active(), "the exit beat is holding");
 
     state.advance_staged_narration_to(0.0);
-    state.advance_staged_narration_to(crate::narration::bios_ticks_secs(71));
+    state.advance_staged_narration_to(crate::narration::bios_ticks_secs(77));
     assert!(state.staged_narration_active(), "still holding one tick short");
-    state.advance_staged_narration_to(crate::narration::bios_ticks_secs(72) + 0.001);
+    state.advance_staged_narration_to(crate::narration::bios_ticks_secs(78) + 0.001);
     assert!(
         !state.staged_narration_active(),
-        "the beat is over after about 72 tick periods (~3.95 s)"
+        "the cell follows after about 78 tick periods (~4.29 s)"
     );
     let _ = fs::remove_dir_all(dir);
 }
