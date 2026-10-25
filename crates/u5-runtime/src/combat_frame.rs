@@ -4375,6 +4375,32 @@ impl PlayState {
         legal_cells
     }
 
+    /// `moons.md §3`, "After the fight the gaps resume as follows"
+    /// (corrected 2026-10-25, u5-spec#300 Q35, `RETRACTIONS.md` R619): on
+    /// the surface overworld "the restore phase repaints only the stats
+    /// panel", and the terrain-combat wrapper's zero-minute clock call
+    /// "repaints the strip only when the fight's **last** clock minute
+    /// crossed an hour boundary" - in one-minute steps, exactly when the
+    /// clock now reads minute zero. Otherwise the strip keeps the pre-combat
+    /// hour's markers and the banner the pre-combat wind. Town fights reload
+    /// the floor and dungeons redraw their labels, and the underworld erases
+    /// both gaps, so only the surface plane holds anything. Whether a camp
+    /// ambush (no trailing clock call) made the fight is not tracked, so it
+    /// takes the same minute-zero test.
+    fn hold_ribbon_gaps_after_surface_combat(&mut self) {
+        self.post_combat_ribbon_hold = None;
+        if !matches!(self.area, Area::World { plane } if plane != WorldPlane::Underworld) {
+            return;
+        }
+        let Some((top, bottom)) = self.combat_entry_chrome.clone() else {
+            return;
+        };
+        self.post_combat_ribbon_hold = Some(PostCombatRibbonHold {
+            top: (self.clock.minute != 0).then_some((top, self.clock.hour)),
+            bottom: Some((bottom, self.wind_save_byte)),
+        });
+    }
+
     pub fn enter_combat_frame(
         &mut self,
         active_objects: Vec<ActiveObject>,
@@ -4560,6 +4586,7 @@ impl PlayState {
         self.combat_active = false;
         self.combat_action_result = 0;
         self.combat_frame_snapshot = None;
+        self.hold_ribbon_gaps_after_surface_combat();
         // `stats-panel.md §2.2.1`: combat exit is an immediate whole-panel
         // site.
         self.repaint_stats_panel();

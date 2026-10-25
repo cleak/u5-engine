@@ -2190,6 +2190,9 @@ impl PlayState {
     /// observable state; the warp's destination scene entry does the
     /// refresh.
     pub fn refresh_cached_moon_glyphs_at_scene_entry(&mut self) {
+        // `moons.md §3` (u5-spec#300 Q35): a scene entry or camp repaints
+        // both gaps, ending any post-combat hold.
+        self.post_combat_ribbon_hold = None;
         if !self.sky_strip_scene_entry_refresh_runs() {
             return;
         }
