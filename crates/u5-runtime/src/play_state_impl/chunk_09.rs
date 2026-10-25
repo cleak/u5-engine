@@ -3157,8 +3157,14 @@ impl PlayState {
     /// `rest-and-camp.md §5`: wilderness camp advances the ordinary clock and
     /// world epilogue without entering the hourly poison/provision/starvation
     /// pass. Ring regeneration is invoked once for this five-minute camp step.
+    ///
+    /// The turn-step counter at `0x02E5` belongs to that same pass: `time.md
+    /// §5` puts "a step counter that saturates at 255" in the pass's trailing
+    /// part, which "does not run inside the wilderness camp loop", and
+    /// `formats/saved-gam.md` `0x02E5` / `karma.md §4.1` make the upkeep pass
+    /// its only increment. So a camp step does not age it (p10 R16).
     pub fn advance_wilderness_camp_tick(&mut self, minutes: u8) {
-        self.advance_turn_with_minutes_policy(minutes, true, true, false, true);
+        self.advance_turn_with_minutes_policy(minutes, true, true, false, false);
         self.apply_pending_world_object_walker_pass();
         self.apply_hourly_ring_regeneration_tick();
     }
