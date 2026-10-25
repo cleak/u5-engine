@@ -1875,7 +1875,9 @@
     #[test]
     fn search_fixed_hidden_treasure_stages_pickup_and_get_grants_inventory() {
         let dir = debug_game_dir();
-        let mut state = test_state(open_grid(), 4, 8);
+        // `hidden-treasures.md §3` (u5-spec#300 Q1, R584): record 18 is at
+        // X 8, Y 5 (the transposed X 5, Y 8 is retracted).
+        let mut state = test_state(open_grid(), 7, 5);
         state.area = Area::Town {
             scene: Scene::new(1).unwrap(),
             floor: 0,
@@ -1893,7 +1895,7 @@
         assert_eq!(state.message, format!("{SEARCH_PREAMBLE}a gem!"));
         assert_eq!(
             state.active_objects[1],
-            ActiveObject::fixed_hidden_treasure_pickup(18, 5, 8, 0)
+            ActiveObject::fixed_hidden_treasure_pickup(18, 8, 5, 0)
         );
 
         assert_eq!(
@@ -1922,7 +1924,9 @@
     #[test]
     fn second_search_of_a_staged_fixed_treasure_before_get_grants_nothing() {
         let dir = debug_game_dir();
-        let mut state = test_state(open_grid(), 4, 8);
+        // `hidden-treasures.md §3` (u5-spec#300 Q1, R584): record 18 is at
+        // X 8, Y 5 (the transposed X 5, Y 8 is retracted).
+        let mut state = test_state(open_grid(), 7, 5);
         state.area = Area::Town {
             scene: Scene::new(1).unwrap(),
             floor: 0,
@@ -1934,7 +1938,7 @@
             state.search_facing_with_game_dir(&dir).unwrap(),
             MoveOutcome::Searched
         );
-        let staged = ActiveObject::fixed_hidden_treasure_pickup(18, 5, 8, 0);
+        let staged = ActiveObject::fixed_hidden_treasure_pickup(18, 8, 5, 0);
         assert_eq!(state.active_objects[1], staged);
 
         assert_eq!(
@@ -1962,8 +1966,9 @@
         );
         assert!(PlayState::fixed_hidden_treasure_table_records_are_sequential());
         assert_eq!(
+            // u5-spec#300 Q1 (R584): the corrected, untransposed X/Y columns.
             PlayState::fixed_hidden_treasure_table_fingerprint(),
-            0x648e_8949_bb4a_78f1
+            0xbecc_378a_39f3_cbb3
         );
         assert_eq!(
             PlayState::fixed_hidden_treasure_table_pickup_counts(),
@@ -2128,7 +2133,7 @@
     #[test]
     fn search_fixed_hidden_record_15_uses_glass_sword_counter_not_found_bitmap() {
         let dir = debug_game_dir();
-        let mut state = world_state(open_world_grid(), 79, 64);
+        let mut state = world_state(open_world_grid(), 63, 80);
         state.area = Area::World {
             plane: WorldPlane::Britannia,
         };
@@ -2173,7 +2178,7 @@
     #[test]
     fn search_fixed_hidden_record_13_requires_zero_keys() {
         let dir = debug_game_dir();
-        let mut state = test_state(open_grid(), 5, 8);
+        let mut state = test_state(open_grid(), 7, 6);
         state.area = Area::Town {
             scene: Scene::new(18).unwrap(),
             floor: -1,
@@ -2204,7 +2209,7 @@
     #[test]
     fn fixed_hidden_special_records_ignore_non_npc_active_object_on_target() {
         let dir = debug_game_dir();
-        let mut state = world_state(open_world_grid(), 79, 64);
+        let mut state = world_state(open_world_grid(), 63, 80);
         state.area = Area::World {
             plane: WorldPlane::Britannia,
         };
@@ -2213,8 +2218,8 @@
         state.active_objects.push(ActiveObject {
             type_byte: 0x10,
             tile: 0x10,
-            x: 80,
-            y: 64,
+            x: 64,
+            y: 80,
             z: WorldPlane::Britannia.save_floor(),
             phase: STEADY_PHASE,
             aux1: 0,
@@ -2235,7 +2240,7 @@
     #[test]
     fn fixed_hidden_special_records_block_on_town_npc_at_target() {
         let dir = debug_game_dir();
-        let mut state = test_state(open_grid(), 5, 8);
+        let mut state = test_state(open_grid(), 7, 6);
         state.area = Area::Town {
             scene: Scene::new(18).unwrap(),
             floor: -1,
@@ -2248,8 +2253,8 @@
             dialog_id: 0,
             schedule: [0; NPC_SCHEDULE_RECORD_LEN],
             state: NPC_STATE_IDLE,
-            x: 6,
-            y: 8,
+            x: 8,
+            y: 6,
             z: 0xff,
             cached_wp: 0,
             move_queue: Vec::new(),
@@ -2257,7 +2262,7 @@
             stuck_counter: 0,
             active_object: Some(1),
         });
-        state.active_objects.push(npc_active_object(1, 6, 8, 0xff));
+        state.active_objects.push(npc_active_object(1, 8, 6, 0xff));
 
         assert_eq!(
             state.search_facing_with_game_dir(&dir).unwrap(),
@@ -2271,7 +2276,7 @@
     #[test]
     fn fixed_hidden_treasure_food_clamps_to_party_food_cap() {
         let dir = debug_game_dir();
-        let mut state = test_state(open_grid(), 18, 24);
+        let mut state = test_state(open_grid(), 23, 19);
         state.area = Area::Town {
             scene: Scene::new(1).unwrap(),
             floor: 1,
@@ -2296,7 +2301,7 @@
     #[test]
     fn get_fixed_hidden_treasure_grants_equipment_stock() {
         let dir = debug_game_dir();
-        let mut state = test_state(open_grid(), 0, 15);
+        let mut state = test_state(open_grid(), 14, 1);
         state.area = Area::Town {
             scene: Scene::new(23).unwrap(),
             floor: 0,
@@ -4580,6 +4585,143 @@
         assert_eq!(rows[item + 1], "", "{rows:?}");
         assert_eq!(rows[item + 2], "Wielding the", "{rows:?}");
         let _ = fs::remove_dir_all(dir);
+    }
+    
+    /// `hidden-treasures.md §3` (added 2026-10-25, u5-spec#300 Q1): the "Get line
+    /// after the leading feed" column for every fixed record, staged and taken
+    /// with Get. The body records (`-`) grant nothing: Get skips them
+    /// (`containers.md §3`, u5-spec#300 Q2).
+    #[test]
+    fn spec300_q1_every_fixed_record_gets_its_published_line() {
+        let expected: [(usize, Option<&str>); 113] = [
+            (0, Some("Mystic Armour!")),
+            (1, Some("Mystic Sword!")),
+            (2, Some("Mystic Armour!")),
+            (3, Some("Mystic Sword!")),
+            (4, Some("Mystic Armour!")),
+            (5, Some("Mystic Sword!")),
+            (6, Some("Mystic Armour!")),
+            (7, Some("Mystic Sword!")),
+            (8, Some("Mystic Armour!")),
+            (9, Some("Mystic Sword!")),
+            (10, Some("Mystic Armour!")),
+            (11, Some("Mystic Sword!")),
+            (12, Some("The plans for the HMS Cape!")),
+            (13, Some("9 keys!")),
+            (14, Some("5 odd keys!")),
+            (15, Some("Glass Sword!")),
+            (16, Some("Sword of Chaos!")),
+            (17, Some("Jeweled Sword!")),
+            (18, Some("1 gem!")),
+            (19, Some("Leather Armour!")),
+            (20, Some("Leather Armour!")),
+            (21, Some("A purple potion!")),
+            (22, Some("A black potion!")),
+            (23, Some("A white potion!")),
+            (24, Some("A scroll: KXC!")),
+            (25, Some("A scroll: AT!")),
+            (26, Some("10 food!")),
+            (27, Some("3 torches!")),
+            (28, Some("Ring of Invisibility!")),
+            (29, Some("5 food!")),
+            (30, Some("Main Gauche!")),
+            (31, Some("Ring of Protection!")),
+            (32, Some("A scroll: RH!")),
+            (33, Some("5 food!")),
+            (34, Some("10 food!")),
+            (35, Some("Magic Axe!")),
+            (36, Some("4 torches!")),
+            (37, Some("Club!")),
+            (38, Some("A green potion!")),
+            (39, Some("A scroll: IQW!")),
+            (40, None),
+            (41, None),
+            (42, None),
+            (43, None),
+            (44, None),
+            (45, Some("Spear!")),
+            (46, Some("Silver Sword!")),
+            (47, Some("5 keys!")),
+            (48, Some("99 gold!")),
+            (49, Some("A scroll: RH!")),
+            (50, Some("A scroll: RH!")),
+            (51, Some("A yellow potion!")),
+            (52, Some("A red potion!")),
+            (53, Some("A scroll: IMC!")),
+            (54, Some("4 gems!")),
+            (55, None),
+            (56, Some("A yellow potion!")),
+            (57, Some("A green potion!")),
+            (58, Some("7 keys!")),
+            (59, Some("9 torches!")),
+            (60, Some("A blue potion!")),
+            (61, Some("5 gems!")),
+            (62, Some("50 gold!")),
+            (63, Some("A white potion!")),
+            (64, Some("A scroll: KXC!")),
+            (65, Some("Amulet/Turning!")),
+            (66, Some("A scroll: AT!")),
+            (67, Some("A orange potion!")),
+            (68, Some("Leather Armour!")),
+            (69, Some("Ring Mail!")),
+            (70, Some("Cloth Armour!")),
+            (71, Some("Scale Mail!")),
+            (72, Some("Long Sword!")),
+            (73, Some("7 keys!")),
+            (74, Some("Ring of Regeneration!")),
+            (75, Some("A green potion!")),
+            (76, Some("A scroll: KXC!")),
+            (77, Some("A scroll: KXC!")),
+            (78, Some("A scroll: IS!")),
+            (79, Some("A scroll: AT!")),
+            (80, Some("Ring of Protection!")),
+            (81, None),
+            (82, None),
+            (83, None),
+            (84, None),
+            (85, Some("A scroll: IMC!")),
+            (86, Some("Ring of Regeneration!")),
+            (87, Some("3 gems!")),
+            (88, Some("A scroll: RH!")),
+            (89, Some("A scroll: RH!")),
+            (90, Some("A scroll: RH!")),
+            (91, Some("Ring of Invisibility!")),
+            (92, Some("5 keys!")),
+            (93, Some("Ankh!")),
+            (94, Some("1 key!")),
+            (95, Some("A green potion!")),
+            (96, Some("A scroll: RH!")),
+            (97, Some("Spiked Collar!")),
+            (98, Some("A purple potion!")),
+            (99, Some("A orange potion!")),
+            (100, Some("A scroll: KXC!")),
+            (101, Some("Ring of Invisibility!")),
+            (102, Some("Spiked Collar!")),
+            (103, Some("A white potion!")),
+            (104, Some("Club!")),
+            (105, Some("Spiked Collar!")),
+            (106, Some("A yellow potion!")),
+            (107, Some("20 food!")),
+            (108, Some("A white potion!")),
+            (109, Some("16 food!")),
+            (110, Some("13 food!")),
+            (111, Some("A black potion!")),
+            (112, Some("A scroll: AT!")),
+        ];
+        for (record, line) in expected {
+            let mut state = test_state(open_grid(), 4, 8);
+            state
+                .active_objects
+                .push(ActiveObject::fixed_hidden_treasure_pickup(record, 5, 8, 0));
+            let outcome = state.get_fixed_hidden_treasure_pickup_at(5, 8);
+            match line {
+                Some(line) => {
+                    assert_eq!(outcome, Some(MoveOutcome::Got), "record {record}");
+                    assert_eq!(state.message, format!("\n{line}"), "record {record}");
+                }
+                None => assert_eq!(outcome, None, "record {record}"),
+            }
+        }
     }
 
     /// `containers.md §3` (added 2026-10-25, u5-spec#300 Q2): Get skips a
