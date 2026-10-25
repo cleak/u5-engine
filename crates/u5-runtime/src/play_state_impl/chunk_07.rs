@@ -2579,11 +2579,18 @@ impl PlayState {
                     // (whose stat row carries the sentinel count eight)."
                     // The withdrawn reading kept A-Attack inside town
                     // mode and never called the combat framer.
-                    if town_npc_attack_enters_conflict(type_byte)
-                        && !matches!(
-                            town_npc_attack_resolution(type_byte),
-                            TownNpcAttackResolution::Refused
-                        )
+                    // `town-mode.md §10` (u5-spec#300 Q18): a resident
+                    // Shadowlord (`0xFC`) "is therefore a **valid conflict
+                    // target**: the attack reaches the NPC-conflict chain
+                    // ... which forces arena 10", with no karma loss, no
+                    // alarm and no removal mark.
+                    let resident_shadowlord = type_byte == SHADOWLORD_ACTOR_TILE;
+                    if resident_shadowlord
+                        || (town_npc_attack_enters_conflict(type_byte)
+                            && !matches!(
+                                town_npc_attack_resolution(type_byte),
+                                TownNpcAttackResolution::Refused
+                            ))
                     {
                         // `combat.md §5`: the encounter's base combat
                         // class "is derived from the creature's own
@@ -2613,8 +2620,13 @@ impl PlayState {
                                 // slot clear, floor reload and
                                 // Shadowlord re-install move to the
                                 // arena exit.
-                                let (pursued, fled) =
-                                    self.town_alarm_sweep(scene, floor, Some(npc_slot));
+                                // `0xFC` "triggers neither" karma nor
+                                // the alarm (u5-spec#300 Q18).
+                                let (pursued, fled) = if resident_shadowlord {
+                                    (0, 0)
+                                } else {
+                                    self.town_alarm_sweep(scene, floor, Some(npc_slot))
+                                };
                                 self.pending_town_conflict = Some(PendingTownConflict {
                                     scene_byte: scene.byte,
                                     floor,
