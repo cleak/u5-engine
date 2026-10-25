@@ -6751,7 +6751,18 @@ impl PlayState {
             return None;
         }
         let target = *self.combat_actors.get(target_slot)?;
-        if !combat_actor_is_active_not_dead(attacker) || !combat_actor_is_active_not_dead(target) {
+        // `combat.md §12`: "a Gazer swinging at a defender that is already
+        // asleep falls through to ordinary melee damage", and §9's target
+        // selection removes "empty, dead, passive, suppressed, or invisible
+        // candidates" - not sleepers. An asleep (`0x08`) defender is
+        // therefore still struck; only the *attacker* must be able to act.
+        // Refusing it here left a party that was all asleep or possessed
+        // untouchable, so the fight could never end (p10 R05).
+        if !combat_actor_is_active_not_dead(attacker)
+            || target.is_empty()
+            || target.is_marked_dead()
+            || !target.has_field_lookup_selectable_bit()
+        {
             return None;
         }
         if attacker.is_controlled() && attacker.is_party_side() {

@@ -466,6 +466,79 @@
         );
     }
 
+    /// `combat.md §12`: "a Gazer swinging at a defender that is already
+    /// asleep falls through to ordinary melee damage", and §9's target
+    /// selection does not remove sleepers. The attack primitive used to
+    /// refuse any defender carrying the asleep bit `0x08`, so once a Gazer
+    /// fight left every party member asleep or possessed nothing could hurt
+    /// anyone and the round walker cycled forever (p10 R05).
+    #[test]
+    fn an_asleep_party_defender_is_still_struck() {
+        // A Gazer on an already-asleep party member: ordinary melee damage.
+        let mut gazer = combat_ai_turn_state(6, 5);
+        gazer.combat_actors[8].owner_target_class = COMBAT_CLASS_GAZER;
+        gazer.party = vec![PartyMember {
+            slot: 0,
+            class_byte: 1,
+            status: b'S',
+            climb_stat: 0,
+            mana: 0,
+            hp: 30,
+            max_hp: 30,
+            level: 1,
+        }];
+        gazer.combat_actors[0].flags |= COMBAT_ACTOR_FLAG_STATUS_DISABLED;
+        let attack = gazer
+            .resolve_and_apply_combat_monster_attack(8, 0, 0, false, 0, Some(true))
+            .expect("an asleep defender is still a legal target");
+        assert!(attack.sleep_effect.is_none(), "{attack:?}");
+        assert!(
+            matches!(
+                attack.damage_application,
+                Some(CombatWeaponDamageApplication::Party { target_slot: 0, .. })
+            ),
+            "the swing falls through to ordinary melee damage: {attack:?}"
+        );
+
+        // A possessed member's fixed magic strike on a sleeping companion.
+        let mut possessed = combat_ai_turn_state(12, 12);
+        possessed.party = (0..2)
+            .map(|slot| PartyMember {
+                slot,
+                class_byte: 1,
+                status: if slot == 1 { b'S' } else { b'G' },
+                climb_stat: 0,
+                mana: 0,
+                hp: 30,
+                max_hp: 30,
+                level: 1,
+            })
+            .collect();
+        possessed.party_combat_defense = vec![0; 2];
+        possessed.combat_actors[0].flags =
+            COMBAT_ACTOR_FLAG_SELECTABLE_80 | COMBAT_ACTOR_FLAG_CONTROLLED;
+        possessed.combat_actors[1] = CombatActorDescriptor::from_row([
+            20,
+            1,
+            COMBAT_ACTOR_FLAG_SELECTABLE_80 | COMBAT_ACTOR_FLAG_STATUS_DISABLED,
+            1,
+            1,
+            0,
+            6,
+            6,
+        ]);
+        let strike = possessed
+            .resolve_and_apply_combat_monster_attack(0, 1, 0, false, 0, Some(true))
+            .expect("the possessed member strikes its sleeping companion");
+        assert!(
+            matches!(
+                strike.damage_application,
+                Some(CombatWeaponDamageApplication::Party { target_slot: 1, .. })
+            ),
+            "{strike:?}"
+        );
+    }
+
     /// The production driver end to end: the possessed member's automatic
     /// turn targets its companion and its attack resolves.
     #[test]
