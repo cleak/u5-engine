@@ -1930,8 +1930,9 @@ impl PlayState {
                 // grant dispatcher's selector". The separate visual filter
                 // this used to apply first is withdrawn, so the handler takes
                 // the record at the cell and lets its class decide - including
-                // deciding to refuse.
-                self.object_occupies(*object, x, y)
+                // deciding to refuse. A staged body is skipped before that
+                // (`containers.md §3`, u5-spec#300 Q2).
+                self.object_occupies(*object, x, y) && !staged_hidden_treasure_body(*object)
             })?;
 
         let Some(grant) = native_object_pickup_grant(object) else {
@@ -2323,7 +2324,13 @@ impl PlayState {
         if let Some(outcome) = self.get_native_object_pickup_at(tx, ty) {
             return Ok(outcome);
         }
-        if self.blocking_object_at(tx, ty).is_some() {
+        // `containers.md §3` (u5-spec#300 Q2): a staged rotting body or
+        // moldy corpse is skipped like an actor, so it does not stop Get
+        // from reaching the live-tile cascade below.
+        if self
+            .blocking_object_at(tx, ty)
+            .is_some_and(|object| !staged_hidden_treasure_body(*object))
+        {
             self.message = GET_NOTHING_REFUSAL.to_string();
             return Ok(MoveOutcome::Blocked);
         }
@@ -3024,7 +3031,7 @@ impl PlayState {
             .enumerate()
             .skip(1)
             .find_map(|(object_slot, object)| {
-                if self.object_occupies(*object, x, y) {
+                if self.object_occupies(*object, x, y) && !staged_hidden_treasure_body(*object) {
                     object
                         .fixed_hidden_treasure_record()
                         .map(|record| (object_slot, record))
@@ -3536,6 +3543,24 @@ impl PlayState {
 /// the pickup class." Each staged class is fed to the `containers.md §8`
 /// dispatcher arm of the same family, with the state as the record's
 /// auxiliary byte. The two corpse classes have no arm.
+/// `containers.md §3` "A staged rotting body or moldy corpse is not
+/// Get-acceptable" (added 2026-10-25, u5-spec#300 Q2): classes 30 and 31 are
+/// "neither below sixteen nor one of the Moonstone, carpet or regalia/shard
+/// classes, so step 3 skips such an object exactly as it skips an actor, and
+/// keeps scanning the other objects at the coordinate. Nothing is printed at
+/// that point". With nothing else acceptable Get falls through to the
+/// live-tile cascade, and the body stays on the cell.
+fn staged_hidden_treasure_body(object: ActiveObject) -> bool {
+    object.fixed_hidden_treasure_record().is_some_and(|record| {
+        FIXED_HIDDEN_TREASURES.get(record).is_some_and(|entry| {
+            matches!(
+                entry.pickup,
+                HiddenTreasurePickup::MoldyCorpse | HiddenTreasurePickup::RottingBody
+            )
+        })
+    })
+}
+
 fn fixed_hidden_treasure_pickup_grant(
     pickup: HiddenTreasurePickup,
     state: u8,

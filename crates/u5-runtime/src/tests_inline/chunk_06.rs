@@ -4581,3 +4581,40 @@
         assert_eq!(rows[item + 2], "Wielding the", "{rows:?}");
         let _ = fs::remove_dir_all(dir);
     }
+
+    /// `containers.md §3` (added 2026-10-25, u5-spec#300 Q2): Get skips a
+    /// staged rotting body or moldy corpse without printing and falls through
+    /// to the live-tile cascade, so a body on a crop tile still gives
+    /// `Crops picked!`, and the body stays on the cell.
+    #[test]
+    fn spec300_q2_get_skips_a_staged_body_and_reaches_the_tile_cascade() {
+        let dir = debug_game_dir();
+        fs::write(
+            dir.join(TOWN_GET_TILE_TABLE_FILE),
+            &format!(
+                "CASTLE:0 0 2 1 {} {} FOOD 1\n",
+                GET_TILE_CROPS_REPLACEMENT, GET_TILE_CROPS_SOURCE,
+            ),
+        )
+        .unwrap();
+        let mut grid = open_grid();
+        grid[32 + 2] = GET_TILE_CROPS_SOURCE;
+        // Record 42 is a rotting body, record 40 a moldy corpse.
+        for record in [42usize, 40] {
+            let mut state = test_state(grid.clone(), 1, 1);
+            state.player.facing = Direction::East;
+            state
+                .active_objects
+                .push(ActiveObject::fixed_hidden_treasure_pickup(record, 2, 1, 0));
+            let body = state.active_objects[1];
+
+            assert_eq!(
+                state.get_facing_with_game_dir(&dir).unwrap(),
+                MoveOutcome::Got,
+                "record {record}"
+            );
+            assert_eq!(state.message, GET_TILE_CROPS_PICKED_LINE, "record {record}");
+            assert_eq!(state.active_objects[1], body, "record {record}");
+        }
+        let _ = fs::remove_dir_all(dir);
+    }
