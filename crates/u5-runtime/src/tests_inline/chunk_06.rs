@@ -3949,6 +3949,24 @@
     }
 
     #[test]
+    fn spec300_q27_a_connecting_broadside_plays_the_impact_rumble_before_the_damage() {
+        // `audio.md §5.3` / `§10.2` and `RETRACTIONS.md` R611 (u5-spec#300
+        // Q27, #301 Q3): stage one "plays the impact rumble, a random rumble
+        // of step 10, target 3000, pitch 100..2000 Hz, 300 updates", and it
+        // is "identical on every stage-one caller (both outdoor ranged
+        // attacks, rough seas, each drowning pass)". The broadside played
+        // only the damage rumbles.
+        let mut state = world_state_with_walker(5, 5, 0x2C, 8, 5);
+        state.party = six_member_party(40);
+        let serial = state.sound_effect_serial;
+        let report = state.outdoor_first_phase_ranged_attack_detail(1).unwrap();
+        assert_eq!(report.outcome, OutdoorRangedAttackOutcome::Connects);
+        let mut expected = vec![SoundEffect::RoughSeasImpactRumble];
+        expected.extend(std::iter::repeat_n(SoundEffect::DamageRumble, 6));
+        assert_eq!(state.sound_effects_after(serial), expected);
+    }
+
+    #[test]
     fn outdoor_walker_obstructed_shot_leaves_the_party_untouched() {
         // `overworld.md §6.2.2`: "*Blocked* means the shot stops where it
         // stopped and nothing further happens -- no payload, no message,

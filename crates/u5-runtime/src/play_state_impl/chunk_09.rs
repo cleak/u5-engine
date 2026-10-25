@@ -5414,7 +5414,21 @@ impl PlayState {
             OutdoorRangedAttackOutcome::Obstructed { .. } => None,
             // §6.2.4: "On a clear line the attack connects, and the
             // payload below runs."
-            OutdoorRangedAttackOutcome::Connects => Some(self.apply_outdoor_impact()),
+            OutdoorRangedAttackOutcome::Connects => {
+                // `audio.md §5.3` / `§10.2` (added 2026-10-25, u5-spec#300
+                // Q27 and #301 Q3, `RETRACTIONS.md` R611): stage one "plays
+                // the impact rumble, a random rumble of step 10, target 3000,
+                // pitch 100..2000 Hz, 300 updates ... followed by one world
+                // tick", and it is "identical on every stage-one caller
+                // (both outdoor ranged attacks, rough seas, each drowning
+                // pass)". The whirlpool, sand-trap and generic-arm callers
+                // enter at stage two (R612), so the rumble is not in the
+                // shared payload.
+                self.outdoor_impact_presentation();
+                self.emit_sound_effect(SoundEffect::RoughSeasImpactRumble);
+                self.advance_world_repaint_tick();
+                Some(self.apply_outdoor_impact_absorption())
+            }
         };
 
         OutdoorRangedAttackReport {
@@ -5511,10 +5525,11 @@ impl PlayState {
     }
 
     /// `overworld.md §6.2.4` stage one — impact presentation. "An impact
-    /// figure is drawn at the party's own map coordinates ..., a short
-    /// tone plays, and the viewport is rebuilt. This stage writes no
-    /// character state and no vehicle state, and prints no narration
-    /// line."
+    /// figure is drawn at the party's own map coordinates ..., and the
+    /// viewport is rebuilt. This stage writes no character state and no
+    /// vehicle state, and prints no narration line." Its sound is not "a
+    /// short tone" (withdrawn, `RETRACTIONS.md` R611) but the 300-update
+    /// impact rumble, which each stage-one caller emits after this.
     fn outdoor_impact_presentation(&mut self) {
         self.mark_visibility_dirty();
     }
@@ -5798,20 +5813,20 @@ impl PlayState {
 
     /// One drowning pass's impact presentation, with its rumble.
     ///
-    /// `audio.md §8.9`: "the loop alternates the damage presentation, which
-    /// plays its own rumble on every pass, with unavoidable damage to every
-    /// non-Dead member". `overworld.md §6.2.4` stage one: "a short tone
-    /// plays". The rumble is the 300-update impact rumble rough seas plays
-    /// after the same impact figure (`§6.2.5`). Measured 2026-10-24 on
-    /// `drowning-collision` (20261022-212330, 20261023-070617), a solo
-    /// 51-HP Avatar: after the long descent the stock sounds one burst per
-    /// pass every 0.337 s - that rumble (220 ms) plus one member's damage
-    /// rumble (118 ms) - where this engine, playing the damage rumble alone,
-    /// ran each pass in under half that and the party died while the stock
-    /// was still on its third pass (`sail-calm`, every run since 2026-10-16).
+    /// `audio.md §8.9`, Drowning row (added 2026-10-25, u5-spec#300 Q27 and
+    /// #301 Q3, `RETRACTIONS.md` R611): each pass is "(1) the impact
+    /// presentation of `overworld.md` Section 6.2.4 stage one - the impact
+    /// figure at the party cell, the 300-update impact rumble `(10, 3000,
+    /// 2000)`, about 216 ms, and one world tick; (2) the whole-party damage
+    /// pass" - each damaged member's 160-update damage rumble - and passes
+    /// "run back to back with no calibrated wait or hold anywhere". The
+    /// published recipe replaces the 2026-10-24 `drowning-collision`
+    /// measurement (0.337 s per solo pass) this was first fitted to; the
+    /// spec reports it consistent with that period.
     fn drowning_pass_impact_presentation(&mut self) {
         self.outdoor_impact_presentation();
         self.emit_sound_effect(SoundEffect::RoughSeasImpactRumble);
+        self.advance_world_repaint_tick();
     }
 
     /// [`Self::apply_ship_loss_drowning`], with each pass staged for the
