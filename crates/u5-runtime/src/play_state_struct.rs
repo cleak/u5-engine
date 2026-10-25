@@ -851,8 +851,12 @@ pub struct PlayState {
     /// `combat-escape-ordinary`, `combat-dungeon-room`, `overworld-night-walk`
     /// stock frames, 2026-10-25) - the "skips rather than erases" case, the
     /// same as `dungeon-mode.md §13`'s labels outliving the mode that drew
-    /// them. Frozen here at combat entry; not live.
+    /// them. Frozen here at combat entry; not live. `moons.md §3` now
+    /// publishes it (u5-spec#300 Q35, `RETRACTIONS.md` R619).
     pub combat_entry_chrome: Option<(ChromeGap, ChromeGap)>,
+    /// `moons.md §3` (u5-spec#300 Q35, R619): the surface-overworld gaps
+    /// left frozen after a fight; see [`crate::PostCombatRibbonHold`].
+    pub post_combat_ribbon_hold: Option<PostCombatRibbonHold>,
     /// `karma.md §7` "Entry pacing": the shrine presentation's own display.
     ///
     /// Meditation does not happen on the overworld map. The presentation

@@ -352,6 +352,21 @@ pub enum ChromeGap {
     Label(String),
 }
 
+/// `moons.md §3` (corrected 2026-10-25, u5-spec#300 Q35, `RETRACTIONS.md`
+/// R619): after a surface-overworld fight "the restore phase repaints only
+/// the stats panel", so each ribbon gap keeps what it showed at combat entry
+/// until its own next ordinary trigger. The strip waits for "the next hour
+/// change, scene entry or camp" (or the exit's zero-minute clock call when
+/// "the fight's **last** clock minute crossed an hour boundary"); the banner
+/// waits for "the next drift hit, Wind Change, scene entry or load". Each
+/// half carries the frozen gap and the hour or wind byte it stays valid
+/// for.
+#[derive(Clone, Debug, PartialEq, Eq, Default)]
+pub struct PostCombatRibbonHold {
+    pub top: Option<(ChromeGap, u8)>,
+    pub bottom: Option<(ChromeGap, u8)>,
+}
+
 /// Everything the chrome pass needs beyond fixed geometry.
 #[derive(Clone, Debug, PartialEq, Eq, Default)]
 pub struct GameplayChromeContent {
@@ -1365,8 +1380,10 @@ pub fn gameplay_chrome_content(state: &crate::PlayState) -> GameplayChromeConten
     // fight (playtest Q10: the arena used to follow the live clock). What is
     // left on screen is whatever the scene drew before the fight: every stock
     // arena capture keeps the strip and wind banner, or a dungeon room's
-    // level and facing labels, rather than the plain ribbon `moons.md §3`
-    // words it as. The captures win; the gaps are frozen at combat entry.
+    // level and facing labels. `moons.md §3` now says so (corrected
+    // 2026-10-25, u5-spec#300 Q35, `RETRACTIONS.md` R619/R620): "Combat
+    // skips both gaps; it does not erase them", so the gaps are frozen at
+    // combat entry.
     // A fixture that raises `combat_active` without framing an arena has no
     // snapshot and falls through to its scene's chrome.
     if state.combat_active {
@@ -1422,17 +1439,37 @@ pub fn gameplay_chrome_content(state: &crate::PlayState) -> GameplayChromeConten
                 picker_page_glyph,
             }
         }
-        crate::Area::World { .. } | crate::Area::Town { .. } => GameplayChromeContent {
-            top: ChromeGap::SkyStrip(Box::new(sky_strip_cells(
+        crate::Area::World { .. } | crate::Area::Town { .. } => {
+            let mut top = ChromeGap::SkyStrip(Box::new(sky_strip_cells(
                 state.clock.hour,
                 state.cached_moon_glyph_bytes,
-            ))),
-            bottom: ChromeGap::Label(wind_banner_text(wind_banner_direction_name(state))),
-            stats_label,
-            timing_glyph,
-            stats_panel_single_box,
-            picker_page_glyph,
-        },
+            )));
+            let mut bottom = ChromeGap::Label(wind_banner_text(wind_banner_direction_name(state)));
+            // `moons.md §3` (u5-spec#300 Q35): a surface-overworld fight
+            // leaves both gaps stale until their next ordinary repaint.
+            if let (crate::Area::World { .. }, Some(hold)) =
+                (state.area, state.post_combat_ribbon_hold.as_ref())
+            {
+                if let Some((gap, hour)) = hold.top.as_ref()
+                    && *hour == state.clock.hour
+                {
+                    top = gap.clone();
+                }
+                if let Some((gap, wind)) = hold.bottom.as_ref()
+                    && *wind == state.wind_save_byte
+                {
+                    bottom = gap.clone();
+                }
+            }
+            GameplayChromeContent {
+                top,
+                bottom,
+                stats_label,
+                timing_glyph,
+                stats_panel_single_box,
+                picker_page_glyph,
+            }
+        }
     }
 }
 

@@ -3800,6 +3800,13 @@ impl PlayState {
     /// mode-zero firing below crosses no hour, so it stays on the two
     /// time-advancing paths that do.
     fn fire_hour_change_bundle(&mut self) {
+        // `moons.md §3` (u5-spec#300 Q35): a post-combat strip stays frozen
+        // only "until the next hour change". Once this hook has run, the
+        // held strip is gone for good - it must not come back when the
+        // clock later returns to the same hour.
+        if let Some(hold) = self.post_combat_ribbon_hold.as_mut() {
+            hold.top = None;
+        }
         self.refresh_cached_moon_glyphs();
         self.write_twelve_hour_audio_repeats();
     }
@@ -5442,7 +5449,19 @@ impl PlayState {
             OutdoorRangedAttackOutcome::Obstructed { .. } => None,
             // §6.2.4: "On a clear line the attack connects, and the
             // payload below runs."
-            OutdoorRangedAttackOutcome::Connects => Some(self.apply_outdoor_impact()),
+            OutdoorRangedAttackOutcome::Connects => {
+                // `audio.md §5.3` / `§10.2` (added 2026-10-25, u5-spec#300
+                // Q27 and #301 Q3, `RETRACTIONS.md` R611): stage one "plays
+                // the impact rumble, a random rumble of step 10, target 3000,
+                // pitch 100..2000 Hz, 300 updates ... followed by one world
+                // tick", and it is "identical on every stage-one caller
+                // (both outdoor ranged attacks, rough seas, each drowning
+                // pass)". The whirlpool, sand-trap and generic-arm callers
+                // enter at stage two (R612) and call the absorption directly.
+                // Stage one plays the rumble and the repaint tick itself.
+                self.outdoor_impact_presentation();
+                Some(self.apply_outdoor_impact_absorption())
+            }
         };
 
         OutdoorRangedAttackReport {
@@ -5453,12 +5472,15 @@ impl PlayState {
         }
     }
 
-    /// `overworld.md §6.2.4` shared impact payload, both stages.
+    /// `overworld.md §6.2.4` shared impact payload, both stages: stage one
+    /// ([`Self::outdoor_impact_presentation`], with its impact rumble and
+    /// repaint tick) then stage two's absorption.
     ///
-    /// This is the whole payload, and it is shared: besides the two ranged
-    /// attacks it is reached "from the sand-trap adjacency reaction and
-    /// from the whirlpool engagement", and the drowning rung of
-    /// `vehicles.md §6` runs its second stage directly.
+    /// The whirlpool, sand-trap and generic adjacent-hostile callers do not
+    /// come here: they "enter at stage two, the absorption stage. They draw
+    /// no impact figure and play no impact rumble" (`RETRACTIONS.md` R612,
+    /// u5-spec#301 Q3; `audio.md §8.9` Whirlpool row), so they call
+    /// [`Self::apply_outdoor_impact_absorption`] directly.
     ///
     /// It does **not** route through the combat damage-and-status
     /// resolver: §6.2.4 states positively that "[n]o attacker identity,
@@ -5519,7 +5541,8 @@ impl PlayState {
             return None;
         }
         self.push_impact_line("Rough seas!");
-        // Stage one plays the impact rumble itself (R611).
+        // Stage one plays the impact rumble and the repaint tick itself
+        // (R611).
         self.outdoor_impact_presentation();
         // `overworld.md §6.2.5`: "Order is `Rough seas!`, impact figure at
         // the party cell, impact rumble, one world repaint tick, then
@@ -5533,8 +5556,7 @@ impl PlayState {
         // `animation.md §13` separates out ("The viewport rebuild and
         // redraw run whenever the master redraw gate is set, regardless of
         // the second gate"), not a full §13.2 world step with its wind
-        // check.
-        self.advance_world_repaint_tick();
+        // check - which is what stage one's tick is.
         Some(self.apply_outdoor_impact_absorption())
     }
 
@@ -5545,10 +5567,14 @@ impl PlayState {
     /// ... - and one world tick repaints the viewport." It "is one fixed
     /// routine, so the sound is identical on every caller: both outdoor
     /// ranged attacks ..., rough seas and every drowning pass" (u5-spec#300
-    /// Q27, #301 Q3; R611 withdrew "a short tone plays").
+    /// Q27, #301 Q3; R611 withdrew "a short tone plays"). "This stage writes
+    /// no character state and no vehicle state, and prints no narration
+    /// line." The repaint tick is the gameplay-draw-free repaint half (see
+    /// [`Self::apply_rough_seas_if_eligible`]).
     fn outdoor_impact_presentation(&mut self) {
         self.mark_visibility_dirty();
         self.emit_sound_effect(SoundEffect::RoughSeasImpactRumble);
+        self.advance_world_repaint_tick();
     }
 
     /// `overworld.md §6.2.4` stage two — impact absorption. The stage
@@ -5830,17 +5856,16 @@ impl PlayState {
 
     /// One drowning pass's impact presentation, with its rumble.
     ///
-    /// `audio.md §8.9`: "the loop alternates the damage presentation, which
-    /// plays its own rumble on every pass, with unavoidable damage to every
-    /// non-Dead member". `overworld.md §6.2.4` stage one: "a short tone
-    /// plays". The rumble is the 300-update impact rumble rough seas plays
-    /// after the same impact figure (`§6.2.5`). Measured 2026-10-24 on
-    /// `drowning-collision` (20261022-212330, 20261023-070617), a solo
-    /// 51-HP Avatar: after the long descent the stock sounds one burst per
-    /// pass every 0.337 s - that rumble (220 ms) plus one member's damage
-    /// rumble (118 ms) - where this engine, playing the damage rumble alone,
-    /// ran each pass in under half that and the party died while the stock
-    /// was still on its third pass (`sail-calm`, every run since 2026-10-16).
+    /// `audio.md §8.9`, Drowning row (added 2026-10-25, u5-spec#300 Q27 and
+    /// #301 Q3, `RETRACTIONS.md` R611): each pass is "(1) the impact
+    /// presentation of `overworld.md` Section 6.2.4 stage one - the impact
+    /// figure at the party cell, the 300-update impact rumble `(10, 3000,
+    /// 2000)`, about 216 ms, and one world tick; (2) the whole-party damage
+    /// pass" - each damaged member's 160-update damage rumble - and passes
+    /// "run back to back with no calibrated wait or hold anywhere". The
+    /// published recipe replaces the 2026-10-24 `drowning-collision`
+    /// measurement (0.337 s per solo pass) this was first fitted to; the
+    /// spec reports it consistent with that period.
     fn drowning_pass_impact_presentation(&mut self) {
         // Stage one plays the impact rumble itself (R611, #301 Q3).
         self.outdoor_impact_presentation();

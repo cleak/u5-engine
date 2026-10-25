@@ -853,6 +853,15 @@ pub fn rough_seas_impact_rumble(jitter: &mut RumbleJitter) -> SpeakerProgram {
     random_rumble(10, 3000, 2000, jitter)
 }
 
+/// `audio.md §7.4` (added 2026-10-25, u5-spec#300 Q32): "Both step bursts
+/// belong to the step, whatever the earlier parity. The committed-step path
+/// sets the intensity to 15 and clears the parity flag before each of its
+/// two ticks, so every committed step emits exactly two bursts" - the 15
+/// before the party position is written, the 11 in the redraw after it.
+/// An emitting tick subtracts 4 with a floor at zero, so 7 and then 3 are
+/// left for the tail ticks.
+pub const DUNGEON_FOOTSTEP_STEP_PAIR: [u8; 2] = [15, 11];
+
 /// `audio.md §5.3` (u5-spec#298 Q7): dungeon sleep or poison field hit,
 /// step 1, target 50, 100..3500 Hz - 50 updates.
 pub fn status_field_rumble(jitter: &mut RumbleJitter) -> SpeakerProgram {
@@ -1242,6 +1251,13 @@ pub const MOONGATE_TRANSIT_ENVELOPE: EnvelopeSegment =
 /// period".
 pub const SHADOWLORD_YELL_SUMMON_ENVELOPE: EnvelopeSegment =
     EnvelopeSegment::new(2, 2000, 30_000, 1, 10_400);
+/// `audio.md §8.6` (added 2026-10-25, u5-spec#300 Q4 and Q17): the
+/// Shadowlord presence notice - "a hideout town's entry notice and each
+/// Stonegate notice" - runs `(1, 2000, 60000, 1, 6600)` "After the notice
+/// text prints". "The five values are constants, the same for all three
+/// Shadowlords"; one fixed pitch that swells and fades, blocking.
+pub const SHADOWLORD_PRESENCE_NOTICE_ENVELOPE: EnvelopeSegment =
+    EnvelopeSegment::new(1, 2000, 60_000, 1, 6600);
 /// `audio.md §6.1`'s absorb cue, the manual envelope every absorbed cast
 /// plays: "phase increment 9800, idle count 1, 28000 iterations, initial
 /// comparison 1000 and comparison increment 2."
@@ -1938,7 +1954,8 @@ impl DissolveToneState {
 ///
 /// Every variant corresponds to a published trigger. There is deliberately no
 /// variant for a successful step, a menu acceptance, a name keystroke, an
-/// ordinary dungeon move or turn, a generic successful command, a generic
+/// ordinary dungeon turn (a committed dungeon step carries the footstep pair,
+/// u5-spec#300 Q32), a generic successful command, a generic
 /// pickup, or the Codex approach: `audio.md §9` states those are silent, and
 /// inventing a cue for them is exactly the failure the section exists to
 /// prevent.
@@ -1961,9 +1978,31 @@ pub enum SoundEffect {
     ShipCollisionRumble,
     /// `§7.4` rough-seas impact before party damage.
     RoughSeasImpactRumble,
+    /// `§5.3` / `§8.2` (added 2026-10-25, u5-spec#300 Q31): a combat hit
+    /// landing on a party target inside the arena, "between the two halves
+    /// of the target member's stats-row flash" - step 40, target 3000,
+    /// 100..500 Hz, 75 updates. "It has the same numbers as the trap row
+    /// but is a separate call from the combat hit presentation, not the
+    /// shared trap resolver."
+    CombatPartyHitBurst,
+    /// `§5.3` / `§8.2` (added 2026-10-25, u5-spec#300 Q31): a combat hit
+    /// on a monster target, or any target outside the arena - the
+    /// 300-update impact rumble `(10, 3000, 2000)`, with no flash.
+    CombatMonsterHitBurst,
     /// `§5.3` dungeon sleep or poison field hit, once per member whose save
     /// fails (u5-spec#298 Q7; `dungeon-mode.md §8.1`).
     StatusFieldRumble,
+    /// `§5.3` / `§7.4` (added 2026-10-25, u5-spec#300 Q32, `RETRACTIONS.md`
+    /// R615): one dungeon footstep burst, "a random rumble (Section 5.3) with
+    /// step 1, target equal to the current intensity and inclusive pitch
+    /// range 100..20000 Hz, so its update count equals the intensity". The
+    /// complete program is 15, 11, 7, 3; see [`DUNGEON_FOOTSTEP_STEP_PAIR`].
+    DungeonFootstep { intensity: u8 },
+    /// `§5.3` / `§8.2` (added 2026-10-25, u5-spec#300 Q32): the dungeon
+    /// electric-field push-back, "once per contact, after the viewport flash
+    /// and before the push-back, the 500-update 100..20000 Hz rumble
+    /// `(1, 500, 20000)`". Distinct from the per-member damage rumble.
+    DungeonElectricPushBack,
     /// `§6` shared potion/wind/spell variant `0..=8`.
     SharedVariant { variant: u8 },
     /// `§6.1` the circle-scaled rumble lead alone, with the viewport inversion
@@ -2118,6 +2157,9 @@ pub enum SoundEffect {
     /// Yell, after `\nA_shadowlord_appears\n` prints and before the
     /// single-cell converge. See [`SHADOWLORD_YELL_SUMMON_ENVELOPE`].
     ShadowlordYellSummon,
+    /// `§8.6` (added 2026-10-25, u5-spec#300 Q4/Q17): one Shadowlord
+    /// presence notice tone. See [`SHADOWLORD_PRESENCE_NOTICE_ENVELOPE`].
+    ShadowlordPresenceNotice,
     /// `§8.10` ambient scenery tick, grandfather-clock tick-tock: a blocking
     /// tone of 3000 Hz for 3 units at sub-counter residue 0 and 2000 Hz at
     /// residue 4, while the hour-chime countdown is zero.
@@ -2169,7 +2211,13 @@ impl SoundEffect {
             SoundEffect::DamageRumble => damage_rumble(jitter),
             SoundEffect::ShipCollisionRumble => ship_collision_rumble(jitter),
             SoundEffect::RoughSeasImpactRumble => rough_seas_impact_rumble(jitter),
+            SoundEffect::CombatPartyHitBurst => trap_rumble(jitter),
+            SoundEffect::CombatMonsterHitBurst => rough_seas_impact_rumble(jitter),
             SoundEffect::StatusFieldRumble => status_field_rumble(jitter),
+            SoundEffect::DungeonFootstep { intensity } => {
+                random_rumble(1, u32::from(*intensity), 20000, jitter)
+            }
+            SoundEffect::DungeonElectricPushBack => random_rumble(1, 500, 20000, jitter),
             SoundEffect::SharedVariant { variant } => shared_variant(*variant, jitter),
             SoundEffect::CircleRumbleLead { circle } => circle_rumble_lead(*circle, jitter),
             SoundEffect::CombatTemplateImpact => combat_template_impact(),
@@ -2246,6 +2294,9 @@ impl SoundEffect {
                 }
             }
             SoundEffect::ShadowlordYellSummon => envelope_program(SHADOWLORD_YELL_SUMMON_ENVELOPE),
+            SoundEffect::ShadowlordPresenceNotice => {
+                envelope_program(SHADOWLORD_PRESENCE_NOTICE_ENVELOPE)
+            }
             SoundEffect::AmbientClockChime => envelope_program(AMBIENT_CLOCK_CHIME_ENVELOPE),
             SoundEffect::AmbientWaterfallRumble => random_rumble(20, 60, 10_000, jitter),
             SoundEffect::AmbientFountainRumble => random_rumble(10, 30, 25_000, jitter),
@@ -3102,6 +3153,11 @@ mod tests {
             SoundEffect::DamageRumble,
             SoundEffect::ShipCollisionRumble,
             SoundEffect::RoughSeasImpactRumble,
+            SoundEffect::CombatPartyHitBurst,
+            SoundEffect::CombatMonsterHitBurst,
+            SoundEffect::DungeonFootstep { intensity: 15 },
+            SoundEffect::DungeonFootstep { intensity: 3 },
+            SoundEffect::DungeonElectricPushBack,
             SoundEffect::StatusFieldRumble,
             SoundEffect::CorpsePlagueRumble,
             SoundEffect::SharedVariant { variant: 0 },

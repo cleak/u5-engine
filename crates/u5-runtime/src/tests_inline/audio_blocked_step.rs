@@ -428,3 +428,53 @@ fn the_two_ring_vanish_paths_share_the_snap_and_order_it_per_path() {
     );
     assert_eq!(entry.party_equipment[0][EQUIP_SLOT_RING], EQUIPMENT_EMPTY);
 }
+
+/// `audio.md §5.3` / `§7.4` / `§8.2` (added 2026-10-25, u5-spec#300 Q32,
+/// `RETRACTIONS.md` R615): every committed dungeon step "emits exactly two
+/// bursts", step 1 at intensities 15 then 11 over 100..20000 Hz, and an
+/// electric contact plays "the 500-update 100..20000 Hz rumble `(1, 500,
+/// 20000)`" before the whole-party damage pass, then finishes through the
+/// committed-step path "so the 15/11 footstep pair also plays". The engine
+/// played nothing on either.
+#[test]
+fn spec300_q32_dungeon_footstep_pair_and_electric_push_back_rumble() {
+    let new_jitter = audio::RumbleJitter::new;
+    assert_eq!(
+        SoundEffect::DungeonFootstep { intensity: 15 }.program(&mut new_jitter()),
+        audio::random_rumble(1, 15, 20000, &mut new_jitter())
+    );
+    assert_eq!(
+        SoundEffect::DungeonElectricPushBack.program(&mut new_jitter()),
+        audio::random_rumble(1, 500, 20000, &mut new_jitter())
+    );
+
+    let mut state = dungeon_state(open_dungeon_record(), 0, 4, 4);
+    let serial = state.sound_effect_serial;
+    assert_eq!(
+        state
+            .step_dungeon(Direction::East, 5, 4, DungeonScene::new(40).unwrap(), 0, None)
+            .unwrap(),
+        MoveOutcome::Moved
+    );
+    assert_eq!(
+        state.sound_effects_after(serial),
+        vec![
+            SoundEffect::DungeonFootstep { intensity: 15 },
+            SoundEffect::DungeonFootstep { intensity: 11 },
+        ]
+    );
+
+    let mut state = dungeon_state(open_dungeon_record(), 0, 4, 4);
+    state.grid[dungeon_cell_index(0, 5, 4)] = 0x83;
+    let living = state.party.iter().filter(|member| member.status != b'D').count();
+    let serial = state.sound_effect_serial;
+    let _ = state
+        .step_dungeon(Direction::East, 5, 4, DungeonScene::new(40).unwrap(), 0, None)
+        .unwrap();
+    let mut expected = vec![SoundEffect::DungeonElectricPushBack];
+    expected.extend(std::iter::repeat_n(SoundEffect::DamageRumble, living));
+    expected.push(SoundEffect::DungeonFootstep { intensity: 15 });
+    expected.push(SoundEffect::DungeonFootstep { intensity: 11 });
+    assert_eq!(state.sound_effects_after(serial), expected);
+    assert_eq!((state.player.x, state.player.y), (4, 4), "pushed back");
+}

@@ -1043,8 +1043,9 @@
             // `magic.md §7`: the scene gate runs before charge consumption.
             assert_eq!(state.spell_charges[spell_index], 3);
             assert_eq!(state.party[0].mana, 20);
-            // `magic.md §5` step 3: no time is consumed on this rejection.
-            assert_eq!(state.turn, 0);
+            // `magic.md §5` step 3 (u5-spec#300 Q14, R604): the rejection
+            // "reports acted" and costs the ordinary turn.
+            assert_eq!(state.turn, 1);
         }
 
         // The same spell in a dungeon passes the scene gate and spends.
@@ -1078,7 +1079,8 @@
             assert_eq!(state.message, "Not here!\n");
             assert_eq!(state.spell_charges[MAGIC_MISSILE_SPELL_INDEX], 2);
             assert_eq!(state.party[0].mana, 9);
-            assert_eq!(state.turn, 0);
+            // `magic.md §5` step 3 (u5-spec#300 Q14, R604): acted.
+            assert_eq!(state.turn, 1);
         }
 
         let mut fighting = britannia_state(open_world_grid(), 1, 1);
@@ -1109,7 +1111,7 @@
             Some(MoveOutcome::Blocked)
         );
         assert_eq!(state.message, "Not here!\n");
-        assert_eq!(state.turn, 0);
+        assert_eq!(state.turn, 1, "R604: the scene rejection is acted");
     }
 
     #[test]

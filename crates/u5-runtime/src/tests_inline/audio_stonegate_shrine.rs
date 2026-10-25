@@ -30,6 +30,9 @@ fn stonegate_entry_presentation_plays_one_notice_tone_per_living_shadowlord() {
     // `town-mode.md §13` (u5-spec#300 Q4, Q17): each Stonegate notice "plays
     // its tone", the constant envelope `(1, 2000, 60000, 1, 6600)`; the
     // Sceptre adds no prelude row or sound (R590).
+    // `audio.md §8.6` (added 2026-10-25, u5-spec#300 Q4/Q17): each Stonegate
+    // notice is followed by the Shadowlord presence tone; the inventory used
+    // to list only the trapdoor scripted death for Stonegate.
     let scene = Scene::new(STONEGATE_SCENE_BYTE).unwrap();
     let mut state = test_state(open_grid(), 1, 1);
     state.area = Area::Town { scene, floor: 0 };

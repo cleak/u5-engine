@@ -294,6 +294,17 @@ impl PlayState {
         // out-of-range byte reads as Calm, and a drift to a real Calm must
         // still store `0` over it (`weather.md §2.1`, out-of-range values).
         let out_of_range_byte = self.wind_save_byte > 4;
+        // `moons.md §3` (u5-spec#300 Q35): after a surface-overworld fight
+        // the banner "keeps the pre-combat wind until the next drift hit,
+        // Wind Change, scene entry or load". This setter is the banner's
+        // repaint helper, so any call outside combat ends the hold for good
+        // - even one that stores the wind already in force, and even if a
+        // later change returns to the wind the hold was keyed on.
+        if !self.combat_active
+            && let Some(hold) = self.post_combat_ribbon_hold.as_mut()
+        {
+            hold.bottom = None;
+        }
         if self.wind == WindState::Calm && wind == WindState::Calm && !out_of_range_byte {
             return false;
         }
@@ -2828,9 +2839,11 @@ impl PlayState {
     /// - **Step 1, active-player resolve.** A missing or unconscious caster
     ///   aborts before any gate.
     /// - **Gate 5, scene.** `magic.md §7`: "the scene gate runs before
-    ///   charge consumption, so `Not here!` does not spend a charge", and
-    ///   `magic.md §5` step 3: "Time is *not* consumed on this rejection".
-    ///   So `Not here!` debits nothing and does not advance the turn.
+    ///   charge consumption, so `Not here!` does not spend a charge". It
+    ///   does cost time: `magic.md §5` step 3 (corrected 2026-10-25,
+    ///   u5-spec#300 Q14, `RETRACTIONS.md` R604) - "this rejection reports
+    ///   acted ... So in overworld and town play the rejection costs the
+    ///   ordinary turn". The withdrawn text said it consumed no time.
     /// - **Gate 6, charges.** `None mixed!` when the counter is zero;
     ///   otherwise the charge is spent immediately.
     /// - **Gate 7, mana.** `M.P. too low!` with the charge already gone.
@@ -2895,11 +2908,20 @@ impl PlayState {
         }
         match outcome {
             CastGateOutcome::Cast => None,
-            // `magic.md §5` step 3: the scene rejection costs no time. The
-            // charges rejection keeps this crate's existing no-turn
-            // behaviour; the spec does not settle whether `None mixed!`
-            // advances the clock.
-            CastGateOutcome::NotHere | CastGateOutcome::NoneMixed => {
+            // `magic.md §5` step 3 (u5-spec#300 Q14, R604): the scene
+            // rejection "reports acted", so outside combat it spends the
+            // ordinary turn. Inside the arena the combat refusal rules
+            // govern and are left as they were.
+            CastGateOutcome::NotHere => {
+                self.emit_cast_gate_refusal(outcome);
+                if !self.combat_active {
+                    self.advance_turn();
+                }
+                Some(MoveOutcome::Blocked)
+            }
+            // The charges rejection keeps this crate's existing no-turn
+            // behaviour (outside this change's `magic.md` scope).
+            CastGateOutcome::NoneMixed => {
                 self.emit_cast_gate_refusal(outcome);
                 Some(MoveOutcome::Blocked)
             }

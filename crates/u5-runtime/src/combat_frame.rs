@@ -325,11 +325,11 @@ pub struct CombatCursorBlinkReport {
     pub secondary_marker_cell: Option<(u8, u8)>,
 }
 
-/// `combat.md Section 12` split-on-damage placement-attempt cap.
-/// When a monster with the split-on-damage class flag is damaged but
-/// not killed, combat scans the actor table for an empty slot to copy
-/// the parent's class byte into. Up to this many attempts are made before
-/// the divide is dropped silently.
+/// `combat.md Section 12` split-on-damage placement-attempt cap: "At most
+/// one clone is made per damaging event, by up to eight attempts that stop
+/// at the first success." Each attempt is a random neighbour-cell draw, not
+/// a slot scan (`RETRACTIONS.md` R593); a split whose attempts all fail
+/// prints nothing.
 pub const COMBAT_SPLIT_PLACEMENT_ATTEMPTS: u8 = 8;
 
 /// `combat.md §12` factory-seed cached combat-defense byte at
@@ -1676,18 +1676,6 @@ impl PlayState {
     /// short form and does **not** reprint the banner" without qualification;
     /// that is wrong for the larger of the two families -
     /// `RETRACTIONS.md` R380.)*
-    /// `combat.md §8.1`: the banner is printed before the two status
-    /// early-outs, so a dragged-under or asleep prompted slot gets its full
-    /// banner and then `ARGH!` / `Zzzzz...` "in place of a command"
-    /// (`RETRACTIONS.md` R380). No key is read on either arm, so the pending
-    /// slot is not opened.
-    pub(crate) fn emit_combat_turn_banner_before_status_early_out(&mut self, slot: usize) {
-        if let Some(banner) = self.combat_turn_banner_for_actor(slot) {
-            self.close_combat_result_row_before_banner();
-            self.emit_combat_print(&banner);
-        }
-    }
-
     /// `combat.md §8`'s spacing rule around a combat result: "its trailing
     /// newline closes the last result row. The next full actor banner
     /// begins with its own newline, **leaving a blank row after the
@@ -4371,9 +4359,33 @@ impl PlayState {
     }
 
     pub fn combat_legal_cell_mask(&self) -> [[bool; COMBAT_ARENA_SIDE]; COMBAT_ARENA_SIDE] {
+        self.combat_legal_cell_mask_over(&self.combat_actors)
+    }
+
+    /// `combat.md §12`, "Where the clone goes" (u5-spec#300 Q9): the split
+    /// clone's cell takes "the same arena-cell acceptance test a combat step
+    /// uses", in which "no live combatant may stand there (a dead or
+    /// dragged-under combatant does not block, an asleep one does)". The
+    /// shared [`Self::combat_legal_cell_mask`] still treats a dragged-under
+    /// combatant as blocking, so the split drops those occupants first.
+    fn combat_split_legal_cell_mask(&self) -> [[bool; COMBAT_ARENA_SIDE]; COMBAT_ARENA_SIDE] {
+        let actors = self.combat_actors.map(|actor| {
+            if actor.is_dragged_under() {
+                CombatActorDescriptor::empty()
+            } else {
+                actor
+            }
+        });
+        self.combat_legal_cell_mask_over(&actors)
+    }
+
+    fn combat_legal_cell_mask_over(
+        &self,
+        actors: &[CombatActorDescriptor],
+    ) -> [[bool; COMBAT_ARENA_SIDE]; COMBAT_ARENA_SIDE] {
         let mut legal_cells = build_combat_ai_legal_cell_mask(
             &self.combat_terrain,
-            &self.combat_actors,
+            actors,
             is_combat_arena_tile_walkable,
         );
         for object in self.active_objects.iter().take(OOL_SLOTS) {
@@ -4385,6 +4397,32 @@ impl PlayState {
             }
         }
         legal_cells
+    }
+
+    /// `moons.md §3`, "After the fight the gaps resume as follows"
+    /// (corrected 2026-10-25, u5-spec#300 Q35, `RETRACTIONS.md` R619): on
+    /// the surface overworld "the restore phase repaints only the stats
+    /// panel", and the terrain-combat wrapper's zero-minute clock call
+    /// "repaints the strip only when the fight's **last** clock minute
+    /// crossed an hour boundary" - in one-minute steps, exactly when the
+    /// clock now reads minute zero. Otherwise the strip keeps the pre-combat
+    /// hour's markers and the banner the pre-combat wind. Town fights reload
+    /// the floor and dungeons redraw their labels, and the underworld erases
+    /// both gaps, so only the surface plane holds anything. Whether a camp
+    /// ambush (no trailing clock call) made the fight is not tracked, so it
+    /// takes the same minute-zero test.
+    fn hold_ribbon_gaps_after_surface_combat(&mut self) {
+        self.post_combat_ribbon_hold = None;
+        if !matches!(self.area, Area::World { plane } if plane != WorldPlane::Underworld) {
+            return;
+        }
+        let Some((top, bottom)) = self.combat_entry_chrome.clone() else {
+            return;
+        };
+        self.post_combat_ribbon_hold = Some(PostCombatRibbonHold {
+            top: (self.clock.minute != 0).then_some((top, self.clock.hour)),
+            bottom: Some((bottom, self.wind_save_byte)),
+        });
     }
 
     pub fn enter_combat_frame(
@@ -4572,6 +4610,7 @@ impl PlayState {
         self.combat_active = false;
         self.combat_action_result = 0;
         self.combat_frame_snapshot = None;
+        self.hold_ribbon_gaps_after_surface_combat();
         // `stats-panel.md §2.2.1`: combat exit is an immediate whole-panel
         // site.
         self.repaint_stats_panel();
@@ -4674,6 +4713,13 @@ impl PlayState {
                         .as_ref()
                         .is_some_and(|snapshot| snapshot.exit_announced)
                     && !combat_has_active_not_dead_non_party_actor(&self.combat_actors));
+        // u5-spec#300 Q10 (`dungeon-mode.md §10`, `RETRACTIONS.md` R595):
+        // dungeon A-Attack "reports \"no action\" and calls no clock before
+        // or after the fight", and an implementation "must not run the
+        // post-action pass after the fight".
+        let dungeon_attack_fight = self.combat_frame_snapshot.as_ref().is_some_and(|snapshot| {
+            snapshot.dungeon_post_combat == Some(DungeonPostCombatApplier::AttackLevelsOnly)
+        });
         let restored_snapshot = if let Some(snapshot) = self.combat_frame_snapshot.take() {
             let enter_endgame_after_restore =
                 snapshot.enter_endgame_after_successful_combat && body_retrieval_exit;
@@ -4723,8 +4769,11 @@ impl PlayState {
         // the ordinary world turn advance, so its draws are the ones that
         // advance owns (NPC schedules and the active-object epilogue).
         // `§5.3` attaches no condition to it, so every way the round loop
-        // ends reaches it.
-        self.advance_turn();
+        // ends reaches it - except a dungeon A-Attack fight, whose only
+        // minute was the loop head's (u5-spec#300 Q10): it spends no turn.
+        if !dungeon_attack_fight {
+            self.advance_turn();
+        }
         self.apply_pending_world_object_walker_pass();
         CombatRoundLoopExitApplication {
             exit,
@@ -5135,43 +5184,63 @@ impl PlayState {
         changed
     }
 
-    /// `combat.md §12` "Splitting / replicating monsters": a class carrying
-    /// the split-on-damage flag that is damaged but **not** killed looks for
-    /// an empty slot in the actor table — up to eight attempts — copies the
-    /// parent's class byte into it, and prints `<monster name> divides!`.
-    /// The child is placed through the ordinary monster-placement primitive
-    /// at the parent's own arena cell and Z plane with the hostile tag; the
-    /// eight-attempt cap lives in [`resolve_combat_split_placement`].
+    /// `combat.md §12` "Splitting / replicating monsters" (corrected
+    /// 2026-10-25, issue #300 Q9; `RETRACTIONS.md` R593): a Slime or
+    /// Gargoyle damaged but not killed makes at most one clone "by up to
+    /// eight attempts that stop at the first success". Each attempt draws a
+    /// neighbour offset (two range draws, X first; an off-arena pair is
+    /// redrawn within the same attempt), the candidate must pass the
+    /// combat-step arena-cell test - so the parent's own cell is always
+    /// refused - and an accepted cell goes to the ordinary monster
+    /// placement, which takes the first free monster slot and record; a full
+    /// monster range fails that attempt. The clone is a fresh hostile of
+    /// the parent's class whose hit points are "overwritten with the
+    /// **parent's remaining hit points after this hit**".
     pub fn apply_combat_monster_split_placement(
         &mut self,
         target_slot: usize,
         damage: CombatMonsterDamageOutcome,
     ) -> Option<CombatSummonApplication> {
         let parent = self.combat_actors.get(target_slot).copied()?;
-        let candidate_slots =
-            (COMBAT_PARTY_ACTOR_SLOTS..COMBAT_ACTOR_SLOTS).collect::<Vec<usize>>();
-        let placement = resolve_combat_split_placement(
-            damage.class,
-            damage.applied_damage,
-            damage.killed,
-            &self.combat_actors,
-            &candidate_slots,
-        )?;
+        if !resolve_combat_split_eligibility(damage.class, damage.applied_damage, damage.killed) {
+            return None;
+        }
         let z = self
             .active_objects
             .get(usize::from(parent.active_object_slot))
             .map(|object| object.z)
             .unwrap_or_default();
-        // `combat.md §6.1`: "Monster and object descriptors never carry"
-        // `0x80`; `§16.1` maps every non-passive placed class to the
-        // ordinary hostile tag `0x40`.
-        let child = self.place_combat_monster_at_arena_cell(
-            placement.class,
-            parent.x,
-            parent.y,
-            z,
-            combat_monster_placement_flags(placement.class),
-        )?;
+        let legal_cells = self.combat_split_legal_cell_mask();
+        let mut placed = None;
+        for _ in 0..COMBAT_SPLIT_PLACEMENT_ATTEMPTS {
+            let (x, y) = loop {
+                let dx_draw = self.random_range_u8(0, 2);
+                let dy_draw = self.random_range_u8(0, 2);
+                if let Some(cell) = combat_split_candidate_cell(parent.x, parent.y, dx_draw, dy_draw)
+                {
+                    break cell;
+                }
+            };
+            if !legal_cells[usize::from(y)][usize::from(x)] {
+                continue;
+            }
+            // `combat.md §6.1`: "Monster and object descriptors never carry"
+            // `0x80`; `§16.1` maps every non-passive placed class to the
+            // ordinary hostile tag `0x40`.
+            if let Some(child) = self.place_combat_monster_at_arena_cell(
+                damage.class,
+                x,
+                y,
+                z,
+                combat_monster_placement_flags(damage.class),
+            ) {
+                placed = Some(child);
+                break;
+            }
+        }
+        let mut child = placed?;
+        self.combat_actors[child.actor_slot].hp_or_wound = parent.hp_or_wound;
+        child.actor.hp_or_wound = parent.hp_or_wound;
         // `combat.md §11.1`, census: "`<monster> divides!` inside the
         // damage handler, and the ordinary result line **still** prints
         // after it" - `Order, stated once` step 4, after step 3's hit
@@ -5179,7 +5248,7 @@ impl PlayState {
         // let that result line overwrite it, so the divide was never seen
         // (playtest H20); it is held for the shared result narrator, which
         // owns those newlines.
-        if let Some(stats) = combat_class_stats(placement.class) {
+        if let Some(stats) = combat_class_stats(damage.class) {
             self.flush_unclaimed_combat_divide_line();
             self.combat_pending_divide_line = Some(format!("{} divides!", stats.name));
         }
@@ -5229,6 +5298,40 @@ impl PlayState {
             Some(actor) if !actor.is_empty() => actor.flags & COMBAT_ACTOR_FLAG_SELECTABLE_80 != 0,
             _ => target_slot < COMBAT_PARTY_ACTOR_SLOTS,
         }
+    }
+
+    /// `combat.md §11.1`, "Order, stated once" step 2 (corrected 2026-10-25,
+    /// u5-spec#300 Q31, `RETRACTIONS.md` R614): when a hit lands, "the
+    /// impact presentation runs first": "for a **party** target that
+    /// member's stats row is flashed around a 75-update noise burst (random
+    /// rumble step 40, target 3000, 100..500 Hz ...), which is the only
+    /// sound of a combat party hit ...; for a **monster** target, or any
+    /// target outside the arena, a 300-update noise burst alone (step 10,
+    /// target 3000, 100..2000 Hz) with no flash; the party form is selected
+    /// by the target descriptor's party-side bit". It precedes the hit
+    /// newline and the damage, and neither form touches the gameplay
+    /// generator. The engine models no separate row-flash raster, so only
+    /// the burst is recorded.
+    pub(crate) fn emit_combat_hit_presentation(
+        &mut self,
+        target_slot: usize,
+        resolution: &CombatWeaponAttackResolution,
+    ) {
+        if !matches!(
+            resolution,
+            CombatWeaponAttackResolution::Hit { .. } | CombatWeaponAttackResolution::Special { .. }
+        ) {
+            return;
+        }
+        let party_target = self
+            .combat_actors
+            .get(target_slot)
+            .is_some_and(|actor| actor.is_party_side());
+        self.emit_sound_effect(if party_target {
+            SoundEffect::CombatPartyHitBurst
+        } else {
+            SoundEffect::CombatMonsterHitBurst
+        });
     }
 
     /// `combat.md` 11.1, census row "Damage zero or negative | both |
@@ -5321,7 +5424,12 @@ impl PlayState {
             return false;
         }
         let name = crate::input_dispatch::combat_actor_display_name(self, slot);
-        self.emit_combat_print(&format!("{name}{COMBAT_REGURGITATED_SUFFIX}"));
+        // `§8.1` (added 2026-10-25, u5-spec#300 Q30): the name and
+        // ` regurgitated!` are followed by a line feed, "on the row below
+        // `ARGH!`, so a release reads `>ARGH!` then `Avatar regurgitated!` on
+        // two rows and never `ARGH!Avatar regurgitated!` on one".
+        self.emit_combat_print(&format!("{name}{COMBAT_REGURGITATED_SUFFIX}\n"));
+        self.message_row_open_mid_line = false;
         if let Some(actor) = self.combat_actors.get_mut(slot) {
             actor.flags &= !COMBAT_ACTOR_FLAG_DRAGGED_UNDER;
         }
@@ -6474,6 +6582,7 @@ impl PlayState {
             input.defence_roll = self.combat_defence_roll(defence_rating);
         }
         let resolution = resolve_combat_weapon_attack(input);
+        self.emit_combat_hit_presentation(target_slot, &resolution);
         let damage_application = match resolution {
             CombatWeaponAttackResolution::Hit { raw_damage, .. } => self
                 .apply_combat_weapon_damage_to_target(
@@ -6746,6 +6855,7 @@ impl PlayState {
                 input.defence_roll = self.combat_defence_roll(defence_rating);
             }
             let resolution = resolve_combat_weapon_attack(input);
+            self.emit_combat_hit_presentation(target_slot, &resolution);
             let damage_application = match resolution {
                 CombatWeaponAttackResolution::Hit { raw_damage, .. } => {
                     self.apply_combat_weapon_damage_to_target(None, target_slot, raw_damage, true)
@@ -6969,6 +7079,7 @@ impl PlayState {
             input.defence_roll = self.combat_defence_roll(defence_rating);
         }
         let resolution = resolve_combat_weapon_attack(input);
+        self.emit_combat_hit_presentation(target_slot, &resolution);
         let damage_application = match resolution {
             CombatWeaponAttackResolution::Hit { raw_damage, .. } => {
                 let application =
@@ -7155,6 +7266,7 @@ impl PlayState {
             input.defence_roll = self.combat_defence_roll(defence_rating);
         }
         let resolution = resolve_combat_weapon_attack(input);
+        self.emit_combat_hit_presentation(target_slot, &resolution);
         let damage_application = match resolution {
             CombatWeaponAttackResolution::Hit { raw_damage, .. } => {
                 let application =
@@ -7918,6 +8030,7 @@ impl PlayState {
             input.defence_roll = self.combat_defence_roll(defence_rating);
         }
         let resolution = resolve_combat_weapon_attack(input);
+        self.emit_combat_hit_presentation(target_slot, &resolution);
         let damage_application = match resolution {
             CombatWeaponAttackResolution::Hit { raw_damage, .. } => self
                 .apply_combat_weapon_damage_to_target(
@@ -8561,8 +8674,18 @@ impl PlayState {
             // status early-outs ... come **after** it, so a dragged-under or
             // sleeping combatant does get its full banner and then that line
             // in place of a command." (`RETRACTIONS.md` R380.)
-            self.emit_combat_turn_banner_before_status_early_out(slot);
-            self.emit_combat_print(COMBAT_DRAGGED_UNDER_TURN_LINE);
+            //
+            // `§8.1` (added 2026-10-25, u5-spec#300 Q26, #301 Q2): "Between
+            // the banner and either line the handler emits its own line feed
+            // and then the prompt marker", so the line reads `>ARGH!` on the
+            // marker row exactly like `>Zzzzz...`, and `ARGH!` carries its
+            // own trailing line feed. No key is read, so the pending command
+            // slot stays closed.
+            self.open_combat_turn_marker_row(Some(slot));
+            self.emit_combat_command_echo_line(&format!("{COMBAT_DRAGGED_UNDER_TURN_LINE}\n"));
+            // One-shot, as after any echo; the line's own feed closed its row.
+            self.combat_prompt_row_opened_by_banner = false;
+            self.message_row_open_mid_line = false;
             self.apply_combat_dragged_under_release(slot);
             CombatActorDispatchAction::DraggedUnderTurn
         } else if actor.is_status_disabled() {

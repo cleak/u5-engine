@@ -904,7 +904,10 @@ impl PlayState {
         }
         // `magic.md §5` step 3: the context gate runs before the handler,
         // so `Not here!` precedes any handler-specific direction/target
-        // prompt and costs neither a charge nor a turn. Blink used to be
+        // prompt and costs no charge. It does cost the ordinary turn
+        // (corrected 2026-10-25, u5-spec#300 Q14, `RETRACTIONS.md` R604:
+        // "this rejection reports acted ... So in overworld and town play the
+        // rejection costs the ordinary turn"). Blink used to be
         // exempted here and re-tested inside its own handlers; that let the
         // dungeon/town "Direction?" prompt appear for a spell whose
         // published mask is `C/O` (`catalogs/spell-list.md §5`, id 17).
@@ -920,6 +923,10 @@ impl PlayState {
             // handler-level scene re-checks never run after this gate.
             self.message = "Not here!".to_string();
             self.emit_sound_effect(SoundEffect::CastFailure);
+            // Inside the arena the combat refusal rules govern; unchanged.
+            if !self.combat_active {
+                self.advance_turn();
+            }
             return Ok(MoveOutcome::Blocked);
         }
         // `magic.md §5` **step 4** is the charges gate - "If the counter is

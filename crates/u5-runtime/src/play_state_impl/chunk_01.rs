@@ -1120,6 +1120,7 @@ impl PlayState {
             active_blackthorn: None,
             blackthorn_audience_map: None,
             combat_entry_chrome: None,
+            post_combat_ribbon_hold: None,
             cutscene_black_viewport: false,
         blackthorn_rescue_reveals_shown: 0,
         blackthorn_rescue_spectral_actor: ActiveObject::empty(),
@@ -1191,6 +1192,8 @@ impl PlayState {
                 state.message.push_str(&line);
                 // `town-mode.md §13` (u5-spec#300 Q4, Q17): "After the text,
                 // the notice plays one software envelope".
+                // `audio.md §8.6` (u5-spec#300 Q4/Q17): "After the notice
+                // text prints, run `(1, 2000, 60000, 1, 6600)`".
                 state.emit_sound_effect(SoundEffect::ShadowlordPresenceNotice);
             }
             // The installed actor's slot is an engine internal. It used to be
@@ -1579,6 +1582,7 @@ impl PlayState {
             active_blackthorn: None,
             blackthorn_audience_map: None,
             combat_entry_chrome: None,
+            post_combat_ribbon_hold: None,
             cutscene_black_viewport: false,
         blackthorn_rescue_reveals_shown: 0,
         blackthorn_rescue_spectral_actor: ActiveObject::empty(),
@@ -2032,6 +2036,7 @@ impl PlayState {
             active_blackthorn: None,
             blackthorn_audience_map: None,
             combat_entry_chrome: None,
+            post_combat_ribbon_hold: None,
             cutscene_black_viewport: false,
         blackthorn_rescue_reveals_shown: 0,
         blackthorn_rescue_spectral_actor: ActiveObject::empty(),

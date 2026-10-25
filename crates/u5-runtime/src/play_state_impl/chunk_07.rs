@@ -2347,6 +2347,10 @@ impl PlayState {
         let Some(note) = self.stonegate_entry_presentation_message() else {
             return;
         };
+        // `audio.md §8.6` (u5-spec#300 Q4/Q17): every Stonegate notice plays
+        // the presence tone `(1, 2000, 60000, 1, 6600)` after its text, each
+        // finishing before the next notice.
+        let notices = self.stonegate_entry_presentation_lines().len();
         // This has to go through the transcript, not the bare message slot.
         // The gameplay window renders from `message_entries()`, so a line
         // written straight into `self.message` during scene load never
@@ -2361,7 +2365,7 @@ impl PlayState {
         // `town-mode.md §13` (u5-spec#300 Q4, Q17): each notice plays its
         // tone, "each tone finishes before the next notice's text"; the
         // envelope is the same constant one for all three Shadowlords.
-        for _ in self.stonegate_entry_presentation_lines() {
+        for _ in 0..notices {
             self.emit_sound_effect(SoundEffect::ShadowlordPresenceNotice);
         }
     }
@@ -2516,13 +2520,13 @@ impl PlayState {
             self.mark_visibility_dirty();
             // `dungeon-mode.md §10`/§14.1 and `combat.md §4`: the arena is
             // entered from inside the A-Attack dispatch ("combat is a
-            // function call"), and the dungeon loop's only per-turn work -
-            // the loop-head minute (§15) and the post-action pass (§4 step
-            // 6) - sits before and after that dispatch. So nothing of the
-            // turn is spent here; the arena path leaves it to the round
-            // loop's exit (`apply_combat_round_loop_exit_inner`), which
-            // finds the loop-head minute still charged and adds none. The
-            // overworld arm made the same correction in playtest H21.
+            // function call"). u5-spec#300 Q10: "No turn is spent by the
+            // command itself. On every path, a match or `What?`, A-Attack
+            // reports \"no action\" and calls no clock before or after the
+            // fight", so the post-action pass does not run for it either; the
+            // only minute is the loop head's (§15). The round loop's exit
+            // (`apply_combat_round_loop_exit_inner`) therefore spends no turn
+            // for this fight.
             // `dungeon-mode.md §14.1`: "Presentation remains caller-owned. The
             // A-Attack path keeps its ordinary Attack command transcript before
             // the matching forward contact", and "Neither caller prints the
@@ -2540,9 +2544,8 @@ impl PlayState {
                 ));
                 return Ok(MoveOutcome::Used);
             }
-            // No arena: the attack acted without a fight, so its turn is
-            // spent now.
-            self.advance_turn();
+            // No arena (an object with no published class): u5-spec#300
+            // Q10 makes every A-Attack path "no action" with no clock call.
             self.push_diagnostic(format!(
                 "attacked dungeon object tile {} at ({x}, {y}) on {} level {level}; no published combat class",
                 object.tile,
@@ -4993,11 +4996,13 @@ impl PlayState {
         self.sync_player_object();
         self.mark_visibility_dirty();
         self.advance_town_arrest_wait_to_morning();
-        // `moons.md §3` (issue #190): "The town arrest jail relocation
-        // refreshes. The relocation arm - the one that moves the party to
-        // the Yew jail, runs the clock forward to 08:00 in repeated
-        // twenty-minute cleanup calls (`systems/town-mode.md` Section 14)
-        // and sets the floor byte to the entry floor - ends by running the
+        // `moons.md §3` (issue #190; wake time corrected 2026-10-25,
+        // u5-spec#300 Q33, `RETRACTIONS.md` R617): "The town arrest jail
+        // relocation refreshes. The relocation arm - the one that moves the
+        // party to the Yew jail, runs the clock forward into the 08:00 hour
+        // in repeated twenty-minute cleanup calls" - so the wake is 08:00 to
+        // 08:19, which the loop above already does by testing the hour
+        // before each step - "and sets the floor byte to the entry floor - ends by running the
         // town entry pass, so it reaches the floor loader and repaints
         // unconditionally; because it clears the floor byte first, that
         // repaint takes the **normal** arm rather than the erase arm."
