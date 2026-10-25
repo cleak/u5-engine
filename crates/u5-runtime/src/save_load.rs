@@ -698,8 +698,8 @@ pub fn encode_inn_registry(bytes: &mut [u8], registry: &[InnGuestRecord]) {
             guest.experience,
         );
         bytes[record + SAVE_CHARACTER_LEVEL_OFFSET] = guest.member.level;
-        // `formats/saved-gam.md` §3.1: the month counter is "capped at 25" by
-        // *the time system* when it increments. Clamping on write instead
+        // `formats/saved-gam.md` §3.1: the month counter is advanced (only
+        // below 25, R587) by *the time system*. Clamping on write instead
         // silently rewrites an inherited byte the engine only ever read, so
         // the raw value is preserved here and the cap stays in the ageing pass
         // that owns it.

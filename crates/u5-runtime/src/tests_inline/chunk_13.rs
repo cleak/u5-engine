@@ -9172,31 +9172,27 @@ fn chargen_seed_inventory_constants_match_published_seed() {
     assert_eq!(CHARGEN_SEED_REAGENT_MANDRAKE, 0);
 }
 
+/// `time.md §8` (corrected 2026-10-25, u5-spec#300 Q8, R587): the rollover
+/// adds one only below 25; 25 or more, the shipped `0xFF` included, is left
+/// unchanged rather than clamped (executed on 0, 1, 24, 25, 26, 127, 128,
+/// 255).
 #[test]
-fn age_character_month_counter_caps_at_twenty_five() {
-    // time.md §8: the 28-day rollover increments each character
-    // record's one-byte month counter, capped at 25. Pickup later
-    // treats a stored zero as one billable unit.
-    assert_eq!(age_character_month_counter(0), 1);
-    assert_eq!(age_character_month_counter(1), 2);
-    assert_eq!(
-        age_character_month_counter(CHARACTER_MONTH_COUNTER_CAP - 1),
-        CHARACTER_MONTH_COUNTER_CAP
-    );
-    assert_eq!(
-        age_character_month_counter(CHARACTER_MONTH_COUNTER_CAP),
-        CHARACTER_MONTH_COUNTER_CAP
-    );
-    // Values above the cap (which shouldn't occur in practice
-    // but might appear in malformed saves) clamp without wrapping.
-    assert_eq!(
-        age_character_month_counter(CHARACTER_MONTH_COUNTER_CAP + 1),
-        CHARACTER_MONTH_COUNTER_CAP
-    );
-    assert_eq!(
-        age_character_month_counter(u8::MAX),
-        CHARACTER_MONTH_COUNTER_CAP
-    );
+fn age_character_month_counter_advances_only_below_twenty_five() {
+    for (before, after) in [
+        (0u8, 1u8),
+        (1, 2),
+        (24, 25),
+        (25, 25),
+        (26, 26),
+        (127, 127),
+        (128, 128),
+        (255, 255),
+    ] {
+        assert_eq!(age_character_month_counter(before), after, "{before}");
+    }
+    let mut counters = [0u8, 24, 25, 0xFF];
+    age_stay_counters_month(&mut counters);
+    assert_eq!(counters, [1, 25, 25, 0xFF]);
     assert_eq!(CHARACTER_MONTH_COUNTER_CAP, 25);
 }
 

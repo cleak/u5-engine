@@ -1220,8 +1220,9 @@ pub const INN_REGISTRY_CAP: usize = crate::SAVE_ROSTER_SLOT_COUNT;
 /// [`crate::SAVE_PARTY_SIZE_MAX`] so the inn gate and the save
 /// file's roster cap stay a single value.
 pub const INN_PARTY_CAP: usize = crate::SAVE_PARTY_SIZE_MAX as usize;
-/// `shops.md §8.4`: maximum value the inn's guest-stay counter
-/// can reach. The same counter is the character record's
+/// `shops.md §8.4`: the inn's guest-stay counter grows only while below
+/// this value (R587: a larger value, `0xFF` included, is left unchanged,
+/// not clamped). The same counter is the character record's
 /// month-counter byte that the 28-day rollover ages each month,
 /// so this cap is the same value as
 /// [`crate::CHARACTER_MONTH_COUNTER_CAP`]. Anchored through to
@@ -2560,10 +2561,8 @@ pub fn age_inn_registry_month(registry: &mut [InnGuestRecord]) -> usize {
     let mut aged = 0;
     for guest in registry {
         let previous = guest.stay_counter;
-        guest.stay_counter = guest
-            .stay_counter
-            .saturating_add(1)
-            .min(INN_STAY_COUNTER_CAP);
+        // `shops.md §6`/`§10.2` (R587): grows only while below 25.
+        guest.stay_counter = crate::age_character_month_counter(guest.stay_counter);
         if guest.stay_counter != previous {
             aged += 1;
         }
@@ -2575,7 +2574,7 @@ pub fn age_stay_counters_month(stay_counters: &mut [u8]) -> usize {
     let mut aged = 0;
     for stay_counter in stay_counters {
         let previous = *stay_counter;
-        *stay_counter = (*stay_counter).saturating_add(1).min(INN_STAY_COUNTER_CAP);
+        *stay_counter = crate::age_character_month_counter(*stay_counter);
         if *stay_counter != previous {
             aged += 1;
         }

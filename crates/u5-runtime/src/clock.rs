@@ -373,22 +373,23 @@ pub const MINUTES_PER_OUTDOOR_TURN: u8 = 2;
 /// elapsed rest through repeated ten-minute calls.
 pub const TOWN_REST_CLEANUP_INCREMENT_MINUTES: u8 = 10;
 
-/// `time.md §8` per-character month-counter cap. The month rollover
+/// `time.md §8` per-character month-counter limit. The month rollover
 /// increments each of the sixteen character records' one-byte counters
-/// (the inn's guest-stay counter), capped at this value. The inn
-/// pickup path treats a stored zero as one billable unit, so the cap
-/// gates the maximum bill at lodging-rate × 25.
+/// (the inn's guest-stay counter) only while the counter is below this
+/// value. The inn pickup path treats a stored zero as one billable unit.
 pub const CHARACTER_MONTH_COUNTER_CAP: u8 = 25;
 
-/// `time.md §8`: age one character record's month counter by the
-/// 28-day rollover. Increments the byte by one, clamped at
-/// [`CHARACTER_MONTH_COUNTER_CAP`]. Apply to every character record
-/// at the day-28 → day-1 rollover regardless of party/lodged state.
+/// `time.md §8` (corrected 2026-10-25, u5-spec#300 Q8, `RETRACTIONS.md`
+/// R587): "The rollover adds one only when the counter is below 25, under an
+/// unsigned test. Any value of 25 or more, including the `0xFF` of every
+/// shipped seed record, is left unchanged. It is not clamped to 25, so a
+/// shipped `0xFF` stays `0xFF`." Apply to every character record at the
+/// day-28 → day-1 rollover regardless of party/lodged state.
 pub const fn age_character_month_counter(counter: u8) -> u8 {
-    if counter >= CHARACTER_MONTH_COUNTER_CAP {
-        CHARACTER_MONTH_COUNTER_CAP
-    } else {
+    if counter < CHARACTER_MONTH_COUNTER_CAP {
         counter + 1
+    } else {
+        counter
     }
 }
 
