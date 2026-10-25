@@ -358,3 +358,31 @@ fn spec300_q33_surrender_awakening_line_and_wake_minute() {
     );
     assert_eq!((state.clock.hour, state.clock.minute), (8, 19));
 }
+
+/// `rest-and-camp.md §4` (u5-spec#300 Q8): at the town bed "Every other key
+/// is discarded silently: no echo, line feed, message, reprint or cursor
+/// movement. Escape does not cancel". Escape used to answer `None!` and spend
+/// the town minute; it must leave the prompt, the window and the clock alone,
+/// and a following digit is still read as the duration.
+#[test]
+fn town_bed_hours_prompt_escape_is_discarded_not_a_cancel() {
+    let (mut state, dir) = p3w_town_bed_state();
+    handle_play_key_input(&mut state, 'H', "", &dir).unwrap();
+    let rows = p3w_rows(&state);
+    let message = state.message.clone();
+    let (clock, turn) = (state.clock, state.turn);
+    for _ in 0..3 {
+        handle_play_key_input(&mut state, '\u{1b}', "", &dir).unwrap();
+    }
+    assert!(state.active_rest.is_some(), "Escape does not cancel");
+    assert_eq!(p3w_rows(&state), rows, "no echo, line feed or reprint");
+    assert_eq!(state.message, message);
+    assert!(!state.message.contains("None!"));
+    assert_eq!((state.clock, state.turn), (clock, turn), "no minute is spent");
+    // The prompt is still live: `0` then cancels it as published.
+    handle_play_key_input(&mut state, '0', "", &dir).unwrap();
+    assert!(state.active_rest.is_none());
+    assert!(!p3w_rows(&state).iter().any(|row| row.contains("None!")));
+    assert_eq!(state.turn, turn + 1, "the cancel itself is acted");
+    let _ = std::fs::remove_dir_all(dir);
+}
