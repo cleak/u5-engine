@@ -1067,7 +1067,9 @@
             PlayInputDisposition::Continue
         );
         assert!(state.active_direction_prompt.is_none());
-        assert_eq!(state.turn, 1);
+        // `commands.md §3` (u5-spec#300 Q14): the overworld `A` is free on
+        // every path, its refusal included.
+        assert_eq!(state.turn, 0);
         assert_eq!(state.message, ATTACK_NOTHING_TO_ATTACK_REFUSAL);
 
         assert_eq!(
@@ -1079,7 +1081,7 @@
             PlayInputDisposition::Continue
         );
         assert!(state.active_direction_prompt.is_none());
-        assert_eq!(state.turn, 1);
+        assert_eq!(state.turn, 0);
         // `commands.md` section 5.4: `Space` prints the cancel word on
         // the open verb line - "A cancelled Look therefore renders as the
         // verb, the hyphen and the cancel word on one line." Push already
@@ -2650,15 +2652,16 @@
         state.party_names = vec![*b"Maria\0\0\0\0", *b"Iolo\0\0\0\0\0", *b"Dupre\0\0\0\0"];
         let original = state.party.clone();
 
+        // u5-spec#300 Q29 (R607): the refusal spends the ordinary turn.
         assert_eq!(state.new_order_from_suffix("12"), MoveOutcome::Blocked);
         assert_eq!(state.message, "Maria must lead!");
         assert_eq!(state.party, original);
-        assert_eq!(state.turn, 0);
+        assert_eq!(state.turn, 1);
 
         assert_eq!(state.new_order_from_suffix("31"), MoveOutcome::Blocked);
         assert_eq!(state.message, "Maria must lead!");
         assert_eq!(state.party, original);
-        assert_eq!(state.turn, 0);
+        assert_eq!(state.turn, 2);
     }
 
     #[test]
@@ -2735,12 +2738,13 @@
             new_order_leader_refusal(&state.party_member_display_name(0))
         );
         assert_eq!(state.party, original);
-        assert_eq!(state.turn, 0);
+        // u5-spec#300 Q29 (R607): the leader refusal is acted.
+        assert_eq!(state.turn, 1);
 
         assert_eq!(state.new_order_from_suffix("13"), MoveOutcome::Blocked);
         assert_eq!(state.message, "");
         assert_eq!(state.party, original);
-        assert_eq!(state.turn, 0);
+        assert_eq!(state.turn, 1);
     }
 
     #[test]

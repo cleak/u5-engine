@@ -465,12 +465,13 @@ impl PlayState {
         // second write here - one used to clobber the Glass Sword counter.
         save[SAVE_SHADOWLORD_HIDEOUTS_OFFSET..SAVE_SHADOWLORD_HIDEOUTS_OFFSET + SHADOWLORD_COUNT]
             .copy_from_slice(&self.shadowlord_hideouts);
-        // `formats/saved-gam.md §9.1`: `0x0325` is the Yell-path handshake
-        // that shard/spell destruction checks, saved because it sits in
-        // resident memory (§10 `0x0322..0x0327`). A live handshake writes
-        // its id; a cleared one writes the factory `0xFF` "none active"
-        // over a stale id, and "other values" are preserved byte-for-byte
-        // from the template (playtest G23).
+        // `formats/saved-gam.md §9.1`: `0x0325` is the last-summoned
+        // Shadowlord id, saved because it sits in resident memory (§10
+        // `0x0322..0x0327`). Nothing clears it once a summon succeeds
+        // (u5-spec#300 Q3, R585), so every later save writes that id; with
+        // no summon yet in this game the new-game `0xFF` stands, and other
+        // values are preserved byte-for-byte from the template (playtest
+        // G23).
         match self.summoned_shadowlord.and_then(|index| u8::try_from(index).ok()) {
             Some(index) => save[SAVE_ACTIVE_SHADOWLORD_OFFSET] = index,
             None if usize::from(save[SAVE_ACTIVE_SHADOWLORD_OFFSET]) < SHADOWLORD_COUNT => {
@@ -584,8 +585,8 @@ impl PlayState {
                 roster_record.experience,
             );
             // `formats/saved-gam.md` §3.1: the per-character month counter is
-            // "capped at 25" by *the time system* when it increments at the
-            // 28-day rollover. Clamping again on write mutates an inherited
+            // aged only by *the time system* at the 28-day rollover (one is
+            // added below 25; 25 or more is left unchanged, R587). Clamping again on write mutates an inherited
             // byte the engine only read - the shipped seed carries `0xFF`
             // here - so the raw value round-trips and the cap stays in the
             // ageing pass that owns it.
@@ -1175,12 +1176,22 @@ impl PlayState {
         // `town-mode.md §13`: "a settlement that hosts a Shadowlord prints
         // one line naming which [...] That single line is the only in-town
         // notice, and a settlement hosting none prints nothing."
+        // `town-mode.md §13` (u5-spec#300 Q4, R590): the Sceptre flag gates
+        // a silent removal of Stonegate's Sceptre figure in the setup path.
+        state.remove_stonegate_sceptre_figure_on_entry();
         if let Some((slot, index)) = state.install_shadowlord_entry_encounter() {
-            if let Some(line) = Self::shadowlord_air_line_for_index(index) {
+            // `town-mode.md §13` (u5-spec#300 Q4): no notice and no tone when
+            // the capability check finds nobody able to act and none asleep.
+            let line = Self::shadowlord_air_line_for_index(index)
+                .filter(|_| state.shadowlord_notice_capability_gate_passes());
+            if let Some(line) = line {
                 if !state.message.is_empty() {
                     state.message.push('\n');
                 }
                 state.message.push_str(&line);
+                // `town-mode.md §13` (u5-spec#300 Q4, Q17): "After the text,
+                // the notice plays one software envelope".
+                state.emit_sound_effect(SoundEffect::ShadowlordPresenceNotice);
             }
             // The installed actor's slot is an engine internal. It used to be
             // appended to the notice as a second sentence, which put a line

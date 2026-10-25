@@ -1084,10 +1084,10 @@ impl PlayState {
     /// it. Measured against the original with a two-member party: `0`
     /// answers `None!` and clears the selection, `1` answers `Avatar`
     /// and sets it, and `9` answers `Invalid!` and changes nothing. Turn
-    /// cost follows the mode: in town an ordinary selection reports
-    /// "acted" (`town-mode.md §7.2`), so the per-turn epilogue runs; the
-    /// deselect, a rejected digit, the dungeon and the overworld take no
-    /// world time (see the charge below).
+    /// cost (`town-mode.md §7.2`, `overworld.md §5` step 5): `None!` and a
+    /// successful selection are free, while `Invalid!` reports "acted" and
+    /// runs the mode's per-turn epilogue in town and on the overworld
+    /// (see the charge below).
     pub fn set_active_player_command(&mut self, digit: char) -> MoveOutcome {
         self.begin_command_echo_for(Command::SetActivePlayer);
         let slot = digit.to_digit(10).map(|digit| digit as usize);
@@ -1137,15 +1137,15 @@ impl PlayState {
         if selected {
             self.stats_panel_command_refresh = crate::stats_panel::PanelRefreshMode::Always;
         }
-        // `town-mode.md §7.2`: away from the harpsichord the town digit
-        // handler "falls through to the ordinary solo-member selector, which
-        // reports \"acted\" for an ordinary selection and \"no action\" for
-        // the deselect-to-whole-party case", and `commands.md §3` runs the
-        // per-turn epilogue on "acted" (playtest Q14). The dungeon always
-        // reports "no action" (`dungeon-mode.md §4` step 3); the overworld
-        // routes digits to a speed selector whose status is unpublished, and
-        // a rejected digit is neither case, so both keep the free answer.
-        if selected && slot != Some(0) && matches!(self.area, Area::Town { .. }) {
+        // `town-mode.md §7.2` (u5-spec#300 Q34, R616): town digits away from
+        // the harpsichord and overworld digits (`overworld.md §5` step 5,
+        // R618: there is no speed selector) reach one shared active-player
+        // selector. `None!` and a successful selection report "no action"
+        // and are free; `Invalid!` reports "acted", so the town epilogue
+        // (one minute) or the overworld per-turn block (two minutes) runs.
+        // The dungeon route stays "always no action" (`dungeon-mode.md §4`
+        // step 3), which the spec flags as under review, not changed.
+        if !selected && matches!(self.area, Area::Town { .. } | Area::World { .. }) {
             self.charge_tile_command_acted_exit(self.turn);
         }
         // `commands.md §5`'s `0` row: every answer - `None!`, `Invalid!` or
@@ -1302,6 +1302,12 @@ impl PlayState {
             } else {
                 self.message = cancel_reply.to_string();
             }
+            // `commands.md §6` (u5-spec#300 Q29, R607): New Order is not a
+            // forwarding route, so `Swap nobody!` at either prompt reports
+            // acted and spends the ordinary turn (executed).
+            if matches!(session.target, PartySelectorTarget::NewOrder { .. }) {
+                self.charge_tile_command_acted_exit(self.turn);
+            }
             return true;
         }
         // `inventory.md §4.3`: "Number keys `1` through `6` select
@@ -1398,7 +1404,7 @@ impl PlayState {
             PartySelectorTarget::NewOrder { first: None } => {
                 // `commands.md §6`: "If either selected slot is slot zero,
                 // the command refuses because the leader must remain
-                // first" - without consuming a turn.
+                // first"; the refusal is not free (R607).
                 if index == 0 {
                     // `text-output.md §10.4`: the refusal prints under the
                     // prompt row the pick completed, so it opens with a
@@ -1410,6 +1416,9 @@ impl PlayState {
                         "\n{}",
                         new_order_leader_refusal(&self.party_member_display_name(0))
                     );
+                    // `commands.md §6` (u5-spec#300 Q29, R607): the leader
+                    // refusal at either prompt spends the ordinary turn.
+                    self.charge_tile_command_acted_exit(self.turn);
                 } else {
                     self.start_party_selector(PartySelectorTarget::NewOrder { first: Some(index) });
                 }
@@ -1426,6 +1435,9 @@ impl PlayState {
                         "\n{}",
                         new_order_leader_refusal(&self.party_member_display_name(0))
                     );
+                    // `commands.md §6` (u5-spec#300 Q29, R607): the leader
+                    // refusal at either prompt spends the ordinary turn.
+                    self.charge_tile_command_acted_exit(self.turn);
                 } else {
                     // The result completes the `with ` line with `!`; the
                     // shared swap routine moves the whole records and
@@ -3683,7 +3695,8 @@ impl PlayState {
                 // down-direction code for down; Space for pass" (handled
                 // above). The direction codes are the shared reader's: the
                 // Up and Down arrows, keypad 8 and 2, and top-row `8`/`2`
-                // with Shift or NumLock - the frontends deliver all of those
+                // with NumLock on (Shift with a top-row key is punctuation,
+                // u5-spec#300 Q15, R589) - the frontends deliver all of those
                 // as [`INPUT_CODE_NORTH`]/[`INPUT_CODE_SOUTH`]. "Every other
                 // key is ignored and read again with no echo and no tone,
                 // including `<`, `>`, Esc, Enter, the period, the Left and
@@ -5712,10 +5725,11 @@ impl PlayState {
             return MoveOutcome::Blocked;
         }
         // commands.md §6: if either selected slot is slot zero, the command
-        // refuses because the leader must remain first, and it returns
-        // without consuming a turn.
+        // refuses because the leader must remain first. Every outcome
+        // spends the ordinary turn (u5-spec#300 Q29, R607).
         if first == 0 || second == 0 {
             self.message = new_order_leader_refusal(&self.party_member_display_name(0));
+            self.advance_turn();
             return MoveOutcome::Blocked;
         }
         // commands.md §6: picking the same nonzero slot twice is accepted as

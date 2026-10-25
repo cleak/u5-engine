@@ -1,6 +1,8 @@
 //! Final input-layer direction codes per `input.md` §5. The keyboard
 //! peek translates numpad cardinals/diagonals, extended arrow keys, and
-//! shifted top-row digits into the eight direction codes used by the
+//! modifier-held digits (NumLock-ed top-row or keypad digits, Shift-held
+//! keypad digits; never Shift with a top-row key, R589) into the eight
+//! direction codes used by the
 //! upper layers; gameplay mode loops handle these inline before the
 //! central command dispatcher sees ordinary letter keys.
 //!
@@ -257,9 +259,10 @@ pub const fn input_keypad_digit_direction_code(digit: u8) -> Option<u8> {
 /// This helper is arm 2. `§8.3` closes with the porting rule: "Whether
 /// NumLock is on in a given player's session is an environment fact, not a
 /// game fact; an engine should expose it as one" - hence the second
-/// argument rather than a global. `input.md §5` gives the fallback for a
-/// host that cannot see the lock state: "an implementation that lacks
-/// NumLock state can treat shift held as the trigger."
+/// argument rather than a global. `input.md §5` (u5-spec#300 Q15, R589):
+/// the flag only ever sees keys that arrive as ASCII digits, so Shift with a
+/// top-row key (punctuation) is never translated; the withdrawn fallback
+/// "treat shift held as the trigger" must not be used for top-row digits.
 pub const fn input_numpad_flag(shift_held: bool, num_lock_active: bool) -> bool {
     shift_held || num_lock_active
 }

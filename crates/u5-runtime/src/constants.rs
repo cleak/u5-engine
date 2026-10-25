@@ -716,11 +716,12 @@ pub const SAVE_RARE_REAGENT_HARVEST_COOKIES_OFFSET: usize = 0x02B2;
 pub const SAVE_FIXED_HIDDEN_TREASURE_RECORD_15_GATE_OFFSET: usize =
     SAVE_EQUIPMENT_STOCK_OFFSET + EQUIPMENT_ID_GLASS_SWORD;
 pub const SAVE_SHADOWLORD_HIDEOUTS_OFFSET: usize = 0x0322;
-/// `formats/saved-gam.md §9.1`: `0x0325` is the active-Shadowlord id,
-/// the "Runtime handshake set by the Shadowlord-name Yell path and checked
-/// by shard/spell destruction". `0..2` names the active Shadowlord; the
-/// factory `0xFF` means "none active"; other values are preserved
-/// byte-for-byte.
+/// `formats/saved-gam.md §9.1`: `0x0325` is the last-summoned Shadowlord
+/// id, "written only by a successful Shadowlord-name Yell" and checked by
+/// the shard destruction step. `0..2` names the Shadowlord most recently
+/// summoned "whether or not it is still present"; nothing clears it, and
+/// the new-game `0xFF` "means only that no summon has yet succeeded"
+/// (u5-spec#300 Q3, R585 withdrew "none active").
 pub const SAVE_ACTIVE_SHADOWLORD_OFFSET: usize = 0x0325;
 pub const SAVE_ACTIVE_SHADOWLORD_NONE: u8 = 0xff;
 /// `formats/saved-gam.md §9.2`: two back-to-back banks of 32
@@ -1028,6 +1029,11 @@ pub const DEFAULT_SHADOWLORD_HIDEOUTS: [u8; SHADOWLORD_COUNT] = [0, 0, 0];
 pub const SHADOWLORD_FALSEHOOD_STONEGATE_NPC_SLOT: usize = 1;
 pub const SHADOWLORD_HATRED_STONEGATE_NPC_SLOT: usize = 2;
 pub const SHADOWLORD_COWARDICE_STONEGATE_NPC_SLOT: usize = 3;
+/// `town-mode.md §13` (u5-spec#300 Q4, R590): Stonegate's roster slot 9 is
+/// "the Sceptre item figure that stands on the centre cell ringed by the
+/// trapdoors", which entry setup silently removes while the party's Sceptre
+/// flag is set.
+pub const STONEGATE_SCEPTRE_FIGURE_NPC_SLOT: usize = 9;
 /// `town-mode.md §13` / `commands.md §11`: shared Shadow Lord actor
 /// class used by both resident-town installation and name/Yell summons.
 pub const SHADOWLORD_ACTOR_TILE: u8 = 0xfc;

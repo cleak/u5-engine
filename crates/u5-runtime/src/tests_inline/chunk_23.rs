@@ -1925,12 +1925,18 @@ fn inn_registry_month_aging_increments_lodged_guests_to_cap() {
             stay_counter: INN_STAY_COUNTER_CAP,
             ..base
         },
+        // `time.md §8` (u5-spec#300 Q8, R587): 0xFF stays 0xFF.
+        InnGuestRecord {
+            stay_counter: 0xFF,
+            ..base
+        },
     ];
 
     assert_eq!(age_inn_registry_month(&mut registry), 2);
     assert_eq!(registry[0].stay_counter, 1);
     assert_eq!(registry[1].stay_counter, INN_STAY_COUNTER_CAP);
     assert_eq!(registry[2].stay_counter, INN_STAY_COUNTER_CAP);
+    assert_eq!(registry[3].stay_counter, 0xFF);
 }
 
 #[test]
@@ -22148,4 +22154,41 @@ fn dungeon_ambush_arena_draws_wall_lines_and_treats_each_side_by_its_neighbour()
     }
     assert_eq!(t[5][5], fill);
     assert_eq!(t[4][4], fill);
+}
+
+/// `dungeon-mode.md §14.1` (u5-spec#300 Q24): "when the party stands on a
+/// `0xE?` cell ... and the **north** neighbour is a wall class, the strip
+/// step also writes the outline wall byte at the interior cells (5,2) and
+/// (5,8); when the **west** neighbour is a wall class it writes them at (2,5)
+/// and (8,5)." On any other own-cell class those cells keep the floor.
+#[test]
+fn spec300_q24_door_cell_ambush_writes_the_interior_wall_stubs() {
+    let object = ActiveObject {
+        type_byte: 0,
+        tile: 0,
+        x: 3,
+        y: 2,
+        z: 0,
+        phase: 0x60,
+        aux1: 20,
+        aux3: DUNGEON_MONSTER_FLOOR_DEP3,
+    };
+    for (underfoot, stubs) in [(0xE0u8, true), (0x00, false)] {
+        let mut grid = open_dungeon_record();
+        grid[dungeon_cell_index(0, 2, 2)] = underfoot;
+        grid[dungeon_cell_index(0, 2, 1)] = 0xB0; // north: wall
+        grid[dungeon_cell_index(0, 1, 2)] = 0xC0; // west: wall
+        let mut state = dungeon_state(grid, 0, 2, 2);
+        state.area = Area::Dungeon {
+            scene: DungeonScene::new(34).unwrap(),
+            level: 0,
+        };
+        state.player.facing = Direction::East;
+        state.enter_dungeon_active_monster_combat(0, object).unwrap();
+        let t = state.combat_terrain;
+        let expected = if stubs { 0x4D } else { 0x05 };
+        for (x, y) in [(5, 2), (5, 8), (2, 5), (8, 5)] {
+            assert_eq!(t[y][x], expected, "underfoot {underfoot:#04x} cell ({x}, {y})");
+        }
+    }
 }

@@ -26,9 +26,10 @@ fn stonegate_trapdoor_script_sounds_the_descent_then_one_rumble_per_death() {
 }
 
 #[test]
-fn stonegate_entry_presentation_stays_silent() {
-    // The only Stonegate row in the `audio.md §8.2` inventory is the trapdoor
-    // scripted death. Entry narration is a `§9` generic command result.
+fn stonegate_entry_presentation_plays_one_notice_tone_per_living_shadowlord() {
+    // `town-mode.md §13` (u5-spec#300 Q4, Q17): each Stonegate notice "plays
+    // its tone", the constant envelope `(1, 2000, 60000, 1, 6600)`; the
+    // Sceptre adds no prelude row or sound (R590).
     let scene = Scene::new(STONEGATE_SCENE_BYTE).unwrap();
     let mut state = test_state(open_grid(), 1, 1);
     state.area = Area::Town { scene, floor: 0 };
@@ -41,7 +42,15 @@ fn stonegate_entry_presentation_stays_silent() {
     state.append_stonegate_entry_presentation_message();
 
     assert!(state.message.contains("doth\nsurround thee..."));
-    assert!(state.sound_effects_after(serial).is_empty());
+    assert_eq!(
+        state.sound_effects_after(serial),
+        vec![SoundEffect::ShadowlordPresenceNotice]
+    );
+    assert_eq!(
+        SoundEffect::ShadowlordPresenceNotice.program(&mut crate::audio::RumbleJitter::default()),
+        SoundEffect::LordBritishCampEnvelope(crate::audio::SHADOWLORD_PRESENCE_NOTICE_ENVELOPE)
+            .program(&mut crate::audio::RumbleJitter::default())
+    );
 }
 
 #[test]

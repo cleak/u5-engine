@@ -116,6 +116,7 @@ fn playtest_g31_entering_stonegate_prints_the_air_rows_for_living_shadowlords() 
     assert_eq!(
         &rows[keep + 1..],
         &[
+            "",
             "An air of",
             "cowardice doth",
             "surround thee...",

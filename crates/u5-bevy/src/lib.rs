@@ -13741,8 +13741,11 @@ fn drive_visual(
                 }
             }
         } else {
-            let digit_translation = !dungeon_skips_digit_translation(&visual.state);
-            let shift_for_key = typed.shift && (digit_translation || !is_top_row_digit(typed.key));
+            // `dungeon-mode.md §10` (u5-spec#300 Q15, R589): "Shift with a
+            // top-row key types punctuation rather than a digit, so it
+            // selects no member" at the dungeon prompt too; the dungeon
+            // exception covers only NumLock, which this frontend cannot see.
+            let shift_for_key = typed.shift;
             match key_code_to_command_char(typed.key, shift_for_key, typed.control) {
                 None => false,
                 Some(ch) => {
@@ -13901,8 +13904,8 @@ fn present_camp_apparition_flash(
 ///
 /// The `Klimb-U/D-` chooser reads through the shared key reader as well, so
 /// it translates too: `dungeon-mode.md §13.1` (issue #299 Q24) takes "while
-/// Shift or NumLock is held, the digits `8` and `2` from the top row" as the
-/// up- and down-direction codes there. Which other dungeon prompts read
+/// NumLock is on, the digits `8` and `2` from the top row" as the up- and
+/// down-direction codes there (u5-spec#300 Q15, R589 dropped Shift). Which other dungeon prompts read
 /// through the shared reader is not enumerated, and they keep the earlier
 /// behaviour.
 fn dungeon_skips_digit_translation(state: &PlayState) -> bool {
@@ -13914,14 +13917,6 @@ fn dungeon_skips_digit_translation(state: &PlayState) -> bool {
         })
 }
 
-fn is_top_row_digit(key: KeyCode) -> bool {
-    use KeyCode::*;
-    matches!(
-        key,
-        Digit0 | Digit1 | Digit2 | Digit3 | Digit4 | Digit5 | Digit6 | Digit7 | Digit8 | Digit9
-    )
-}
-
 fn held_direction_key_to_command_char(
     key: KeyCode,
     shift_pressed: bool,
@@ -13931,8 +13926,9 @@ fn held_direction_key_to_command_char(
     let physical_direction = matches!(
         key,
         ArrowLeft | ArrowRight | ArrowUp | ArrowDown | Numpad2 | Numpad4 | Numpad6 | Numpad8
-    ) || (shift_pressed
-        && matches!(key, Digit2 | Digit4 | Digit6 | Digit8));
+    );
+    // `input.md §5` (u5-spec#300 Q15, R589): Shift with a top-row digit is
+    // punctuation, never a direction, so it acquires no typematic movement.
     physical_direction
         .then(|| key_code_to_command_char(key, shift_pressed, control_pressed))
         .flatten()
@@ -19168,16 +19164,18 @@ fn key_code_to_command_char(
 /// cannot: `winit`/Bevy report `KeyCode::NumLock` as a key *press*, never
 /// as a lock state, so there is nothing to read here.
 ///
-/// `input.md §5` publishes the fallback this constant takes: "an
+/// `input.md §5` (u5-spec#300 Q15, R589) withdrew the fallback "an
 /// implementation that lacks NumLock state can treat shift held as the
-/// trigger." The extended-scancode arm of the flag (arrows, Home/End/
-/// PgUp/PgDn and the numpad keys) is unaffected and is translated in full
-/// by the match below.
+/// trigger": the modifier rule "only ever sees keys that arrive as ASCII
+/// digits", and "Shift with a top-row key types punctuation (`!`, `@`,
+/// `%`, ...), which the rule never touches. ... An implementation must not
+/// treat Shift with a top-row digit as a direction." So the top-row digits
+/// are translated only under NumLock, which this frontend cannot see. The
+/// extended-scancode arm (arrows, Home/End/PgUp/PgDn and the numpad keys)
+/// is unaffected and is translated in full by the match below.
 ///
-/// The visible gap: with NumLock on and no shift held, the original remaps
-/// eight of the ten digits to directions, so `combat.md §8.3`'s "member
-/// selection by digit is therefore only reachable with NumLock off" reads
-/// here as "only reachable with shift not held".
+/// The visible gap: with NumLock on, the original remaps eight of the ten
+/// top-row digits to directions; here they stay digits.
 const NUM_LOCK_STATE_OBSERVABLE: bool = false;
 
 fn key_code_to_input_byte(key: KeyCode, shift_pressed: bool, control_pressed: bool) -> Option<u8> {
@@ -19202,7 +19200,9 @@ fn key_code_to_input_byte(key: KeyCode, shift_pressed: bool, control_pressed: bo
         };
     }
 
-    let numpad_flag = input_numpad_flag(shift_pressed, NUM_LOCK_STATE_OBSERVABLE);
+    // `input.md §5` (R589): only NumLock reaches the top-row digits; Shift
+    // makes them punctuation (the arms below).
+    let numpad_flag = input_numpad_flag(false, NUM_LOCK_STATE_OBSERVABLE);
     let byte = match key {
         Escape => 0x1B,
         Enter | NumpadEnter => 0x0D,
@@ -19233,6 +19233,18 @@ fn key_code_to_input_byte(key: KeyCode, shift_pressed: bool, control_pressed: bo
         F8 => input_function_key_code(8)?,
         F9 => input_function_key_code(9)?,
         F10 => input_function_key_code(10)?,
+        // `input.md §5` (u5-spec#300 Q15, R589): "Shift with a top-row key
+        // types punctuation (`!`, `%`, ...), never a digit", so it is never
+        // a direction and selects no member.
+        Digit1 if shift_pressed => b'!',
+        Digit2 if shift_pressed => b'@',
+        Digit3 if shift_pressed => b'#',
+        Digit4 if shift_pressed => b'$',
+        Digit5 if shift_pressed => b'%',
+        Digit6 if shift_pressed => b'^',
+        Digit7 if shift_pressed => b'&',
+        Digit8 if shift_pressed => b'*',
+        Digit9 if shift_pressed => b'(',
         Digit1 if numpad_flag => input_typed_digit_direction_code(1, numpad_flag)?,
         Digit2 if numpad_flag => input_typed_digit_direction_code(2, numpad_flag)?,
         Digit3 if numpad_flag => input_typed_digit_direction_code(3, numpad_flag)?,
@@ -19241,12 +19253,10 @@ fn key_code_to_input_byte(key: KeyCode, shift_pressed: bool, control_pressed: bo
         Digit7 if numpad_flag => input_typed_digit_direction_code(7, numpad_flag)?,
         Digit8 if numpad_flag => input_typed_digit_direction_code(8, numpad_flag)?,
         Digit9 if numpad_flag => input_typed_digit_direction_code(9, numpad_flag)?,
-        // `input.md §4`'s modified top-row rule covers "digit `1` through `9`
-        // while Shift or NumLock is held" and maps them to "the numpad layout
-        // above", where `5` is the centre cell and has no direction. So a
-        // modified `5` is not an ordinary digit either - the keyboard sends
-        // the shifted character, and the dispatcher answers the unmapped
-        // `What?`.
+        // `input.md §5`'s modifier rule maps NumLock-ed digits to "the
+        // numpad layout above", where `5` is the centre cell and has no
+        // direction. A shifted `5` is the `%` the keyboard sends (arm above),
+        // and the dispatcher answers the unmapped `What?`.
         //
         // Measured 2026-09-11 (`stray-keys/stray`): the original answers `%`
         // with `?What?`, and this engine read it as a bare `5`, opened
@@ -19378,9 +19388,10 @@ mod tests {
             held_direction_key_to_command_char(KeyCode::Numpad4, false, false),
             Some(u5_runtime::INPUT_CODE_WEST as char)
         );
+        // R589: Shift with a top-row digit is punctuation, not movement.
         assert_eq!(
             held_direction_key_to_command_char(KeyCode::Digit6, true, false),
-            Some(u5_runtime::INPUT_CODE_EAST as char)
+            None
         );
         assert_eq!(
             held_direction_key_to_command_char(KeyCode::KeyA, false, false),
@@ -20005,9 +20016,10 @@ mod tests {
     }
 
     /// u5-spec#299 Q18 / `RETRACTIONS.md` R572: the dungeon command prompt
-    /// keeps shifted top-row digits as digits, but the hole-up hours prompt
-    /// is resident and "with Shift or NumLock held the top-row `1`-`4` and
-    /// `6`-`9` arrive as direction codes and are discarded".
+    /// keeps NumLock-ed top-row digits as digits, but the hole-up hours
+    /// prompt is resident and "With NumLock on, top-row and keypad `1`-`4`
+    /// and `6`-`9` arrive as direction codes and are discarded" (u5-spec#300
+    /// Q15, R589).
     #[test]
     fn dungeon_hours_prompt_runs_the_shifted_digit_translation() {
         let mut state = dungeon_state(open_dungeon_record(), 0, 1, 1);
@@ -20017,9 +20029,10 @@ mod tests {
         assert!(!dungeon_skips_digit_translation(&state));
     }
 
-    /// `dungeon-mode.md §10` keeps shifted top-row digits as digits in the
-    /// dungeon command loop, but the `Klimb-U/D-` chooser (§13.1, issue #299
-    /// Q24) reads them through the shared reader's translation.
+    /// The `Klimb-U/D-` chooser (§13.1, issue #299 Q24) reads through the
+    /// shared reader's translation; R589 (u5-spec#300 Q15) leaves only
+    /// NumLock-ed top-row `8`/`2` as direction codes there - Shift with a
+    /// top-row key "types punctuation and is ignored like any other key".
     #[test]
     fn dungeon_klimb_chooser_translates_shifted_top_row_digits() {
         let mut grid = open_dungeon_record();
@@ -20029,10 +20042,7 @@ mod tests {
         handle_play_key_input(&mut state, 'K', "", Path::new("")).unwrap();
         assert!(state.active_direction_prompt.is_some());
         assert!(!dungeon_skips_digit_translation(&state));
-        assert_eq!(
-            key_code_to_command_char(KeyCode::Digit8, true, false),
-            Some(char::from(u5_runtime::INPUT_CODE_NORTH))
-        );
+        assert_eq!(key_code_to_command_char(KeyCode::Digit8, true, false), Some('*'));
     }
 
     #[test]
@@ -26438,14 +26448,10 @@ mod tests {
             key_code_to_input_byte(KeyCode::PageDown, false, false),
             Some(u5_runtime::INPUT_CODE_SOUTHEAST)
         );
-        assert_eq!(
-            key_code_to_input_byte(KeyCode::Digit8, true, false),
-            Some(u5_runtime::INPUT_CODE_NORTH)
-        );
-        assert_eq!(
-            key_code_to_input_byte(KeyCode::Digit1, true, false),
-            Some(u5_runtime::INPUT_CODE_SOUTHWEST)
-        );
+        // `input.md §5` (u5-spec#300 Q15, R589): Shift with a top-row digit
+        // is the punctuation the keyboard sends, never a direction.
+        assert_eq!(key_code_to_input_byte(KeyCode::Digit8, true, false), Some(b'*'));
+        assert_eq!(key_code_to_input_byte(KeyCode::Digit1, true, false), Some(b'!'));
         assert_eq!(
             key_code_to_input_byte(KeyCode::F1, false, false),
             Some(u5_runtime::INPUT_CODE_F1)
@@ -27829,13 +27835,10 @@ mod tests {
         install_test_conversation(&mut state);
         let mut input_line = String::new();
 
-        for key in [
-            KeyCode::ArrowUp,
-            KeyCode::Numpad1,
-            KeyCode::Digit8,
-            KeyCode::F1,
-        ] {
-            let shift = key == KeyCode::Digit8;
+        // Shift with top-row `8` is the punctuation `*`, not a direction
+        // byte (`input.md §5`, u5-spec#300 Q15, R589), so it is not here.
+        for key in [KeyCode::ArrowUp, KeyCode::Numpad1, KeyCode::F1] {
+            let shift = false;
             let result = handle_visual_line_key(
                 &mut state,
                 &mut input_line,

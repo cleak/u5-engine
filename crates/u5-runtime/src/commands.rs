@@ -517,17 +517,17 @@ pub const fn new_order_swap_accepted(slot_a: usize, slot_b: usize) -> bool {
 }
 
 /// `commands.md §6` resolved outcome for one N-New Order command.
-/// Cancellation of either prompt or a leader-slot selection both
-/// abort without consuming a turn; only a successful non-leader
-/// pair consumes the turn (same-slot pairs included — the swap is a
-/// behavioural no-op but the turn is still consumed).
+/// New Order is not a forwarding route, so every outcome reports acted
+/// and spends the ordinary turn: cancellation of either prompt, a
+/// leader-slot selection and a swap (same-slot pairs included). R607
+/// (u5-spec#300 Q29) withdrew "without consuming a turn".
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum NewOrderOutcome {
     /// Either prompt was cancelled. The command prints the
-    /// no-selection result and returns without consuming a turn.
+    /// no-selection result; the turn is still spent (R607).
     Cancelled,
     /// At least one selected slot is the leader (slot 0). The
-    /// command refuses and returns without consuming a turn.
+    /// command refuses; the turn is still spent (R607).
     LeaderRefusal,
     /// Both selections are non-leader slots. The handler exchanges
     /// the two roster records and consumes the turn. Same-slot pairs
@@ -1457,11 +1457,22 @@ pub const LOOK_RESULT_PREFIX: &str = "\nThou dost see";
 pub const TOWN_ARREST_SURRENDER_PROMPT: &str =
     "\"Thou art under arrest!\"\n\n\"Wilt thou come quietly?\"\n\n:";
 /// `town-mode.md §1123`: "the surrender line is `The guard strikes thee
-/// unconscious!`". The awakening line the same sentence mentions is
-/// still unpublished, so the engine prints this one and stops.
+/// unconscious!`".
 pub const TOWN_ARREST_KNOCKOUT_MESSAGE: &str = "The guard strikes thee unconscious!";
-/// `town-mode.md §1123`: the `:` answer row echoes `Yes` or `No!`.
+/// `town-mode.md §14` (u5-spec#300 Q33): the awakening literal is
+/// `Thou dost awaken to...`, "the complete literal, ending with its
+/// ellipsis"; nothing completes it.
+pub const TOWN_ARREST_AWAKENING_MESSAGE: &str = "Thou dost awaken to...";
+/// `town-mode.md §14` (u5-spec#300 Q7): the refusal's challenge,
+/// `"Then defend thyself, rogue!"`, after a blank row.
+pub const TOWN_ARREST_REFUSAL_CHALLENGE: &str = "\"Then defend thyself, rogue!\"";
+/// `town-mode.md §1123`: the `:` answer row echoes `Yes` or `No`.
 pub const TOWN_ARREST_YES_REPLY: &str = "Yes";
+/// `town-mode.md §14` (u5-spec#300 Q7, R592): "The refusal echo is `No`,
+/// not `No!`".
+pub const TOWN_ARREST_REFUSAL_NO_REPLY: &str = "No";
+/// `blackthorn.md §7a`: the Blackthorn payment prompt's refusal echo,
+/// `No!` - "a different prompt and is unchanged" by R592.
 pub const TOWN_ARREST_NO_REPLY: &str = "No!";
 /// `cleak/u5-spec#194` (black-box): X-it on foot completes its own
 /// `X-it ` echo line with `what?`.
@@ -1529,6 +1540,13 @@ pub const PAID_INN_REST_SLEEP_LINE: &str = "Zzzzzz....";
 pub const PAID_INN_REST_MORNING_LINE: &str = "Morning!";
 
 pub const TOWN_BED_REST_SLEEP_LINE: &str = "Zzzzzzz...";
+/// `commands.md §5.5` / `rest-and-camp.md §4` (u5-spec#300 Q8): the town
+/// bed prompt is `For_how_many_hours?_` "with no range text", printed after
+/// `Hole up- ` on the same line.
+pub const TOWN_BED_HOURS_PROMPT: &str = "For how many hours? ";
+/// `commands.md §5.5` (u5-spec#300 Q8): the town-bed loop's refusal
+/// `Thrown_out_of_bed!\n`, printed when a ten-minute step's bed test fails.
+pub const TOWN_BED_THROWN_OUT_LINE: &str = "Thrown out of bed!";
 
 pub const USE_PICKER_NO_QUANTITY: u8 = 255;
 

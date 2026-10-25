@@ -46,7 +46,8 @@ impl PreparedTopDownCell {
 
 impl PlayState {
     /// `time.md §8`: "Each of the sixteen character record slots carries a
-    /// one-byte counter. The month rollover increments it, capped at 25",
+    /// one-byte counter. The month rollover adds one to it only when it is
+    /// below 25" (u5-spec#300 Q8, R587),
     /// and implementations "should still preserve and age it on all
     /// character records". The active party's copies, the lodged guests'
     /// records and every other roster record age together (playtest G28,
@@ -1423,7 +1424,12 @@ impl PlayState {
         for _ in 0..DUNGEON_ACTIVE_OBJECT_PLACEMENT_ATTEMPTS {
             let x = usize::from(self.random_range_u8(0, (DUNGEON_SIDE - 1) as u8));
             let y = usize::from(self.random_range_u8(0, (DUNGEON_SIDE - 1) as u8));
-            if (x, y) == (self.player.x, self.player.y)
+            // `dungeon-mode.md §4.1` (u5-spec#300 Q24, R610): "a candidate
+            // is also rejected when it shares the party's X **or** the
+            // party's Y, so the party's whole row and whole column are
+            // excluded, not only its own cell".
+            if x == self.player.x
+                || y == self.player.y
                 || !dungeon_active_object_spawn_accepts(self.dungeon_cell(level, x, y))
             {
                 continue;
@@ -1441,11 +1447,22 @@ impl PlayState {
             object.aux3 = DUNGEON_MONSTER_UPPER_DEP3;
         }
         if !placed {
+            // `dungeon-mode.md §4.1` (u5-spec#300 Q24): "X and Y of both the
+            // active-object record and the first dungeon creature slot ...
+            // are set to 255, outside the 0..7 grid; then type and tile are
+            // set to zero and the class byte to the inactive marker `0xFF`.
+            // The sprite-state byte, the placement selector ... and the
+            // stamped level are left as the roll wrote them." A zeroed X/Y
+            // "would be a live record at cell (0, 0)".
             object.type_byte = 0;
             object.tile = 0;
-            object.x = 0;
-            object.y = 0;
+            object.x = DUNGEON_ACTIVE_OBJECT_INACTIVE_COORDINATE;
+            object.y = DUNGEON_ACTIVE_OBJECT_INACTIVE_COORDINATE;
             object.aux1 = DUNGEON_MONSTER_INACTIVE_DEP1;
+            self.dungeon_monster_previous_cell = Some((
+                DUNGEON_ACTIVE_OBJECT_INACTIVE_COORDINATE,
+                DUNGEON_ACTIVE_OBJECT_INACTIVE_COORDINATE,
+            ));
         }
 
         if self.active_objects.len() <= DUNGEON_ACTIVE_MONSTER_SLOT {
@@ -3179,17 +3196,25 @@ impl PlayState {
     /// action counter is not bumped and no post-action pass is entered. The
     /// iteration's minute is flagged so the dispatched command's own
     /// `advance_turn` does not charge it a second time.
+    ///
+    /// `dungeon-mode.md §4` step 1 (u5-spec#300 Q10, R595): the call "is
+    /// gated on the shared timed-effect tag ... and on nothing else. While
+    /// Negate Time (`T`) is active the call is not made at all ... While
+    /// Quickness (`Q`) is active the call is made only on every other
+    /// iteration, so dungeon time passes at half rate; a call that is made
+    /// still advances one minute". Which iteration of each pair spends the
+    /// minute is not established; this engine spends it on the odd ones.
     pub fn advance_dungeon_loop_minute(&mut self) {
         let minutes = self.turn_minute_increment();
-        let effective_minutes = if self.negate_time_active() {
-            0
-        } else {
-            TimingStatusTag::from_save_byte(self.active_effect_tag.unwrap_or(0))
-                .effective_minutes(minutes)
-        };
+        let tag = TimingStatusTag::from_save_byte(self.active_effect_tag.unwrap_or(0));
         self.dungeon_loop_minute_charged = true;
         self.dungeon_loop_iteration = self.dungeon_loop_iteration.wrapping_add(1);
-        self.advance_clock_half(effective_minutes);
+        if self.negate_time_active()
+            || (tag == TimingStatusTag::HalfTime && self.dungeon_loop_iteration % 2 == 0)
+        {
+            return;
+        }
+        self.advance_clock_half(tag.effective_minutes(minutes));
     }
 
     /// The clock half of a turn shared by [`Self::advance_dungeon_loop_minute`]
@@ -5029,14 +5054,17 @@ impl PlayState {
         if object.tile == 0 || object.tile == ACTOR_TILE_TRANSPARENT_BYTE {
             return;
         }
-        // `active-objects.md §8` early-out 4: "A slot whose displayed-frame
-        // byte is the hidden value ... is skipped. This is how gameplay parks
-        // an actor." The arena's hidden value is non-zero since playtest J21
-        // (`COMBAT_HIDDEN_ACTIVE_OBJECT_TILE`), so it needs its own test here,
-        // ahead of the coin: otherwise the script rewrites a hidden
-        // combatant's frame back to a drawn sprite and draws a coin the
-        // parked slot never spends.
-        if self.combat_active && object.tile == crate::COMBAT_HIDDEN_ACTIVE_OBJECT_TILE {
+        // `active-objects.md §8` early-out 4 (u5-spec#300 Q16, R608): "A slot
+        // whose displayed-frame byte is exactly one of three values is
+        // skipped: `0x00`, the hidden value; `0x1D`, the party combatant's
+        // invisibility frame ...; or `0x1E`, a party combatant's asleep
+        // frame ... No other frame value is exempt; in particular the
+        // moldy-corpse value `0x1F` is not." The zero value returned above.
+        // Tested ahead of the coin, so a parked slot draws none.
+        if matches!(
+            object.tile,
+            crate::COMBAT_POTION_INVISIBLE_WAKE_DISPLAY_TILE | crate::COMBAT_POTION_SLEEP_DISPLAY_TILE
+        ) {
             return;
         }
         let Some(script) = active_object_animation_script(object.type_byte) else {
@@ -5491,8 +5519,8 @@ impl PlayState {
             return None;
         }
         self.push_impact_line("Rough seas!");
+        // Stage one plays the impact rumble itself (R611).
         self.outdoor_impact_presentation();
-        self.emit_sound_effect(SoundEffect::RoughSeasImpactRumble);
         // `overworld.md §6.2.5`: "Order is `Rough seas!`, impact figure at
         // the party cell, impact rumble, one world repaint tick, then
         // absorption." The same section scopes the whole sequence's cost
@@ -5511,12 +5539,16 @@ impl PlayState {
     }
 
     /// `overworld.md §6.2.4` stage one — impact presentation. "An impact
-    /// figure is drawn at the party's own map coordinates ..., a short
-    /// tone plays, and the viewport is rebuilt. This stage writes no
-    /// character state and no vehicle state, and prints no narration
-    /// line."
+    /// figure (figure zero) is drawn at the party's own map coordinates ...,
+    /// the **impact rumble** plays - a random rumble of step 10, target
+    /// 3000, pitch drawn from the inclusive range 100..2000 Hz, 300 updates
+    /// ... - and one world tick repaints the viewport." It "is one fixed
+    /// routine, so the sound is identical on every caller: both outdoor
+    /// ranged attacks ..., rough seas and every drowning pass" (u5-spec#300
+    /// Q27, #301 Q3; R611 withdrew "a short tone plays").
     fn outdoor_impact_presentation(&mut self) {
         self.mark_visibility_dirty();
+        self.emit_sound_effect(SoundEffect::RoughSeasImpactRumble);
     }
 
     /// `overworld.md §6.2.4` stage two — impact absorption. The stage
@@ -5810,8 +5842,8 @@ impl PlayState {
     /// ran each pass in under half that and the party died while the stock
     /// was still on its third pass (`sail-calm`, every run since 2026-10-16).
     fn drowning_pass_impact_presentation(&mut self) {
+        // Stage one plays the impact rumble itself (R611, #301 Q3).
         self.outdoor_impact_presentation();
-        self.emit_sound_effect(SoundEffect::RoughSeasImpactRumble);
     }
 
     /// [`Self::apply_ship_loss_drowning`], with each pass staged for the
@@ -6355,7 +6387,10 @@ impl PlayState {
         let party_terrain = self.grid[world_cell_index(self.player.x, self.player.y)];
         if generic_adjacent_hostile_uses_impact(party_terrain, self.player.transport.save_marker())
         {
-            self.apply_outdoor_impact();
+            // `overworld.md §6.2.4` / `active-objects.md §8` (u5-spec#301
+            // Q3, R612): this arm enters at stage two - "no impact figure is
+            // drawn and no impact rumble plays".
+            self.apply_outdoor_impact_absorption();
             return Ok(Some(MoveOutcome::Used));
         }
 

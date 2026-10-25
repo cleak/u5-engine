@@ -252,9 +252,11 @@ pub struct PlayState {
     /// resident in the current town. Reset before every entry comparison;
     /// transient runtime state, not part of the save image.
     pub resident_shadowlord: Option<usize>,
-    /// `commands.md §11` transient identity handshake for a Shadowlord
-    /// summoned by name. The actor record itself carries only the shared
-    /// `0xFC` identity bytes.
+    /// `commands.md §11` / `formats/saved-gam.md §9.1` `0x0325`: the id of
+    /// the Shadowlord last summoned by name. Only a successful Yell writes
+    /// it and nothing clears it (u5-spec#300 Q3, R585), so it may name a
+    /// Shadowlord no longer present. The actor record itself carries only
+    /// the shared `0xFC` identity bytes.
     pub summoned_shadowlord: Option<usize>,
     pub removed_town_npc_flags: HashMap<u8, u32>,
     pub shrine_ordained_mask: u8,

@@ -2050,7 +2050,12 @@ impl PlayState {
         }
 
         let active_slot = self.insert_resident_shadowlord_npc(scene, floor)?;
-        let _ = self.apply_resident_shadowlord_npc_sweep(shadowlord_index);
+        // `town-mode.md §13` (u5-spec#300 Q4): the sweep runs after the
+        // party-capability check, and a party with nobody able to act and
+        // nobody asleep stops entry there, "no resident-entry sweep".
+        if self.shadowlord_notice_capability_gate_passes() {
+            let _ = self.apply_resident_shadowlord_npc_sweep(shadowlord_index);
+        }
         self.mark_visibility_dirty();
         Some((active_slot, shadowlord_index))
     }
@@ -2262,9 +2267,8 @@ impl PlayState {
     ///
     /// This used to return an engine summary - `Stonegate entry: Sceptre
     /// prelude; air of Hatred.` - which is a sentence the original never
-    /// prints. The rows themselves are the presentation; the Sceptre-gated
-    /// prelude row's *text* is not published, so it stays a diagnostic
-    /// rather than an invented line.
+    /// prints. The rows themselves are the presentation. R590 (u5-spec#300
+    /// Q4) withdrew the "Sceptre-gated prelude row" outright.
     pub fn stonegate_entry_presentation_message(&self) -> Option<String> {
         let Area::Town { scene, .. } = self.area else {
             return None;
@@ -2272,8 +2276,50 @@ impl PlayState {
         if scene.byte != STONEGATE_SCENE_BYTE {
             return None;
         }
+        if !self.shadowlord_notice_capability_gate_passes() {
+            return None;
+        }
         let lines = self.stonegate_entry_presentation_lines();
         (!lines.is_empty()).then(|| lines.join("\n\n"))
+    }
+
+    /// `town-mode.md §13` (u5-spec#300 Q4, Q17): town entry runs the shared
+    /// party-capability check before the notice, and "If the capability
+    /// check finds nobody in the party able to act and nobody asleep, entry
+    /// stops at that check: no notice, no tone and no resident-entry sweep".
+    pub fn shadowlord_notice_capability_gate_passes(&self) -> bool {
+        self.party_capability() != PartyCapability::Defeated
+    }
+
+    /// `town-mode.md §13` (u5-spec#300 Q4, R590): "when the party's Sceptre
+    /// flag is set ..., the setup path silently removes roster slot 9, the
+    /// Sceptre item figure that stands on the centre cell ringed by the
+    /// trapdoors. Nothing is printed and nothing sounds." No removal mark is
+    /// written: the figure "is placed again by the roster load of the next
+    /// entry after a Shadow Lord fight has reclaimed the Sceptre and cleared
+    /// the flag". Static reading in the spec, not executed.
+    pub fn remove_stonegate_sceptre_figure_on_entry(&mut self) -> bool {
+        let Area::Town { scene, .. } = self.area else {
+            return false;
+        };
+        if scene.byte != STONEGATE_SCENE_BYTE
+            || self.special_items[SPECIAL_ITEM_SCEPTRE_LB_INDEX] == 0
+        {
+            return false;
+        }
+        let Some(index) = self
+            .npcs
+            .iter()
+            .position(|npc| npc.slot == STONEGATE_SCEPTRE_FIGURE_NPC_SLOT)
+        else {
+            return false;
+        };
+        if let Some(slot) = self.npcs[index].active_object {
+            self.free_active_object_slot(slot);
+        }
+        self.npcs.remove(index);
+        self.mark_visibility_dirty();
+        true
     }
 
     pub fn append_stonegate_entry_presentation_message(&mut self) {
@@ -2283,13 +2329,13 @@ impl PlayState {
         if scene.byte != STONEGATE_SCENE_BYTE {
             return;
         }
-        if self.special_items[SPECIAL_ITEM_SCEPTRE_LB_INDEX] != 0 {
-            // §13: "the town setup path can play a Sceptre-gated prelude row
-            // when the party carries the Sceptre of Lord British". The row's
-            // text is not published, so this records that it was reached
-            // instead of inventing one.
-            self.diagnostics
-                .push("Stonegate Sceptre-gated prelude row reached".to_string());
+        // `town-mode.md §13` (u5-spec#300 Q4, R590): "The published
+        // \"Sceptre-gated prelude row\" does not exist"; the Sceptre flag
+        // gates only the silent figure removal of
+        // [`Self::remove_stonegate_sceptre_figure_on_entry`], which entry
+        // setup runs before this.
+        if !self.shadowlord_notice_capability_gate_passes() {
+            return;
         }
         for index in (0..SHADOWLORD_COUNT).rev() {
             if self.shadowlord_alive(index) {
@@ -2312,6 +2358,12 @@ impl PlayState {
             false => format!("{}\n\n{note}", self.message),
         };
         self.emit_message_line(composed);
+        // `town-mode.md §13` (u5-spec#300 Q4, Q17): each notice plays its
+        // tone, "each tone finishes before the next notice's text"; the
+        // envelope is the same constant one for all three Shadowlords.
+        for _ in self.stonegate_entry_presentation_lines() {
+            self.emit_sound_effect(SoundEffect::ShadowlordPresenceNotice);
+        }
     }
 
     pub fn current_shadowlord_hideout_id(&self) -> Option<u8> {
@@ -2536,7 +2588,8 @@ impl PlayState {
                         return Ok(MoveOutcome::Used);
                     }
                 }
-                self.advance_turn();
+                // `commands.md §3` (u5-spec#300 Q14): the overworld `A`
+                // reports "no action" on every path, so this refusal is free.
                 let note = self.terrain_encounter_note(game_dir, plane, object)?;
                 // `combat.md §8.2`: the shipped game's whole attack vocabulary
                 // is `Attack-`, `Nothing to attack!`, `Attacked!` and
@@ -2578,11 +2631,18 @@ impl PlayState {
                     // (whose stat row carries the sentinel count eight)."
                     // The withdrawn reading kept A-Attack inside town
                     // mode and never called the combat framer.
-                    if town_npc_attack_enters_conflict(type_byte)
-                        && !matches!(
-                            town_npc_attack_resolution(type_byte),
-                            TownNpcAttackResolution::Refused
-                        )
+                    // `town-mode.md §10` (u5-spec#300 Q18): a resident
+                    // Shadowlord (`0xFC`) "is therefore a **valid conflict
+                    // target**: the attack reaches the NPC-conflict chain
+                    // ... which forces arena 10", with no karma loss, no
+                    // alarm and no removal mark.
+                    let resident_shadowlord = type_byte == SHADOWLORD_ACTOR_TILE;
+                    if resident_shadowlord
+                        || (town_npc_attack_enters_conflict(type_byte)
+                            && !matches!(
+                                town_npc_attack_resolution(type_byte),
+                                TownNpcAttackResolution::Refused
+                            ))
                     {
                         // `combat.md §5`: the encounter's base combat
                         // class "is derived from the creature's own
@@ -2612,8 +2672,13 @@ impl PlayState {
                                 // slot clear, floor reload and
                                 // Shadowlord re-install move to the
                                 // arena exit.
-                                let (pursued, fled) =
-                                    self.town_alarm_sweep(scene, floor, Some(npc_slot));
+                                // `0xFC` "triggers neither" karma nor
+                                // the alarm (u5-spec#300 Q18).
+                                let (pursued, fled) = if resident_shadowlord {
+                                    (0, 0)
+                                } else {
+                                    self.town_alarm_sweep(scene, floor, Some(npc_slot))
+                                };
                                 self.pending_town_conflict = Some(PendingTownConflict {
                                     scene_byte: scene.byte,
                                     floor,
@@ -2696,7 +2761,12 @@ impl PlayState {
             return Ok(MoveOutcome::Used);
         }
 
-        self.advance_turn();
+        // `commands.md §3` (u5-spec#300 Q14): town `Nothing to attack!` is
+        // acted (executed); the overworld `A` reports "no action" on every
+        // path, so its refusal is free.
+        if matches!(self.area, Area::Town { .. }) {
+            self.advance_turn();
+        }
         // Measured: `A` into an empty adjacent cell prints `Attack-North`
         // and then this refusal - not a composed line naming the cell.
         self.message = ATTACK_NOTHING_TO_ATTACK_REFUSAL.to_string();
@@ -4003,8 +4073,10 @@ impl PlayState {
         // `overworld.md §8` correction: both marker arms reach the shared
         // §6.2.4 impact payload. On foot this is the whole-party damage pass;
         // it skips only the transition and does not clear the whirlpool slot.
+        // `overworld.md §6.2.4` (u5-spec#301 Q3, R612): both whirlpool arms
+        // enter the payload at stage two, with no impact figure or rumble.
         if self.player.transport.is_foot() {
-            self.apply_outdoor_impact();
+            self.apply_outdoor_impact_absorption();
             return Ok(MoveOutcome::Used);
         }
 
@@ -4047,7 +4119,8 @@ impl PlayState {
         self.mark_visibility_dirty();
         // Step 6: the Section 6.2.4 impact payload, "which may add
         // `Ship sunk!` and then either `Abandon ship!` or `DROWNING!!!`".
-        self.apply_outdoor_impact();
+        // It enters at the absorption stage (R612, u5-spec#301 Q3).
+        self.apply_outdoor_impact_absorption();
         // Step 7: "The plane write and the move to `(34, 18)` ... This runs
         // **unconditionally** after step 6, including after the drowning
         // arm." It prints nothing of its own: the banner above is the first
@@ -4099,7 +4172,9 @@ impl PlayState {
 
     fn apply_world_sand_trap_slot_engagement(&mut self, sand_trap_slot: usize) {
         let _ = sand_trap_slot;
-        self.apply_outdoor_impact();
+        // `active-objects.md §8` (u5-spec#301 Q3, R612): "no impact figure
+        // or impact rumble" - the payload's absorption stage only.
+        self.apply_outdoor_impact_absorption();
     }
 
     pub fn apply_town_post_turn_effects_after_turn(
@@ -4653,14 +4728,16 @@ impl PlayState {
             && let Some(index) = self.npcs.iter().position(|npc| npc.slot == npc_slot)
             && self.npcs[index].dialog_id == TOWN_NPC_BRUSHOFF_DIALOG_ID
         {
+            // `town-mode.md §14` / `npc-schedules.md` producer table
+            // (u5-spec#300 Q19): "one line feed, the line, the same damage
+            // pass, then flight for that NPC. There is no `Attacked!`, no
+            // conflict and no arrest."
+            self.message_row_open_mid_line = false;
+            self.emit_message_line(format!("\n{TOWN_NPC_BRUSHOFF_LINE}\n"));
+            let _ = self.apply_outdoor_impact_party_damage();
             let _ = self.npcs[index].force_town_flight();
             self.record_town_npc_mutation(index);
-            // The shouted line's wording is not published
-            // (`conversation.md §2` step 5, `OPEN-QUESTIONS.md`), so it is
-            // recorded rather than invented (playtest K13).
-            self.push_diagnostic(format!(
-                "NPC slot {npc_slot} shouts the brush-off; its line is not published"
-            ));
+            self.push_diagnostic(format!("NPC slot {npc_slot} shouts the brush-off"));
             return Ok(Some(MoveOutcome::Used));
         }
         // Measured 2026-09-08 at Minoc's gate at 16:00
@@ -4845,6 +4922,9 @@ impl PlayState {
                 // or `No!`", so the accepted key completes the open row
                 // before the outcome prints on the next one.
                 self.commit_prompt_reply(":", TOWN_ARREST_YES_REPLY);
+                // `town-mode.md §14` (u5-spec#300 Q33): `:Yes`, then a blank
+                // row before the knockout line - the echo ends its row.
+                self.message_row_open_mid_line = false;
                 self.pending_town_arrest = None;
                 if prompt.scene_byte == BLACKTHORN_CAPTIVE_CELL_SCENE {
                     return self.begin_blackthorn_audience_capture(game_dir);
@@ -4852,20 +4932,29 @@ impl PlayState {
                 self.apply_town_arrest_surrender(game_dir)
             }
             'n' => {
-                self.commit_prompt_reply(":", TOWN_ARREST_NO_REPLY);
+                // `town-mode.md §14` (u5-spec#300 Q7, R592): "The refusal
+                // echo is `No`, not `No!`".
+                self.commit_prompt_reply(":", crate::commands::TOWN_ARREST_REFUSAL_NO_REPLY);
+                self.message_row_open_mid_line = false;
                 self.pending_town_arrest = None;
                 let scene = Scene::new(prompt.scene_byte)?;
+                // "the colon row completes with `No`, then a blank row,
+                // `"Then defend thyself, rogue!"` and the alarm sweep".
+                self.emit_message_line(format!(
+                    "\n{}\n",
+                    crate::commands::TOWN_ARREST_REFUSAL_CHALLENGE
+                ));
                 let (pursued, fled) =
                     self.town_alarm_sweep(scene, prompt.floor, Some(prompt.npc_slot));
                 self.push_diagnostic(format!(
                     "Refused surrender; alarm raised ({pursued} pursuing, {fled} fleeing)."
                 ));
-                // `town-mode.md §1123`: "Refusing prints the guards'
-                // challenge". That literal is unpublished and unmeasured,
-                // so the engine prints nothing rather than inventing it;
-                // the alarm sweep still runs. cleak/u5-spec#198 tracks
-                // the measurement.
-                self.message = String::new();
+                // "Post-action cleanup then takes its conflict follow-up:
+                // when the linked object's actor byte is at least `0x40`
+                // (a guard's always is) it prints `Attacked!` with its
+                // leading line feed and enters the NPC-conflict chain, an
+                // ordinary town arena fight" (R591 recorded the omission).
+                self.start_town_arrest_refusal_conflict(scene, prompt.floor, prompt.npc_slot, game_dir)?;
                 Ok(Some(MoveOutcome::Used))
             }
             // `town-mode.md §14` prints the challenge once; an unaccepted
@@ -4925,15 +5014,77 @@ impl PlayState {
             self.player.y,
             self.clock.hour
         ));
-        // `town-mode.md §1123`: "surrendering prints the knockout and
-        // awakening lines"; the knockout line is now published as `The
-        // guard strikes thee unconscious!` (spec issue #206). The
-        // awakening line still is not, so the engine prints the one it
-        // has and stops rather than inventing the other.
-        self.message = TOWN_ARREST_KNOCKOUT_MESSAGE.to_string();
+        // `town-mode.md §14` (u5-spec#300 Q7, Q33): "the colon row
+        // completes with `Yes`; a blank row and `The guard strikes thee
+        // unconscious!`; the fade; a blank row and `Thou dost awaken
+        // to...`". Each literal is a line feed, the text, a line feed.
+        self.message = format!(
+            "\n{TOWN_ARREST_KNOCKOUT_MESSAGE}\n\n{}",
+            crate::commands::TOWN_ARREST_AWAKENING_MESSAGE
+        );
         Ok(Some(MoveOutcome::Transition(
             AreaTransition::EnteredLocation(scene),
         )))
+    }
+
+    /// `town-mode.md §14` (u5-spec#300 Q7): the refusal's conflict
+    /// follow-up. The fight's target is "the roster index held in the
+    /// retained contact state"; when its linked actor byte is at least
+    /// `0x40`, `Attacked!` prints and the ordinary town arena fight starts,
+    /// as the contact arm of post-action cleanup does.
+    fn start_town_arrest_refusal_conflict(
+        &mut self,
+        scene: Scene,
+        floor: i8,
+        npc_slot: usize,
+        game_dir: &Path,
+    ) -> io::Result<()> {
+        let Some((type_byte, object_slot, object)) = self.npcs.iter().find_map(|npc| {
+            (npc.slot == npc_slot)
+                .then_some(npc.active_object)
+                .flatten()
+                .and_then(|slot| {
+                    self.active_objects
+                        .get(slot)
+                        .copied()
+                        .filter(|object| !object.is_empty())
+                        .map(|object| (npc.type_byte, slot, object))
+                })
+        }) else {
+            return Ok(());
+        };
+        if object.type_byte < TOWN_NPC_CONTACT_CONFLICT_ACTOR_FIRST {
+            return Ok(());
+        }
+        self.mark_visibility_dirty();
+        self.emit_message_line(TOWN_NPC_CONTACT_ATTACKED_LINE);
+        let trigger = ActiveObject {
+            type_byte,
+            tile: type_byte,
+            ..object
+        };
+        if game_dir.join(BRIT_CBT_FILE).exists() && terrain_combat_base_class(trigger).is_some() {
+            self.pending_town_conflict = Some(PendingTownConflict {
+                scene_byte: scene.byte,
+                floor,
+                npc_slot,
+                type_byte,
+                awaiting_floor_reload: false,
+                // The turn was already spent by the epilogue that reached
+                // cleanup; nothing of it runs again after the fight.
+                owes_turn_epilogue: false,
+            });
+            let hostile_terrain = self.grid[object.y * TOWN_GRID_SIDE + object.x];
+            let _setup_report = self.enter_terrain_combat_from_object_in_scene_with_terrain(
+                game_dir,
+                WorldPlane::Britannia,
+                object_slot,
+                trigger,
+                scene.byte,
+                hostile_terrain,
+            )?;
+        }
+        Ok(())
     }
 
     /// The arrest wait-to-morning loop (`time.md §10`: "advances time in
@@ -7434,6 +7585,11 @@ impl PlayState {
             if !self.complete_open_direction_echo("Hole up- ", HOLE_UP_NOT_IN_BED_REFUSAL) {
                 self.message = format!("Hole up- {HOLE_UP_NOT_IN_BED_REFUSAL}");
             }
+            // `town-mode.md §12` / `rest-and-camp.md §3` (u5-spec#300 Q8,
+            // Q14; R588, R603): the off-bed refusal "returns the ordinary
+            // acted result, so the refusal costs the normal one-minute town
+            // turn and runs the epilogue" (executed).
+            self.charge_tile_command_acted_exit(self.turn);
             return Ok(MoveOutcome::Blocked);
         }
         let Some(hours) = hours else {
@@ -7474,14 +7630,16 @@ impl PlayState {
         self.mark_town_rest_sleepers();
         if !self.advance_town_rest_until_target_hour(hours, entries.as_deref(), scene, floor) {
             let woke = self.wake_town_rest_sleepers();
-            // `rest-and-camp.md §6`: "Town/inn rest can instead produce a
-            // local refusal or \"thrown out\" style result depending on the
-            // caller context" - the wording is not published, so the engine
-            // records what happened rather than inventing a sentence.
             self.diagnostics.push(format!(
                 "town-bed rest interrupted; woke {woke} asleep member(s)"
             ));
-            self.message.clear();
+            // `rest-and-camp.md §4` (u5-spec#300 Q8): the members are put to
+            // sleep and only then does `Zzzzzzz...` print, ahead of the
+            // ten-minute loop; a failed bed test in a step prints the
+            // published refusal `Thrown_out_of_bed!\n` (`commands.md §5.5`).
+            self.emit_message_line(format!("{}\n", crate::commands::TOWN_BED_REST_SLEEP_LINE));
+            self.message = crate::commands::TOWN_BED_THROWN_OUT_LINE.to_string();
+            self.message_row_open_mid_line = false;
             return Ok(MoveOutcome::Blocked);
         }
         let mut recovered_hp = 0;
@@ -7491,11 +7649,8 @@ impl PlayState {
             recovered_hp += hp;
             recovered_mana += mana;
         }
-        // `npc-schedules.md §12`: the H-Hole-Up hours command is the second
-        // of the clear-and-re-place pass's three callers, and it runs "when
-        // it finishes its rested hours". An interrupted rest returns above
-        // and never reaches it.
-        self.clear_and_replace_scheduled_npcs();
+        // `npc-schedules.md §12` (u5-spec#300 Q6, R586): the reseat runs
+        // after every ten-minute step inside the loop, not once here.
         let woke = self.wake_town_rest_sleepers();
         // `rest-and-camp.md §4`: the town-bed surface prints its own
         // seven-z sleep line and nothing else. The hours and the recovery
@@ -7545,6 +7700,12 @@ impl PlayState {
             // and a nine-hour rest crosses both.
             self.refresh_cached_moon_glyphs_at_scene_entry();
             ticks += 1;
+            // `npc-schedules.md §12` / `rest-and-camp.md §4` (u5-spec#300
+            // Q6, R586): the bed loop "reseats the town's NPCs after every
+            // ten-minute step, before that step's bed test", after the
+            // step's dawn/dusk gate pass (run inside the clock advance
+            // above). R586 withdrew "when it finishes its rested hours".
+            self.clear_and_replace_scheduled_npcs();
             if !self.town_rest_bed_still_accepts(entries, scene, floor) {
                 return false;
             }

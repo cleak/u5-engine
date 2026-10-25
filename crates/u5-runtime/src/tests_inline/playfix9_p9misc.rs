@@ -95,13 +95,13 @@ fn playtest_q07_discarded_key_after_shortfall_does_not_reprint_the_prompt() {
     let _ = fs::remove_dir_all(dir);
 }
 
-/// `town-mode.md §7.2`: away from the harpsichord the town digit handler
-/// "falls through to the ordinary solo-member selector, which reports
-/// \"acted\" for an ordinary selection and \"no action\" for the
-/// deselect-to-whole-party case"; `commands.md §3` runs the per-turn
-/// epilogue on "acted" (Q14).
+/// `town-mode.md §7.2` (u5-spec#300 Q34, R616): away from the harpsichord
+/// the town digit reaches the shared active-player selector. `None!` and a
+/// successful selection are free; `Invalid!` reports "acted" and costs the
+/// one-minute town turn ("`1` and `0` left the clock unchanged, while `9`
+/// ... printed `Invalid!` and advanced it by one minute").
 #[test]
-fn playtest_q14_town_digit_selection_reports_acted_and_zero_does_not() {
+fn playtest_q14_town_digit_selection_is_free_and_invalid_reports_acted() {
     let dir = debug_game_dir();
     let mut state = test_state(open_grid(), 5, 5);
     state.party.push(PartyMember {
@@ -119,21 +119,50 @@ fn playtest_q14_town_digit_selection_reports_acted_and_zero_does_not() {
 
     handle_play_key_input(&mut state, '2', "", &dir).unwrap();
     assert_eq!(state.active_player, Some(1));
-    assert_eq!(state.turn, 1, "an ordinary town selection reports acted");
-    let mut expected = clock_before;
-    expected.advance_minutes(1);
-    assert_eq!(state.clock, expected);
+    assert_eq!(state.turn, 0, "a successful town selection is free");
+    assert_eq!(state.clock, clock_before);
 
     handle_play_key_input(&mut state, '0', "", &dir).unwrap();
     assert_eq!(state.active_player, None);
-    assert_eq!(state.turn, 1, "the deselect reports no action");
+    assert_eq!(state.turn, 0, "the deselect reports no action");
+    assert_eq!(state.clock, clock_before);
+
+    handle_play_key_input(&mut state, '9', "", &dir).unwrap();
+    assert_eq!(state.message, SET_ACTIVE_PLAYER_INVALID_REPLY);
+    assert_eq!(state.active_player, None);
+    assert_eq!(state.turn, 1, "`Invalid!` reports acted");
+    let mut expected = clock_before;
+    expected.advance_minutes(1);
     assert_eq!(state.clock, expected);
+    let _ = fs::remove_dir_all(dir);
+}
+
+/// `overworld.md §5` step 5 (u5-spec#300 Q34, R618): overworld digits reach
+/// the same selector, not a speed selector. `1` and `0` are free; `8`
+/// printed `Invalid!` and ran the per-turn block ("advanced the clock 08:39
+/// to 08:41").
+#[test]
+fn spec300_q34_overworld_digit_reaches_the_active_player_selector() {
+    let dir = debug_game_dir();
+    let mut state = world_state(open_world_grid(), 5, 5);
+    state.clock = GameClock::with_date(139, 4, 5, 8, 39).unwrap();
+
+    handle_play_key_input(&mut state, '1', "", &dir).unwrap();
+    assert_eq!(state.active_player, Some(0));
+    handle_play_key_input(&mut state, '0', "", &dir).unwrap();
+    assert_eq!(state.active_player, None);
+    assert_eq!((state.turn, state.clock.hour, state.clock.minute), (0, 8, 39));
+
+    handle_play_key_input(&mut state, '8', "", &dir).unwrap();
+    assert_eq!(state.message, SET_ACTIVE_PLAYER_INVALID_REPLY);
+    assert_eq!(state.turn, 1);
+    assert_eq!((state.clock.hour, state.clock.minute), (8, 41));
     let _ = fs::remove_dir_all(dir);
 }
 
 /// Review of Q14: the epilogue an acted town digit now runs can print
 /// (`time.md §5`'s `Starving!\n`). The member's name is already on the
-/// transcript by then, so the warning takes a row of its own; it used to be
+/// transcript by then (an `Invalid!` digit is the acted one, u5-spec#300 Q34), so the warning takes a row of its own; it used to be
 /// appended to the spent slot, and the next flush logged `Shamino` twice.
 #[test]
 fn playtest_q14_town_digit_epilogue_line_does_not_reprint_the_answer() {
@@ -154,12 +183,12 @@ fn playtest_q14_town_digit_epilogue_line_does_not_reprint_the_answer() {
     state.clock = GameClock::with_date(139, 4, 5, 17, 59).unwrap();
     state.food = 0;
 
-    handle_play_key_input(&mut state, '2', "", &dir).unwrap();
+    handle_play_key_input(&mut state, '9', "", &dir).unwrap();
     state.flush_message_slot();
     let rows = playtest_transcript_rows(&state);
     assert_eq!(state.clock.hour, 18, "{rows:?}");
     assert_eq!(
-        rows.iter().filter(|row| row.eq_ignore_ascii_case("shamino")).count(),
+        rows.iter().filter(|row| row.as_str() == SET_ACTIVE_PLAYER_INVALID_REPLY).count(),
         1,
         "{rows:?}"
     );
@@ -192,4 +221,84 @@ fn playtest_q16_inn_solo_leave_without_shoppe_dat_shows_no_transcribed_record() 
         !rows.iter().any(|row| row.contains("inn!") || row.contains("SLEEP")),
         "{rows:?}"
     );
+}
+
+/// `commands.md §6` (u5-spec#300 Q29, R607): New Order is not a forwarding
+/// route, so `Swap nobody!` and `<leader> must lead!` at either prompt spend
+/// the ordinary turn (executed: Escape at the first prompt and the leader
+/// picked first, overworld and town).
+#[test]
+fn spec300_q29_new_order_cancel_and_leader_refusal_spend_the_turn() {
+    let dir = debug_game_dir();
+    for town in [true, false] {
+        for keys in [&['\u{1b}'][..], &['\r'][..]] {
+            let mut state = if town {
+                test_state(open_grid(), 5, 5)
+            } else {
+                world_state(open_world_grid(), 5, 5)
+            };
+            state.party.push(PartyMember {
+                slot: 1,
+                class_byte: b'F',
+                status: b'G',
+                climb_stat: DEFAULT_CLIMB_STAT,
+                mana: 0,
+                hp: 20,
+                max_hp: 20,
+                level: 1,
+            });
+            state.party_names = vec![*b"AVATAR\0\0\0", *b"SHAMINO\0\0"];
+            let mut clock = state.clock;
+            handle_play_key_input(&mut state, 'N', "", &dir).unwrap();
+            assert_eq!(state.turn, 0);
+            for key in keys {
+                handle_play_key_input(&mut state, *key, "", &dir).unwrap();
+            }
+            assert!(state.active_party_selector.is_none());
+            assert_eq!(state.turn, 1, "town {town} keys {keys:?}");
+            clock.advance_minutes(if town { 1 } else { 2 });
+            assert_eq!(state.clock, clock, "town {town} keys {keys:?}");
+        }
+    }
+    let _ = fs::remove_dir_all(dir);
+}
+
+/// `commands.md §3` (u5-spec#300 Q14): the overworld `A` reports "no
+/// action" on every path, so `Nothing to attack!` there is free, while town
+/// `Nothing to attack!` is acted (executed).
+#[test]
+fn spec300_q14_overworld_attack_refusal_is_free_and_town_refusal_is_acted() {
+    let dir = debug_game_dir();
+    let mut world = world_state(open_world_grid(), 5, 5);
+    handle_play_key_input(&mut world, 'A', "8", &dir).unwrap();
+    assert_eq!(world.message, ATTACK_NOTHING_TO_ATTACK_REFUSAL);
+    assert_eq!(world.turn, 0);
+    let mut town = test_state(open_grid(), 5, 5);
+    handle_play_key_input(&mut town, 'A', "8", &dir).unwrap();
+    assert_eq!(town.message, ATTACK_NOTHING_TO_ATTACK_REFUSAL);
+    assert_eq!(town.turn, 1);
+    let _ = fs::remove_dir_all(dir);
+}
+
+/// `dungeon-mode.md §4` step 1 and §15 (u5-spec#300 Q10, R595): the dungeon
+/// loop-head clock call is made on every iteration normally, not at all
+/// under Negate Time, and only on every other iteration under Quickness ("so
+/// dungeon time passes at half rate; a call that is made still advances one
+/// minute"). R595 withdrew the "Q-quest mode pendulum" that "stays disabled".
+#[test]
+fn spec300_q10_dungeon_loop_minute_follows_quickness_and_negate_time() {
+    for (tag, expected) in [
+        (None, 4u8),
+        (Some(QUICKNESS_ACTIVE_EFFECT_TAG), 2),
+        (Some(NEGATE_TIME_ACTIVE_EFFECT_TAG), 0),
+    ] {
+        let mut state = dungeon_state(open_dungeon_record(), 0, 1, 1);
+        state.clock = GameClock::new(10, 0).unwrap();
+        state.active_effect_tag = tag;
+        state.active_effect_counter = 50;
+        for _ in 0..4 {
+            state.advance_dungeon_loop_minute();
+        }
+        assert_eq!(state.clock.minute, expected, "tag {tag:?}");
+    }
 }

@@ -1023,7 +1023,7 @@ fn world_enter_stonegate_keeps_exact_entry_narration_without_diagnostics() {
     // narration (playtest G31); no engine summary sentence does.
     assert_eq!(
         state.message,
-        "keep\nAn air of\nfalsehood doth\nsurround thee..."
+        "keep\n\nAn air of\nfalsehood doth\nsurround thee..."
     );
     assert!(!state.message.contains("Stonegate entry:"));
     let _ = fs::remove_dir_all(dir);
@@ -1443,11 +1443,12 @@ fn stonegate_load_appends_entry_presentation_notes() {
 
     // The entry itself prints nothing (no published scene-entry narration),
     // so the presentation notes are the whole of the slot.
+    // u5-spec#300 Q4 (R590): there is no Sceptre-gated prelude row.
     assert!(
-        state
+        !state
             .diagnostics
             .iter()
-            .any(|note| note.contains("Sceptre-gated prelude row reached"))
+            .any(|note| note.contains("prelude"))
     );
     assert!(state.message.contains("An air of\nhatred doth"));
     assert!(!state.message.contains("An air of\nfalsehood doth"));

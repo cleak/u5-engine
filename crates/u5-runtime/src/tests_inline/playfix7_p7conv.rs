@@ -153,6 +153,8 @@ fn playtest_l05_enter_on_a_ruined_shrine_prints_ruins_without_a_newline() {
         }
     ));
     assert_eq!((state.player.x, state.player.y), (233, 66));
-    assert_eq!(state.turn, turn);
+    // `commands.md §5.5`/§3 (u5-spec#300 Q28): the ruins arm is acted and
+    // spends the outdoor turn as `Pass` does.
+    assert_eq!(state.turn, turn + 1);
     let _ = fs::remove_dir_all(dir);
 }

@@ -35,12 +35,22 @@ fn p6town_entering_a_hideout_town_prints_its_air_line() {
         .iter()
         .rposition(|row| *row == "BRITAIN")
         .expect("entry narration row");
+    // u5-spec#300 Q4: one blank row between the centred name and `An air
+    // of`, then the notice's tone (`(1, 2000, 60000, 1, 6600)`), once.
     assert_eq!(
         &rows[name + 1..],
-        &["An air of", "falsehood doth", "surround thee..."]
+        &["", "An air of", "falsehood doth", "surround thee..."]
     );
     assert!(state.message_row_open_mid_line);
     assert!(!state.message.contains("hatred"));
+    assert_eq!(
+        state
+            .sound_effects_after(0)
+            .iter()
+            .filter(|effect| **effect == SoundEffect::ShadowlordPresenceNotice)
+            .count(),
+        1
+    );
     let _ = fs::remove_dir_all(dir);
 }
 
@@ -132,26 +142,37 @@ fn p6town_contact_conversation_keeps_the_commands_result_line() {
     let _ = fs::remove_dir_all(dir);
 }
 
-/// Playtest K08. `town-mode.md §7`: A-Attack "looks for a live NPC linked to
-/// the target sprite ... Invalid targets produce the ordinary failure text",
-/// which `combat.md §8.2` gives as `Nothing to attack!`. A resident
-/// Shadowlord (roster type `0xFC`) is refused, and the refusal used to print
-/// nothing after `Attack-East`.
+/// `town-mode.md §10` (u5-spec#300 Q18): a resident Shadowlord (roster type
+/// `0xFC`) "is therefore a **valid conflict target**: the attack reaches the
+/// NPC-conflict chain ... which forces arena 10 for `0xFC..0xFF`", with no
+/// karma loss, no alarm and no removal mark. Playtest K08 had refused it
+/// with `Nothing to attack!`.
 #[test]
-fn p6town_attack_on_a_refused_town_npc_prints_the_ordinary_failure_text() {
+fn spec300_q18_attack_on_a_resident_shadowlord_opens_a_conflict() {
+    let dir = debug_game_dir();
+    let record = synthetic_combat_arena_record();
+    fs::write(dir.join(BRIT_CBT_FILE), record.repeat(BRIT_CBT_RECORDS)).unwrap();
     let mut shadowlord = g6_npc(31, 6, 5, 0, (6, 5, 0));
     shadowlord.type_byte = SHADOWLORD_ACTOR_TILE;
     let mut state = g6_town_with(vec![shadowlord], 5, 5);
     assert!(state.town_attack_target_at(0, 6, 5).is_some());
+    let karma = state.moral_standing;
 
     assert_eq!(
-        handle_play_key_input(&mut state, 'A', "6", Path::new("")).unwrap(),
+        handle_play_key_input(&mut state, 'A', "6", &dir).unwrap(),
         PlayInputDisposition::Continue
     );
 
-    assert!(state.diagnostics_contain("no attackable town NPC"));
-    assert_eq!(state.message, ATTACK_NOTHING_TO_ATTACK_REFUSAL);
-    assert_eq!(state.npcs.len(), 1, "the refused target is left in place");
+    assert!(state.combat_active);
+    assert_ne!(state.message, ATTACK_NOTHING_TO_ATTACK_REFUSAL);
+    assert_eq!(
+        state.pending_town_conflict.map(|pending| pending.type_byte),
+        Some(SHADOWLORD_ACTOR_TILE)
+    );
+    assert_eq!(state.moral_standing, karma);
+    state.apply_combat_round_loop_exit(CombatRoundLoopExit::Victory);
+    assert!(state.removed_town_npc_flags.values().all(|mask| *mask == 0));
+    let _ = fs::remove_dir_all(dir);
 }
 
 /// Playtest K12. `conversation.md §2` step 5: the five dispatcher branches,
@@ -186,13 +207,13 @@ fn p6town_cowering_and_scare_talk_follow_the_dispatchers_leading_feed() {
     }
 }
 
-/// Playtest K13. `conversation.md §2` step 5: the scare index "hand[s] off to
-/// the town scare-and-flee helper ... no literals are established", and
-/// `OPEN-QUESTIONS.md` lists the gap. The engine printed an invented
-/// `Begone, vermin!`; it now prints nothing past the dispatcher's feed and
-/// still applies the flight rewrite.
+/// `town-mode.md §14` (u5-spec#300 Q19, R601): Talk on dialogue `0xFE`
+/// prints the dispatcher's leading line feed and `"Begone,` / `vermin!"`,
+/// then runs the whole-party damage pass (each non-Dead slot takes `1..8`);
+/// the flight helper is not given the talked-to NPC's number, so that NPC
+/// is not rewritten. Playtest K13 had printed nothing and rewritten it.
 #[test]
-fn p6town_scare_talk_prints_no_invented_line() {
+fn spec300_q19_scare_talk_prints_begone_vermin_and_damages_the_party() {
     let mut state = test_state(open_grid(), 1, 1);
     state.player.facing = Direction::East;
     state.load_scheduled_npcs(&[
@@ -205,10 +226,11 @@ fn p6town_scare_talk_prints_no_invented_line() {
             name: None,
         },
     ]);
+    let hp = state.party[0].hp;
     state.talk_facing_with_dialogue(&HashMap::new());
-    assert_eq!(state.message.trim(), "");
-    assert!(state.diagnostics_contain("scare hand-off reached"));
-    assert_eq!(&state.npcs[0].schedule[..3], &[3, 3, 3]);
+    assert_eq!(state.message, format!("\n{TOWN_NPC_BRUSHOFF_LINE}"));
+    assert!((1..=8).contains(&(hp - state.party[0].hp)));
+    assert_eq!(&state.npcs[0].schedule[..3], &[7, 7, 7]);
 }
 
 /// Playtest K19. `view.md §3` step 3 reads the Look target "through the
