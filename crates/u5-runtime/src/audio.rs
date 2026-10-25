@@ -846,6 +846,15 @@ pub fn rough_seas_impact_rumble(jitter: &mut RumbleJitter) -> SpeakerProgram {
     random_rumble(10, 3000, 2000, jitter)
 }
 
+/// `audio.md §7.4` (added 2026-10-25, u5-spec#300 Q32): "Both step bursts
+/// belong to the step, whatever the earlier parity. The committed-step path
+/// sets the intensity to 15 and clears the parity flag before each of its
+/// two ticks, so every committed step emits exactly two bursts" - the 15
+/// before the party position is written, the 11 in the redraw after it.
+/// An emitting tick subtracts 4 with a floor at zero, so 7 and then 3 are
+/// left for the tail ticks.
+pub const DUNGEON_FOOTSTEP_STEP_PAIR: [u8; 2] = [15, 11];
+
 /// `audio.md §5.3` (u5-spec#298 Q7): dungeon sleep or poison field hit,
 /// step 1, target 50, 100..3500 Hz - 50 updates.
 pub fn status_field_rumble(jitter: &mut RumbleJitter) -> SpeakerProgram {
@@ -1931,7 +1940,8 @@ impl DissolveToneState {
 ///
 /// Every variant corresponds to a published trigger. There is deliberately no
 /// variant for a successful step, a menu acceptance, a name keystroke, an
-/// ordinary dungeon move or turn, a generic successful command, a generic
+/// ordinary dungeon turn (a committed dungeon step carries the footstep pair,
+/// u5-spec#300 Q32), a generic successful command, a generic
 /// pickup, or the Codex approach: `audio.md §9` states those are silent, and
 /// inventing a cue for them is exactly the failure the section exists to
 /// prevent.
@@ -1968,6 +1978,17 @@ pub enum SoundEffect {
     /// `§5.3` dungeon sleep or poison field hit, once per member whose save
     /// fails (u5-spec#298 Q7; `dungeon-mode.md §8.1`).
     StatusFieldRumble,
+    /// `§5.3` / `§7.4` (added 2026-10-25, u5-spec#300 Q32, `RETRACTIONS.md`
+    /// R615): one dungeon footstep burst, "a random rumble (Section 5.3) with
+    /// step 1, target equal to the current intensity and inclusive pitch
+    /// range 100..20000 Hz, so its update count equals the intensity". The
+    /// complete program is 15, 11, 7, 3; see [`DUNGEON_FOOTSTEP_STEP_PAIR`].
+    DungeonFootstep { intensity: u8 },
+    /// `§5.3` / `§8.2` (added 2026-10-25, u5-spec#300 Q32): the dungeon
+    /// electric-field push-back, "once per contact, after the viewport flash
+    /// and before the push-back, the 500-update 100..20000 Hz rumble
+    /// `(1, 500, 20000)`". Distinct from the per-member damage rumble.
+    DungeonElectricPushBack,
     /// `§6` shared potion/wind/spell variant `0..=8`.
     SharedVariant { variant: u8 },
     /// `§6.1` the circle-scaled rumble lead alone, with the viewport inversion
@@ -2171,6 +2192,10 @@ impl SoundEffect {
             SoundEffect::CombatPartyHitBurst => trap_rumble(jitter),
             SoundEffect::CombatMonsterHitBurst => rough_seas_impact_rumble(jitter),
             SoundEffect::StatusFieldRumble => status_field_rumble(jitter),
+            SoundEffect::DungeonFootstep { intensity } => {
+                random_rumble(1, u32::from(*intensity), 20000, jitter)
+            }
+            SoundEffect::DungeonElectricPushBack => random_rumble(1, 500, 20000, jitter),
             SoundEffect::SharedVariant { variant } => shared_variant(*variant, jitter),
             SoundEffect::CircleRumbleLead { circle } => circle_rumble_lead(*circle, jitter),
             SoundEffect::CombatTemplateImpact => combat_template_impact(),
@@ -3102,6 +3127,9 @@ mod tests {
             SoundEffect::RoughSeasImpactRumble,
             SoundEffect::CombatPartyHitBurst,
             SoundEffect::CombatMonsterHitBurst,
+            SoundEffect::DungeonFootstep { intensity: 15 },
+            SoundEffect::DungeonFootstep { intensity: 3 },
+            SoundEffect::DungeonElectricPushBack,
             SoundEffect::StatusFieldRumble,
             SoundEffect::CorpsePlagueRumble,
             SoundEffect::SharedVariant { variant: 0 },

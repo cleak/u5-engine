@@ -81,6 +81,12 @@ impl PlayState {
             self.player.y = origin_y;
             self.sync_player_object();
             self.mark_visibility_dirty();
+            // `audio.md §8.2` (added 2026-10-25, u5-spec#300 Q32): "Once per
+            // contact, after the viewport flash and before the push-back, the
+            // 500-update 100..20000 Hz rumble `(1, 500, 20000)`"; the
+            // whole-party damage pass that follows adds each damaged
+            // member's own damage rumble.
+            self.emit_sound_effect(SoundEffect::DungeonElectricPushBack);
             let _ = self.apply_dungeon_field_effect_at(
                 level,
                 nx,
@@ -97,6 +103,12 @@ impl PlayState {
             if !is_dungeon_walkable(tile) {
                 self.emit_message_line(MOVEMENT_BLOCKED_REFUSAL);
                 return Ok(MoveOutcome::Blocked);
+            }
+            // u5-spec#300 Q32: "The move finishes through the ordinary
+            // committed-step path onto the origin cell, so the 15/11
+            // footstep pair also plays" (unless `Blocked!` above).
+            for intensity in crate::audio::DUNGEON_FOOTSTEP_STEP_PAIR {
+                self.emit_sound_effect(SoundEffect::DungeonFootstep { intensity });
             }
             self.message = DUNGEON_ELECTRIC_FIELD_LINE.to_string();
             return Ok(MoveOutcome::Moved);
@@ -116,10 +128,7 @@ impl PlayState {
             return Ok(MoveOutcome::Blocked);
         }
 
-        self.player.x = nx;
-        self.player.y = ny;
-        self.sync_player_object();
-        self.mark_visibility_dirty();
+        self.commit_dungeon_step_position(nx, ny);
         if is_dungeon_fall_trap(tile) {
             return self.resolve_dungeon_fall_trap(scene, level, nx, ny, game_dir);
         }
@@ -148,6 +157,23 @@ impl PlayState {
         // §5.2`) is the whole of an ordinary accepted step.
         self.message = String::new();
         Ok(MoveOutcome::Moved)
+    }
+
+    /// The committed dungeon step (`audio.md §7.4`, added 2026-10-25,
+    /// u5-spec#300 Q32): "The first (15) plays inside the movement handler,
+    /// **before** the party position is written and before any redraw ...
+    /// The position is then written and the shared dungeon redraw runs ...
+    /// **then the second burst (11)**". The decaying tail (7, then 3) rides
+    /// on later redraw and idle-wait ticks, which this engine does not model
+    /// as dungeon ticks, so it is not emitted.
+    fn commit_dungeon_step_position(&mut self, nx: usize, ny: usize) {
+        let [first, second] = crate::audio::DUNGEON_FOOTSTEP_STEP_PAIR;
+        self.emit_sound_effect(SoundEffect::DungeonFootstep { intensity: first });
+        self.player.x = nx;
+        self.player.y = ny;
+        self.sync_player_object();
+        self.mark_visibility_dirty();
+        self.emit_sound_effect(SoundEffect::DungeonFootstep { intensity: second });
     }
 
     pub fn dungeon_teleport_at(
