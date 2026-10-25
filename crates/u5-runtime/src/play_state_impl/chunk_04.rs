@@ -6640,11 +6640,14 @@ impl PlayState {
             TOWN_NPC_BRUSHOFF_DIALOG_ID => {}
             _ => return None,
         }
-        self.advance_talk_turn();
-        self.message = response;
+        // `conversation.md §2` step 5 (u5-spec#300 Q19): the damage pass and
+        // the flight helper run inside Talk, ahead of the turn epilogue, so
+        // their draws and the flight rewrite precede its scheduler work.
         if dialog_id == TOWN_NPC_BRUSHOFF_DIALOG_ID {
             self.talk_scare_hand_off(target_x, target_y);
         }
+        self.advance_talk_turn();
+        self.message = response;
         Some(MoveOutcome::Talked)
     }
 

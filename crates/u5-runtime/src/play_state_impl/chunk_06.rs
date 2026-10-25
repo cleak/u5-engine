@@ -3541,11 +3541,6 @@ impl PlayState {
     }
 }
 
-/// `hidden-treasures.md §2`: "The `State` column is the per-record pickup
-/// state staged into the active-object record; Get interprets it according to
-/// the pickup class." Each staged class is fed to the `containers.md §8`
-/// dispatcher arm of the same family, with the state as the record's
-/// auxiliary byte. The two corpse classes have no arm.
 /// `containers.md §3` "A staged rotting body or moldy corpse is not
 /// Get-acceptable" (added 2026-10-25, u5-spec#300 Q2): classes 30 and 31 are
 /// "neither below sixteen nor one of the Moonstone, carpet or regalia/shard
@@ -3564,6 +3559,11 @@ fn staged_hidden_treasure_body(object: ActiveObject) -> bool {
     })
 }
 
+/// `hidden-treasures.md §2`: "The `State` column is the per-record pickup
+/// state staged into the active-object record; Get interprets it according to
+/// the pickup class." Each staged class is fed to the `containers.md §8`
+/// dispatcher arm of the same family, with the state as the record's
+/// auxiliary byte. The two corpse classes have no arm.
 fn fixed_hidden_treasure_pickup_grant(
     pickup: HiddenTreasurePickup,
     state: u8,

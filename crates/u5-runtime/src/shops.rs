@@ -2862,7 +2862,10 @@ pub fn apply_inn_pickup_guest_with_bill(
     }
     party.push(member);
     party_names.push(guest.name);
-    party_stay_counters.push(guest.stay_counter.min(INN_STAY_COUNTER_CAP));
+    // `shops.md §8.4` `P`: "Every byte of every moved record travels with its
+    // record", and R587 leaves a counter of 25 or more unchanged, so the
+    // stay counter is carried as stored, not clamped.
+    party_stay_counters.push(guest.stay_counter);
     party_strengths.push(guest.strength);
     party_intelligence.push(guest.intelligence);
     party_experience.push(guest.experience);
