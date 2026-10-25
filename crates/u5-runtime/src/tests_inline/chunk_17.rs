@@ -571,12 +571,50 @@
         assert_eq!(state.spell_prompt_echo().as_deref(), Some(":IN "));
         assert!(state.step_active_cast('\u{8}', "", Path::new("")).unwrap().is_none());
         assert_eq!(state.spell_prompt_echo().as_deref(), Some(":"));
-        assert!(state.step_active_cast('\u{1b}', "", Path::new("")).unwrap().is_none());
+        // `commands.md §3` (u5-spec#300 Q14, R604): `C` is acted on this
+        // path, so the cancel hands back an outcome and spends the turn.
+        assert!(state.step_active_cast('\u{1b}', "", Path::new("")).unwrap().is_some());
         assert!(state.active_cast.is_none());
         // The cancel reply continues the colon row the prompt opened
         // (`cleak/u5-engine#5`).
         assert_eq!(state.message, ":None!");
-        assert_eq!(state.turn, 0);
+        assert_eq!(state.turn, 1);
+    }
+
+    /// `commands.md §3` (u5-spec#300 Q14, R604): `C` Cast "Acted", except
+    /// one scene-changing sub-handler branch; "Being a refusal or a
+    /// cancellation is not what makes a command free". Escape, or Enter on
+    /// an empty name, at the spell-name prompt spends the ordinary turn - the
+    /// one-minute town turn, the outdoor turn on the overworld - and runs the
+    /// epilogue. Inside the arena nothing changes: no world turn is charged.
+    #[test]
+    fn spell_name_prompt_cancel_spends_the_turn_outside_combat() {
+        let dir = std::env::temp_dir();
+        for (town, cancel) in [(true, '\u{1b}'), (true, '\r'), (false, '\u{1b}')] {
+            let mut state = if town {
+                test_state(open_grid(), 5, 5)
+            } else {
+                world_state(open_world_grid(), 10, 20)
+            };
+            state.active_player = Some(0);
+            let clock = state.clock;
+            assert_eq!(state.start_cast_spell_prompt(), MoveOutcome::Observed);
+            handle_play_key_input(&mut state, cancel, "", &dir).unwrap();
+            assert!(state.active_cast.is_none());
+            assert_eq!(state.turn, 1, "town={town} cancel={cancel:?}");
+            let mut expected = clock;
+            expected.advance_minutes(if town { 1 } else { MINUTES_PER_OUTDOOR_TURN });
+            assert_eq!(state.clock, expected, "town={town} cancel={cancel:?}");
+        }
+
+        // The arena keeps its own action tail and spends no world turn.
+        let mut state = test_state(open_grid(), 5, 5);
+        state.combat_active = true;
+        state.active_cast = Some(crate::z_stats::CastSession::for_combat_actor(0, true));
+        let clock = state.clock;
+        let _ = state.step_active_cast('\u{1b}', "", Path::new("")).unwrap();
+        assert!(state.active_cast.is_none());
+        assert_eq!((state.turn, state.clock), (0, clock));
     }
 
     #[test]

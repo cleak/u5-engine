@@ -1704,12 +1704,12 @@ impl PlayState {
             match cast_input_action(ch) {
                 CastInputAction::Cancel => {
                     self.message = format!(":{PARTY_SELECTOR_CANCEL_REPLY}");
-                    return Ok(None);
+                    return Ok(self.charge_cancelled_spell_name_prompt(&session));
                 }
                 CastInputAction::Complete => {
                     if session.buffer.is_empty() {
                         self.message = format!(":{PARTY_SELECTOR_CANCEL_REPLY}");
-                        return Ok(None);
+                        return Ok(self.charge_cancelled_spell_name_prompt(&session));
                     }
                     let spell_code = inline_spell_code(&session.buffer);
                     let suffix = format!("{}{}", session.caster_index + 1, spell_code);
@@ -1765,6 +1765,25 @@ impl PlayState {
         self.message = self.render_cast_session(&session);
         self.active_cast = Some(session);
         Ok(None)
+    }
+
+    /// `commands.md §3` (u5-spec#300 Q14, R604): `C` Cast is a forwarded
+    /// route that reports "Acted", except one sub-handler branch that
+    /// "belongs to a scene-changing path"; "Being a refusal or a cancellation
+    /// is not what makes a command free." So abandoning the spell-name prompt
+    /// (Escape, or Enter on an empty name) spends the ordinary turn, as the
+    /// scene gate's `Not here!` does. Inside the arena the combat action tail
+    /// governs instead (`combat.md §8`), so nothing is charged here and the
+    /// caller still finishes the actor's action.
+    fn charge_cancelled_spell_name_prompt(
+        &mut self,
+        session: &CastSession,
+    ) -> Option<(MoveOutcome, Option<(usize, bool)>)> {
+        if session.combat_actor_slot.is_some() || self.combat_active {
+            return None;
+        }
+        self.advance_turn();
+        Some((MoveOutcome::Blocked, None))
     }
 
     /// Close a spell's `Aim! ` cursor without a target.
