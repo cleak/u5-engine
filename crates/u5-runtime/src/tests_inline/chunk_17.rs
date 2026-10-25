@@ -3791,7 +3791,8 @@
 
         assert_eq!(state.spell_charges[REVEAL_SPELL_INDEX], 1);
         assert_eq!(state.party[0].mana, REVEAL_COST);
-        assert_eq!(state.turn, 0);
+        // `magic.md §5` step 3 (u5-spec#300 Q14, R604): `Not here!` is acted.
+        assert_eq!(state.turn, 1);
         assert_eq!(state.message, "Not here!");
     }
 
@@ -3854,7 +3855,8 @@
 
         assert_eq!(state.spell_charges[INVISIBILITY_SPELL_INDEX], 1);
         assert_eq!(state.party[0].mana, INVISIBILITY_COST);
-        assert_eq!(state.turn, 0);
+        // `magic.md §5` step 3 (u5-spec#300 Q14, R604): `Not here!` is acted.
+        assert_eq!(state.turn, 1);
         assert_eq!(state.message, "Not here!");
     }
 
@@ -3955,7 +3957,8 @@
 
         assert_eq!(state.spell_charges[CAUSE_FEAR_SPELL_INDEX], 1);
         assert_eq!(state.party[0].mana, CAUSE_FEAR_COST);
-        assert_eq!(state.turn, 0);
+        // `magic.md §5` step 3 (u5-spec#300 Q14, R604): `Not here!` is acted.
+        assert_eq!(state.turn, 1);
         assert_eq!(state.message, "Not here!");
     }
 
@@ -4982,7 +4985,8 @@
         assert_eq!((state.player.x, state.player.y), (1, 1));
         assert_eq!(state.spell_charges[BLINK_SPELL_INDEX], 1);
         assert_eq!(state.party[0].mana, BLINK_COST);
-        assert_eq!(state.turn, 0);
+        // `magic.md §5` step 3 (u5-spec#300 Q14, R604): `Not here!` is acted.
+        assert_eq!(state.turn, 1);
         assert_eq!(state.message, "Not here!");
     }
 
@@ -5053,7 +5057,8 @@
 
         assert_eq!(indoor.spell_charges[BLINK_SPELL_INDEX], 1);
         assert_eq!(indoor.party[0].mana, BLINK_COST);
-        assert_eq!(indoor.turn, 0);
+        // `magic.md §5` step 3 (u5-spec#300 Q14, R604): `Not here!` is acted.
+        assert_eq!(indoor.turn, 1);
         assert_eq!(indoor.message, "Not here!");
 
         let mut passed = britannia_state(open_world_grid(), 1, 1);

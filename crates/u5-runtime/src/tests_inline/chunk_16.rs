@@ -583,7 +583,8 @@ BRITANNIA 11 21
 
         assert_eq!(state.spell_charges[IN_WIS_SPELL_INDEX], 1);
         assert_eq!(state.party[0].mana, IN_WIS_COST);
-        assert_eq!(state.turn, 0);
+        // `magic.md §5` step 3 (u5-spec#300 Q14, R604): `Not here!` is acted.
+        assert_eq!(state.turn, 1);
         assert_eq!(state.message, "Not here!");
     }
 
@@ -727,7 +728,8 @@ BRITANNIA 11 21
 
         assert_eq!(state.spell_charges[spell_index], 1);
         assert_eq!(state.party[0].mana, 1);
-        assert_eq!(state.turn, 0);
+        // `magic.md §5` step 3 (u5-spec#300 Q14, R604): `Not here!` is acted.
+        assert_eq!(state.turn, 1);
         assert_eq!(state.message, "Not here!");
     }
 
@@ -1162,7 +1164,8 @@ BRITANNIA 11 21
 
         assert_eq!(state.spell_charges[X_RAY_SPELL_INDEX], 1);
         assert_eq!(state.party[0].mana, X_RAY_COST);
-        assert_eq!(state.turn, 0);
+        // `magic.md §5` step 3 (u5-spec#300 Q14, R604): `Not here!` is acted.
+        assert_eq!(state.turn, 1);
         assert_eq!(state.message, "Not here!");
         assert!(state.active_view_overlay.is_none());
     }

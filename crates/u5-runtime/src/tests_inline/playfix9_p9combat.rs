@@ -294,3 +294,23 @@ fn spec300_q31_a_landed_hit_plays_the_target_sides_impact_burst() {
     assert!(!sounds.contains(&SoundEffect::CombatMonsterHitBurst));
     assert!(!sounds.contains(&SoundEffect::DamageRumble));
 }
+
+/// `magic.md §5` step 3 (corrected 2026-10-25, u5-spec#300 Q14,
+/// `RETRACTIONS.md` R604): the scene gate's `Not here!` "reports acted ...
+/// So in overworld and town play the rejection costs the ordinary turn".
+/// The withdrawn "Time is *not* consumed on this rejection" left the clock
+/// where it was.
+#[test]
+fn spec300_q14_scene_gate_not_here_spends_the_turn() {
+    let mut state = test_state(open_grid(), 5, 5);
+    state.spell_charges[UUS_POR_SPELL_INDEX] = 1;
+    state.party[0].mana = 4;
+    state.party[0].level = 4;
+    let turn = state.turn;
+
+    handle_play_key_input(&mut state, 'C', "1PU", Path::new("")).unwrap();
+
+    assert_eq!(state.message, "Not here!");
+    assert_eq!(state.turn, turn + 1, "the refusal spends the ordinary turn");
+    assert_eq!(state.spell_charges[UUS_POR_SPELL_INDEX], 1, "no charge spent");
+}

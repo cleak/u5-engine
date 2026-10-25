@@ -32,7 +32,8 @@
 
         assert_eq!(wrong_scene.spell_charges[FIRE_FIELD_SPELL_INDEX], 1);
         assert_eq!(wrong_scene.party[0].mana, FIELD_SPELL_COST);
-        assert_eq!(wrong_scene.turn, 0);
+        // `magic.md §5` step 3 (u5-spec#300 Q14, R604): `Not here!` is acted.
+        assert_eq!(wrong_scene.turn, 1);
         assert_eq!(wrong_scene.message, "Not here!");
 
         let mut blocked_grid = open_dungeon_record();
@@ -114,7 +115,8 @@
 
         assert_eq!(wrong_scene.spell_charges[DISPEL_FIELD_SPELL_INDEX], 1);
         assert_eq!(wrong_scene.party[0].mana, DISPEL_FIELD_COST);
-        assert_eq!(wrong_scene.turn, 0);
+        // `magic.md §5` step 3 (u5-spec#300 Q14, R604): `Not here!` is acted.
+        assert_eq!(wrong_scene.turn, 1);
         assert_eq!(wrong_scene.message, "Not here!");
     }
 
@@ -155,7 +157,8 @@
 
         assert_eq!(state.spell_charges[UUS_POR_SPELL_INDEX], 1);
         assert_eq!(state.party[0].mana, 4);
-        assert_eq!(state.turn, 0);
+        // `magic.md §5` step 3 (u5-spec#300 Q14, R604): `Not here!` is acted.
+        assert_eq!(state.turn, 1);
         assert_eq!(state.message, "Not here!");
     }
 
@@ -345,7 +348,8 @@
 
         assert_eq!(state.spell_charges[MAGIC_LOCK_SPELL_INDEX], 1);
         assert_eq!(state.party[0].mana, 5);
-        assert_eq!(state.turn, 0);
+        // `magic.md §5` step 3 (u5-spec#300 Q14, R604): `Not here!` is acted.
+        assert_eq!(state.turn, 1);
         assert_eq!(state.message, "Not here!");
         let _ = fs::remove_dir_all(dir);
     }
@@ -595,7 +599,8 @@
 
         assert_eq!(state.spell_charges[UNLOCK_MAGIC_SPELL_INDEX], 1);
         assert_eq!(state.party[0].mana, 5);
-        assert_eq!(state.turn, 0);
+        // `magic.md §5` step 3 (u5-spec#300 Q14, R604): `Not here!` is acted.
+        assert_eq!(state.turn, 1);
         assert_eq!(state.message, "Not here!");
         let _ = fs::remove_dir_all(dir);
     }
@@ -785,7 +790,8 @@
 
         assert_eq!(state.spell_charges[REL_HUR_SPELL_INDEX], 1);
         assert_eq!(state.party[0].mana, 3);
-        assert_eq!(state.turn, 0);
+        // `magic.md §5` step 3 (u5-spec#300 Q14, R604): `Not here!` is acted.
+        assert_eq!(state.turn, 1);
         assert_eq!(state.message, "Not here!");
     }
 
