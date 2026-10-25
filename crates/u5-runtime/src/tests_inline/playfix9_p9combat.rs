@@ -170,35 +170,72 @@ fn playtest_q19_aimed_spell_confirmed_on_an_empty_cell_still_plays_its_effect() 
     assert!(cancelled.sound_effects_after(serial).is_empty());
 }
 
-/// `moons.md §3`: "Combat and the underworld leave both gaps as plain
-/// chrome"; `§2.2` keeps combat outside the strip renderer's scene gate and
-/// `weather.md §2.1` says "The banner is not drawn in combat-class scenes".
-/// An arena fought in a town, on the surface or in a dungeon room kept the
-/// underlying scene's live strip and wind banner, or its level and facing
-/// labels (Q10).
+/// `moons.md §2.2`/`§3` and `weather.md §2.1` keep combat outside the strip
+/// and banner renderers, so nothing repaints either ribbon gap during a fight
+/// - the arena used to follow the live clock, wind and facing (Q10). Q10 then
+/// blanked both gaps, as `moons.md §3`'s "plain chrome" words it, but every
+/// stock arena capture keeps what the scene drew before the fight: a town or
+/// surface arena shows the strip and the wind banner (`combat-town-attack`,
+/// `combat-escape-ordinary`, `overworld-night-walk`), a dungeon room shows
+/// `L1` and `Dir: North` (`combat-dungeon-room`). The captures win: the gaps
+/// are frozen at combat entry.
 #[test]
-fn playtest_q10_combat_arena_leaves_both_ribbon_gaps_plain() {
+fn playtest_q10_combat_arena_keeps_the_pre_combat_ribbon_gaps_frozen() {
+    fn enter(state: &mut PlayState) {
+        let mut actors = [CombatActorDescriptor::empty(); COMBAT_ACTOR_SLOTS];
+        actors[0] = CombatActorDescriptor::from_row([
+            20,
+            1,
+            COMBAT_ACTOR_FLAG_SELECTABLE_80,
+            0,
+            0,
+            0,
+            4,
+            4,
+        ]);
+        state
+            .enter_combat_frame(vec![ActiveObject::empty(); OOL_SLOTS], actors)
+            .expect("combat frame should enter");
+    }
+
     let mut town = test_state(open_grid(), 1, 1);
     town.wind = WindState::South;
     town.wind_save_byte = WindState::South.save_byte();
-    assert!(matches!(
-        gameplay_chrome_content(&town).top,
-        ChromeGap::SkyStrip(_)
-    ));
-    town.combat_active = true;
+    let before = gameplay_chrome_content(&town);
+    assert!(matches!(before.top, ChromeGap::SkyStrip(_)));
+    assert!(matches!(before.bottom, ChromeGap::Label(_)));
+    enter(&mut town);
+    assert!(town.combat_active);
+    // A wind shift or an hour rolling over mid-fight repaints nothing.
+    town.wind = WindState::North;
+    town.wind_save_byte = WindState::North.save_byte();
+    town.clock.hour = (town.clock.hour + 6) % 24;
+    assert_ne!(
+        gameplay_chrome_content(&{
+            let mut live = town.clone();
+            live.combat_active = false;
+            live
+        }),
+        before,
+        "the live scene chrome did move"
+    );
     let arena = gameplay_chrome_content(&town);
-    assert_eq!(arena.top, ChromeGap::Unbroken);
-    assert_eq!(arena.bottom, ChromeGap::Unbroken);
+    assert_eq!((arena.top, arena.bottom), (before.top, before.bottom));
 
     let mut surface = world_state(open_world_grid(), 10, 20);
-    surface.combat_active = true;
+    let before = gameplay_chrome_content(&surface);
+    enter(&mut surface);
     let arena = gameplay_chrome_content(&surface);
-    assert_eq!(arena.top, ChromeGap::Unbroken);
-    assert_eq!(arena.bottom, ChromeGap::Unbroken);
+    assert_eq!((arena.top, arena.bottom), (before.top, before.bottom));
 
     let mut room = dungeon_state(open_dungeon_record(), 0, 1, 1);
-    room.combat_active = true;
+    let before = gameplay_chrome_content(&room);
+    assert!(matches!(before.top, ChromeGap::Label(_)));
+    enter(&mut room);
+    room.player.facing = match room.player.facing {
+        Direction::East => Direction::West,
+        _ => Direction::East,
+    };
     let arena = gameplay_chrome_content(&room);
-    assert_eq!(arena.top, ChromeGap::Unbroken);
-    assert_eq!(arena.bottom, ChromeGap::Unbroken);
+    assert_eq!((arena.top, arena.bottom), (before.top, before.bottom));
 }

@@ -1360,23 +1360,26 @@ pub fn gameplay_chrome_content(state: &crate::PlayState) -> GameplayChromeConten
             picker_page_glyph,
         };
     }
-    // `moons.md §3`: "The renderer is suppressed for dungeon-class views,
-    // combat, and the underworld presentation ... Combat and the underworld
-    // leave both gaps as plain chrome." `§2.2` puts combat outside the
-    // renderer's scene gate ("nothing is drawn"), and `weather.md §2.1`:
-    // "The banner is not drawn in combat-class scenes". The arena kept the
-    // underlying scene's live, clock-driven strip and wind banner - or the
-    // dungeon's level and facing labels - because this switch reads only
-    // the area (playtest Q10).
+    // `moons.md §2.2`/`§3` and `weather.md §2.1` keep combat outside the
+    // strip and banner renderers, so nothing *repaints* either gap during a
+    // fight (playtest Q10: the arena used to follow the live clock). What is
+    // left on screen is whatever the scene drew before the fight: every stock
+    // arena capture keeps the strip and wind banner, or a dungeon room's
+    // level and facing labels, rather than the plain ribbon `moons.md §3`
+    // words it as. The captures win; the gaps are frozen at combat entry.
+    // A fixture that raises `combat_active` without framing an arena has no
+    // snapshot and falls through to its scene's chrome.
     if state.combat_active {
-        return GameplayChromeContent {
-            top: ChromeGap::Unbroken,
-            bottom: ChromeGap::Unbroken,
-            stats_label,
-            timing_glyph,
-            stats_panel_single_box,
-            picker_page_glyph,
-        };
+        if let Some((top, bottom)) = state.combat_entry_chrome.clone() {
+            return GameplayChromeContent {
+                top,
+                bottom,
+                stats_label,
+                timing_glyph,
+                stats_panel_single_box,
+                picker_page_glyph,
+            };
+        }
     }
     match state.area {
         crate::Area::Dungeon { level, .. } => GameplayChromeContent {

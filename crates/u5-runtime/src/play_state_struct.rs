@@ -838,6 +838,19 @@ pub struct PlayState {
     pub endgame_absorption_arena: Option<Box<PlayState>>,
     pub active_blackthorn: Option<crate::blackthorn_session::BlackthornChallenge>,
     pub blackthorn_audience_map: Option<MiscmapsCutsceneMap>,
+    /// The two viewport ribbon gaps (top, bottom) as they stood when the
+    /// current fight's arena was framed. Display state only.
+    ///
+    /// `moons.md §2.2`/`§3` and `weather.md §2.1` keep combat outside the
+    /// sky-strip and wind-banner renderers, so nothing repaints either gap
+    /// during a fight. Stock captures show what that leaves: the pre-combat
+    /// strip and banner, or a dungeon room's level and facing labels, stay
+    /// on screen for the whole fight (`combat-town-attack`,
+    /// `combat-escape-ordinary`, `combat-dungeon-room`, `overworld-night-walk`
+    /// stock frames, 2026-10-25) - the "skips rather than erases" case, the
+    /// same as `dungeon-mode.md §13`'s labels outliving the mode that drew
+    /// them. Frozen here at combat entry; not live.
+    pub combat_entry_chrome: Option<(ChromeGap, ChromeGap)>,
     /// `karma.md §7` "Entry pacing": the shrine presentation's own display.
     ///
     /// Meditation does not happen on the overworld map. The presentation

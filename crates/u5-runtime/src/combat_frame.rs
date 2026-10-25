@@ -4475,6 +4475,11 @@ impl PlayState {
         self.active_combat_targeting = None;
         self.combat_remembered_targets = [None; COMBAT_ACTOR_SLOTS];
         self.combat_ambush_reveals = reveals;
+        // Nothing repaints the ribbon gaps during the fight, so the arena
+        // keeps the ones the scene last drew (playtest Q10 review; see
+        // [`PlayState::combat_entry_chrome`]).
+        let entry_chrome = crate::gameplay_chrome::gameplay_chrome_content(self);
+        self.combat_entry_chrome = Some((entry_chrome.top, entry_chrome.bottom));
         self.combat_active = true;
         self.combat_action_result = 0;
         // `stats-panel.md §2.2.1`: combat entry is an immediate whole-panel
