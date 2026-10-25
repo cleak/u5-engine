@@ -7888,6 +7888,18 @@ impl PlayState {
             defence_roll: 0,
             forced_hit,
         };
+        // `combat.md §8.2`: the bare-handed attempt "behaves as melee with
+        // range one", so it shares the `§11.1` "Swing begins | party melee"
+        // sweep that `audio.md §7.4` plays "unconditionally, before the
+        // to-hit roll" - the same route test as the equipment path, so an
+        // attempt that resolves out of range stays silent there too.
+        if let Some(CombatWeaponAttackRangeRoute::Melee) = resolve_combat_weapon_attack_range_route(
+            input.target_range,
+            input.range_cap,
+            input.effect_code,
+        ) {
+            self.emit_sound_effect(SoundEffect::PartyMeleeAttackSwing);
+        }
         if combat_weapon_attack_takes_defence_draw(input) {
             input.defence_roll = self.combat_defence_roll(defence_rating);
         }
