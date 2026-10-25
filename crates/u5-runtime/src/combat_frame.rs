@@ -1676,18 +1676,6 @@ impl PlayState {
     /// short form and does **not** reprint the banner" without qualification;
     /// that is wrong for the larger of the two families -
     /// `RETRACTIONS.md` R380.)*
-    /// `combat.md §8.1`: the banner is printed before the two status
-    /// early-outs, so a dragged-under or asleep prompted slot gets its full
-    /// banner and then `ARGH!` / `Zzzzz...` "in place of a command"
-    /// (`RETRACTIONS.md` R380). No key is read on either arm, so the pending
-    /// slot is not opened.
-    pub(crate) fn emit_combat_turn_banner_before_status_early_out(&mut self, slot: usize) {
-        if let Some(banner) = self.combat_turn_banner_for_actor(slot) {
-            self.close_combat_result_row_before_banner();
-            self.emit_combat_print(&banner);
-        }
-    }
-
     /// `combat.md §8`'s spacing rule around a combat result: "its trailing
     /// newline closes the last result row. The next full actor banner
     /// begins with its own newline, **leaving a blank row after the
@@ -5341,7 +5329,12 @@ impl PlayState {
             return false;
         }
         let name = crate::input_dispatch::combat_actor_display_name(self, slot);
-        self.emit_combat_print(&format!("{name}{COMBAT_REGURGITATED_SUFFIX}"));
+        // `§8.1` (added 2026-10-25, u5-spec#300 Q30): the name and
+        // ` regurgitated!` are followed by a line feed, "on the row below
+        // `ARGH!`, so a release reads `>ARGH!` then `Avatar regurgitated!` on
+        // two rows and never `ARGH!Avatar regurgitated!` on one".
+        self.emit_combat_print(&format!("{name}{COMBAT_REGURGITATED_SUFFIX}\n"));
+        self.message_row_open_mid_line = false;
         if let Some(actor) = self.combat_actors.get_mut(slot) {
             actor.flags &= !COMBAT_ACTOR_FLAG_DRAGGED_UNDER;
         }
@@ -8581,8 +8574,18 @@ impl PlayState {
             // status early-outs ... come **after** it, so a dragged-under or
             // sleeping combatant does get its full banner and then that line
             // in place of a command." (`RETRACTIONS.md` R380.)
-            self.emit_combat_turn_banner_before_status_early_out(slot);
-            self.emit_combat_print(COMBAT_DRAGGED_UNDER_TURN_LINE);
+            //
+            // `§8.1` (added 2026-10-25, u5-spec#300 Q26, #301 Q2): "Between
+            // the banner and either line the handler emits its own line feed
+            // and then the prompt marker", so the line reads `>ARGH!` on the
+            // marker row exactly like `>Zzzzz...`, and `ARGH!` carries its
+            // own trailing line feed. No key is read, so the pending command
+            // slot stays closed.
+            self.open_combat_turn_marker_row(Some(slot));
+            self.emit_combat_command_echo_line(&format!("{COMBAT_DRAGGED_UNDER_TURN_LINE}\n"));
+            // One-shot, as after any echo; the line's own feed closed its row.
+            self.combat_prompt_row_opened_by_banner = false;
+            self.message_row_open_mid_line = false;
             self.apply_combat_dragged_under_release(slot);
             CombatActorDispatchAction::DraggedUnderTurn
         } else if actor.is_status_disabled() {

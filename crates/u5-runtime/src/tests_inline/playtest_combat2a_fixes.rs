@@ -204,6 +204,65 @@ fn a_sleeping_combatants_line_stands_on_the_banners_marker_row() {
     }
 }
 
+/// `combat.md §8.1` (added 2026-10-25, u5-spec#300 Q26 and Q30, #301 Q2):
+/// the dragged-under arm prints "banner, feed, marker, `ARGH!` and its feed",
+/// so the line reads `>ARGH!` on the marker row exactly like `>Zzzzz...`; a
+/// release then prints `<name> regurgitated!` "on the row below `ARGH!` ...
+/// never `ARGH!Avatar regurgitated!` on one". The engine printed a bare
+/// `ARGH!` under the banner and ran the release line onto it.
+#[test]
+fn a_dragged_under_combatants_argh_stands_on_the_marker_row_and_release_is_on_the_next() {
+    let mut seen = [false, false];
+    for seed in 0..64u16 {
+        for (name, last_row, blank) in [
+            (*b"Avatar\0\0\0", "with bare hands:", true),
+            (*b"Iolo\0\0\0\0\0", "bare hands:", false),
+        ] {
+            let mut state = combat_state_after_the_conflict_banner(6, 5);
+            state.party_names[0] = name;
+            state.combat_actors[0].flags |= COMBAT_ACTOR_FLAG_DRAGGED_UNDER;
+            state.combat_actors[0].phase_counter = 1;
+            // Release chance `(base step - 1) / 30` (`§8.1`): about half.
+            state.combat_actors[0].base_step = 16;
+            state.prng_state = seed.wrapping_mul(2_654).wrapping_add(1);
+
+            let _ = state.apply_combat_actor_slot_dispatch(0, 30);
+
+            assert_eq!(state.pending_combat_actor_slot, None, "no key is read");
+            assert!(!state.combat_prompt_row_opened_by_banner);
+            assert!(!state.message_row_open_mid_line);
+            let rows = combat_message_window_rows(&state);
+            let argh = rows
+                .iter()
+                .rposition(|row| row == &format!(">{COMBAT_DRAGGED_UNDER_TURN_LINE}"))
+                .unwrap_or_else(|| panic!("`ARGH!` carries the marker: {rows:?}"));
+            let above = if blank {
+                assert_eq!(rows[argh - 1], "", "rows: {rows:?}");
+                argh - 2
+            } else {
+                argh - 1
+            };
+            assert_eq!(rows[above], last_row, "rows: {rows:?}");
+            let released = !state.combat_actors[0].is_dragged_under();
+            seen[usize::from(released)] = true;
+            if released {
+                let display = String::from_utf8_lossy(&name)
+                    .trim_end_matches('\0')
+                    .to_string();
+                // The name line starts on the row below `>ARGH!`; at
+                // sixteen columns it word-wraps before `regurgitated!`.
+                assert_eq!(
+                    format!("{} {}", rows[argh + 1], rows[argh + 2]),
+                    format!("{display}{COMBAT_REGURGITATED_SUFFIX}"),
+                    "rows: {rows:?}"
+                );
+                assert_eq!(rows[argh + 3], "", "its own feed closes the row: {rows:?}");
+            }
+        }
+    }
+    assert_eq!(seen, [true, true], "both a hold and a release must be exercised");
+}
+
 /// `inventory.md §5` step 2: with no displayable item R-Ready "prints the
 /// normal \"nothing to ready\" refusal and exits". Playtest F26: the picker
 /// stayed open behind the refusal and swallowed every key up to an Escape.
