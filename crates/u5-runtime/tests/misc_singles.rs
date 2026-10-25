@@ -1358,7 +1358,8 @@ fn shrine_mantra_escape_clears_and_left_erases() {
 
     let session = state.active_shrine.as_ref().expect("prompt stays open");
     assert_eq!(session.phase, z_stats::ShrinePhase::Mantra);
-    assert_eq!(session.mantra_buffer, "ahm");
+    // Upper-cased by the general typed-string reader (playtest Q05).
+    assert_eq!(session.mantra_buffer, "AHM");
 }
 
 #[test]
@@ -1372,7 +1373,7 @@ fn shrine_virtue_left_erases_the_last_character() {
         .step_active_shrine(char::from(INPUT_CODE_WEST), "", dir)
         .unwrap();
 
-    assert_eq!(state.active_shrine.as_ref().unwrap().virtue_buffer, "hon");
+    assert_eq!(state.active_shrine.as_ref().unwrap().virtue_buffer, "HON");
 }
 
 /// Playtest G13: now that a function key reaches the open prompt, the
@@ -1388,7 +1389,7 @@ fn function_key_at_a_shrine_answer_is_discarded() {
     handle_play_key_input(&mut state, f1, "", std::path::Path::new("")).unwrap();
     handle_play_key_input(&mut state, 'm', "", std::path::Path::new("")).unwrap();
 
-    assert_eq!(state.active_shrine.as_ref().unwrap().mantra_buffer, "ahm");
+    assert_eq!(state.active_shrine.as_ref().unwrap().mantra_buffer, "AHM");
 }
 
 /// Review follow-up to G13: with the `What?` confined to the command prompt,

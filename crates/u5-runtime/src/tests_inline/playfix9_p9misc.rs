@@ -20,6 +20,43 @@ fn playtest_q01_cast_suffix_without_letters_prints_no_help_sentence() {
     let _ = fs::remove_dir_all(dir);
 }
 
+/// `text-output.md §10.6`: the general typed-string reader, "used for most
+/// free-text prompts", has "keys are uppercased"; only character names keep
+/// their case. `karma.md §12` reads the shrine's virtue and mantras as
+/// ordinary typed strings (Q05).
+#[test]
+fn playtest_q05_shrine_virtue_and_mantra_answers_are_upper_cased() {
+    let dir = debug_game_dir();
+    let mut state = world_state(open_world_grid(), 5, 5);
+    let mut session = ShrineSession::new(ShrineVirtue::Honesty);
+    session.phase = ShrinePhase::Virtue;
+    state.active_shrine = Some(session);
+
+    state.step_active_shrine('h', "onEsty", &dir).unwrap();
+    assert_eq!(
+        state.active_shrine.as_ref().unwrap().virtue_buffer,
+        "HONESTY"
+    );
+    state.step_active_shrine('\r', "", &dir).unwrap();
+    assert!(
+        playtest_transcript_rows(&state)
+            .iter()
+            .any(|row| row == ":HONESTY"),
+        "{:?}",
+        playtest_transcript_rows(&state)
+    );
+    state.flush_staged_narration();
+    state.step_active_shrine('a', "hm", &dir).unwrap();
+    let session = state.active_shrine.as_ref().unwrap();
+    assert_eq!(session.phase, ShrinePhase::Mantra);
+    assert_eq!(session.mantra_buffer, "AHM");
+    assert_eq!(
+        state.shrine_prompt_echo().as_deref(),
+        Some(format!("{SHRINE_MANTRA_PROMPT}AHM").as_str())
+    );
+    let _ = fs::remove_dir_all(dir);
+}
+
 /// `magic.md §6` step 4: after the shortfall notice the quantity prompt "is
 /// asked again" once, and in its key table "Anything else - space, letter,
 /// punctuation - Discarded: no echo, no other effect, prompt still waiting".

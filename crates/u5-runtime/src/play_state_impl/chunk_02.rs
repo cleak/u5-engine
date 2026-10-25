@@ -2171,8 +2171,11 @@ impl PlayState {
                     }
                     // Printable ASCII only: a function key (`input.md §5`)
                     // or any other byte is discarded.
+                    // `text-output.md §10.6`: the general typed-string
+                    // reader upper-cases keys; only character names keep
+                    // their case (playtest Q05).
                     ch if (' '..='~').contains(&ch) && session.virtue_buffer.len() < 12 => {
-                        session.virtue_buffer.push(ch);
+                        session.virtue_buffer.push(ch.to_ascii_uppercase());
                     }
                     _ => {}
                 },
@@ -2197,7 +2200,8 @@ impl PlayState {
                         ch if (' '..='~').contains(&ch)
                             && session.mantra_buffer.len() < SHRINE_MANTRA_INPUT_LIMIT =>
                         {
-                            session.mantra_buffer.push(ch);
+                            // Same general reader as the virtue answer (Q05).
+                            session.mantra_buffer.push(ch.to_ascii_uppercase());
                         }
                         _ => {}
                     }
