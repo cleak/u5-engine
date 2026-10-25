@@ -971,12 +971,6 @@ pub enum CombatDefaultDeathMarker {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub struct CombatSplitPlacement {
-    pub slot: usize,
-    pub class: u8,
-}
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum CombatAiAttackRoute {
     OutOfRange,
     Melee,
@@ -3529,29 +3523,33 @@ pub fn resolve_default_monster_death_marker_for_class(
     ))
 }
 
-pub fn resolve_combat_split_placement(
-    class: u8,
-    applied_damage: u8,
-    killed: bool,
-    descriptors: &[CombatActorDescriptor],
-    candidate_slots: &[usize],
-) -> Option<CombatSplitPlacement> {
-    let traits = combat_class_traits(class)?;
-    if !traits.splits || applied_damage == 0 || killed {
-        return None;
-    }
+/// `combat.md §12` "Splitting / replicating monsters" (corrected 2026-10-25,
+/// issue #300 Q9): "Exactly two classes carry the \"split on damage\" flag:
+/// Slime (class 24) and Gargoyle (class 30). Damage application tests it
+/// only when the damage is nonzero, is not the instant-kill value, and leaves
+/// the monster with hit points above zero; a fatal hit never splits." The
+/// instant-kill value always kills, so `killed` covers it.
+pub fn resolve_combat_split_eligibility(class: u8, applied_damage: u8, killed: bool) -> bool {
+    combat_class_traits(class).is_some_and(|traits| traits.splits) && applied_damage != 0 && !killed
+}
 
-    candidate_slots
-        .iter()
-        .copied()
-        .take(8)
-        .find(|slot| {
-            *slot < COMBAT_ACTOR_SLOTS
-                && descriptors
-                    .get(*slot)
-                    .is_some_and(|descriptor| descriptor.is_free_for_allocation())
-        })
-        .map(|slot| CombatSplitPlacement { slot, class })
+/// `combat.md §12`, "Where the clone goes": one attempt's candidate cell.
+/// "Each attempt draws an offset of -1, 0 or +1 on each axis, X first ...
+/// so the candidate is one of the nine cells of the 3x3 block centred on the
+/// parent. While either coordinate falls outside the arena's `0..10`, both
+/// coordinates are redrawn." `dx_draw` and `dy_draw` are the two `0..2`
+/// range draws; `None` is an off-arena pair that the caller redraws within
+/// the same attempt. The earlier free-slot scan is retracted
+/// (`RETRACTIONS.md` R593).
+pub fn combat_split_candidate_cell(
+    parent_x: u8,
+    parent_y: u8,
+    dx_draw: u8,
+    dy_draw: u8,
+) -> Option<(u8, u8)> {
+    let x = i16::from(parent_x) + i16::from(dx_draw) - 1;
+    let y = i16::from(parent_y) + i16::from(dy_draw) - 1;
+    combat_arena_coordinate_in_bounds(x, y).then_some((x as u8, y as u8))
 }
 
 /// `combat.md §11` attack routing.

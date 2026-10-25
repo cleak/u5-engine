@@ -19600,74 +19600,32 @@ fn default_monster_death_marker_can_resolve_class_drop_cap() {
 }
 
 #[test]
-fn combat_split_placement_requires_split_trait_damage_and_survival() {
-    let descriptors = [CombatActorDescriptor::empty(); COMBAT_ACTOR_SLOTS];
-    assert_eq!(
-        resolve_combat_split_placement(24, 1, false, &descriptors, &[7]),
-        Some(CombatSplitPlacement { slot: 7, class: 24 })
-    );
-    assert_eq!(
-        resolve_combat_split_placement(32, 1, false, &descriptors, &[7]),
-        None
-    );
-    assert_eq!(
-        resolve_combat_split_placement(24, 0, false, &descriptors, &[7]),
-        None
-    );
-    assert_eq!(
-        resolve_combat_split_placement(24, 1, true, &descriptors, &[7]),
-        None
-    );
+fn combat_split_eligibility_is_slime_and_gargoyle_on_nonzero_nonfatal_damage() {
+    // `combat.md §12` (issue #300 Q9): "Exactly two classes carry the
+    // \"split on damage\" flag: Slime (class 24) and Gargoyle (class 30)",
+    // tested "only when the damage is nonzero ... and leaves the monster with
+    // hit points above zero".
+    for class in 0..=u8::MAX {
+        assert_eq!(
+            resolve_combat_split_eligibility(class, 1, false),
+            matches!(class, 24 | 30),
+            "class {class}"
+        );
+    }
+    assert!(!resolve_combat_split_eligibility(24, 0, false));
+    assert!(!resolve_combat_split_eligibility(24, 1, true));
 }
 
 #[test]
-fn combat_split_placement_checks_up_to_eight_candidate_slots() {
-    let mut descriptors = [CombatActorDescriptor::empty(); COMBAT_ACTOR_SLOTS];
-    descriptors[3] = CombatActorDescriptor::from_row([
-        10,
-        1,
-        COMBAT_ACTOR_FLAG_SELECTABLE_80,
-        24,
-        0,
-        0,
-        4,
-        4,
-    ]);
-    descriptors[4] = CombatActorDescriptor::from_row([
-        10,
-        1,
-        COMBAT_ACTOR_FLAG_SELECTABLE_80,
-        24,
-        0,
-        0,
-        5,
-        4,
-    ]);
-    descriptors[5] = CombatActorDescriptor::from_row([
-        10,
-        1,
-        COMBAT_ACTOR_FLAG_SELECTABLE_80,
-        24,
-        0,
-        0,
-        6,
-        4,
-    ]);
-
-    assert_eq!(
-        resolve_combat_split_placement(24, 1, false, &descriptors, &[99, 3, 4, 5, 6, 7, 8, 9],),
-        Some(CombatSplitPlacement { slot: 6, class: 24 })
-    );
-    assert_eq!(
-        resolve_combat_split_placement(
-            24,
-            1,
-            false,
-            &descriptors,
-            &[99, 3, 4, 5, 99, 99, 99, 99, 6],
-        ),
-        None
-    );
+fn combat_split_candidate_is_a_cell_of_the_parents_3x3_block() {
+    // `combat.md §12` "Where the clone goes" (R593): an offset of -1, 0 or
+    // +1 on each axis, X first; an off-arena pair is redrawn.
+    assert_eq!(combat_split_candidate_cell(5, 5, 0, 0), Some((4, 4)));
+    assert_eq!(combat_split_candidate_cell(5, 5, 1, 1), Some((5, 5)));
+    assert_eq!(combat_split_candidate_cell(5, 5, 2, 0), Some((6, 4)));
+    assert_eq!(combat_split_candidate_cell(0, 10, 0, 1), None);
+    assert_eq!(combat_split_candidate_cell(0, 10, 1, 2), None);
+    assert_eq!(combat_split_candidate_cell(0, 10, 2, 0), Some((1, 9)));
 }
 
 #[test]

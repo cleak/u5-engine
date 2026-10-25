@@ -325,11 +325,11 @@ pub struct CombatCursorBlinkReport {
     pub secondary_marker_cell: Option<(u8, u8)>,
 }
 
-/// `combat.md Section 12` split-on-damage placement-attempt cap.
-/// When a monster with the split-on-damage class flag is damaged but
-/// not killed, combat scans the actor table for an empty slot to copy
-/// the parent's class byte into. Up to this many attempts are made before
-/// the divide is dropped silently.
+/// `combat.md Section 12` split-on-damage placement-attempt cap: "At most
+/// one clone is made per damaging event, by up to eight attempts that stop
+/// at the first success." Each attempt is a random neighbour-cell draw, not
+/// a slot scan (`RETRACTIONS.md` R593); a split whose attempts all fail
+/// prints nothing.
 pub const COMBAT_SPLIT_PLACEMENT_ATTEMPTS: u8 = 8;
 
 /// `combat.md §12` factory-seed cached combat-defense byte at
@@ -5135,43 +5135,63 @@ impl PlayState {
         changed
     }
 
-    /// `combat.md §12` "Splitting / replicating monsters": a class carrying
-    /// the split-on-damage flag that is damaged but **not** killed looks for
-    /// an empty slot in the actor table — up to eight attempts — copies the
-    /// parent's class byte into it, and prints `<monster name> divides!`.
-    /// The child is placed through the ordinary monster-placement primitive
-    /// at the parent's own arena cell and Z plane with the hostile tag; the
-    /// eight-attempt cap lives in [`resolve_combat_split_placement`].
+    /// `combat.md §12` "Splitting / replicating monsters" (corrected
+    /// 2026-10-25, issue #300 Q9; `RETRACTIONS.md` R593): a Slime or
+    /// Gargoyle damaged but not killed makes at most one clone "by up to
+    /// eight attempts that stop at the first success". Each attempt draws a
+    /// neighbour offset (two range draws, X first; an off-arena pair is
+    /// redrawn within the same attempt), the candidate must pass the
+    /// combat-step arena-cell test - so the parent's own cell is always
+    /// refused - and an accepted cell goes to the ordinary monster
+    /// placement, which takes the first free monster slot and record; a full
+    /// monster range fails that attempt. The clone is a fresh hostile of
+    /// the parent's class whose hit points are "overwritten with the
+    /// **parent's remaining hit points after this hit**".
     pub fn apply_combat_monster_split_placement(
         &mut self,
         target_slot: usize,
         damage: CombatMonsterDamageOutcome,
     ) -> Option<CombatSummonApplication> {
         let parent = self.combat_actors.get(target_slot).copied()?;
-        let candidate_slots =
-            (COMBAT_PARTY_ACTOR_SLOTS..COMBAT_ACTOR_SLOTS).collect::<Vec<usize>>();
-        let placement = resolve_combat_split_placement(
-            damage.class,
-            damage.applied_damage,
-            damage.killed,
-            &self.combat_actors,
-            &candidate_slots,
-        )?;
+        if !resolve_combat_split_eligibility(damage.class, damage.applied_damage, damage.killed) {
+            return None;
+        }
         let z = self
             .active_objects
             .get(usize::from(parent.active_object_slot))
             .map(|object| object.z)
             .unwrap_or_default();
-        // `combat.md §6.1`: "Monster and object descriptors never carry"
-        // `0x80`; `§16.1` maps every non-passive placed class to the
-        // ordinary hostile tag `0x40`.
-        let child = self.place_combat_monster_at_arena_cell(
-            placement.class,
-            parent.x,
-            parent.y,
-            z,
-            combat_monster_placement_flags(placement.class),
-        )?;
+        let legal_cells = self.combat_legal_cell_mask();
+        let mut placed = None;
+        for _ in 0..COMBAT_SPLIT_PLACEMENT_ATTEMPTS {
+            let (x, y) = loop {
+                let dx_draw = self.random_range_u8(0, 2);
+                let dy_draw = self.random_range_u8(0, 2);
+                if let Some(cell) = combat_split_candidate_cell(parent.x, parent.y, dx_draw, dy_draw)
+                {
+                    break cell;
+                }
+            };
+            if !legal_cells[usize::from(y)][usize::from(x)] {
+                continue;
+            }
+            // `combat.md §6.1`: "Monster and object descriptors never carry"
+            // `0x80`; `§16.1` maps every non-passive placed class to the
+            // ordinary hostile tag `0x40`.
+            if let Some(child) = self.place_combat_monster_at_arena_cell(
+                damage.class,
+                x,
+                y,
+                z,
+                combat_monster_placement_flags(damage.class),
+            ) {
+                placed = Some(child);
+                break;
+            }
+        }
+        let mut child = placed?;
+        self.combat_actors[child.actor_slot].hp_or_wound = parent.hp_or_wound;
+        child.actor.hp_or_wound = parent.hp_or_wound;
         // `combat.md §11.1`, census: "`<monster> divides!` inside the
         // damage handler, and the ordinary result line **still** prints
         // after it" - `Order, stated once` step 4, after step 3's hit
@@ -5179,7 +5199,7 @@ impl PlayState {
         // let that result line overwrite it, so the divide was never seen
         // (playtest H20); it is held for the shared result narrator, which
         // owns those newlines.
-        if let Some(stats) = combat_class_stats(placement.class) {
+        if let Some(stats) = combat_class_stats(damage.class) {
             self.flush_unclaimed_combat_divide_line();
             self.combat_pending_divide_line = Some(format!("{} divides!", stats.name));
         }

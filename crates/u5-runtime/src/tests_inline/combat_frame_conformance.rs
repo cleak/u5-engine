@@ -236,18 +236,95 @@
             .find(|slot| *slot != parent_slot && !state.combat_actors[*slot].is_empty())
             .expect("a damaged slime must divide into a free slot");
         let child = state.combat_actors[child_slot];
+        let parent = state.combat_actors[parent_slot];
         assert_eq!(child.owner_target_class, 24);
-        assert_eq!(child.hp_or_wound, stats.max_hp);
+        // `§12` (issue #300 Q9): "Its current hit points are then
+        // overwritten with the **parent's remaining hit points after this
+        // hit**, not the class maximum."
+        assert_eq!(child.hp_or_wound, parent.hp_or_wound);
+        assert!(parent.hp_or_wound < stats.max_hp);
         // `combat.md §6.1`: "Monster and object descriptors never carry"
         // the party-side bit; `§16.1` maps every non-passive class to `0x40`.
         assert_eq!(child.flags, COMBAT_ACTOR_FLAG_SELECTABLE_40);
-        assert_eq!(
-            (child.x, child.y),
-            (
-                state.combat_actors[parent_slot].x,
-                state.combat_actors[parent_slot].y
-            )
-        );
+        // `§12` "Where the clone goes" (R593): "a clone always appears on
+        // one of the eight neighbours and never under its parent".
+        assert_ne!((child.x, child.y), (parent.x, parent.y));
+        assert!(child.x.abs_diff(parent.x) <= 1 && child.y.abs_diff(parent.y) <= 1);
+        let object = state.active_objects[usize::from(child.active_object_slot)];
+        assert_eq!((object.x, object.y), (usize::from(child.x), usize::from(child.y)));
+    }
+
+    #[test]
+    fn split_clone_lands_on_a_random_open_neighbour_for_every_seed() {
+        // `combat.md §12` (issue #300 Q9): independent neighbour-cell draws,
+        // each refused unless it passes the combat-step arena-cell test.
+        // Every neighbour but (5, 6) is walled here, so whenever the split
+        // happens the clone is on (5, 6), never on the parent's (4, 5).
+        let mut divided = 0;
+        for seed in 0..64u16 {
+            let mut state = combat_frame_conformance_state();
+            state.prng_state = seed.wrapping_mul(997).wrapping_add(1);
+            let parent_slot = COMBAT_PARTY_ACTOR_SLOTS;
+            place_death_side_effect_monster(&mut state, 24, parent_slot, 10);
+            let wall = (0..=u8::MAX)
+                .find(|tile| !is_combat_arena_tile_walkable(*tile))
+                .unwrap();
+            for (x, y) in [(3, 4), (4, 4), (5, 4), (3, 5), (5, 5), (3, 6), (4, 6)] {
+                state.combat_terrain[y][x] = wall;
+            }
+            state
+                .apply_combat_weapon_damage_to_target(None, parent_slot, 1, false)
+                .unwrap();
+            let children: Vec<_> = (COMBAT_PARTY_ACTOR_SLOTS..COMBAT_ACTOR_SLOTS)
+                .filter(|slot| *slot != parent_slot && !state.combat_actors[*slot].is_empty())
+                .map(|slot| state.combat_actors[slot])
+                .collect();
+            assert!(children.len() <= 1, "seed {seed}: one clone at most");
+            if let Some(child) = children.first() {
+                assert_eq!((child.x, child.y), (5, 6), "seed {seed}");
+                assert_eq!(state.combat_pending_divide_line.as_deref(), Some("Slime divides!"));
+                divided += 1;
+            } else {
+                // "A split whose eight attempts all fail prints nothing."
+                assert!(state.combat_pending_divide_line.is_none(), "seed {seed}");
+            }
+        }
+        assert!(divided > 0, "some seed must find the one open neighbour");
+    }
+
+    #[test]
+    fn split_with_every_monster_slot_full_draws_all_eight_attempts_and_prints_nothing() {
+        // `combat.md §12` (issue #300 Q9): "with all twenty-six monster
+        // slots in use, all eight attempts are still drawn and every one
+        // fails at placement"; "every attempt makes two range draws
+        // (executed: a split whose eight attempts all fail made sixteen)".
+        let mut state = combat_frame_conformance_state();
+        let parent_slot = COMBAT_PARTY_ACTOR_SLOTS;
+        place_death_side_effect_monster(&mut state, 24, parent_slot, 10);
+        let stats = combat_class_stats(32).unwrap();
+        for slot in COMBAT_PARTY_ACTOR_SLOTS + 1..COMBAT_ACTOR_SLOTS {
+            // Park the filler monsters in the far corner rows, clear of
+            // the parent's neighbours, so only placement can fail.
+            let x = (slot % COMBAT_ARENA_SIDE) as u8;
+            let y = if slot < COMBAT_PARTY_ACTOR_SLOTS + 1 + COMBAT_ARENA_SIDE { 0 } else { 10 };
+            state.combat_actors[slot] = CombatActorDescriptor::for_monster_placement(
+                stats,
+                0,
+                x,
+                y,
+                combat_monster_placement_flags(32),
+                0,
+            );
+        }
+        let mut expected = state.clone();
+        for _ in 0..16 {
+            expected.random_range_u8(0, 2);
+        }
+        state
+            .apply_combat_weapon_damage_to_target(None, parent_slot, 1, false)
+            .unwrap();
+        assert!(state.combat_pending_divide_line.is_none());
+        assert_eq!(state.prng_state, expected.prng_state);
     }
 
     #[test]
