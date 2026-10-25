@@ -1382,7 +1382,7 @@ impl PlayState {
             let y = (self.player.y as isize + dy).rem_euclid(DUNGEON_SIDE as isize) as usize;
             dungeon_ambush_side_treatment(dungeon_cell_class_of(self.dungeon_cell(level, x, y)))
         });
-        let record = CombatArenaRecord::synthesise_dungeon_ambush(
+        let mut record = CombatArenaRecord::synthesise_dungeon_ambush(
             floor_tile,
             outline_tile,
             sides,
@@ -1392,6 +1392,15 @@ impl PlayState {
             permutation,
             centre_icon,
         );
+        // `dungeon-mode.md §14.1` (u5-spec#300 Q24): the one extra write
+        // keyed on the party's **own** cell class `0xE?`.
+        if underfoot_class == DungeonCellClass::HeavyDoorVariant {
+            record.apply_door_cell_wall_stubs(
+                outline_tile,
+                sides[0] == DungeonAmbushSideTreatment::Sealed,
+                sides[3] == DungeonAmbushSideTreatment::Sealed,
+            );
+        }
         let setup = dungeon_room_combat_setup_from_record_for_entry(
             DUNGEON_AMBUSH_SYNTHETIC_ARENA_INDEX,
             &record,

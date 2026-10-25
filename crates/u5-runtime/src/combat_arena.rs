@@ -464,6 +464,22 @@ impl CombatArenaRecord {
         Self { rows }
     }
 
+    /// `dungeon-mode.md §14.1` step 3.5 (u5-spec#300 Q24): "when the party
+    /// stands on a `0xE?` cell ... and the **north** neighbour is a wall
+    /// class, the strip step also writes the outline wall byte at the
+    /// interior cells (5,2) and (5,8); when the **west** neighbour is a wall
+    /// class it writes them at (2,5) and (8,5)." Coordinates are (X, Y).
+    pub fn apply_door_cell_wall_stubs(&mut self, outline_byte: u8, north_wall: bool, west_wall: bool) {
+        if north_wall {
+            self.rows[2][5] = outline_byte;
+            self.rows[8][5] = outline_byte;
+        }
+        if west_wall {
+            self.rows[5][2] = outline_byte;
+            self.rows[5][8] = outline_byte;
+        }
+    }
+
     pub fn row(&self, y: usize) -> Option<&[u8; COMBAT_ARENA_ROW_STRIDE]> {
         self.rows.get(y)
     }
