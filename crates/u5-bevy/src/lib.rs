@@ -27835,13 +27835,10 @@ mod tests {
         install_test_conversation(&mut state);
         let mut input_line = String::new();
 
-        for key in [
-            KeyCode::ArrowUp,
-            KeyCode::Numpad1,
-            KeyCode::Digit8,
-            KeyCode::F1,
-        ] {
-            let shift = key == KeyCode::Digit8;
+        // Shift with top-row `8` is the punctuation `*`, not a direction
+        // byte (`input.md §5`, u5-spec#300 Q15, R589), so it is not here.
+        for key in [KeyCode::ArrowUp, KeyCode::Numpad1, KeyCode::F1] {
+            let shift = false;
             let result = handle_visual_line_key(
                 &mut state,
                 &mut input_line,
