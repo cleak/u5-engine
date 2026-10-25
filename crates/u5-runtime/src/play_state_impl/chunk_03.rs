@@ -2126,6 +2126,17 @@ impl PlayState {
                         CombatSpellCursorKey::Confirm => {
                             self.combat_aim_marker_gate = false;
                             let Some(slot) = self.combat_targeting_occupant_at((x, y)) else {
+                                // The cast was committed by the confirm, so
+                                // the shot still flies: `audio.md §8.3` plays
+                                // the spell effect on confirmation "before
+                                // the coordinate/projectile-impact resolver",
+                                // and `magic.md §8` drops only the text - "a
+                                // shot with no resolved actor and no original
+                                // aimed actor has no result line" (Q19).
+                                if let Some(spell_index) = spell_index_from_code(&session.spell_code)
+                                {
+                                    self.emit_active_target_combat_spell_effect(spell_index);
+                                }
                                 self.cancel_combat_aim_cursor();
                                 return Ok(None);
                             };

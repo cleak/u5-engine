@@ -5398,6 +5398,20 @@ impl PlayState {
         })
     }
 
+    /// The confirmed cursor's spell effect for the active-target attack
+    /// spells: the combat effect template's circle-scaled rumble lead
+    /// (`audio.md §6.1`), or the id's shared variant where it has one.
+    /// `§8.3`: "For combat cursor spells, confirmation plays the spell
+    /// effect before the coordinate/projectile-impact resolver."
+    pub(crate) fn emit_active_target_combat_spell_effect(&mut self, spell_index: usize) {
+        match audio::spell_shared_variant(spell_index) {
+            Some(variant) => self.emit_sound_effect(SoundEffect::SharedVariant { variant }),
+            None => self.emit_sound_effect(SoundEffect::CircleRumbleLead {
+                circle: audio::spell_circle(spell_index),
+            }),
+        }
+    }
+
     pub fn cast_active_target_combat_spell(
         &mut self,
         caster_index: usize,
@@ -5443,12 +5457,7 @@ impl PlayState {
         // fires inside one combat spell resolution" - "once per accepted target
         // cursor is what the code shape suggests, but that is not established".
         // This handler resolves exactly one accepted cursor, so it fires once.
-        match audio::spell_shared_variant(spell_index) {
-            Some(variant) => self.emit_sound_effect(SoundEffect::SharedVariant { variant }),
-            None => self.emit_sound_effect(SoundEffect::CircleRumbleLead {
-                circle: audio::spell_circle(spell_index),
-            }),
-        }
+        self.emit_active_target_combat_spell_effect(spell_index);
 
         // `RETRACTIONS.md` R446 / `magic.md §8`: "Kill does not use a separate
         // `Creature:` prompt, a protected-class rejection before resistance,
@@ -7888,6 +7897,18 @@ impl PlayState {
             defence_roll: 0,
             forced_hit,
         };
+        // `combat.md §8.2`: the bare-handed attempt "behaves as melee with
+        // range one", so it shares the `§11.1` "Swing begins | party melee"
+        // sweep that `audio.md §7.4` plays "unconditionally, before the
+        // to-hit roll" - the same route test as the equipment path, so an
+        // attempt that resolves out of range stays silent there too.
+        if let Some(CombatWeaponAttackRangeRoute::Melee) = resolve_combat_weapon_attack_range_route(
+            input.target_range,
+            input.range_cap,
+            input.effect_code,
+        ) {
+            self.emit_sound_effect(SoundEffect::PartyMeleeAttackSwing);
+        }
         if combat_weapon_attack_takes_defence_draw(input) {
             input.defence_roll = self.combat_defence_roll(defence_rating);
         }

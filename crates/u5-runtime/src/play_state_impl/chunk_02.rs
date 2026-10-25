@@ -913,7 +913,13 @@ impl PlayState {
             && self.party.get(caster_index).is_some()
             && !self.spell_allowed_in_current_cast_context(spell_index)
         {
+            // `audio.md §6.1`: "a spell rejected by the castability mask
+            // prints `Not here!\n` and plays the 50-update cast-failure
+            // glissando before any resource debit, with no additional
+            // Failed line" (`magic.md §7` result table agrees). The
+            // handler-level scene re-checks never run after this gate.
             self.message = "Not here!".to_string();
+            self.emit_sound_effect(SoundEffect::CastFailure);
             return Ok(MoveOutcome::Blocked);
         }
         // `magic.md §5` **step 4** is the charges gate - "If the counter is
