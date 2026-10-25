@@ -1083,10 +1083,11 @@ impl PlayState {
     /// The echo is `Set Active Plr:` and the answer opens the row under
     /// it. Measured against the original with a two-member party: `0`
     /// answers `None!` and clears the selection, `1` answers `Avatar`
-    /// and sets it, and `9` answers `Invalid!` and changes nothing. The
-    /// command takes no world time - `commands.md` §4's return table
-    /// gives the digit row "No action. The loop skips its epilogue, so
-    /// no world time passes."
+    /// and sets it, and `9` answers `Invalid!` and changes nothing. Turn
+    /// cost follows the mode: in town an ordinary selection reports
+    /// "acted" (`town-mode.md §7.2`), so the per-turn epilogue runs; the
+    /// deselect, a rejected digit, the dungeon and the overworld take no
+    /// world time (see the charge below).
     pub fn set_active_player_command(&mut self, digit: char) -> MoveOutcome {
         self.begin_command_echo_for(Command::SetActivePlayer);
         let slot = digit.to_digit(10).map(|digit| digit as usize);

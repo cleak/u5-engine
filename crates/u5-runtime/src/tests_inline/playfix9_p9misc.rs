@@ -131,6 +131,42 @@ fn playtest_q14_town_digit_selection_reports_acted_and_zero_does_not() {
     let _ = fs::remove_dir_all(dir);
 }
 
+/// Review of Q14: the epilogue an acted town digit now runs can print
+/// (`time.md §5`'s `Starving!\n`). The member's name is already on the
+/// transcript by then, so the warning takes a row of its own; it used to be
+/// appended to the spent slot, and the next flush logged `Shamino` twice.
+#[test]
+fn playtest_q14_town_digit_epilogue_line_does_not_reprint_the_answer() {
+    let dir = debug_game_dir();
+    let mut state = test_state(open_grid(), 5, 5);
+    state.party.push(PartyMember {
+        slot: 1,
+        class_byte: b'F',
+        status: b'G',
+        climb_stat: DEFAULT_CLIMB_STAT,
+        mana: 0,
+        hp: 60,
+        max_hp: 60,
+        level: 1,
+    });
+    state.party[0].hp = 60;
+    state.party_names = vec![*b"AVATAR\0\0\0", *b"SHAMINO\0\0"];
+    state.clock = GameClock::with_date(139, 4, 5, 17, 59).unwrap();
+    state.food = 0;
+
+    handle_play_key_input(&mut state, '2', "", &dir).unwrap();
+    state.flush_message_slot();
+    let rows = playtest_transcript_rows(&state);
+    assert_eq!(state.clock.hour, 18, "{rows:?}");
+    assert_eq!(
+        rows.iter().filter(|row| row.eq_ignore_ascii_case("shamino")).count(),
+        1,
+        "{rows:?}"
+    );
+    assert!(rows.iter().any(|row| row == "Starving!"), "{rows:?}");
+    let _ = fs::remove_dir_all(dir);
+}
+
 /// `shops.md §8.C` names only "Record 191" for the solo Leave refusal and
 /// `§8.B` only record `119` for the shipwright's menu. The engine carried
 /// transcriptions of both as fallbacks; without `SHOPPE.DAT` nothing of the
