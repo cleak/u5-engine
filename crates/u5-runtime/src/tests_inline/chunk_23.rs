@@ -17001,7 +17001,12 @@ fn combat_cast_directed_sleep_and_poison_wind_mutate_party_targets() {
     assert_eq!(poison.spell_charges[POISON_WIND_SPELL_INDEX], 0);
     assert_eq!(poison.party[0].mana, 0);
     assert_eq!(poison.party[2].status, b'P');
-    assert_eq!(poison.message, "");
+    // `magic.md §8` "Directed-effect narration": the poison helper itself
+    // prints `<target> is poisoned!` on the Good party arm (p10 R10); the
+    // silence this used to pin was not published.
+    // (The fixture's descriptor names roster slot 0, so the line carries
+    // that member's name.)
+    assert!(poison.message.ends_with(" is poisoned!"), "{}", poison.message);
 }
 
 #[test]

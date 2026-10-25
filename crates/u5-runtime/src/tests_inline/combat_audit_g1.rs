@@ -735,3 +735,42 @@ fn in_zu_friendly_fire_sets_the_party_members_asleep_bit() {
     }
     assert!(slept, "no seed let In Zu land on the party member");
 }
+
+/// p10 R10. `magic.md §8` "Directed-effect narration" and `combat.md
+/// §11.1`: on Poison Wind's Good party target arm "the poison helper itself
+/// prints `<target> is poisoned!` followed by a newline. The shared narrator
+/// then suppresses a second result." The engine printed nothing.
+#[test]
+fn poison_wind_on_a_good_party_member_prints_is_poisoned() {
+    let spell = spell_index_from_code("HIN").unwrap();
+    let mut poisoned = false;
+    for seed in 0..1024u16 {
+        let mut state = p10_friendly_fire_state(spell);
+        state.prng_state = seed.wrapping_mul(0x9E37);
+        let _ = state.cast_directed_combat_spell(
+            0,
+            spell,
+            CombatDirectedSpellEffect::PoisonWind,
+            Some(Direction::North),
+        );
+        if state.party[1].status != b'P' {
+            continue;
+        }
+        poisoned = true;
+        state.flush_message_slot();
+        let name = crate::input_dispatch::combat_actor_display_name(&state, 1);
+        let line = format!("{name} is poisoned!");
+        let rows: Vec<String> = state
+            .message_transcript
+            .iter()
+            .map(|entry| entry.text.clone())
+            .collect();
+        assert_eq!(
+            rows.iter().filter(|row| **row == line).count(),
+            1,
+            "seed {seed}: one poison line and no second result: {rows:?}"
+        );
+        break;
+    }
+    assert!(poisoned, "no seed let Poison Wind poison the party member");
+}

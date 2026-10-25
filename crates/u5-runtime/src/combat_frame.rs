@@ -6009,6 +6009,16 @@ impl PlayState {
                                 // poisoning of a Good member is deferred.
                                 self.stats_panel_command_refresh =
                                     crate::stats_panel::PanelRefreshMode::Deferred;
+                                // `magic.md §8` "Directed-effect narration" /
+                                // `combat.md §11.1`: "a Good party target
+                                // changes to Poisoned and the poison helper
+                                // itself prints `<target> is poisoned!`
+                                // followed by a newline. The shared narrator
+                                // then suppresses a second result" (p10 R10).
+                                narration.push(format!(
+                                    "{} is poisoned!",
+                                    crate::input_dispatch::combat_actor_display_name(self, slot)
+                                ));
                             }
                             if let CombatPartyPoisonOutcome::FallbackDamage { raw_damage } = outcome
                             {
@@ -6027,13 +6037,6 @@ impl PlayState {
                                     ));
                                 }
                             }
-                            // The status-only arm is a deliberate silence:
-                            // `combat.md §11.1` publishes `<target> is
-                            // poisoned!` for a *monster attacker's* landed
-                            // swing, "printed **inside** damage resolution",
-                            // and says nothing about Poison Wind's own
-                            // status-only route. Inventing a line here is what
-                            // `Poison wind!` used to be.
                             affected = true;
                         }
                     } else {
