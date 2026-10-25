@@ -70,6 +70,25 @@ fn g6_pos(state: &PlayState, index: usize) -> (usize, usize) {
     (state.npcs[index].x, state.npcs[index].y)
 }
 
+/// p10 R14. `npc-schedules.md §9.1`: "`200` .. `204` | No draw and no
+/// replan. The counter is incremented" - "five consecutive passes on which
+/// the NPC does nothing at all" - and `§7`: state 2 runs "search, route,
+/// step" with "no per-direction sweep". A greedy direct step used to run
+/// ahead of the band, moving the NPC and zeroing its counter.
+#[test]
+fn an_npc_in_the_stuck_aging_band_stands_still_and_ages() {
+    let mut state = g6_town_with(vec![g6_npc(1, 5, 5, 0, (8, 5, 0))], 20, 20);
+    state.npcs[0].stuck_counter = 200;
+    let mut searched = false;
+    for expected in 201..=204 {
+        let outcome = state.advance_npc_in_plane_schedule_step(0, 0, 8, 5, 0, 0, &mut searched);
+        assert_eq!(outcome, NpcScheduleStepOutcome::Stalled);
+        assert_eq!(g6_pos(&state, 0), (5, 5), "no move inside the band");
+        assert_eq!(state.npcs[0].stuck_counter, expected);
+    }
+    assert!(!searched, "the band spends no search");
+}
+
 /// p10 R15. `npc-schedules.md §9`: values 3 and 6 share one step chooser,
 /// which tests "legal orthogonal neighbours in **east, north, west, south**
 /// order", and "mode 3 retreats". With east, north and west all tied at the

@@ -1119,14 +1119,12 @@ impl PlayState {
     ) -> NpcScheduleStepOutcome {
         let start = (self.npcs[npc_index].x, self.npcs[npc_index].y);
         let target = (target_x, target_y);
-        let direct_step = step_toward(start, target).filter(|(nx, ny)| {
-            self.npc_can_step_toward(npc_index, *nx, *ny, floor, target_x, target_y)
-        });
-        if let Some((nx, ny)) = direct_step {
-            return NpcScheduleStepOutcome::from_moved(self.commit_npc_schedule_position(
-                npc_index, waypoint, target_x, target_y, target_z, floor, nx, ny, target_z,
-            ));
-        }
+        // `npc-schedules.md §7`: state 2 runs "search, route, step" - "There
+        // is no per-direction sweep and no direction-priority ordering in
+        // these states". A greedy direct step used to run here ahead of the
+        // search budget and the §9.1 stuck-counter bands, so a blocked NPC
+        // in the `200..204` aging band stepped straight back and had its
+        // counter zeroed, re-planning every other turn (p10 R14).
         if *searched {
             // `npc-schedules.md §7`: "At most one NPC per tick may start a
             // fresh search ... every later slot in the same tick that would
