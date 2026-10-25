@@ -742,11 +742,31 @@ pub fn handle_play_script_command(
             return Ok(PlayInputDisposition::Continue);
         }
     }
+    if let Some(code) = play_script_direction_prompt_digit(state, command) {
+        return handle_play_key_input(state, char::from(code), "", game_dir);
+    }
     let Some((key, suffix)) = play_input_key_and_suffix(command) else {
         handle_empty_play_input(state, game_dir)?;
         return Ok(PlayInputDisposition::Continue);
     };
     handle_play_key_input(state, key, &suffix, game_dir)
+}
+
+/// A play script answers an open `Direction-` prompt with a compass digit,
+/// which stands for the keypad key with NumLock on: `input.md §5` translates
+/// that one into a direction code before any prompt sees it, while "Plain
+/// unmodified top-row digits remain ordinary text input" and no longer
+/// answer the prompt (R589). The script step delivers the translated code,
+/// as an arrow key typed at the terminal does. Digits anywhere else (a
+/// member picker, say) stay digits.
+fn play_script_direction_prompt_digit(state: &PlayState, command: &str) -> Option<u8> {
+    if state.active_direction_prompt.is_none() {
+        return None;
+    }
+    match command.as_bytes() {
+        [digit @ b'1'..=b'9'] => u5_runtime::input_keypad_digit_direction_code(digit - b'0'),
+        _ => None,
+    }
 }
 
 fn settle_play_script_exploration_gate(state: &mut PlayState, game_dir: &Path) -> io::Result<()> {

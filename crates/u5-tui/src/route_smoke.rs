@@ -3965,8 +3965,11 @@ fn apply_route_smoke_case_setup(
             state.mark_visibility_dirty();
         }
         "blackthorn-fixed-hidden-zero-key-search" => {
-            state.player.x = 5;
-            state.player.y = 8;
+            // `hidden-treasures.md §3` record 13 is at X 8, Y 6; the table
+            // had X and Y transposed (R584), and this route searched the old
+            // cell (6, 8).
+            state.player.x = 7;
+            state.player.y = 6;
             state.player.facing = Direction::East;
             state.keys = 0;
             state.sync_player_object();
@@ -5251,11 +5254,14 @@ fn seed_directed_wind_combat_route(
     // `combat.md §6.3`: ordinary death markers are rejected on terrain
     // bytes below four. Seed accepted arena terrain so the directed-wind
     // routes exercise their intended death/status branch rather than the
-    // negative release form.
+    // negative release form. Not `0x04` itself: that byte is swamp, the
+    // Poison tier of `§7` step 7's standing-cell hazard, and since the
+    // slept target takes its own asleep turn (p10 R09) the swamp under it
+    // struck it after the cast.
     state.enter_combat_frame_with_terrain(
         active_objects,
         actors,
-        [[0x04; COMBAT_ARENA_SIDE]; COMBAT_ARENA_SIDE],
+        [[0x05; COMBAT_ARENA_SIDE]; COMBAT_ARENA_SIDE],
     )?;
     Ok(())
 }
@@ -6448,11 +6454,15 @@ fn validate_route_smoke_case_state(
                         .is_none_or(|member| member.status != b'S')
                         // `combat.md §11.1` census: "Target slept | both |
                         // `<target> slept!`" - target-named, one line per
-                        // target the cone lands on.
-                        || !state.message.ends_with(" slept!")
+                        // target the cone lands on. The sleeper's own turn
+                        // follows in the same walk (`§8.1`'s asleep arm,
+                        // `Zzzzz...`, p10 R09), so the line is no longer last.
+                        || !state.message.contains(" slept!")
                     {
                         return Err(io::Error::other(format!(
-                            "route smoke `{case_name}` did not apply the directed Sleep cone"
+                            "route smoke `{case_name}` did not apply the directed Sleep cone; target status {:?}, message {:?}",
+                            state.party.get(target_slot).map(|member| char::from(member.status)),
+                            state.message,
                         )));
                     }
                 }
@@ -6463,13 +6473,16 @@ fn validate_route_smoke_case_state(
                         .party
                         .get(target_slot)
                         .is_none_or(|member| member.status != b'P')
-                        // The accepted party arm is status-only, and `combat.md §11.1`
-                        // publishes no line for it; the invented `Poison wind!`
-                        // is gone and the arm says nothing.
-                        || !state.message.is_empty()
+                        // `magic.md §8` (p10 R10): on the accepted Good party
+                        // arm "the poison helper itself prints `<target> is
+                        // poisoned!`" and the shared narrator stays silent;
+                        // the invented `Poison wind!` stays gone.
+                        || !state.message.trim_end().ends_with(" is poisoned!")
                     {
                         return Err(io::Error::other(format!(
-                            "route smoke `{case_name}` did not apply the directed Poison Wind cone"
+                            "route smoke `{case_name}` did not apply the directed Poison Wind cone; target status {:?}, message {:?}",
+                            state.party.get(target_slot).map(|member| char::from(member.status)),
+                            state.message,
                         )));
                     }
                 }
