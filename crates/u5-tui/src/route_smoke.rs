@@ -1592,7 +1592,9 @@ pub fn route_smoke_cases() -> Vec<RouteSmokeCase> {
             script: &["empty", "N"],
             expected: RouteSmokeExpectation::Town(castle),
             min_turn: 1,
-            expected_frame_kind: "tile viewport",
+            // `town-mode.md §14` (u5-spec#300 Q7): the refusal is followed by
+            // `Attacked!` and the town arena fight with the guard.
+            expected_frame_kind: "combat viewport",
         },
         RouteSmokeCase {
             name: "castle-town-guard-arrest-surrender-yew",
@@ -7326,6 +7328,7 @@ fn validate_route_smoke_case_state(
                     .find(|npc| npc.slot == 2)
                     .is_none_or(|npc| npc.schedule[..3] != [7, 7, 7])
                 || !state.diagnostics_contain("Refused surrender")
+                || !state.combat_active
             {
                 return Err(io::Error::other(format!(
                     "route smoke `{case_name}` did not refuse the guard arrest prompt into alarm cleanup"
@@ -8680,7 +8683,9 @@ fn validate_shadowlord_shard_route(
             .copied()
             .skip(1)
             .any(PlayState::is_shadowlord_actor)
-        || state.summoned_shadowlord.is_some()
+        // `formats/saved-gam.md §9.1` `0x0325` (u5-spec#300 Q3, R585): the
+        // shard leaves the last-summoned id alone.
+        || state.summoned_shadowlord != Some(shadowlord_index)
         || !state.message.to_ascii_lowercase().contains(message_fragment)
     {
         return Err(io::Error::other(format!(
@@ -8709,6 +8714,15 @@ fn validate_shadowlord_shard_route(
 fn require_raster_hash(case: &RouteSmokeCase, raster: &str) -> io::Result<()> {
     if case.name == "castle-death-vision-look"
         && (raster.contains("tile viewport") || raster.contains("view overlay"))
+        && raster.contains(" hash ")
+    {
+        return Ok(());
+    }
+    // `town-mode.md §14` (u5-spec#300 Q7): the arrest refusal's first step
+    // (the contact that opens the challenge) is still the town viewport; only
+    // the `N` answer reaches the fight, which the final-frame check pins.
+    if case.name == "castle-town-guard-arrest-refusal"
+        && raster.contains("tile viewport")
         && raster.contains(" hash ")
     {
         return Ok(());
