@@ -1176,8 +1176,15 @@ impl PlayState {
         // `town-mode.md §13`: "a settlement that hosts a Shadowlord prints
         // one line naming which [...] That single line is the only in-town
         // notice, and a settlement hosting none prints nothing."
+        // `town-mode.md §13` (u5-spec#300 Q4, R590): the Sceptre flag gates
+        // a silent removal of Stonegate's Sceptre figure in the setup path.
+        state.remove_stonegate_sceptre_figure_on_entry();
         if let Some((slot, index)) = state.install_shadowlord_entry_encounter() {
-            if let Some(line) = Self::shadowlord_air_line_for_index(index) {
+            // `town-mode.md §13` (u5-spec#300 Q4): no notice and no tone when
+            // the capability check finds nobody able to act and none asleep.
+            let line = Self::shadowlord_air_line_for_index(index)
+                .filter(|_| state.shadowlord_notice_capability_gate_passes());
+            if let Some(line) = line {
                 if !state.message.is_empty() {
                     state.message.push('\n');
                 }

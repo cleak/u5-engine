@@ -1761,6 +1761,85 @@ fn stonegate_entry_presentation_uses_sceptre_and_living_shadowlord_slots() {
     assert_eq!(state.stonegate_entry_presentation_message(), None);
 }
 
+/// `town-mode.md §13` (u5-spec#300 Q4, R590): "when the party's Sceptre flag
+/// is set ..., the setup path silently removes roster slot 9, the Sceptre
+/// item figure ... Nothing is printed and nothing sounds", and it writes no
+/// removal mark, so the figure returns on a later entry without the flag.
+#[test]
+fn spec300_q4_stonegate_entry_removes_the_sceptre_figure_while_the_sceptre_is_carried() {
+    let scene = Scene::new(STONEGATE_SCENE_BYTE).unwrap();
+    let slots = [
+        NpcSlot {
+            slot: 0,
+            type_byte: 0,
+            dialog_id: 0,
+            schedule: [0; 16],
+            name: None,
+        },
+        NpcSlot {
+            slot: STONEGATE_SCEPTRE_FIGURE_NPC_SLOT,
+            type_byte: 0xB5,
+            dialog_id: 0,
+            schedule: [0, 0, 0, 2, 2, 2, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0],
+            name: None,
+        },
+    ];
+    for carried in [true, false] {
+        let mut state = test_state(open_grid(), 5, 5);
+        state.area = Area::Town { scene, floor: 0 };
+        state.load_scheduled_npcs(&slots);
+        assert!(state
+            .npcs
+            .iter()
+            .any(|npc| npc.slot == STONEGATE_SCEPTRE_FIGURE_NPC_SLOT));
+        if carried {
+            state.special_items[SPECIAL_ITEM_SCEPTRE_LB_INDEX] = SPECIAL_ITEM_OWNED_VALUE;
+        }
+        let message = state.message.clone();
+        let serial = state.sound_effect_serial;
+
+        assert_eq!(state.remove_stonegate_sceptre_figure_on_entry(), carried);
+
+        assert_eq!(
+            state
+                .npcs
+                .iter()
+                .any(|npc| npc.slot == STONEGATE_SCEPTRE_FIGURE_NPC_SLOT),
+            !carried
+        );
+        assert_eq!(state.message, message, "nothing is printed");
+        assert!(state.sound_effects_after(serial).is_empty(), "nothing sounds");
+        assert!(state.removed_town_npc_flags.values().all(|mask| *mask == 0));
+    }
+}
+
+/// `town-mode.md §13` (u5-spec#300 Q4): "If the capability check finds nobody
+/// in the party able to act and nobody asleep, entry stops at that check: no
+/// notice, no tone and no resident-entry sweep."
+#[test]
+fn spec300_q4_shadowlord_notice_is_skipped_when_nobody_can_act_or_sleeps() {
+    let mut state = test_state(open_grid(), 5, 5);
+    state.area = Area::Town {
+        scene: Scene::new(STONEGATE_SCENE_BYTE).unwrap(),
+        floor: 0,
+    };
+    state.shadowlord_hideouts = [1, 2, 3];
+    for member in &mut state.party {
+        member.status = b'D';
+    }
+    let serial = state.sound_effect_serial;
+    state.append_stonegate_entry_presentation_message();
+    assert_eq!(state.stonegate_entry_presentation_message(), None);
+    assert!(!state.message.contains("An air of"));
+    assert!(state.sound_effects_after(serial).is_empty());
+
+    // One sleeper is enough for the check to pass.
+    state.party[0].status = b'S';
+    assert!(state.shadowlord_notice_capability_gate_passes());
+    state.append_stonegate_entry_presentation_message();
+    assert!(state.message.contains("An air of"));
+}
+
 #[test]
 fn removed_npc_mask_is_scene_wide_and_not_keyed_by_floor() {
     let scene = Scene::new(17).unwrap();

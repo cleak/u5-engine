@@ -2722,6 +2722,7 @@ impl PlayState {
             let note = next.stonegate_entry_presentation_message().or_else(|| {
                 next.resident_shadowlord
                     .and_then(Self::shadowlord_air_line_for_index)
+                    .filter(|_| next.shadowlord_notice_capability_gate_passes())
             });
             if let Some(note) = note {
                 // `town-mode.md §13` (u5-spec#300 Q4): every notice begins

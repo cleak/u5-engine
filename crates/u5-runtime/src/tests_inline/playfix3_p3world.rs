@@ -210,6 +210,24 @@ fn spec300_q22_town_off_bed_refusal_wraps_and_is_acted() {
     let _ = std::fs::remove_dir_all(dir);
 }
 
+/// `commands.md §5.8` (u5-spec#300 Q22, R605): on the overworld with no
+/// Grapple, `Klimb-With` stands on the prompt row, `what?` on the next, then
+/// the ordinary blank row and the next prompt; the turn is spent (§3).
+#[test]
+fn spec300_q22_overworld_klimb_with_what_wraps_and_spends_the_turn() {
+    let dir = debug_game_dir();
+    let mut state = world_state(open_world_grid(), 10, 20);
+    let mut clock = state.clock;
+    handle_play_key_input(&mut state, 'K', "", &dir).unwrap();
+    assert_eq!(
+        p4window_rows_from(&p4window_rows(&state), ">Klimb-With"),
+        [">Klimb-With", "what?", "", ">"]
+    );
+    clock.advance_minutes(MINUTES_PER_OUTDOOR_TURN);
+    assert_eq!((state.turn, state.clock), (1, clock));
+    let _ = std::fs::remove_dir_all(dir);
+}
+
 fn spec300_arrest_state(dir: &std::path::Path) -> PlayState {
     let record = synthetic_combat_arena_record();
     std::fs::write(dir.join(BRIT_CBT_FILE), record.repeat(BRIT_CBT_RECORDS)).unwrap();

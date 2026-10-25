@@ -2050,7 +2050,12 @@ impl PlayState {
         }
 
         let active_slot = self.insert_resident_shadowlord_npc(scene, floor)?;
-        let _ = self.apply_resident_shadowlord_npc_sweep(shadowlord_index);
+        // `town-mode.md §13` (u5-spec#300 Q4): the sweep runs after the
+        // party-capability check, and a party with nobody able to act and
+        // nobody asleep stops entry there, "no resident-entry sweep".
+        if self.shadowlord_notice_capability_gate_passes() {
+            let _ = self.apply_resident_shadowlord_npc_sweep(shadowlord_index);
+        }
         self.mark_visibility_dirty();
         Some((active_slot, shadowlord_index))
     }
@@ -2271,8 +2276,50 @@ impl PlayState {
         if scene.byte != STONEGATE_SCENE_BYTE {
             return None;
         }
+        if !self.shadowlord_notice_capability_gate_passes() {
+            return None;
+        }
         let lines = self.stonegate_entry_presentation_lines();
         (!lines.is_empty()).then(|| lines.join("\n\n"))
+    }
+
+    /// `town-mode.md §13` (u5-spec#300 Q4, Q17): town entry runs the shared
+    /// party-capability check before the notice, and "If the capability
+    /// check finds nobody in the party able to act and nobody asleep, entry
+    /// stops at that check: no notice, no tone and no resident-entry sweep".
+    pub fn shadowlord_notice_capability_gate_passes(&self) -> bool {
+        self.party_capability() != PartyCapability::Defeated
+    }
+
+    /// `town-mode.md §13` (u5-spec#300 Q4, R590): "when the party's Sceptre
+    /// flag is set ..., the setup path silently removes roster slot 9, the
+    /// Sceptre item figure that stands on the centre cell ringed by the
+    /// trapdoors. Nothing is printed and nothing sounds." No removal mark is
+    /// written: the figure "is placed again by the roster load of the next
+    /// entry after a Shadow Lord fight has reclaimed the Sceptre and cleared
+    /// the flag". Static reading in the spec, not executed.
+    pub fn remove_stonegate_sceptre_figure_on_entry(&mut self) -> bool {
+        let Area::Town { scene, .. } = self.area else {
+            return false;
+        };
+        if scene.byte != STONEGATE_SCENE_BYTE
+            || self.special_items[SPECIAL_ITEM_SCEPTRE_LB_INDEX] == 0
+        {
+            return false;
+        }
+        let Some(index) = self
+            .npcs
+            .iter()
+            .position(|npc| npc.slot == STONEGATE_SCEPTRE_FIGURE_NPC_SLOT)
+        else {
+            return false;
+        };
+        if let Some(slot) = self.npcs[index].active_object {
+            self.free_active_object_slot(slot);
+        }
+        self.npcs.remove(index);
+        self.mark_visibility_dirty();
+        true
     }
 
     pub fn append_stonegate_entry_presentation_message(&mut self) {
@@ -2283,9 +2330,13 @@ impl PlayState {
             return;
         }
         // `town-mode.md §13` (u5-spec#300 Q4, R590): "The published
-        // \"Sceptre-gated prelude row\" does not exist." The silent removal
-        // of the Sceptre figure (roster slot 9) that replaces it is static
-        // reading only and not established, so nothing is done for it.
+        // \"Sceptre-gated prelude row\" does not exist"; the Sceptre flag
+        // gates only the silent figure removal of
+        // [`Self::remove_stonegate_sceptre_figure_on_entry`], which entry
+        // setup runs before this.
+        if !self.shadowlord_notice_capability_gate_passes() {
+            return;
+        }
         for index in (0..SHADOWLORD_COUNT).rev() {
             if self.shadowlord_alive(index) {
                 let title = Self::shadowlord_title_for_index(index).unwrap_or("Shadowlord");
