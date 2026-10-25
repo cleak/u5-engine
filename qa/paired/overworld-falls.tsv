@@ -9,6 +9,16 @@
 # Seeded with `seed_position <profile> plane=britannia x=54 y=136`;
 # `find_tile` reads `(54, 137)` as the waterfall and `(54, 136)` as the
 # cell above it.
+#
+# The roster panel is a roster lottery here. Each fall checks the Avatar
+# once (`overworld.md §8`, the shared skewed `1..30` roll against Dexterity
+# 30), and since playtest Q11 the damage helper repaints the panel at once
+# (`§6.2.4`), so a hit shows as `59G` from the first beat on. Measured
+# 2026-10-25 on rc12: the engine drew the hit in 20261025-045722, the
+# stock side drew it in 20261025-080315 (and repainted on the spot, which
+# confirms Q11), and 20261025-073049 matched with neither. The message
+# window is fixed text and still decides the verdict; the repaint itself is
+# pinned deterministically by `overworld-falls-damage`.
 # requires-seed: the party on Britannia directly north of the falls
 both	wait	15000
 both	key	space

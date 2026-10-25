@@ -1,0 +1,27 @@
+# `overworld.md §8` "Surface chasm/falls" row and `§6.2.4`: the falls chain
+# checks each living member once - the shared skewed `1..30` roll, damage when
+# Dexterity is **less than or equal to** it - and the shared party-damage
+# helper "performs a complete stats-panel repaint ... an **immediate**
+# repaint made by the helper itself as its last act".
+#
+# `overworld-falls` cannot measure that repaint reliably: its Avatar has
+# Dexterity 30, so a hit needs the roll's top value, and either side may or
+# may not draw it on a given run (its header has the 2026-10-25 runs).
+#
+# This seed is `seed-overworld-falls` with the Avatar's Dexterity byte set to
+# 1, which every roll meets: both sides must take exactly one point, so the
+# panel is deterministic and every beat compares the moment it repaints.
+# Measured 2026-10-25 (20261025-080216): both sides read `59G` at every
+# beat - the stock panel repaints within the falls turn, as Q11 has it.
+# requires-seed: seed-overworld-falls with the Avatar's Dexterity set to 1
+both	wait	15000
+both	key	space
+both	wait	4000
+both	key	j
+both	wait	9000
+both	shot	before	The party after the falls turn, one point down
+both	key	space
+both	wait	6000
+both	shot	falls	F-A-L-L-S!!! and the descent
+both	wait	6000
+both	shot	underworld	Falling into underworld!!
