@@ -1390,7 +1390,7 @@
         assert_eq!(state.turn, 0);
 
         assert_eq!(
-            handle_play_key_input(&mut state, '6', "", &dir).unwrap(),
+            handle_play_key_input(&mut state, char::from(INPUT_CODE_EAST), "", &dir).unwrap(),
             PlayInputDisposition::Continue
         );
 
@@ -1456,7 +1456,7 @@
 
         assert_eq!(state.klimb_command(&dir).unwrap(), MoveOutcome::Observed);
         assert_eq!(
-            handle_play_key_input(&mut state, '6', "", &dir).unwrap(),
+            handle_play_key_input(&mut state, char::from(INPUT_CODE_EAST), "", &dir).unwrap(),
             PlayInputDisposition::Continue
         );
         assert_eq!(state.message, "What?");
@@ -1913,7 +1913,7 @@
         assert_eq!(state.active_objects[0].x, 1);
         assert_eq!(state.turn, 1);
 
-        assert_eq!(handle_play_key_input(&mut state, '6', "", &dir).unwrap(), PlayInputDisposition::Continue);
+        assert_eq!(handle_play_key_input(&mut state, char::from(INPUT_CODE_EAST), "", &dir).unwrap(), PlayInputDisposition::Continue);
 
         assert_eq!(state.area, Area::Town { scene: Scene::new(17).unwrap(), floor: 0 });
         assert_eq!((state.player.x, state.player.y), (1, 0));

@@ -60,7 +60,7 @@ fn outdoor_klimb_gates_run_before_the_direction_prompt() {
     // toward the cell it names rather than toward the party's facing.
     state.player.facing = Direction::North;
     assert_eq!(
-        handle_play_key_input(&mut state, '6', "", &dir).unwrap(),
+        handle_play_key_input(&mut state, char::from(INPUT_CODE_EAST), "", &dir).unwrap(),
         PlayInputDisposition::Continue
     );
     assert_eq!((state.player.x, state.player.y), (11, 20));
@@ -89,7 +89,7 @@ fn routed_world_k_plane_transition_does_not_retrigger_reciprocal_landing_row() {
     );
     // Outdoor K opens the shared direction prompt; `6` is East.
     assert_eq!(
-        handle_play_key_input(&mut state, '6', "", &dir).unwrap(),
+        handle_play_key_input(&mut state, char::from(INPUT_CODE_EAST), "", &dir).unwrap(),
         PlayInputDisposition::Continue
     );
 

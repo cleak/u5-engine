@@ -475,8 +475,17 @@ pub enum DungeonLookFocus {
 /// up is ahead, left and right rotate the facing a quarter turn, and down
 /// selects the party's own cell (measured 2026-09-07 against the stock
 /// game, which ignores `A`/`R`/`L`/`H` and Escape here).
+///
+/// Besides the direction codes it reads the compass digits, because its only
+/// caller is the harness's inline `L`/`S` operand, which is not a keystroke
+/// at any prompt (`input.md §5` keeps a typed digit out of the prompts
+/// themselves; see [`crate::Direction::from_prompt_key`]).
 pub fn dungeon_look_focus_from_key(key: char) -> Option<DungeonLookFocus> {
-    match crate::Direction::from_prompt_key(key)? {
+    let direction = match key {
+        '8' | '4' | '6' | '2' => crate::Direction::from_play_key(key),
+        _ => crate::Direction::from_prompt_key(key),
+    };
+    match direction? {
         crate::Direction::North => Some(DungeonLookFocus::Ahead),
         crate::Direction::West => Some(DungeonLookFocus::Left),
         crate::Direction::East => Some(DungeonLookFocus::Right),

@@ -1415,7 +1415,7 @@ fn town_jimmy_prompts_for_direction_then_party_without_turn() {
     assert_eq!(state.turn, 0);
 
     assert_eq!(
-        handle_play_key_input(&mut state, '6', "", &dir).unwrap(),
+        handle_play_key_input(&mut state, char::from(INPUT_CODE_EAST), "", &dir).unwrap(),
         PlayInputDisposition::Continue
     );
     assert_eq!(state.message, PARTY_SELECTION_PROMPT);
@@ -1439,7 +1439,7 @@ fn active_town_jimmy_picker_unlocks_with_selected_member() {
     assert!(state.active_direction_prompt.is_some());
     assert_eq!(state.turn, 0);
 
-    handle_play_key_input(&mut state, '6', "", &dir).unwrap();
+    handle_play_key_input(&mut state, char::from(INPUT_CODE_EAST), "", &dir).unwrap();
     assert!(state.active_jimmy.is_some());
     assert_eq!(state.turn, 0);
 
@@ -1477,7 +1477,7 @@ fn active_town_jimmy_picker_rejects_ineligible_pick_and_echoes_eligible_name() {
     assert!(state.party[2].conscious());
 
     handle_play_key_input(&mut state, 'J', "", &dir).unwrap();
-    handle_play_key_input(&mut state, '6', "", &dir).unwrap();
+    handle_play_key_input(&mut state, char::from(INPUT_CODE_EAST), "", &dir).unwrap();
     assert!(state.active_jimmy.is_some());
 
     handle_play_key_input(&mut state, '3', "\r", &dir).unwrap();
@@ -1523,7 +1523,7 @@ fn town_jimmy_one_member_party_picks_silently() {
     assert_eq!(state.party.len(), 1);
 
     handle_play_key_input(&mut state, 'J', "", &dir).unwrap();
-    handle_play_key_input(&mut state, '6', "", &dir).unwrap();
+    handle_play_key_input(&mut state, char::from(INPUT_CODE_EAST), "", &dir).unwrap();
 
     assert!(state.active_jimmy.is_none());
     assert_ne!(state.message, PARTY_SELECTION_PROMPT);

@@ -28,19 +28,20 @@ impl Direction {
 
     /// `commands.md §5.4`: the shared direction prompt "accepts only the
     /// four directions and Space" - the translated direction codes of
-    /// `input.md §5` (arrows, numpad, shifted top-row digits). The
-    /// terminal harness's letter aliases in [`Self::from_play_key`] are
-    /// not directions to the original and are discarded here.
+    /// `input.md §5`: the scancode table (arrows, Home/End/PgUp/PgDn, the
+    /// keypad) and a digit that arrives with NumLock on or with Shift held
+    /// on the keypad. "Plain unmodified top-row digits remain ordinary text
+    /// input", and "An implementation must not treat Shift with a top-row
+    /// digit as a direction" (u5-spec#300 Q15, R589), so a typed digit is
+    /// never a direction here: the frontend delivers a translated one as its
+    /// direction code. The terminal harness's letter aliases in
+    /// [`Self::from_play_key`] are not directions to the original either.
+    /// A plain `8`/`2`/`4`/`6` used to answer the adjacent-tile `Direction-`
+    /// prompt (p10 R13 follow-up).
     pub fn from_prompt_key(key: char) -> Option<Self> {
-        if let Some(byte) = input_byte_from_char(key) {
-            if crate::input_code_direction(byte).is_some() {
-                return Self::from_play_key(key);
-            }
-        }
-        match key {
-            '7' | '8' | '9' | '4' | '6' | '1' | '2' | '3' => Self::from_play_key(key),
-            _ => None,
-        }
+        let byte = input_byte_from_char(key)?;
+        crate::input_code_direction(byte)?;
+        Self::from_play_key(key)
     }
 
     pub fn from_play_key(key: char) -> Option<Self> {

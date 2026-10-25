@@ -1831,7 +1831,7 @@ fn world_push_prompt_routes_to_overworld_push() {
         assert_eq!(state.message, "Push-");
 
         assert_eq!(
-            handle_play_key_input(&mut state, '6', "", &dir).unwrap(),
+            handle_play_key_input(&mut state, char::from(INPUT_CODE_EAST), "", &dir).unwrap(),
             PlayInputDisposition::Continue
         );
 

@@ -11009,7 +11009,7 @@ fn combat_input_dispatch_push_prompt_keeps_actor_until_direction() {
     assert_eq!(state.active_effect_counter, 3);
 
     assert_eq!(
-        handle_play_key_input(&mut state, '6', "", game_dir).unwrap(),
+        handle_play_key_input(&mut state, char::from(INPUT_CODE_EAST), "", game_dir).unwrap(),
         PlayInputDisposition::Continue
     );
 

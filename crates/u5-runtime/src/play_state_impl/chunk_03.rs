@@ -1979,11 +1979,8 @@ impl PlayState {
                     // at this prompt "Other keys are ignored and the prompt
                     // reads again" (`§11`). A plain `8`/`2`/`4`/`6` used to
                     // answer it (p10 R13).
-                    let Some(direction) = u8::try_from(u32::from(ch))
-                        .ok()
-                        .filter(|byte| crate::input_code_direction(*byte).is_some())
-                        .and_then(|_| Direction::from_play_key(ch))
-                        .filter(|direction| direction.is_cardinal())
+                    let Some(direction) =
+                        Direction::from_prompt_key(ch).filter(|direction| direction.is_cardinal())
                     else {
                         continue;
                     };
@@ -3857,7 +3854,10 @@ impl PlayState {
             // `combat.md §8.4` (u5-spec#299 Q13): the adjacent-climb prompt
             // takes a cardinal or Space only; `<`/`>` no longer climb a
             // ladder from it - the ladder cases are resolved on the cell
-            // under the actor before this prompt opens.
+            // under the actor before this prompt opens. `input.md §5`: only
+            // a translated direction code is a direction, so a plain top-row
+            // `8`/`2`/`4`/`6` is ignored here as at the spell prompt (p10
+            // R13), and the prompt reads again.
             let Some(direction) =
                 Direction::from_prompt_key(ch).filter(|direction| direction.is_cardinal())
             else {

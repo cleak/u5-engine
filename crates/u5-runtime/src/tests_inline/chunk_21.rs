@@ -2665,7 +2665,7 @@ fn play_input_talk_without_suffix_opens_keyword_session() {
     state.set_active_talk_branch_flag(1);
 
     assert_eq!(
-        handle_play_key_input(&mut state, '6', "", &dir).unwrap(),
+        handle_play_key_input(&mut state, char::from(INPUT_CODE_EAST), "", &dir).unwrap(),
         PlayInputDisposition::Continue
     );
     assert!(state.message.contains("Greetings"));
@@ -2746,7 +2746,7 @@ fn play_input_conversation_empty_line_emits_bye_envelope_and_closes() {
     ]);
 
     handle_play_key_input(&mut state, 'T', "", &dir).unwrap();
-    handle_play_key_input(&mut state, '6', "", &dir).unwrap();
+    handle_play_key_input(&mut state, char::from(INPUT_CODE_EAST), "", &dir).unwrap();
     assert!(state.active_conversation.is_some());
 
     assert_eq!(

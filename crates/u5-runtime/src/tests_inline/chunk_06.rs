@@ -949,7 +949,7 @@
     fn tile_commands_report_acted_on_misses_and_cancels() {
         let dir = debug_game_dir();
         for letter in ['G', 'O', 'J'] {
-            for second in ['6', ' '] {
+            for second in [char::from(INPUT_CODE_EAST), ' '] {
                 let mut state = test_state(open_grid(), 5, 5);
                 state.keys = 1;
                 assert_eq!(
@@ -976,7 +976,7 @@
             PlayInputDisposition::Continue
         );
         assert_eq!(
-            handle_play_key_input(&mut state, '6', "", &dir).unwrap(),
+            handle_play_key_input(&mut state, char::from(INPUT_CODE_EAST), "", &dir).unwrap(),
             PlayInputDisposition::Continue
         );
         assert_eq!(state.message, GET_NOTHING_REFUSAL);

@@ -1141,14 +1141,14 @@
         assert_eq!(state.message, "Attack-");
 
         assert_eq!(
-            handle_play_key_input(&mut state, '9', "x", Path::new("")).unwrap(),
+            handle_play_key_input(&mut state, char::from(INPUT_CODE_NORTHEAST), "x", Path::new("")).unwrap(),
             PlayInputDisposition::Continue
         );
         assert!(state.active_direction_prompt.is_some());
         assert_eq!(state.turn, 0);
 
         assert_eq!(
-            handle_play_key_input(&mut state, '6', "", Path::new("")).unwrap(),
+            handle_play_key_input(&mut state, char::from(INPUT_CODE_EAST), "", Path::new("")).unwrap(),
             PlayInputDisposition::Continue
         );
         assert!(state.active_direction_prompt.is_none());
@@ -1243,7 +1243,7 @@
         // `commands.md §5.2`: the `F` echo is the bare `Fire-`.
         assert_eq!(ship.message, "Fire-");
         assert_eq!(
-            handle_play_key_input(&mut ship, '4', "", &dir).unwrap(),
+            handle_play_key_input(&mut ship, char::from(INPUT_CODE_WEST), "", &dir).unwrap(),
             PlayInputDisposition::Continue
         );
         assert!(ship.active_direction_prompt.is_none());
@@ -1262,7 +1262,7 @@
         assert!(push.active_direction_prompt.is_some());
         assert_eq!(push.message, "Push-");
         assert_eq!(
-            handle_play_key_input(&mut push, '6', "", &dir).unwrap(),
+            handle_play_key_input(&mut push, char::from(INPUT_CODE_EAST), "", &dir).unwrap(),
             PlayInputDisposition::Continue
         );
         assert!(push.active_direction_prompt.is_none());
@@ -1297,7 +1297,7 @@
         assert_eq!(state.turn, 0);
 
         assert_eq!(
-            handle_play_key_input(&mut state, '6', "", &dir).unwrap(),
+            handle_play_key_input(&mut state, char::from(INPUT_CODE_EAST), "", &dir).unwrap(),
             PlayInputDisposition::Continue
         );
         assert!(state.active_direction_prompt.is_none());
@@ -1325,7 +1325,7 @@
         assert!(get.active_direction_prompt.is_some());
         assert_eq!(get.message, "Get-");
         assert_eq!(
-            handle_play_key_input(&mut get, '6', "", &dir).unwrap(),
+            handle_play_key_input(&mut get, char::from(INPUT_CODE_EAST), "", &dir).unwrap(),
             PlayInputDisposition::Continue
         );
         assert!(get.active_direction_prompt.is_none());
@@ -1345,7 +1345,7 @@
         assert!(open.active_direction_prompt.is_some());
         assert_eq!(open.message, "Open-");
         assert_eq!(
-            handle_play_key_input(&mut open, '6', "", &dir).unwrap(),
+            handle_play_key_input(&mut open, char::from(INPUT_CODE_EAST), "", &dir).unwrap(),
             PlayInputDisposition::Continue
         );
         assert!(open.active_direction_prompt.is_none());
@@ -1370,7 +1370,7 @@
         assert!(search.active_direction_prompt.is_some());
         assert_eq!(search.message, "Search-");
         assert_eq!(
-            handle_play_key_input(&mut search, '6', "", &dir).unwrap(),
+            handle_play_key_input(&mut search, char::from(INPUT_CODE_EAST), "", &dir).unwrap(),
             PlayInputDisposition::Continue
         );
         assert!(search.active_direction_prompt.is_none());
@@ -1415,7 +1415,7 @@
             PlayInputDisposition::Continue
         );
         assert_eq!(
-            handle_play_key_input(&mut search, '6', "", &dir).unwrap(),
+            handle_play_key_input(&mut search, char::from(INPUT_CODE_EAST), "", &dir).unwrap(),
             PlayInputDisposition::Continue
         );
         assert!(search.active_party_selector.is_some());
@@ -1452,7 +1452,7 @@
         assert_eq!(state.message, "Look-");
 
         assert_eq!(
-            handle_play_key_input(&mut state, '6', "", &dir).unwrap(),
+            handle_play_key_input(&mut state, char::from(INPUT_CODE_EAST), "", &dir).unwrap(),
             PlayInputDisposition::Continue
         );
         assert!(state.active_direction_prompt.is_none());
@@ -5781,5 +5781,33 @@ fn z_stats_left_and_right_scroll_a_populated_shared_list() {
     assert_ne!(
         empty.active_z_stats.as_ref().map(|s| s.page),
         Some(ZStatsPage::Spells)
+    );
+}
+
+/// `input.md §5` (u5-spec#300 Q15, R589): only a translated direction code
+/// is a direction. "Plain unmodified top-row digits remain ordinary text
+/// input", and Shift with a top-row key "types punctuation", so at the
+/// adjacent-tile `Direction-` prompt (here `Open-`) a plain `8`/`2`/`4`/`6`
+/// and the shifted `*`/`@`/`$`/`^` are ignored and the prompt reads again;
+/// the direction code answers it. p10 R13 fixed only the spell prompt.
+#[test]
+fn adjacent_tile_direction_prompt_ignores_plain_and_shifted_top_row_digits() {
+    let dir = std::env::temp_dir();
+    let mut state = test_state(open_grid(), 5, 5);
+    handle_play_key_input(&mut state, 'O', "", &dir).unwrap();
+    assert!(state.active_direction_prompt.is_some());
+    let message = state.message.clone();
+    for key in ['8', '2', '4', '6', '7', '9', '1', '3', '*', '@', '$', '^'] {
+        handle_play_key_input(&mut state, key, "", &dir).unwrap();
+        assert!(state.active_direction_prompt.is_some(), "{key:?} answered");
+        assert_eq!(state.message, message, "{key:?} printed");
+        assert_eq!(state.turn, 0, "{key:?} spent a turn");
+    }
+    handle_play_key_input(&mut state, char::from(INPUT_CODE_EAST), "", &dir).unwrap();
+    assert!(state.active_direction_prompt.is_none());
+    assert!(Direction::from_prompt_key('8').is_none());
+    assert_eq!(
+        Direction::from_prompt_key(char::from(INPUT_CODE_NORTH)),
+        Some(Direction::North)
     );
 }

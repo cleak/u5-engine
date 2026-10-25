@@ -58,13 +58,13 @@ fn a_prompted_direction_completes_the_open_verb_echo_on_its_own_line() {
     // keeps a drifting echo literal from silently dropping the
     // direction word again.
     for (key, verb, direction_key, direction) in [
-        ('O', "Open-", '2', "South"),
-        ('G', "Get-", '2', "South"),
-        ('A', "Attack-", '6', "East"),
-        ('J', "Jimmy-", '8', "North"),
-        ('K', "Klimb-", '4', "West"),
-        ('P', "Push-", '2', "South"),
-        ('S', "Search-", '6', "East"),
+        ('O', "Open-", char::from(u5_runtime::INPUT_CODE_SOUTH), "South"),
+        ('G', "Get-", char::from(u5_runtime::INPUT_CODE_SOUTH), "South"),
+        ('A', "Attack-", char::from(u5_runtime::INPUT_CODE_EAST), "East"),
+        ('J', "Jimmy-", char::from(u5_runtime::INPUT_CODE_NORTH), "North"),
+        ('K', "Klimb-", char::from(u5_runtime::INPUT_CODE_WEST), "West"),
+        ('P', "Push-", char::from(u5_runtime::INPUT_CODE_SOUTH), "South"),
+        ('S', "Search-", char::from(u5_runtime::INPUT_CODE_EAST), "East"),
     ] {
         let mut state = test_state(open_grid(), 5, 5);
         assert_eq!(
