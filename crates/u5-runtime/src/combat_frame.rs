@@ -6841,6 +6841,9 @@ impl PlayState {
             input.defence_roll = self.combat_defence_roll(defence_rating);
         }
         let resolution = resolve_combat_weapon_attack(input);
+        // `combat.md` (u5-spec#300 Q31, R614): the target side's impact
+        // burst plays when the strike lands, as on every attack path.
+        self.emit_combat_hit_presentation(target_slot, &resolution);
         // The damage stays fed as magical, as the pre-existing strike did:
         // the published flavour is a magic strike, not a weapon blow.
         let damage_application = match resolution {

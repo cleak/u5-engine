@@ -103,11 +103,10 @@ fn p3w_w2_town_bed_hours_prompt_zero_cancels_silently_and_spends_the_turn() {
 }
 
 #[test]
-fn p3w_w2_town_bed_hours_prompt_zero_echoes_and_aborts_without_none() {
-    // `rest-and-camp.md §4`: the resident handler "accepts the same visible
-    // duration shape as the town-hours path: Space and `0` cancel", and the
-    // resident shape echoes the key "followed by one line feed; Space ... or
-    // `0` ... then aborts with no further output" (`dungeon-mode.md §11`).
+fn p3w_w2_town_bed_hours_prompt_zero_aborts_without_echo_or_none() {
+    // `rest-and-camp.md §4`: "Space and `0` cancel", and since u5-spec#300 Q8
+    // the town path differs from the resident handler: "this handler echoes
+    // the cancelling Space or `0`, and the town path does not".
     let (mut state, dir) = p3w_town_bed_state();
     let clock = state.clock;
     handle_play_key_input(&mut state, 'H', "", &dir).unwrap();
@@ -116,7 +115,7 @@ fn p3w_w2_town_bed_hours_prompt_zero_echoes_and_aborts_without_none() {
     let rows = p3w_rows(&state);
     assert_eq!(
         rows.last().cloned(),
-        Some(format!("Hole up- {REST_HOURS_PROMPT}0")),
+        Some(format!("Hole up- {}", crate::commands::TOWN_BED_HOURS_PROMPT)),
         "{rows:?}"
     );
     assert!(!rows.iter().any(|row| row.contains("None!")), "{rows:?}");
