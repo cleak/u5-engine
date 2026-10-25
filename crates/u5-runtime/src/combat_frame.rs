@@ -4728,8 +4728,15 @@ impl PlayState {
         // the ordinary world turn advance, so its draws are the ones that
         // advance owns (NPC schedules and the active-object epilogue).
         // `§5.3` attaches no condition to it, so every way the round loop
-        // ends reaches it.
-        self.advance_turn();
+        // ends reaches it - except a fight an overworld A-Attack opened:
+        // `commands.md §3` makes that attack "no action, including the
+        // successful attack that enters combat", and `§4` gives the exit's
+        // own clock call "a **zero** increment" (p10 R11).
+        if std::mem::take(&mut self.combat_exit_skips_world_turn) {
+            self.recompute_daylight();
+        } else {
+            self.advance_turn();
+        }
         self.apply_pending_world_object_walker_pass();
         CombatRoundLoopExitApplication {
             exit,

@@ -2533,6 +2533,10 @@ impl PlayState {
                             object_slot,
                             object,
                         )?;
+                        // `commands.md §3`: the attack that enters combat is
+                        // still "no action", so the exit owes no outdoor turn
+                        // either (p10 R11).
+                        self.combat_exit_skips_world_turn = self.combat_active;
                         return Ok(MoveOutcome::Used);
                     }
                 }

@@ -851,6 +851,13 @@ pub struct PlayState {
     /// same as `dungeon-mode.md §13`'s labels outliving the mode that drew
     /// them. Frozen here at combat entry; not live.
     pub combat_entry_chrome: Option<(ChromeGap, ChromeGap)>,
+    /// `commands.md §3`: "`A` overworld | Always \"no action\", including
+    /// the successful attack that enters combat", and `combat.md §4`: the
+    /// exit's clock call has "a **zero** increment ... so the only time a
+    /// fight adds is its round-wrap minutes". Set when an overworld A-Attack
+    /// opens the arena, so the round loop's exit owes no outdoor turn for it
+    /// (p10 R11); consumed by that exit.
+    pub combat_exit_skips_world_turn: bool,
     /// `karma.md §7` "Entry pacing": the shrine presentation's own display.
     ///
     /// Meditation does not happen on the overworld map. The presentation
