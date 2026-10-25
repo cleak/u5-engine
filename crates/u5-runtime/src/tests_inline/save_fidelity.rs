@@ -680,7 +680,8 @@ fn active_shadowlord_handshake_survives_save_and_reload() {
     let reloaded = load_play_options_from_save(&dir).unwrap();
     assert_eq!(reloaded.summoned_shadowlord, Some(SHADOWLORD_FALSEHOOD_INDEX));
 
-    // The shard clears the handshake; the next save stops naming it.
+    // A state with no summon in this game (the new-game value) writes
+    // `0xFF` over a stale template id.
     state.summoned_shadowlord = None;
     assert_eq!(
         state.save_game_command(&dir, Some(true)).unwrap(),
@@ -851,4 +852,33 @@ fn dungeon_zero_minute_turn_keeps_the_shared_snapshot_for_the_upkeep_pass() {
     state.advance_dungeon_loop_minute();
     state.advance_turn();
     assert_eq!(state.food, food, "one meal per crossing");
+}
+
+/// `formats/saved-gam.md §9.1` `0x0325` (u5-spec#300 Q3, R585): the byte is
+/// the last-summoned Shadowlord id and "Nothing clears the byte: leaving the
+/// keep, the actor going away with the scene reload, destroying a Shadowlord
+/// with its shard ... all leave it alone". Executed: Astaroth summoned in the
+/// Lycaeum, the party left to the overworld and saved, and the byte read `1`.
+#[test]
+fn spec300_q3_last_summoned_shadowlord_survives_leaving_and_shard() {
+    let mut town = test_state(open_grid(), 10, 10);
+    town.area = Area::Town {
+        scene: Scene::new(SCENE_THE_LYCAEUM).unwrap(),
+        floor: 0,
+    };
+    town.summoned_shadowlord = Some(SHADOWLORD_HATRED_INDEX);
+    // The shard's actor clear leaves the id alone.
+    town.clear_shadowlord_name_encounters(SHADOWLORD_HATRED_INDEX);
+    assert_eq!(town.summoned_shadowlord, Some(SHADOWLORD_HATRED_INDEX));
+
+    let mut template = saved_game_seed_bytes(0, 0, 10, 20);
+    template[SAVE_AVATAR_NAME_OFFSET] = b'A';
+    template[SAVE_ACTIVE_SHADOWLORD_OFFSET] = SAVE_ACTIVE_SHADOWLORD_NONE;
+    let dir = save_fidelity_game_dir(template);
+    let mut world = world_state(open_world_grid(), 10, 20);
+    world.summoned_shadowlord = town.summoned_shadowlord;
+    world.save_game_command(&dir, Some(true)).unwrap();
+    let saved = fs::read(dir.join("SAVED.GAM")).unwrap();
+    assert_eq!(saved[SAVE_ACTIVE_SHADOWLORD_OFFSET], 1);
+    let _ = fs::remove_dir_all(dir);
 }

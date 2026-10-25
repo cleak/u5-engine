@@ -465,12 +465,13 @@ impl PlayState {
         // second write here - one used to clobber the Glass Sword counter.
         save[SAVE_SHADOWLORD_HIDEOUTS_OFFSET..SAVE_SHADOWLORD_HIDEOUTS_OFFSET + SHADOWLORD_COUNT]
             .copy_from_slice(&self.shadowlord_hideouts);
-        // `formats/saved-gam.md §9.1`: `0x0325` is the Yell-path handshake
-        // that shard/spell destruction checks, saved because it sits in
-        // resident memory (§10 `0x0322..0x0327`). A live handshake writes
-        // its id; a cleared one writes the factory `0xFF` "none active"
-        // over a stale id, and "other values" are preserved byte-for-byte
-        // from the template (playtest G23).
+        // `formats/saved-gam.md §9.1`: `0x0325` is the last-summoned
+        // Shadowlord id, saved because it sits in resident memory (§10
+        // `0x0322..0x0327`). Nothing clears it once a summon succeeds
+        // (u5-spec#300 Q3, R585), so every later save writes that id; with
+        // no summon yet in this game the new-game `0xFF` stands, and other
+        // values are preserved byte-for-byte from the template (playtest
+        // G23).
         match self.summoned_shadowlord.and_then(|index| u8::try_from(index).ok()) {
             Some(index) => save[SAVE_ACTIVE_SHADOWLORD_OFFSET] = index,
             None if usize::from(save[SAVE_ACTIVE_SHADOWLORD_OFFSET]) < SHADOWLORD_COUNT => {

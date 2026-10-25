@@ -1653,7 +1653,9 @@ impl PlayState {
                 cleared += 1;
             }
         }
-        self.summoned_shadowlord = None;
+        // `formats/saved-gam.md §9.1` `0x0325` (u5-spec#300 Q3, R585):
+        // destroying a Shadowlord with its shard leaves the last-summoned
+        // id alone, so `summoned_shadowlord` is not reset here.
         cleared
     }
 
@@ -3004,8 +3006,10 @@ impl PlayState {
             saved_dungeon_working_buffer: None,
             moonstone_slots: self.moonstone_slots,
             shadowlord_hideouts: self.shadowlord_hideouts,
-            // Scene rebuilds keep the existing reset; the save image carries `0x0325`.
-            summoned_shadowlord: None,
+            // `formats/saved-gam.md §9.1` `0x0325` (u5-spec#300 Q3, R585):
+            // "Nothing clears the byte: leaving the keep, the actor going
+            // away with the scene reload, ... leave it alone".
+            summoned_shadowlord: self.summoned_shadowlord,
             removed_town_npc_flags: self.removed_town_npc_flags.clone(),
             talk_branch_flags: self.talk_branch_flags.clone(),
             shrine_ordained_mask: self.shrine_ordained_mask,

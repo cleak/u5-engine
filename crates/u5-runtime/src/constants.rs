@@ -716,11 +716,12 @@ pub const SAVE_RARE_REAGENT_HARVEST_COOKIES_OFFSET: usize = 0x02B2;
 pub const SAVE_FIXED_HIDDEN_TREASURE_RECORD_15_GATE_OFFSET: usize =
     SAVE_EQUIPMENT_STOCK_OFFSET + EQUIPMENT_ID_GLASS_SWORD;
 pub const SAVE_SHADOWLORD_HIDEOUTS_OFFSET: usize = 0x0322;
-/// `formats/saved-gam.md §9.1`: `0x0325` is the active-Shadowlord id,
-/// the "Runtime handshake set by the Shadowlord-name Yell path and checked
-/// by shard/spell destruction". `0..2` names the active Shadowlord; the
-/// factory `0xFF` means "none active"; other values are preserved
-/// byte-for-byte.
+/// `formats/saved-gam.md §9.1`: `0x0325` is the last-summoned Shadowlord
+/// id, "written only by a successful Shadowlord-name Yell" and checked by
+/// the shard destruction step. `0..2` names the Shadowlord most recently
+/// summoned "whether or not it is still present"; nothing clears it, and
+/// the new-game `0xFF` "means only that no summon has yet succeeded"
+/// (u5-spec#300 Q3, R585 withdrew "none active").
 pub const SAVE_ACTIVE_SHADOWLORD_OFFSET: usize = 0x0325;
 pub const SAVE_ACTIVE_SHADOWLORD_NONE: u8 = 0xff;
 /// `formats/saved-gam.md §9.2`: two back-to-back banks of 32
