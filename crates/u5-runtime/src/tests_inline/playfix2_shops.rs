@@ -260,9 +260,18 @@ fn pf2_herbalist_prompts_keep_their_space_and_replies_take_one_blank() {
 /// flush took it for no write and nothing was appended.
 #[test]
 fn pf2_shipwright_invalid_menu_key_redraws_the_menu() {
-    let menu = shipwright_rows_after(&['Y'], Path::new(""));
+    // A synthetic record `119`: the engine carries no copy of the shipped
+    // menu text (playtest Q16), so the menu needs a `SHOPPE.DAT`.
+    let dir = debug_game_dir();
+    let shoppe = shoppe_dat_with_records(&[(
+        crate::shops::SHOPPE_RECORD_SHIPWRIGHT_MENU,
+        b"\n\n\"Menu line.\n\nMenu question?\"".as_slice(),
+    )]);
+    std::fs::write(dir.join("SHOPPE.DAT"), shoppe).unwrap();
+    let menu = shipwright_rows_after(&['Y'], &dir);
     let question = menu.last().cloned().expect("menu rows");
-    let redrawn = shipwright_rows_after(&['Y', 'x'], Path::new(""));
+    assert_eq!(question, "Menu question?\"", "{menu:#?}");
+    let redrawn = shipwright_rows_after(&['Y', 'x'], &dir);
     assert_eq!(
         redrawn.iter().filter(|row| **row == question).count(),
         2,
@@ -270,6 +279,7 @@ fn pf2_shipwright_invalid_menu_key_redraws_the_menu() {
     );
     assert_eq!(redrawn.last(), Some(&question), "{redrawn:#?}");
     // An invalid key at the entry question still waits silently.
-    let entry = shipwright_rows_after(&[], Path::new(""));
-    assert_eq!(shipwright_rows_after(&['x'], Path::new("")), entry);
+    let entry = shipwright_rows_after(&[], &dir);
+    assert_eq!(shipwright_rows_after(&['x'], &dir), entry);
+    let _ = fs::remove_dir_all(dir);
 }

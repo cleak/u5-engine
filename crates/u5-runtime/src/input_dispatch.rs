@@ -1799,11 +1799,11 @@ fn handle_active_shop_key_input(
                                 innkeeper_name,
                                 inn.display_name(),
                             );
-                            if record.is_empty() {
-                                format!("\n\n{INN_NOBODY_TO_LEAVE_REFUSAL}")
-                            } else {
-                                format!("\n\n{record}")
-                            }
+                            // Without `SHOPPE.DAT` the record renders
+                            // empty and nothing is said: §8.C names only the
+                            // record, and the engine must not carry a copy
+                            // of its text (playtest Q16).
+                            format!("\n\n{record}")
                         } else {
                             let deposit = inn_leave_companion_deposit_for_speaker(
                                 inn,
@@ -4775,15 +4775,12 @@ fn inn_pickup_selected_guest(
         }
     }
 }
-/// **Measured** 2026-09-08 at Hotel Brittany with a party of one.
 /// **Measured**: the question the leave-companion branch asks.
 const INN_WHO_WILL_STAY_PROMPT: &str = "\"Who will\nstay?\" ";
 /// **Measured**: what the innkeeper says once a companion is lodged, and the
 /// question the visit continues on.
 const INN_THANKS_LINE: &str = "\"I thank thee.\"";
 const INN_ANYTHING_MORE_PROMPT: &str = "\"Is there\nanything more\nI can do for\nthee?\" ";
-const INN_NOBODY_TO_LEAVE_REFUSAL: &str =
-    "\"Lord British is missing, and all ye plan to do is SLEEP for a month or so? Not in my inn!\"";
 
 
 /// `shops.md` §4's "Tavern count-word exception": the bill's count "is the
@@ -5658,14 +5655,6 @@ fn format_horse_trader_outcome(
     }
 }
 
-/// `shops.md §8.B`, the shipwright's row: "`Yes`, then record `119` with no
-/// added resident menu question; the record carries its own leading spacing
-/// and prompt." The asset supplies the wording, so the engine reads it rather
-/// than transcribing it; these two literals were measured at The Rusty Bucket
-/// in Buccaneer's Den (`qa/paired/bd-shipwright.tsv`) and remain only as the
-/// fallback for a run with no `SHOPPE.DAT`.
-const SHIPWRIGHT_STOCK_LINE: &str = "\"We sell ocean-going Frigates and small, light Skiffs.";
-const SHIPWRIGHT_STOCK_QUESTION: &str = "Which would ye like to see?\"";
 /// The confirmation prompt a quoted hull ends on, quoted like the arms
 /// browser's `Deal?"`.
 const SHIPWRIGHT_CONFIRM_PROMPT: &str = "Wilt thou take it?\"";
@@ -5727,8 +5716,12 @@ fn format_ship_broker_outcome(
 ) -> String {
     use crate::shop_runtime::ShipBrokerOutcome::*;
     match outcome {
-        EnteredMenu => menu_record
-            .unwrap_or_else(|| format!("{SHIPWRIGHT_STOCK_LINE}\n\n{SHIPWRIGHT_STOCK_QUESTION}")),
+        // `shops.md §8.B`, the shipwright's row: "`Yes`, then record `119`
+        // with no added resident menu question; the record carries its own
+        // leading spacing and prompt." The asset supplies the wording; a run
+        // without `SHOPPE.DAT` shows nothing rather than a transcription of
+        // the record (playtest Q16).
+        EnteredMenu => menu_record.unwrap_or_default(),
         QuotedPurchase { quote } => offer_record.unwrap_or_else(|| {
             // Fallback for a run without the asset: the engine's own
             // sentence, kept only so a headless harness still has text.
@@ -8197,6 +8190,21 @@ mod arms_shop_resident_literal_tests {
 
     /// The draw is uniform over `0..3`, so the pool wraps rather than
     /// panicking if a wider roll ever reaches it.
+    /// `shops.md §8.B`: the shipwright's menu is record `119`, which the
+    /// asset supplies. Without `SHOPPE.DAT` the engine shows nothing rather
+    /// than a transcription of the record (playtest Q16).
+    #[test]
+    fn shipwright_menu_without_shoppe_dat_has_no_transcribed_fallback() {
+        assert_eq!(
+            format_ship_broker_outcome(
+                crate::shop_runtime::ShipBrokerOutcome::EnteredMenu,
+                None,
+                None
+            ),
+            ""
+        );
+    }
+
     #[test]
     fn arms_stock_call_pool_wraps_past_three() {
         for roll in 0u8..=u8::MAX {

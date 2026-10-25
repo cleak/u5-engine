@@ -76,3 +76,30 @@ fn playtest_q14_town_digit_selection_reports_acted_and_zero_does_not() {
     assert_eq!(state.clock, expected);
     let _ = fs::remove_dir_all(dir);
 }
+
+/// `shops.md §8.C` names only "Record 191" for the solo Leave refusal and
+/// `§8.B` only record `119` for the shipwright's menu. The engine carried
+/// transcriptions of both as fallbacks; without `SHOPPE.DAT` nothing of the
+/// records is shown now (Q16).
+#[test]
+fn playtest_q16_inn_solo_leave_without_shoppe_dat_shows_no_transcribed_record() {
+    use crate::shop_runtime::InnkeeperState;
+    use crate::shop_session::ActiveShopSession;
+    let mut state = test_state(open_grid(), 1, 1);
+    state.area = Area::Town {
+        scene: Scene::new(2).unwrap(),
+        floor: 0,
+    };
+    assert_eq!(state.party.len(), 1);
+    state.gold = 999;
+    state.active_shop = Some(ActiveShopSession::Innkeeper(InnkeeperState::ServiceMenu {
+        inn: Inn::TheWayfarerInn,
+    }));
+    handle_play_key_input(&mut state, 'L', "", Path::new("")).unwrap();
+    state.flush_message_slot();
+    let rows = playtest_transcript_rows(&state);
+    assert!(
+        !rows.iter().any(|row| row.contains("inn!") || row.contains("SLEEP")),
+        "{rows:?}"
+    );
+}
