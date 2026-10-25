@@ -129,3 +129,41 @@ fn playtest_g31_entering_stonegate_prints_the_air_rows_for_living_shadowlords() 
     assert!(!state.message.contains("hatred"));
     let _ = fs::remove_dir_all(dir);
 }
+
+/// `audio.md §8.6` (added 2026-10-25, u5-spec#300 Q4 and Q17): "a hideout
+/// town's entry notice and each Stonegate notice" is followed by the
+/// presence tone `(1, 2000, 60000, 1, 6600)`, the same constants for all
+/// three Shadowlords. The engine printed the notices silently.
+#[test]
+fn spec300_q17_each_stonegate_notice_plays_the_presence_tone() {
+    assert_eq!(
+        audio::SHADOWLORD_PRESENCE_NOTICE_ENVELOPE,
+        audio::EnvelopeSegment::new(1, 2000, 60_000, 1, 6600)
+    );
+    let dir = debug_game_dir();
+    let scene = Scene::new(STONEGATE_SCENE_BYTE).unwrap();
+    fs::write(dir.join("KEEP.DAT"), location_pages()).unwrap();
+    fs::write(dir.join("KEEP.NPC"), vec![0; (scene.block + 1) * 576]).unwrap();
+    fs::write(dir.join("KEEP.TLK"), [0, 0]).unwrap();
+    fs::write(
+        dir.join(WORLD_LOCATION_TABLE_FILE),
+        "BRITANNIA 10 20 KEEP:4 7 0x12 KEEP\n",
+    )
+    .unwrap();
+    let mut grid = open_world_grid();
+    grid[world_cell_index(10, 20)] = 0x12;
+    let mut state = britannia_state(grid, 10, 20);
+    // Falsehood and cowardice alive, hatred vanquished: two notices.
+    state.shadowlord_hideouts = [0, SHADOWLORD_VANQUISHED, 3];
+    let serial = state.sound_effect_serial;
+
+    state.enter_current_location(&dir).unwrap();
+
+    let tones = state
+        .sound_effects_after(serial)
+        .iter()
+        .filter(|effect| **effect == SoundEffect::ShadowlordPresenceNotice)
+        .count();
+    assert_eq!(tones, 2);
+    let _ = fs::remove_dir_all(dir);
+}

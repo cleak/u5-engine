@@ -26,9 +26,10 @@ fn stonegate_trapdoor_script_sounds_the_descent_then_one_rumble_per_death() {
 }
 
 #[test]
-fn stonegate_entry_presentation_stays_silent() {
-    // The only Stonegate row in the `audio.md §8.2` inventory is the trapdoor
-    // scripted death. Entry narration is a `§9` generic command result.
+fn stonegate_entry_presentation_plays_one_presence_tone_per_notice() {
+    // `audio.md §8.6` (added 2026-10-25, u5-spec#300 Q4/Q17): each Stonegate
+    // notice is followed by the Shadowlord presence tone; the inventory used
+    // to list only the trapdoor scripted death for Stonegate.
     let scene = Scene::new(STONEGATE_SCENE_BYTE).unwrap();
     let mut state = test_state(open_grid(), 1, 1);
     state.area = Area::Town { scene, floor: 0 };
@@ -41,7 +42,10 @@ fn stonegate_entry_presentation_stays_silent() {
     state.append_stonegate_entry_presentation_message();
 
     assert!(state.message.contains("doth\nsurround thee..."));
-    assert!(state.sound_effects_after(serial).is_empty());
+    assert_eq!(
+        state.sound_effects_after(serial),
+        vec![SoundEffect::ShadowlordPresenceNotice]
+    );
 }
 
 #[test]

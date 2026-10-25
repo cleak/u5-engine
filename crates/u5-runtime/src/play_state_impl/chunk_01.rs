@@ -1182,6 +1182,9 @@ impl PlayState {
                     state.message.push('\n');
                 }
                 state.message.push_str(&line);
+                // `audio.md §8.6` (u5-spec#300 Q4/Q17): "After the notice
+                // text prints, run `(1, 2000, 60000, 1, 6600)`".
+                state.emit_sound_effect(SoundEffect::ShadowlordPresenceNotice);
             }
             // The installed actor's slot is an engine internal. It used to be
             // appended to the notice as a second sentence, which put a line

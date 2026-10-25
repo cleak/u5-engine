@@ -2301,6 +2301,10 @@ impl PlayState {
         let Some(note) = self.stonegate_entry_presentation_message() else {
             return;
         };
+        // `audio.md §8.6` (u5-spec#300 Q4/Q17): every Stonegate notice plays
+        // the presence tone `(1, 2000, 60000, 1, 6600)` after its text, each
+        // finishing before the next notice.
+        let notices = self.stonegate_entry_presentation_lines().len();
         // This has to go through the transcript, not the bare message slot.
         // The gameplay window renders from `message_entries()`, so a line
         // written straight into `self.message` during scene load never
@@ -2312,6 +2316,9 @@ impl PlayState {
             false => format!("{}\n\n{note}", self.message),
         };
         self.emit_message_line(composed);
+        for _ in 0..notices {
+            self.emit_sound_effect(SoundEffect::ShadowlordPresenceNotice);
+        }
     }
 
     pub fn current_shadowlord_hideout_id(&self) -> Option<u8> {
