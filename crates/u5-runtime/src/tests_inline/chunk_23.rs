@@ -1925,12 +1925,18 @@ fn inn_registry_month_aging_increments_lodged_guests_to_cap() {
             stay_counter: INN_STAY_COUNTER_CAP,
             ..base
         },
+        // `time.md §8` (u5-spec#300 Q8, R587): 0xFF stays 0xFF.
+        InnGuestRecord {
+            stay_counter: 0xFF,
+            ..base
+        },
     ];
 
     assert_eq!(age_inn_registry_month(&mut registry), 2);
     assert_eq!(registry[0].stay_counter, 1);
     assert_eq!(registry[1].stay_counter, INN_STAY_COUNTER_CAP);
     assert_eq!(registry[2].stay_counter, INN_STAY_COUNTER_CAP);
+    assert_eq!(registry[3].stay_counter, 0xFF);
 }
 
 #[test]

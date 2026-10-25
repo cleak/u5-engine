@@ -137,10 +137,10 @@ fn p3w_w5_ignite_turn_spends_its_own_light_unit() {
 #[test]
 fn p3w_w6_month_rollover_ages_every_character_record() {
     // `time.md §8`: "Each of the sixteen character record slots carries a
-    // one-byte counter. The month rollover increments it, capped at 25", and
-    // implementations "should still preserve and age it on all character
-    // records". `stat-arithmetic.md`'s capped add stores the cap for a result
-    // at or above it, so the shipped `0xFF` becomes 25.
+    // one-byte counter", and implementations "should still preserve and age
+    // it on all character records". The rollover adds one only below 25, so
+    // the shipped `0xFF` "stays `0xFF` for the whole game" (u5-spec#300 Q8,
+    // R587 withdrew "capped at 25").
     let mut state = test_state(open_grid(), 1, 1);
     let active = state.party.len();
     let mut roster = default_party_roster(active.max(1));
@@ -164,5 +164,5 @@ fn p3w_w6_month_rollover_ages_every_character_record() {
         .iter()
         .map(|record| record.stay_counter)
         .collect();
-    assert_eq!(inactive, [CHARACTER_MONTH_COUNTER_CAP, 4]);
+    assert_eq!(inactive, [0xFF, 4]);
 }

@@ -1294,9 +1294,10 @@ pub const fn inn_pickup_status_converts_to_dead(stored_status: CharacterStatus) 
     matches!(stored_status, CharacterStatus::Poisoned)
 }
 
-/// `shops.md §8.4` 28-day month-rollover stay-counter cap. Each
+/// `shops.md §8.4` 28-day month-rollover stay-counter limit. Each
 /// month rollover bumps the inn registry's per-guest stay counter
-/// by one until this cap is reached; the pickup bill multiplies the
+/// by one while it is below this value (a value at or above it is left
+/// unchanged, `time.md §8`, R587); the pickup bill multiplies the
 /// adjusted lodging charge by the stored counter. Anchored to
 /// [`INN_STAY_COUNTER_CAP`] so the persistence cap and the
 /// month-rollover cap stay a single value.
@@ -2560,10 +2561,9 @@ pub fn age_inn_registry_month(registry: &mut [InnGuestRecord]) -> usize {
     let mut aged = 0;
     for guest in registry {
         let previous = guest.stay_counter;
-        guest.stay_counter = guest
-            .stay_counter
-            .saturating_add(1)
-            .min(INN_STAY_COUNTER_CAP);
+        // `time.md §8` (u5-spec#300 Q8, R587): add one only below 25; a
+        // value of 25 or more is left unchanged, never clamped.
+        guest.stay_counter = crate::age_character_month_counter(guest.stay_counter);
         if guest.stay_counter != previous {
             aged += 1;
         }
@@ -2575,7 +2575,7 @@ pub fn age_stay_counters_month(stay_counters: &mut [u8]) -> usize {
     let mut aged = 0;
     for stay_counter in stay_counters {
         let previous = *stay_counter;
-        *stay_counter = (*stay_counter).saturating_add(1).min(INN_STAY_COUNTER_CAP);
+        *stay_counter = crate::age_character_month_counter(*stay_counter);
         if *stay_counter != previous {
             aged += 1;
         }

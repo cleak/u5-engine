@@ -46,7 +46,8 @@ impl PreparedTopDownCell {
 
 impl PlayState {
     /// `time.md §8`: "Each of the sixteen character record slots carries a
-    /// one-byte counter. The month rollover increments it, capped at 25",
+    /// one-byte counter. The month rollover adds one to it only when it is
+    /// below 25" (u5-spec#300 Q8, R587),
     /// and implementations "should still preserve and age it on all
     /// character records". The active party's copies, the lodged guests'
     /// records and every other roster record age together (playtest G28,
