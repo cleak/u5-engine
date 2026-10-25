@@ -2527,7 +2527,14 @@ impl PlayState {
                 }
             }
         }
-        self.message = self.render_mix_session(&session);
+        let rendered = self.render_mix_session(&session);
+        // `magic.md §6` step 4: after the shortfall notice the prompt "is
+        // asked again" once, and a discarded key has "no echo, no other
+        // effect". The notice's slot already ends with this prompt, so
+        // re-rendering it would log a second `How much?` (playtest Q07).
+        if !(session.phase == MixPhase::Quantity && self.message.ends_with(&rendered)) {
+            self.message = rendered;
+        }
         self.active_mix = Some(session);
         None
     }

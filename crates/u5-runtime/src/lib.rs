@@ -1202,4 +1202,5 @@ mod tests {
     include!("tests_inline/playfix8_p8play.rs");
     include!("tests_inline/playfix8_p8visual.rs");
     include!("tests_inline/playfix8_p8save.rs");
+    include!("tests_inline/playfix9_p9misc.rs");
 }
