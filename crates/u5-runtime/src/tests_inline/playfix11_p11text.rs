@@ -94,3 +94,25 @@ fn playtest_s23_escape_at_the_reagent_list_leaves_no_blank_under_the_help() {
     assert_eq!(rows.get(help + 1).map(String::as_str), Some(">"), "{rows:?}");
     let _ = fs::remove_dir_all(dir);
 }
+
+/// S17/S21: `commands.md §5.5`, overworld Enter class table: "anything else
+/// | `What?\n`, producing `Enter_What?\n`; no action", and §3: "Overworld:
+/// only `Enter What?` on an unrecognised tile ... Town and dungeon: `Enter
+/// what?`". Plain grass is the commonest unrecognised tile.
+#[test]
+fn playtest_s17_overworld_enter_on_grass_prints_capital_what() {
+    let dir = debug_game_dir();
+    let mut state = britannia_state(open_world_grid(), 10, 20);
+    state.begin_command_echo_for(Command::Enter);
+    assert_eq!(
+        state.enter_current_location(&dir).unwrap(),
+        MoveOutcome::Blocked
+    );
+    state.commit_command_echo();
+    assert_eq!(state.turn, 0);
+    assert_eq!(
+        playtest_transcript_rows(&state).last().map(String::as_str),
+        Some("Enter What?")
+    );
+    let _ = fs::remove_dir_all(dir);
+}
