@@ -147,3 +147,95 @@ fn playtest_s05_orange_potion_disables_the_packed_drinkers_descriptor() {
     );
     assert_eq!(state.party[1].status, b'D');
 }
+
+/// Put a Sleep Field marker on the arena cell of combat descriptor `slot`,
+/// over plain floor (a swamp cell would take the terrain arm first).
+fn p11_place_sleep_marker_under(state: &mut PlayState, slot: usize) {
+    let actor = state.combat_actors[slot];
+    state.combat_terrain[usize::from(actor.y)][usize::from(actor.x)] = 0x05;
+    let free = (1..OOL_SLOTS)
+        .find(|index| state.active_objects[*index].is_empty())
+        .expect("a free record for the marker");
+    state.active_objects[free] = ActiveObject {
+        type_byte: COMBAT_FIELD_KIND_SLEEP,
+        tile: COMBAT_FIELD_KIND_SLEEP,
+        x: usize::from(actor.x),
+        y: usize::from(actor.y),
+        ..ActiveObject::empty()
+    };
+}
+
+/// `combat.md §11`, Sleep row (u5-spec#302 Q6, `RETRACTIONS.md` R624):
+/// contact "Call[s] the shared sleep routine of Section 12": a party target
+/// gets "status `'S'` **whatever the current letter, Poisoned included**,
+/// descriptor bit `0x08`, prone marker", and "No message (`slept!` is not
+/// printed on this path)". "The hook runs after every dispatch of the actor,
+/// including ... the one in which the wake draw succeeded, so an actor still
+/// on the marker is put back to sleep straight away". Contact used to write
+/// the roster letter alone, so the asleep arm never ran.
+#[test]
+fn spec302_q6_sleep_field_contact_runs_the_shared_sleep_routine_on_a_party_member() {
+    let mut state = combat2b_two_member_state();
+    state.party[1].status = b'P';
+    state.active_player = Some(1);
+    p11_place_sleep_marker_under(&mut state, 1);
+    let rows_before = combat2b_rows_text(&state);
+    let serial = state.sound_effect_serial;
+
+    assert!(
+        state
+            .apply_combat_post_dispatch_contact_for_actor_position(1)
+            .is_some()
+    );
+
+    assert_eq!(state.party[1].status, b'S', "Poisoned is not exempt");
+    assert!(state.combat_actors[1].is_status_disabled(), "bit 0x08 is set");
+    let object = usize::from(state.combat_actors[1].active_object_slot);
+    assert_eq!(state.active_objects[object].tile, COMBAT_POTION_SLEEP_DISPLAY_TILE);
+    assert_eq!(state.active_player, None, "the active-player selection is cleared");
+    state.flush_message_slot();
+    assert_eq!(combat2b_rows_text(&state), rows_before, "contact prints nothing");
+    assert!(!state.message.contains("slept"));
+    assert!(state.sound_effects_after(serial).is_empty(), "and plays nothing");
+
+    // A successful wake draw restores `G`, and the hook at the end of that
+    // same dispatch puts the member straight back to sleep.
+    let wake = state
+        .apply_combat_sleep_wake_dispatch(1, COMBAT_SLEEP_WAKE_SUCCESS_ROLL)
+        .expect("a disabled actor takes the wake dispatch");
+    assert!(wake.woke);
+    assert_eq!(state.party[1].status, b'G');
+    let _ = state.apply_combat_post_dispatch_contact_for_actor_position(1);
+    assert_eq!(state.party[1].status, b'S');
+    assert!(state.combat_actors[1].is_status_disabled());
+}
+
+/// `combat.md §11`/§12 (u5-spec#302 Q6): a non-party target gets "bit
+/// `0x08`, the linked record's phase byte set to the freeze sentinel (sprite
+/// unchanged)", and the wake helper later "zeroes the whole byte".
+#[test]
+fn spec302_q6_sleep_field_contact_freezes_a_monsters_animation_until_it_wakes() {
+    let mut state = combat2b_two_member_state();
+    let monster = (COMBAT_PARTY_ACTOR_SLOTS..state.combat_actors.len())
+        .find(|slot| !state.combat_actors[*slot].is_empty())
+        .expect("the fixture seats a monster");
+    let object = usize::from(state.combat_actors[monster].active_object_slot);
+    let tile_before = state.active_objects[object].tile;
+    p11_place_sleep_marker_under(&mut state, monster);
+
+    assert!(
+        state
+            .apply_combat_post_dispatch_contact_for_actor_position(monster)
+            .is_some()
+    );
+
+    assert!(state.combat_actors[monster].is_status_disabled());
+    assert_eq!(state.active_objects[object].phase, STEADY_PHASE, "the freeze sentinel");
+    assert_eq!(state.active_objects[object].tile, tile_before, "sprite unchanged");
+
+    let wake = state
+        .apply_combat_sleep_wake_dispatch(monster, COMBAT_SLEEP_WAKE_SUCCESS_ROLL)
+        .expect("a disabled actor takes the wake dispatch");
+    assert!(wake.woke);
+    assert_eq!(state.active_objects[object].phase, 0, "the script restarts at step 0");
+}
