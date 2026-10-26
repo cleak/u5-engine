@@ -180,6 +180,16 @@ overwrites it with the headless one, and the next run then fails with
 `window matching '^Ultima V' did not appear within 60s`, which reads like a
 harness fault and is not one. Pass `--no-build` to skip it.
 
+`--key-sync sendevent` makes the harness hand both sides each `both` key at
+the same instant instead of focusing one window after the other, which left
+DOSBox about 1.4 s behind on every key. With `--fixed-clock` that matters: the
+original draws from its gameplay stream on every idle world pass (`prng.md`
+Section 4), so 1.4 s of skew is roughly twenty-five passes of drift before any
+pool draw. Measured 2026-10-26 on `nb-inn`: 1.40-1.47 s per key with the
+default serial delivery, 2-7 ms with `sendevent`. `--reaction-probe MS`
+additionally records when each side's frame reacted to every key. The suite
+appends the measured skew to each result line when the harness recorded one.
+
 `seeds.tsv` is the machine-readable half of the table below: it names the
 profile that holds each scenario's seed, where the table says what the seed
 must *contain*. Both are needed - the table is what lets a seed be rebuilt, the

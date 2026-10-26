@@ -31,6 +31,7 @@ Usage: paired_suite.py [--engine-dir DIR] [--list] [scenario...]
 """
 
 import argparse
+import json
 import os
 import pathlib
 import re
@@ -171,6 +172,26 @@ def compare(artifact: str) -> tuple[str, str]:
     return "RERUN", (result.stderr.strip().splitlines() or ["no summary line"])[-1]
 
 
+def key_skew_note(artifact: str) -> str:
+    """The harness's measured per-key delivery skew, when it recorded one.
+
+    With seed control both sides start from the same roll stream, and the
+    original draws once per idle world pass, so how far apart the two sides
+    received each key is part of whether a drawn pool row can agree at all.
+    """
+    try:
+        record = json.loads((pathlib.Path(artifact) / "record.json").read_text())
+    except (OSError, ValueError):
+        return ""
+    skew = record.get("key_skew") or {}
+    if not skew.get("paired_keys"):
+        return ""
+    return (
+        f"\tkey skew {record.get('key_sync', '?')}: max {skew['max_abs_skew_ms']:.0f} ms, "
+        f"mean {skew['mean_abs_skew_ms']:.0f} ms over {skew['paired_keys']} keys"
+    )
+
+
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--engine-dir", default=".")
@@ -191,11 +212,36 @@ def main() -> None:
             "time-of-day hook."
         ),
     )
+    parser.add_argument(
+        "--key-sync",
+        choices=("serial", "sendevent"),
+        help=(
+            "how the harness hands `both` keys to the two sides. `serial` (the "
+            "harness default) focuses each window in turn, so DOSBox gets every "
+            "key about 1.3 s after the engine - several idle-pass draws of the "
+            "gameplay stream (prng.md 4). `sendevent` keeps the engine focused "
+            "and gives DOSBox the same key in the same instant. Sets "
+            "U5_PAIRED_KEY_SYNC for `game-dev-u5-paired`."
+        ),
+    )
+    parser.add_argument(
+        "--reaction-probe",
+        type=int,
+        metavar="MS",
+        help=(
+            "record when each side's frame reacted to every `both` key, sampling "
+            "for up to MS milliseconds. Sets U5_PAIRED_REACTION_PROBE_MS."
+        ),
+    )
     parser.add_argument("scenarios", nargs="*")
     args = parser.parse_args()
     if args.fixed_clock:
         # Inherited by `game-dev-u5-paired`, and from it by both sides.
         os.environ["U5_FIXED_HOST_CLOCK"] = args.fixed_clock
+    if args.key_sync:
+        os.environ["U5_PAIRED_KEY_SYNC"] = args.key_sync
+    if args.reaction_probe:
+        os.environ["U5_PAIRED_REACTION_PROBE_MS"] = str(args.reaction_probe)
 
     table = seeds()
     # `seeds.tsv` lives in the same directory and is not a scenario.
@@ -322,7 +368,7 @@ def main() -> None:
         # failure nor a match.
         if verdict not in ("match", "PROBE"):
             failures += 1
-        print(f"{verdict:<6} {name}\t{artifact}\t{detail}", flush=True)
+        print(f"{verdict:<6} {name}\t{artifact}\t{detail}{key_skew_note(artifact)}", flush=True)
     for name, why in blocked:
         print(f"skip {name}\t{why}", flush=True)
     print(
