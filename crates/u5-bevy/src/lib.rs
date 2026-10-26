@@ -28208,11 +28208,8 @@ mod tests {
         );
         let mut rows = vec![String::new(); 13];
         for row in &surface.message_rows {
-            rows[usize::from(row.row - 11)] = format!(
-                "{}{}",
-                if row.prefixed { ">" } else { "" },
-                row.text
-            );
+            rows[usize::from(row.row - 11)] =
+                format!("{}{}", if row.prefixed { ">" } else { "" }, row.text);
         }
         rows
     }
@@ -28238,10 +28235,17 @@ mod tests {
         shell.tap(KeyCode::KeyE);
         shell.ticks(5);
         assert!(shell.visual().state.active_shrine.is_some());
-        assert!(shell.visual().state.cinematic_hold_owns_input(), "the approach walk");
+        assert!(
+            shell.visual().state.cinematic_hold_owns_input(),
+            "the approach walk"
+        );
         shell.tap(KeyCode::KeyX);
         shell.tap(KeyCode::KeyY);
-        assert_eq!(shell.visual().input_line, "", "nothing is read during the walk");
+        assert_eq!(
+            shell.visual().input_line,
+            "",
+            "nothing is read during the walk"
+        );
         assert_eq!(shell.visual().typed_keys.len(), 2, "both keys stay queued");
         let rows = shell_message_rows(&shell);
         assert_eq!(rows.last().map(String::as_str), Some(""), "{rows:?}");
@@ -28269,7 +28273,10 @@ mod tests {
             shell.tap(key);
         }
         shell.ticks(1);
-        assert!(shell.visual().state.cinematic_hold_owns_input(), "the six-tick wait");
+        assert!(
+            shell.visual().state.cinematic_hold_owns_input(),
+            "the six-tick wait"
+        );
         shell.tap(KeyCode::KeyQ);
         assert_eq!(shell.visual().input_line, "");
         let rows = shell_message_rows(&shell);
@@ -31360,7 +31367,11 @@ mod tests {
         use KeyCode::*;
         for key in [Numpad5, Numpad0] {
             assert_eq!(key_code_to_input_byte(key, false, false), None, "{key:?}");
-            assert_eq!(key_code_to_line_input_byte(key, false, false), None, "{key:?}");
+            assert_eq!(
+                key_code_to_line_input_byte(key, false, false),
+                None,
+                "{key:?}"
+            );
         }
         assert_eq!(key_code_to_input_byte(Numpad5, true, false), Some(b'5'));
         assert_eq!(key_code_to_input_byte(Numpad0, true, false), Some(b'0'));
