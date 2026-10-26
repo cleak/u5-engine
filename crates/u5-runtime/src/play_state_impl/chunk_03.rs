@@ -3062,9 +3062,12 @@ impl PlayState {
         if tile >= TOWN_ATTACK_WATER_TILE_LIMIT {
             return false;
         }
-        // The town K-Klimb mounted refusal's form: the reply continues the
-        // verb's echo row (`Attack-On foot!`, fifteen cells).
-        self.message = "-On foot!".to_string();
+        // The reply continues the verb's open `Attack-` echo row:
+        // `commands.md §5.8` gives `Attack-On foot!` with one hyphen
+        // (fifteen cells). Unlike the town K-Klimb horse refusal, whose
+        // literal carries its own hyphen (`Klimb--On foot!`), this one
+        // does not.
+        self.message = "On foot!".to_string();
         true
     }
 

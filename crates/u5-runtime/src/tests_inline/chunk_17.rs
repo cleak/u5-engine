@@ -1103,7 +1103,15 @@
         let clock_before = state.clock;
         handle_play_key_input(&mut state, 'A', "", Path::new("")).unwrap();
         assert!(state.active_direction_prompt.is_none(), "no direction is asked");
-        assert_eq!(state.message, "-On foot!");
+        assert_eq!(state.message, "On foot!");
+        state.flush_message_slot();
+        let rows: Vec<&str> = state
+            .message_entries()
+            .iter()
+            .map(|entry| entry.text.trim_end())
+            .collect();
+        // One hyphen, unlike town K's `Klimb--On foot!` (`commands.md §5.8`).
+        assert_eq!(rows, ["Attack-On foot!"]);
         assert_eq!(state.turn, 0, "the refusal is town A's no-action path");
         assert_eq!(state.clock, clock_before);
 
