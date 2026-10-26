@@ -508,7 +508,7 @@ fn handle_play_key_input_inner(
         return handle_active_shrine_restoration_key_input(state, key, suffix, game_dir);
     }
     if state.active_mix.is_some() {
-        return Ok(handle_active_mix_key_input(state, key, suffix));
+        return handle_active_mix_key_input(state, key, suffix, game_dir);
     }
     if state.active_new_order.is_some() {
         return Ok(handle_active_new_order_key_input(state, key, suffix));
@@ -743,7 +743,10 @@ fn handle_play_key_input_inner(
         // `karma.md §7`: "`M` always selects Mix Reagents, including at a
         // shrine" (`RETRACTIONS.md` R411); meditation is reached only through
         // E-Enter. §8 (R451): the Codex reader is likewise E-Enter on `0x11`.
-        state.mix_reagents_from_suffix(suffix);
+        let turn_before = state.turn;
+        let outcome = state.mix_reagents_from_suffix(suffix);
+        state.charge_mix_command_acted_exit(turn_before);
+        state.apply_post_turn_effects_after_outcome(turn_before, game_dir, outcome)?;
         return Ok(PlayInputDisposition::Continue);
     }
     if key == 'N' && !suffix.is_empty() {
@@ -1013,9 +1016,19 @@ fn handle_active_mix_key_input(
     state: &mut PlayState,
     key: char,
     suffix: &str,
-) -> PlayInputDisposition {
-    let _ = state.step_active_mix(key, suffix);
-    PlayInputDisposition::Continue
+    game_dir: &Path,
+) -> io::Result<PlayInputDisposition> {
+    let turn_before = state.turn;
+    if let Some(outcome) = state.step_active_mix(key, suffix) {
+        // `magic.md §6` (corrected 2026-10-25, u5-spec#302 Q1, R621): M-Mix
+        // "reports \"acted\" on every path, and the mode loop runs its
+        // ordinary per-turn epilogue exactly once after the command returns"
+        // - success, a wrong mix, `None!`, Escape at the reagent list, a zero
+        // quantity and `Nothing to mix!` alike (playtest S01).
+        state.charge_mix_command_acted_exit(turn_before);
+        state.apply_post_turn_effects_after_outcome(turn_before, game_dir, outcome)?;
+    }
+    Ok(PlayInputDisposition::Continue)
 }
 
 fn handle_active_rest_key_input(

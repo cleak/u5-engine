@@ -3235,6 +3235,19 @@ impl PlayState {
         }
     }
 
+    /// `magic.md §6` (corrected 2026-10-25, u5-spec#302 Q1, R621): "the
+    /// mixer itself adds no game time ... The command is not free, though"
+    /// - M-Mix reports "acted" on every exit, so the overworld and town
+    /// epilogue runs once when its last prompt closes. Nothing is charged
+    /// while the mixer session is still open; the dungeon charges its own
+    /// acted letters ([`Self::charge_tile_command_acted_exit`]).
+    pub fn charge_mix_command_acted_exit(&mut self, turn_before: u64) {
+        if self.active_mix.is_some() {
+            return;
+        }
+        self.charge_tile_command_acted_exit(turn_before);
+    }
+
     pub fn start_search_direction_prompt(&mut self) -> MoveOutcome {
         self.active_direction_prompt =
             Some(DirectionPromptSession::new(DirectionPromptKind::Search));

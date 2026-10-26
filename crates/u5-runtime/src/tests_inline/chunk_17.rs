@@ -973,8 +973,68 @@
         assert!(state.active_mix.is_none());
         assert_eq!(state.reagents[REAGENT_SULFUR_ASH], 1);
         assert_eq!(state.spell_charges[IN_LOR_SPELL_INDEX], 1);
-        assert_eq!(state.turn, 0);
+        // `magic.md §6` (corrected 2026-10-25, u5-spec#302 Q1, R621): the
+        // mixer adds no time of its own, but the command reports "acted",
+        // so the ordinary turn runs once (playtest S01).
+        assert_eq!(state.turn, 1);
         assert_eq!(state.message, "Mixing...\n\nDone!");
+    }
+
+    /// `magic.md §6` (corrected 2026-10-25, u5-spec#302 Q1, R621): "M-Mix
+    /// ... reports \"acted\" on every path, and the mode loop runs its
+    /// ordinary per-turn epilogue exactly once after the command returns.
+    /// In town that is one minute ... On the overworld it is the ordinary
+    /// outdoor turn." The listed exits include `No reagents owned!`,
+    /// `None!` after Escape or a bare Return, Escape at the reagent list, a
+    /// zero quantity and `Nothing to mix!`. The engine charged none of them
+    /// (playtest S01, S10, S12, S22).
+    #[test]
+    fn every_mmix_exit_spends_one_ordinary_turn_in_town_and_outdoors() {
+        let exits: [(&str, &[(char, &str)]); 6] = [
+            ("None! after Escape", &[('M', ""), ('\u{1b}', "")]),
+            ("None! after a bare Return", &[('M', ""), ('\r', "")]),
+            ("Escape at the reagent list", &[('M', ""), ('I', "L"), ('\u{1b}', "")]),
+            (
+                "a zero quantity",
+                &[('M', ""), ('I', "L"), ('1', ""), ('M', ""), ('0', ""), ('\r', "")],
+            ),
+            (
+                "Nothing to mix!",
+                &[('M', ""), ('I', "L"), ('M', ""), ('1', ""), ('\r', "")],
+            ),
+            (
+                "a successful mix",
+                &[('M', ""), ('I', "L"), ('1', ""), ('M', ""), ('1', ""), ('\r', "")],
+            ),
+        ];
+        for town in [true, false] {
+            for (label, keys) in exits {
+                let mut state = if town {
+                    test_state(open_grid(), 5, 5)
+                } else {
+                    britannia_state(open_world_grid(), 5, 5)
+                };
+                state.reagents = [0; REAGENT_COUNT];
+                state.reagents[REAGENT_SULFUR_ASH] = 9;
+                let clock_before = state.clock;
+                for (key, suffix) in keys {
+                    handle_play_key_input(&mut state, *key, suffix, Path::new("")).unwrap();
+                }
+                assert!(state.active_mix.is_none(), "{label}: the mixer closed");
+                assert_eq!(state.turn, 1, "{label} (town {town}) spends one turn");
+                assert_ne!(state.clock, clock_before, "{label} (town {town}) advances the clock");
+            }
+            // `No reagents owned!` refuses before any prompt opens.
+            let mut state = if town {
+                test_state(open_grid(), 5, 5)
+            } else {
+                britannia_state(open_world_grid(), 5, 5)
+            };
+            state.reagents = [0; REAGENT_COUNT];
+            handle_play_key_input(&mut state, 'M', "", Path::new("")).unwrap();
+            assert!(state.message.contains(MMIX_NO_REAGENTS_OWNED_MESSAGE));
+            assert_eq!(state.turn, 1, "No reagents owned! (town {town}) spends one turn");
+        }
     }
 
     /// `magic.md §6` step 4, "What Return does": "A leading minus is

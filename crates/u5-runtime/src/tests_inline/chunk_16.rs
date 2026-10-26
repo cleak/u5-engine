@@ -1524,7 +1524,8 @@ BRITANNIA 11 21
 
         assert_eq!(state.reagents[REAGENT_SULFUR_ASH], 0);
         assert_eq!(state.spell_charges[IN_LOR_SPELL_INDEX], 1);
-        assert_eq!(state.turn, 0);
+        // `magic.md §6` (u5-spec#302 Q1, R621): every Mix exit is acted.
+        assert_eq!(state.turn, 1);
         assert_eq!(state.message, "Mixing...\n\nDone!");
     }
 
