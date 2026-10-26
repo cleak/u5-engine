@@ -784,6 +784,15 @@ fn handle_play_key_input_inner(
     if matches!(key, 'J' | 'j')
         && (!suffix.is_empty() || matches!(state.area, Area::Dungeon { .. }))
     {
+        // `dungeon-mode.md §4` step 1 / `§15`: the dungeon's minute sits at
+        // the head of every iteration, whatever the command. `J` is read by
+        // this shared intercept rather than the dungeon handler, so it runs
+        // that loop head itself, as `Z` does above; after a no-action
+        // command the previous head's charge was still standing and the J
+        // spent no minute (playtest S16).
+        if matches!(state.area, Area::Dungeon { .. }) {
+            state.advance_dungeon_loop_minute();
+        }
         state.begin_command_echo_for(Command::Jimmy);
         let turn_before = state.turn;
         let member_index = if suffix.is_empty() {

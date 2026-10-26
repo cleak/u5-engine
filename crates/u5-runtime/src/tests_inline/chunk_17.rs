@@ -1266,6 +1266,33 @@
         assert_eq!(clock_after(&['P', 'Z']), two_minutes);
     }
 
+    /// `dungeon-mode.md §4` step 1 and `commands.md §3` (Dungeon): "the
+    /// dungeon loop advances its own clock at the head of the iteration,
+    /// before the command is even parsed, so no dungeon command is
+    /// distinguished by this status for timekeeping purposes." A `J` after
+    /// the no-action `W` spent no minute, the Z defect of p10 R12 on J
+    /// (playtest S16).
+    #[test]
+    fn dungeon_jimmy_after_a_no_action_command_still_spends_its_minute() {
+        let clock_after = |keys: &[char]| {
+            let mut state = dungeon_state(open_dungeon_record(), 0, 1, 1);
+            for key in keys {
+                handle_play_key_input(&mut state, *key, "", Path::new("")).unwrap();
+            }
+            state.clock
+        };
+        let start = dungeon_state(open_dungeon_record(), 0, 1, 1).clock;
+        let minutes = |count: u8| {
+            let mut clock = start;
+            clock.advance_minutes(count);
+            clock
+        };
+        assert_eq!(clock_after(&['J']), minutes(1), "J alone spends one minute");
+        assert_eq!(clock_after(&['W', 'J']), minutes(2), "W;J is two iterations");
+        assert_eq!(clock_after(&['W', 'J', 'J', 'J']), minutes(4));
+        assert_eq!(clock_after(&[' ', 'J']), minutes(2));
+    }
+
     #[test]
     fn active_direction_prompt_routes_attack_and_cancel() {
         let mut state = world_state(open_world_grid(), 5, 5);
