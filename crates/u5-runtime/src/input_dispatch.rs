@@ -913,7 +913,7 @@ fn handle_active_z_stats_key_input(
 /// `inventory.md §5` / `commands.md §4`: once R-Ready's or Z-stats' last
 /// prompt has closed, pay the owed exploration charge and run the
 /// post-action pass that follows it (playtest F23).
-fn settle_exploration_acted_charge(state: &mut PlayState, game_dir: &Path) -> io::Result<()> {
+pub fn settle_exploration_acted_charge(state: &mut PlayState, game_dir: &Path) -> io::Result<()> {
     if let Some(turn_before) = state.settle_exploration_acted_charge() {
         // The exchange's closing reply (`Item: Done`, `Status: Done`,
         // `Player: None!`) is already committed when the charge is paid.
@@ -1102,6 +1102,10 @@ fn handle_active_shrine_key_input(
     if let Some(outcome) = state.step_active_shrine(key, suffix, game_dir)? {
         state.apply_post_turn_effects_after_outcome(turn_before, game_dir, outcome)?;
     }
+    // The E-Enter shrine arm's acted turn, once the session and its exit
+    // pacing have finished (`commands.md §3`, playtest S14); while the exit
+    // presentation is still staged, the exploration turn gate pays it.
+    settle_exploration_acted_charge(state, game_dir)?;
     Ok(PlayInputDisposition::Continue)
 }
 

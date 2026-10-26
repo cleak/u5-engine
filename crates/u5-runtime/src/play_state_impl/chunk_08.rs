@@ -1884,7 +1884,19 @@ impl PlayState {
             if self.complete_open_direction_echo("Enter ", SHRINE_ENTER_ECHO_PREFIX) {
                 self.push_message_entry(virtue.name(), false);
             }
-            return self.begin_shrine_kneel_presentation(game_dir, virtue);
+            let outcome = self.begin_shrine_kneel_presentation(game_dir, virtue)?;
+            // `commands.md §3`, the `E` row: on the overworld "every
+            // non-transition outcome, namely `ruins`, the shrine arm, ...
+            // spends a turn (acted)" (`karma.md §7.2`'s window also counts
+            // one clock advance). The meditation's own world ticks are
+            // presentation, so the ordinary outdoor turn is owed once the
+            // shrine session closes, on every outcome (playtest S14). The
+            // natural-moongate dispatch of the same overlay is not E and
+            // owes nothing here.
+            if self.active_shrine.is_some() {
+                self.exploration_acted_charge_owed = true;
+            }
+            return Ok(outcome);
         }
         // `karma.md §8` (`cleak/u5-spec#250`, `RETRACTIONS.md` R451): "Use
         // **E-Enter while standing on live terrain tile `0x11`** to begin the

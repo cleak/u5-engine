@@ -79,6 +79,12 @@ impl PlayState {
             self.presentation_entry_chrome = None;
             self.shrine_approach_walk = None;
         }
+        // `commands.md §3`: an overworld E-Enter at a shrine is acted, and
+        // the mode loop's epilogue runs once the E handler - meditation and
+        // exit pacing alike (`karma.md §7`) - has returned. That is here, at
+        // the head of the next prompt, once the staged exit has drained
+        // (playtest S14).
+        crate::input_dispatch::settle_exploration_acted_charge(self, game_dir)?;
         // A rescue cinematic is already running for this defeat. The roster
         // stays Defeated until its restoration loop (`blackthorn.md §7` step
         // 22), so without this the gate would start a second rescue on every

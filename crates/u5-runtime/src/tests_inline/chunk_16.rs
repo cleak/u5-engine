@@ -2196,6 +2196,41 @@ BRITANNIA 11 21
         let _ = fs::remove_dir_all(dir);
     }
 
+    /// `commands.md §3`, the `E` row: on the overworld "every non-transition
+    /// outcome, namely `ruins`, the shrine arm, ... spends a turn (acted)";
+    /// only `Enter What?` is free. A finished meditation - a blank virtue
+    /// answer, or a wrong virtue then a blank mantra - cost nothing here
+    /// (playtest S14). The turn is charged once, after the E handler has
+    /// returned - the meditation and its exit pacing (`karma.md §7`) - at
+    /// the head of the next prompt, so the presentation's own wind draws
+    /// stay ahead of the turn's.
+    #[test]
+    fn an_e_enter_shrine_visit_spends_one_outdoor_turn_when_it_ends() {
+        for keys in [&[('\r', "")][..], &[('X', "X\r"), ('\r', "")][..]] {
+            let dir = debug_game_dir();
+            fs::write(dir.join(SHRINE_TABLE_FILE), "BRITANNIA 10 20 HONESTY 25\n").unwrap();
+            let mut grid = open_world_grid();
+            grid[world_cell_index(10, 20)] = SHRINE_MARKER_TILE;
+            let mut state = britannia_state(grid, 10, 20);
+
+            handle_play_key_input(&mut state, 'E', "", &dir).unwrap();
+            state.flush_staged_narration();
+            assert!(state.active_shrine.is_some());
+            assert_eq!(state.turn, 0, "nothing is charged while the shrine is open");
+            for (key, suffix) in keys {
+                handle_play_key_input(&mut state, *key, suffix, &dir).unwrap();
+                state.flush_staged_narration();
+            }
+            assert!(state.active_shrine.is_none(), "{keys:?}: the meditation ended");
+            state.apply_exploration_turn_gate(&dir).unwrap();
+            assert_eq!(state.turn, 1, "{keys:?}: one outdoor turn");
+            state.apply_exploration_turn_gate(&dir).unwrap();
+            assert_eq!(state.turn, 1, "{keys:?}: charged once");
+            assert_eq!(state.clock, GameClock::new(12, 2).unwrap());
+            let _ = fs::remove_dir_all(dir);
+        }
+    }
+
     #[test]
     fn escape_at_the_virtue_prompt_erases_the_answer_and_keeps_the_prompt() {
         // `karma.md §7`: "Escape erases the whole current answer and keeps
