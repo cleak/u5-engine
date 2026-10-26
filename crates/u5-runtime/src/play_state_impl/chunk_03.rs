@@ -6869,7 +6869,23 @@ impl PlayState {
         // "Sextant prints `Position:`; In Wis has no separate `Locate` label."
         // §5.1 says the same from the other side - In Wis completes with "Its
         // location readout, with no appended generic completion line."
-        self.message = sextant_coordinate_pair_line(self.player.y as u8, self.player.x as u8);
+        //
+        // §8: "The entire coordinate pair, including its punctuation and
+        // separating space, uses the runic font (RUNES.CH). The formatter
+        // selects that font before the leading newline and restores the
+        // normal text font before the trailing newline", and In Wis "invokes
+        // the same formatter directly" - so the row is runic here exactly as
+        // it is under the Sextant's `Position:` (playtest S08). The feeds
+        // themselves follow the ordinary row rules.
+        let pair = sextant_coordinate_pair_line(self.player.y as u8, self.player.x as u8);
+        self.flush_message_slot();
+        self.push_message_transcript_lines("\n");
+        for row in pair.split('\n').filter(|row| !row.is_empty()) {
+            self.push_runic_message_entry(row);
+        }
+        self.adopt_flushed_message(pair);
+        // The printer's trailing feed closes the coordinate row.
+        self.message_row_open_mid_line = false;
         MoveOutcome::Observed
     }
 

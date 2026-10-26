@@ -131,3 +131,36 @@ fn playtest_s04_attribute_page_magic_points_take_two_cells() {
         state.active_z_stats = None;
     }
 }
+
+/// S08: `magic.md §8`: "The entire coordinate pair, including its
+/// punctuation and separating space, uses the runic font (RUNES.CH) ... In
+/// Wis ... invokes the same formatter directly." The Sextant's row was
+/// already runic; Locate's was logged in the text font.
+#[test]
+fn playtest_s08_in_wis_prints_its_coordinate_pair_in_runes() {
+    let mut state = britannia_state(open_world_grid(), 0x23, 0xaf);
+    state.spell_charges[IN_WIS_SPELL_INDEX] = 1;
+    state.party[0].mana = IN_WIS_COST;
+    state.party[0].level = IN_WIS_COST;
+    handle_play_key_input(&mut state, 'C', "1WI", Path::new("")).unwrap();
+    state.flush_message_slot();
+    let entry = state
+        .message_transcript
+        .iter()
+        .rev()
+        .find(|entry| entry.text == "K'P\", C'D\"")
+        .unwrap_or_else(|| panic!("{:?}", playtest_transcript_rows(&state)));
+    assert!(!entry.glyphs.is_empty());
+    assert!(
+        entry
+            .glyphs
+            .iter()
+            .all(|glyph| glyph.font == TlkGlyphFont::Runic),
+        "{:?}",
+        entry.glyphs
+    );
+    // Logged once, with the printer's leading feed still its own row.
+    let rows = playtest_transcript_rows(&state);
+    assert_eq!(rows.iter().filter(|row| row.contains("K'P")).count(), 1, "{rows:?}");
+    assert!(!state.message_row_open_mid_line);
+}
