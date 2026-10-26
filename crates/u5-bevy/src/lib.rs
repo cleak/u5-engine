@@ -13725,7 +13725,20 @@ fn drive_visual(
             .and_then(|hold| hold.current())
             == Some(u5_runtime::text_hold::TextHoldKind::TimedPause);
         let effects_before = visual.state.sound_effect_serial;
-        let read = if visual_line_prompt_active(&visual.state) {
+        let line_prompt_active = visual_line_prompt_active(&visual.state);
+        // `karma.md §7` "What the holds do and do not do": a hold reads no
+        // key and prints nothing - "A key typed during the approach walk, or
+        // during any later wait, is still queued when the next prompt opens
+        // and is consumed by it." The shrine's session is already in its
+        // virtue or mantra phase while the walk and the six- and twelve-tick
+        // waits run, so this editor used to take the key at once and echo it
+        // on a row no prompt had opened yet (playtest S28). Leave it queued
+        // for the reader that opens when the hold ends.
+        if line_prompt_active && visual.state.cinematic_hold_owns_input() {
+            visual.typed_keys.push_front(typed);
+            break;
+        }
+        let read = if line_prompt_active {
             let game_dir = visual.game_dir.clone();
             let v: &mut VisualState = visual.as_mut();
             let result = handle_visual_line_key(
@@ -28160,6 +28173,97 @@ mod tests {
         // The shop's text is transcript rows now, which the caller paints
         // over the surface rather than into it, so the rows are what moved.
         assert_ne!(before.message_rows, after.message_rows);
+    }
+
+    #[cfg(feature = "original-asset-tests")]
+    fn shell_message_rows(shell: &VisualShellHarness) -> Vec<String> {
+        let font = load_ibm_ch_font(original_asset_dir()).unwrap();
+        let visual = shell.visual();
+        let line = visual.input_line.clone();
+        let surface = render_integrated_status_framebuffer(
+            &mut visual.state.clone(),
+            &line,
+            "",
+            play_ctx(&font),
+            true,
+        );
+        let mut rows = vec![String::new(); 13];
+        for row in &surface.message_rows {
+            rows[usize::from(row.row - 11)] = format!(
+                "{}{}",
+                if row.prefixed { ">" } else { "" },
+                row.text
+            );
+        }
+        rows
+    }
+
+    /// Playtest S28, `karma.md §7` "What the holds do and do not do": the
+    /// approach walk and the six-tick wait after the virtue answer read no
+    /// key and print nothing; a key typed during them "is still queued when
+    /// the next prompt opens and is consumed by it". The shell's line editor
+    /// took and echoed such keys on a row no prompt had opened yet.
+    #[test]
+    #[cfg(feature = "original-asset-tests")]
+    fn keys_typed_during_a_shrine_hold_stay_queued_until_the_prompt_opens() {
+        let mut shell = VisualShellHarness::new(
+            "shrine-hold-typeahead",
+            PlayOptions {
+                target: PlayTarget::World(WorldPlane::Britannia),
+                start: Some((233, 66)),
+                clock: u5_runtime::GameClock::new(12, 0).unwrap(),
+                ..PlayOptions::default()
+            },
+        );
+        shell.ticks(30);
+        shell.tap(KeyCode::KeyE);
+        shell.ticks(5);
+        assert!(shell.visual().state.active_shrine.is_some());
+        assert!(shell.visual().state.cinematic_hold_owns_input(), "the approach walk");
+        shell.tap(KeyCode::KeyX);
+        shell.tap(KeyCode::KeyY);
+        assert_eq!(shell.visual().input_line, "", "nothing is read during the walk");
+        assert_eq!(shell.visual().typed_keys.len(), 2, "both keys stay queued");
+        let rows = shell_message_rows(&shell);
+        assert_eq!(rows.last().map(String::as_str), Some(""), "{rows:?}");
+        assert!(!rows.iter().any(|row| row.contains("XY")), "{rows:?}");
+
+        shell.ticks(400);
+        assert!(!shell.visual().state.cinematic_hold_owns_input());
+        // The virtue prompt's reader consumes the queued keys.
+        assert_eq!(shell.visual().input_line, "XY");
+        let rows = shell_message_rows(&shell);
+        assert_eq!(rows.last().map(String::as_str), Some(":XY"), "{rows:?}");
+
+        for key in [
+            KeyCode::Backspace,
+            KeyCode::Backspace,
+            KeyCode::KeyH,
+            KeyCode::KeyO,
+            KeyCode::KeyN,
+            KeyCode::KeyE,
+            KeyCode::KeyS,
+            KeyCode::KeyT,
+            KeyCode::KeyY,
+            KeyCode::Enter,
+        ] {
+            shell.tap(key);
+        }
+        shell.ticks(1);
+        assert!(shell.visual().state.cinematic_hold_owns_input(), "the six-tick wait");
+        shell.tap(KeyCode::KeyQ);
+        assert_eq!(shell.visual().input_line, "");
+        let rows = shell_message_rows(&shell);
+        assert!(!rows.iter().any(|row| row == "Q"), "{rows:?}");
+
+        shell.ticks(200);
+        assert!(!shell.visual().state.cinematic_hold_owns_input());
+        let rows = shell_message_rows(&shell);
+        assert_eq!(
+            rows[rows.len() - 3..],
+            [":HONESTY", "", "Mantra:Q"],
+            "the first ask consumes the queued key: {rows:?}"
+        );
     }
 
     #[test]
