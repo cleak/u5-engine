@@ -26035,8 +26035,11 @@ mod tests {
         // lost their member key: a one-member party's Jimmy picks silently
         // (`commands.md §5.8`, -2). The two endgame routes that start during
         // the walk-in page the greeting before their first answer
-        // (`endgame.md §5.1`, playtest K09, +2).
-        assert_eq!(reports.len(), 2066);
+        // (`endgame.md §5.1`, playtest K09, +2). The three dungeon ladder
+        // routes climb through K's `Klimb-U/D-` chooser instead of `<` and
+        // `>`, which are not dungeon commands (`dungeon-mode.md §4`,
+        // playtest S26, +6).
+        assert_eq!(reports.len(), 2072);
         for report in &reports {
             assert!(report.path.exists());
             assert_eq!(report.width, VISUAL_PLAY_FRAME_WIDTH);
@@ -26051,7 +26054,7 @@ mod tests {
             }
         }
         let manifest = fs::read_to_string(dir.join("manifest.txt")).unwrap();
-        assert!(manifest.contains("coverage\tvisual-route-steps\t2066"));
+        assert!(manifest.contains("coverage\tvisual-route-steps\t2072"));
         assert!(manifest.contains("coverage\tvisual-key-route-steps\t90"));
         assert!(manifest.contains("coverage\tvisual-route-combat-steps\t"));
         assert!(manifest.contains("route-world-movement-01-d\t320x200\t"));
