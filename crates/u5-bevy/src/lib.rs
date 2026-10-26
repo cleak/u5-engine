@@ -19304,7 +19304,19 @@ fn key_code_to_input_byte(key: KeyCode, shift_pressed: bool, control_pressed: bo
         // (`commands.md §5.2`), not the `0` that opens Set Active Player
         // (playtest H17).
         Digit0 if shift_pressed => b')',
-        Digit0 | Numpad0 => b'0',
+        // `input.md §5`: "With no modifier, the keypad delivers the cursor
+        // keys of the scancode table, and keypad `5` is discarded"; only
+        // Shift (or NumLock, which this frontend cannot see) makes the keypad
+        // deliver digits, and "`5` stays a digit". Keypad `0` is Insert
+        // without a modifier, which the extended-key table does not carry.
+        // This frontend reads the rest of the keypad as NumLock-off cursor
+        // keys, so the centre and `0` keys follow the same model: they used
+        // to arrive as plain digits, so keypad 5 alone slept five hours at
+        // the dungeon hours prompt and opened Set Active Player in town
+        // (`dungeon-mode.md §11`, playtest S31).
+        Numpad0 | Numpad5 if !shift_pressed => return None,
+        Numpad0 => b'0',
+        Digit0 => b'0',
         Digit1 => b'1',
         Digit2 => b'2',
         Digit3 => b'3',
@@ -31332,7 +31344,6 @@ mod tests {
             (NumpadDivide, false, b'/'),
             (Digit0, true, b')'),
             (Digit0, false, b'0'),
-            (Numpad0, false, b'0'),
         ] {
             assert_eq!(
                 key_code_to_input_byte(key, shift, false),
@@ -31340,6 +31351,29 @@ mod tests {
                 "{key:?} shift={shift}"
             );
         }
+    }
+
+    /// Playtest S31, `input.md §5`: "With no modifier, the keypad delivers
+    /// the cursor keys of the scancode table, and keypad `5` is discarded";
+    /// with Shift held it delivers digits, where "`5` stays a digit". The
+    /// shell reads keypad 1-9 as NumLock-off cursor keys, so the centre key
+    /// and keypad 0 (Insert) produce nothing unmodified.
+    #[test]
+    fn unmodified_keypad_five_and_zero_produce_no_key() {
+        use KeyCode::*;
+        for key in [Numpad5, Numpad0] {
+            assert_eq!(key_code_to_input_byte(key, false, false), None, "{key:?}");
+            assert_eq!(key_code_to_line_input_byte(key, false, false), None, "{key:?}");
+        }
+        assert_eq!(key_code_to_input_byte(Numpad5, true, false), Some(b'5'));
+        assert_eq!(key_code_to_input_byte(Numpad0, true, false), Some(b'0'));
+        // The rest of the keypad is unchanged either way.
+        assert_eq!(
+            key_code_to_input_byte(Numpad1, false, false),
+            Some(u5_runtime::INPUT_CODE_SOUTHWEST)
+        );
+        assert_eq!(key_code_to_input_byte(Digit5, false, false), Some(b'5'));
+        assert_eq!(key_code_to_input_byte(Digit0, false, false), Some(b'0'));
     }
 
     /// Playtest H16 and H17 through the shell: in a town, `/` and Shift with
