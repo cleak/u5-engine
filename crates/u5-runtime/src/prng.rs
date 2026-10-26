@@ -33,9 +33,46 @@ pub struct HostClockTime {
     pub hundredth: u8,
 }
 
+/// QA seed control: when this environment variable holds `HH:MM:SS.CC`, every
+/// host-clock seed event reads that fixed time instead of the host's.
+///
+/// `prng.md §3`: every seeding event "performs one time-of-day read that
+/// returns all four fields together", and the seed is a pure function of
+/// them. The paired harness sets the same value on the stock side, where a
+/// small resident hook answers the DOS time-of-day call with it, so both
+/// sides start from - and every re-seed returns to - the same state, and
+/// their draws can be compared one for one. Unset, the host clock is read
+/// as the original reads it.
+pub const FIXED_HOST_CLOCK_ENV: &str = "U5_FIXED_HOST_CLOCK";
+
 impl HostClockTime {
+    /// Parse `HH:MM:SS.CC` (hundredths), the DOS time-of-day fields in the
+    /// ranges the DOS call returns.
+    pub fn parse(text: &str) -> Option<Self> {
+        let (hms, hundredth) = text.trim().split_once('.')?;
+        let mut fields = hms.split(':');
+        let hour: u8 = fields.next()?.parse().ok()?;
+        let minute: u8 = fields.next()?.parse().ok()?;
+        let second: u8 = fields.next()?.parse().ok()?;
+        let hundredth: u8 = hundredth.parse().ok()?;
+        if fields.next().is_some() || hour > 23 || minute > 59 || second > 59 || hundredth > 99 {
+            return None;
+        }
+        Some(Self { hour, minute, second, hundredth })
+    }
+
+    /// The fixed QA time from [`FIXED_HOST_CLOCK_ENV`], when set and valid.
+    pub fn fixed_from_env() -> Option<Self> {
+        std::env::var(FIXED_HOST_CLOCK_ENV)
+            .ok()
+            .and_then(|text| Self::parse(&text))
+    }
+
     /// Take the one local time-of-day sample used by a host-clock seed event.
     pub fn now() -> Self {
+        if let Some(fixed) = Self::fixed_from_env() {
+            return fixed;
+        }
         let now = Local::now();
         Self {
             hour: now.hour() as u8,
@@ -114,6 +151,20 @@ pub fn u5_prng_range_u16(state: &mut u16, low: u16, high: u16) -> u16 {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn a_fixed_host_clock_parses_the_dos_time_fields() {
+        use super::HostClockTime;
+        assert_eq!(
+            HostClockTime::parse("12:34:56.78"),
+            Some(HostClockTime { hour: 12, minute: 34, second: 56, hundredth: 78 })
+        );
+        // The published vector for that time (`prng.md §3`).
+        assert_eq!(HostClockTime::parse("12:34:56.78").unwrap().seed(), 0x93D);
+        for bad in ["24:00:00.00", "12:60:00.00", "12:00:60.00", "12:00:00.100", "12:00:00", "1:2:3:4.5", ""] {
+            assert_eq!(HostClockTime::parse(bad), None, "{bad}");
+        }
+    }
+
     use super::*;
 
     #[test]

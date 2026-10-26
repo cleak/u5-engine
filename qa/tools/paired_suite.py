@@ -180,8 +180,22 @@ def main() -> None:
         action="store_true",
         help="skip the visual rebuild; only safe when nothing else has built since",
     )
+    parser.add_argument(
+        "--fixed-clock",
+        metavar="HH:MM:SS.CC",
+        help=(
+            "seed control: both sides read this DOS time-of-day at every PRNG "
+            "seeding event (prng.md 3), so their roll streams can be compared "
+            "draw for draw. Sets U5_FIXED_HOST_CLOCK, which the clean engine "
+            "reads and the RemoteGameDev DOSBox adapter answers with a resident "
+            "time-of-day hook."
+        ),
+    )
     parser.add_argument("scenarios", nargs="*")
     args = parser.parse_args()
+    if args.fixed_clock:
+        # Inherited by `game-dev-u5-paired`, and from it by both sides.
+        os.environ["U5_FIXED_HOST_CLOCK"] = args.fixed_clock
 
     table = seeds()
     # `seeds.tsv` lives in the same directory and is not a scenario.
