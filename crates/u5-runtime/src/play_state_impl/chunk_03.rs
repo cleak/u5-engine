@@ -3028,10 +3028,37 @@ impl PlayState {
     }
 
     pub fn start_attack_direction_prompt(&mut self) -> MoveOutcome {
+        if self.town_attack_on_foot_refusal() {
+            return MoveOutcome::Blocked;
+        }
         self.active_direction_prompt =
             Some(DirectionPromptSession::new(DirectionPromptKind::Attack));
         self.message = self.render_active_direction_prompt();
         MoveOutcome::Observed
+    }
+
+    /// `commands.md §5.8` and `town-mode.md` A-Attack (added 2026-10-25,
+    /// u5-spec#302 Q4): in town, "before asking for a direction it refuses
+    /// when the party itself stands on a water cell (tile id below 4) while
+    /// its transport marker is anything other than exactly on foot: it
+    /// prints `On foot!` after the `Attack-` echo, asks for no direction and
+    /// costs no turn". The `commands.md §3` table files it as town A's only
+    /// "no action" path. On foot on water, or mounted on dry ground, the
+    /// direction prompt follows as usual. Returns whether it refused.
+    pub fn town_attack_on_foot_refusal(&mut self) -> bool {
+        if !matches!(self.area, Area::Town { .. }) || self.player.transport.is_foot() {
+            return false;
+        }
+        let Some(&tile) = self.grid.get(self.player.y * TOWN_GRID_SIDE + self.player.x) else {
+            return false;
+        };
+        if tile >= TOWN_ATTACK_WATER_TILE_LIMIT {
+            return false;
+        }
+        // The town K-Klimb mounted refusal's form: the reply continues the
+        // verb's echo row (`Attack-On foot!`, fifteen cells).
+        self.message = "-On foot!".to_string();
+        true
     }
 
     pub fn start_fire_direction_prompt(&mut self) -> MoveOutcome {

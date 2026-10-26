@@ -99,6 +99,10 @@ pub const fn town_resident_name(scene_byte: u8) -> Option<&'static str> {
 
 /// `town-mode.md §3`: per-location grid dimensions and floor byte size.
 pub const TOWN_GRID_SIDE: usize = 32;
+
+/// `commands.md §5.8` (u5-spec#302 Q4): the town A-Attack on-foot refusal's
+/// water test, "tile id below 4: deep water, water or shoals".
+pub const TOWN_ATTACK_WATER_TILE_LIMIT: u8 = 4;
 pub const TOWN_GRID_BYTES: usize = TOWN_GRID_SIDE * TOWN_GRID_SIDE;
 
 /// `town-mode.md §15`: "When that cell represents any coordinate outside

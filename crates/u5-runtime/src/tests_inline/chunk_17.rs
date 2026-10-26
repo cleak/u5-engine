@@ -1037,6 +1037,35 @@
         }
     }
 
+    /// `commands.md §5.8` and `town-mode.md` A-Attack (added 2026-10-25,
+    /// u5-spec#302 Q4): in town, a party whose own cell is water (tile id
+    /// below 4) and whose transport is not exactly on foot gets `Attack-On
+    /// foot!` before any direction prompt, at no turn cost. On foot on that
+    /// water, or mounted on dry ground, the direction prompt follows.
+    #[test]
+    fn town_attack_on_water_refuses_on_foot_before_the_direction_prompt() {
+        let water = 2u8;
+        let mut grid = open_grid();
+        grid[5 * TOWN_GRID_SIDE + 5] = water;
+        let mut state = test_state(grid.clone(), 5, 5);
+        mount_horse(&mut state);
+        let clock_before = state.clock;
+        handle_play_key_input(&mut state, 'A', "", Path::new("")).unwrap();
+        assert!(state.active_direction_prompt.is_none(), "no direction is asked");
+        assert_eq!(state.message, "-On foot!");
+        assert_eq!(state.turn, 0, "the refusal is town A's no-action path");
+        assert_eq!(state.clock, clock_before);
+
+        let mut on_foot = test_state(grid, 5, 5);
+        handle_play_key_input(&mut on_foot, 'A', "", Path::new("")).unwrap();
+        assert!(on_foot.active_direction_prompt.is_some(), "on foot, the prompt opens");
+
+        let mut mounted_dry = test_state(open_grid(), 5, 5);
+        mount_horse(&mut mounted_dry);
+        handle_play_key_input(&mut mounted_dry, 'A', "", Path::new("")).unwrap();
+        assert!(mounted_dry.active_direction_prompt.is_some(), "dry ground, the prompt opens");
+    }
+
     /// `magic.md §6` step 4, "What Return does": "A leading minus is
     /// accepted by the reader but never survives validation [...] a
     /// negative quantity is larger than any counter, always takes the
