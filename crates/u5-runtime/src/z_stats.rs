@@ -1380,6 +1380,9 @@ pub const Z_STATS_MAX_HP_LABEL: &str = "  HM:";
 pub const Z_STATS_DEXTERITY_LABEL: &str = "Dex=";
 pub const Z_STATS_EXPERIENCE_LABEL: &str = "  Ex:";
 pub const Z_STATS_MAGIC_LABEL: &str = "    Magic:";
+/// `inventory.md §4.7` field widths (issue #302 Q2): "magic points take two
+/// cells, space-padded (`Magic:_7`, `Magic:25`)", straight after the colon.
+pub const Z_STATS_MAGIC_VALUE_CELLS: usize = 2;
 /// `inventory.md §4.7` equipment-page heading literal `Arms\n\n`.
 pub const Z_STATS_ARMS_HEADING: &str = "Arms";
 /// `inventory.md §4.5` moonstone row sentinel: "The word `Moonstone_`,

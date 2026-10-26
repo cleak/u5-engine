@@ -4488,7 +4488,12 @@ impl PlayState {
             Z_STATS_EXPERIENCE_LABEL,
             experience,
         );
-        rows[7] = format!("{Z_STATS_MAGIC_LABEL} {}", member.mana);
+        // Two cells right after the colon: `____Magic:_7`, `Magic:25`. A
+        // literal space before a padded field gave three (playtest S04).
+        rows[7] = format!(
+            "{Z_STATS_MAGIC_LABEL}{:>Z_STATS_MAGIC_VALUE_CELLS$}",
+            member.mana
+        );
     }
 
     pub fn step_active_z_stats(&mut self, key: char, suffix: &str) -> bool {

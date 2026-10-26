@@ -116,3 +116,18 @@ fn playtest_s17_overworld_enter_on_grass_prints_capital_what() {
     );
     let _ = fs::remove_dir_all(dir);
 }
+
+/// S04: `inventory.md §4.7` field widths (issue #302 Q2): "magic points
+/// take two cells, space-padded (`Magic:_7`, `Magic:25`)", and the executed
+/// row 8 is `____Magic:_7`. A two-digit value follows the colon directly.
+#[test]
+fn playtest_s04_attribute_page_magic_points_take_two_cells() {
+    let mut state = test_state(open_grid(), 5, 5);
+    for (mana, expected) in [(7, "    Magic: 7"), (25, "    Magic:25"), (99, "    Magic:99")] {
+        state.party[0].mana = mana;
+        assert_eq!(state.z_stats_for_party(0), MoveOutcome::Observed);
+        let session = state.active_z_stats.clone().expect("a live page");
+        assert_eq!(state.z_stats_panel_rows(&session)[7], expected);
+        state.active_z_stats = None;
+    }
+}
