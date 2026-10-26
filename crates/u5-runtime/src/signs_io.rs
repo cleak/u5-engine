@@ -404,6 +404,88 @@ pub fn sign_payload_rendered(bytes: &[u8]) -> crate::tlk_runner::TlkRenderedText
     out
 }
 
+/// `formats/signs-dat.md §2` and §5 step 4 (issue #302 Q3, `RETRACTIONS.md`
+/// R623): "The window is 2000 bytes from the absolute offset in the scene's
+/// directory entry."
+pub const SIGNS_DAT_READ_WINDOW_BYTES: usize = 2000;
+/// `formats/signs-dat.md §2`: the window is "first fill[ed] ... with the
+/// all-ones byte (255)", which survives only past a short read; §3's only end
+/// test is this byte "where the next header would start".
+pub const SIGNS_DAT_WINDOW_FILL_BYTE: u8 = 0xFF;
+
+/// The Look path's sign lookup over the raw file, `formats/signs-dat.md §5`
+/// (issue #302 Q3, R623).
+///
+/// - A scene outside the directory, or a zero directory entry, finds nothing
+///   (the caller prints the §6 placard; §5 step 3, §7).
+/// - The 2000-byte window starts at the scene's directory offset and is
+///   scanned record by record across later scenes' blocks; "only the record's
+///   `z`, `x` and `y` bytes are compared" and the first match wins (step 6).
+/// - A record "can match only if its whole four-byte header lies inside the
+///   window". The scan ends at the window's end, at a 255 byte where a header
+///   would start, or at a record with no terminator - step 7's clean contract,
+///   a deliberate divergence from the original's unbounded scan.
+/// - The zero-padding pseudo-record (an all-zero header with an empty body) is
+///   ignored, the second deliberate divergence.
+/// - A matched record whose text runs past the window is printed in full from
+///   the file, as the clean contract allows; an alias bridge resolves to the
+///   following record's shared body (§3).
+pub fn find_sign_in_window(bytes: &[u8], scene: u8, z: u8, y: u8, x: u8) -> Option<SignRecord> {
+    let slot = usize::from(scene);
+    if slot >= SCENE_DIRECTORY_SLOTS || bytes.len() < SCENE_DIRECTORY_BYTES {
+        return None;
+    }
+    let offset = usize::from(u16::from_le_bytes([bytes[slot * 2], bytes[slot * 2 + 1]]));
+    if offset == 0 || offset >= bytes.len() {
+        return None;
+    }
+    // The window holds file bytes up to `data_end`; past that only the 255
+    // prefill a short read leaves behind, which the end test stops at.
+    let window_end = offset + SIGNS_DAT_READ_WINDOW_BYTES;
+    let data_end = window_end.min(bytes.len());
+    let mut cursor = offset;
+    loop {
+        if cursor + RECORD_HEADER_LEN > window_end {
+            return None;
+        }
+        if cursor >= data_end || bytes[cursor] == SIGNS_DAT_WINDOW_FILL_BYTE {
+            return None;
+        }
+        if cursor + RECORD_HEADER_LEN > data_end {
+            // The rest of the header is the short read's 255 prefill.
+            return None;
+        }
+        let header = &bytes[cursor..cursor + RECORD_HEADER_LEN];
+        let payload_start = cursor + RECORD_HEADER_LEN;
+        let payload_end = payload_start + bytes[payload_start..].iter().position(|&b| b == 0)?;
+        let pseudo_record = header.iter().all(|&b| b == 0) && payload_end == payload_start;
+        if !pseudo_record && header[1] == z && header[2] == x && header[3] == y {
+            let mut body_start = payload_start;
+            let mut body_end = payload_end;
+            // §3 alias bridge: the bridge's terminator is followed by another
+            // header, and the formatter prints the body after it.
+            while is_alias_bridge_payload(&bytes[body_start..body_end]) {
+                let next_start = body_end + 1 + RECORD_HEADER_LEN;
+                if next_start > bytes.len() {
+                    return None;
+                }
+                body_start = next_start;
+                body_end = body_start + bytes[body_start..].iter().position(|&b| b == 0)?;
+            }
+            let payload = bytes[body_start..body_end].to_vec();
+            return Some(SignRecord {
+                scene: header[0],
+                z: header[1],
+                y: header[3],
+                x: header[2],
+                body: decode_sign_payload(&payload),
+                payload,
+            });
+        }
+        cursor = payload_end + 1;
+    }
+}
+
 /// `formats/signs-dat.md §5` step 6 (corrected 2026-10-25, u5-spec#300 Q13,
 /// `RETRACTIONS.md` R598): "The first matching record is printed through the
 /// sign formatter and the scan stops; a later record with the same coordinate

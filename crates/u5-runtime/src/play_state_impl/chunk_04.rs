@@ -4539,16 +4539,25 @@ impl PlayState {
         let Some(game_dir) = game_dir else {
             return Ok(None);
         };
-        let Some(records) = load_sign_records(game_dir)? else {
+        let Some(bytes) = read_optional_disk_file(&game_dir.join(SIGNS_DAT_FILE))? else {
             return Ok(None);
         };
-        // `formats/signs-dat.md §5` step 6 (u5-spec#300 Q13, R598): only the
-        // first matching record is printed. Steps 3 and 7: a zero directory
-        // entry, or a window with no match, prints the §6 placard. The scan
-        // here stays inside the scene's own block: the spec says the read
-        // window runs on into later scenes' records, but its length "is not
-        // published" (R599), so how far it reaches is not modelled.
-        let Some(record) = find_sign(&records, scene, z, y, x) else {
+        if bytes.len() < SIGNS_DAT_SCENE_DIRECTORY_BYTES {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                format!(
+                    "{SIGNS_DAT_FILE} too short: {} bytes, need at least {SIGNS_DAT_SCENE_DIRECTORY_BYTES} for the scene directory",
+                    bytes.len()
+                ),
+            ));
+        }
+        // `formats/signs-dat.md §5` (u5-spec#302 Q3, R623): the 2000-byte
+        // window from the scene's directory offset is scanned across later
+        // scenes' records, comparing only `z`, `x`, `y`; the first match is
+        // printed (step 6, R598). Steps 3 and 7: a zero directory entry, or
+        // a window with no match, prints the §6 placard - the clean contract
+        // ends the scan at the window's end.
+        let Some(record) = find_sign_in_window(&bytes, scene, z, y, x) else {
             return Ok(Some(sign_no_record_placard_rendered()));
         };
         // `formats/signs-dat.md §6`: the stream is "already authored" and

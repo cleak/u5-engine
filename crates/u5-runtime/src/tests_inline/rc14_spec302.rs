@@ -80,3 +80,115 @@ fn spec302_q2_attribute_page_rows_match_the_executed_example() {
     let rows = state.z_stats_panel_rows(&ZStatsSession::new(0));
     assert_eq!(rows[7], "    Magic:25");
 }
+
+/// A SIGNS.DAT image with one block per `(scene, records)` entry, laid back
+/// to back in the order given, each record `(z, x, y, body)`.
+fn rc14_signs_bytes(blocks: &[(u8, &[(u8, u8, u8, &[u8])])]) -> Vec<u8> {
+    let mut bytes = vec![0u8; SIGNS_DAT_SCENE_DIRECTORY_BYTES];
+    for (scene, records) in blocks {
+        let offset = u16::try_from(bytes.len()).unwrap();
+        let slot = usize::from(*scene) * 2;
+        bytes[slot..slot + 2].copy_from_slice(&offset.to_le_bytes());
+        for (z, x, y, body) in *records {
+            bytes.extend_from_slice(&[*scene, *z, *x, *y]);
+            bytes.extend_from_slice(body);
+            bytes.push(0);
+        }
+    }
+    bytes
+}
+
+/// `formats/signs-dat.md §5` (issue #302 Q3, R623): the window is scanned on
+/// into later scenes' records, "Only the record's `z`, `x` and `y` bytes are
+/// compared", and the first match is printed; a lookup never reaches an
+/// earlier scene's block.
+#[test]
+fn spec302_q3_window_reaches_later_scenes_and_compares_only_the_coordinate() {
+    let bytes = rc14_signs_bytes(&[
+        (3, &[(0, 1, 1, b"Three")]),
+        (4, &[(0, 2, 2, b"Four"), (0, 1, 1, b"FourDup")]),
+    ]);
+    let found = |scene, z, y, x| find_sign_in_window(&bytes, scene, z, y, x).map(|r| r.body);
+    // Executed on shipped data: a scene-3 lookup at a coordinate only a
+    // scene-4 record has printed that scene-4 sign.
+    assert_eq!(found(3, 0, 2, 2).as_deref(), Some("Four"));
+    assert_eq!(found(3, 0, 1, 1).as_deref(), Some("Three"));
+    assert_eq!(found(4, 0, 1, 1).as_deref(), Some("FourDup"));
+    assert_eq!(found(4, 1, 1, 1), None);
+    // A zero directory entry and a scene outside the directory find nothing.
+    assert_eq!(found(5, 0, 2, 2), None);
+    assert_eq!(found(40, 0, 2, 2), None);
+}
+
+/// `formats/signs-dat.md §5` (issue #302 Q3, R623): "The window is 2000
+/// bytes", and "A shipped record can match only if its whole four-byte
+/// header lies inside the window". The clean contract ends the scan at the
+/// window's end (step 7) and may print a matched record's text in full from
+/// the file even where it runs past the window.
+#[test]
+fn spec302_q3_window_is_two_thousand_bytes_and_needs_the_whole_header() {
+    assert_eq!(SIGNS_DAT_READ_WINDOW_BYTES, 2000);
+    let filler_body = |len: usize| vec![b'x'; len];
+    // One filler record of total length `lead`, then the probe record.
+    let image = |lead: usize, probe_body: &[u8]| {
+        let filler = filler_body(lead - 4 - 1);
+        let mut bytes = rc14_signs_bytes(&[(1, &[(0, 9, 9, &filler), (0, 3, 4, probe_body)])]);
+        bytes.extend_from_slice(&[0; 8]);
+        bytes
+    };
+    let probe = |bytes: &[u8]| find_sign_in_window(bytes, 1, 0, 4, 3).map(|r| r.body);
+    // Header in the window's last four bytes: still matchable.
+    let bytes = image(SIGNS_DAT_READ_WINDOW_BYTES - 4, b"Edge");
+    assert_eq!(probe(&bytes).as_deref(), Some("Edge"));
+    // Its text runs past the window and is printed whole from the file.
+    let long = b"TextPastTheWindowEnd";
+    let bytes = image(SIGNS_DAT_READ_WINDOW_BYTES - 4, long);
+    assert_eq!(probe(&bytes).as_deref(), Some("TextPastTheWindowEnd"));
+    // One byte later the header straddles the window's end: no match.
+    let bytes = image(SIGNS_DAT_READ_WINDOW_BYTES - 3, b"Edge");
+    assert_eq!(probe(&bytes), None);
+    let bytes = image(SIGNS_DAT_READ_WINDOW_BYTES, b"Edge");
+    assert_eq!(probe(&bytes), None);
+}
+
+/// `formats/signs-dat.md §5` (issue #302 Q3, R623): the clean contract
+/// ignores the zero-padding pseudo-record, which the original would print as
+/// an empty sign for a lookup at level 0, `(0, 0)`; the scan carries on past
+/// it to later headers.
+#[test]
+fn spec302_q3_zero_padding_pseudo_record_is_ignored() {
+    let mut bytes = rc14_signs_bytes(&[(18, &[(1, 5, 5, b"Own")])]);
+    bytes.extend_from_slice(&[0, 0, 0, 0, 0]);
+    bytes.extend_from_slice(&[19, 0, 0, 0]);
+    bytes.extend_from_slice(b"Later\0");
+    let found = find_sign_in_window(&bytes, 18, 0, 0, 0).map(|r| r.body);
+    assert_eq!(found.as_deref(), Some("Later"));
+    let mut bytes = rc14_signs_bytes(&[(18, &[(1, 5, 5, b"Own")])]);
+    bytes.extend_from_slice(&[0, 0, 0, 0, 0]);
+    assert_eq!(find_sign_in_window(&bytes, 18, 0, 0, 0), None);
+}
+
+/// `formats/signs-dat.md §5` step 5 through the Look path: a town lookup
+/// whose own block has no record for the coordinate prints the later
+/// scene's record, not the placard (issue #302 Q3).
+#[test]
+fn spec302_q3_look_prints_a_later_scenes_record_inside_the_window() {
+    let dir = debug_game_dir();
+    fs::write(dir.join(LOOK2_DAT_FILE), look2_bytes(&[])).unwrap();
+    // `test_state` stands in scene 17; the sign is at (x 2, y 1) on floor 0.
+    let bytes = rc14_signs_bytes(&[
+        (17, &[(0, 9, 9, b"Elsewhere")]),
+        (18, &[(0, 2, 1, b"Later")]),
+    ]);
+    fs::write(dir.join(SIGNS_DAT_FILE), bytes).unwrap();
+    let mut grid = open_grid();
+    grid[32 + 2] = 0xa0;
+    let mut state = test_state(grid, 1, 1);
+
+    state
+        .look_direction_with_game_dir(Direction::East, &dir)
+        .unwrap();
+
+    assert_eq!(state.message, format!("{LOOK_RESULT_PREFIX}\n\nLater"));
+    let _ = fs::remove_dir_all(dir);
+}
