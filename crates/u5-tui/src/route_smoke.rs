@@ -2263,7 +2263,9 @@ pub fn route_smoke_cases() -> Vec<RouteSmokeCase> {
         RouteSmokeCase {
             name: "dungeon-ladder-down-up-route",
             options: dungeon_options.clone(),
-            script: &[">", "<"],
+            // `dungeon-mode.md §13.1`: on a two-way ladder K opens the
+            // `Klimb-U/D-` chooser; `<` and `>` are not dungeon commands.
+            script: &["K", "D", "K", "U"],
             expected: RouteSmokeExpectation::Dungeon(dungeon),
             min_turn: 2,
             expected_frame_kind: "dungeon first-person viewport",
@@ -2271,7 +2273,9 @@ pub fn route_smoke_cases() -> Vec<RouteSmokeCase> {
         RouteSmokeCase {
             name: "reload-dungeon-ladder-down-up-route",
             options: dungeon_options.clone(),
-            script: &[">", "<"],
+            // `dungeon-mode.md §13.1`: on a two-way ladder K opens the
+            // `Klimb-U/D-` chooser; `<` and `>` are not dungeon commands.
+            script: &["K", "D", "K", "U"],
             expected: RouteSmokeExpectation::Dungeon(dungeon),
             min_turn: 1,
             expected_frame_kind: "dungeon first-person viewport",
@@ -3729,8 +3733,8 @@ fn route_reload_checkpoints(case_name: &str) -> &'static [usize] {
         | "reload-chasm-underworld-pass"
         | "reload-boarded-horse-pass"
         | "reload-ship-xit-skiff-pass"
-        | "reload-dungeon-ladder-down-up-route"
         | "reload-dungeon-surface-exit-return-world" => &[1],
+        "reload-dungeon-ladder-down-up-route" => &[2],
         "reload-underworld-fixed-hidden-stack-search-get-search"
         | "reload-minoc-fixed-hidden-daily-search-get-repeat"
         | "reload-horse-trader-horse-and-rider-buy-pass" => &[2],

@@ -13473,8 +13473,10 @@ fn combat_input_dispatch_cast_uses_pending_actor_as_caster() {
         y: 5,
         ..ActiveObject::empty()
     };
+    // Byte 3 is the owner/target/class byte naming roster member 1
+    // (`combat.md §5`); the cast gate charges the member it names (S05).
     state.combat_actors[1] =
-        CombatActorDescriptor::from_row([20, 1, COMBAT_ACTOR_FLAG_SELECTABLE_80, 0, 1, 0, 4, 5]);
+        CombatActorDescriptor::from_row([20, 1, COMBAT_ACTOR_FLAG_SELECTABLE_80, 1, 1, 0, 4, 5]);
     state.pending_combat_actor_slot = Some(1);
     state.next_combat_actor_slot = 2;
 
@@ -16996,8 +16998,10 @@ fn combat_cast_directed_sleep_and_poison_wind_mutate_party_targets() {
     poison.spell_charges[POISON_WIND_SPELL_INDEX] = 1;
     poison.combat_actors[0] =
         CombatActorDescriptor::from_row([12, 1, COMBAT_ACTOR_FLAG_SELECTABLE_80, 0, 0, 0, 5, 5]);
+    // Byte 3 is the owner/target/class byte naming roster member 2
+    // (`combat.md §5`); the poison lands on the member it names (S05).
     poison.combat_actors[2] =
-        CombatActorDescriptor::from_row([12, 1, COMBAT_ACTOR_FLAG_SELECTABLE_80, 0, 2, 0, 6, 5]);
+        CombatActorDescriptor::from_row([12, 1, COMBAT_ACTOR_FLAG_SELECTABLE_80, 2, 2, 0, 6, 5]);
 
     assert_eq!(
         poison
@@ -17012,8 +17016,6 @@ fn combat_cast_directed_sleep_and_poison_wind_mutate_party_targets() {
     // `magic.md §8` "Directed-effect narration": the poison helper itself
     // prints `<target> is poisoned!` on the Good party arm (p10 R10); the
     // silence this used to pin was not published.
-    // (The fixture's descriptor names roster slot 0, so the line carries
-    // that member's name.)
     assert!(poison.message.ends_with(" is poisoned!"), "{}", poison.message);
 }
 
@@ -18770,6 +18772,11 @@ fn arena_field_contact_scan_skips_linked_renderer_and_uses_first_separate_marker
         y: 4,
         ..ActiveObject::empty()
     };
+    // The contact itself draws nothing. The shared sleep routine runs one
+    // world tick (`combat.md §11` Sleep row, u5-spec#302 Q6); arming the
+    // session-start bare repaint makes that tick draw-free, and its
+    // consumption below shows the tick ran.
+    state.session_start_world_step_frozen = true;
     let prng_before = state.prng_state;
 
     assert!(matches!(
@@ -18786,6 +18793,7 @@ fn arena_field_contact_scan_skips_linked_renderer_and_uses_first_separate_marker
     ));
     assert_eq!(state.party[0].status, b'S');
     assert_eq!(state.prng_state, prng_before);
+    assert!(!state.session_start_world_step_frozen, "the sleep tick ran");
     assert_eq!(state.active_objects[1].type_byte, COMBAT_FIELD_KIND_SLEEP);
     assert_eq!(state.active_objects[2].type_byte, COMBAT_FIELD_KIND_POISON);
 }

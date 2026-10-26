@@ -231,12 +231,15 @@ impl PlayState {
             }
             // `dungeon-mode.md §13.1`: every climbing arm reports "acted",
             // so the post-action pass reads the cell the climb landed on.
-            'k' | '<' | '>' => {
-                let outcome = match key {
-                    '<' => self.climb(game_dir, ClimbIntent::Up)?,
-                    '>' => self.climb(game_dir, ClimbIntent::Down)?,
-                    _ => self.klimb_command(game_dir)?,
-                };
+            // `<` and `>` are not dungeon commands: `dungeon-mode.md §4` step
+            // 3 sends everything but the cardinal codes, Enter, period,
+            // digits and the Control bindings to the resident dispatcher,
+            // whose answer to an unmapped key is `What?` (`commands.md §4`).
+            // They used to run the level-change spell's climb and print its
+            // `Failed!`, which `§8.1` says "cannot appear on the K route at
+            // all" (playtest S26).
+            'k' => {
+                let outcome = self.klimb_command(game_dir)?;
                 self.apply_post_turn_effects_after_dungeon_level_change(turn_before, game_dir, outcome)?;
                 return Ok(true);
             }
@@ -1865,9 +1868,12 @@ impl PlayState {
         allow_combat_override: bool,
     ) -> ActingMemberSelection {
         if allow_combat_override && self.combat_active {
+            // `magic.md §5` step 1 / `inventory.md §6`: the round walker's
+            // party slot, mapped to the roster member it seats (playtest
+            // S05: a dead earlier member packs the descriptors).
             if let Some(slot) = self
-                .pending_combat_actor_slot
-                .filter(|slot| *slot < self.party.len() && *slot < COMBAT_PARTY_ACTOR_SLOTS)
+                .combat_acting_roster_slot()
+                .filter(|slot| *slot < COMBAT_PARTY_ACTOR_SLOTS)
             {
                 return ActingMemberSelection::Selected(slot);
             }

@@ -1584,9 +1584,11 @@ impl PlayState {
 
     pub fn z_stats_initial_party_index(&self) -> usize {
         if self.combat_active {
-            if let Some(slot) = self.pending_combat_actor_slot {
-                if slot < self.party.len()
-                    && slot < COMBAT_PARTY_ACTOR_SLOTS
+            // `combat.md §8` Z row: "for a party-side actor it opens that
+            // character's own sheet" - the roster member behind the acting
+            // descriptor, not the descriptor index (playtest S05).
+            if let Some(slot) = self.combat_acting_roster_slot() {
+                if slot < COMBAT_PARTY_ACTOR_SLOTS
                     && self
                         .party
                         .get(slot)
@@ -4795,7 +4797,13 @@ impl PlayState {
             self.message.clear();
             return MoveOutcome::Blocked;
         }
-        let outcome = self.start_ready_equipment_for_party(actor_slot);
+        // `inventory.md §6`: Ready binds "the active living combat actor" -
+        // the member its descriptor seats (`combat.md §5`, playtest S05).
+        let member = self
+            .combat_roster_slot_for_actor_slot(actor_slot)
+            .filter(|slot| *slot < self.party.len())
+            .unwrap_or(actor_slot);
+        let outcome = self.start_ready_equipment_for_party(member);
         // `commands.md §5.2`: "`Use item`, `Ready...` and `Mix Reagents` end
         // in **two** newlines, leaving one blank row before their prompt." On
         // the surface the picker frame follows and the blank is invisible; in
@@ -6687,7 +6695,7 @@ impl PlayState {
         // `magic.md §8` Healing effects: "In combat it also wakes the
         // matching combat descriptor for that selected member" - the same
         // wake the blue potion's combat arm performs.
-        if self.clear_combat_party_sleep_presentation(target_index) {
+        if self.clear_combat_party_sleep_presentation(self.combat_descriptor_for_party_member(target_index)) {
             self.mark_visibility_dirty();
         }
         self.advance_turn();

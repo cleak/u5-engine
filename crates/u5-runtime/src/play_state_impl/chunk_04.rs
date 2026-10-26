@@ -2458,7 +2458,7 @@ impl PlayState {
             POTION_BLUE_INDEX => {
                 if self.party[target_index].status == b'S' && self.party[target_index].hp > 0 {
                     self.party[target_index].status = b'G';
-                    if self.clear_combat_party_sleep_presentation(target_index) {
+                    if self.clear_combat_party_sleep_presentation(self.combat_descriptor_for_party_member(target_index)) {
                         self.mark_visibility_dirty();
                     }
                     self.advance_turn();
@@ -2514,7 +2514,7 @@ impl PlayState {
                         if matches!(
                             apply_combat_sleep_to_party_target(&mut self.party[target_index]),
                             CombatPartySleepOutcome::SleptPartyMember { .. }
-                        ) && self.apply_combat_party_sleep_presentation(target_index)
+                        ) && self.apply_combat_party_sleep_presentation(self.combat_descriptor_for_party_member(target_index))
                         {
                             self.mark_visibility_dirty();
                         }
@@ -2536,7 +2536,7 @@ impl PlayState {
                     self.message = POTION_RESULT_NO_NOTICEABLE_EFFECT.to_string();
                     return MoveOutcome::Blocked;
                 }
-                let applied = self.apply_combat_potion_poof_presentation(target_index);
+                let applied = self.apply_combat_potion_poof_presentation(self.combat_descriptor_for_party_member(target_index));
                 if applied {
                     self.mark_visibility_dirty();
                 }
@@ -2556,7 +2556,7 @@ impl PlayState {
                     return MoveOutcome::Blocked;
                 }
                 self.advance_turn();
-                let applied = self.apply_combat_party_invisibility_potion(target_index);
+                let applied = self.apply_combat_party_invisibility_potion(self.combat_descriptor_for_party_member(target_index));
                 // `inventory.md §7.2`: "Black in combat | `Invisible!\n`".
                 self.message = POTION_RESULT_INVISIBLE.to_string();
                 if applied {
@@ -2869,6 +2869,18 @@ impl PlayState {
         if self.cast_resources_spent {
             return None;
         }
+        // Inside the arena the cast pipeline names its caster by combat
+        // descriptor (the combat-actor lookups need it); the mana, level and
+        // consciousness belong to the member that descriptor seats
+        // (`combat.md §5`; `magic.md §5` step 1). A packed arena put a later
+        // member at a lower descriptor index, so the gate read the dead
+        // member ahead of him and the cast ended silently (playtest S05).
+        let caster_index = if self.combat_active {
+            self.combat_roster_slot_for_actor_slot(caster_index)
+                .unwrap_or(caster_index)
+        } else {
+            caster_index
+        };
         let Some(caster) = self.party.get(caster_index).copied() else {
             // Out-of-range caster: the `Player: ` prompt bounds the index.
             self.message.clear();
@@ -3208,6 +3220,8 @@ impl PlayState {
             return MoveOutcome::Blocked;
         }
         self.player.facing = next;
+        // `audio.md §7.4`: a turn's redraw is a footstep tick (S25).
+        self.tick_dungeon_footstep();
         self.advance_turn();
         // `dungeon-mode.md §14`: a turn prints its verb and nothing else -
         // "`Turn left\n` / `Turn right\n`" - and the handler itself only

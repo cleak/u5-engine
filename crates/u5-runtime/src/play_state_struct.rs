@@ -117,6 +117,12 @@ pub struct PlayState {
     /// across a save is not published, so `None` (a resumed game) reads
     /// as the monster's current cell, the value setup would have written.
     pub dungeon_monster_previous_cell: Option<(usize, usize)>,
+    /// `audio.md §7.4` (u5-spec#300 Q32): the footstep rumble's current
+    /// intensity and its parity ("just emitted"). A committed step plays 15
+    /// and 11 and leaves 7 armed; later dungeon ticks alternate silent and
+    /// emitting, so the second plays the 7 and the fourth the 3.
+    pub dungeon_footstep_intensity: u8,
+    pub dungeon_footstep_just_emitted: bool,
     /// `dungeon-mode.md §14.1` (u5-spec#298 Q1): a post-combat code 5 or 6
     /// that leaves the level stack takes the surface exit of `§13.2`, which
     /// needs the game directory; the framer's restore owes it to the input

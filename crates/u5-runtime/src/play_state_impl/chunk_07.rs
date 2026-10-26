@@ -1111,10 +1111,22 @@ impl PlayState {
         }
         let dungeon_monster =
             matches!(self.area, Area::Dungeon { .. }) && slot == DUNGEON_ACTIVE_MONSTER_SLOT;
+        let in_arena = self.combat_active;
         if let Some(object) = self.active_objects.get_mut(slot) {
             object.free();
             if dungeon_monster {
+                // `dungeon-mode.md §4.1` (u5-spec#300 Q24): the inactive form
+                // is type and tile zero, class `0xFF` **and X/Y 255**, because
+                // "A-Attack does not test the inactive marker at all; it
+                // relies on those off-grid coordinates never matching a
+                // cell". A freed record left on its old cell would match a
+                // later A-Attack there now that A-Attack ignores the class.
+                // (An arena's slot 1 is a combat object, not this record.)
                 object.tile = 0;
+                if !in_arena {
+                    object.x = DUNGEON_ACTIVE_OBJECT_INACTIVE_COORDINATE;
+                    object.y = DUNGEON_ACTIVE_OBJECT_INACTIVE_COORDINATE;
+                }
                 object.aux1 = DUNGEON_MONSTER_INACTIVE_DEP1;
             }
         }
@@ -2536,7 +2548,7 @@ impl PlayState {
                 self.message.clear();
                 return Ok(MoveOutcome::Blocked);
             };
-            let Some((slot, object)) = self.dungeon_active_monster_at(x, y) else {
+            let Some((slot, object)) = self.dungeon_attack_monster_record_at(x, y) else {
                 // `dungeon-mode.md §10`: "If the active monster is not exactly
                 // in that forward cell, the handler prints the stock refusal
                 // `What?\n` on the following row and does not launch combat."
@@ -2842,6 +2854,28 @@ impl PlayState {
     pub fn dungeon_active_monster_at(&self, x: usize, y: usize) -> Option<(usize, ActiveObject)> {
         self.dungeon_active_monster()
             .filter(|(_, object)| object.x == x && object.y == y)
+    }
+
+    /// The A-Attack lookup: the single dungeon monster record when its
+    /// coordinate is `(x, y)`, **whatever its class byte**.
+    /// `dungeon-mode.md §4.1` (u5-spec#300 Q24): "A-Attack does not test the
+    /// inactive marker at all; it relies on those off-grid coordinates never
+    /// matching a cell", and `§10` "compares that coordinate with the single
+    /// active dungeon monster record". The painter, step, contact and
+    /// blocking paths keep the `0xFF` test (playtest S27).
+    pub fn dungeon_attack_monster_record_at(
+        &self,
+        x: usize,
+        y: usize,
+    ) -> Option<(usize, ActiveObject)> {
+        let Area::Dungeon { .. } = self.area else {
+            return None;
+        };
+        self.active_objects
+            .get(DUNGEON_ACTIVE_MONSTER_SLOT)
+            .copied()
+            .filter(|object| object.x == x && object.y == y)
+            .map(|object| (DUNGEON_ACTIVE_MONSTER_SLOT, object))
     }
 
     /// `town-mode.md §14`: the first half of the NPC-conflict chain's

@@ -572,8 +572,9 @@ pub enum CombatSleepEffectOutcome {
     /// sleep narration code and a stats-panel redraw.
     PartyMemberSlept { status_before: u8, status_after: u8 },
     /// The non-party arm: "the descriptor's disabled bit is set, the shared
-    /// narration status is set to the sleep code, the record's spare byte is
-    /// marked, and one frame renders."
+    /// narration status is set to the sleep code, the linked record's phase
+    /// byte is set to the freeze sentinel ..., and one frame renders"
+    /// (naming clarified u5-spec#302 Q6; formerly "the record's spare byte").
     NonPartyDisabled,
 }
 
@@ -1371,6 +1372,23 @@ impl PlayState {
     ) -> Option<CombatSleepEffectOutcome> {
         if target_slot >= COMBAT_PARTY_ACTOR_SLOTS {
             self.set_combat_actor_status_disabled(target_slot);
+            // `combat.md §12`'s non-party row (naming clarified u5-spec#302
+            // Q6): "the linked record's phase byte is set to the freeze
+            // sentinel (`active-objects.md` Section 3)", so its animation
+            // stops until the wake helper zeroes the whole byte. The sprite
+            // itself is left unchanged.
+            if let Some(object) = self
+                .combat_actors
+                .get(target_slot)
+                .map(|actor| usize::from(actor.active_object_slot))
+                .and_then(|object_slot| self.active_objects.get_mut(object_slot))
+            {
+                object.phase = STEADY_PHASE;
+            }
+            // `combat.md §11` Sleep row / `§12`: "one world tick (not
+            // suppressed by the rest/camp marker)".
+            self.mark_visibility_dirty();
+            self.advance_visual_tick();
             return Some(CombatSleepEffectOutcome::NonPartyDisabled);
         }
         let roster_slot = self.combat_roster_slot_for_actor_slot(target_slot)?;
@@ -1402,6 +1420,10 @@ impl PlayState {
                 }
                 self.request_party_stats_panel_refresh();
                 self.mark_visibility_dirty();
+                // `combat.md §11` Sleep row / `§12` / `§6.3`: "one world tick
+                // unless the rest/camp alternate-entry marker is set" - the
+                // same tick the faint sleep helper runs.
+                self.run_combat_party_sleep_world_tick();
                 Some(CombatSleepEffectOutcome::PartyMemberSlept {
                     status_before,
                     status_after,
@@ -1564,6 +1586,16 @@ impl PlayState {
         let woke = roll == COMBAT_SLEEP_WAKE_SUCCESS_ROLL;
         if woke {
             actor.clear_status_disabled();
+            // `combat.md §12` (u5-spec#302 Q6): a non-party sleeper's frozen
+            // animation resumes when "the wake helper zeroes the whole byte
+            // and the script restarts at step 0".
+            if slot >= COMBAT_PARTY_ACTOR_SLOTS
+                && let Some(object) = self
+                    .active_objects
+                    .get_mut(usize::from(actor.active_object_slot))
+            {
+                object.phase = 0;
+            }
             // `catalogs/item-list.md` "Orange combat sleep presentation":
             // wake "selects the retained base/type tile as the display tile,
             // except that an actor still under the combat invisibility state
@@ -2719,7 +2751,10 @@ impl PlayState {
         // `'C'`: the panel's in-combat `C` is the separate presentation
         // override driven by the descriptor bit.
         if target_slot < COMBAT_PARTY_ACTOR_SLOTS {
-            if let Some(member) = self.party.get_mut(target_slot) {
+            // `combat.md §5`: the descriptor names its member through the
+            // owner/target/class byte (playtest S05).
+            let roster_slot = self.combat_party_roster_index(target_slot);
+            if let Some(member) = self.party.get_mut(roster_slot) {
                 member.status = CharacterStatus::Good.save_byte();
             }
             self.mark_visibility_dirty();
@@ -5041,15 +5076,22 @@ impl PlayState {
             // edge documented by §6.3.
             self.combat_action_result = COMBAT_ACTION_RESULT_SLEEP;
             self.mark_visibility_dirty();
-            let suppress_tick = self
-                .combat_frame_snapshot
-                .as_ref()
-                .is_some_and(|snapshot| snapshot.suppress_controlled_faint_sleep_tick);
-            if !suppress_tick {
-                self.advance_visual_tick();
-            }
+            self.run_combat_party_sleep_world_tick();
         }
         Some(actor_slot)
+    }
+
+    /// The shared sleep routine's party-arm world tick (`combat.md §6.3`,
+    /// `§12`): "exactly one blocking world tick unless the combat-entry cache
+    /// carries the rest/camp alternate-entry bit `0x04`".
+    fn run_combat_party_sleep_world_tick(&mut self) {
+        let suppress_tick = self
+            .combat_frame_snapshot
+            .as_ref()
+            .is_some_and(|snapshot| snapshot.suppress_controlled_faint_sleep_tick);
+        if !suppress_tick {
+            self.advance_visual_tick();
+        }
     }
 
     fn apply_combat_monster_death_active_object_effect(
@@ -5426,14 +5468,16 @@ impl PlayState {
     /// restored from the record's primary tile byte - otherwise it stays
     /// held."
     ///
-    /// The two rumbles the same sentence names - "a short rumble" before
-    /// the roll and "a longer rumble" on the release - carry no published
-    /// parameters in `audio.md`, so neither is emitted here rather than
-    /// inventing a program (`cleak/u5-engine#1`).
+    /// The two rumbles (added 2026-10-25, u5-spec#302 Q5): "the short
+    /// rumble - the random rumble `(40, 3000, 500)` ... - then the release
+    /// draw", and on a release "a longer rumble plays - `(1, 7000, 600)`"
+    /// after the regurgitated line. Both use only the sound jitter stream,
+    /// never the gameplay generator.
     pub(crate) fn apply_combat_dragged_under_release(&mut self, slot: usize) -> bool {
         let Some(actor) = self.combat_actors.get(slot).copied() else {
             return false;
         };
+        self.emit_sound_effect(SoundEffect::CombatDraggedUnderRumble);
         let roll = self.random_range_u8(
             COMBAT_DRAGGED_UNDER_RELEASE_ROLL_LOW,
             COMBAT_DRAGGED_UNDER_RELEASE_ROLL_HIGH,
@@ -5448,6 +5492,7 @@ impl PlayState {
         // two rows and never `ARGH!Avatar regurgitated!` on one".
         self.emit_combat_print(&format!("{name}{COMBAT_REGURGITATED_SUFFIX}\n"));
         self.message_row_open_mid_line = false;
+        self.emit_sound_effect(SoundEffect::CombatDraggedUnderReleaseRumble);
         if let Some(actor) = self.combat_actors.get_mut(slot) {
             actor.flags &= !COMBAT_ACTOR_FLAG_DRAGGED_UNDER;
         }
@@ -5842,7 +5887,11 @@ impl PlayState {
         for (index, slot) in target_slots.iter().copied().enumerate() {
             let application = match effect {
                 CombatDirectedSpellEffect::Sleep if slot < COMBAT_PARTY_ACTOR_SLOTS => {
-                    let outcome = apply_combat_sleep_to_party_target(self.party.get_mut(slot)?);
+                    // `combat.md §5`: the descriptor names its member
+                    // through the owner/target/class byte (playtest S05).
+                    let roster_slot = self.combat_roster_slot_for_actor_slot(slot).unwrap_or(slot);
+                    let outcome =
+                        apply_combat_sleep_to_party_target(self.party.get_mut(roster_slot)?);
                     // `combat.md §6.2`'s party row: "the status byte becomes
                     // `'S'`, the descriptor's disabled bit is set, the
                     // presentation record shows the prone marker, the
@@ -5856,7 +5905,7 @@ impl PlayState {
                         if !self.apply_combat_party_sleep_presentation(slot) {
                             self.set_combat_actor_status_disabled(slot);
                         }
-                        if self.active_player == Some(slot) {
+                        if self.active_player == Some(roster_slot) {
                             self.active_player = None;
                         }
                         self.request_party_stats_panel_refresh();
@@ -5868,7 +5917,7 @@ impl PlayState {
                     }
                 }
                 CombatDirectedSpellEffect::Sleep => {
-                    self.set_combat_actor_status_disabled(slot);
+                    let _ = self.apply_combat_sleep_effect_to_target(slot);
                     CombatDirectedSpellSlotStatusApplication::NonPartySleepDisabled {
                         target_slot: slot,
                     }
@@ -5881,8 +5930,9 @@ impl PlayState {
                     } else {
                         let poison_damage_roll = poison_damage_rolls[index];
                         if slot < COMBAT_PARTY_ACTOR_SLOTS {
+                            let roster_slot = self.combat_party_roster_index(slot);
                             let outcome = apply_combat_poison_to_party_target(
-                                self.party.get_mut(slot)?,
+                                self.party.get_mut(roster_slot)?,
                                 poison_damage_roll,
                             );
                             if matches!(outcome, CombatPartyPoisonOutcome::PoisonedPartyMember { .. })
@@ -6086,7 +6136,8 @@ impl PlayState {
                             affected = true;
                         }
                     } else {
-                        self.set_combat_actor_status_disabled(slot);
+                        // The same shared routine (`combat.md §12`, R624).
+                        let _ = self.apply_combat_sleep_effect_to_target(slot);
                         affected = true;
                     }
                     // `combat.md §11.1` census: "Target slept | both |
@@ -6106,16 +6157,17 @@ impl PlayState {
                         continue;
                     }
                     if slot < COMBAT_PARTY_ACTOR_SLOTS {
+                        let roster_slot = self.combat_party_roster_index(slot);
                         let needs_damage_roll = self
                             .party
-                            .get(slot)
+                            .get(roster_slot)
                             .is_some_and(|member| member.status != b'G' || member.hp == 0);
                         let damage_roll = if needs_damage_roll {
                             self.combat_arena_field_poison_damage_roll()
                         } else {
                             0
                         };
-                        if let Some(member) = self.party.get_mut(slot) {
+                        if let Some(member) = self.party.get_mut(roster_slot) {
                             let outcome = apply_combat_poison_to_party_target(member, damage_roll);
                             if matches!(outcome, CombatPartyPoisonOutcome::PoisonedPartyMember { .. })
                             {
@@ -6315,11 +6367,48 @@ impl PlayState {
             .get(actor.active_object_slot as usize)?
             .tile;
 
+        // `combat.md §11`, Sleep row (corrected u5-spec#302 Q6, R624): "Call
+        // the shared sleep routine of Section 12 (the Gazer's)". A party
+        // target gets status `'S'` whatever its letter, the descriptor's
+        // bit `0x08`, the prone marker, the active-player clear and the
+        // panel redraw; a non-party target bit `0x08` and the frozen phase.
+        // "No message (`slept!` is not printed on this path) and no sound",
+        // and no draw. Writing only the roster letter left the party
+        // sleeper without bit `0x08`, so `§8.1`'s asleep arm never ran.
+        if field == CombatArenaFieldKind::Sleep {
+            let contact_outcome = match self.apply_combat_sleep_effect_to_target(target_slot)? {
+                CombatSleepEffectOutcome::RefusedDeadParty => {
+                    CombatArenaFieldContactOutcome::SleepSkippedDeadParty
+                }
+                CombatSleepEffectOutcome::PartyMemberSlept {
+                    status_before,
+                    status_after,
+                } => CombatArenaFieldContactOutcome::SleptPartyMember {
+                    status_before,
+                    status_after,
+                },
+                CombatSleepEffectOutcome::NonPartyDisabled => {
+                    CombatArenaFieldContactOutcome::SleepDisabledNonParty
+                }
+            };
+            return Some(CombatArenaFieldContactApplication {
+                field,
+                target_slot,
+                contact_outcome,
+                damage_application: None,
+            });
+        }
+
         let contact_outcome = if target_slot < COMBAT_PARTY_ACTOR_SLOTS {
+            // `combat.md §5`: the descriptor names its member through the
+            // owner/target/class byte (playtest S05).
+            let roster_slot = self
+                .combat_roster_slot_for_actor_slot(target_slot)
+                .unwrap_or(target_slot);
             resolve_combat_arena_field_contact_for_party_target(
                 field,
                 linked_active_object_tile,
-                self.party.get_mut(target_slot)?,
+                self.party.get_mut(roster_slot)?,
                 poison_damage_roll,
                 fire_damage_roll,
             )?
@@ -7008,7 +7097,7 @@ impl PlayState {
                     let takes_status_arm = target_slot < COMBAT_PARTY_ACTOR_SLOTS
                         && self
                             .party
-                            .get(target_slot)
+                            .get(self.combat_party_roster_index(target_slot))
                             .is_some_and(|member| member.living() && member.status == b'G');
                     let damage_roll = if gate && !takes_status_arm {
                         self.combat_monster_poison_damage_roll()
@@ -7021,9 +7110,11 @@ impl PlayState {
             };
             let fallback_raw_damage = combat_field_poison_fallback_damage(poison_damage_roll);
             let poison_outcome = if target_slot < COMBAT_PARTY_ACTOR_SLOTS {
+                // `combat.md §5`: the descriptor's member (playtest S05).
+                let roster_slot = self.combat_party_roster_index(target_slot);
                 resolve_poison_status_attack_for_party_target(
                     attacker.owner_target_class,
-                    self.party.get_mut(target_slot)?,
+                    self.party.get_mut(roster_slot)?,
                     poison_gate_accepts,
                     fallback_raw_damage,
                 )?
@@ -8971,6 +9062,41 @@ impl PlayState {
             }
         }
         report
+    }
+
+    /// The roster member whose combat turn is open: the round walker's
+    /// descriptor slot mapped through its owner/target/class byte
+    /// (`combat.md §5`). `magic.md §5` step 1: "Inside combat, the
+    /// active-player byte is whichever party-slot the round walker is
+    /// currently dispatching". A packed party (a dead member in an earlier
+    /// roster slot) seats later members at lower descriptor indices, so the
+    /// descriptor index alone named the wrong member (playtest S05).
+    pub(crate) fn combat_acting_roster_slot(&self) -> Option<usize> {
+        if !self.combat_active {
+            return None;
+        }
+        self.pending_combat_actor_slot
+            .and_then(|slot| self.combat_roster_slot_for_actor_slot(slot))
+            .filter(|slot| *slot < self.party.len())
+    }
+
+    /// The roster member a party-side descriptor seats (`combat.md §5`),
+    /// falling back to the index itself for an unseated descriptor - the same
+    /// rule as [`Self::combat_roster_slot_for_actor_slot`], for callers that
+    /// index the roster directly.
+    pub(crate) fn combat_party_roster_index(&self, slot: usize) -> usize {
+        self.combat_roster_slot_for_actor_slot(slot).unwrap_or(slot)
+    }
+
+    /// The combat descriptor for a roster member picked by index (a potion
+    /// or Awaken target), falling back to the index itself when no seated
+    /// descriptor names it. See [`Self::combat_acting_roster_slot`].
+    pub(crate) fn combat_descriptor_for_party_member(&self, roster_slot: usize) -> usize {
+        if !self.combat_active {
+            return roster_slot;
+        }
+        self.combat_party_descriptor_slot_for_roster_slot(roster_slot)
+            .unwrap_or(roster_slot)
     }
 
     /// Inverse of [`Self::combat_roster_slot_for_actor_slot`]: find the

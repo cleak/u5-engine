@@ -50,12 +50,14 @@ impl PlayState {
         let ny = ny.rem_euclid(DUNGEON_SIDE as isize) as usize;
         if self.dungeon_active_monster_at(nx, ny).is_some() {
             self.message = MOVEMENT_BLOCKED_REFUSAL.to_string();
+            self.tick_dungeon_footstep();
             return Ok(MoveOutcome::Blocked);
         }
 
         let tile = self.dungeon_cell(level, nx, ny);
         if back_step && dungeon_back_step_rejected(tile) {
             self.message = MOVEMENT_BLOCKED_REFUSAL.to_string();
+            self.tick_dungeon_footstep();
             return Ok(MoveOutcome::Blocked);
         }
         // `dungeon-mode.md` Section 8.1, "Electric contact": it "prints
@@ -111,6 +113,7 @@ impl PlayState {
             for intensity in crate::audio::DUNGEON_FOOTSTEP_STEP_PAIR {
                 self.emit_sound_effect(SoundEffect::DungeonFootstep { intensity });
             }
+            self.arm_dungeon_footstep_tail();
             self.message = DUNGEON_ELECTRIC_FIELD_LINE.to_string();
             return Ok(MoveOutcome::Moved);
         }
@@ -126,6 +129,7 @@ impl PlayState {
         }
         if !is_dungeon_walkable(tile) {
             self.message = MOVEMENT_BLOCKED_REFUSAL.to_string();
+            self.tick_dungeon_footstep();
             return Ok(MoveOutcome::Blocked);
         }
 
@@ -165,9 +169,8 @@ impl PlayState {
     /// **before** the party position is written and before any redraw ...
     /// The position is then written and the shared dungeon redraw runs ...
     /// **then the second burst (11)**". The decaying tail (7, then 3) rides
-    /// on later redraw and idle-wait ticks, which this engine does not model
-    /// as dungeon ticks, so it is not emitted.
-    fn commit_dungeon_step_position(&mut self, nx: usize, ny: usize) {
+    /// on later ticks; see [`Self::tick_dungeon_footstep`].
+    pub(crate) fn commit_dungeon_step_position(&mut self, nx: usize, ny: usize) {
         let [first, second] = crate::audio::DUNGEON_FOOTSTEP_STEP_PAIR;
         self.emit_sound_effect(SoundEffect::DungeonFootstep { intensity: first });
         self.player.x = nx;
@@ -175,6 +178,40 @@ impl PlayState {
         self.sync_player_object();
         self.mark_visibility_dirty();
         self.emit_sound_effect(SoundEffect::DungeonFootstep { intensity: second });
+        self.arm_dungeon_footstep_tail();
+    }
+
+    /// After the committed step's pair: "An emitting tick subtracts 4 with a
+    /// floor at zero", so 7 is armed, and "the parity stands at 'just
+    /// emitted'" (`audio.md §7.4`).
+    pub(crate) fn arm_dungeon_footstep_tail(&mut self) {
+        let [_, second] = crate::audio::DUNGEON_FOOTSTEP_STEP_PAIR;
+        self.dungeon_footstep_intensity = second.saturating_sub(4);
+        self.dungeon_footstep_just_emitted = true;
+    }
+
+    /// One dungeon footstep tick (`audio.md §7.4`, "The tail", u5-spec#300
+    /// Q32): "later ticks alternate silent and emitting: the **second**
+    /// later tick plays the 7 and the **fourth** plays the 3, and later
+    /// ticks are silent until the next committed step re-arms 15 ... Ticks
+    /// come from every run of the shared dungeon redraw (turns, blocked
+    /// steps, the electric routine, the post-room-return arm) and from every
+    /// idle iteration of the dungeon command wait" (playtest S25).
+    pub(crate) fn tick_dungeon_footstep(&mut self) {
+        if !matches!(self.area, Area::Dungeon { .. }) || self.combat_active {
+            return;
+        }
+        if self.dungeon_footstep_just_emitted {
+            self.dungeon_footstep_just_emitted = false;
+            return;
+        }
+        self.dungeon_footstep_just_emitted = true;
+        let intensity = self.dungeon_footstep_intensity;
+        if intensity == 0 {
+            return;
+        }
+        self.emit_sound_effect(SoundEffect::DungeonFootstep { intensity });
+        self.dungeon_footstep_intensity = intensity.saturating_sub(4);
     }
 
     pub fn dungeon_teleport_at(

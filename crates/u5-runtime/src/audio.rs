@@ -846,6 +846,13 @@ pub fn damage_rumble(jitter: &mut RumbleJitter) -> SpeakerProgram {
     random_rumble(10, 1600, 2000, jitter)
 }
 
+/// `audio.md §5.3` (added 2026-10-25, u5-spec#302 Q5): the combat
+/// dragged-under release rumble `(1, 7000, 600)`, "the longest random rumble
+/// this document lists" - 7000 updates in 100..600 Hz.
+pub fn dragged_under_release_rumble(jitter: &mut RumbleJitter) -> SpeakerProgram {
+    random_rumble(1, 7000, 600, jitter)
+}
+
 /// `audio.md §7.4`: sailing collision, 20 updates in 100..300 Hz.
 pub fn ship_collision_rumble(jitter: &mut RumbleJitter) -> SpeakerProgram {
     random_rumble(100, 2000, 300, jitter)
@@ -1985,6 +1992,15 @@ pub enum SoundEffect {
     /// on a monster target, or any target outside the arena - the
     /// 300-update impact rumble `(10, 3000, 2000)`, with no flash.
     CombatMonsterHitBurst,
+    /// `§5.3` (added 2026-10-25, u5-spec#302 Q5): the combat dragged-under
+    /// turn, after `ARGH!` - "the trap row's numbers but ... its own call
+    /// from the combat turn handler": step 40, target 3000, 100..500 Hz,
+    /// 75 updates.
+    CombatDraggedUnderRumble,
+    /// `§5.3` (added 2026-10-25, u5-spec#302 Q5): the dragged-under
+    /// release, after the regurgitated line - step 1, target 7000,
+    /// 100..600 Hz, 7000 updates.
+    CombatDraggedUnderReleaseRumble,
     /// `§5.3` dungeon sleep or poison field hit, once per member whose save
     /// fails (u5-spec#298 Q7; `dungeon-mode.md §8.1`).
     StatusFieldRumble,
@@ -2206,6 +2222,8 @@ impl SoundEffect {
             SoundEffect::RoughSeasImpactRumble => rough_seas_impact_rumble(jitter),
             SoundEffect::CombatPartyHitBurst => trap_rumble(jitter),
             SoundEffect::CombatMonsterHitBurst => rough_seas_impact_rumble(jitter),
+            SoundEffect::CombatDraggedUnderRumble => trap_rumble(jitter),
+            SoundEffect::CombatDraggedUnderReleaseRumble => dragged_under_release_rumble(jitter),
             SoundEffect::StatusFieldRumble => status_field_rumble(jitter),
             SoundEffect::DungeonFootstep { intensity } => {
                 random_rumble(1, u32::from(*intensity), 20000, jitter)
@@ -3145,6 +3163,8 @@ mod tests {
             SoundEffect::RoughSeasImpactRumble,
             SoundEffect::CombatPartyHitBurst,
             SoundEffect::CombatMonsterHitBurst,
+            SoundEffect::CombatDraggedUnderRumble,
+            SoundEffect::CombatDraggedUnderReleaseRumble,
             SoundEffect::DungeonFootstep { intensity: 15 },
             SoundEffect::DungeonFootstep { intensity: 3 },
             SoundEffect::DungeonElectricPushBack,
