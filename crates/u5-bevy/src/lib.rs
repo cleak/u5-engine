@@ -11751,6 +11751,11 @@ fn transition_visual_intro_to_gameplay(
     });
     let (mut state, atlas, text_font, rune_font) =
         launch.unwrap_or_else(|err| panic!("Journey Onward launch failed: {err}"));
+    // `prng.md §3`: the intro's one host-clock seed, advanced by whatever a
+    // menu sub-flow drew, carries into play. Neither the load nor Journey
+    // Onward is among §3's seeding events, and the state word "is not part
+    // of the saved game".
+    state.prng_state = intro.dispatch.gameplay_prng_state();
     state.pace_combat_presentations = true;
     // `commands.md §5.2`: real keystrokes, so `<`, `>` and `.` are unmapped
     // keys here, not the terminal harness's shortcuts (playtest H18).
@@ -12617,6 +12622,10 @@ fn finish_visual_intro_title_to_menu(
 fn complete_visual_intro_start_menu_loader(intro: &mut VisualIntroState) {
     intro.pending_auto_return_to_view = !intro.title_sequence_skipped;
     intro.dispatch.dismiss_title();
+    // `prng.md §3` "Boot placement": the run's one host-clock seed is taken
+    // "after title and start-screen preparation ... before the first
+    // intro-menu draw and key poll".
+    let _ = intro.dispatch.gameplay_prng_state();
     clear_carry_visual_intro_title_tick(intro);
     intro.menu_idle_ticks = 0;
     intro.modal_backing = None;
@@ -13156,6 +13165,15 @@ fn step_visual_intro_panel(intro: &mut VisualIntroState, ch: char) -> bool {
         },
     };
 
+    if !matches!(outcome, VisualIntroPanelOutcome::Stay) {
+        // `prng.md §3`: the questionnaire drew from the run's one gameplay
+        // stream, and the menu it returns to "resumes after the seed
+        // assignment and does not sample again".
+        if let VisualIntroPanel::CharacterCreation { session, .. } = &intro.panel {
+            let draws = session.rng_draws_consumed();
+            intro.dispatch.consume_gameplay_prng_draws(draws);
+        }
+    }
     match outcome {
         VisualIntroPanelOutcome::Stay => {}
         VisualIntroPanelOutcome::ReturnToMenu {
@@ -13412,7 +13430,14 @@ fn resolve_visual_intro_subflow(intro: &mut VisualIntroState, subflow: IntroSubf
             let records = load_question_records(&intro.game_dir)
                 .unwrap_or_else(|err| panic!("QUESTION.DAT could not be loaded: {err}"))
                 .unwrap_or_else(|| panic!("visual character creation requires QUESTION.DAT"));
-            let session = ChargenSession::new(records.records, visual_chargen_rng_pool())
+            // `chargen.md §6`'s picker draws from the run's gameplay stream,
+            // which the intro seeded once (`prng.md §3`) - not from a fresh
+            // clock sample, which a second questionnaire in the same run
+            // would otherwise take.
+            let pool = u5_runtime::chargen::chargen_rng_pool_from_prng_state(
+                intro.dispatch.gameplay_prng_state(),
+            );
+            let session = ChargenSession::new(records.records, pool)
                 .unwrap_or_else(|err| panic!("QUESTION.DAT could not start chargen: {err}"));
             intro.panel = VisualIntroPanel::CharacterCreation {
                 session,
@@ -29423,6 +29448,78 @@ mod tests {
         assert!(matches!(intro.panel, VisualIntroPanel::Menu));
         assert!(intro.message.is_empty(), "{:?}", intro.message);
         assert!(!intro.message_waiting_for_key);
+    }
+
+    /// `prng.md §3`: the intro seeds the gameplay generator "once per run",
+    /// and "Returning to the menu from a menu sub-flow resumes after the seed
+    /// assignment and does not sample again". The questionnaire's virtue
+    /// picker draws from that stream (`chargen.md §6`), so a Journey Onward
+    /// after Create starts from the seed advanced by exactly the picker's
+    /// draws - not from a fresh sample at the load.
+    #[test]
+    fn a_completed_questionnaire_leaves_the_run_stream_advanced_by_its_draws() {
+        let dir =
+            std::env::temp_dir().join(format!("u5-prng-chargen-carry-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(&dir).unwrap();
+        fs::write(
+            dir.join(u5_runtime::INIT_GAM_FILENAME),
+            vec![0u8; u5_runtime::SAVED_GAM_LEN],
+        )
+        .unwrap();
+        fs::write(
+            dir.join(u5_runtime::INIT_OOL_FILENAME),
+            vec![0u8; u5_runtime::OOL_PLANE_LEN],
+        )
+        .unwrap();
+
+        // The `prng.md §3` seed for `12:00:00.00`, the paired harness's
+        // pinned clock.
+        let seed = u5_runtime::prng::host_clock_prng_seed(12, 0, 0, 0);
+        let mut probe = UnifiedMenuDispatch::new();
+        probe.set_gameplay_prng_state(seed);
+        let session = ChargenSession::new(
+            chargen_records(),
+            u5_runtime::chargen::chargen_rng_pool_from_prng_state(seed),
+        )
+        .unwrap();
+        let mut intro = read_only_intro_state_for_local_assets(
+            &dir,
+            VisualIntroPanel::CharacterCreation {
+                session,
+                input_line: String::new(),
+            },
+        );
+        intro.dispatch = probe;
+        intro.dispatch.dismiss_title();
+        intro.dispatch.submit_menu_key(b'C');
+
+        for ch in ['b', 'o', 'b', '\r', 'm'] {
+            step_visual_intro_panel(&mut intro, ch);
+        }
+        let mut draws = 0;
+        for _ in 0..64 {
+            let VisualIntroPanel::CharacterCreation { session, .. } = &intro.panel else {
+                break;
+            };
+            draws = session.rng_draws_consumed();
+            step_visual_intro_panel(&mut intro, 'a');
+        }
+        assert!(
+            matches!(intro.panel, VisualIntroPanel::Menu),
+            "chargen committed"
+        );
+        assert!(
+            draws >= 14,
+            "seven questions draw at least two virtues each: {draws}"
+        );
+
+        let mut expected = seed;
+        for _ in 0..draws {
+            expected = u5_prng_advance_state(expected);
+        }
+        assert_eq!(intro.dispatch.gameplay_prng_state(), expected);
+        let _ = fs::remove_dir_all(dir);
     }
 
     /// Playtest N18: `systems/intro.md §10` - every story step waits for "a

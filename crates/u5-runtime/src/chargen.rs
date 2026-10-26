@@ -150,6 +150,14 @@ impl ChargenSession {
 }
 
 impl ChargenSession {
+    /// How many virtue-picker draws this session has taken from its pool.
+    /// Each pool byte is one `random(0, 7)` - one advance of the shared
+    /// generator ([`chargen_rng_pool_from_prng_state`]) - so this is the
+    /// number of advances the questionnaire cost the run's stream.
+    pub fn rng_draws_consumed(&self) -> usize {
+        self.rng_cursor
+    }
+
     pub fn current_step(&self) -> ChargenSessionStep {
         match self.phase {
             ChargenSessionPhase::AwaitingName => ChargenSessionStep::PromptName,

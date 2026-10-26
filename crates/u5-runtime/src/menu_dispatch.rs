@@ -16,6 +16,17 @@ pub struct UnifiedMenuDispatch {
     pub u4: Option<U4TransferSession>,
     pub codex: Option<CodexChallenge>,
     pub blackthorn: Option<BlackthornChallenge>,
+    /// The gameplay PRNG state for this run, owned by the intro controller.
+    ///
+    /// `prng.md §3`: the program "assigns the resulting state **once per
+    /// run** in the intro controller", before the first menu poll, and
+    /// "Returning to the menu from a menu sub-flow resumes after the seed
+    /// assignment and does not sample again". Nothing re-seeds at Journey
+    /// Onward or at the save load, and the state word "is not part of the
+    /// saved game" - so a menu sub-flow that draws from the shared generator
+    /// (`chargen.md §6`'s virtue picker) leaves the stream advanced for the
+    /// Journey Onward that follows it.
+    gameplay_prng: Option<u16>,
 }
 
 /// One reported state-change to the harness.
@@ -50,6 +61,35 @@ pub enum UnifiedMenuStep {
 impl UnifiedMenuDispatch {
     pub fn new() -> Self {
         Self::default()
+    }
+
+    /// The run's gameplay PRNG state, taking the intro controller's single
+    /// host-clock sample (`prng.md §3`) the first time it is asked for.
+    ///
+    /// The frontend asks once the start/menu screen is prepared, which is
+    /// where the original samples; the early Journey Onward path "jumps
+    /// directly to the same sample rather than bypassing it", which the
+    /// lazy sample here covers.
+    pub fn gameplay_prng_state(&mut self) -> u16 {
+        *self
+            .gameplay_prng
+            .get_or_insert_with(crate::prng::host_clock_prng_seed_now)
+    }
+
+    /// Install the run's gameplay PRNG state directly, in place of the host
+    /// clock sample - for a harness that wants a known stream.
+    pub fn set_gameplay_prng_state(&mut self, state: u16) {
+        self.gameplay_prng = Some(state);
+    }
+
+    /// Account for `draws` advances a menu sub-flow took from the run's
+    /// gameplay stream (the chargen virtue picker's `random(0, 7)` calls).
+    pub fn consume_gameplay_prng_draws(&mut self, draws: usize) {
+        let mut state = self.gameplay_prng_state();
+        for _ in 0..draws {
+            state = crate::prng::u5_prng_advance_state(state);
+        }
+        self.gameplay_prng = Some(state);
     }
 
     /// Title-screen tick.
@@ -169,6 +209,29 @@ impl UnifiedMenuDispatch {
 mod tests {
     use super::*;
     use crate::codex_challenge::*;
+
+    /// `prng.md §3`: one host-clock sample per run; a sub-flow's draws carry
+    /// forward and nothing samples again.
+    #[test]
+    fn the_run_samples_its_gameplay_seed_once_and_carries_sub_flow_draws() {
+        let mut d = UnifiedMenuDispatch::new();
+        let seed = d.gameplay_prng_state();
+        assert_eq!(
+            d.gameplay_prng_state(),
+            seed,
+            "a second ask does not re-sample"
+        );
+
+        d.consume_gameplay_prng_draws(3);
+        let mut expected = seed;
+        for _ in 0..3 {
+            expected = crate::prng::u5_prng_advance_state(expected);
+        }
+        assert_eq!(d.gameplay_prng_state(), expected);
+
+        d.consume_gameplay_prng_draws(0);
+        assert_eq!(d.gameplay_prng_state(), expected);
+    }
 
     #[test]
     fn new_dispatch_starts_on_title() {
