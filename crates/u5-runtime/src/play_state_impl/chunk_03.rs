@@ -2649,7 +2649,26 @@ impl PlayState {
                 // cancel reply of `commands.md §5.6` belongs to the
                 // prompts that publish it, not to this one.
                 // `cleak/u5-engine#5`.
-                '\u{1b}' => Some(MoveOutcome::PromptDeclined),
+                //
+                // Step 4: "The `Type M to mix:` instruction line carries no
+                // trailing feed of its own", and the cancel adds none, so the
+                // next poll's leading feed closes that row and "no blank row
+                // appears" (`text-output.md §10.4`). Only the help row is
+                // marked: the world's own row flag is not set, so nothing
+                // carries past the next command's echo (playtest S23).
+                '\u{1b}' => {
+                    self.flush_message_slot();
+                    if let Some(help) = self
+                        .message_transcript
+                        .last_mut()
+                        .filter(|entry| entry.text == MMIX_REAGENT_HELP_MESSAGE)
+                    {
+                        help.leaves_row_open = true;
+                        self.message_transcript_revision =
+                            self.message_transcript_revision.wrapping_add(1);
+                    }
+                    Some(MoveOutcome::PromptDeclined)
+                }
                 '\r' | '\n' | ' ' => {
                     self.toggle_mix_reagent(session);
                     None

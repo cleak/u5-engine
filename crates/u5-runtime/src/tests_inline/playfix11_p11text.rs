@@ -69,3 +69,28 @@ fn playtest_s19_closing_record_key_spends_the_quest_rows_one_shot() {
     assert!(!state.surface_command_row_follows_history);
     let _ = fs::remove_dir_all(dir);
 }
+
+/// S23: `magic.md §6` step 4 - "The `Type M to mix:` instruction line
+/// carries no trailing feed of its own" - and step 3's Escape "cancels
+/// before any inventory change" with no text. `text-output.md §10.4`: the
+/// next poll's leading feed closes the open row "and no blank row appears:
+/// the prompt marker lands on the row directly beneath the partly written
+/// line" - the same shape the zero-quantity exit already has.
+#[test]
+fn playtest_s23_escape_at_the_reagent_list_leaves_no_blank_under_the_help() {
+    let dir = debug_game_dir();
+    let mut state = p4window_world_state();
+    state.reagents = [0; REAGENT_COUNT];
+    state.reagents[REAGENT_SULFUR_ASH] = 9;
+    p4window_keys(&mut state, &dir, &['M', 'I', 'L', '\r']);
+    assert!(state.active_mix.is_some(), "{:?}", state.message);
+    p4window_keys(&mut state, &dir, &['\u{1b}']);
+    assert!(state.active_mix.is_none());
+    let rows = p4window_rows(&state);
+    let help = rows
+        .iter()
+        .rposition(|row| row == "Type M to mix:")
+        .unwrap_or_else(|| panic!("help on screen: {rows:?}"));
+    assert_eq!(rows.get(help + 1).map(String::as_str), Some(">"), "{rows:?}");
+    let _ = fs::remove_dir_all(dir);
+}
