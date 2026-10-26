@@ -70,29 +70,38 @@ fn playtest_s19_closing_record_key_spends_the_quest_rows_one_shot() {
     let _ = fs::remove_dir_all(dir);
 }
 
-/// S23: `magic.md §6` step 4 - "The `Type M to mix:` instruction line
-/// carries no trailing feed of its own" - and step 3's Escape "cancels
-/// before any inventory change" with no text. `text-output.md §10.4`: the
-/// next poll's leading feed closes the open row "and no blank row appears:
-/// the prompt marker lands on the row directly beneath the partly written
-/// line" - the same shape the zero-quantity exit already has.
+/// S23 read `magic.md §6` step 4 - "The `Type M to mix:` instruction line
+/// carries no trailing feed of its own" - with `text-output.md §10.4` as an
+/// Escape at the reagent list leaving no blank row under the help. The
+/// paired `magic-mix` captures contradict it: every stock run (rc13
+/// 2026-10-25, rc14 2026-10-26) shows `Type M to mix:`, one blank row, then
+/// the prompt marker, and rc13's engine matched that before S23 changed it.
+/// The capture wins; the spec question is noted. Escape sets the row flag
+/// itself, whatever printed before it.
 #[test]
-fn playtest_s23_escape_at_the_reagent_list_leaves_no_blank_under_the_help() {
-    let dir = debug_game_dir();
-    let mut state = p4window_world_state();
-    state.reagents = [0; REAGENT_COUNT];
-    state.reagents[REAGENT_SULFUR_ASH] = 9;
-    p4window_keys(&mut state, &dir, &['M', 'I', 'L', '\r']);
-    assert!(state.active_mix.is_some(), "{:?}", state.message);
-    p4window_keys(&mut state, &dir, &['\u{1b}']);
-    assert!(state.active_mix.is_none());
-    let rows = p4window_rows(&state);
-    let help = rows
-        .iter()
-        .rposition(|row| row == "Type M to mix:")
-        .unwrap_or_else(|| panic!("help on screen: {rows:?}"));
-    assert_eq!(rows.get(help + 1).map(String::as_str), Some(">"), "{rows:?}");
-    let _ = fs::remove_dir_all(dir);
+fn playtest_s23_escape_at_the_reagent_list_leaves_one_blank_under_the_help() {
+    for toggles in [&['\r'][..], &['\r', 'j', '\r'][..]] {
+        let dir = debug_game_dir();
+        let mut state = p4window_world_state();
+        state.reagents = [0; REAGENT_COUNT];
+        state.reagents[REAGENT_SULFUR_ASH] = 9;
+        state.reagents[REAGENT_GINSENG] = 9;
+        p4window_keys(&mut state, &dir, &['M', 'I', 'L', '\r']);
+        assert!(state.active_mix.is_some(), "{:?}", state.message);
+        p4window_keys(&mut state, &dir, toggles);
+        state.message_row_open_mid_line = true;
+        p4window_keys(&mut state, &dir, &['\u{1b}']);
+        assert!(state.active_mix.is_none());
+        assert!(!state.message_row_open_mid_line);
+        let rows = p4window_rows(&state);
+        let help = rows
+            .iter()
+            .rposition(|row| row == "Type M to mix:")
+            .unwrap_or_else(|| panic!("help on screen: {rows:?}"));
+        assert_eq!(rows.get(help + 1).map(String::as_str), Some(""), "{rows:?}");
+        assert_eq!(rows.get(help + 2).map(String::as_str), Some(">"), "{rows:?}");
+        let _ = fs::remove_dir_all(dir);
+    }
 }
 
 /// S17/S21: `commands.md §5.5`, overworld Enter class table: "anything else

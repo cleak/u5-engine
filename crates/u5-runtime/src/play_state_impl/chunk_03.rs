@@ -2701,23 +2701,17 @@ impl PlayState {
                 // prompts that publish it, not to this one.
                 // `cleak/u5-engine#5`.
                 //
-                // Step 4: "The `Type M to mix:` instruction line carries no
-                // trailing feed of its own", and the cancel adds none, so the
-                // next poll's leading feed closes that row and "no blank row
-                // appears" (`text-output.md §10.4`). Only the help row is
-                // marked: the world's own row flag is not set, so nothing
-                // carries past the next command's echo (playtest S23).
+                // The stock window then shows one blank row between
+                // `Type M to mix:` and the next prompt marker, in every
+                // paired `magic-mix` capture (rc13 2026-10-25, rc14
+                // 2026-10-26). Playtest S23 read step 4's "no trailing
+                // feed" plus `text-output.md §10.4` as closing the row with
+                // no blank; the capture contradicts that, so the capture
+                // wins and the help row is left closed, as before S23. The
+                // question is noted for the spec. The flag is set here
+                // rather than inherited from whatever printed last.
                 '\u{1b}' => {
-                    self.flush_message_slot();
-                    if let Some(help) = self
-                        .message_transcript
-                        .last_mut()
-                        .filter(|entry| entry.text == MMIX_REAGENT_HELP_MESSAGE)
-                    {
-                        help.leaves_row_open = true;
-                        self.message_transcript_revision =
-                            self.message_transcript_revision.wrapping_add(1);
-                    }
+                    self.message_row_open_mid_line = false;
                     Some(MoveOutcome::PromptDeclined)
                 }
                 '\r' | '\n' | ' ' => {
