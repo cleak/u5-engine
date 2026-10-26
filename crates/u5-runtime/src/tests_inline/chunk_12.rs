@@ -775,7 +775,12 @@ fn the_dungeon_floor_traps_damage_every_living_member() {
 }
 
 #[test]
-fn dungeon_fall_trap_chain_freshens_the_monster_on_every_accepted_level() {
+fn dungeon_fall_trap_chain_rolls_the_monster_once_after_its_damage() {
+    // `dungeon-mode.md §4.1`: the wandering monster is "rolled by dungeon
+    // view initialisation", and §8.1 runs every descent's `...splat!` and
+    // damage sweep before the view is reinitialised. So a two-deep chain
+    // draws damage, damage, then one fresh roll - measured on the stock
+    // game, whose Doom fall damage is the draw straight after the torch roll.
     let scene = DungeonScene::new(33).unwrap();
     let mut grid = vec![0x90; DUNGEON_RECORD_LEN];
     grid[dungeon_cell_index(0, 2, 1)] = 0x61;
@@ -784,17 +789,13 @@ fn dungeon_fall_trap_chain_freshens_the_monster_on_every_accepted_level() {
     let mut state = dungeon_state(grid.clone(), 0, 2, 1);
     let mut expected = dungeon_state(grid, 0, 2, 1);
 
-    // Each accepted level freshens the monster and then runs
-    // `dungeon-mode.md §8.1`'s damage helper for that descent step, so the
-    // expectation draws in the same order the chain does.
     expected.area = Area::Dungeon { scene, level: 1 };
     expected.sync_player_object();
-    assert!(!expected.setup_dungeon_active_monster_fresh());
     expected.apply_dungeon_floor_trap_damage();
     expected.area = Area::Dungeon { scene, level: 2 };
     expected.sync_player_object();
-    assert!(!expected.setup_dungeon_active_monster_fresh());
     expected.apply_dungeon_floor_trap_damage();
+    assert!(!expected.setup_dungeon_active_monster_fresh());
 
     assert_eq!(
         state
@@ -803,10 +804,31 @@ fn dungeon_fall_trap_chain_freshens_the_monster_on_every_accepted_level() {
         MoveOutcome::Transition(AreaTransition::ChangedDungeonLevel { scene, level: 2 })
     );
     assert_eq!(state.prng_state, expected.prng_state);
+    assert_eq!(state.party[0].hp, expected.party[0].hp);
     assert_eq!(
         state.active_objects[DUNGEON_ACTIVE_MONSTER_SLOT],
         expected.active_objects[DUNGEON_ACTIVE_MONSTER_SLOT]
     );
+}
+
+/// The paired Doom fall at a fixed DOS clock (`qa/paired/doom-final-room`):
+/// seed `0x09EB`, one torch draw, then the fall. The stock game took 6 HP on
+/// every run - the second draw of the stream, `random(1, 8)` = 6 - so no
+/// wandering-monster roll sits between the torch and the damage.
+#[test]
+fn a_single_fall_draws_its_damage_before_any_monster_roll() {
+    let scene = DungeonScene::new(33).unwrap();
+    let mut grid = vec![0x90; DUNGEON_RECORD_LEN];
+    grid[dungeon_cell_index(0, 2, 1)] = 0x61;
+    let mut state = dungeon_state(grid, 0, 2, 1);
+    state.party[0].hp = 60;
+    let mut probe = 0x09EBu16;
+    let _torch = u5_prng_range_u16(&mut probe, 112, 127);
+    state.prng_state = probe;
+    state
+        .resolve_dungeon_fall_trap_transition(scene, 0, 2, 1, None, false)
+        .unwrap();
+    assert_eq!(state.party[0].hp, 54, "the stock game's 60 -> 54");
 }
 
 #[test]

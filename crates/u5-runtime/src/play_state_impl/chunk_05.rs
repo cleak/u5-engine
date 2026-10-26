@@ -763,7 +763,6 @@ impl PlayState {
             level = next_level;
             self.area = Area::Dungeon { scene, level };
             self.sync_player_object();
-            self.setup_dungeon_active_monster_fresh();
             let destination = dungeon_cell_index(level, x, y);
             if self.grid[destination] < 0x90 {
                 self.grid[destination] |= 0x08;
@@ -796,6 +795,21 @@ impl PlayState {
         // is still what this returns, because the level change is what the
         // caller reinitialises the view from.
         let _ = self.resolve_current_dungeon_room_trigger(game_dir)?;
+        // `dungeon-mode.md §4.1`/`§14`: the wandering monster is "rolled by
+        // dungeon view initialisation", and §8.1 has the chain run the room
+        // helper first and only "then reinitialise[] the first-person view".
+        // So the fresh roll follows the whole chain - every descent's
+        // `...splat!` and damage sweep - not each level change inside it. A
+        // landing that opened a room fight leaves the roll to that fight's
+        // exit, which re-rolls "after every ... fight".
+        //
+        // Measured with a fixed DOS clock (`qa/paired/doom-final-room`,
+        // four runs each side): the stock fall took 6 HP every time, the
+        // draw straight after the torch roll; this engine, rolling the
+        // monster's seventeen draws in between, took 4 every time.
+        if drops > 0 && matches!(self.area, Area::Dungeon { .. }) && !self.combat_active {
+            self.setup_dungeon_active_monster_fresh();
+        }
         Ok(MoveOutcome::Transition(
             AreaTransition::ChangedDungeonLevel { scene, level },
         ))
