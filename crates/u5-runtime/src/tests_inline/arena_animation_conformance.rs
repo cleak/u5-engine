@@ -194,7 +194,7 @@ mod arena_animation_conformance {
         let accepted = (1u16..)
             .find(|seed| {
                 let mut probe = *seed;
-                u5_prng_range_u16(&mut probe, 0, 255) % 4 == 0
+                u5_prng_range_u16(&mut probe, 0, 255) < 64
             })
             .unwrap();
         let mut state = arena_animation_state(&[(4, arena_record(0x5c, 3, 2, 0x30))]);
@@ -209,7 +209,7 @@ mod arena_animation_conformance {
             .find(|seed| {
                 let mut probe = *seed;
                 u5_prng_range_u16(&mut probe, 0, 255) >= 128
-                    && u5_prng_range_u16(&mut probe, 0, 255) % 4 == 0
+                    && u5_prng_range_u16(&mut probe, 0, 255) < 64
             })
             .unwrap();
         let mut state = arena_animation_state(&[(4, arena_record(0x50, 3, 2, 0x30))]);

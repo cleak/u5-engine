@@ -4306,6 +4306,70 @@ impl PlayState {
         self.advance_visual_tick_inner(true)
     }
 
+    /// Whether an open prompt is waiting in the shared single-keystroke wait,
+    /// which keeps running the world step on every no-key pass.
+    ///
+    /// `input.md §2` (u5-spec#303 Q3, R626): "The same wait-for-input routine
+    /// serves the open-ended command prompt and every gameplay prompt:
+    /// direction prompts, Y/N prompts (shop entry and confirmations,
+    /// conversation yes/no, the exit confirmation), shop menus and lists,
+    /// typed words, numbers and party-member selection ... a prompt waits
+    /// exactly as the command prompt does in the same scene ... An
+    /// implementation must not add a prompt mode that freezes the world."
+    /// `conversation.md §10`: the keyword and ask-who prompts, the yes/no
+    /// prompt and WAIT-KEY wait through it as well.
+    ///
+    /// Left out, and still frozen: the shrine and Codex presentation, whose
+    /// world steps are counted by `karma.md §7` itself; the endgame, whose
+    /// "tight loops on the raw key check" `input.md §2` lists among the
+    /// readers that bypass the shared wait; and the Z-stats pages and the
+    /// arrest offer, which the published list of shared-wait readers does
+    /// not name.
+    pub fn prompt_waits_in_shared_wait(&self) -> bool {
+        if self.endgame.is_some()
+            || self.active_shrine.is_some()
+            || self.active_shrine_restoration.is_some()
+            || self.active_z_stats.is_some()
+            || self.pending_town_arrest.is_some()
+        {
+            return false;
+        }
+        self.active_conversation.is_some()
+            || self.blackthorn_prompt_echo().is_some()
+            || self.active_yell.is_some()
+            || self.active_wishing_well.is_some()
+            || self.active_shop.is_some()
+            || self.active_party_selector.is_some()
+            || self.active_ready.is_some()
+            || self.active_use.is_some()
+            || self.active_cast.is_some()
+            || self.active_cast_followup.is_some()
+            || self.active_rest.is_some()
+            || self.active_jimmy.is_some()
+            || self.active_surface_chest.is_some()
+            || self.active_mix.is_some()
+            || self.active_new_order.is_some()
+            || self.active_direction_prompt.is_some()
+            || self.active_yes_no_prompt.is_some()
+    }
+
+    /// One no-key pass of the shared wait while a prompt is open: the same
+    /// world step the command wait performs, and nothing else - not the
+    /// command wait's under-sail route, falls trigger or dungeon footstep,
+    /// which belong to the command prompt's own entry. Returns `false`,
+    /// doing nothing, when no shared-wait prompt is open.
+    ///
+    /// The step keeps its own scene-band and Negate Time gates
+    /// ([`Self::advance_visual_tick`]), so a prompt in a first-person dungeon
+    /// scene still steps nothing (`input.md §2`).
+    pub fn prompt_wait_pass(&mut self) -> bool {
+        if !self.prompt_waits_in_shared_wait() {
+            return false;
+        }
+        let _ = self.advance_visual_tick();
+        true
+    }
+
     /// One counted world step of the shrine/Codex presentation
     /// (`karma.md §7` "Random-stream cost").
     ///
@@ -5172,7 +5236,7 @@ impl PlayState {
                     break;
                 }
                 AnimationScriptStep::Snap => {
-                    if self.random_range_u8(0, 255) % 4 == 0 {
+                    if animation_snap_taken(self.random_range_u8(0, 255)) {
                         tile = object.type_byte;
                         if class == ANIMATION_SNAP_ADVANCING_CLASS {
                             position += 1;
@@ -5184,7 +5248,7 @@ impl PlayState {
                     position += 1;
                 }
                 AnimationScriptStep::SixStep => {
-                    if self.random_range_u8(0, 255) % 4 != 0 {
+                    if animation_six_step_restarts(self.random_range_u8(0, 255)) {
                         position = 0;
                     } else {
                         position += 1;
@@ -5205,7 +5269,7 @@ impl PlayState {
     /// inclusive `0..255` draw accepted at 128 or above", drawn from the
     /// shared gameplay stream (`visibility.md §8.4` consumer one).
     fn active_object_animation_coin(&mut self) -> bool {
-        self.random_range_u8(0, 255) >= 128
+        animation_eligibility_coin_passes(self.random_range_u8(0, 255))
     }
 
     pub fn advance_outdoor_active_objects(&mut self) {
@@ -6339,20 +6403,15 @@ impl PlayState {
         if object.z != floor || !town_free_roaming_object_eligible(object) {
             return false;
         }
-        // `town-mode.md §16` eligible-object-bytes row: "Empty slots, the
-        // avatar's slot-zero record, **linked NPC sprite classes**, and all
-        // other object families are skipped." Twenty shipped roster slots
-        // carry the horse tags `0x10`/`0x11` (`catalogs/npc-roster.md §4`:
-        // "Unmounted horse frames, used for stable and paddock actors"), so
-        // a linked stable horse would otherwise be driven twice per turn -
-        // once by its schedule and once by this walker - and would spend
-        // PRNG draws doing it. The chance gate sits below this test because
-        // the same row says "No PRNG value is consumed for ineligible or
-        // off-floor slots".
-        if self.npcs.iter().any(|npc| npc.active_object == Some(slot)) {
-            return false;
-        }
-
+        // `town-mode.md §16` eligible-object-bytes row, corrected by
+        // u5-spec#303 Q4 (R627): "This byte test and the floor test of the
+        // next row are the whole **eligibility** predicate ... The walker does
+        // not ask whether the slot belongs to a roster NPC". Every shipped
+        // horse is a roster NPC, so the earlier skip of linked slots here left
+        // the walker with nothing to move and dropped its chance-gate draws
+        // from the shared stream. The walker "writes only the slot record:
+        // when the slot belongs to a roster NPC, that NPC's schedule-side
+        // runtime coordinate is not updated"; the reseat snaps it back.
         if self.random_mod_u8(2) != 0 {
             return false;
         }

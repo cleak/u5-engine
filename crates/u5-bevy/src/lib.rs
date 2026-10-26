@@ -18969,7 +18969,12 @@ fn visual_modal_prompt_active(state: &PlayState) -> bool {
 /// expressed where it belongs, in [`combat_targeting_cursor_owns_keyboard`].
 fn visual_idle_tick(state: &mut PlayState, game_dir: &Path) -> bool {
     if visual_modal_prompt_active(state) {
-        return false;
+        // `input.md §2` (u5-spec#303 Q3, R626): a prompt "waits exactly as
+        // the command prompt does in the same scene", so each no-key pass at
+        // one still runs the world step - and its gameplay draws. Only the
+        // command wait's own extras (the under-sail route and the falls
+        // trigger below) stay with the command prompt.
+        return state.prompt_wait_pass();
     }
     // `timing.md §8.2`: this pump is the input helper's idle wait, so it owns
     // the scripted step-and-wait and - when sails are set - the under-sail
@@ -19001,6 +19006,10 @@ fn advance_visual_wait_frame(
     state.poll_view_overlay_idle();
     if visual_line_prompt_active(state) {
         *prompt_cursor_visible = !*prompt_cursor_visible;
+        // The typed-word readers wait in the shared wait too (`input.md §2`
+        // and `§8` step 1, u5-spec#303 Q3): the cursor blinks and the world
+        // steps on the same pass.
+        let _ = state.prompt_wait_pass();
         true
     } else if advance_visual_endgame_frame_operation(state) {
         *prompt_cursor_visible = false;
@@ -27585,17 +27594,22 @@ mod tests {
     }
 
     #[test]
-    fn visual_idle_tick_suppresses_world_tick_during_modal_prompt() {
+    fn visual_idle_tick_steps_the_world_but_spends_no_turn_during_modal_prompt() {
+        // `input.md §2` (u5-spec#303 Q3, R626): the wishing well's Y/N waits
+        // in the shared wait, which runs the world step on each no-key pass;
+        // "No game-clock time passes" and the prompt stays up.
         let mut state = world_state(open_world_grid(), 10, 20);
         let _ = state
             .start_wishing_well_prompt(Direction::East, u5_runtime::WISHING_WELL_LOOK_DESCRIPTION);
         let clock_before = state.clock;
+        let prng_before = state.prng_state;
 
-        assert!(!visual_idle_tick(&mut state, Path::new(".")));
+        assert!(visual_idle_tick(&mut state, Path::new(".")));
+        assert!(visual_idle_tick(&mut state, Path::new(".")));
 
         assert_eq!(state.turn, 0);
         assert_eq!(state.clock, clock_before);
-        assert_eq!(state.animation.frame, 0);
+        assert_ne!(state.prng_state, prng_before, "the world step's wind check drew");
         assert!(
             state
                 .message
@@ -27604,29 +27618,60 @@ mod tests {
     }
 
     #[test]
-    fn visual_wait_frame_blinks_line_prompt_without_world_tick() {
+    fn visual_wait_frame_blinks_line_prompt_and_steps_the_world() {
+        // `input.md §2` (u5-spec#303 Q3, R626): no prompt freezes the world.
+        // The keyword prompt waits in the shared wait, so each pass blinks
+        // the cursor *and* runs the same world step - draw for draw - as an
+        // idle pass at the command prompt, without spending a turn.
+        let seed = 0x09EB;
+        let mut idle = world_state(open_world_grid(), 10, 20);
+        idle.prng_state = seed;
         let mut state = world_state(open_world_grid(), 10, 20);
+        state.prng_state = seed;
         install_test_conversation(&mut state);
         let clock_before = state.clock;
         let mut prompt_cursor_visible = false;
 
-        assert!(advance_visual_wait_frame(
-            &mut state,
-            Path::new("."),
-            &mut prompt_cursor_visible
-        ));
-        assert!(prompt_cursor_visible);
+        for pass in 0..3 {
+            assert!(advance_visual_wait_frame(
+                &mut state,
+                Path::new("."),
+                &mut prompt_cursor_visible
+            ));
+            assert_eq!(prompt_cursor_visible, pass % 2 == 0);
+            assert!(visual_idle_tick(&mut idle, Path::new(".")));
+            assert_eq!(state.prng_state, idle.prng_state, "pass {pass}: same draws as idle");
+            assert_eq!(state.animation.frame, idle.animation.frame);
+        }
+        assert_ne!(state.prng_state, seed, "the world step drew");
         assert_eq!(state.turn, 0);
         assert_eq!(state.clock, clock_before);
-        assert_eq!(state.animation.frame, 0);
+        assert!(state.active_conversation.is_some());
+    }
 
-        assert!(advance_visual_wait_frame(
-            &mut state,
-            Path::new("."),
-            &mut prompt_cursor_visible
-        ));
-        assert!(!prompt_cursor_visible);
-        assert_eq!(state.animation.frame, 0);
+    /// `input.md §2` (u5-spec#303 Q3): the direction, Y/N and shop prompts
+    /// step the world at each no-key pass exactly as the command wait does.
+    #[test]
+    fn visual_idle_tick_steps_the_world_at_direction_and_yes_no_prompts() {
+        let seed = 0x09EB;
+        let mut idle = world_state(open_world_grid(), 10, 20);
+        idle.prng_state = seed;
+        assert!(visual_idle_tick(&mut idle, Path::new(".")));
+        assert!(visual_idle_tick(&mut idle, Path::new(".")));
+
+        let mut talk = world_state(open_world_grid(), 10, 20);
+        talk.prng_state = seed;
+        talk.active_direction_prompt = Some(u5_runtime::DirectionPromptSession {
+            kind: u5_runtime::DirectionPromptKind::Talk,
+        });
+        let clock_before = talk.clock;
+        assert!(visual_idle_tick(&mut talk, Path::new(".")));
+        assert!(visual_idle_tick(&mut talk, Path::new(".")));
+        assert_eq!(talk.prng_state, idle.prng_state, "same draws as an idle command wait");
+        assert_eq!(talk.animation.frame, idle.animation.frame);
+        assert_eq!(talk.turn, 0);
+        assert_eq!(talk.clock, clock_before);
+        assert!(talk.active_direction_prompt.is_some());
     }
 
     #[test]

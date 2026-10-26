@@ -604,18 +604,14 @@
     }
 
     #[test]
-    fn town_free_roaming_walker_skips_linked_npc_sprites_without_prng() {
-        // `town-mode.md §16` eligible-object-bytes row: "Empty slots, the
-        // avatar's slot-zero record, linked NPC sprite classes, and all
-        // other object families are skipped", and "No PRNG value is
-        // consumed for ineligible or off-floor slots". The three shipped
-        // `CASTLE:0` stable horses are roster slots carrying the horse
-        // tags `0x10`/`0x11` (`catalogs/npc-roster.md §4`), so their
-        // linked sprites must not also be driven by this walker.
-        let mut state = test_state(town_free_roaming_grid(), 1, 1);
-        state.prng_state = 0x1234;
-        state.active_objects.push(npc_active_object(0x10, 5, 5, 0));
-        state.npcs.push(RuntimeNpc {
+    fn town_free_roaming_walker_moves_roster_horses_like_unlinked_ones() {
+        // `town-mode.md §16` (u5-spec#303 Q4, R627): "This byte test and the
+        // floor test of the next row are the whole **eligibility** predicate
+        // ... The walker does not ask whether the slot belongs to a roster
+        // NPC", and on success it "writes only the slot record: when the slot
+        // belongs to a roster NPC, that NPC's schedule-side runtime coordinate
+        // is not updated". The shipped stable horses are all roster NPCs.
+        let linked_npc = RuntimeNpc {
             slot: 15,
             type_byte: 0x10,
             dialog_id: 0,
@@ -629,19 +625,42 @@
             move_queue_pos: 0,
             stuck_counter: 0,
             active_object: Some(1),
-        });
+        };
+        // Find a seed whose chance gate passes and whose step commits, so the
+        // linked record is seen to move.
+        let mut committed_seed = None;
+        for seed in 0..512u16 {
+            let mut probe = test_state(town_free_roaming_grid(), 1, 1);
+            probe.prng_state = seed;
+            probe.active_objects.push(npc_active_object(0x10, 5, 5, 0));
+            probe.advance_town_free_roaming_active_objects();
+            if (probe.active_objects[1].x, probe.active_objects[1].y) != (5, 5) {
+                committed_seed = Some(seed);
+                break;
+            }
+        }
+        let seed = committed_seed.expect("some seed walks the horse");
 
-        state.advance_active_objects();
+        let mut unlinked = test_state(town_free_roaming_grid(), 1, 1);
+        unlinked.prng_state = seed;
+        unlinked.active_objects.push(npc_active_object(0x10, 5, 5, 0));
+        unlinked.advance_town_free_roaming_active_objects();
 
-        assert_eq!(state.prng_state, 0x1234);
-        assert_eq!((state.active_objects[1].x, state.active_objects[1].y), (5, 5));
-        assert!(!state.visibility_dirty);
+        let mut linked = test_state(town_free_roaming_grid(), 1, 1);
+        linked.prng_state = seed;
+        linked.active_objects.push(npc_active_object(0x10, 5, 5, 0));
+        linked.npcs.push(linked_npc);
+        linked.advance_town_free_roaming_active_objects();
 
-        // Unlink it and the same record becomes an ordinary free-roaming
-        // animal again.
-        state.npcs.clear();
-        state.advance_active_objects();
-        assert_ne!(state.prng_state, 0x1234);
+        assert_eq!(linked.prng_state, unlinked.prng_state, "same draws linked or not");
+        assert_eq!(linked.active_objects[1], unlinked.active_objects[1]);
+        assert_ne!((linked.active_objects[1].x, linked.active_objects[1].y), (5, 5));
+        assert!(linked.visibility_dirty);
+        assert_eq!(
+            (linked.npcs[0].x, linked.npcs[0].y),
+            (5, 5),
+            "the walker does not update the roster NPC's runtime coordinate"
+        );
     }
 
     #[test]

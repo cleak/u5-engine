@@ -1769,3 +1769,31 @@ pub const fn world_slow_movement_line(tile: u8) -> Option<&'static str> {
         None => None,
     }
 }
+
+/// `npc-schedules.md §9.1` stage 1 (u5-spec#303 Q5): the wander coin draws
+/// `random(0, 255)` and "the bit tested is its value-8 bit (bit 3): the step
+/// proceeds when that bit is **set**".
+pub const fn town_npc_wander_coin_passes(roll: u8) -> bool {
+    roll & 0x08 != 0
+}
+
+/// `active-objects.md §3` (u5-spec#303 Q5): the animator's eligibility coin
+/// "is an inclusive `0..255` draw accepted at 128 or above".
+pub const fn animation_eligibility_coin_passes(roll: u8) -> bool {
+    roll >= 128
+}
+
+/// `active-objects.md §3` (u5-spec#303 Q5): "the snap is taken when the
+/// result is below 64 and the position advances when it is 64 or more". The
+/// gates "are threshold compares on the whole byte ... An implementation that
+/// tests the low bit or the low two bits reproduces the rates but not the
+/// stream."
+pub const fn animation_snap_taken(roll: u8) -> bool {
+    roll < 64
+}
+
+/// `active-objects.md §3` (u5-spec#303 Q5): "the script restarts when the
+/// result is below 192 and advances when it is 192 or more".
+pub const fn animation_six_step_restarts(roll: u8) -> bool {
+    roll < 192
+}

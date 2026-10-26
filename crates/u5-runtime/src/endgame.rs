@@ -2099,11 +2099,13 @@ impl PlayState {
             PhaseTick::Steady | PhaseTick::Countdown => return false,
             PhaseTick::DecisionPoint => {}
         }
-        if self.random_range_u8(0, 255) < 128 {
+        if !crate::animation_eligibility_coin_passes(self.random_range_u8(0, 255)) {
             return false;
         }
         let before = object.tile;
-        endgame_tableau_script_a_decision(object, || self.random_range_u8(0, 255) % 4 == 0);
+        endgame_tableau_script_a_decision(object, || {
+            crate::animation_snap_taken(self.random_range_u8(0, 255))
+        });
         object.tile != before
     }
 

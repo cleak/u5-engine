@@ -721,6 +721,15 @@ pub fn handle_play_script_command(
         return Ok(PlayInputDisposition::Continue);
     }
     if let Some(count) = play_script_idle_tick_count(command)? {
+        // An open prompt is still the shared wait, which steps the world on
+        // every no-key pass (`input.md §2`, u5-spec#303 Q3); a `.` key would
+        // instead be read by the prompt as a key.
+        if state.prompt_waits_in_shared_wait() {
+            for _ in 0..count {
+                state.prompt_wait_pass();
+            }
+            return Ok(PlayInputDisposition::Continue);
+        }
         for _ in 0..count {
             if handle_play_key_input(state, '.', "", game_dir)? == PlayInputDisposition::Quit {
                 return Ok(PlayInputDisposition::Quit);

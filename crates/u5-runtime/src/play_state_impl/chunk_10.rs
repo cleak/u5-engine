@@ -1439,10 +1439,15 @@ impl PlayState {
     /// magnitude range evenly, so the draw is bias-free and the single bit is
     /// an exact half."
     ///
-    /// Which of the eight bits is tested, and which half of it loses, are not
-    /// published; the low bit is used here. Only the rate is contractual.
+    /// Which bit, and which half of it passes, is published since
+    /// u5-spec#303 Q5: "the bit tested is its value-8 bit (bit 3): the step
+    /// proceeds when that bit is **set** (results 8..15, 24..31, and so on up
+    /// to 248..255) and the turn ends when it is clear. It is not bit 0 and
+    /// not a test for zero. ... A gate that tests bit 0 has the right rate but
+    /// selects a different half of the stream." The earlier low-bit test here
+    /// had exactly that wrong half.
     pub fn town_npc_wander_gate_passes(&mut self) -> bool {
-        self.random_range_u8(0, u8::MAX) & 1 == 0
+        town_npc_wander_coin_passes(self.random_range_u8(0, u8::MAX))
     }
 
     /// `npc-schedules.md §9.1` stage 2: "A single cardinal direction is

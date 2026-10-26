@@ -278,7 +278,7 @@ impl ShrineApproachWalk {
         }
         let mut prng = crate::prng::U5Prng::new(self.kneel_prng);
         let coin = prng.next_range_u16(0, SHRINE_KNEELING_ROLL_HIGH);
-        if coin % 2 != 0 {
+        if !crate::animation_eligibility_coin_passes(coin as u8) {
             // The fair coin decides whether this pass advances at all.
             self.kneel_prng = prng.state();
             return;
@@ -286,7 +286,7 @@ impl ShrineApproachWalk {
         let last = (SHRINE_KNEELING_POSE_FAMILY.len() - 1) as u8;
         if self.kneel_frame == last {
             let rebase = prng.next_range_u16(0, SHRINE_KNEELING_ROLL_HIGH);
-            if rebase % 4 == 0 {
+            if crate::animation_snap_taken(rebase as u8) {
                 self.kneel_frame = 0;
                 self.kneel_hold = SHRINE_KNEELING_BASE_HOLD_TICKS;
             } else {
