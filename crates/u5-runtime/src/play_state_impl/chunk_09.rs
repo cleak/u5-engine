@@ -5097,7 +5097,11 @@ impl PlayState {
         for _ in 0..=2 * script.len() {
             match script.get(position).copied().unwrap_or(AnimationScriptStep::Restart) {
                 AnimationScriptStep::Frame(n) => {
-                    tile = class + n - 1;
+                    // "the displayed frame is class + n - 1": every frame
+                    // step is at least 1, so subtract first. The Shadow Lord
+                    // class `0xFC` reaches `0xFF` on frame 4, and adding
+                    // first overflowed the byte (playtest S06).
+                    tile = class + (n - 1);
                     position += 1;
                     break;
                 }
