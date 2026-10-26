@@ -164,3 +164,34 @@ fn playtest_s08_in_wis_prints_its_coordinate_pair_in_runes() {
     assert_eq!(rows.iter().filter(|row| row.contains("K'P")).count(), 1, "{rows:?}");
     assert!(!state.message_row_open_mid_line);
 }
+
+/// S09: `formats/signs-dat.md §6`: the Yew poster's "border letters above
+/// are the resident sign-border glyph fragments used by the original text
+/// layer, not prose", and the placard is given "in the runic font, in the
+/// same code-point notation as the poster above". The frame is runic cells,
+/// as on the placard; the letters `a`..`g` must not print as Roman text.
+#[test]
+fn playtest_s09_yew_wanted_poster_frame_is_drawn_in_the_runic_font() {
+    let state = test_state(open_grid(), 5, 5);
+    let poster = state
+        .sign_message_at(None, 4, 0, 21, 17)
+        .unwrap()
+        .expect("the fixed poster");
+    let rows: Vec<Vec<TlkRenderedGlyph>> = poster
+        .rendered_lines()
+        .map(<[TlkRenderedGlyph]>::to_vec)
+        .collect();
+    assert_eq!(rows.len(), 9);
+    let runic = |glyph: &TlkRenderedGlyph| glyph.font == TlkGlyphFont::Runic;
+    assert!(rows[0].iter().all(runic), "{:?}", rows[0]);
+    assert!(rows[8].iter().all(runic), "{:?}", rows[8]);
+    for row in &rows[1..8] {
+        assert!(runic(row.first().unwrap()) && runic(row.last().unwrap()), "{row:?}");
+        assert_eq!(row.first().unwrap().byte, b'g');
+    }
+    // The poster's own words stay in the text font.
+    let wanted: Vec<u8> = rows[1][1..rows[1].len() - 1].iter().map(|glyph| glyph.byte).collect();
+    assert_eq!(wanted, b"   Wanted:   ");
+    assert!(rows[1][4..11].iter().all(|glyph| glyph.font == TlkGlyphFont::Ordinary));
+    assert!(poster.text.starts_with("abbbbbbbbbbbbbc\ng   Wanted:   g\n"));
+}

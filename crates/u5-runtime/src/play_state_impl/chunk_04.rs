@@ -4519,8 +4519,8 @@ impl PlayState {
         y: u8,
         x: u8,
     ) -> io::Result<Option<crate::tlk_runner::TlkRenderedText>> {
-        if let Some(message) = self.yew_wanted_poster_message(scene, z, y, x) {
-            return Ok(Some(crate::tlk_runner::TlkRenderedText::plain(message)));
+        if self.yew_wanted_poster_message(scene, z, y, x).is_some() {
+            return Ok(Some(yew_wanted_poster_rendered(&self.party_names)));
         }
         let Some(game_dir) = game_dir else {
             return Ok(None);
@@ -6949,6 +6949,44 @@ pub fn yew_wanted_poster_rows(names: &[[u8; SAVE_CHARACTER_NAME_LEN]]) -> Vec<St
     rows.push("gDead or Aliveg".to_string());
     rows.push("deeeeeeeeeeeeeef".to_string());
     rows
+}
+
+/// [`yew_wanted_poster_rows`] with its frame drawn as a frame.
+///
+/// `formats/signs-dat.md §6`: "The border letters above are the resident
+/// sign-border glyph fragments used by the original text layer, not prose",
+/// and the no-record placard is given "in the runic font, in the same
+/// code-point notation as the poster above" - so `a`..`g` on the border are
+/// runic-font frame cells, the same ones the placard and framed `SIGNS.DAT`
+/// records draw (playtest S09). The spec does not say which font the
+/// `Wanted:`, name and `Dead or Alive` cells use; they keep the text font.
+pub fn yew_wanted_poster_rendered(
+    names: &[[u8; SAVE_CHARACTER_NAME_LEN]],
+) -> crate::tlk_runner::TlkRenderedText {
+    use crate::tlk_runner::{TlkGlyphFont, TlkRenderedGlyph, TlkRenderedText};
+    let rows = yew_wanted_poster_rows(names);
+    let last_row = rows.len() - 1;
+    let mut out = TlkRenderedText::default();
+    for (index, row) in rows.iter().enumerate() {
+        if index > 0 {
+            out.text.push('\n');
+            out.glyphs.push(TlkRenderedGlyph::ordinary(b'\n'));
+        }
+        let last_cell = row.len() - 1;
+        for (column, byte) in row.bytes().enumerate() {
+            let border = index == 0 || index == last_row || column == 0 || column == last_cell;
+            out.text.push(char::from(byte));
+            out.glyphs.push(TlkRenderedGlyph {
+                byte,
+                font: if border {
+                    TlkGlyphFont::Runic
+                } else {
+                    TlkGlyphFont::Ordinary
+                },
+            });
+        }
+    }
+    out
 }
 
 fn yew_wanted_poster_name_row(name: Option<&[u8; SAVE_CHARACTER_NAME_LEN]>) -> String {
