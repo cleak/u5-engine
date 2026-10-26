@@ -13434,12 +13434,20 @@ fn resolve_visual_intro_subflow(intro: &mut VisualIntroState, subflow: IntroSubf
                     intro.message_waiting_for_key = false;
                     intro.message.clear();
                 }
+                // `§6.4`: "The player-visible feedback for a wrong or absent
+                // disk comes from the resident media-error handler, not from
+                // this screen", and `§3`/`§11` let a one-directory install
+                // collapse that handler into this file-existence check. The
+                // spec publishes no notice for the collapsed case, so the
+                // menu simply stays up, as after `§6.4`'s `Esc` abort
+                // (playtest S32: this printed an invented
+                // `Transfer source rejected.` behind a key wait).
                 u4_transfer::U4TransferEntry::MediaUnavailable => {
                     intro
                         .dispatch
                         .complete_subflow(subflow, IntroSubflowResult::Cancelled);
-                    intro.message = visual_intro_transfer_source_rejected_message();
-                    intro.message_waiting_for_key = true;
+                    intro.message.clear();
+                    intro.message_waiting_for_key = false;
                     return true;
                 }
             }
@@ -13486,15 +13494,6 @@ fn resolve_visual_intro_subflow(intro: &mut VisualIntroState, subflow: IntroSubf
         }
     }
     true
-}
-
-/// `u4-transfer.md §3`/`§5`: the retryable missing-media / no
-/// transferable-data notice shown in the intro window. The intro
-/// message line is a single fixed-cell row starting at column 1, so
-/// the underlying `io::Error` detail stays on the terminal path and
-/// this line is kept inside the 40-column screen.
-fn visual_intro_transfer_source_rejected_message() -> String {
-    "Transfer source rejected.".to_string()
 }
 
 fn visual_intro_empty_save_message() -> String {
@@ -13730,7 +13729,20 @@ fn drive_visual(
             .and_then(|hold| hold.current())
             == Some(u5_runtime::text_hold::TextHoldKind::TimedPause);
         let effects_before = visual.state.sound_effect_serial;
-        let read = if visual_line_prompt_active(&visual.state) {
+        let line_prompt_active = visual_line_prompt_active(&visual.state);
+        // `karma.md §7` "What the holds do and do not do": a hold reads no
+        // key and prints nothing - "A key typed during the approach walk, or
+        // during any later wait, is still queued when the next prompt opens
+        // and is consumed by it." The shrine's session is already in its
+        // virtue or mantra phase while the walk and the six- and twelve-tick
+        // waits run, so this editor used to take the key at once and echo it
+        // on a row no prompt had opened yet (playtest S28). Leave it queued
+        // for the reader that opens when the hold ends.
+        if line_prompt_active && visual.state.cinematic_hold_owns_input() {
+            visual.typed_keys.push_front(typed);
+            break;
+        }
+        let read = if line_prompt_active {
             let game_dir = visual.game_dir.clone();
             let v: &mut VisualState = visual.as_mut();
             let result = handle_visual_line_key(
@@ -19022,7 +19034,17 @@ fn handle_visual_line_key(
     let Some(byte) = key_code_to_line_input_byte(key, shift_pressed, control_pressed) else {
         return Ok(None);
     };
-    match u5_runtime::free_text_input_action(byte) {
+    // `karma.md §12`: at the shrine's virtue and mantra prompts "Backspace
+    // or Left erases the last character", and Left is the west direction
+    // code (`input.md §5`), which the general free-text reader of
+    // `input.md §8` otherwise discards. The runtime's own shrine editor
+    // already erases on it; this editor filtered it out first (playtest S29).
+    let action = if byte == u5_runtime::INPUT_CODE_WEST && state.active_shrine.is_some() {
+        u5_runtime::FreeTextInputAction::Backspace
+    } else {
+        u5_runtime::free_text_input_action(byte)
+    };
+    match action {
         u5_runtime::FreeTextInputAction::Cancel => {
             input_line.clear();
             // `input.md §8`: in the free-text reader (conversation keyword,
@@ -19286,7 +19308,19 @@ fn key_code_to_input_byte(key: KeyCode, shift_pressed: bool, control_pressed: bo
         // (`commands.md §5.2`), not the `0` that opens Set Active Player
         // (playtest H17).
         Digit0 if shift_pressed => b')',
-        Digit0 | Numpad0 => b'0',
+        // `input.md §5`: "With no modifier, the keypad delivers the cursor
+        // keys of the scancode table, and keypad `5` is discarded"; only
+        // Shift (or NumLock, which this frontend cannot see) makes the keypad
+        // deliver digits, and "`5` stays a digit". Keypad `0` is Insert
+        // without a modifier, which the extended-key table does not carry.
+        // This frontend reads the rest of the keypad as NumLock-off cursor
+        // keys, so the centre and `0` keys follow the same model: they used
+        // to arrive as plain digits, so keypad 5 alone slept five hours at
+        // the dungeon hours prompt and opened Set Active Player in town
+        // (`dungeon-mode.md §11`, playtest S31).
+        Numpad0 | Numpad5 if !shift_pressed => return None,
+        Numpad0 => b'0',
+        Digit0 => b'0',
         Digit1 => b'1',
         Digit2 => b'2',
         Digit3 => b'3',
@@ -23391,10 +23425,12 @@ mod tests {
     #[cfg(feature = "original-asset-tests")]
     fn visual_intro_missing_u4_transfer_source_returns_to_menu_without_writing() {
         // `u4-transfer.md §3`: missing or wrong media is a retryable
-        // condition, not a hard process failure, and `§5`'s "no
-        // transferable data" branch is presented in the intro too.
-        // Either way the path shows a message, waits for a key and
-        // returns to menu polling without writing a save.
+        // condition, not a hard process failure, and a one-directory
+        // install collapses it into a file-existence check. `§6.4` puts
+        // the feedback for an absent disk in the resident media-error
+        // handler, not on this screen, and the spec publishes no notice
+        // for the collapsed case: the path returns to menu polling with
+        // nothing printed, no key wait and no save (playtest S32).
         let dir = debug_game_dir();
         let mut intro = visual_intro_state_with_panel(dir.clone(), VisualIntroPanel::Menu);
 
@@ -23404,12 +23440,8 @@ mod tests {
         ));
 
         assert!(matches!(intro.panel, VisualIntroPanel::Menu));
-        assert!(intro.message_waiting_for_key);
-        assert!(
-            intro.message.contains("Transfer source rejected"),
-            "{}",
-            intro.message
-        );
+        assert!(!intro.message_waiting_for_key);
+        assert_eq!(intro.message, "");
         assert!(!dir.join(SAVED_GAM_FILENAME).exists());
         let _ = fs::remove_dir_all(dir);
     }
@@ -28170,6 +28202,104 @@ mod tests {
         assert_ne!(before.message_rows, after.message_rows);
     }
 
+    #[cfg(feature = "original-asset-tests")]
+    fn shell_message_rows(shell: &VisualShellHarness) -> Vec<String> {
+        let font = load_ibm_ch_font(original_asset_dir()).unwrap();
+        let visual = shell.visual();
+        let line = visual.input_line.clone();
+        let surface = render_integrated_status_framebuffer(
+            &mut visual.state.clone(),
+            &line,
+            "",
+            play_ctx(&font),
+            true,
+        );
+        let mut rows = vec![String::new(); 13];
+        for row in &surface.message_rows {
+            rows[usize::from(row.row - 11)] =
+                format!("{}{}", if row.prefixed { ">" } else { "" }, row.text);
+        }
+        rows
+    }
+
+    /// Playtest S28, `karma.md §7` "What the holds do and do not do": the
+    /// approach walk and the six-tick wait after the virtue answer read no
+    /// key and print nothing; a key typed during them "is still queued when
+    /// the next prompt opens and is consumed by it". The shell's line editor
+    /// took and echoed such keys on a row no prompt had opened yet.
+    #[test]
+    #[cfg(feature = "original-asset-tests")]
+    fn keys_typed_during_a_shrine_hold_stay_queued_until_the_prompt_opens() {
+        let mut shell = VisualShellHarness::new(
+            "shrine-hold-typeahead",
+            PlayOptions {
+                target: PlayTarget::World(WorldPlane::Britannia),
+                start: Some((233, 66)),
+                clock: u5_runtime::GameClock::new(12, 0).unwrap(),
+                ..PlayOptions::default()
+            },
+        );
+        shell.ticks(30);
+        shell.tap(KeyCode::KeyE);
+        shell.ticks(5);
+        assert!(shell.visual().state.active_shrine.is_some());
+        assert!(
+            shell.visual().state.cinematic_hold_owns_input(),
+            "the approach walk"
+        );
+        shell.tap(KeyCode::KeyX);
+        shell.tap(KeyCode::KeyY);
+        assert_eq!(
+            shell.visual().input_line,
+            "",
+            "nothing is read during the walk"
+        );
+        assert_eq!(shell.visual().typed_keys.len(), 2, "both keys stay queued");
+        let rows = shell_message_rows(&shell);
+        assert_eq!(rows.last().map(String::as_str), Some(""), "{rows:?}");
+        assert!(!rows.iter().any(|row| row.contains("XY")), "{rows:?}");
+
+        shell.ticks(400);
+        assert!(!shell.visual().state.cinematic_hold_owns_input());
+        // The virtue prompt's reader consumes the queued keys.
+        assert_eq!(shell.visual().input_line, "XY");
+        let rows = shell_message_rows(&shell);
+        assert_eq!(rows.last().map(String::as_str), Some(":XY"), "{rows:?}");
+
+        for key in [
+            KeyCode::Backspace,
+            KeyCode::Backspace,
+            KeyCode::KeyH,
+            KeyCode::KeyO,
+            KeyCode::KeyN,
+            KeyCode::KeyE,
+            KeyCode::KeyS,
+            KeyCode::KeyT,
+            KeyCode::KeyY,
+            KeyCode::Enter,
+        ] {
+            shell.tap(key);
+        }
+        shell.ticks(1);
+        assert!(
+            shell.visual().state.cinematic_hold_owns_input(),
+            "the six-tick wait"
+        );
+        shell.tap(KeyCode::KeyQ);
+        assert_eq!(shell.visual().input_line, "");
+        let rows = shell_message_rows(&shell);
+        assert!(!rows.iter().any(|row| row == "Q"), "{rows:?}");
+
+        shell.ticks(200);
+        assert!(!shell.visual().state.cinematic_hold_owns_input());
+        let rows = shell_message_rows(&shell);
+        assert_eq!(
+            rows[rows.len() - 3..],
+            [":HONESTY", "", "Mantra:Q"],
+            "the first ask consumes the queued key: {rows:?}"
+        );
+    }
+
     #[test]
     fn visual_line_input_buffers_shrine_mantra_until_enter() {
         let dir = debug_game_dir();
@@ -31139,6 +31269,45 @@ mod tests {
         );
     }
 
+    /// Playtest S29, `karma.md §12`: at the shrine's virtue and mantra
+    /// prompts "Backspace or Left erases the last character". Left and
+    /// keypad 4 both deliver the west code; elsewhere the free-text reader
+    /// still discards it (`input.md §8`).
+    #[test]
+    fn left_and_keypad_west_erase_at_the_shrine_prompts() {
+        let press = |state: &mut PlayState, line: &mut String, key: KeyCode| {
+            handle_visual_line_key(state, line, key, false, false, Path::new("")).unwrap();
+        };
+        for phase in [
+            u5_runtime::ShrinePhase::Virtue,
+            u5_runtime::ShrinePhase::Mantra,
+        ] {
+            let mut shrine = test_state(open_grid(), 1, 1);
+            let mut session = u5_runtime::ShrineSession::new(ShrineVirtue::Honesty);
+            session.phase = phase;
+            shrine.active_shrine = Some(session);
+            assert!(visual_line_prompt_active(&shrine));
+            let mut line = String::new();
+            for key in [KeyCode::KeyH, KeyCode::KeyO, KeyCode::KeyN, KeyCode::KeyX] {
+                press(&mut shrine, &mut line, key);
+            }
+            assert_eq!(line, "HONX");
+            press(&mut shrine, &mut line, KeyCode::ArrowLeft);
+            assert_eq!(line, "HON", "{phase:?}: Left erases");
+            press(&mut shrine, &mut line, KeyCode::Numpad4);
+            assert_eq!(line, "HO", "{phase:?}: keypad 4 erases");
+            assert!(shrine.active_shrine.is_some(), "the prompt stays open");
+        }
+        // The yell line is the general reader: the west code is discarded.
+        let mut yell = test_state(open_grid(), 1, 1);
+        yell.active_yell = Some(u5_runtime::YellSession {
+            buffer: String::new(),
+        });
+        let mut line = "AB".to_string();
+        press(&mut yell, &mut line, KeyCode::ArrowLeft);
+        assert_eq!(line, "AB");
+    }
+
     /// Playtest H15, `karma.md §12`: the shrine's virtue and mantra prompts
     /// "read up to twelve characters"; the ruined shrine's answers fifteen.
     #[test]
@@ -31187,7 +31356,6 @@ mod tests {
             (NumpadDivide, false, b'/'),
             (Digit0, true, b')'),
             (Digit0, false, b'0'),
-            (Numpad0, false, b'0'),
         ] {
             assert_eq!(
                 key_code_to_input_byte(key, shift, false),
@@ -31195,6 +31363,33 @@ mod tests {
                 "{key:?} shift={shift}"
             );
         }
+    }
+
+    /// Playtest S31, `input.md §5`: "With no modifier, the keypad delivers
+    /// the cursor keys of the scancode table, and keypad `5` is discarded";
+    /// with Shift held it delivers digits, where "`5` stays a digit". The
+    /// shell reads keypad 1-9 as NumLock-off cursor keys, so the centre key
+    /// and keypad 0 (Insert) produce nothing unmodified.
+    #[test]
+    fn unmodified_keypad_five_and_zero_produce_no_key() {
+        use KeyCode::*;
+        for key in [Numpad5, Numpad0] {
+            assert_eq!(key_code_to_input_byte(key, false, false), None, "{key:?}");
+            assert_eq!(
+                key_code_to_line_input_byte(key, false, false),
+                None,
+                "{key:?}"
+            );
+        }
+        assert_eq!(key_code_to_input_byte(Numpad5, true, false), Some(b'5'));
+        assert_eq!(key_code_to_input_byte(Numpad0, true, false), Some(b'0'));
+        // The rest of the keypad is unchanged either way.
+        assert_eq!(
+            key_code_to_input_byte(Numpad1, false, false),
+            Some(u5_runtime::INPUT_CODE_SOUTHWEST)
+        );
+        assert_eq!(key_code_to_input_byte(Digit5, false, false), Some(b'5'));
+        assert_eq!(key_code_to_input_byte(Digit0, false, false), Some(b'0'));
     }
 
     /// Playtest H16 and H17 through the shell: in a town, `/` and Shift with

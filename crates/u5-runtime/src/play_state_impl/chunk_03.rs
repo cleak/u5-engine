@@ -813,6 +813,14 @@ impl PlayState {
         }) {
             return true;
         }
+        // `endgame.md §7` steps 4-6 and `§5.1`: the victory rite's automatic
+        // stretches - the box hand-over, the forty-iteration pause after
+        // record `3`, and the gate's rise, hold, exits and sink - read no
+        // key, so they draw no cursor either. Only the key-paced rite pages
+        // and the Orb's acknowledgement read one (playtest S34).
+        if self.endgame_victory_reads_no_key() {
+            return true;
+        }
         // `blackthorn.md §7`: a defeated party is never offered a command
         // prompt - the loop's next turn hands it to the rescue - so the row
         // [`Self::defeated_party_row_is_continuation`] keeps waits on no key
