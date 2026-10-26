@@ -218,20 +218,19 @@ impl U4TransferScreen {
                 // renderer keeps its own surface, so present first.
                 self.present();
                 let source = self.session.committed_source();
-                let avatar = commit_u4_transfer_save(&self.game_dir, &source, None)
+                commit_u4_transfer_save(&self.game_dir, &source, None)
                     .unwrap_or_else(|err| panic!("Ultima IV transfer save commit failed: {err}"));
                 // `§6.6`/`§8`: on return the intro reloads and redraws
                 // the start/menu view from scratch. Nothing underneath
-                // this screen was saved, so nothing is restored.
+                // this screen was saved, so nothing is restored. `§6.6`'s
+                // ` Conversion complete, saving...` is the path's only
+                // finishing text and `§8` step 4 goes straight back to the
+                // menu, so no completion notice or key wait follows it
+                // (playtest S33).
                 VisualIntroPanelOutcome::ReturnToMenu {
                     subflow: IntroSubflow::UltimaIvTransfer,
                     result: IntroSubflowResult::SaveReady,
-                    message: format!(
-                        "Transferred {}. Choose Journey Onward to load the new save.",
-                        String::from_utf8_lossy(&avatar.name)
-                            .trim_end_matches('\0')
-                            .trim_end()
-                    ),
+                    message: String::new(),
                 }
             }
         }
@@ -1197,13 +1196,16 @@ mod tests {
             );
             outcome = screen.step('\r');
         }
-        assert!(matches!(
-            outcome,
+        // `§6.6`/`§8` step 4: straight back to the menu, with no
+        // engine-authored completion notice behind a key wait (playtest S33).
+        match &outcome {
             VisualIntroPanelOutcome::ReturnToMenu {
                 result: IntroSubflowResult::SaveReady,
+                message,
                 ..
-            }
-        ));
+            } => assert_eq!(message, "", "no post-commit notice is published"),
+            _ => panic!("the last stage key commits and returns to the menu"),
+        }
         let saved = std::fs::read(screen.game_dir.join(u5_runtime::SAVED_GAM_FILENAME)).unwrap();
         assert!(saved[u5_runtime::SAVE_ROSTER_OFFSET..].starts_with(b"Shamino\0"));
         // `§5.3`/`§7` end to end: this source's virtue standings are
