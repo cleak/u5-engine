@@ -2022,6 +2022,13 @@ impl PlayState {
                             SELECTION_CANCELLED_LITERAL,
                             false,
                         );
+                        // `magic.md §5`: the cancel "only skips the handler's
+                        // effect"; the C command still reports acted
+                        // (`commands.md §3`, playtest S02).
+                        if session.combat_actor_slot.is_none() && !self.combat_active {
+                            self.charge_cast_refusal_turn();
+                            return Ok(Some((MoveOutcome::Blocked, None)));
+                        }
                         return Ok(None);
                     }
                     let highlight = session.buffer.parse::<usize>().unwrap_or(1).max(1);

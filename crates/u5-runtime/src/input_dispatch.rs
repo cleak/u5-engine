@@ -536,6 +536,10 @@ fn handle_play_key_input_inner(
             .active_party_selector
             .is_some_and(|session| matches!(session.target, PartySelectorTarget::Search { .. }))
             .then_some(state.turn);
+        let cast_turn_before = state
+            .active_party_selector
+            .is_some_and(|session| matches!(session.target, PartySelectorTarget::Cast))
+            .then_some(state.turn);
         state.step_active_party_selector_with_game_dir(key, suffix, game_dir);
         // `commands.md §3`/§7: a Search that reached the acting-member
         // picker reports "acted" whether the pick searched or cancelled.
@@ -544,6 +548,19 @@ fn handle_play_key_input_inner(
                 state.charge_tile_command_acted_exit(turn_before);
                 state.apply_top_down_post_turn_effects_after_turn(turn_before, game_dir)?;
             }
+        }
+        // `commands.md §3` / `magic.md §5` step 1: `Player: None!` at Cast's
+        // acting-member picker is a C path, so it reports acted too
+        // (playtest S03, S13). A pick opens the spell prompt instead, and
+        // the cast charges when that closes.
+        if let Some(turn_before) = cast_turn_before
+            && state.active_party_selector.is_none()
+            && state.active_cast.is_none()
+            && !state.combat_active
+            && state.turn == turn_before
+        {
+            state.charge_cast_refusal_turn();
+            state.apply_top_down_post_turn_effects_after_turn(turn_before, game_dir)?;
         }
         settle_exploration_acted_charge(state, game_dir)?;
         return Ok(PlayInputDisposition::Continue);

@@ -880,6 +880,8 @@ impl PlayState {
             // **and plays a manual envelope cue**". The engine printed the
             // line and played nothing.
             self.emit_sound_effect(SoundEffect::MagicAbsorbed);
+            // A dispatcher scene gate, so it reports acted (playtest S03).
+            self.charge_cast_refusal_turn();
             return Ok(MoveOutcome::Blocked);
         }
         if spell_index.is_some()
@@ -971,6 +973,8 @@ impl PlayState {
             if !already_spent {
                 if self.spell_charges[spell_index] == 0 {
                     self.emit_cast_gate_refusal(crate::magic::CastGateOutcome::NoneMixed);
+                    // The step-4 charge gate reports acted (playtest S03).
+                    self.charge_cast_refusal_turn();
                     return Ok(MoveOutcome::Blocked);
                 }
                 if let Some(circle) = spell_circle_for(spell_index as u8)
@@ -1622,8 +1626,26 @@ impl PlayState {
                     }
                 }
                 self.message = "No effect!".to_string();
+                // The step-2 no-match result reports acted (playtest S11).
+                self.charge_cast_refusal_turn();
                 Ok(MoveOutcome::Blocked)
             }
+        }
+    }
+
+    /// `commands.md §3` (u5-spec#300 Q14): `C` reports "acted" on every
+    /// path except "one sub-handler branch, which belongs to a
+    /// scene-changing path and is not the scene gate" - "Being a refusal or
+    /// a cancellation is not what makes a command free." So the dispatcher's
+    /// own gates (`magic.md §5`: the acting-member pick, the no-match
+    /// `No effect!`, the `Absorbed!` scene gate, the `None mixed!` charge
+    /// gate) and a cancelled handler prompt spend the ordinary turn in
+    /// overworld and town play, as the scene gate's `Not here!` already did
+    /// (playtest S02, S03, S11, S13). Inside the arena the combat action
+    /// tail governs instead, so nothing is charged there.
+    pub(crate) fn charge_cast_refusal_turn(&mut self) {
+        if !self.combat_active {
+            self.advance_turn();
         }
     }
 

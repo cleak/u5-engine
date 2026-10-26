@@ -365,7 +365,8 @@ fn rc3_spell_target_escape_completes_the_on_who_row() {
         state
             .step_active_cast_followup('\u{1b}', "", Path::new(""))
             .unwrap()
-            .is_none()
+            .is_some(),
+        "the cancel is an acted C path (playtest S02)"
     );
     state.flush_message_slot();
     let rows = rc3_rows(&state);

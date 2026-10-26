@@ -1037,6 +1037,57 @@
         }
     }
 
+    /// `commands.md §3` (u5-spec#300 Q14): `C` is free only on "one
+    /// sub-handler branch, which belongs to a scene-changing path and is
+    /// not the scene gate"; "Being a refusal or a cancellation is not what
+    /// makes a command free." The dispatcher gates of `magic.md §5` - the
+    /// acting-member pick (`Player: None!`), the no-match `No effect!`, the
+    /// `None mixed!` charge gate - and a cancelled handler prompt (`On who:
+    /// None!`, reached with the charge and mana already spent) each spend
+    /// the ordinary turn. The engine charged none of them (playtest S02,
+    /// S03, S11, S13).
+    #[test]
+    fn cast_refusals_and_a_cancelled_target_prompt_spend_the_ordinary_turn() {
+        let cases: [(&str, &[(char, &str)]); 4] = [
+            ("No effect!", &[('C', ""), ('X', ""), ('X', ""), ('\r', "")]),
+            ("None mixed!", &[('C', ""), ('I', ""), ('L', ""), ('\r', "")]),
+            ("On who: None!", &[('C', ""), ('M', ""), ('\r', ""), ('\u{1b}', "")]),
+            ("Player: None!", &[('C', ""), ('\u{1b}', "")]),
+        ];
+        for town in [true, false] {
+            for (label, keys) in cases {
+                let mut state = if town {
+                    test_state(open_grid(), 5, 5)
+                } else {
+                    britannia_state(open_world_grid(), 5, 5)
+                };
+                state.spell_charges = [0; SPELL_COUNT];
+                if label == "On who: None!" {
+                    state.spell_charges[HEAL_SPELL_INDEX] = 1;
+                    state.party[0].mana = HEAL_COST;
+                    state.party[0].level = HEAL_COST;
+                }
+                if label == "Player: None!" {
+                    let second = state.party[0].clone();
+                    state.party.push(PartyMember { slot: 1, ..second });
+                }
+                let clock_before = state.clock;
+                for (key, suffix) in keys {
+                    handle_play_key_input(&mut state, *key, suffix, Path::new("")).unwrap();
+                }
+                state.flush_message_slot();
+                assert!(
+                    state.active_cast.is_none()
+                        && state.active_cast_followup.is_none()
+                        && state.active_party_selector.is_none(),
+                    "{label}: the cast closed"
+                );
+                assert_eq!(state.turn, 1, "{label} (town {town}) spends one turn");
+                assert_ne!(state.clock, clock_before, "{label} (town {town}) advances the clock");
+            }
+        }
+    }
+
     /// `commands.md §5.8` and `town-mode.md` A-Attack (added 2026-10-25,
     /// u5-spec#302 Q4): in town, a party whose own cell is water (tile id
     /// below 4) and whose transport is not exactly on foot gets `Attack-On
@@ -4830,7 +4881,9 @@
 
         assert_eq!(no_charge.spell_charges[OPEN_SPELL_INDEX], 0);
         assert_eq!(no_charge.party[0].mana, OPEN_SPELL_COST);
-        assert_eq!(no_charge.turn, 0);
+        // `commands.md §3`: `None mixed!` is a C path, so it reports acted
+        // (playtest S03).
+        assert_eq!(no_charge.turn, 1);
         assert_eq!(no_charge.message, "None mixed!\n");
 
         let mut no_modeled_target = test_state(open_grid(), 1, 1);

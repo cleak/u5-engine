@@ -607,7 +607,9 @@ BRITANNIA 11 21
         assert_eq!(stonegate.spell_charges[IN_LOR_SPELL_INDEX], 1);
         assert_eq!(stonegate.party[0].mana, IN_LOR_COST);
         assert_eq!(stonegate.light_spell_counter, 0);
-        assert_eq!(stonegate.turn, 0);
+        // `commands.md §3`: the Absorbed scene gate is a C path, so it
+        // reports acted (playtest S03).
+        assert_eq!(stonegate.turn, 1);
         assert_eq!(stonegate.message, "Absorbed!");
 
         let mut blackthorn = test_state(open_grid(), 5, 5);
@@ -627,7 +629,7 @@ BRITANNIA 11 21
 
         assert_eq!(blackthorn.spell_charges[gp], 1);
         assert_eq!(blackthorn.party[0].mana, 1);
-        assert_eq!(blackthorn.turn, 0);
+        assert_eq!(blackthorn.turn, 1);
         assert_eq!(blackthorn.message, "Absorbed!");
     }
 
@@ -1048,7 +1050,8 @@ BRITANNIA 11 21
         );
 
         assert_eq!(state.food, 12);
-        assert_eq!(state.turn, 0);
+        // `commands.md §3`: `None mixed!` reports acted (playtest S03).
+        assert_eq!(state.turn, 1);
         assert_eq!(state.message, "None mixed!\n");
     }
 
@@ -1099,7 +1102,8 @@ BRITANNIA 11 21
         );
 
         assert_eq!(state.gems, 0);
-        assert_eq!(state.turn, 0);
+        // `commands.md §3`: `None mixed!` reports acted (playtest S03).
+        assert_eq!(state.turn, 1);
         assert_eq!(state.message, "None mixed!\n");
         assert!(state.active_view_overlay.is_none());
     }
