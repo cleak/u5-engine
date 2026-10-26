@@ -3220,6 +3220,8 @@ impl PlayState {
             return MoveOutcome::Blocked;
         }
         self.player.facing = next;
+        // `audio.md §7.4`: a turn's redraw is a footstep tick (S25).
+        self.tick_dungeon_footstep();
         self.advance_turn();
         // `dungeon-mode.md §14`: a turn prints its verb and nothing else -
         // "`Turn left\n` / `Turn right\n`" - and the handler itself only

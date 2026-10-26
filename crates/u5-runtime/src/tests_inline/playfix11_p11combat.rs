@@ -296,3 +296,47 @@ fn spec302_q5_dragged_under_turns_play_the_argh_and_release_rumbles() {
         "7000 updates and the stop"
     );
 }
+
+/// `audio.md §7.4` "The full program" and "The tail" (u5-spec#300 Q32): the
+/// program is "15, 11, 7, 3"; after the step "the **second** later tick plays
+/// the 7 and the **fourth** plays the 3, and later ticks are silent", with
+/// ticks from turns, blocked steps and "every idle iteration of the dungeon
+/// command wait". A committed step played only its 15/11 pair (S25).
+#[test]
+fn playtest_s25_dungeon_footstep_tail_plays_seven_then_three_on_later_ticks() {
+    let footsteps = |state: &PlayState, serial| -> Vec<u8> {
+        state
+            .sound_effects_after(serial)
+            .iter()
+            .filter_map(|effect| match effect {
+                SoundEffect::DungeonFootstep { intensity } => Some(*intensity),
+                _ => None,
+            })
+            .collect()
+    };
+
+    // Idle iterations of the command wait.
+    let mut state = dungeon_state(open_dungeon_record(), 0, 3, 7);
+    let serial = state.sound_effect_serial;
+    state.commit_dungeon_step_position(4, 7);
+    assert_eq!(footsteps(&state, serial), vec![15, 11]);
+    let mut per_tick = Vec::new();
+    for _ in 0..6 {
+        let before = state.sound_effect_serial;
+        state.idle_wait_pass(None).unwrap();
+        per_tick.push(footsteps(&state, before));
+    }
+    assert_eq!(
+        per_tick,
+        vec![vec![], vec![7], vec![], vec![3], vec![], vec![]],
+        "silent, 7, silent, 3, then silence"
+    );
+
+    // Turns tick too, and a new step re-arms the pair.
+    let serial = state.sound_effect_serial;
+    state.commit_dungeon_step_position(5, 7);
+    for clockwise in [true, false, true, false] {
+        let _ = state.turn_dungeon(clockwise);
+    }
+    assert_eq!(footsteps(&state, serial), vec![15, 11, 7, 3]);
+}

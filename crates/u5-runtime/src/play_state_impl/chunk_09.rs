@@ -4541,6 +4541,9 @@ impl PlayState {
         if !self.under_sail_wait_pass_applies() {
             self.under_sail_wait_cursor_poll_pending = false;
             self.advance_visual_tick();
+            // `audio.md §7.4`: "every idle iteration of the dungeon command
+            // wait" ticks the footstep rumble (playtest S25).
+            self.tick_dungeon_footstep();
             return Ok(IdleWaitPass::CommandWait);
         }
         if self.under_sail_wait_cursor_poll_pending {
