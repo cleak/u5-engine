@@ -226,6 +226,45 @@ pub const DUNGEON_FLOURISH_PEN: u8 = 12;
 pub const DUNGEON_FLOURISH_RUNS: [(i32, i32, i32); 4] =
     [(87, 92, 93), (87, 97, 98), (88, 91, 93), (88, 97, 99)];
 
+/// One chamber-name banner of `dungeon-mode.md §6.4` (u5-spec#298 Q12):
+/// a block of runic-font rows printed in inverse video with its top-left
+/// cell at `origin` on the 40-by-25 grid of 8-by-8 cells.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct DungeonChamberBanner {
+    pub origin: (u8, u8),
+    /// The stored rows, each already space-padded to the block width.
+    pub rows: &'static [&'static [u8]],
+}
+
+/// `dungeon-mode.md §6.4`'s banner table, for dungeon record `record`
+/// (Deceit 0 .. Doom 7) and one-based banner index `n`, the wall's low
+/// nibble. `None` when the dungeon has fewer than `n` banners.
+///
+/// The rows are the runic font's code points (`formats/miscmsg-dat.md §4`,
+/// `endgame.md`): `[` is `TH`, `_` is `ST`, `]` is `NG` and `@` the word
+/// space; each digraph is one cell. The padding is the spec's - "fixed in the
+/// stored text and is **not** centring" - so every row is exactly the
+/// published block width.
+///
+/// Not drawn: Shame's three banners (DEEP, DEEPER, DEEPEST). Their `EE`
+/// digraph has no published code point (`§6.4` calls the `EE` reading
+/// "probable" and gives no byte), so this engine leaves those walls plain
+/// rather than guess a glyph.
+pub fn dungeon_chamber_banner(record: u8, n: u8) -> Option<DungeonChamberBanner> {
+    let (origin, rows): ((u8, u8), &'static [&'static [u8]]) = match (record, n) {
+        (0, 1) => ((7, 10), &[b"BOTTOMLESS", b"   PIT    "]),
+        (1, 1) => ((8, 9), &[b"[E@MAZE", b" OF@LO_", b" SOULS "]),
+        (3, 1) => ((8, 10), &[b"[E@PRISON", b"   WRO]  "]),
+        (4, 1) => ((8, 11), &[b"[E@CRYPT"]),
+        (4, 2) => ((9, 10), &[b"UPPER ", b"CRYPTS"]),
+        (4, 3) => ((9, 10), &[b"LOWER ", b"CRYPTS"]),
+        (4, 4) => ((9, 10), &[b"DEBTERS", b" ALLY  "]),
+        (6, 1) => ((7, 10), &[b"MO[ER@LODE", b"   MAZE   "]),
+        _ => return None,
+    };
+    Some(DungeonChamberBanner { origin, rows })
+}
+
 pub const DUNGEON_MONSTER_INITIAL_STATES: [u8; 8] =
     [0x60, 0xa0, 0x00, 0x90, 0x80, 0x60, 0x00, 0x00];
 pub const DUNGEON_MONSTER_COMBAT_CLASSES: [u8; 8] = [20, 21, 22, 23, 24, 25, 28, 27];

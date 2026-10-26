@@ -907,6 +907,7 @@
             pixels: Vec::new(),
             dungeon_billboards: None,
             dungeon_sprites: None,
+            runic_font: None,
         };
         let viewport = state.render_top_down_frame(5, &atlas).unwrap().unwrap();
         assert_eq!(viewport.cells_wide, LOCAL_VIEW_OVERLAY_SIDE);
@@ -1024,6 +1025,7 @@
             pixels: vec![2; 512 * TILE_ATLAS_SIDE * TILE_ATLAS_SIDE],
             dungeon_billboards: None,
             dungeon_sprites: None,
+            runic_font: None,
         };
         let replacement = state.render_top_down_frame(5, &atlas).unwrap().unwrap();
         let base = state

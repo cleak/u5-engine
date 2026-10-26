@@ -82,6 +82,10 @@ pub struct TileAtlas {
     pub dungeon_billboards: Option<crate::dungeon_view::DungeonBillboardBanks>,
     /// Masked first-person object and wandering-monster sprite banks.
     pub dungeon_sprites: Option<crate::dungeon_view::DungeonSpriteBanks>,
+    /// `RUNES.CH`, for the one viewport text the first-person renderer
+    /// prints itself: `dungeon-mode.md §6.4`'s chamber-name banners. `None`
+    /// when the directory does not ship it.
+    pub runic_font: Option<FixedCellFont>,
 }
 
 impl TileAtlas {

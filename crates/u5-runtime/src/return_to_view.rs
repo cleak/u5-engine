@@ -2603,6 +2603,7 @@ mod tests {
             pixels,
             dungeon_billboards: None,
             dungeon_sprites: None,
+            runic_font: None,
         }
     }
 
@@ -2854,6 +2855,7 @@ mod tests {
             pixels,
             dungeon_billboards: None,
             dungeon_sprites: None,
+            runic_font: None,
         };
 
         let (viewport, _report) =

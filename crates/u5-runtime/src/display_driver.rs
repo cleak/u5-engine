@@ -1121,6 +1121,7 @@ mod red_green_plane_swap_tests {
                 .collect(),
             dungeon_billboards: None,
             dungeon_sprites: None,
+            runic_font: None,
         };
         let before = atlas.pixels.clone();
         swap_loaded_tile_red_green_planes_over_published_set(&mut atlas);

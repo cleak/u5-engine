@@ -290,3 +290,70 @@ fn playtest_s24_inline_direction_forms_match_the_prompt_form() {
     );
     let _ = fs::remove_dir_all(dir);
 }
+
+/// S07: `dungeon-mode.md §6.4` (u5-spec#298 Q12): "A `0xB?` wall one cell
+/// ahead whose low nibble is non-zero routes to the per-dungeon chamber-name
+/// banner handler", drawn as "a solid white block with black runes exactly
+/// its rows high and its width in cells wide" at origin `(8 x column, 8 x
+/// row)`. "Confirmed on the original in EGA: facing Deceit's first-level
+/// banner wall showed a solid white block with black runes covering exactly
+/// x 56..135, y 80..95." Only when `n` is within the dungeon's banner count.
+#[test]
+fn playtest_s07_dungeon_chamber_banner_draws_its_inverse_block() {
+    // A blank runic font: every cell is all background, so the inverse
+    // block is solid white and its extent is exact.
+    let blank_runes = parse_ch_font(&vec![0; CH_FONT_LEN], RUNES_CH_FILE).unwrap();
+    let mut atlas = synthetic_tile_atlas(TileGraphicsDepth::Ega16);
+    atlas.runic_font = Some(blank_runes);
+    let white = TileGraphicsDepth::Ega16.pixel_limit() - 1;
+    let render = |record: u8, wall: u8| {
+        let mut grid = open_dungeon_record();
+        grid[dungeon_cell_index(0, 5, 4)] = wall;
+        let mut state = dungeon_state(grid, 0, 4, 4);
+        state.area = Area::Dungeon {
+            scene: DungeonScene::from_record(record).unwrap(),
+            level: 0,
+        };
+        state.player.facing = Direction::East;
+        state.torch_counter = 10;
+        state.render_top_down_frame(VIEWPORT_PLAYER_ROW, &atlas).unwrap().unwrap()
+    };
+    let white_box = |viewport: &TileViewport| {
+        let mut bounds: Option<(usize, usize, usize, usize)> = None;
+        for y in 0..viewport.height {
+            for x in 0..viewport.width {
+                if viewport.pixels[y * viewport.width + x] == white {
+                    let (sx, sy) = (x + VIEWPORT_ORIGIN_X, y + VIEWPORT_ORIGIN_Y);
+                    bounds = Some(match bounds {
+                        None => (sx, sx, sy, sy),
+                        Some((x0, x1, y0, y1)) => (x0.min(sx), x1.max(sx), y0.min(sy), y1.max(sy)),
+                    });
+                }
+            }
+        }
+        bounds
+    };
+    // Deceit (record 0), banner 1: BOTTOMLESS / PIT at (7, 10), 2 x 10.
+    assert_eq!(white_box(&render(0, 0xb1)), Some((56, 135, 80, 95)));
+    // Covetous (record 4), banner 2: UPPER / CRYPTS at (9, 10), 2 x 6.
+    assert_eq!(white_box(&render(4, 0xb2)), Some((72, 119, 80, 95)));
+    // A plain wall, an index past the dungeon's count, and Destard (none).
+    assert_eq!(white_box(&render(0, 0xb0)), None);
+    assert_eq!(white_box(&render(0, 0xb2)), None);
+    assert_eq!(white_box(&render(2, 0xb1)), None);
+    // Every published banner is its published size.
+    for (record, n, rows, cells) in [
+        (0, 1, 2, 10),
+        (1, 1, 3, 7),
+        (3, 1, 2, 9),
+        (4, 1, 1, 8),
+        (4, 2, 2, 6),
+        (4, 3, 2, 6),
+        (4, 4, 2, 7),
+        (6, 1, 2, 10),
+    ] {
+        let banner = dungeon_chamber_banner(record, n).unwrap();
+        assert_eq!(banner.rows.len(), rows, "{record}/{n}");
+        assert!(banner.rows.iter().all(|row| row.len() == cells), "{record}/{n}");
+    }
+}
