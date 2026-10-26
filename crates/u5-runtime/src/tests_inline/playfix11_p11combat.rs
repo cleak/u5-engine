@@ -374,3 +374,54 @@ fn playtest_s26_dungeon_angle_brackets_answer_what_not_a_failed_climb() {
         }
     }
 }
+
+/// `dungeon-mode.md §4.1` (u5-spec#300 Q24): "A-Attack does not test the
+/// inactive marker at all; it relies on those off-grid coordinates never
+/// matching a cell", and `§10` compares the forward cell "with the single
+/// active dungeon monster record". A record carrying the `0xFF` class on an
+/// on-grid cell (an old engine save's shape) answered `What?` (S27); the
+/// stock inactive form at X/Y 255 still never matches.
+#[test]
+fn playtest_s27_dungeon_attack_matches_the_record_by_coordinate_alone() {
+    let mut state = dungeon_state(open_dungeon_record(), 0, 2, 3);
+    state.player.facing = Direction::East;
+    if state.active_objects.len() <= DUNGEON_ACTIVE_MONSTER_SLOT {
+        state
+            .active_objects
+            .resize(DUNGEON_ACTIVE_MONSTER_SLOT + 1, ActiveObject::empty());
+    }
+    let inactive_on_grid = ActiveObject {
+        type_byte: 0,
+        tile: 0,
+        x: 3,
+        y: 3,
+        z: 0,
+        phase: 0,
+        aux1: DUNGEON_MONSTER_INACTIVE_DEP1,
+        aux3: 0,
+    };
+
+    state.active_objects[DUNGEON_ACTIVE_MONSTER_SLOT] = inactive_on_grid;
+    assert_eq!(
+        state.dungeon_attack_monster_record_at(3, 3).map(|(slot, _)| slot),
+        Some(DUNGEON_ACTIVE_MONSTER_SLOT),
+        "the class byte is not consulted"
+    );
+    let _ = state.attack_command(None);
+    assert_ne!(state.message, crate::commands::DUNGEON_ATTACK_NO_TARGET_REFUSAL);
+
+    let mut stock = dungeon_state(open_dungeon_record(), 0, 2, 3);
+    stock.player.facing = Direction::East;
+    if stock.active_objects.len() <= DUNGEON_ACTIVE_MONSTER_SLOT {
+        stock
+            .active_objects
+            .resize(DUNGEON_ACTIVE_MONSTER_SLOT + 1, ActiveObject::empty());
+    }
+    stock.active_objects[DUNGEON_ACTIVE_MONSTER_SLOT] = ActiveObject {
+        x: DUNGEON_ACTIVE_OBJECT_INACTIVE_COORDINATE,
+        y: DUNGEON_ACTIVE_OBJECT_INACTIVE_COORDINATE,
+        ..inactive_on_grid
+    };
+    let _ = stock.attack_command(None);
+    assert_eq!(stock.message, crate::commands::DUNGEON_ATTACK_NO_TARGET_REFUSAL);
+}
