@@ -603,7 +603,9 @@ impl PlayState {
                     // Reagents at this location. The earlier statement that
                     // the M command owns Codex entry is retracted." Codex
                     // entry is E-Enter on tile `0x11`.
-                    handled!(self.start_mix_reagents_prompt());
+                    let outcome = self.start_mix_reagents_prompt();
+                    self.charge_mix_command_acted_exit(turn_before);
+                    handled!(outcome);
                 }
                 'N' => {
                     handled!(self.start_new_order_prompt());
@@ -805,7 +807,11 @@ impl PlayState {
                 outcome
             }
             // See the `M` arm above: `M` is Mix Reagents everywhere.
-            'm' => self.start_mix_reagents_prompt(),
+            'm' => {
+                let outcome = self.start_mix_reagents_prompt();
+                self.charge_mix_command_acted_exit(turn_before);
+                outcome
+            }
             'z' => self.z_stats_command(),
             'c' => self.start_cast_spell_prompt(),
             // `commands.md §2`: "Lowercase letters should already have been
@@ -874,6 +880,8 @@ impl PlayState {
             // **and plays a manual envelope cue**". The engine printed the
             // line and played nothing.
             self.emit_sound_effect(SoundEffect::MagicAbsorbed);
+            // A dispatcher scene gate, so it reports acted (playtest S03).
+            self.charge_cast_refusal_turn();
             return Ok(MoveOutcome::Blocked);
         }
         if spell_index.is_some()
@@ -965,6 +973,8 @@ impl PlayState {
             if !already_spent {
                 if self.spell_charges[spell_index] == 0 {
                     self.emit_cast_gate_refusal(crate::magic::CastGateOutcome::NoneMixed);
+                    // The step-4 charge gate reports acted (playtest S03).
+                    self.charge_cast_refusal_turn();
                     return Ok(MoveOutcome::Blocked);
                 }
                 if let Some(circle) = spell_circle_for(spell_index as u8)
@@ -1616,8 +1626,26 @@ impl PlayState {
                     }
                 }
                 self.message = "No effect!".to_string();
+                // The step-2 no-match result reports acted (playtest S11).
+                self.charge_cast_refusal_turn();
                 Ok(MoveOutcome::Blocked)
             }
+        }
+    }
+
+    /// `commands.md §3` (u5-spec#300 Q14): `C` reports "acted" on every
+    /// path except "one sub-handler branch, which belongs to a
+    /// scene-changing path and is not the scene gate" - "Being a refusal or
+    /// a cancellation is not what makes a command free." So the dispatcher's
+    /// own gates (`magic.md §5`: the acting-member pick, the no-match
+    /// `No effect!`, the `Absorbed!` scene gate, the `None mixed!` charge
+    /// gate) and a cancelled handler prompt spend the ordinary turn in
+    /// overworld and town play, as the scene gate's `Not here!` already did
+    /// (playtest S02, S03, S11, S13). Inside the arena the combat action
+    /// tail governs instead, so nothing is charged there.
+    pub(crate) fn charge_cast_refusal_turn(&mut self) {
+        if !self.combat_active {
+            self.advance_turn();
         }
     }
 
@@ -1683,7 +1711,9 @@ impl PlayState {
         // unknown-spell outcomes alike. The pause itself is presentation
         // only — "Neither branch advances the clock" — and this crate has no
         // frontend delay channel to drive, so only the printed beat is
-        // modelled here; mixing still costs no game time.
+        // modelled here. The mixer adds no time of its own; the command's
+        // one ordinary turn is charged by its dispatcher once the last
+        // prompt closes (`magic.md §6`, u5-spec#302 Q1, R621).
         self.message = MMIX_MIXING_MESSAGE.to_string();
         for index in selected_reagent_indices(request.reagent_mask) {
             self.reagents[index] -= request.amount;
@@ -3150,7 +3180,7 @@ mod movement_magic_karma_traps_spec_tests {
         assert_eq!(lines.next(), Some(""), "the completion line opens a block");
         assert_eq!(lines.next(), Some(MMIX_COMPLETION_MESSAGE));
         assert_eq!(lines.next(), None);
-        assert_eq!(state.turn, 0, "magic.md §6: mixing costs no game time");
+        assert_eq!(state.turn, 0, "magic.md §6: the mixer itself adds no game time");
     }
 
     /// `magic.md §6` Step 6: "Because the line precedes the recipe

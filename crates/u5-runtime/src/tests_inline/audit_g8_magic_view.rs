@@ -42,10 +42,12 @@ fn audit_a118_cancelled_heal_prompt_keeps_the_spent_charge_and_mana() {
     assert_eq!(state.spell_charges[HEAL_SPELL_INDEX], 0);
     assert_eq!(state.party[0].mana, 0);
 
+    // `commands.md §3`: the cancel is still an acted C path, so it now
+    // returns the outcome the turn charge runs under (playtest S02).
     assert!(state
         .step_active_cast_followup('\u{1b}', "", Path::new(""))
         .unwrap()
-        .is_none());
+        .is_some());
     assert!(state.active_cast_followup.is_none());
     assert_eq!(state.spell_charges[HEAL_SPELL_INDEX], 0);
     assert_eq!(state.party[0].mana, 0);

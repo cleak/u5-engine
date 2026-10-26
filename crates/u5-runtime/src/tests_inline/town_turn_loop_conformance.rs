@@ -1611,3 +1611,20 @@ fn talk_with_an_unowned_faced_object_ignores_a_guard_record_standing_on_the_cell
     state.talk_facing_with_dialogue(&HashMap::new());
     assert_eq!(state.npcs[0].schedule[NPC_SCHEDULE_AI_OFFSET], 1);
 }
+
+/// `commands.md §3`: `F` is free on no path and spends a turn "Always,
+/// including `Fire-What?`"; it is not one of the six forwarding routes, so a
+/// cancelled direction prompt is acted too, and `§5.4` makes Space the
+/// prompt's `Pass`. The shipboard `Fire-Pass` was free (playtest S15).
+#[test]
+fn a_pass_at_the_shipboard_fire_prompt_spends_the_outdoor_turn() {
+    let mut state = frigate_world(false, 77, WindState::Calm);
+    let clock_before = state.clock;
+    handle_play_key_input(&mut state, 'F', "", Path::new("")).unwrap();
+    assert!(state.active_direction_prompt.is_some(), "the ship asks a direction");
+    assert_eq!(state.turn, 0);
+    handle_play_key_input(&mut state, ' ', "", Path::new("")).unwrap();
+    assert!(state.active_direction_prompt.is_none());
+    assert_eq!(state.turn, 1, "Fire-Pass spends one turn");
+    assert_ne!(state.clock, clock_before);
+}

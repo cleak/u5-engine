@@ -2022,6 +2022,13 @@ impl PlayState {
                             SELECTION_CANCELLED_LITERAL,
                             false,
                         );
+                        // `magic.md §5`: the cancel "only skips the handler's
+                        // effect"; the C command still reports acted
+                        // (`commands.md §3`, playtest S02).
+                        if session.combat_actor_slot.is_none() && !self.combat_active {
+                            self.charge_cast_refusal_turn();
+                            return Ok(Some((MoveOutcome::Blocked, None)));
+                        }
                         return Ok(None);
                     }
                     let highlight = session.buffer.parse::<usize>().unwrap_or(1).max(1);
@@ -3028,10 +3035,40 @@ impl PlayState {
     }
 
     pub fn start_attack_direction_prompt(&mut self) -> MoveOutcome {
+        if self.town_attack_on_foot_refusal() {
+            return MoveOutcome::Blocked;
+        }
         self.active_direction_prompt =
             Some(DirectionPromptSession::new(DirectionPromptKind::Attack));
         self.message = self.render_active_direction_prompt();
         MoveOutcome::Observed
+    }
+
+    /// `commands.md §5.8` and `town-mode.md` A-Attack (added 2026-10-25,
+    /// u5-spec#302 Q4): in town, "before asking for a direction it refuses
+    /// when the party itself stands on a water cell (tile id below 4) while
+    /// its transport marker is anything other than exactly on foot: it
+    /// prints `On foot!` after the `Attack-` echo, asks for no direction and
+    /// costs no turn". The `commands.md §3` table files it as town A's only
+    /// "no action" path. On foot on water, or mounted on dry ground, the
+    /// direction prompt follows as usual. Returns whether it refused.
+    pub fn town_attack_on_foot_refusal(&mut self) -> bool {
+        if !matches!(self.area, Area::Town { .. }) || self.player.transport.is_foot() {
+            return false;
+        }
+        let Some(&tile) = self.grid.get(self.player.y * TOWN_GRID_SIDE + self.player.x) else {
+            return false;
+        };
+        if tile >= TOWN_ATTACK_WATER_TILE_LIMIT {
+            return false;
+        }
+        // The reply continues the verb's open `Attack-` echo row:
+        // `commands.md §5.8` gives `Attack-On foot!` with one hyphen
+        // (fifteen cells). Unlike the town K-Klimb horse refusal, whose
+        // literal carries its own hyphen (`Klimb--On foot!`), this one
+        // does not.
+        self.message = "On foot!".to_string();
+        true
     }
 
     pub fn start_fire_direction_prompt(&mut self) -> MoveOutcome {
@@ -3233,6 +3270,19 @@ impl PlayState {
             Area::Town { .. } => self.advance_turn_without_door_tick(),
             Area::Dungeon { .. } => {}
         }
+    }
+
+    /// `magic.md §6` (corrected 2026-10-25, u5-spec#302 Q1, R621): "the
+    /// mixer itself adds no game time ... The command is not free, though"
+    /// - M-Mix reports "acted" on every exit, so the overworld and town
+    /// epilogue runs once when its last prompt closes. Nothing is charged
+    /// while the mixer session is still open; the dungeon charges its own
+    /// acted letters ([`Self::charge_tile_command_acted_exit`]).
+    pub fn charge_mix_command_acted_exit(&mut self, turn_before: u64) {
+        if self.active_mix.is_some() {
+            return;
+        }
+        self.charge_tile_command_acted_exit(turn_before);
     }
 
     pub fn start_search_direction_prompt(&mut self) -> MoveOutcome {
@@ -3653,7 +3703,10 @@ impl PlayState {
                 // forwarding routes, so its cancel keeps the default too. Town
                 // `A` forwards "'Acted', except the on-foot refusal"; a
                 // cancelled aim is not that refusal. Overworld `A` is "always
-                // no action" and stays free (playtest M1/M2).
+                // no action" and stays free (playtest M1/M2). `F` spends a
+                // turn "Always, including `Fire-What?`" and is not a
+                // forwarding route, so the shipboard `Fire-Pass` is acted too
+                // (playtest S15).
                 let town_attack = matches!(session.kind, DirectionPromptKind::Attack)
                     && matches!(self.area, Area::Town { .. });
                 if matches!(
@@ -3661,6 +3714,7 @@ impl PlayState {
                     DirectionPromptKind::Search
                         | DirectionPromptKind::Look
                         | DirectionPromptKind::Talk
+                        | DirectionPromptKind::Fire
                 ) || town_attack
                 {
                     match self.area {
@@ -4587,7 +4641,7 @@ impl PlayState {
         }
     }
 
-    /// Pay the exploration charge R-Ready or Z-stats owes once none of
+    /// Pay the exploration charge R-Ready, Z-stats or an E-Enter shrine visit owes once none of
     /// their prompts is open any more. Returns the turn counter before the
     /// charge so the caller can run the post-action pass, or `None` when
     /// nothing was owed or a prompt is still waiting.
@@ -4603,6 +4657,8 @@ impl PlayState {
             || self.active_ready.is_some()
             || self.active_party_selector.is_some()
             || self.active_z_stats.is_some()
+            || self.active_shrine.is_some()
+            || self.cinematic_hold_owns_input()
         {
             return None;
         }

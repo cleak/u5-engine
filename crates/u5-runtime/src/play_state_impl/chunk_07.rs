@@ -2585,6 +2585,10 @@ impl PlayState {
             ));
             return Ok(MoveOutcome::Used);
         }
+        // The town on-foot refusal runs before the direction is read.
+        if self.town_attack_on_foot_refusal() {
+            return Ok(MoveOutcome::Blocked);
+        }
         let Some(direction) = direction else {
             // The interactive `A` opens the `Attack-` prompt, so a missing
             // direction can only come from the inline harness form.

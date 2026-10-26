@@ -827,7 +827,7 @@
     }
 
     #[test]
-    fn cast_rel_hur_requires_mixed_charge_without_spending_turn() {
+    fn cast_rel_hur_requires_mixed_charge_and_the_refusal_spends_the_turn() {
         let mut state = britannia_state(open_world_grid(), 5, 5);
         state.party[0].mana = 3;
         state.party[0].level = 2;
@@ -839,7 +839,8 @@
 
         assert_eq!(state.wind, WindState::Calm);
         assert_eq!(state.party[0].mana, 3);
-        assert_eq!(state.turn, 0);
+        // `commands.md §3`: `None mixed!` reports acted (playtest S03).
+        assert_eq!(state.turn, 1);
         assert_eq!(state.message, "None mixed!\n");
     }
 
@@ -959,7 +960,8 @@
 
         assert_eq!(stonegate.spell_charges[TIME_STOP_SPELL_INDEX], 1);
         assert_eq!(stonegate.party[0].mana, TIME_STOP_COST);
-        assert_eq!(stonegate.turn, 0);
+        // `commands.md §3`: `Absorbed!` reports acted (playtest S03).
+        assert_eq!(stonegate.turn, 1);
         assert_eq!(stonegate.active_effect_tag, None);
         assert_eq!(stonegate.active_effect_counter, 0);
         // `audio.md §6.1` / `RETRACTIONS.md` R462: "The text is

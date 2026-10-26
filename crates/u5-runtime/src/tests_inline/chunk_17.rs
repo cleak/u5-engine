@@ -973,8 +973,156 @@
         assert!(state.active_mix.is_none());
         assert_eq!(state.reagents[REAGENT_SULFUR_ASH], 1);
         assert_eq!(state.spell_charges[IN_LOR_SPELL_INDEX], 1);
-        assert_eq!(state.turn, 0);
+        // `magic.md §6` (corrected 2026-10-25, u5-spec#302 Q1, R621): the
+        // mixer adds no time of its own, but the command reports "acted",
+        // so the ordinary turn runs once (playtest S01).
+        assert_eq!(state.turn, 1);
         assert_eq!(state.message, "Mixing...\n\nDone!");
+    }
+
+    /// `magic.md §6` (corrected 2026-10-25, u5-spec#302 Q1, R621): "M-Mix
+    /// ... reports \"acted\" on every path, and the mode loop runs its
+    /// ordinary per-turn epilogue exactly once after the command returns.
+    /// In town that is one minute ... On the overworld it is the ordinary
+    /// outdoor turn." The listed exits include `No reagents owned!`,
+    /// `None!` after Escape or a bare Return, Escape at the reagent list, a
+    /// zero quantity and `Nothing to mix!`. The engine charged none of them
+    /// (playtest S01, S10, S12, S22).
+    #[test]
+    fn every_mmix_exit_spends_one_ordinary_turn_in_town_and_outdoors() {
+        let exits: [(&str, &[(char, &str)]); 6] = [
+            ("None! after Escape", &[('M', ""), ('\u{1b}', "")]),
+            ("None! after a bare Return", &[('M', ""), ('\r', "")]),
+            ("Escape at the reagent list", &[('M', ""), ('I', "L"), ('\u{1b}', "")]),
+            (
+                "a zero quantity",
+                &[('M', ""), ('I', "L"), ('1', ""), ('M', ""), ('0', ""), ('\r', "")],
+            ),
+            (
+                "Nothing to mix!",
+                &[('M', ""), ('I', "L"), ('M', ""), ('1', ""), ('\r', "")],
+            ),
+            (
+                "a successful mix",
+                &[('M', ""), ('I', "L"), ('1', ""), ('M', ""), ('1', ""), ('\r', "")],
+            ),
+        ];
+        for town in [true, false] {
+            for (label, keys) in exits {
+                let mut state = if town {
+                    test_state(open_grid(), 5, 5)
+                } else {
+                    britannia_state(open_world_grid(), 5, 5)
+                };
+                state.reagents = [0; REAGENT_COUNT];
+                state.reagents[REAGENT_SULFUR_ASH] = 9;
+                let clock_before = state.clock;
+                for (key, suffix) in keys {
+                    handle_play_key_input(&mut state, *key, suffix, Path::new("")).unwrap();
+                }
+                assert!(state.active_mix.is_none(), "{label}: the mixer closed");
+                assert_eq!(state.turn, 1, "{label} (town {town}) spends one turn");
+                assert_ne!(state.clock, clock_before, "{label} (town {town}) advances the clock");
+            }
+            // `No reagents owned!` refuses before any prompt opens.
+            let mut state = if town {
+                test_state(open_grid(), 5, 5)
+            } else {
+                britannia_state(open_world_grid(), 5, 5)
+            };
+            state.reagents = [0; REAGENT_COUNT];
+            handle_play_key_input(&mut state, 'M', "", Path::new("")).unwrap();
+            assert!(state.message.contains(MMIX_NO_REAGENTS_OWNED_MESSAGE));
+            assert_eq!(state.turn, 1, "No reagents owned! (town {town}) spends one turn");
+        }
+    }
+
+    /// `commands.md §3` (u5-spec#300 Q14): `C` is free only on "one
+    /// sub-handler branch, which belongs to a scene-changing path and is
+    /// not the scene gate"; "Being a refusal or a cancellation is not what
+    /// makes a command free." The dispatcher gates of `magic.md §5` - the
+    /// acting-member pick (`Player: None!`), the no-match `No effect!`, the
+    /// `None mixed!` charge gate - and a cancelled handler prompt (`On who:
+    /// None!`, reached with the charge and mana already spent) each spend
+    /// the ordinary turn. The engine charged none of them (playtest S02,
+    /// S03, S11, S13).
+    #[test]
+    fn cast_refusals_and_a_cancelled_target_prompt_spend_the_ordinary_turn() {
+        let cases: [(&str, &[(char, &str)]); 4] = [
+            ("No effect!", &[('C', ""), ('X', ""), ('X', ""), ('\r', "")]),
+            ("None mixed!", &[('C', ""), ('I', ""), ('L', ""), ('\r', "")]),
+            ("On who: None!", &[('C', ""), ('M', ""), ('\r', ""), ('\u{1b}', "")]),
+            ("Player: None!", &[('C', ""), ('\u{1b}', "")]),
+        ];
+        for town in [true, false] {
+            for (label, keys) in cases {
+                let mut state = if town {
+                    test_state(open_grid(), 5, 5)
+                } else {
+                    britannia_state(open_world_grid(), 5, 5)
+                };
+                state.spell_charges = [0; SPELL_COUNT];
+                if label == "On who: None!" {
+                    state.spell_charges[HEAL_SPELL_INDEX] = 1;
+                    state.party[0].mana = HEAL_COST;
+                    state.party[0].level = HEAL_COST;
+                }
+                if label == "Player: None!" {
+                    let second = state.party[0].clone();
+                    state.party.push(PartyMember { slot: 1, ..second });
+                }
+                let clock_before = state.clock;
+                for (key, suffix) in keys {
+                    handle_play_key_input(&mut state, *key, suffix, Path::new("")).unwrap();
+                }
+                state.flush_message_slot();
+                assert!(
+                    state.active_cast.is_none()
+                        && state.active_cast_followup.is_none()
+                        && state.active_party_selector.is_none(),
+                    "{label}: the cast closed"
+                );
+                assert_eq!(state.turn, 1, "{label} (town {town}) spends one turn");
+                assert_ne!(state.clock, clock_before, "{label} (town {town}) advances the clock");
+            }
+        }
+    }
+
+    /// `commands.md §5.8` and `town-mode.md` A-Attack (added 2026-10-25,
+    /// u5-spec#302 Q4): in town, a party whose own cell is water (tile id
+    /// below 4) and whose transport is not exactly on foot gets `Attack-On
+    /// foot!` before any direction prompt, at no turn cost. On foot on that
+    /// water, or mounted on dry ground, the direction prompt follows.
+    #[test]
+    fn town_attack_on_water_refuses_on_foot_before_the_direction_prompt() {
+        let water = 2u8;
+        let mut grid = open_grid();
+        grid[5 * TOWN_GRID_SIDE + 5] = water;
+        let mut state = test_state(grid.clone(), 5, 5);
+        mount_horse(&mut state);
+        let clock_before = state.clock;
+        handle_play_key_input(&mut state, 'A', "", Path::new("")).unwrap();
+        assert!(state.active_direction_prompt.is_none(), "no direction is asked");
+        assert_eq!(state.message, "On foot!");
+        state.flush_message_slot();
+        let rows: Vec<&str> = state
+            .message_entries()
+            .iter()
+            .map(|entry| entry.text.trim_end())
+            .collect();
+        // One hyphen, unlike town K's `Klimb--On foot!` (`commands.md §5.8`).
+        assert_eq!(rows, ["Attack-On foot!"]);
+        assert_eq!(state.turn, 0, "the refusal is town A's no-action path");
+        assert_eq!(state.clock, clock_before);
+
+        let mut on_foot = test_state(grid, 5, 5);
+        handle_play_key_input(&mut on_foot, 'A', "", Path::new("")).unwrap();
+        assert!(on_foot.active_direction_prompt.is_some(), "on foot, the prompt opens");
+
+        let mut mounted_dry = test_state(open_grid(), 5, 5);
+        mount_horse(&mut mounted_dry);
+        handle_play_key_input(&mut mounted_dry, 'A', "", Path::new("")).unwrap();
+        assert!(mounted_dry.active_direction_prompt.is_some(), "dry ground, the prompt opens");
     }
 
     /// `magic.md §6` step 4, "What Return does": "A leading minus is
@@ -1124,6 +1272,33 @@
         assert_eq!(clock_after(&['Z']), one_minute, "Z alone spends one minute");
         assert_eq!(clock_after(&[' ', 'Z']), two_minutes);
         assert_eq!(clock_after(&['P', 'Z']), two_minutes);
+    }
+
+    /// `dungeon-mode.md §4` step 1 and `commands.md §3` (Dungeon): "the
+    /// dungeon loop advances its own clock at the head of the iteration,
+    /// before the command is even parsed, so no dungeon command is
+    /// distinguished by this status for timekeeping purposes." A `J` after
+    /// the no-action `W` spent no minute, the Z defect of p10 R12 on J
+    /// (playtest S16).
+    #[test]
+    fn dungeon_jimmy_after_a_no_action_command_still_spends_its_minute() {
+        let clock_after = |keys: &[char]| {
+            let mut state = dungeon_state(open_dungeon_record(), 0, 1, 1);
+            for key in keys {
+                handle_play_key_input(&mut state, *key, "", Path::new("")).unwrap();
+            }
+            state.clock
+        };
+        let start = dungeon_state(open_dungeon_record(), 0, 1, 1).clock;
+        let minutes = |count: u8| {
+            let mut clock = start;
+            clock.advance_minutes(count);
+            clock
+        };
+        assert_eq!(clock_after(&['J']), minutes(1), "J alone spends one minute");
+        assert_eq!(clock_after(&['W', 'J']), minutes(2), "W;J is two iterations");
+        assert_eq!(clock_after(&['W', 'J', 'J', 'J']), minutes(4));
+        assert_eq!(clock_after(&[' ', 'J']), minutes(2));
     }
 
     #[test]
@@ -4741,7 +4916,9 @@
 
         assert_eq!(no_charge.spell_charges[OPEN_SPELL_INDEX], 0);
         assert_eq!(no_charge.party[0].mana, OPEN_SPELL_COST);
-        assert_eq!(no_charge.turn, 0);
+        // `commands.md §3`: `None mixed!` is a C path, so it reports acted
+        // (playtest S03).
+        assert_eq!(no_charge.turn, 1);
         assert_eq!(no_charge.message, "None mixed!\n");
 
         let mut no_modeled_target = test_state(open_grid(), 1, 1);

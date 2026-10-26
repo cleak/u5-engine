@@ -233,6 +233,10 @@ pub fn run_play_script_commands(
         state.run_blackthorn_rescue_to_handoff(game_dir)?;
         state.run_blackthorn_audience_exit_to_handoff(game_dir)?;
         resolve_shrine_third_mantra_without_pump(state, game_dir)?;
+        // The script shells run no exploration turn gate, so the acted turn an
+        // E-Enter shrine visit owes once its exit pacing has drained is paid
+        // here, as the gate pays it (`commands.md §3`, playtest S14).
+        u5_runtime::input_dispatch::settle_exploration_acted_charge(state, game_dir)?;
         drain_play_script_prompt_head_panel_refresh(state);
         print_play_script_snapshot(state, tile_atlas)?;
         if disposition == PlayInputDisposition::Quit {
@@ -283,6 +287,10 @@ where
         state.run_blackthorn_rescue_to_handoff(game_dir)?;
         state.run_blackthorn_audience_exit_to_handoff(game_dir)?;
         resolve_shrine_third_mantra_without_pump(state, game_dir)?;
+        // The script shells run no exploration turn gate, so the acted turn an
+        // E-Enter shrine visit owes once its exit pacing has drained is paid
+        // here, as the gate pays it (`commands.md §3`, playtest S14).
+        u5_runtime::input_dispatch::settle_exploration_acted_charge(state, game_dir)?;
         drain_play_script_prompt_head_panel_refresh(state);
         after_command(state, index, command)?;
         if disposition == PlayInputDisposition::Quit {

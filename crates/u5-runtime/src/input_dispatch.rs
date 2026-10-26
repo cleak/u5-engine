@@ -508,7 +508,7 @@ fn handle_play_key_input_inner(
         return handle_active_shrine_restoration_key_input(state, key, suffix, game_dir);
     }
     if state.active_mix.is_some() {
-        return Ok(handle_active_mix_key_input(state, key, suffix));
+        return handle_active_mix_key_input(state, key, suffix, game_dir);
     }
     if state.active_new_order.is_some() {
         return Ok(handle_active_new_order_key_input(state, key, suffix));
@@ -536,6 +536,10 @@ fn handle_play_key_input_inner(
             .active_party_selector
             .is_some_and(|session| matches!(session.target, PartySelectorTarget::Search { .. }))
             .then_some(state.turn);
+        let cast_turn_before = state
+            .active_party_selector
+            .is_some_and(|session| matches!(session.target, PartySelectorTarget::Cast))
+            .then_some(state.turn);
         state.step_active_party_selector_with_game_dir(key, suffix, game_dir);
         // `commands.md §3`/§7: a Search that reached the acting-member
         // picker reports "acted" whether the pick searched or cancelled.
@@ -544,6 +548,19 @@ fn handle_play_key_input_inner(
                 state.charge_tile_command_acted_exit(turn_before);
                 state.apply_top_down_post_turn_effects_after_turn(turn_before, game_dir)?;
             }
+        }
+        // `commands.md §3` / `magic.md §5` step 1: `Player: None!` at Cast's
+        // acting-member picker is a C path, so it reports acted too
+        // (playtest S03, S13). A pick opens the spell prompt instead, and
+        // the cast charges when that closes.
+        if let Some(turn_before) = cast_turn_before
+            && state.active_party_selector.is_none()
+            && state.active_cast.is_none()
+            && !state.combat_active
+            && state.turn == turn_before
+        {
+            state.charge_cast_refusal_turn();
+            state.apply_top_down_post_turn_effects_after_turn(turn_before, game_dir)?;
         }
         settle_exploration_acted_charge(state, game_dir)?;
         return Ok(PlayInputDisposition::Continue);
@@ -743,7 +760,10 @@ fn handle_play_key_input_inner(
         // `karma.md §7`: "`M` always selects Mix Reagents, including at a
         // shrine" (`RETRACTIONS.md` R411); meditation is reached only through
         // E-Enter. §8 (R451): the Codex reader is likewise E-Enter on `0x11`.
-        state.mix_reagents_from_suffix(suffix);
+        let turn_before = state.turn;
+        let outcome = state.mix_reagents_from_suffix(suffix);
+        state.charge_mix_command_acted_exit(turn_before);
+        state.apply_post_turn_effects_after_outcome(turn_before, game_dir, outcome)?;
         return Ok(PlayInputDisposition::Continue);
     }
     if key == 'N' && !suffix.is_empty() {
@@ -764,6 +784,15 @@ fn handle_play_key_input_inner(
     if matches!(key, 'J' | 'j')
         && (!suffix.is_empty() || matches!(state.area, Area::Dungeon { .. }))
     {
+        // `dungeon-mode.md §4` step 1 / `§15`: the dungeon's minute sits at
+        // the head of every iteration, whatever the command. `J` is read by
+        // this shared intercept rather than the dungeon handler, so it runs
+        // that loop head itself, as `Z` does above; after a no-action
+        // command the previous head's charge was still standing and the J
+        // spent no minute (playtest S16).
+        if matches!(state.area, Area::Dungeon { .. }) {
+            state.advance_dungeon_loop_minute();
+        }
         state.begin_command_echo_for(Command::Jimmy);
         let turn_before = state.turn;
         let member_index = if suffix.is_empty() {
@@ -893,7 +922,7 @@ fn handle_active_z_stats_key_input(
 /// `inventory.md §5` / `commands.md §4`: once R-Ready's or Z-stats' last
 /// prompt has closed, pay the owed exploration charge and run the
 /// post-action pass that follows it (playtest F23).
-fn settle_exploration_acted_charge(state: &mut PlayState, game_dir: &Path) -> io::Result<()> {
+pub fn settle_exploration_acted_charge(state: &mut PlayState, game_dir: &Path) -> io::Result<()> {
     if let Some(turn_before) = state.settle_exploration_acted_charge() {
         // The exchange's closing reply (`Item: Done`, `Status: Done`,
         // `Player: None!`) is already committed when the charge is paid.
@@ -1013,9 +1042,19 @@ fn handle_active_mix_key_input(
     state: &mut PlayState,
     key: char,
     suffix: &str,
-) -> PlayInputDisposition {
-    let _ = state.step_active_mix(key, suffix);
-    PlayInputDisposition::Continue
+    game_dir: &Path,
+) -> io::Result<PlayInputDisposition> {
+    let turn_before = state.turn;
+    if let Some(outcome) = state.step_active_mix(key, suffix) {
+        // `magic.md §6` (corrected 2026-10-25, u5-spec#302 Q1, R621): M-Mix
+        // "reports \"acted\" on every path, and the mode loop runs its
+        // ordinary per-turn epilogue exactly once after the command returns"
+        // - success, a wrong mix, `None!`, Escape at the reagent list, a zero
+        // quantity and `Nothing to mix!` alike (playtest S01).
+        state.charge_mix_command_acted_exit(turn_before);
+        state.apply_post_turn_effects_after_outcome(turn_before, game_dir, outcome)?;
+    }
+    Ok(PlayInputDisposition::Continue)
 }
 
 fn handle_active_rest_key_input(
@@ -1072,6 +1111,10 @@ fn handle_active_shrine_key_input(
     if let Some(outcome) = state.step_active_shrine(key, suffix, game_dir)? {
         state.apply_post_turn_effects_after_outcome(turn_before, game_dir, outcome)?;
     }
+    // The E-Enter shrine arm's acted turn, once the session and its exit
+    // pacing have finished (`commands.md §3`, playtest S14); while the exit
+    // presentation is still staged, the exploration turn gate pays it.
+    settle_exploration_acted_charge(state, game_dir)?;
     Ok(PlayInputDisposition::Continue)
 }
 
