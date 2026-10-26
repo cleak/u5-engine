@@ -257,28 +257,38 @@ fn a_solo_closing_record_keeps_its_row_open_into_the_captive_cell() {
 /// fall ends with "the last party member's rumble", the first dissolve to
 /// black takes 1.65 s, and the fall end to the envelope start is **4.80 s**.
 ///
-/// The death hold ends exactly when this engine's own sweep and member
-/// rumbles do, never before and within one tick after, for any party size:
-/// the paired `stonegate-trapdoor-audio` captures had the fixed 501-tick hold
-/// running about 0.6 s past this engine's last rumble, which put its
+/// The death hold ends exactly when the step's own sounds do - the fall's
+/// damage rumbles, the descent and one member-death rumble per slot - never
+/// before and within one tick after, for any party size: the paired
+/// `stonegate-trapdoor-audio` captures had the fixed 501-tick hold running
+/// about 0.6 s past this engine's last rumble, which put its
 /// fall-end-to-envelope span at 5.15 s against the stock's 4.80 s.
 #[test]
 fn spec301_q5_stonegate_holds_use_the_published_segments() {
-    use crate::audio::{RumbleJitter, SoundEffect};
+    use crate::audio::RumbleJitter;
     let tick = crate::narration::BIOS_TICK_SECS;
-    let mut jitter = RumbleJitter::new();
-    let descent = SoundEffect::StonegateDescent
-        .program(&mut jitter)
-        .duration(true)
-        .as_secs_f64();
-    let rumble = SoundEffect::StonegateMemberDeath
-        .program(&mut jitter)
-        .duration(true)
-        .as_secs_f64();
     for members in 1..=6usize {
-        let sound = descent + rumble * members as f64;
-        let hold = f64::from(crate::stonegate_trapdoor_death_hold_bios_ticks(members)) * tick;
-        assert!(hold >= sound && hold - sound < tick, "{members}: {hold} vs {sound}");
+        let mut state = test_state(open_grid(), 5, 5);
+        while state.party.len() < members {
+            let companion = audit_g5_companion(state.party.len() as u8);
+            state.party.push(companion);
+        }
+        state.party.truncate(members);
+        let serial = state.sound_effect_serial;
+        state.emit_sound_effect(crate::audio::SoundEffect::DamageRumble);
+        state.apply_stonegate_trapdoor_script_after(0, serial);
+        let mut jitter = RumbleJitter::new();
+        let sound: f64 = state
+            .sound_effects_after(serial)
+            .iter()
+            .map(|effect| effect.program(&mut jitter).duration(true).as_secs_f64())
+            .sum();
+        assert_eq!(state.sound_effects_after(serial).len(), 2 + members);
+        let hold = state.staged_narration.beats().next().expect("hold").delay_secs;
+        assert!(
+            hold >= sound && hold - sound < tick,
+            "{members}: {hold} vs {sound}"
+        );
     }
     let dissolve = f64::from(crate::blackthorn::BLACKTHORN_RESCUE_WAIT_VIEWPORT_DISSOLVE) * tick;
     assert!((dissolve - 1.65).abs() < tick, "{dissolve}");

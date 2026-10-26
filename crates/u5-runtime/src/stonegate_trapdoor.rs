@@ -65,22 +65,19 @@ pub const STONEGATE_TRAPDOOR_RUMBLE_BUDGET_UNITS: u16 = 3_000;
 /// its fall-end-to-envelope span measured 5.15 s against the stock's 4.80 s
 /// (every run, 2026-10-25 and 2026-10-26). The spec's own definition of the
 /// fall end is "the last party member's rumble", so the hold now ends when
-/// this engine's last rumble does: the descent program plus one member-death
-/// rumble per party slot, in ticks, rounded up. The 27.52 s figure is from
-/// DOSBox 0.74; which emulator's sweep is nearer period hardware is the
-/// question left for the spec.
-pub fn stonegate_trapdoor_death_hold_bios_ticks(party_slots: usize) -> u16 {
-    use crate::audio::{RumbleJitter, SoundEffect};
-    let mut jitter = RumbleJitter::new();
-    let descent = SoundEffect::StonegateDescent
-        .program(&mut jitter)
-        .duration(true)
-        .as_secs_f64();
-    let rumble = SoundEffect::StonegateMemberDeath
-        .program(&mut jitter)
-        .duration(true)
-        .as_secs_f64();
-    let secs = descent + rumble * party_slots as f64;
+/// this engine's last rumble does: the length of every sound the step queued -
+/// the fall's own damage rumbles, the descent, one member-death rumble per
+/// slot - in ticks, rounded up. The 27.52 s figure is from DOSBox 0.74; which
+/// emulator's sweep is nearer period hardware is the question left for the
+/// spec.
+pub fn stonegate_trapdoor_death_hold_bios_ticks(
+    step_sounds: &[crate::audio::SoundEffect],
+) -> u16 {
+    let mut jitter = crate::audio::RumbleJitter::new();
+    let secs: f64 = step_sounds
+        .iter()
+        .map(|effect| effect.program(&mut jitter).duration(true).as_secs_f64())
+        .sum();
     (secs / crate::narration::BIOS_TICK_SECS).ceil() as u16
 }
 

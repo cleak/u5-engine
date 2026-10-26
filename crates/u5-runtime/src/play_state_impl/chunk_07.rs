@@ -4317,6 +4317,7 @@ impl PlayState {
             if let Some(entry) =
                 self.town_trap_door_at(game_dir, scene, floor, self.player.x, self.player.y, tile)?
             {
+                let step_sound_serial = self.sound_effect_serial;
                 self.apply_town_trapdoor_party_damage();
                 if scene.byte == STONEGATE_SCENE_BYTE {
                     // `town-mode.md §7.1` orders the script: the black fill
@@ -4343,7 +4344,7 @@ impl PlayState {
                     self.repaint_stats_panel();
                     self.stats_panel_command_refresh =
                         crate::stats_panel::PanelRefreshMode::None;
-                    self.apply_stonegate_trapdoor_script(floor);
+                    self.apply_stonegate_trapdoor_script_after(floor, step_sound_serial);
                     self.emit_town_underfoot_line(Self::TOWN_TRAPDOOR_MESSAGE);
                     // The line closes its own row. `text-output.md` §10.4
                     // then has the rescue's first beat spend its leading feed
@@ -4619,17 +4620,19 @@ impl PlayState {
     /// recorded separately; the durable mutations here match the cutscene's
     /// live-grid, active-object, and party writes.
     pub fn apply_stonegate_trapdoor_script(&mut self, floor: i8) {
+        self.apply_stonegate_trapdoor_script_after(floor, self.sound_effect_serial);
+    }
+
+    /// [`Self::apply_stonegate_trapdoor_script`], with the step's sounds
+    /// counted from `step_sound_serial`: the fall's damage rumbles play ahead
+    /// of the descent, and the hold has to outlast them too.
+    pub(crate) fn apply_stonegate_trapdoor_script_after(
+        &mut self,
+        floor: i8,
+        step_sound_serial: u64,
+    ) {
         self.pending_stonegate_trapdoor_playback =
             Some(StonegateTrapdoorPlayback::complete(self.party.len()));
-        // The sweep is blocking, so nothing after the death runs until it has
-        // finished. Staged as a pure hold - no text - which the rescue's own
-        // beats then queue behind.
-        // [`crate::stonegate_trapdoor_death_hold_bios_ticks`] carries the
-        // duration - the sweep plus one rumble per slot below - and why.
-        self.staged_narration.push_ticks(
-            crate::stonegate_trapdoor_death_hold_bios_ticks(self.party.len()),
-            String::new(),
-        );
 
         // `town-mode.md §7.1` fixes the order of this script precisely, and
         // `audio.md §8.2` places the descent inside it. Step 1 is the direct
@@ -4662,6 +4665,18 @@ impl PlayState {
             // and the stats panel is repainted.
             self.emit_sound_effect(SoundEffect::StonegateMemberDeath);
         }
+
+        // The sweep is blocking, so nothing after the death runs until it has
+        // finished. Staged as a pure hold - no text - which the rescue's own
+        // beats then queue behind. Pushed once every sound of the step has
+        // been queued; nothing else stages between here and the rescue.
+        // [`crate::stonegate_trapdoor_death_hold_bios_ticks`] carries the
+        // duration and why.
+        let step_sounds = self.sound_effects_after(step_sound_serial);
+        self.staged_narration.push_ticks(
+            crate::stonegate_trapdoor_death_hold_bios_ticks(&step_sounds),
+            String::new(),
+        );
 
         // The status/provision tail follows the deaths. If this action crossed
         // an hour boundary, its normal pass was deferred by `advance_turn` so
