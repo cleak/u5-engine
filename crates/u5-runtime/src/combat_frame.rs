@@ -5450,14 +5450,16 @@ impl PlayState {
     /// restored from the record's primary tile byte - otherwise it stays
     /// held."
     ///
-    /// The two rumbles the same sentence names - "a short rumble" before
-    /// the roll and "a longer rumble" on the release - carry no published
-    /// parameters in `audio.md`, so neither is emitted here rather than
-    /// inventing a program (`cleak/u5-engine#1`).
+    /// The two rumbles (added 2026-10-25, u5-spec#302 Q5): "the short
+    /// rumble - the random rumble `(40, 3000, 500)` ... - then the release
+    /// draw", and on a release "a longer rumble plays - `(1, 7000, 600)`"
+    /// after the regurgitated line. Both use only the sound jitter stream,
+    /// never the gameplay generator.
     pub(crate) fn apply_combat_dragged_under_release(&mut self, slot: usize) -> bool {
         let Some(actor) = self.combat_actors.get(slot).copied() else {
             return false;
         };
+        self.emit_sound_effect(SoundEffect::CombatDraggedUnderRumble);
         let roll = self.random_range_u8(
             COMBAT_DRAGGED_UNDER_RELEASE_ROLL_LOW,
             COMBAT_DRAGGED_UNDER_RELEASE_ROLL_HIGH,
@@ -5472,6 +5474,7 @@ impl PlayState {
         // two rows and never `ARGH!Avatar regurgitated!` on one".
         self.emit_combat_print(&format!("{name}{COMBAT_REGURGITATED_SUFFIX}\n"));
         self.message_row_open_mid_line = false;
+        self.emit_sound_effect(SoundEffect::CombatDraggedUnderReleaseRumble);
         if let Some(actor) = self.combat_actors.get_mut(slot) {
             actor.flags &= !COMBAT_ACTOR_FLAG_DRAGGED_UNDER;
         }

@@ -239,3 +239,60 @@ fn spec302_q6_sleep_field_contact_freezes_a_monsters_animation_until_it_wakes() 
     assert!(wake.woke);
     assert_eq!(state.active_objects[object].phase, 0, "the script restarts at step 0");
 }
+
+/// `combat.md §8.1` / `audio.md §5.3` (added 2026-10-25, u5-spec#302 Q5):
+/// the dragged-under arm's order is "`ARGH!` and its feed, the short rumble -
+/// the random rumble `(40, 3000, 500)` ... - then the release draw", and a
+/// release prints the regurgitated line, then "a longer rumble plays -
+/// `(1, 7000, 600)`". Both rumbles were left silent while unpublished.
+#[test]
+fn spec302_q5_dragged_under_turns_play_the_argh_and_release_rumbles() {
+    let mut seen = [false, false];
+    for seed in 0..64u16 {
+        let mut state = combat_state_after_the_conflict_banner(6, 5);
+        state.combat_actors[0].flags |= COMBAT_ACTOR_FLAG_DRAGGED_UNDER;
+        state.combat_actors[0].phase_counter = 1;
+        state.combat_actors[0].base_step = 16;
+        state.prng_state = seed.wrapping_mul(2_654).wrapping_add(1);
+        let serial = state.sound_effect_serial;
+
+        let _ = state.apply_combat_actor_slot_dispatch(0, 30);
+
+        let sounds = state.sound_effects_after(serial);
+        let released = !state.combat_actors[0].is_dragged_under();
+        seen[usize::from(released)] = true;
+        let expected: &[SoundEffect] = if released {
+            &[
+                SoundEffect::CombatDraggedUnderRumble,
+                SoundEffect::CombatDraggedUnderReleaseRumble,
+            ]
+        } else {
+            &[SoundEffect::CombatDraggedUnderRumble]
+        };
+        let dragged: Vec<SoundEffect> = sounds
+            .iter()
+            .cloned()
+            .filter(|effect| {
+                matches!(
+                    effect,
+                    SoundEffect::CombatDraggedUnderRumble
+                        | SoundEffect::CombatDraggedUnderReleaseRumble
+                )
+            })
+            .collect();
+        assert_eq!(dragged, expected, "seed {seed}: {sounds:?}");
+    }
+    assert_eq!(seen, [true, true], "both a hold and a release must be exercised");
+
+    let mut jitter = crate::audio::RumbleJitter::new();
+    assert_eq!(
+        SoundEffect::CombatDraggedUnderRumble.program(&mut jitter).ops.len(),
+        75 + 1,
+        "75 updates and the stop"
+    );
+    assert_eq!(
+        SoundEffect::CombatDraggedUnderReleaseRumble.program(&mut jitter).ops.len(),
+        7000 + 1,
+        "7000 updates and the stop"
+    );
+}
