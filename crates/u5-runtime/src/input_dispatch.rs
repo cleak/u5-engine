@@ -6767,7 +6767,7 @@ fn handle_combat_multistage_command(
                 .get(actor_slot)
                 .is_some_and(|actor| actor.is_party_side())
             {
-                state.z_stats_for_party(actor_slot);
+                state.z_stats_for_combat_party_actor(actor_slot);
             } else {
                 state.start_party_selector(PartySelectorTarget::ZStats);
             }

@@ -195,3 +195,44 @@ fn playtest_s09_yew_wanted_poster_frame_is_drawn_in_the_runic_font() {
     assert!(rows[1][4..11].iter().all(|glyph| glyph.font == TlkGlyphFont::Ordinary));
     assert!(poster.text.starts_with("abbbbbbbbbbbbbc\ng   Wanted:   g\n"));
 }
+
+/// S20: `text-output.md §10.2`: the arena's turn handler "emits the pair
+/// after the turn banner on every pass, before ... the key read, with no
+/// gate", and `commands.md §5.1`: the marker "persists in the
+/// message-window scrollback exactly where it was drawn". A party-side Z
+/// "opens that character's own sheet silently, with no prompt" (`combat.md
+/// §8`), so `\nStatus:_`'s feed closes the marker row; it never erases it
+/// (§10.4).
+#[test]
+fn playtest_s20_combat_z_keeps_the_marker_the_turn_handler_drew() {
+    let game_dir = Path::new(".");
+    let mut state = combat_player_command_state(8, 5);
+    state.pending_combat_actor_slot = Some(0);
+    state.emit_combat_print("\nAvatar, armed\nwith bare hands:\n");
+    state.combat_prompt_row_opened_by_banner = true;
+    let before = p4window_rows(&state);
+    assert_eq!(
+        before.iter().rev().find(|row| !row.is_empty()).map(String::as_str),
+        Some(">"),
+        "marker row waits for the key: {before:?}"
+    );
+
+    handle_play_key_input(&mut state, 'Z', "", game_dir).unwrap();
+    assert!(state.active_z_stats.is_some());
+    let rows = p4window_rows(&state);
+    let status = rows
+        .iter()
+        .rposition(|row| row.starts_with("Status:"))
+        .unwrap_or_else(|| panic!("{rows:?}"));
+    assert_eq!(rows[status - 1], ">", "{rows:?}");
+    assert_eq!(rows[status - 2], "with bare hands:", "{rows:?}");
+
+    // Escape completes the prompt's own row; the marker stays drawn.
+    handle_play_key_input(&mut state, '\u{1b}', "", game_dir).unwrap();
+    let rows = p4window_rows(&state);
+    let done = rows
+        .iter()
+        .rposition(|row| row == &format!("{Z_STATS_STATUS_PROMPT}{Z_STATS_DONE_MESSAGE}"))
+        .unwrap_or_else(|| panic!("{rows:?}"));
+    assert_eq!(rows[done - 1], ">", "{rows:?}");
+}

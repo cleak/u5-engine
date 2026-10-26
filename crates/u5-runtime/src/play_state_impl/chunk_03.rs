@@ -1541,6 +1541,40 @@ impl PlayState {
         MoveOutcome::Observed
     }
 
+    /// `combat.md §8`, the `Z` row, for a **party-side** actor: the sheet
+    /// opens "silently, with no prompt" on the arena's own key read.
+    pub(crate) fn z_stats_for_combat_party_actor(&mut self, slot: usize) -> MoveOutcome {
+        if self.party.is_empty() {
+            return self.z_stats_for_party(slot);
+        }
+        self.active_z_stats = Some(ZStatsSession::new(slot.min(self.party.len() - 1)));
+        // The arena's turn handler drew its feed and marker before it
+        // read this key, "with no gate" (`text-output.md §10.2`), and
+        // `combat.md §8`'s party-side Z "opens that character's own
+        // sheet silently, with no prompt" - no echo is written on the
+        // marker row. So the marker stays where it was drawn
+        // (`commands.md §5.1`: it "persists in the message-window
+        // scrollback exactly where it was drawn"; §10.4: "A line feed
+        // moves the cursor; it never erases"), and `\nStatus:_`'s
+        // leading feed only closes that row. Logging a plain blank
+        // there erased the triangle (playtest S20).
+        self.flush_message_slot();
+        let marker_row = self.message_transcript.len();
+        self.push_overworld_bare_marker_entry(marker_row);
+        // Placed where the waiting marker was: directly under a banner that
+        // opened its row, under §10.4's blank otherwise.
+        if let Some(entry) = self.message_transcript.last_mut() {
+            entry.continues_open_row = self.combat_prompt_row_opened_by_banner;
+        }
+        let prompt = self.render_active_z_stats();
+        self.push_message_entry(prompt.clone(), false);
+        if let Some(entry) = self.message_transcript.last_mut() {
+            entry.starts_fresh_row = true;
+        }
+        self.adopt_flushed_message(prompt);
+        MoveOutcome::Observed
+    }
+
     /// The row the acting-member picker indicates when it opens: the shared
     /// selector's own starting row ([`Self::start_party_selector`]).
     pub fn acting_member_picker_initial_highlight(&self) -> usize {
