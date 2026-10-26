@@ -236,3 +236,57 @@ fn playtest_s20_combat_z_keeps_the_marker_the_turn_handler_drew() {
         .unwrap_or_else(|| panic!("{rows:?}"));
     assert_eq!(rows[done - 1], ">", "{rows:?}");
 }
+
+/// S24: `commands.md §5.4`: the direction prompt "accepts only the four
+/// directions and Space" and appends the chosen word to the open line, and
+/// `§5.8` gives `Get-North` ⏎ `[blank]` ⏎ `Nothing to get!`. The terminal
+/// harness's inline direction form must give the rows the prompt gives:
+/// the same word and blank for a cardinal, and no diagonal look or push.
+#[test]
+fn playtest_s24_inline_direction_forms_match_the_prompt_form() {
+    let dir = debug_game_dir();
+    for (key, alias) in [
+        ('G', 'w'),
+        ('S', 'w'),
+        ('O', 'w'),
+        ('J', 'w'),
+        ('P', 'w'),
+        ('g', 'w'),
+        ('L', 'y'),
+        ('l', 'y'),
+        ('P', 'y'),
+    ] {
+        let mut inline = p4window_world_state();
+        handle_play_key_input(&mut inline, key, &alias.to_string(), &dir).unwrap();
+        inline.flush_staged_narration();
+
+        let mut prompted = p4window_world_state();
+        handle_play_key_input(&mut prompted, key.to_ascii_uppercase(), "", &dir).unwrap();
+        let code = match alias {
+            'w' => char::from(INPUT_CODE_NORTH),
+            _ => char::from(INPUT_CODE_NORTHWEST),
+        };
+        handle_play_key_input(&mut prompted, code, "", &dir).unwrap();
+        prompted.flush_staged_narration();
+
+        assert_eq!(
+            playtest_transcript_rows(&inline),
+            playtest_transcript_rows(&prompted),
+            "{key}{alias}"
+        );
+        assert_eq!(p4window_rows(&inline), p4window_rows(&prompted), "{key}{alias}");
+        assert_eq!(inline.turn, prompted.turn, "{key}{alias}");
+        assert_eq!(
+            inline.active_direction_prompt.is_some(),
+            alias == 'y',
+            "{key}{alias}: a diagonal leaves the prompt waiting"
+        );
+    }
+    let mut get = p4window_world_state();
+    handle_play_key_input(&mut get, 'G', "w", &dir).unwrap();
+    assert_eq!(
+        p4window_rows_from(&p4window_rows(&get), ">Get-North").get(..3).map(<[String]>::to_vec),
+        Some(vec![">Get-North".to_string(), String::new(), "Nothing to get!".to_string()]),
+    );
+    let _ = fs::remove_dir_all(dir);
+}
