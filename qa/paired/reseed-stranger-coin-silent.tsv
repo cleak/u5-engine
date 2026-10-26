@@ -1,0 +1,28 @@
+# The stranger opener's coin, anchored on its own re-seed (`prng.md`
+# Section 3, `conversation.md` Section 9 step 3): "the engine makes one fresh
+# host-clock read, assigns the transformed value as the shared
+# random-generator state, and immediately flips a fair coin". With a fixed
+# DOS clock both sides re-seed to the same state right before the flip, so
+# the two must agree on whether the NPC introduces itself, every run.
+#
+# `town-talk` at 12:00:00.00 measures one face: seed `0x09EB`, an odd first
+# draw. This runs the same seed and keys at 12:00:00.08, where the seed is
+# `0x09E3` and the first draw is even, so the pair of scenarios pins which
+# coin value introduces - something the spec leaves as "one outcome" and
+# "the other".
+# requires-seed: profile `seed-town-talk-reseeded`, built by qa/tools/reseed.py
+# fixed-clock: 12:00:00.08
+both	wait	15000
+both	key	space
+both	wait	4000
+both	key	j
+both	wait	9000
+both	shot	seeded	Journey Onward on the seeded cell
+both	key	t
+both	wait	1200
+both	key	Up
+both	wait	3000
+both	shot	greeting	Talk north: the coin's other face
+both	key	Return
+both	wait	3000
+both	shot	bye	Empty line ends the conversation

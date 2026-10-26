@@ -1,0 +1,28 @@
+# The Shadowlord blight's pattern, on its own deterministic seed.
+#
+# `town-mode.md` Section 3: in the town hiding a living Shadowlord a pass
+# thins standing crops and fruit trees "seven times in eight", and "immediately
+# before the walk the gameplay PRNG is seeded from the **calendar day of the
+# month**, and immediately after the walk it is re-seeded from the host
+# clock" (`prng.md` Section 3, the blight pair). So which trees still stand is
+# "a pure function of the day byte and the floor content": no idle time and
+# no clock reaches it, and the two sides must draw the same pattern on every
+# run. The viewport comparison of `orchard` is the check; any cell that
+# differs is an engine draw-count or draw-order defect in the walk.
+#
+# The seed is `seed-reseed-falsehood-theft` (the Falsehood hideout slot names
+# Britain) with the party moved to (24, 26), inside Britain's walled orchard:
+# nineteen authored fruit trees lie in view. Journey Onward runs the
+# preserving entry, whose Shadowlord install runs the pass once on day 5.
+#
+# The clock half of the pair re-seeds before the install's resident-entry
+# sweep, so the header pins the clock as well, though nothing shot here
+# depends on it.
+# requires-seed: profile `seed-reseed-blight-orchard`
+# fixed-clock: 12:00:00.00
+both	wait	15000
+both	key	space
+both	wait	4000
+both	key	j
+both	wait	9000
+both	shot	orchard	Journey Onward into the blighted orchard

@@ -1,0 +1,59 @@
+# Random outcomes anchored on published host-clock re-seeds (`prng.md`
+# Section 3), with no idle time between the re-seed and the draw it feeds.
+# Run with a fixed DOS clock (the `# fixed-clock:` header below, which
+# `paired_suite.py` applies): both sides then re-seed to the same state, so
+# every outcome checked here must agree exactly, run after run. A difference
+# in any of them is an engine draw defect, not a lottery.
+#
+# The seed is `seed-town-talk-reseeded` (Britain, the party south of the
+# noble fighting bard) with two save bytes changed: the Falsehood hideout slot
+# `0x0322` names Britain (scene 2, `formats/saved-gam.md`), and keys, gems
+# and torches are 2, 3 and 4, so the theft's first case applies.
+#
+# Anchors, in order:
+#
+#   * Journey Onward runs the preserving entry, whose Shadowlord install runs
+#     the hideout blight (day-of-month seed, then a host-clock re-seed;
+#     `town-mode.md` Section 3) and then the resident-entry sweep.
+#   * `talk`: the bard is a stranger, so the opener re-seeds from the clock
+#     "immediately before the `random(0, 1)` introduction coin flip"
+#     (`conversation.md` Section 9 step 3). At 12:00:00.00 the seed is
+#     `0x09EB` and the first draw is odd.
+#   * `bye`: an empty line ends the conversation, and in the Falsehood
+#     hideout the cleanup prints `Something was stolen!`, re-seeds, and
+#     draws over keys, gems and torches until it lands on one the party
+#     carries (`conversation.md` Section 10). At this seed that draw is the
+#     first one, `random(0, 2)` = 2.
+#   * `p1`..`p3`: Z-stats, to read which of the three counters lost one.
+#
+# Which coin value introduces and which counter each pick value names are
+# not published (`conversation.md` lists "keys, gems, or torches" and says
+# "one outcome"), so this scenario also measures them; see
+# `reseed-stranger-coin-silent` for the coin's other face.
+# requires-seed: profile `seed-reseed-falsehood-theft`
+# fixed-clock: 12:00:00.00
+both	wait	15000
+both	key	space
+both	wait	4000
+both	key	j
+both	wait	9000
+both	shot	seeded	Journey Onward into the Falsehood hideout
+both	key	t
+both	wait	1200
+both	key	Up
+both	wait	3000
+both	shot	talk	Stranger opener: re-seed, then the introduction coin
+both	key	Return
+both	wait	4000
+both	shot	bye	Empty line: BYE, then the theft's re-seed and pick
+both	key	z
+both	wait	2000
+both	key	Return
+both	wait	2500
+both	shot	p1	Z-stats page 1
+both	key	Right
+both	wait	2000
+both	shot	p2	Z-stats page 2
+both	key	Right
+both	wait	2000
+both	shot	p3	Z-stats page 3

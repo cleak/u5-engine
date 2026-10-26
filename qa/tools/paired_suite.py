@@ -43,7 +43,7 @@ ROOT = pathlib.Path(__file__).resolve().parents[1] / "paired"
 PROFILES = pathlib.Path.home() / ".local/share/u5/engine"
 
 
-def run_scenario(cmd: list[str]) -> subprocess.CompletedProcess:
+def run_scenario(cmd: list[str], env: dict | None = None) -> subprocess.CompletedProcess:
     """Run one scenario in its own process group, and take the group down
     with us.
 
@@ -64,6 +64,7 @@ def run_scenario(cmd: list[str]) -> subprocess.CompletedProcess:
         stderr=subprocess.PIPE,
         text=True,
         start_new_session=True,
+        env=env,
     )
 
     def stop(_signum=None, _frame=None):
@@ -107,6 +108,18 @@ def seeds() -> dict[str, tuple[str, str]]:
 
 def needs_seed(path: pathlib.Path) -> bool:
     return "# requires-seed" in path.read_text()
+
+
+def scenario_fixed_clock(path: pathlib.Path) -> str | None:
+    """The `# fixed-clock: HH:MM:SS.CC` a scenario pins, if any.
+
+    A scenario anchored on a published re-seed (`prng.md` Section 3) expects
+    one particular outcome, and which one depends on the clock the re-seed
+    reads. It names that clock itself so a suite run cannot measure it at
+    another; the header wins over `--fixed-clock` for that scenario.
+    """
+    match = re.search(r"^# fixed-clock:\s*(\d\d:\d\d:\d\d\.\d\d)\s*$", path.read_text(), re.M)
+    return match.group(1) if match else None
 
 
 def captures_are_usable(artifact: str) -> bool:
@@ -298,7 +311,12 @@ def main() -> None:
         if profile is not None:
             cmd += ["--seed-save", str(profile)]
         cmd.append(str(ROOT / f"{name}.tsv"))
-        result = run_scenario(cmd)
+        env = None
+        pinned = scenario_fixed_clock(ROOT / f"{name}.tsv")
+        if pinned is not None:
+            env = dict(os.environ, U5_FIXED_HOST_CLOCK=pinned)
+            print(f"clock {name}\tfixed at {pinned} by its header", flush=True)
+        result = run_scenario(cmd, env)
         artifact_of = lambda out: (
             re.findall(r"/[\w./-]*artifacts/u5/paired/[\w.-]+", out) or [""]
         )[-1]
@@ -306,7 +324,7 @@ def main() -> None:
         # `captures_are_usable`.
         if result.returncode == 0 and not captures_are_usable(artifact_of(result.stdout)):
             print(f"recap {name}\tcaptures were not the game frame; re-running", flush=True)
-            result = run_scenario(cmd)
+            result = run_scenario(cmd, env)
         # A walk-in town scenario that disagreed may have met NPC traffic
         # rather than a defect: whichever side is refused a step arrives in
         # a different cell and everything after it diverges. Those agree
@@ -328,7 +346,7 @@ def main() -> None:
                         f"retry {name}\tread {first} on a walk-in route; re-running",
                         flush=True,
                     )
-                    result = run_scenario(cmd)
+                    result = run_scenario(cmd, env)
         # The harness prints its artifact directory among a JSON tail; take
         # the last path under the artifact root rather than the last line.
         paths = re.findall(r"/[\w./-]*artifacts/u5/paired/[\w.-]+", result.stdout)

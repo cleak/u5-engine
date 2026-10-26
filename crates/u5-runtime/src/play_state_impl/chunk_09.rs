@@ -4319,22 +4319,24 @@ impl PlayState {
     /// `conversation.md §10`: the keyword and ask-who prompts, the yes/no
     /// prompt and WAIT-KEY wait through it as well.
     ///
+    /// `timing.md §8.2` names "the character status pages" among the same
+    /// routine's callers, so the Z-stats pages step too, and the arrest
+    /// offer is one of the Y/N confirmations.
+    ///
     /// Left out, and still frozen: the shrine and Codex presentation, whose
-    /// world steps are counted by `karma.md §7` itself; the endgame, whose
+    /// world steps are counted by `karma.md §7` itself, and the endgame, whose
     /// "tight loops on the raw key check" `input.md §2` lists among the
-    /// readers that bypass the shared wait; and the Z-stats pages and the
-    /// arrest offer, which the published list of shared-wait readers does
-    /// not name.
+    /// readers that bypass the shared wait.
     pub fn prompt_waits_in_shared_wait(&self) -> bool {
         if self.endgame.is_some()
             || self.active_shrine.is_some()
             || self.active_shrine_restoration.is_some()
-            || self.active_z_stats.is_some()
-            || self.pending_town_arrest.is_some()
         {
             return false;
         }
         self.active_conversation.is_some()
+            || self.active_z_stats.is_some()
+            || self.pending_town_arrest.is_some()
             || self.blackthorn_prompt_echo().is_some()
             || self.active_yell.is_some()
             || self.active_wishing_well.is_some()

@@ -162,3 +162,7 @@ asleep-overworld	seed-asleep-overworld	the night-cast overworld party grown to t
 asleep-town	seed-asleep-town	the town-hidden-door Britain seat grown to three, all three status bytes set to S
 asleep-dungeon-clock	seed-asleep-dungeon-late	seed-asleep-dungeon with the clock set to 23:55 (0x02D9 = 0x02DA = 23, 0x02DB = 55)
 overworld-falls-damage	seed-overworld-falls-dex1	seed-overworld-falls with the Avatar Dexterity byte set to 1, so every fall roll lands
+reseed-stranger-coin-introduces	seed-town-talk-reseeded	shares town-talk's seed; anchored on the opener's re-seed at a fixed clock
+reseed-stranger-coin-silent	seed-town-talk-reseeded	shares town-talk's seed; anchored on the opener's re-seed at a fixed clock
+reseed-falsehood-theft	seed-reseed-falsehood-theft	seed-town-talk-reseeded with the Falsehood hideout slot 0x0322 = 2 (Britain) and keys/gems/torches 2/3/4
+reseed-blight-orchard	seed-reseed-blight-orchard	seed-reseed-falsehood-theft with the party moved to (24, 26) in Britain's orchard
