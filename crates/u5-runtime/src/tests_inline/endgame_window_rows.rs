@@ -545,3 +545,61 @@ fn spec300_q5_endgame_keeps_the_dungeon_level_and_facing_bands() {
     assert_eq!(chrome.top, ChromeGap::Label("L8".to_string()));
     assert_eq!(chrome.bottom, ChromeGap::Label(dungeon_direction_label("North")));
 }
+
+/// Playtest S34. `commands.md §5.1` gives the end-cap triangle to the turn
+/// loop, and the endgame runs none: `endgame.md §5.1` reads the rite pages
+/// through the ordinary reader, like the greeting's wait. The box hand-over
+/// (`§7` steps 4-5) and the forty-iteration pause after record `3` read no
+/// key at all, so they draw no cursor either.
+#[test]
+fn endgame_victory_rite_draws_no_command_row_and_no_cursor_while_it_reads_no_key() {
+    let dir = debug_game_dir();
+    let mut state = test_state(endgame_tableau_test_grid(), 5, 5);
+    state.party_names = vec![*b"Avatar\0\0\0"];
+    state.special_items[SPECIAL_ITEM_WOODEN_BOX_INDEX] = SPECIAL_ITEM_OWNED_VALUE;
+    state.enter_endgame_with_messages(Some(endgame_window_synthetic_messages()));
+    state.finish_endgame_entry_presentation();
+    state.flush_staged_narration();
+    state.resolve_endgame_confirmation(true);
+    let no_command_row = |state: &PlayState, beat: &str| {
+        assert!(endgame_page_row_is_key_wait(state), "{beat}");
+        let rows = endgame_window_shell_rows(state);
+        assert!(!rows.iter().any(|row| row.starts_with('>')), "{beat}: {rows:?}");
+    };
+    // The automatic stretch: hand-over, box, record 3 and its pause, up to
+    // the frame that prints `He says:` and the second page.
+    let mut frames = 0;
+    while state.endgame.as_ref().unwrap().cinematic.step
+        == crate::endgame_cinematic::EndgameCinematicStep::RiteMessage(0)
+    {
+        no_command_row(&state, &format!("automatic frame {frames}"));
+        assert!(
+            state.message_window_cursor_suppressed(),
+            "automatic frame {frames} reads no key"
+        );
+        state.flush_staged_narration();
+        frames += 1;
+        assert!(frames < 500);
+        assert!(state.advance_endgame_display_frame());
+    }
+    assert!(frames > 40, "the forty-iteration pause ran on display frames");
+    let endgame = state.endgame.as_ref().unwrap();
+    assert_eq!(endgame.cinematic.rite_pause_ticks_remaining, 0);
+    assert_eq!(endgame.victory_staging, EndgameVictoryStagingPhase::Inactive);
+    // The key-paced pages read a key: a bare cursor, still no triangle.
+    for page in 0..8 {
+        if state.endgame.as_ref().unwrap().victory_tableau_phase
+            != EndgameVictoryTableauPhase::Inactive
+        {
+            break;
+        }
+        no_command_row(&state, &format!("page {page}"));
+        assert!(!state.message_window_cursor_suppressed(), "page {page} reads a key");
+        handle_play_key_input(&mut state, ' ', "", &dir).unwrap();
+        state.flush_staged_narration();
+        while state.advance_endgame_display_frame() {
+            state.flush_staged_narration();
+        }
+    }
+    let _ = fs::remove_dir_all(dir);
+}

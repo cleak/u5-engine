@@ -795,11 +795,13 @@ pub fn blackthorn_exit_key_wait_on_feed_row(state: &crate::PlayState) -> bool {
         })
 }
 
+/// The whole endgame runs no turn loop, so the page-wait row holds after
+/// the box answer too: `commands.md §5.1` gives the triangle to "every
+/// mode's turn loop", and `endgame.md §5.1` reads the rite pages through the
+/// same ordinary reader as the greeting's wait. Gating it on the undecided
+/// outcome drew the triangle through the victory rite (playtest S34).
 pub fn endgame_page_row_is_key_wait(state: &crate::PlayState) -> bool {
-    state
-        .endgame
-        .as_ref()
-        .is_some_and(|endgame| !endgame.is_terminal())
+    state.endgame.is_some()
 }
 
 pub fn shop_pause_row_is_continuation(state: &crate::PlayState) -> bool {

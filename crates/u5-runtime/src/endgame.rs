@@ -2656,6 +2656,26 @@ impl PlayState {
     }
 
     /// Whether the victory branch's box hand-over still owes frames.
+    /// Whether the victory rite is in one of its automatic stretches, which
+    /// read no key: `endgame.md §7` steps 4-5's box hand-over, the `§5.1`
+    /// forty-iteration pause between record `3` and `He says:`, and step
+    /// 9-13's gate sequence after the Orb's key read.
+    pub fn endgame_victory_reads_no_key(&self) -> bool {
+        self.endgame.as_ref().is_some_and(|endgame| {
+            endgame.outcome == Some(EndgameOutcome::Victory)
+                && (endgame.victory_staging != EndgameVictoryStagingPhase::Inactive
+                    || endgame.cinematic.rite_pause_ticks_remaining != 0
+                    || matches!(
+                        endgame.victory_tableau_phase,
+                        EndgameVictoryTableauPhase::GateRise { .. }
+                            | EndgameVictoryTableauPhase::GateFullHold { .. }
+                            | EndgameVictoryTableauPhase::ActorExit
+                            | EndgameVictoryTableauPhase::GateSink { .. }
+                            | EndgameVictoryTableauPhase::RestoreFloor
+                    ))
+        })
+    }
+
     pub fn endgame_victory_staging_pending(&self) -> bool {
         self.endgame
             .as_ref()
