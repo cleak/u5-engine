@@ -1077,7 +1077,18 @@ impl PlayState {
         // puts every other letter's echo - not under a derived blank row that
         // appeared only after a banner that does not fill its last row
         // (playtest H32).
-        let continues_open_row = std::mem::take(&mut self.surface_command_row_follows_history)
+        let surface_row_follows = std::mem::take(&mut self.surface_command_row_follows_history);
+        if surface_row_follows {
+            // `text-output.md §10.4`: "the next poll's leading feed closes
+            // the open row" - this echo's turn-loop feed is that poll, so the
+            // open surface row is closed from here on. Left set, the flag
+            // outlived the row it described and every later leading-feed
+            // result (`Look`, `Get`, `Search`) spent its feed closing a row
+            // that was already closed, losing the blank `commands.md §5.8`
+            // shows under the echo (playtest S18).
+            self.message_row_open_mid_line = false;
+        }
+        let continues_open_row = surface_row_follows
             || (self.combat_active && self.combat_prompt_row_opened_by_banner);
         let text = echo.text.to_string();
         let glyphs = ordinary_glyphs_from_engine_text(&text);

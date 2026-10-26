@@ -1207,4 +1207,5 @@ mod tests {
     include!("tests_inline/playfix8_p8save.rs");
     include!("tests_inline/playfix9_p9combat.rs");
     include!("tests_inline/playfix9_p9misc.rs");
+    include!("tests_inline/playfix11_p11text.rs");
 }
