@@ -1541,6 +1541,40 @@ impl PlayState {
         MoveOutcome::Observed
     }
 
+    /// `combat.md §8`, the `Z` row, for a **party-side** actor: the sheet
+    /// opens "silently, with no prompt" on the arena's own key read.
+    pub(crate) fn z_stats_for_combat_party_actor(&mut self, slot: usize) -> MoveOutcome {
+        if self.party.is_empty() {
+            return self.z_stats_for_party(slot);
+        }
+        self.active_z_stats = Some(ZStatsSession::new(slot.min(self.party.len() - 1)));
+        // The arena's turn handler drew its feed and marker before it
+        // read this key, "with no gate" (`text-output.md §10.2`), and
+        // `combat.md §8`'s party-side Z "opens that character's own
+        // sheet silently, with no prompt" - no echo is written on the
+        // marker row. So the marker stays where it was drawn
+        // (`commands.md §5.1`: it "persists in the message-window
+        // scrollback exactly where it was drawn"; §10.4: "A line feed
+        // moves the cursor; it never erases"), and `\nStatus:_`'s
+        // leading feed only closes that row. Logging a plain blank
+        // there erased the triangle (playtest S20).
+        self.flush_message_slot();
+        let marker_row = self.message_transcript.len();
+        self.push_overworld_bare_marker_entry(marker_row);
+        // Placed where the waiting marker was: directly under a banner that
+        // opened its row, under §10.4's blank otherwise.
+        if let Some(entry) = self.message_transcript.last_mut() {
+            entry.continues_open_row = self.combat_prompt_row_opened_by_banner;
+        }
+        let prompt = self.render_active_z_stats();
+        self.push_message_entry(prompt.clone(), false);
+        if let Some(entry) = self.message_transcript.last_mut() {
+            entry.starts_fresh_row = true;
+        }
+        self.adopt_flushed_message(prompt);
+        MoveOutcome::Observed
+    }
+
     /// The row the acting-member picker indicates when it opens: the shared
     /// selector's own starting row ([`Self::start_party_selector`]).
     pub fn acting_member_picker_initial_highlight(&self) -> usize {
@@ -2656,7 +2690,26 @@ impl PlayState {
                 // cancel reply of `commands.md §5.6` belongs to the
                 // prompts that publish it, not to this one.
                 // `cleak/u5-engine#5`.
-                '\u{1b}' => Some(MoveOutcome::PromptDeclined),
+                //
+                // Step 4: "The `Type M to mix:` instruction line carries no
+                // trailing feed of its own", and the cancel adds none, so the
+                // next poll's leading feed closes that row and "no blank row
+                // appears" (`text-output.md §10.4`). Only the help row is
+                // marked: the world's own row flag is not set, so nothing
+                // carries past the next command's echo (playtest S23).
+                '\u{1b}' => {
+                    self.flush_message_slot();
+                    if let Some(help) = self
+                        .message_transcript
+                        .last_mut()
+                        .filter(|entry| entry.text == MMIX_REAGENT_HELP_MESSAGE)
+                    {
+                        help.leaves_row_open = true;
+                        self.message_transcript_revision =
+                            self.message_transcript_revision.wrapping_add(1);
+                    }
+                    Some(MoveOutcome::PromptDeclined)
+                }
                 '\r' | '\n' | ' ' => {
                     self.toggle_mix_reagent(session);
                     None
@@ -4523,7 +4576,12 @@ impl PlayState {
             Z_STATS_EXPERIENCE_LABEL,
             experience,
         );
-        rows[7] = format!("{Z_STATS_MAGIC_LABEL} {}", member.mana);
+        // Two cells right after the colon: `____Magic:_7`, `Magic:25`. A
+        // literal space before a padded field gave three (playtest S04).
+        rows[7] = format!(
+            "{Z_STATS_MAGIC_LABEL}{:>Z_STATS_MAGIC_VALUE_CELLS$}",
+            member.mana
+        );
     }
 
     pub fn step_active_z_stats(&mut self, key: char, suffix: &str) -> bool {
@@ -6901,7 +6959,23 @@ impl PlayState {
         // "Sextant prints `Position:`; In Wis has no separate `Locate` label."
         // §5.1 says the same from the other side - In Wis completes with "Its
         // location readout, with no appended generic completion line."
-        self.message = sextant_coordinate_pair_line(self.player.y as u8, self.player.x as u8);
+        //
+        // §8: "The entire coordinate pair, including its punctuation and
+        // separating space, uses the runic font (RUNES.CH). The formatter
+        // selects that font before the leading newline and restores the
+        // normal text font before the trailing newline", and In Wis "invokes
+        // the same formatter directly" - so the row is runic here exactly as
+        // it is under the Sextant's `Position:` (playtest S08). The feeds
+        // themselves follow the ordinary row rules.
+        let pair = sextant_coordinate_pair_line(self.player.y as u8, self.player.x as u8);
+        self.flush_message_slot();
+        self.push_message_transcript_lines("\n");
+        for row in pair.split('\n').filter(|row| !row.is_empty()) {
+            self.push_runic_message_entry(row);
+        }
+        self.adopt_flushed_message(pair);
+        // The printer's trailing feed closes the coordinate row.
+        self.message_row_open_mid_line = false;
         MoveOutcome::Observed
     }
 

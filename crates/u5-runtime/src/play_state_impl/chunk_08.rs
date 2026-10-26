@@ -1931,9 +1931,8 @@ impl PlayState {
             return Ok(MoveOutcome::Blocked);
         }
         let Some(live_class) = WorldEntryNarrationClass::from_live_tile(tile) else {
-            // `karma.md §8`: a tile with no entry handler (e.g. `0x41`)
-            // "takes the ordinary `Enter what?\n` refusal" - lower-case
-            // `w`, completing the open echo as the non-world branch does.
+            // `commands.md §5.5`: "anything else | `What?\n`, producing
+            // `Enter_What?\n`; no action".
             self.refuse_world_enter_with_nothing();
             return Ok(MoveOutcome::Blocked);
         };
@@ -2042,11 +2041,16 @@ impl PlayState {
         Ok(())
     }
 
-    /// `commands.md §5.3` / `karma.md §8`: the ordinary `Enter what?`
-    /// refusal, completing the open `Enter ` echo.
+    /// `commands.md §5.5`: the overworld's unrecognised-tile refusal,
+    /// completing the open `Enter ` echo. "Live tile is not an accepted
+    /// E-Enter tile | `Enter_What?\n` | `What?\n` continues the normal
+    /// prefix", and the incomplete sidecar row takes the same literal. The
+    /// lower-case `Enter what?` is the off-overworld form (`§5.2`, `§3`);
+    /// `karma.md §8`'s tile `0x41` refusal is read in the Codex's temporary
+    /// display, not on the overworld map (playtest S17/S21).
     fn refuse_world_enter_with_nothing(&mut self) {
-        if !self.complete_open_direction_echo("Enter ", ENTER_NOTHING_REFUSAL) {
-            self.message = format!("Enter {ENTER_NOTHING_REFUSAL}");
+        if !self.complete_open_direction_echo("Enter ", ENTER_WORLD_UNRECOGNISED_REFUSAL) {
+            self.message = format!("Enter {ENTER_WORLD_UNRECOGNISED_REFUSAL}");
         }
     }
 

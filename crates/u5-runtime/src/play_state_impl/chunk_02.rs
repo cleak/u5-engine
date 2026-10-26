@@ -2285,6 +2285,15 @@ impl PlayState {
                     return Ok(None);
                 }
                 ShrinePhase::AltarQuest => {
+                    // This key is the second wait the quest record's row was
+                    // opened for, so that row's one-shot is spent here. Left
+                    // set, it drifted onto the first command after the
+                    // ordination and swallowed the blank `karma.md §7` puts
+                    // under the closing record: "one blank row, and then the
+                    // prompt row: the ordinary command-boundary blank of
+                    // systems/text-output.md Section 10.4 is spent here like
+                    // anywhere else" (playtest S19).
+                    self.surface_command_row_follows_history = false;
                     self.emit_shrine_misc_record(game_dir, MISCMSG_SHRINE_RETURN_INSTRUCTION)?;
                     // "Finish with the shrine's sound sequence and ten world
                     // ticks." `karma.md §7.2` fills in what that sequence is

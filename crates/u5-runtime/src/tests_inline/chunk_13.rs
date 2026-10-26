@@ -5984,6 +5984,7 @@ fn display_driver_loaded_tile_graphics_save_restore_and_plane_swap() {
         pixels: vec![0; TILE_ATLAS_TILE_PIXELS * 3],
         dungeon_billboards: None,
         dungeon_sprites: None,
+        runic_font: None,
     };
     atlas.pixels[0] = 0x02;
     atlas.pixels[TILE_ATLAS_TILE_PIXELS] = 0x04;
@@ -6014,6 +6015,7 @@ fn display_driver_tile_graphics_save_substitutes_two_rows_and_restore_puts_back_
             .collect(),
         dungeon_billboards: None,
         dungeon_sprites: None,
+        runic_font: None,
     };
     let original = atlas.pixels.clone();
     let row = |tile: usize, row: usize| {

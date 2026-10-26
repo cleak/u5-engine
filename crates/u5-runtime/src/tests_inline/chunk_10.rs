@@ -805,16 +805,18 @@ fn world_enter_sidecar_without_narration_class_is_no_action() {
     assert_eq!((state.player.x, state.player.y), (10, 20));
     assert_eq!(state.turn, 0);
     assert_eq!((state.clock.hour, state.clock.minute), (12, 0));
-    // `karma.md §8` / `commands.md §5.3`: the ordinary refusal completes
-    // the open echo with lower-case `what?`.
-    assert_eq!(state.message_entries()[0].text, "Enter what?");
+    // `commands.md §5.5`: "Custom clean sidecar row has no narration class |
+    // `Enter_What?\n`" - the overworld literal, capital `W` (playtest S17).
+    assert_eq!(state.message_entries()[0].text, "Enter What?");
     let _ = fs::remove_dir_all(dir);
 }
 
 #[test]
-fn world_enter_on_codex_decoration_tile_takes_lower_case_what_refusal() {
-    // `karma.md §8`: "Tile `0x41` is not an alternative entry trigger.
-    // E-Enter on that tile takes the ordinary `Enter what?\n` refusal".
+fn world_enter_on_codex_decoration_tile_is_not_an_entry_trigger() {
+    // `karma.md §8`: "Tile `0x41` is not an alternative entry trigger." Its
+    // lower-case `Enter what?\n` belongs to the Codex's temporary display;
+    // on the overworld map the tile is `commands.md §5.5`'s "anything else",
+    // which prints `Enter_What?\n` (playtest S17/S21).
     let dir = debug_game_dir();
     let mut grid = open_world_grid();
     grid[world_cell_index(10, 20)] = 0x41;
@@ -828,7 +830,7 @@ fn world_enter_on_codex_decoration_tile_takes_lower_case_what_refusal() {
     state.commit_command_echo();
 
     assert_eq!(state.turn, 0);
-    assert_eq!(state.message_entries()[0].text, "Enter what?");
+    assert_eq!(state.message_entries()[0].text, "Enter What?");
     assert!(state.active_shrine.is_none());
     let _ = fs::remove_dir_all(dir);
 }

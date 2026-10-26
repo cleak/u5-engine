@@ -1580,6 +1580,11 @@ pub const GET_TABLE_CANT_REACH_PLATE_LINE: &str = "\nCan\'t reach plate!";
 pub const HOLE_UP_NOT_IN_BED_REFUSAL: &str = "Only in bed!";
 /// `cleak/u5-spec#194` (black-box): `Enter ` with no entrance underfoot.
 pub const ENTER_NOTHING_REFUSAL: &str = "what?";
+/// `commands.md §5.5`, the overworld Enter class table: "anything else |
+/// `What?\n`, producing `Enter_What?\n`; no action" - capital `W`, distinct
+/// from the town and dungeon `Enter what?` (`§3`: "Overworld `Enter What?`
+/// ... executed").
+pub const ENTER_WORLD_UNRECOGNISED_REFUSAL: &str = "What?";
 /// `commands.md §5.5`: the ruined-shrine Enter arm prints `ruins` after
 /// `Enter_`, with no newline.
 pub const ENTER_RUINS_NARRATION: &str = "ruins";

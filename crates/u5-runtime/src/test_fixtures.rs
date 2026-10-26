@@ -31,6 +31,7 @@ pub fn synthetic_tile_atlas(depth: TileGraphicsDepth) -> TileAtlas {
         pixels,
         dungeon_billboards: None,
         dungeon_sprites: None,
+        runic_font: None,
     }
 }
 

@@ -23,9 +23,51 @@ pub fn handle_play_key_input(
     suffix: &str,
     game_dir: &Path,
 ) -> io::Result<PlayInputDisposition> {
-    run_with_command_epilogue(state, game_dir, |state| {
-        handle_play_key_input_inner(state, key, suffix, game_dir)
-    })
+    let mut deferred_prompt_key = None;
+    let disposition = run_with_command_epilogue(state, game_dir, |state| {
+        handle_play_key_input_inner(state, key, suffix, game_dir, &mut deferred_prompt_key)
+    })?;
+    // The terminal harness's inline direction form (`G8`, `Lw`) is the
+    // command key and then the prompt's own key, so the second half runs as
+    // its own input event exactly as a two-key script would - including a
+    // diagonal, which the prompt ignores (playtest S24).
+    if let Some(prompt_key) = deferred_prompt_key
+        && state.active_direction_prompt.is_some()
+    {
+        return handle_play_key_input(state, prompt_key, "", game_dir);
+    }
+    Ok(disposition)
+}
+
+/// `commands.md §5.4`: the top-down letters whose handler opens the shared
+/// direction prompt. The terminal harness's inline direction suffix for one
+/// of these is replayed as that prompt's key rather than skipping it: the
+/// prompt "accepts only the four directions and Space" and appends the chosen
+/// word to the open line, and `§5.8` puts the result under a blank
+/// (`Get-North` / blank / `Nothing to get!`). Calling the handler directly
+/// printed `Get-` with no word and no blank, and looked at diagonal cells the
+/// prompt never accepts (playtest S24).
+fn inline_direction_replays_through_prompt(route: SceneRoute, key: char) -> bool {
+    matches!(route, SceneRoute::Overworld | SceneRoute::TownFamily)
+        && matches!(
+            key,
+            'A' | 'G' | 'J' | 'L' | 'O' | 'P' | 'S' | 'T' | 'g' | 'l' | 'o' | 'p'
+        )
+}
+
+/// The input-layer byte a harness direction alias stands for (`input.md §5`).
+fn direction_prompt_key(direction: Direction) -> char {
+    let input = match direction {
+        Direction::North => InputDirection::North,
+        Direction::South => InputDirection::South,
+        Direction::East => InputDirection::East,
+        Direction::West => InputDirection::West,
+        Direction::NorthWest => InputDirection::Northwest,
+        Direction::NorthEast => InputDirection::Northeast,
+        Direction::SouthWest => InputDirection::Southwest,
+        Direction::SouthEast => InputDirection::Southeast,
+    };
+    char::from(crate::input_direction_code(input))
 }
 
 /// `combat.md §8.1` and `§14`, for the turns combat takes **without** a key.
@@ -398,6 +440,7 @@ fn handle_play_key_input_inner(
     mut key: char,
     mut suffix: &str,
     game_dir: &Path,
+    deferred_prompt_key: &mut Option<char>,
 ) -> io::Result<PlayInputDisposition> {
     // `conversation.md §7.3`: a key that arrives during a `0x83` pause "is
     // consumed and ends the pause at once", and `0x8F` blocks for "exactly
@@ -610,7 +653,7 @@ fn handle_play_key_input_inner(
         // dropped every other command while the party stood on a re-rising
         // gate (playtest E61). The transit rewrote the cell to terrain `5`,
         // so this re-entry cannot run the same transit again.
-        return handle_play_key_input_inner(state, key, suffix, game_dir);
+        return handle_play_key_input_inner(state, key, suffix, game_dir, deferred_prompt_key);
     }
     // `timing.md §8.2`, the under-sail pass's keyboard poll, and
     // `RETRACTIONS.md` R372: "a key whose translated code **equals the cached
@@ -781,8 +824,16 @@ fn handle_play_key_input_inner(
     // Inline harnesses may still supply Jimmy's party member as a suffix.
     // Interactive input falls through to the shared adjacent-direction
     // prompt first, matching the published command sequence.
+    // A suffix that names no party member but is a direction alias is the
+    // inline direction form instead, which goes through the top-down
+    // direction prompt below (playtest S24).
+    let jimmy_inline_direction = key == 'J'
+        && !matches!(state.area, Area::Dungeon { .. })
+        && parse_inline_party_index(suffix).is_none()
+        && suffix.chars().any(|ch| Direction::from_play_key(ch).is_some());
     if matches!(key, 'J' | 'j')
         && (!suffix.is_empty() || matches!(state.area, Area::Dungeon { .. }))
+        && !jimmy_inline_direction
     {
         // `dungeon-mode.md §4` step 1 / `§15`: the dungeon's minute sits at
         // the head of every iteration, whatever the command. `J` is read by
@@ -827,7 +878,17 @@ fn handle_play_key_input_inner(
     // a letter." So the dungeon has no `Q` interception of its own; the letter
     // reaches the dungeon handler and takes the same save route every other
     // scene takes. Control + `E` owns the program exit.
-    let inline_direction = suffix.chars().find_map(Direction::from_play_key);
+    let mut inline_direction = suffix.chars().find_map(Direction::from_play_key);
+    if inline_direction_replays_through_prompt(active_route, key)
+        && let Some(direction) = inline_direction.take()
+    {
+        *deferred_prompt_key = Some(direction_prompt_key(direction));
+        // The legacy `l` alias looks at the facing tile when it has no
+        // direction; with one it is `L` and its prompt.
+        if key == 'l' {
+            key = 'L';
+        }
+    }
     let inline_rest = parse_inline_rest_request(suffix);
     let inline_drink = parse_inline_yes_no(suffix);
     let inline_party_index = parse_inline_party_index(suffix);
@@ -6810,7 +6871,7 @@ fn handle_combat_multistage_command(
                 .get(actor_slot)
                 .is_some_and(|actor| actor.is_party_side())
             {
-                state.z_stats_for_party(actor_slot);
+                state.z_stats_for_combat_party_actor(actor_slot);
             } else {
                 state.start_party_selector(PartySelectorTarget::ZStats);
             }

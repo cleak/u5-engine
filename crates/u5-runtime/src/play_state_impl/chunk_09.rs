@@ -671,14 +671,16 @@ impl PlayState {
 
         let Some(area) = self.top_down_render_area() else {
             self.top_down_previous_viewport = None;
-            return self
-                .render_dungeon_viewport(
-                    radius,
-                    atlas.depth,
-                    atlas.dungeon_billboards.as_ref(),
-                    atlas.dungeon_sprites.as_ref(),
-                )
-                .map(Some);
+            let mut viewport = self.render_dungeon_viewport(
+                radius,
+                atlas.depth,
+                atlas.dungeon_billboards.as_ref(),
+                atlas.dungeon_sprites.as_ref(),
+            )?;
+            if let Some(font) = atlas.runic_font.as_ref() {
+                self.draw_dungeon_chamber_banner(&mut viewport, font);
+            }
+            return Ok(Some(viewport));
         };
         let _ = isize::try_from(radius).map_err(|_| {
             io::Error::new(io::ErrorKind::InvalidInput, "viewport radius is too large")
@@ -1625,6 +1627,62 @@ impl PlayState {
         // by `RETRACTIONS.md` R394: the halves overlap in column 95.
         let right_x = dungeon_billboard_right_x(left_x, sprite.image.width as i32);
         blit_dungeon_sprite_oriented(viewport, sprite, right_x, y, true, rising);
+    }
+
+    /// The chamber banner this render owes, if any: `dungeon-mode.md §6.4`,
+    /// "A `0xB?` wall one cell ahead whose low nibble is non-zero routes to
+    /// the per-dungeon chamber-name banner handler", which draws "only when
+    /// the wall's low nibble `n` is no greater than" the dungeon's banner
+    /// count. One cell ahead is band 1, which the sweep reaches only when the
+    /// party's own cell is see-through; with no light nothing is rendered.
+    pub fn dungeon_chamber_banner_ahead(&self) -> Option<DungeonChamberBanner> {
+        let Area::Dungeon { scene, level } = self.area else {
+            return None;
+        };
+        if self.combat_active || !self.has_personal_light() {
+            return None;
+        }
+        let (fdx, fdy) = self.player.facing.delta();
+        if !dungeon_forward_outcome(self.dungeon_renderer_offset_cell(level, 0, 0), 0).see_through {
+            return None;
+        }
+        let ahead = self.dungeon_renderer_offset_cell(level, fdx, fdy);
+        if ahead >> 4 != 0xb || ahead & 0x0f == 0 {
+            return None;
+        }
+        dungeon_chamber_banner(u8::try_from(scene.record).ok()?, ahead & 0x0f)
+    }
+
+    /// `dungeon-mode.md §6.4`: the banner is printed through display mode
+    /// 0's window at its origin cell, in the runic font with inverse video
+    /// on, "and because inverse video paints the spaces too it appears as a
+    /// **solid white block with black runes**" - "drawn on every render of
+    /// the view that has such a wall one cell ahead" (playtest S07). White is
+    /// the depth's highest pen, as the flourish's pen is masked to the depth.
+    fn draw_dungeon_chamber_banner(&self, viewport: &mut TileViewport, font: &FixedCellFont) {
+        let Some(banner) = self.dungeon_chamber_banner_ahead() else {
+            return;
+        };
+        let white = viewport.depth.pixel_limit() - 1;
+        let (origin_column, origin_row) = banner.origin;
+        for (row_index, row) in banner.rows.iter().enumerate() {
+            for (cell_index, &code) in row.iter().enumerate() {
+                let cell_x = (usize::from(origin_column) + cell_index) * CH_CELL_SIDE;
+                let cell_y = (usize::from(origin_row) + row_index) * CH_CELL_SIDE;
+                for glyph_row in 0..CH_CELL_SIDE {
+                    let bits = font.glyph_row(code, glyph_row).unwrap_or(0);
+                    for column in 0..CH_CELL_SIDE {
+                        let set = bits & (0x80 >> column) != 0;
+                        Self::plot_dungeon_screen_pixel(
+                            viewport,
+                            (cell_x + column) as i32,
+                            (cell_y + glyph_row) as i32,
+                            if set { 0 } else { white },
+                        );
+                    }
+                }
+            }
+        }
     }
 
     fn plot_dungeon_screen_pixel(

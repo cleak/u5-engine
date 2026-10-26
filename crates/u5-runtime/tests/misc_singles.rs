@@ -433,6 +433,7 @@ fn row_ramp_atlas() -> TileAtlas {
         pixels,
         dungeon_billboards: None,
         dungeon_sprites: None,
+        runic_font: None,
     }
 }
 
@@ -545,6 +546,7 @@ fn composite_destinations_take_the_rotated_shoals_through_their_mask_tile() {
         pixels,
         dungeon_billboards: None,
         dungeon_sprites: None,
+        runic_font: None,
     };
 
     for set in WATER_COMPOSITE_SETS {
@@ -790,6 +792,7 @@ fn fire_test_atlas(
         pixels,
         dungeon_billboards: None,
         dungeon_sprites: None,
+        runic_font: None,
     }
 }
 
@@ -928,6 +931,7 @@ fn non_fire_tiles_are_untouched_by_the_fire_stage() {
             pixels,
             dungeon_billboards: None,
             dungeon_sprites: None,
+            runic_font: None,
         };
         let authored: Vec<u8> = atlas
             .tile_pixels(usize::from(tile))

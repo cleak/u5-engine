@@ -18,6 +18,11 @@ pub fn load_tile_atlas(game_dir: &Path, depth: TileGraphicsDepth) -> io::Result<
         crate::dungeon_view::load_optional_dungeon_billboard_banks(game_dir, depth)?;
     atlas.dungeon_sprites =
         crate::dungeon_view::load_optional_dungeon_sprite_banks(game_dir, depth)?;
+    atlas.runic_font = if game_dir.join(RUNES_CH_FILE).exists() {
+        Some(load_runes_ch_font(game_dir)?)
+    } else {
+        None
+    };
     Ok(atlas)
 }
 
@@ -70,6 +75,7 @@ pub fn unpack_tile_atlas_body(
         pixels,
         dungeon_billboards: None,
         dungeon_sprites: None,
+        runic_font: None,
     })
 }
 

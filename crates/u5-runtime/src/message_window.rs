@@ -517,7 +517,11 @@ pub fn message_log_from_entries<'a>(
         // section 10.3 lists echoes that emit one deliberately ("two
         // newlines | Complete, plus one deliberate extra blank row").
         if entry.bare_marker {
-            log.end_turn();
+            // A marker row the arena's turn banner opened follows the banner
+            // directly (`combat.md §8.1`), as its live row did.
+            if !entry.continues_open_row {
+                log.end_turn();
+            }
             log.push_bare_marker();
             continue;
         }
