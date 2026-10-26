@@ -340,3 +340,37 @@ fn playtest_s25_dungeon_footstep_tail_plays_seven_then_three_on_later_ticks() {
     }
     assert_eq!(footsteps(&state, serial), vec![15, 11, 7, 3]);
 }
+
+/// `dungeon-mode.md §4` step 3: underground only the cardinal codes, Enter,
+/// period, digits and the Control bindings are the mode's own, and
+/// "everything else, letters included", goes to the resident dispatcher,
+/// whose unmapped-key answer is `What?` (`commands.md §4`). `§8.1`: the
+/// failure word "cannot appear on the K route at all". `<` and `>` ran the
+/// level-change climb and printed `Klimb-Up!` / `Failed!` (S26).
+#[test]
+fn playtest_s26_dungeon_angle_brackets_answer_what_not_a_failed_climb() {
+    let game_dir = std::path::Path::new(".");
+    for key in ['<', '>'] {
+        for shortcuts in [true, false] {
+            let mut state = dungeon_state(open_dungeon_record(), 1, 3, 7);
+            state.harness_shortcut_keys = shortcuts;
+            let area_before = state.area;
+            handle_play_key_input(&mut state, key, "", game_dir).unwrap();
+            state.flush_message_slot();
+            let rows: Vec<String> = state
+                .message_entries()
+                .iter()
+                .map(|entry| entry.text.clone())
+                .collect();
+            assert!(
+                rows.iter().any(|row| row.contains("What?")),
+                "{key:?} (shortcuts {shortcuts}): {rows:?}"
+            );
+            assert!(
+                !rows.iter().any(|row| row.contains("Failed!") || row.contains("Klimb")),
+                "{key:?} (shortcuts {shortcuts}): {rows:?}"
+            );
+            assert_eq!(state.area, area_before, "no level change");
+        }
+    }
+}

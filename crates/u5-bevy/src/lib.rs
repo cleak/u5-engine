@@ -2692,9 +2692,8 @@ fn visual_route_reload_checkpoints(case_label: &str) -> &'static [usize] {
         | "route-reload-gate-travel-underworld-pass"
         | "route-reload-chasm-underworld-pass"
         | "route-reload-ship-xit-skiff-pass"
-        | "route-reload-dungeon-ladder-down-up"
-        | "route-reload-dungeon-ladder-down-up-route"
         | "route-reload-dungeon-surface-exit-return-world" => &[1],
+        "route-reload-dungeon-ladder-down-up" | "route-reload-dungeon-ladder-down-up-route" => &[2],
         "route-reload-underworld-fixed-hidden-stack-search-get-search"
         | "route-reload-horse-trader-horse-and-rider-buy-pass" => &[2],
         "route-reload-castle-jimmy-prisoner-release" => &[2],
@@ -5257,7 +5256,9 @@ fn visual_route_suite_cases() -> Vec<VisualRouteSuiteCase> {
                 torch_counter: 9,
                 ..PlayOptions::default()
             },
-            script: &[">", "<"],
+            // `dungeon-mode.md §13.1`: K's `Klimb-U/D-` chooser on the
+            // two-way ladder; `<` and `>` are not dungeon commands (S26).
+            script: &["K", "D", "K", "U"],
             configure: Some(seed_visual_route_dungeon_ladder),
         },
         VisualRouteSuiteCase {
@@ -5269,7 +5270,9 @@ fn visual_route_suite_cases() -> Vec<VisualRouteSuiteCase> {
                 torch_counter: 9,
                 ..PlayOptions::default()
             },
-            script: &[">", "<"],
+            // `dungeon-mode.md §13.1`: K's `Klimb-U/D-` chooser on the
+            // two-way ladder; `<` and `>` are not dungeon commands (S26).
+            script: &["K", "D", "K", "U"],
             configure: Some(seed_visual_route_dungeon_ladder),
         },
         VisualRouteSuiteCase {
@@ -5281,7 +5284,9 @@ fn visual_route_suite_cases() -> Vec<VisualRouteSuiteCase> {
                 torch_counter: 9,
                 ..PlayOptions::default()
             },
-            script: &[">", "<"],
+            // `dungeon-mode.md §13.1`: K's `Klimb-U/D-` chooser on the
+            // two-way ladder; `<` and `>` are not dungeon commands (S26).
+            script: &["K", "D", "K", "U"],
             configure: Some(seed_visual_route_dungeon_ladder),
         },
         VisualRouteSuiteCase {
@@ -26185,16 +26190,16 @@ mod tests {
         assert!(manifest.contains("route-dungeon-hole-up-no-direct-recovery-01-h1"));
         assert!(manifest.contains("route-dungeon-long-camp-recovery-01-h6_4"));
         assert!(manifest.contains("route-dungeon-heavy-door-variant-pass-through-01-idle"));
-        assert!(manifest.contains("route-dungeon-ladder-down-up-route-02-_"));
+        assert!(manifest.contains("route-dungeon-ladder-down-up-route-04-u"));
         assert!(manifest.contains(&visual_route_step_label(
             "route-reload-dungeon-ladder-down-up",
-            2,
-            "<"
+            4,
+            "U"
         )));
         assert!(manifest.contains(&visual_route_step_label(
             "route-reload-dungeon-ladder-down-up-route",
-            2,
-            "<"
+            4,
+            "U"
         )));
         assert!(manifest.contains("route-dungeon-surface-exit-return-world-01-k"));
         assert!(manifest.contains("route-reload-dungeon-surface-exit-return-world-02-empty"));

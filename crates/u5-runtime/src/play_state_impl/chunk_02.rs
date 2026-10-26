@@ -231,12 +231,15 @@ impl PlayState {
             }
             // `dungeon-mode.md §13.1`: every climbing arm reports "acted",
             // so the post-action pass reads the cell the climb landed on.
-            'k' | '<' | '>' => {
-                let outcome = match key {
-                    '<' => self.climb(game_dir, ClimbIntent::Up)?,
-                    '>' => self.climb(game_dir, ClimbIntent::Down)?,
-                    _ => self.klimb_command(game_dir)?,
-                };
+            // `<` and `>` are not dungeon commands: `dungeon-mode.md §4` step
+            // 3 sends everything but the cardinal codes, Enter, period,
+            // digits and the Control bindings to the resident dispatcher,
+            // whose answer to an unmapped key is `What?` (`commands.md §4`).
+            // They used to run the level-change spell's climb and print its
+            // `Failed!`, which `§8.1` says "cannot appear on the K route at
+            // all" (playtest S26).
+            'k' => {
+                let outcome = self.klimb_command(game_dir)?;
                 self.apply_post_turn_effects_after_dungeon_level_change(turn_before, game_dir, outcome)?;
                 return Ok(true);
             }
