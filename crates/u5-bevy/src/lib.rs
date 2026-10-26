@@ -13429,12 +13429,20 @@ fn resolve_visual_intro_subflow(intro: &mut VisualIntroState, subflow: IntroSubf
                     intro.message_waiting_for_key = false;
                     intro.message.clear();
                 }
+                // `§6.4`: "The player-visible feedback for a wrong or absent
+                // disk comes from the resident media-error handler, not from
+                // this screen", and `§3`/`§11` let a one-directory install
+                // collapse that handler into this file-existence check. The
+                // spec publishes no notice for the collapsed case, so the
+                // menu simply stays up, as after `§6.4`'s `Esc` abort
+                // (playtest S32: this printed an invented
+                // `Transfer source rejected.` behind a key wait).
                 u4_transfer::U4TransferEntry::MediaUnavailable => {
                     intro
                         .dispatch
                         .complete_subflow(subflow, IntroSubflowResult::Cancelled);
-                    intro.message = visual_intro_transfer_source_rejected_message();
-                    intro.message_waiting_for_key = true;
+                    intro.message.clear();
+                    intro.message_waiting_for_key = false;
                     return true;
                 }
             }
@@ -13481,15 +13489,6 @@ fn resolve_visual_intro_subflow(intro: &mut VisualIntroState, subflow: IntroSubf
         }
     }
     true
-}
-
-/// `u4-transfer.md §3`/`§5`: the retryable missing-media / no
-/// transferable-data notice shown in the intro window. The intro
-/// message line is a single fixed-cell row starting at column 1, so
-/// the underlying `io::Error` detail stays on the terminal path and
-/// this line is kept inside the 40-column screen.
-fn visual_intro_transfer_source_rejected_message() -> String {
-    "Transfer source rejected.".to_string()
 }
 
 fn visual_intro_empty_save_message() -> String {
@@ -23421,10 +23420,12 @@ mod tests {
     #[cfg(feature = "original-asset-tests")]
     fn visual_intro_missing_u4_transfer_source_returns_to_menu_without_writing() {
         // `u4-transfer.md §3`: missing or wrong media is a retryable
-        // condition, not a hard process failure, and `§5`'s "no
-        // transferable data" branch is presented in the intro too.
-        // Either way the path shows a message, waits for a key and
-        // returns to menu polling without writing a save.
+        // condition, not a hard process failure, and a one-directory
+        // install collapses it into a file-existence check. `§6.4` puts
+        // the feedback for an absent disk in the resident media-error
+        // handler, not on this screen, and the spec publishes no notice
+        // for the collapsed case: the path returns to menu polling with
+        // nothing printed, no key wait and no save (playtest S32).
         let dir = debug_game_dir();
         let mut intro = visual_intro_state_with_panel(dir.clone(), VisualIntroPanel::Menu);
 
@@ -23434,12 +23435,8 @@ mod tests {
         ));
 
         assert!(matches!(intro.panel, VisualIntroPanel::Menu));
-        assert!(intro.message_waiting_for_key);
-        assert!(
-            intro.message.contains("Transfer source rejected"),
-            "{}",
-            intro.message
-        );
+        assert!(!intro.message_waiting_for_key);
+        assert_eq!(intro.message, "");
         assert!(!dir.join(SAVED_GAM_FILENAME).exists());
         let _ = fs::remove_dir_all(dir);
     }
