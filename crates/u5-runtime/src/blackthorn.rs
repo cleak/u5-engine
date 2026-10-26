@@ -1584,6 +1584,30 @@ pub const BLACKTHORN_RESCUE_WAIT_AFTER_VERTIGO: u16 = 4;
 /// ticks. The bracketed sixty is withdrawn.
 pub const BLACKTHORN_RESCUE_WAIT_VIEWPORT_DISSOLVE: u16 = 30;
 
+/// The untimed work between the fall end and the envelopes, as holds.
+///
+/// `blackthorn.md §7.1` "Measured Stonegate segments" times the span from
+/// the fall end to the envelope sequence at **4.80 s**, and says it is "a
+/// measured sum - 52 requested ticks, the CPU-bound first dissolve, the
+/// conditional repaint and the text work". The 52 ticks and the dissolve
+/// ([`BLACKTHORN_RESCUE_WAIT_VIEWPORT_DISSOLVE`]) come to 82 ticks, 4.50 s;
+/// the table's own rows place the other 0.30 s, about five tick periods:
+///
+/// - fall end to beat 1, 0.62 s, against the ten-tick wait's 0.55: the
+///   repaint "about 0.07 s after fall end" and the print - one tick;
+/// - beat 1 to beat 2, 1.75 s, against the 1.65 s dissolve: the print before
+///   it and the 0.03 s after it - two ticks;
+/// - beat 3 to beat 4, "28 tick periods plus print time" (1.60 s), and beat
+///   4 to the envelope, 0.06 s - two ticks, held before beat 4 because the
+///   envelopes run as beat 4 is released.
+///
+/// The paired `stonegate-trapdoor-audio` capture measures the same span on
+/// the stock side at 4.80 s; without these this engine ran it in 4.50 s from
+/// its own fall end.
+pub const BLACKTHORN_RESCUE_UNTIMED_BEFORE_DARKNESS: u16 = 1;
+pub const BLACKTHORN_RESCUE_UNTIMED_AROUND_DISSOLVE: u16 = 2;
+pub const BLACKTHORN_RESCUE_UNTIMED_BEFORE_ENVELOPES: u16 = 2;
+
 /// `blackthorn.md §7` step 4's "three cell reveals", as a hold.
 ///
 /// §6.2 publishes them as 31 checkpoints of one world tick each, "blocking

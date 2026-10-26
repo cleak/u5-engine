@@ -253,15 +253,50 @@ fn a_solo_closing_record_keeps_its_row_open_into_the_captive_cell() {
     }
 }
 
-/// u5-spec#301 Q5, `blackthorn.md §7.1` "Measured Stonegate segments" (3000
-/// cycles, from the `North` echo): the fall ends at +27.52 s and the first
-/// dissolve to black takes 1.65 s. Both holds were measured or derived
-/// figures (483 and a bracketed 60 ticks) before the table was published.
+/// u5-spec#301 Q5, `blackthorn.md §7.1` "Measured Stonegate segments": the
+/// fall ends with "the last party member's rumble", the first dissolve to
+/// black takes 1.65 s, and the fall end to the envelope start is **4.80 s**.
+///
+/// The death hold ends exactly when this engine's own sweep and member
+/// rumbles do, never before and within one tick after, for any party size:
+/// the paired `stonegate-trapdoor-audio` captures had the fixed 501-tick hold
+/// running about 0.6 s past this engine's last rumble, which put its
+/// fall-end-to-envelope span at 5.15 s against the stock's 4.80 s.
 #[test]
 fn spec301_q5_stonegate_holds_use_the_published_segments() {
+    use crate::audio::{RumbleJitter, SoundEffect};
     let tick = crate::narration::BIOS_TICK_SECS;
-    let fall = f64::from(crate::STONEGATE_TRAPDOOR_DEATH_HOLD_BIOS_TICKS) * tick;
-    assert!((fall - 27.52).abs() < tick, "{fall}");
+    let mut jitter = RumbleJitter::new();
+    let descent = SoundEffect::StonegateDescent
+        .program(&mut jitter)
+        .duration(true)
+        .as_secs_f64();
+    let rumble = SoundEffect::StonegateMemberDeath
+        .program(&mut jitter)
+        .duration(true)
+        .as_secs_f64();
+    for members in 1..=6usize {
+        let sound = descent + rumble * members as f64;
+        let hold = f64::from(crate::stonegate_trapdoor_death_hold_bios_ticks(members)) * tick;
+        assert!(hold >= sound && hold - sound < tick, "{members}: {hold} vs {sound}");
+    }
     let dissolve = f64::from(crate::blackthorn::BLACKTHORN_RESCUE_WAIT_VIEWPORT_DISSOLVE) * tick;
     assert!((dissolve - 1.65).abs() < tick, "{dissolve}");
+
+    // Fall end to the envelopes: every hold the rescue stages up to and
+    // including the third refuge fragment, whose release runs them.
+    let dir = debug_game_dir();
+    let mut state = test_state(open_grid(), 1, 1);
+    state.party[0].status = b'D';
+    state.party[0].hp = 0;
+    state.apply_blackthorn_rescue_refuge(&dir).unwrap();
+    let mut span = 0.0;
+    for beat in state.staged_narration.beats() {
+        span += beat.delay_secs;
+        if beat.text == crate::blackthorn::BLACKTHORN_RESCUE_REFUGE_THIRD {
+            break;
+        }
+    }
+    assert!((span - 4.80).abs() < tick, "fall end to envelopes {span} s");
+    let _ = fs::remove_dir_all(dir);
 }

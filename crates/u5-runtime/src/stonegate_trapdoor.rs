@@ -53,10 +53,36 @@ pub const STONEGATE_TRAPDOOR_RUMBLE_BUDGET_UNITS: u16 = 3_000;
 /// 3000-cycle setting and timed from the Up key's `North` echo: the sweep
 /// starts at +0.10 s and the fall ends - "the last party member's rumble and
 /// stats repaint after the trapdoor sweep" - at **+27.52 s**. The hold runs
-/// from the step, so it is that 27.52 s: 501 ticks. This was the derived
-/// 26.5 s sweep alone (483 ticks), without the member rumbles. The table does
-/// not state the captured party's size.
-pub const STONEGATE_TRAPDOOR_DEATH_HOLD_BIOS_TICKS: u16 = 501;
+/// from the step, so it was set to that 27.52 s: 501 ticks. That was the
+/// derived 26.5 s sweep alone (483 ticks) before, without the member rumbles.
+/// The table does not state the captured party's size.
+///
+/// The paired `stonegate-trapdoor-audio` captures (DOSBox Staging, 3000
+/// cycles) contradict the 27.52 s as an absolute: on that emulator the stock
+/// sound runs about 26.8 s from the sweep's first tone to the last rumble,
+/// and this engine's own sweep and rumble run 26.9 s - so with the 501 the
+/// rescue started about 0.6 s after this engine's fall had audibly ended, and
+/// its fall-end-to-envelope span measured 5.15 s against the stock's 4.80 s
+/// (every run, 2026-10-25 and 2026-10-26). The spec's own definition of the
+/// fall end is "the last party member's rumble", so the hold now ends when
+/// this engine's last rumble does: the descent program plus one member-death
+/// rumble per party slot, in ticks, rounded up. The 27.52 s figure is from
+/// DOSBox 0.74; which emulator's sweep is nearer period hardware is the
+/// question left for the spec.
+pub fn stonegate_trapdoor_death_hold_bios_ticks(party_slots: usize) -> u16 {
+    use crate::audio::{RumbleJitter, SoundEffect};
+    let mut jitter = RumbleJitter::new();
+    let descent = SoundEffect::StonegateDescent
+        .program(&mut jitter)
+        .duration(true)
+        .as_secs_f64();
+    let rumble = SoundEffect::StonegateMemberDeath
+        .program(&mut jitter)
+        .duration(true)
+        .as_secs_f64();
+    let secs = descent + rumble * party_slots as f64;
+    (secs / crate::narration::BIOS_TICK_SECS).ceil() as u16
+}
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct StonegateTrapdoorPlayback {

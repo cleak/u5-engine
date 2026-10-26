@@ -4624,10 +4624,10 @@ impl PlayState {
         // The sweep is blocking, so nothing after the death runs until it has
         // finished. Staged as a pure hold - no text - which the rescue's own
         // beats then queue behind.
-        // [`crate::STONEGATE_TRAPDOOR_DEATH_HOLD_BIOS_TICKS`] carries the
-        // published duration and why it is that number.
+        // [`crate::stonegate_trapdoor_death_hold_bios_ticks`] carries the
+        // duration - the sweep plus one rumble per slot below - and why.
         self.staged_narration.push_ticks(
-            crate::STONEGATE_TRAPDOOR_DEATH_HOLD_BIOS_TICKS,
+            crate::stonegate_trapdoor_death_hold_bios_ticks(self.party.len()),
             String::new(),
         );
 
@@ -6702,9 +6702,12 @@ impl PlayState {
         let verdict = blackthorn_rescue_verdict_record(self.moral_standing);
         let verdict_message = self.blackthorn_rescue_verdict_message(game_dir, verdict as usize)?;
 
-        // Step 1-2: "Wait ten BIOS ticks. Print beat 1."
+        // Step 1-2: "Wait ten BIOS ticks. Print beat 1." Each hold below
+        // also carries the measured untimed work beside its wait; see
+        // [`crate::blackthorn::BLACKTHORN_RESCUE_UNTIMED_BEFORE_DARKNESS`].
         self.staged_narration.push_ticks(
-            crate::blackthorn::BLACKTHORN_RESCUE_WAIT_BEFORE_DARKNESS,
+            crate::blackthorn::BLACKTHORN_RESCUE_WAIT_BEFORE_DARKNESS
+                + crate::blackthorn::BLACKTHORN_RESCUE_UNTIMED_BEFORE_DARKNESS,
             crate::blackthorn::BLACKTHORN_RESCUE_DARKNESS,
         );
 
@@ -6719,7 +6722,8 @@ impl PlayState {
         // fragments used to follow the darkness beat immediately. See
         // [`crate::BLACKTHORN_RESCUE_WAIT_VIEWPORT_DISSOLVE`].
         self.staged_narration.push_ticks(
-            crate::blackthorn::BLACKTHORN_RESCUE_WAIT_VIEWPORT_DISSOLVE,
+            crate::blackthorn::BLACKTHORN_RESCUE_WAIT_VIEWPORT_DISSOLVE
+                + crate::blackthorn::BLACKTHORN_RESCUE_UNTIMED_AROUND_DISSOLVE,
             crate::blackthorn::BLACKTHORN_RESCUE_REFUGE_FIRST,
         );
         self.staged_narration.push_ticks(
@@ -6727,7 +6731,8 @@ impl PlayState {
             crate::blackthorn::BLACKTHORN_RESCUE_REFUGE_SECOND,
         );
         self.staged_narration.push_ticks(
-            crate::blackthorn::BLACKTHORN_RESCUE_WAIT_BEFORE_REFUGE_THIRD,
+            crate::blackthorn::BLACKTHORN_RESCUE_WAIT_BEFORE_REFUGE_THIRD
+                + crate::blackthorn::BLACKTHORN_RESCUE_UNTIMED_BEFORE_ENVELOPES,
             crate::blackthorn::BLACKTHORN_RESCUE_REFUGE_THIRD,
         );
 
