@@ -3700,7 +3700,10 @@ impl PlayState {
                 // forwarding routes, so its cancel keeps the default too. Town
                 // `A` forwards "'Acted', except the on-foot refusal"; a
                 // cancelled aim is not that refusal. Overworld `A` is "always
-                // no action" and stays free (playtest M1/M2).
+                // no action" and stays free (playtest M1/M2). `F` spends a
+                // turn "Always, including `Fire-What?`" and is not a
+                // forwarding route, so the shipboard `Fire-Pass` is acted too
+                // (playtest S15).
                 let town_attack = matches!(session.kind, DirectionPromptKind::Attack)
                     && matches!(self.area, Area::Town { .. });
                 if matches!(
@@ -3708,6 +3711,7 @@ impl PlayState {
                     DirectionPromptKind::Search
                         | DirectionPromptKind::Look
                         | DirectionPromptKind::Talk
+                        | DirectionPromptKind::Fire
                 ) || town_attack
                 {
                     match self.area {
