@@ -1111,10 +1111,22 @@ impl PlayState {
         }
         let dungeon_monster =
             matches!(self.area, Area::Dungeon { .. }) && slot == DUNGEON_ACTIVE_MONSTER_SLOT;
+        let in_arena = self.combat_active;
         if let Some(object) = self.active_objects.get_mut(slot) {
             object.free();
             if dungeon_monster {
+                // `dungeon-mode.md §4.1` (u5-spec#300 Q24): the inactive form
+                // is type and tile zero, class `0xFF` **and X/Y 255**, because
+                // "A-Attack does not test the inactive marker at all; it
+                // relies on those off-grid coordinates never matching a
+                // cell". A freed record left on its old cell would match a
+                // later A-Attack there now that A-Attack ignores the class.
+                // (An arena's slot 1 is a combat object, not this record.)
                 object.tile = 0;
+                if !in_arena {
+                    object.x = DUNGEON_ACTIVE_OBJECT_INACTIVE_COORDINATE;
+                    object.y = DUNGEON_ACTIVE_OBJECT_INACTIVE_COORDINATE;
+                }
                 object.aux1 = DUNGEON_MONSTER_INACTIVE_DEP1;
             }
         }

@@ -409,6 +409,19 @@ fn playtest_s27_dungeon_attack_matches_the_record_by_coordinate_alone() {
     );
     let _ = state.attack_command(None);
     assert_ne!(state.message, crate::commands::DUNGEON_ATTACK_NO_TARGET_REFUSAL);
+    // The freed record takes the full inactive form, X/Y 255 included, so a
+    // second A-Attack at the same cell finds nothing (`§4.1`).
+    let freed = state.active_objects[DUNGEON_ACTIVE_MONSTER_SLOT];
+    assert_eq!(
+        (freed.x, freed.y, freed.aux1),
+        (
+            DUNGEON_ACTIVE_OBJECT_INACTIVE_COORDINATE,
+            DUNGEON_ACTIVE_OBJECT_INACTIVE_COORDINATE,
+            DUNGEON_MONSTER_INACTIVE_DEP1
+        )
+    );
+    let _ = state.attack_command(None);
+    assert_eq!(state.message, crate::commands::DUNGEON_ATTACK_NO_TARGET_REFUSAL);
 
     let mut stock = dungeon_state(open_dungeon_record(), 0, 2, 3);
     stock.player.facing = Direction::East;
@@ -424,4 +437,17 @@ fn playtest_s27_dungeon_attack_matches_the_record_by_coordinate_alone() {
     };
     let _ = stock.attack_command(None);
     assert_eq!(stock.message, crate::commands::DUNGEON_ATTACK_NO_TARGET_REFUSAL);
+}
+
+/// `combat.md §5`: a party descriptor names its member through the
+/// owner/target/class byte. Charm's Good write (`§6.1a`) used the descriptor
+/// index as the roster index, so in a packed arena it rewrote the dead member
+/// ahead of the target (the S05 slip, review follow-up).
+#[test]
+fn playtest_s05_charm_good_write_lands_on_the_packed_descriptors_member() {
+    let mut state = p11_packed_party_state();
+    state.party[2].status = b'S';
+    assert!(state.apply_combat_charm_allegiance(1).is_some());
+    assert_eq!(state.party[2].status, b'G', "Iolo, whom descriptor 1 seats");
+    assert_eq!(state.party[1].status, b'D', "the dead Shamino is untouched");
 }
