@@ -53,10 +53,7 @@ impl PlayState {
                     return Ok(ExplorationTurnGateOutcome::Slept { transition: None });
                 }
             }
-            let member_index = self
-                .pending_combat_actor_slot
-                .filter(|&slot| slot < self.party.len())
-                .unwrap_or(0);
+            let member_index = self.combat_acting_roster_slot().unwrap_or(0);
             return Ok(ExplorationTurnGateOutcome::Ready { member_index });
         }
         // `stats-panel.md §2.3`: the deferred request is consumed at "the

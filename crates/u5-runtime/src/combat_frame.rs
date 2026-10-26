@@ -5842,7 +5842,11 @@ impl PlayState {
         for (index, slot) in target_slots.iter().copied().enumerate() {
             let application = match effect {
                 CombatDirectedSpellEffect::Sleep if slot < COMBAT_PARTY_ACTOR_SLOTS => {
-                    let outcome = apply_combat_sleep_to_party_target(self.party.get_mut(slot)?);
+                    // `combat.md §5`: the descriptor names its member
+                    // through the owner/target/class byte (playtest S05).
+                    let roster_slot = self.combat_roster_slot_for_actor_slot(slot).unwrap_or(slot);
+                    let outcome =
+                        apply_combat_sleep_to_party_target(self.party.get_mut(roster_slot)?);
                     // `combat.md §6.2`'s party row: "the status byte becomes
                     // `'S'`, the descriptor's disabled bit is set, the
                     // presentation record shows the prone marker, the
@@ -5856,7 +5860,7 @@ impl PlayState {
                         if !self.apply_combat_party_sleep_presentation(slot) {
                             self.set_combat_actor_status_disabled(slot);
                         }
-                        if self.active_player == Some(slot) {
+                        if self.active_player == Some(roster_slot) {
                             self.active_player = None;
                         }
                         self.request_party_stats_panel_refresh();
@@ -8971,6 +8975,33 @@ impl PlayState {
             }
         }
         report
+    }
+
+    /// The roster member whose combat turn is open: the round walker's
+    /// descriptor slot mapped through its owner/target/class byte
+    /// (`combat.md §5`). `magic.md §5` step 1: "Inside combat, the
+    /// active-player byte is whichever party-slot the round walker is
+    /// currently dispatching". A packed party (a dead member in an earlier
+    /// roster slot) seats later members at lower descriptor indices, so the
+    /// descriptor index alone named the wrong member (playtest S05).
+    pub(crate) fn combat_acting_roster_slot(&self) -> Option<usize> {
+        if !self.combat_active {
+            return None;
+        }
+        self.pending_combat_actor_slot
+            .and_then(|slot| self.combat_roster_slot_for_actor_slot(slot))
+            .filter(|slot| *slot < self.party.len())
+    }
+
+    /// The combat descriptor for a roster member picked by index (a potion
+    /// or Awaken target), falling back to the index itself when no seated
+    /// descriptor names it. See [`Self::combat_acting_roster_slot`].
+    pub(crate) fn combat_descriptor_for_party_member(&self, roster_slot: usize) -> usize {
+        if !self.combat_active {
+            return roster_slot;
+        }
+        self.combat_party_descriptor_slot_for_roster_slot(roster_slot)
+            .unwrap_or(roster_slot)
     }
 
     /// Inverse of [`Self::combat_roster_slot_for_actor_slot`]: find the

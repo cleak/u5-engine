@@ -1835,9 +1835,12 @@ impl PlayState {
         allow_combat_override: bool,
     ) -> ActingMemberSelection {
         if allow_combat_override && self.combat_active {
+            // `magic.md §5` step 1 / `inventory.md §6`: the round walker's
+            // party slot, mapped to the roster member it seats (playtest
+            // S05: a dead earlier member packs the descriptors).
             if let Some(slot) = self
-                .pending_combat_actor_slot
-                .filter(|slot| *slot < self.party.len() && *slot < COMBAT_PARTY_ACTOR_SLOTS)
+                .combat_acting_roster_slot()
+                .filter(|slot| *slot < COMBAT_PARTY_ACTOR_SLOTS)
             {
                 return ActingMemberSelection::Selected(slot);
             }

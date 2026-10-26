@@ -6767,7 +6767,13 @@ fn handle_combat_multistage_command(
                 .get(actor_slot)
                 .is_some_and(|actor| actor.is_party_side())
             {
-                state.z_stats_for_party(actor_slot);
+                // The character the descriptor seats (`combat.md §5`;
+                // playtest S05).
+                let member = state
+                    .combat_roster_slot_for_actor_slot(actor_slot)
+                    .filter(|slot| *slot < state.party.len())
+                    .unwrap_or(actor_slot);
+                state.z_stats_for_party(member);
             } else {
                 state.start_party_selector(PartySelectorTarget::ZStats);
             }

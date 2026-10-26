@@ -13473,8 +13473,10 @@ fn combat_input_dispatch_cast_uses_pending_actor_as_caster() {
         y: 5,
         ..ActiveObject::empty()
     };
+    // Byte 3 is the owner/target/class byte naming roster member 1
+    // (`combat.md §5`); the cast gate charges the member it names (S05).
     state.combat_actors[1] =
-        CombatActorDescriptor::from_row([20, 1, COMBAT_ACTOR_FLAG_SELECTABLE_80, 0, 1, 0, 4, 5]);
+        CombatActorDescriptor::from_row([20, 1, COMBAT_ACTOR_FLAG_SELECTABLE_80, 1, 1, 0, 4, 5]);
     state.pending_combat_actor_slot = Some(1);
     state.next_combat_actor_slot = 2;
 
