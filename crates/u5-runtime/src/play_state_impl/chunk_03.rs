@@ -4522,9 +4522,9 @@ impl PlayState {
     /// `inventory.md §4.7` attribute page, built from its published
     /// label literals.
     ///
-    /// The published sequence is leading spaces that centre the line,
-    /// the record's leading glyph, the `_Lv-` label and the level, then
-    /// the name; then `Str=`/`__HP:`, `Int=`/`__HM:`, `Dex=`/`__Ex:` and
+    /// The published sequence (issue #302 Q2, R622) is the per-class
+    /// indent, the record's gender glyph, the `_Lv-` label, the level and
+    /// the class name; the status name alone, centred; then `Str=`/`__HP:`, `Int=`/`__HM:`, `Dex=`/`__Ex:` and
     /// `____Magic:`, each label carrying its own interior spacing. The
     /// condition line under the name and the four-cell right-justified
     /// value column are runtime observations - see
@@ -4558,15 +4558,33 @@ impl PlayState {
         // value is followed by one space and the member's **class** name -
         // `Lv-2 Fighter` for Shamino, `Lv-2 Avatar` for the Avatar - not
         // the member's name, which `§4.7` already centres above.
-        let class_name = crate::character_class_for_byte(member.class_byte)
+        let class = crate::character_class_for_byte(member.class_byte);
+        let class_name = class
             .map(|class| class.display_name())
             .unwrap_or_else(|| name.as_str());
-        rows[0] = z_stats_centred_panel_row(&format!(
+        // `inventory.md §4.7` (issue #302 Q2, R622): row 1 is "Per-class
+        // indent, gender glyph, `_Lv-`, level (one cell), one space, class
+        // name" - an indent from the per-class table, not a centring. Druid's
+        // twelve cells centred to two spaces where the table gives one. An
+        // unknown class byte keeps the old centring as a fallback.
+        let level_line = format!(
             "{}{}{} {class_name}",
             char::from(gender),
             Z_STATS_LEVEL_LABEL,
             member.level
-        ));
+        );
+        rows[0] = match class {
+            Some(class) => crate::stats_panel::truncate_ascii_chars(
+                &format!(
+                    "{}{level_line}",
+                    " ".repeat(crate::z_stats_level_line_indent(class))
+                ),
+                crate::STATS_PANEL_WIDTH,
+            ),
+            None => z_stats_centred_panel_row(&level_line),
+        };
+        // Row 2: "Status name alone, centred in columns 24 to 38" - the
+        // panel's fifteen cells; no `Status:` label on the page (R622).
         rows[1] = z_stats_centred_panel_row(z_stats_health_line(member.status));
         rows[3] = z_stats_attribute_row(
             Z_STATS_STRENGTH_LABEL,
@@ -7891,7 +7909,10 @@ fn z_stats_centred_panel_row(text: &str) -> String {
     // column 1 in the original, where rounding down puts it at column 0. The
     // Avatar's `Lv-2 Avatar` is thirteen cells and lands at column 1 under
     // either rounding, which is why this survived - the same way `Str=20` hid
-    // the zero-padding fault until `Int=05` turned up.
+    // the zero-padding fault until `Int=05` turned up. Issue #302 Q2 (R622)
+    // has since shown those level-line spaces are a per-class indent
+    // ([`crate::z_stats_level_line_indent`]); this helper now centres only
+    // the status name and the headings.
     format!("{}{text}", " ".repeat((width - length).div_ceil(2)))
 }
 

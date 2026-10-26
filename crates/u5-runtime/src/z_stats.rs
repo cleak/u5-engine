@@ -1369,13 +1369,12 @@ pub const Z_STATS_LEVEL_LABEL: &str = " Lv-";
 pub const Z_STATS_STRENGTH_LABEL: &str = "Str=";
 pub const Z_STATS_HP_LABEL: &str = "  HP:";
 pub const Z_STATS_INTELLIGENCE_LABEL: &str = "Int=";
-/// `inventory.md §4.7` publishes this literal as the label for "Magic
-/// points". A capture of the original's Avatar sheet contradicts that
-/// pairing: it reads `HP: 60` / `HM: 60` / `Magic: 0` on a save whose
-/// character record carries 60 maximum hit points and no magic points,
-/// so `__HM:` is the **maximum hit points** field and `____Magic:` is
-/// the magic-point pool. The capture is followed here and the spec
-/// pairing is flagged as a question to file.
+/// `inventory.md §4.7` (corrected 2026-10-25, issue #302 Q2, `RETRACTIONS.md`
+/// R622): "`__HM:` | **Maximum** hit points (four cells, space-padded)", and
+/// `\n\n____Magic:` is followed by "Current magic points, printed on the same
+/// line right after the label". The earlier table's magic-point pairing is
+/// retracted; the engine had followed a capture of the original that agreed
+/// with the correction (playtest pass 10 R03).
 pub const Z_STATS_MAX_HP_LABEL: &str = "  HM:";
 pub const Z_STATS_DEXTERITY_LABEL: &str = "Dex=";
 pub const Z_STATS_EXPERIENCE_LABEL: &str = "  Ex:";
@@ -1391,6 +1390,24 @@ pub const Z_STATS_MOONSTONE_LABEL: &str = "Moonstone";
 /// `inventory.md §4.7` literal table: the `Equipment` heading, which the
 /// stock game uses as the counters screen's border label.
 pub const Z_STATS_EQUIPMENT_HEADING: &str = "Equipment";
+
+/// `inventory.md §4.7` (issue #302 Q2, R622): "The level-line indent, in
+/// spaces, by class: Avatar 1, Mage 2, Bard 2, Fighter 1, Druid 1, Tinker 1,
+/// Paladin 1, Ranger 1, Shepherd 0. It comes from a per-class table in the
+/// shipped data, not from the name length." The level line is the text
+/// window's first row; it is not centred.
+pub const fn z_stats_level_line_indent(class: crate::CharacterClass) -> usize {
+    match class {
+        crate::CharacterClass::Mage | crate::CharacterClass::Bard => 2,
+        crate::CharacterClass::Shepherd => 0,
+        crate::CharacterClass::Avatar
+        | crate::CharacterClass::Fighter
+        | crate::CharacterClass::Druid
+        | crate::CharacterClass::Tinker
+        | crate::CharacterClass::Paladin
+        | crate::CharacterClass::Ranger => 1,
+    }
+}
 
 /// Width of the attribute page's right-hand numeric column.
 ///
