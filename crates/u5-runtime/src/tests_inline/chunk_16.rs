@@ -404,8 +404,13 @@ BRITANNIA 11 21
 
         assert_eq!(state.spell_charges[IN_LOR_SPELL_INDEX], 0);
         assert_eq!(state.party[0].mana, 0);
-        // `lighting.md §5`: the cast turn's cleanup ages the new counter (Q09).
-        assert_eq!(state.light_spell_counter, IN_LOR_LIGHT_DURATION - 1);
+        // `dungeon-mode.md §4` step 1 / `§15`: underground the iteration's
+        // minute - and with it the light decay - runs at the loop head,
+        // before the command is parsed, so the new counter is first aged at
+        // the next head, as an interactive dungeon cast leaves it. The inline
+        // `C` form used to skip that head and age the counter on its own
+        // turn instead (rc14).
+        assert_eq!(state.light_spell_counter, IN_LOR_LIGHT_DURATION);
         assert_eq!(IN_LOR_LIGHT_DURATION, 100);
         assert_eq!(state.ambient_light, LIGHT_SPELL_FLOOR);
         assert_eq!(state.turn, 1);

@@ -773,6 +773,15 @@ fn handle_play_key_input_inner(
         return handle_combat_cast_key_input(state, suffix, game_dir);
     }
     if key == 'C' && !suffix.is_empty() {
+        // `dungeon-mode.md §4` step 1 / `§15`: the dungeon's minute sits at
+        // the head of every iteration, whatever the command. This inline
+        // `C` form is read here rather than by the dungeon handler, so it
+        // runs that loop head itself, as `Z` and `J` do; after a no-action
+        // command the previous head's charge was still standing and the
+        // cast spent no minute (the J defect of playtest S16).
+        if matches!(state.area, Area::Dungeon { .. }) {
+            state.advance_dungeon_loop_minute();
+        }
         state.begin_command_echo_for(Command::Cast);
         let turn_before = state.turn;
         let outcome = state.cast_spell_from_suffix(suffix, game_dir)?;

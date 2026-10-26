@@ -192,3 +192,28 @@ fn spec302_q3_look_prints_a_later_scenes_record_inside_the_window() {
     assert_eq!(state.message, format!("{LOOK_RESULT_PREFIX}\n\nLater"));
     let _ = fs::remove_dir_all(dir);
 }
+
+/// `dungeon-mode.md §4` step 1 / `§15`: the dungeon minute sits at the head
+/// of every iteration. The inline `C` form is read by the shared intercept,
+/// so after the no-action `W` it found the previous head's charge standing
+/// and spent no minute - the J defect fixed in 16981e15 (playtest S16).
+#[test]
+fn dungeon_inline_cast_after_a_no_action_command_still_spends_its_minute() {
+    let clock_after = |keys: &[char]| {
+        let mut state = dungeon_state(open_dungeon_record(), 0, 1, 1);
+        for key in keys {
+            handle_play_key_input(&mut state, *key, "", Path::new("")).unwrap();
+        }
+        handle_play_key_input(&mut state, 'C', "1IL", Path::new("")).unwrap();
+        state.clock
+    };
+    let start = dungeon_state(open_dungeon_record(), 0, 1, 1).clock;
+    let minutes = |count: u8| {
+        let mut clock = start;
+        clock.advance_minutes(count);
+        clock
+    };
+    assert_eq!(clock_after(&[]), minutes(1), "C alone spends one minute");
+    assert_eq!(clock_after(&['W']), minutes(2), "W;C is two iterations");
+    assert_eq!(clock_after(&[' ']), minutes(2));
+}
