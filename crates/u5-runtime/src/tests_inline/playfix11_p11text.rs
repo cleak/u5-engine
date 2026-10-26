@@ -48,3 +48,24 @@ fn playtest_s18_blank_mantra_does_not_leave_the_row_open_for_later_commands() {
     }
     let _ = fs::remove_dir_all(dir);
 }
+
+/// S19: `karma.md §7`, "Both key waits precede the closing record": "the
+/// closing line wrapped across the message strip, one blank row, and then
+/// the prompt row: the ordinary command-boundary blank of
+/// systems/text-output.md Section 10.4 is spent here like anywhere else."
+/// The quest record's open-row one-shot belongs to the second key wait and
+/// must not survive it onto the next command.
+#[test]
+fn playtest_s19_closing_record_key_spends_the_quest_rows_one_shot() {
+    let dir = debug_game_dir();
+    let mut state = world_state(open_world_grid(), 5, 5);
+    let mut session = ShrineSession::new(ShrineVirtue::Honesty);
+    session.phase = ShrinePhase::AltarQuest;
+    state.active_shrine = Some(session);
+    // What the `AltarAnnouncement` arm leaves for the second key wait.
+    state.surface_command_row_follows_history = true;
+    let _ = state.step_active_shrine(' ', "", &dir);
+    assert!(state.active_shrine.is_none());
+    assert!(!state.surface_command_row_follows_history);
+    let _ = fs::remove_dir_all(dir);
+}
