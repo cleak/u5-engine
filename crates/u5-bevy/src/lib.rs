@@ -19030,7 +19030,17 @@ fn handle_visual_line_key(
     let Some(byte) = key_code_to_line_input_byte(key, shift_pressed, control_pressed) else {
         return Ok(None);
     };
-    match u5_runtime::free_text_input_action(byte) {
+    // `karma.md §12`: at the shrine's virtue and mantra prompts "Backspace
+    // or Left erases the last character", and Left is the west direction
+    // code (`input.md §5`), which the general free-text reader of
+    // `input.md §8` otherwise discards. The runtime's own shrine editor
+    // already erases on it; this editor filtered it out first (playtest S29).
+    let action = if byte == u5_runtime::INPUT_CODE_WEST && state.active_shrine.is_some() {
+        u5_runtime::FreeTextInputAction::Backspace
+    } else {
+        u5_runtime::free_text_input_action(byte)
+    };
+    match action {
         u5_runtime::FreeTextInputAction::Cancel => {
             input_line.clear();
             // `input.md §8`: in the free-text reader (conversation keyword,
@@ -31233,6 +31243,45 @@ mod tests {
             // Playtest N19: the reader uppercases keys.
             "A".repeat(u5_runtime::YELL_INPUT_MAX_LEN)
         );
+    }
+
+    /// Playtest S29, `karma.md §12`: at the shrine's virtue and mantra
+    /// prompts "Backspace or Left erases the last character". Left and
+    /// keypad 4 both deliver the west code; elsewhere the free-text reader
+    /// still discards it (`input.md §8`).
+    #[test]
+    fn left_and_keypad_west_erase_at_the_shrine_prompts() {
+        let press = |state: &mut PlayState, line: &mut String, key: KeyCode| {
+            handle_visual_line_key(state, line, key, false, false, Path::new("")).unwrap();
+        };
+        for phase in [
+            u5_runtime::ShrinePhase::Virtue,
+            u5_runtime::ShrinePhase::Mantra,
+        ] {
+            let mut shrine = test_state(open_grid(), 1, 1);
+            let mut session = u5_runtime::ShrineSession::new(ShrineVirtue::Honesty);
+            session.phase = phase;
+            shrine.active_shrine = Some(session);
+            assert!(visual_line_prompt_active(&shrine));
+            let mut line = String::new();
+            for key in [KeyCode::KeyH, KeyCode::KeyO, KeyCode::KeyN, KeyCode::KeyX] {
+                press(&mut shrine, &mut line, key);
+            }
+            assert_eq!(line, "HONX");
+            press(&mut shrine, &mut line, KeyCode::ArrowLeft);
+            assert_eq!(line, "HON", "{phase:?}: Left erases");
+            press(&mut shrine, &mut line, KeyCode::Numpad4);
+            assert_eq!(line, "HO", "{phase:?}: keypad 4 erases");
+            assert!(shrine.active_shrine.is_some(), "the prompt stays open");
+        }
+        // The yell line is the general reader: the west code is discarded.
+        let mut yell = test_state(open_grid(), 1, 1);
+        yell.active_yell = Some(u5_runtime::YellSession {
+            buffer: String::new(),
+        });
+        let mut line = "AB".to_string();
+        press(&mut yell, &mut line, KeyCode::ArrowLeft);
+        assert_eq!(line, "AB");
     }
 
     /// Playtest H15, `karma.md §12`: the shrine's virtue and mantra prompts
