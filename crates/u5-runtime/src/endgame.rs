@@ -2655,7 +2655,6 @@ impl PlayState {
         }
     }
 
-    /// Whether the victory branch's box hand-over still owes frames.
     /// Whether the victory rite is in one of its automatic stretches, which
     /// read no key: `endgame.md §7` steps 4-5's box hand-over, the `§5.1`
     /// forty-iteration pause between record `3` and `He says:`, and step
@@ -2676,6 +2675,7 @@ impl PlayState {
         })
     }
 
+    /// Whether the victory branch's box hand-over still owes frames.
     pub fn endgame_victory_staging_pending(&self) -> bool {
         self.endgame
             .as_ref()
