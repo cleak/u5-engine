@@ -1190,10 +1190,21 @@ impl PlayState {
             let line = Self::shadowlord_air_line_for_index(index)
                 .filter(|_| state.shadowlord_notice_capability_gate_passes());
             if let Some(line) = line {
-                if !state.message.is_empty() {
-                    state.message.push('\n');
-                }
-                state.message.push_str(&line);
+                // `town-mode.md §13`: "A save loaded inside a hideout town
+                // prints the notice too, with no narration before it, so the
+                // notice follows whatever the window last showed." It goes
+                // into the transcript, as the Enter path's notice does, so
+                // the next command scrolls it up rather than dropping it:
+                // measured (`qa/paired/reseed-falsehood-theft`, `talk`), the
+                // stock window still shows `falsehood doth` /
+                // `surround thee...` above `Talk-North`, where this engine's
+                // message slot was discarded unflushed.
+                let note = format!("\n{line}");
+                state.message_row_open_mid_line = false;
+                state.push_message_transcript_lines(&note);
+                state.message_row_open_mid_line = true;
+                state.message.push_str(&note);
+                state.message_flushed = state.message.clone();
                 // `town-mode.md §13` (u5-spec#300 Q4, Q17): "After the text,
                 // the notice plays one software envelope".
                 // `audio.md §8.6` (u5-spec#300 Q4/Q17): "After the notice
