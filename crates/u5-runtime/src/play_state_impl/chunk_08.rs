@@ -1797,8 +1797,9 @@ impl PlayState {
         // §7 "Entry pacing" (answering `cleak/u5-spec#271`): the
         // Approach-to-Kneel interval is the walk's forty-five world steps
         // "plus the handler's own repaint step - forty-six world steps in
-        // all", one tick each ([`SHRINE_KNEEL_HOLD_BIOS_TICKS`]; re-measured
-        // with synced keys 2026-10-26, see `docs/measured-constants.md`).
+        // all", at a little over a tick each
+        // ([`SHRINE_KNEEL_HOLD_BIOS_TICKS`]; re-measured with synced keys
+        // 2026-10-26, see `docs/measured-constants.md`).
         self.staged_narration.push_ticks_counting_world_steps(
             SHRINE_KNEEL_HOLD_BIOS_TICKS,
             SHRINE_KNEEL_WORLD_STEPS,

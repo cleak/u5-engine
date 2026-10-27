@@ -75,7 +75,7 @@ Spec citations are to the `u5-spec` HEAD of the date given (`ac2c62a` for
 | `BLACKTHORN_CAPTIVE_CELL_HANDOFF_BIOS_TICKS` | `u5-runtime/src/blackthorn.rs` | 5 | spec `blackthorn.md §4.2` (about 0.27 s) | n/a | 2026-10-26 |
 | `stonegate_trapdoor_death_hold_bios_ticks` (fn) | `u5-runtime/src/stonegate_trapdoor.rs` | sum of the step's queued sounds | engine: ends with this engine's last rumble. Spec `blackthorn.md §7.1` gives the fall end at +27.52 s for three members on DOSBox 0.74 (R625); the DOSBox Staging capture runs about 26.8 s | stock events (first sweep tone to last rumble), audio | 2026-10-26 |
 | `SHRINE_PRESENTATION_BIOS_TICKS_PER_WORLD_STEP` | `u5-runtime/src/commands.rs` | 1 | spec floor `karma.md §7` "Entry pacing"; re-measured with synced keys on `shrine-enter-pacing` (efc8be79) | key (re-measured, sendevent) | 2026-10-26 |
-| `SHRINE_KNEEL_HOLD_BIOS_TICKS` | `u5-runtime/src/commands.rs` | 46 | derived: spec 46 world steps x 1 tick (was a serial-fitted 72) | key (re-measured, sendevent) | 2026-10-26 |
+| `SHRINE_KNEEL_HOLD_BIOS_TICKS` | `u5-runtime/src/commands.rs` | 49 | measured; spec 46 world steps is the floor (was 46, the floor at 1 tick a step; before that a serial-fitted 72) | key: stock Kneel record 2653 to 2704 ms after `E` (mean 2670 ms, 48.6 ticks) over 4 sendevent runs of `shrine-three-mantras`, message areas sampled every ~33 ms; at 46 the engine's came at 2522 to 2543 ms | 2026-10-26 |
 | `SHRINE_EXIT_PACING_HOLD_BIOS_TICKS` | `u5-runtime/src/commands.rs` | 61 | derived: spec 61 world steps x 1 tick (was a serial-fitted 88) | key (re-measured, sendevent) | 2026-10-26 |
 | `SHRINE_VIRTUE_QUESTION_HOLD_WORLD_TICKS` | `u5-runtime/src/commands.rs` | 11 | measured; spec `karma.md §7` publishes ten world steps and ten one-tick delays, not their cost (was 16, from 600 ms samples read as ~1.6 ticks a step) | stock events: Kneel record to question 598, 624, 626, 658 ms (mean 627 ms, 11.4 ticks) over 4 synced-key runs of `shrine-three-mantras`, both message areas sampled every ~33 ms with grim; the same sampler read the engine's 16 ticks as 857 to 891 ms | 2026-10-26 |
 | `SHRINE_MANTRA_FIRST_HOLD_BIOS_TICKS` | `u5-runtime/src/commands.rs` | 6 | derived: spec 6 world steps x 1 tick (`karma.md §7`, §12); re-measured (was 10, a ~1.6-a-step conversion) | key: stock reacts 401 to 438 ms after the virtue Return over 5 sendevent runs with `--reaction-probe 1500` (immediate keys 37 to 71 ms), about 6 ticks | 2026-10-26 |
@@ -129,12 +129,14 @@ Open findings:
   nothing for about 0.35 s, until the six-step wait ends and its newline
   prints. Fixed 2026-10-26: the answer row stays open through the hold and
   both feeds print when it releases (`karma.md §7`/§12).
-- The same fine sampler puts the stock Kneel record 2653 to 2704 ms after
-  the `E` key over four runs, and this engine's at 2522 to 2543 ms: about
-  2.5 ticks early, while both sides showed the `E` echo within 35 ms of each
-  other. `SHRINE_KNEEL_HOLD_BIOS_TICKS` (46, the published steps at one tick
-  each) was left alone: it is the walk's measured floor, and the shortfall
-  is of the order the ten-step question hold also shows (11.4 ticks).
+- The same fine sampler put the stock Kneel record 2653 to 2704 ms after
+  the `E` key over four runs, and this engine's (46 ticks) at 2522 to
+  2543 ms, about 2.5 ticks early. The old sixteen-tick question hold had
+  hidden it; once that was eleven, `shrine-enter-pacing`'s `t2400` beat
+  showed the engine's question a sample early. `SHRINE_KNEEL_HOLD_BIOS_TICKS`
+  is now 49. The walk, the mantra holds and the question hold all run a
+  little over a tick a step on the stock side; the 61-step exit has not been
+  re-measured this finely and stays at the floor.
 - `SHRINE_VIRTUE_QUESTION_HOLD_WORLD_TICKS` was 16 and disagreed with the
   mantra holds' one tick a step. Re-measured on 2026-10-26 with a finer
   sampler (see its row): 11.

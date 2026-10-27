@@ -93,15 +93,16 @@ mod draw_parity {
     /// same day: 0.60 to 0.66 s, eleven ticks for its ten steps.
     #[test]
     fn shrine_walk_and_exit_cost_one_tick_a_step() {
-        assert_eq!(SHRINE_KNEEL_HOLD_BIOS_TICKS, SHRINE_KNEEL_WORLD_STEPS);
-        assert_eq!(SHRINE_KNEEL_HOLD_BIOS_TICKS, 46);
+        // The walk's forty-six steps are its floor; the stock interval,
+        // sampled finely with synced keys, is 48.6 ticks (2026-10-26).
+        assert_eq!(SHRINE_KNEEL_WORLD_STEPS, 46);
+        assert_eq!(SHRINE_KNEEL_HOLD_BIOS_TICKS, 49);
         assert_eq!(SHRINE_EXIT_PACING_HOLD_BIOS_TICKS, 61);
         for steps in [0u16, 1, 40, 51, 60, 61, 66] {
             assert_eq!(shrine_presentation_hold_bios_ticks(steps), steps);
         }
-        // Key to Kneel record: 46 ticks is 2.53 s, inside the stock's
-        // (1.8 s, 2.4 s nominal + screenshot cost] window, and well short of
-        // the 3.6 s the serial-fitted hold gave.
+        // Key to Kneel record: 49 ticks is 2.69 s, beside the stock's 2.65 to
+        // 2.70 s, and well short of the 3.6 s the serial-fitted hold gave.
         let kneel_secs = f64::from(SHRINE_KNEEL_HOLD_BIOS_TICKS) * crate::narration::BIOS_TICK_SECS;
         assert!((2.4..2.7).contains(&kneel_secs), "{kneel_secs}");
         assert_eq!(SHRINE_VIRTUE_QUESTION_HOLD_WORLD_TICKS, 11);

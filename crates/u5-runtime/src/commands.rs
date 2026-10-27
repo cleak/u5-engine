@@ -796,10 +796,23 @@ pub const SHRINE_KNEEL_NARRATION: &str = "...and thou dost kneel before the Alta
 /// `t2400`, and the closing Return's exit was still walking when the stock
 /// was back on the overworld (`shrine-mantra-close`, `shrine-unfocused`).
 pub const SHRINE_PRESENTATION_BIOS_TICKS_PER_WORLD_STEP: u16 = 1;
-/// The Approach-to-Kneel hold: §7's forty-six world steps at
-/// [`SHRINE_PRESENTATION_BIOS_TICKS_PER_WORLD_STEP`].
-pub const SHRINE_KNEEL_HOLD_BIOS_TICKS: u16 =
-    SHRINE_KNEEL_WORLD_STEPS * SHRINE_PRESENTATION_BIOS_TICKS_PER_WORLD_STEP;
+/// The Approach-to-Kneel hold: §7's forty-six world steps, which "the walk is
+/// **at least** forty-five ticks" makes a floor of forty-six ticks.
+///
+/// **Re-measured** 2026-10-26 (`qa/paired/shrine-three-mantras.tsv`, synced
+/// keys, four runs, message areas sampled every ~33 ms): the stock Kneel
+/// record comes 2653, 2661, 2663 and 2704 ms after the `E` key (mean 2670 ms,
+/// 48.6 ticks), the two sides' `E` echoes within 35 ms of each other, where
+/// the floor's forty-six ticks put this engine's at 2522 to 2543 ms. Each
+/// step's one-tick request waits for the *next* timer edge after a full
+/// repaint, so the forty-six steps run a little over a tick each - the same
+/// excess the ten-step question hold shows
+/// ([`SHRINE_VIRTUE_QUESTION_HOLD_WORLD_TICKS`]). Forty-nine ticks (2.69 s)
+/// is the nearest whole count. Kept at the floor, it hid behind the old
+/// sixteen-tick question hold: with that corrected to eleven the engine put
+/// the question up on `shrine-enter-pacing`'s `t2400` beat a sample before
+/// the original.
+pub const SHRINE_KNEEL_HOLD_BIOS_TICKS: u16 = 49;
 /// `karma.md §12`: "After ten world ticks, record `29`: the question asking
 /// which virtue."
 ///
