@@ -1205,9 +1205,26 @@ impl PlayState {
         self.message_transcript_revision = self.message_transcript_revision.wrapping_add(1);
     }
 
-    /// Emit an encounter's announcement - `Attacked!` - as a row of its own,
-    /// never written on a bare marker row ([`MessageEntry::starts_fresh_row`]).
+    /// Emit an encounter's announcement - `Attacked!` - with the leading line
+    /// feed its literal begins with.
+    ///
+    /// `text-output.md §10.2`: "a literal that begins with a line feed, such
+    /// as `Attacked!` (both copies) or `WHIRLPOOL!`, moves to the row below",
+    /// and §10.4: "a line feed always advances the row". So the feed closes
+    /// a row still open mid-line, and after a completed row - the `Pass\n`
+    /// echo - it spends one blank row (playtest P13-04/P13-15). After a bare
+    /// marker row it only ends the marker row, never written on it
+    /// ([`MessageEntry::starts_fresh_row`]), as the whirlpool banner does.
     pub(crate) fn emit_encounter_line(&mut self, line: &str) {
+        self.flush_message_slot();
+        if !self
+            .message_transcript
+            .last()
+            .is_some_and(|entry| entry.bare_marker)
+        {
+            self.emit_message_line(format!("\n{line}"));
+            return;
+        }
         self.emit_message_line(line);
         if let Some(entry) = self.message_transcript.last_mut()
             && entry.text == line

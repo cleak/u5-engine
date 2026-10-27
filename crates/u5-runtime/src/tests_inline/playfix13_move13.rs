@@ -72,4 +72,49 @@ mod playfix13_move13 {
         );
         let _ = fs::remove_dir_all(dir);
     }
+
+    fn rows(state: &PlayState) -> Vec<String> {
+        state
+            .message_transcript
+            .iter()
+            .map(|entry| entry.text.clone())
+            .collect()
+    }
+
+    #[test]
+    fn p13_15_attacked_after_a_completed_row_spends_its_leading_feed_as_a_blank() {
+        // `text-output.md §10.2`: `Attacked!` is "a literal that begins with
+        // a line feed"; §10.4: "a line feed always advances the row". After
+        // the `Pass\n` echo the cursor is at column 0, so the feed spends a
+        // blank row (playtest P13-15, P13-04 case 1).
+        let mut state = world_state(open_world_grid(), 5, 5);
+        state.emit_message_line("Pass\n");
+        state.message_row_open_mid_line = false;
+
+        state.emit_encounter_line("Attacked!");
+
+        let rows = rows(&state);
+        assert_eq!(
+            rows[rows.len() - 3..],
+            ["Pass".to_string(), String::new(), "Attacked!".to_string()],
+            "{rows:?}"
+        );
+    }
+
+    #[test]
+    fn p13_15_attacked_after_an_open_row_closes_it_without_a_blank() {
+        // The same leading feed closes a row still open mid-line.
+        let mut state = world_state(open_world_grid(), 5, 5);
+        state.emit_message_line("Rough seas!");
+        state.message_row_open_mid_line = true;
+
+        state.emit_encounter_line("Attacked!");
+
+        let rows = rows(&state);
+        assert_eq!(
+            rows[rows.len() - 2..],
+            ["Rough seas!".to_string(), "Attacked!".to_string()],
+            "{rows:?}"
+        );
+    }
 }
