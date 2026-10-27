@@ -770,80 +770,62 @@ pub const SHRINE_PRESENTATION_CUTSCENE_MAP_RECORD: usize = 1;
 pub const CODEX_PRESENTATION_CUTSCENE_MAP_RECORD: usize = 2;
 pub const SHRINE_APPROACH_NARRATION: &str = "Thou dost approach the tranquil Shrine...";
 pub const SHRINE_KNEEL_NARRATION: &str = "...and thou dost kneel before the Altar.";
-/// `karma.md §12`'s entry table gives no interval between the approach record
-/// and the kneel record - only the ten world ticks before the question after
-/// it. Measured 2026-09-12 (`qa/paired/shrine-enter-pacing.tsv`, which samples
-/// the entry eight times and reads which sample first shows each record) and
-/// bracketed by four runs: at 40 ticks the kneel lands two samples early, at
-/// 80 one sample late, and 72 puts it in the same sample as the original.
+/// The shrine presentation's wall-clock rate: one BIOS tick per counted
+/// world step.
 ///
-/// Read the bracket in *samples*, not in absolute milliseconds: the harness's
-/// nominal 600 ms step is not wall-clock, because each beat also pays for two
-/// screenshots. An earlier note here quoted the nominal times as if they were
-/// and made the hold look half as long as it is.
+/// `karma.md §7` "Entry pacing": every presentation interval is "a counted
+/// repetition of one world step plus one one-tick delay request", and "With
+/// the delays real, forty-five timer ticks is roughly two and a half seconds
+/// ... the walk is **at least** forty-five ticks". So the published floor is
+/// one tick a step.
 ///
-/// `cleak/u5-spec#271` asks for the published figure. Until it lands this is
-/// a measured constant, like the rest of the paced presentation timings.
-pub const SHRINE_KNEEL_HOLD_BIOS_TICKS: u16 = 72;
+/// **Re-measured 2026-10-26 with synced keys** (`--key-sync sendevent`,
+/// `qa/paired/shrine-enter-pacing.tsv`). The stock side has the walking pose
+/// on screen by `t1200`, in the walk's last cell by `t1800` and the Kneel
+/// record by `t2400`. That is the published counts at one tick a step: 21
+/// steps to the first pose (1.15 s), 41 to the last cell (2.25 s) and 46 to
+/// the Kneel record (2.53 s), each beat's screenshots adding to its nominal
+/// time. Both of these holds are measured from the key, so they are the ones
+/// the serial-key skew below distorted.
+///
+/// The constants this replaces (72 ticks for the kneel and 88 for the 61-step
+/// exit, about 1.4 to 1.6 ticks a step) were fitted to serial-key captures. Those handed DOSBox every key about 1.3 s after the
+/// engine, so each stock interval read 1.3 s shorter than the engine's. Fitted
+/// that way, the engine ran a second or more behind the original whenever
+/// both sides got the key together: the kneel came at `t3600` instead of
+/// `t2400`, and the closing Return's exit was still walking when the stock
+/// was back on the overworld (`shrine-mantra-close`, `shrine-unfocused`).
+pub const SHRINE_PRESENTATION_BIOS_TICKS_PER_WORLD_STEP: u16 = 1;
+/// The Approach-to-Kneel hold: §7's forty-six world steps at
+/// [`SHRINE_PRESENTATION_BIOS_TICKS_PER_WORLD_STEP`].
+pub const SHRINE_KNEEL_HOLD_BIOS_TICKS: u16 =
+    SHRINE_KNEEL_WORLD_STEPS * SHRINE_PRESENTATION_BIOS_TICKS_PER_WORLD_STEP;
 /// `karma.md §12`: "After ten world ticks, record `29`: the question asking
 /// which virtue."
 ///
-/// Ten is the published *step* count, not a duration, and a world step is
-/// not one BIOS tick. `karma.md §7.2` prices a step at "the 55 ms of one
-/// stock timer tick" and then says the figure is "a floor, not an
-/// estimate", because it adds "**nothing** for the full viewport rebuild
-/// each of those steps also performs, which is unpriced". The sibling
-/// [`SHRINE_KNEEL_HOLD_BIOS_TICKS`] is the measured version of that same
-/// gap: 72 ticks for forty-five steps, a little over 1.6 ticks a step.
-/// Ten steps at that rate is sixteen.
-///
-/// **Measured** 2026-09-19 (`qa/paired/shrine-enter-pacing.tsv`, which
-/// samples the entry every 600 ms on both sides). Both sides put the Kneel
-/// record in the same window, `t1800`..`t2400`; the original's virtue
-/// question is **not** up at `t2400` and is by `t3000`, while this engine
-/// printed it inside the kneel record's own window. Ten BIOS ticks is
-/// 0.55 s and left the two records in one sample; sixteen is 0.88 s and
-/// separates them the way the capture does.
-///
-/// `cleak/u5-spec#271` asks for the published interval; until it lands
-/// this is a measured constant scaled from its measured sibling, like the
-/// rest of the paced presentation timings.
+/// **Measured** 2026-09-19 (`qa/paired/shrine-enter-pacing.tsv`): the
+/// original's question comes one 600 ms sample after its Kneel record, which
+/// ten ticks (0.55 s) does not reproduce and sixteen (0.88 s) does. That is
+/// an interval between two records on the stock side, so the serial-key skew
+/// that misled [`SHRINE_KNEEL_HOLD_BIOS_TICKS`] does not touch it, and the
+/// synced-key re-measurement of 2026-10-26 confirms it: at ten ticks the
+/// engine put the question up at `t2400` beside the Kneel record, where the
+/// original still showed the Kneel record alone. The kneeling steps cost more
+/// than the walk's - about 1.6 ticks each, the kneeling family's animator
+/// running on each repaint - and `karma.md §7` publishes step counts, not
+/// their cost.
 pub const SHRINE_VIRTUE_QUESTION_HOLD_WORLD_TICKS: u16 = 16;
-/// The meditation's exit pacing, after the closing quest record.
+/// The meditation's exit pacing, after the handler returns.
 ///
-/// `karma.md §12` ends the interaction with "the shrine's sound sequence and
-/// ten world ticks", which reads as about half a second. It is not:
-/// `cleak/u5-spec#271` answers that the handler then "*returns to the shrine
-/// presentation*, whose exit pacing runs before the mode loop's prompt -
-/// re-stamp the walking pose, one world step, four animation frames walking
-/// the avatar back down ..., clear the avatar, four more frames with nothing
-/// drawn, a ten-step wait, then the actor-table and scene restore, a
-/// display-mode set and a full redraw. That is fifty-one world steps and
-/// eight stings on top of the handler's ten steps, so the command row is not
-/// expected until well past 3 s after the acknowledging key even before the
-/// sound sequence is counted."
-///
-/// Scaled the same way as [`SHRINE_KNEEL_HOLD_BIOS_TICKS`], whose 72 ticks
-/// cover forty-five timer waits, forty-six repaints and nine stings: sixty-one
-/// steps and eight stings come out a little longer. Measured 2026-09-12
-/// (`qa/paired/shrine-three-mantras.tsv`, beat `after2`): the original has no
-/// command row 2.5 s after the key.
-///
-/// `karma.md §7.2` (2026-09-13) now prices the whole key-to-prompt window
-/// arithmetically, and the measurement sits the right side of it. The
-/// section decomposes the ordination arm's sixty-one world steps as "**ten**
-/// (the handler's own closing wait) **plus one** (the exit's re-stamp step)
+/// `cleak/u5-spec#271` and `karma.md §7.2`: the handler "*returns to the
+/// shrine presentation*, whose exit pacing runs before the mode loop's prompt".
+/// On the ordination arm that is sixty-one world steps: "**ten** (the
+/// handler's own closing wait) **plus one** (the exit's re-stamp step)
 /// **plus forty** (eight exit animation frames at five steps each) **plus
-/// ten** (the exit's closing wait)", which is the split this constant was
-/// written to. Its fifty-one steps and eight stings price at 51 x 55 ms plus
-/// 8 x 27 ms, about 3.0 s, against this constant's 88 ticks, about 4.8 s.
-///
-/// §7.2 is explicit that its rows are "a floor, not an estimate": they "add
-/// **nothing** for the full viewport rebuild each of those steps also
-/// performs, which is unpriced". A measured hold above the floor is what the
-/// section predicts, so the constant stands as measured rather than being
-/// replaced by the arithmetic.
-pub const SHRINE_EXIT_PACING_HOLD_BIOS_TICKS: u16 = 88;
+/// ten** (the exit's closing wait)". Each step costs one tick, at
+/// [`SHRINE_PRESENTATION_BIOS_TICKS_PER_WORLD_STEP`].
+pub const SHRINE_EXIT_PACING_HOLD_BIOS_TICKS: u16 =
+    SHRINE_EXIT_PACING_HOLD_WORLD_STEPS * SHRINE_PRESENTATION_BIOS_TICKS_PER_WORLD_STEP;
 /// **Measured** 2026-09-07 (`qa/paired/shrine-flow.tsv`): accepting the virtue
 /// leaves the question and the typed answer on screen, then opens this prompt
 /// a blank row below it. The typed mantra echoes on the same row as the label
@@ -852,14 +834,13 @@ pub const SHRINE_EXIT_PACING_HOLD_BIOS_TICKS: u16 = 88;
 pub const SHRINE_MANTRA_PROMPT: &str = "Mantra:";
 
 /// `karma.md §12`'s mantra-questions row: "After a nonblank virtue answer,
-/// wait six world ticks and emit a newline." Converted at the same
-/// ~1.6-BIOS-ticks-per-world-step rate [`SHRINE_VIRTUE_QUESTION_HOLD_WORLD_TICKS`]
-/// measures (`72` ticks for `45` steps): six steps round to ten ticks.
+/// wait six world ticks and emit a newline." Converted at the ~1.6 ticks a
+/// kneeling step that [`SHRINE_VIRTUE_QUESTION_HOLD_WORLD_TICKS`] measures:
+/// six steps round to ten ticks.
 ///
 /// **Measured constant, not yet independently calibrated** against its own
-/// paired capture - scaled from the sibling holds' rate like
-/// `cleak/u5-spec#271` already asks about for them. Re-check once that
-/// issue or a dedicated shrine-mantra-pacing capture answers it directly.
+/// paired capture. Re-check once a dedicated shrine-mantra-pacing capture
+/// answers it directly.
 pub const SHRINE_MANTRA_FIRST_HOLD_BIOS_TICKS: u16 = 10;
 /// `karma.md §12`: "waiting twelve world ticks after each nonblank answer."
 /// Twelve steps at the same rate round to nineteen ticks. Same calibration
@@ -887,13 +868,10 @@ pub const SHRINE_HANDLER_CLOSING_WORLD_STEPS: u16 = 10;
 /// plus the fifty-one of the exit). Other windows scale from that rate.
 pub const SHRINE_EXIT_PACING_HOLD_WORLD_STEPS: u16 = 61;
 
-/// The wall-clock hold for `world_steps` counted presentation steps, at the
-/// measured rate of [`SHRINE_EXIT_PACING_HOLD_BIOS_TICKS`].
+/// The wall-clock hold for `world_steps` counted presentation steps, at
+/// [`SHRINE_PRESENTATION_BIOS_TICKS_PER_WORLD_STEP`].
 pub const fn shrine_presentation_hold_bios_ticks(world_steps: u16) -> u16 {
-    let ticks = (world_steps as u32 * SHRINE_EXIT_PACING_HOLD_BIOS_TICKS as u32
-        + SHRINE_EXIT_PACING_HOLD_WORLD_STEPS as u32 / 2)
-        / SHRINE_EXIT_PACING_HOLD_WORLD_STEPS as u32;
-    ticks as u16
+    world_steps * SHRINE_PRESENTATION_BIOS_TICKS_PER_WORLD_STEP
 }
 
 /// `karma.md §7.2`: the offering and turn-in swells run the envelope

@@ -80,4 +80,28 @@ mod draw_parity {
         state.animate_active_objects();
         assert_eq!(state.active_objects[4].tile, 0x5c, "63 snaps");
     }
+
+    /// `karma.md §7`: the approach walk and the exit are counted world steps
+    /// at one one-tick delay each. Re-measured with synced keys
+    /// (`shrine-enter-pacing`, 2026-10-26): the original kneels by `t2400`,
+    /// where the serial-fitted 72-tick hold kneeled at `t3600`. The
+    /// kneeling-phase holds are intervals between records and keep their
+    /// measured ~1.6 ticks a step.
+    #[test]
+    fn shrine_walk_and_exit_cost_one_tick_a_step() {
+        assert_eq!(SHRINE_KNEEL_HOLD_BIOS_TICKS, SHRINE_KNEEL_WORLD_STEPS);
+        assert_eq!(SHRINE_KNEEL_HOLD_BIOS_TICKS, 46);
+        assert_eq!(SHRINE_EXIT_PACING_HOLD_BIOS_TICKS, 61);
+        for steps in [0u16, 1, 40, 51, 60, 61, 66] {
+            assert_eq!(shrine_presentation_hold_bios_ticks(steps), steps);
+        }
+        // Key to Kneel record: 46 ticks is 2.53 s, inside the stock's
+        // (1.8 s, 2.4 s nominal + screenshot cost] window, and well short of
+        // the 3.6 s the serial-fitted hold gave.
+        let kneel_secs = f64::from(SHRINE_KNEEL_HOLD_BIOS_TICKS) * crate::narration::BIOS_TICK_SECS;
+        assert!((2.4..2.7).contains(&kneel_secs), "{kneel_secs}");
+        assert_eq!(SHRINE_VIRTUE_QUESTION_HOLD_WORLD_TICKS, 16);
+        assert_eq!(SHRINE_MANTRA_FIRST_HOLD_BIOS_TICKS, 10);
+        assert_eq!(SHRINE_MANTRA_SUBSEQUENT_HOLD_BIOS_TICKS, 19);
+    }
 }
