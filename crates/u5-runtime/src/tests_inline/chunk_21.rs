@@ -2506,7 +2506,12 @@ fn object_pickup_inventory_grants_cover_caps_equipment_and_story_items() {
     );
     assert_eq!(state.special_items[SPECIAL_ITEM_SKULL_KEY_INDEX], 2);
     assert_eq!(state.special_items[SPECIAL_ITEM_HMS_CAPE_PLANS_INDEX], 1);
-    assert_eq!(state.special_items[SPECIAL_ITEM_WOODEN_BOX_INDEX], 1);
+    // inventory.md §4.5: a normally acquired Wooden Box is uncounted
+    // (playtest P13-09).
+    assert_eq!(
+        state.special_items[SPECIAL_ITEM_WOODEN_BOX_INDEX],
+        crate::commands::USE_PICKER_NO_QUANTITY
+    );
     // inventory.md §4.5 (R456): normal acquisition gives the Amulet, Crown
     // and Sceptre the no-quantity value, not one (playtest Q12).
     for index in [

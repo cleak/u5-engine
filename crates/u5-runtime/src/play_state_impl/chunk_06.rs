@@ -2030,9 +2030,12 @@ impl PlayState {
                     [SPECIAL_ITEM_HMS_CAPE_PLANS_INDEX]
                     .max(SPECIAL_ITEM_OWNED_VALUE);
             }
+            // `inventory.md §4.5` "Which U-Use rows omit quantity": the
+            // normally acquired Wooden Box is an uncounted row, so the grant
+            // writes the no-quantity marker, not one (playtest P13-09). The
+            // endgame and U-Use readers only test the flag for nonzero.
             ObjectPickupKind::SandalwoodBox => {
-                self.special_items[SPECIAL_ITEM_WOODEN_BOX_INDEX] =
-                    self.special_items[SPECIAL_ITEM_WOODEN_BOX_INDEX].max(SPECIAL_ITEM_OWNED_VALUE);
+                self.special_items[SPECIAL_ITEM_WOODEN_BOX_INDEX] = crate::commands::USE_PICKER_NO_QUANTITY;
             }
             // `inventory.md §4.5`: "normal acquisition gives each of these
             // the no-quantity value instead" of one (R456) - so the U-Use

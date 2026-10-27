@@ -835,9 +835,12 @@
         );
 
         assert!(state.active_objects[1].is_empty());
+        // `inventory.md §4.5` "Which U-Use rows omit quantity": a normally
+        // acquired Wooden Box is an uncounted row, so the grant writes the
+        // no-quantity marker 255, not one (playtest P13-09).
         assert_eq!(
             state.special_items[SPECIAL_ITEM_WOODEN_BOX_INDEX],
-            SPECIAL_ITEM_OWNED_VALUE
+            crate::commands::USE_PICKER_NO_QUANTITY
         );
         assert_eq!(state.turn, 1);
         assert_eq!(state.message, "\nA sandalwood box!");
