@@ -8476,6 +8476,44 @@ fn sage_unknown_topic_quotes_its_reply_and_repeats_the_question() {
     assert_eq!(state.gold, 200);
 }
 
+/// `shops.md §8.C` sage result table: "After typed topic | `\n\n`; empty
+/// input returns to tavern continuation". The two feeds follow the typed line
+/// even when it is empty, so an empty echo row and a blank row sit between
+/// `You respond:` and the continuation question. It ran straight onto the
+/// echo row (playtest P12-05).
+#[test]
+fn sage_empty_topic_keeps_the_echo_row_and_a_blank_before_continuation() {
+    use crate::shop_runtime::SageState;
+    use crate::shop_session::ActiveShopSession;
+
+    let mut state = test_state(open_grid(), 1, 1);
+    state.area = Area::Town {
+        scene: Scene::new(22).unwrap(),
+        floor: 0,
+    };
+    state.gold = 200;
+    state.active_shop = Some(ActiveShopSession::Sage(SageState::default()));
+    state.emit_message_line("\"Of what wouldst thou hear my lore, sir?\"\n\nYou respond:");
+
+    handle_play_key_input(&mut state, '\r', "", Path::new("")).unwrap();
+    state.flush_message_slot();
+
+    let texts: Vec<String> = state
+        .message_entries()
+        .iter()
+        .map(|entry| entry.text.clone())
+        .collect();
+    let at = texts
+        .iter()
+        .rposition(|text| text == "You respond:")
+        .expect("prompt row");
+    assert_eq!(
+        &texts[at..],
+        &["You respond:", "", "", "\"Anything else", "for thee?\" "],
+        "{texts:?}"
+    );
+}
+
 /// `shops.md §8.C`: sage "Short funds | `"Sorry, `, honorific, record `91`"
 /// and tavern "No packs affordable, fewer than three food servings | `\n\n`,
 /// then record `90`", each record's `$` substituting the vendor (`§4.1`).

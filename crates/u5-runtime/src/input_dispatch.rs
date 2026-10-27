@@ -2698,6 +2698,15 @@ fn handle_active_shop_key_input(
                         // topic typed lower-case.
                         state.emit_message_line(line.to_uppercase());
                         state.push_explicit_blank_message_entry();
+                    } else {
+                        // "After typed topic | `\n\n`" has no exception for
+                        // an empty line: the empty echo row closes and a
+                        // blank row follows before the continuation question.
+                        // The continuation ran straight onto the echo row
+                        // (playtest P12-05).
+                        state.flush_message_slot();
+                        state.push_explicit_blank_message_entry();
+                        state.push_explicit_blank_message_entry();
                     }
                     step_sage(s, SageInput::Keyword(&line), &mut state.gold)
                 }
