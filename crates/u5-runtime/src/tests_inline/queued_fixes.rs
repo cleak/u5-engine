@@ -124,3 +124,40 @@ fn z1_none_ready_placeholder_sits_on_panel_row_five() {
     assert!(rows[2].starts_with(' ') && !rows[2].trim().is_empty(), "rows: {rows:?}");
     assert!(!rows.iter().any(|row| row.contains(Z_STATS_NONE_READY_PLACEHOLDER)));
 }
+
+/// R14a. `commands.md §3` (Dungeon): "the dungeon loop advances its own
+/// clock at the head of the iteration, before the command is even parsed, so
+/// no dungeon command is distinguished by this status for timekeeping
+/// purposes." The inline `M`, `N`, `R` and `Y` suffix forms are read by the
+/// shared intercept, so after the no-action `W` they found the previous
+/// head's charge still standing and spent no minute - the defect the inline
+/// `C`, `Z` and `J` forms had (p10 R12, playtest S16).
+#[test]
+fn r14a_dungeon_inline_suffix_forms_spend_their_loop_head_minute() {
+    let start = dungeon_state(open_dungeon_record(), 0, 1, 1).clock;
+    let minutes = |count: u8| {
+        let mut clock = start;
+        clock.advance_minutes(count);
+        clock
+    };
+    for (key, suffix) in [('M', "1:1:1"), ('N', "12"), ('R', "1:1"), ('Y', "hello")] {
+        let clock_after = |first: Option<char>| {
+            let mut state = dungeon_state(open_dungeon_record(), 0, 1, 1);
+            if let Some(first) = first {
+                handle_play_key_input(&mut state, first, "", Path::new("")).unwrap();
+            }
+            handle_play_key_input(&mut state, key, suffix, Path::new("")).unwrap();
+            // A suffix form is a whole command: it leaves nothing open.
+            assert!(
+                state.active_mix.is_none()
+                    && state.active_ready.is_none()
+                    && state.active_yell.is_none(),
+                "{key}{suffix} left a prompt open"
+            );
+            state.clock
+        };
+        assert_eq!(clock_after(None), minutes(1), "{key}{suffix} alone is one iteration");
+        assert_eq!(clock_after(Some('W')), minutes(2), "W;{key}{suffix} is two iterations");
+        assert_eq!(clock_after(Some(' ')), minutes(2), "Space;{key}{suffix}");
+    }
+}
