@@ -188,6 +188,14 @@ fn run_with_command_epilogue(
             state.pending_outdoor_reaction_slots.clear();
         }
     }
+    // `movement.md §8.1` / `active-objects.md §8` (u5-spec#305 Q4): a
+    // difficult-terrain step whose extra call fought still owes its later
+    // calls, terrain charge and consumed-action tail once the fight returns.
+    if result.is_ok() && !state.combat_active && state.pending_difficult_terrain_step.is_some() {
+        if let Err(error) = state.resume_difficult_terrain_step_after_combat(game_dir) {
+            result = Err(error);
+        }
+    }
     // `weather.md §5.1`, clear four: "After **every** outdoor command handler
     // returns, and before the next input is read, the loop clears the cache
     // unless the transport marker is still a hoisted frigate." This is that

@@ -476,6 +476,63 @@ fn play_script_typeahead_replays_simple_movement_queue() {
     assert!(state.message.is_empty());
 }
 
+#[test]
+fn play_script_blocked_step_flushes_the_typeahead_queue() {
+    // Playtest P13-02, `audio.md §7.4`: a refused town step "Prints
+    // `Blocked!`, beeps, flushes type-ahead", so with Buffer On the keys
+    // queued behind it are discarded rather than run.
+    let mut grid = open_grid();
+    grid[4 * 32 + 5] = 0x01; // impassable on foot
+    let mut state = test_state(grid, 4, 4);
+
+    handle_play_script_command(&mut state, "buffer", Path::new("")).unwrap();
+    handle_play_script_command(&mut state, "dss", Path::new("")).unwrap();
+
+    assert!(state.typeahead_buffer_enabled);
+    assert_eq!((state.player.x, state.player.y), (4, 4));
+    // The town refusal spends its own turn; the queued steps spend none.
+    assert_eq!(state.turn, 1);
+}
+
+#[test]
+fn play_script_takes_the_overworld_input_helper_entry_step_at_every_prompt() {
+    // Playtest P13-03, `overworld.md §5` item 5: "Input-helper entry: one
+    // world tick, unconditionally, at every prompt, the session's first
+    // prompt included." A script command is a key read at that prompt.
+    let mut state = world_state(open_world_grid(), 10, 10);
+    state.active_objects.truncate(1);
+    state.overworld_input_helper_entry_owed = true;
+    state.session_start_world_step_frozen = false;
+    let mut expected = state.clone();
+    assert!(expected.run_overworld_input_helper_entry_step());
+    handle_play_key_input(&mut expected, ' ', "", Path::new("")).unwrap();
+    let mut without_entry = state.clone();
+    without_entry.overworld_input_helper_entry_owed = false;
+    handle_play_key_input(&mut without_entry, ' ', "", Path::new("")).unwrap();
+    assert_ne!(expected.prng_state, without_entry.prng_state);
+
+    handle_play_script_command(&mut state, "pass", Path::new("")).unwrap();
+
+    assert_eq!(state.prng_state, expected.prng_state);
+    assert_eq!(state.turn, expected.turn);
+    // The next prompt owes the step again.
+    assert!(state.overworld_input_helper_entry_owed);
+}
+
+#[test]
+fn interactive_blocked_step_flushes_the_typeahead_queue() {
+    // Playtest P13-02: the interactive loop's queue takes the same flush.
+    let mut grid = open_grid();
+    grid[4 * 32 + 5] = 0x01; // impassable on foot
+    let mut state = test_state(grid, 4, 4);
+    state.typeahead_buffer_enabled = true;
+    let mut input = std::io::Cursor::new(b"dss\n".to_vec());
+
+    run_interactive_play_loop(&mut state, Path::new(""), None, &mut input).unwrap();
+
+    assert_eq!((state.player.x, state.player.y), (4, 4));
+}
+
 // from chunk_19
 #[test]
 fn play_script_command_label_sanitizes_control_sequences() {

@@ -1116,20 +1116,112 @@ impl PlayState {
                 step.extra_object_update_calls,
             )? {
                 Ok(hostile) => hostile,
-                Err(outcome) => return Ok(outcome),
+                Err((outcome, remaining_calls)) => {
+                    // `active-objects.md §8`: "A generic terrain-combat call
+                    // can therefore return" - the fight returns to this call
+                    // and the step carries on. Only a reaction that moved the
+                    // party elsewhere ends the step here.
+                    if self.combat_active && !outcome.is_transition() {
+                        self.pending_difficult_terrain_step = Some(PendingDifficultTerrainStep {
+                            plane,
+                            step,
+                            remaining_calls,
+                            transition,
+                        });
+                    }
+                    return Ok(outcome);
+                }
             };
             // "Suppression does not remove the terrain's time charge."
             if !hostile {
                 slow_line = Some(step.line);
             }
-            let effective_minutes = if self.negate_time_active() {
-                0
-            } else {
-                TimingStatusTag::from_save_byte(self.active_effect_tag.unwrap_or(0))
-                    .effective_minutes(step.extra_minutes)
-            };
-            self.advance_clock_half(effective_minutes);
+            self.charge_difficult_terrain_minutes(step);
         }
+        self.finish_world_step_tail(game_dir, plane, transition, slow_line)
+    }
+
+    /// `movement.md §8.1`: "one call charges the terrain's two or four extra
+    /// minutes after its additional object calls and possible feedback".
+    fn charge_difficult_terrain_minutes(&mut self, step: WorldDifficultTerrainStep) {
+        let effective_minutes = if self.negate_time_active() {
+            0
+        } else {
+            TimingStatusTag::from_save_byte(self.active_effect_tag.unwrap_or(0))
+                .effective_minutes(step.extra_minutes)
+        };
+        self.advance_clock_half(effective_minutes);
+    }
+
+    /// Finish a difficult-terrain step that a terrain combat interrupted,
+    /// once the combat frame has returned to the world
+    /// ([`PlayState::pending_difficult_terrain_step`]).
+    ///
+    /// `active-objects.md §8` (u5-spec#305 Q4): the fight "can therefore
+    /// return and be followed by another lower-indexed adjacent reaction in
+    /// the same epilogue", so the interrupted call's lower reactions drain
+    /// first; then its proximity pause, any extra call not yet run, the
+    /// terrain charge (`movement.md §8.1`: "Suppression does not remove the
+    /// terrain's time charge") and "The ordinary consumed-action tail [that]
+    /// subsequently performs its own clock and upkeep work". The feedback
+    /// line stays suppressed: the call that fought reported a hostile
+    /// interaction.
+    ///
+    /// Nothing runs while a fight or a staged reaction is still open, or
+    /// when the party no longer stands on the step's plane. A party the
+    /// fight left unable to act finishes nothing here, as the town attack
+    /// epilogue declines to.
+    pub fn resume_difficult_terrain_step_after_combat(
+        &mut self,
+        game_dir: &Path,
+    ) -> io::Result<Option<MoveOutcome>> {
+        if self.combat_active || !self.pending_outdoor_reaction_slots.is_empty() {
+            return Ok(None);
+        }
+        let Some(pending) = self.pending_difficult_terrain_step.take() else {
+            return Ok(None);
+        };
+        if self.area != (Area::World { plane: pending.plane })
+            || matches!(self.party_capability(), PartyCapability::Defeated)
+        {
+            return Ok(None);
+        }
+        // The fight's closing lines are already printed in the original by the
+        // time its call returns; record them before the step's tail resets
+        // the message slot. The row state is left as the exit set it.
+        self.commit_command_echo();
+        self.flush_message_slot();
+        if self.slot_one_within_proximity_pause(pending.plane) {
+            let _ = self.advance_visual_tick();
+        }
+        if let Err((outcome, remaining_calls)) = self.run_difficult_terrain_object_updates(
+            Some(game_dir),
+            pending.plane,
+            pending.remaining_calls,
+        )? {
+            if self.combat_active && !outcome.is_transition() {
+                self.pending_difficult_terrain_step = Some(PendingDifficultTerrainStep {
+                    remaining_calls,
+                    ..pending
+                });
+            }
+            return Ok(Some(outcome));
+        }
+        self.charge_difficult_terrain_minutes(pending.step);
+        self.finish_world_step_tail(Some(game_dir), pending.plane, pending.transition, None)
+            .map(Some)
+    }
+
+    /// The accepted overworld step after its destination terrain's extra
+    /// calls and charge: the ordinary turn, a plane change, the feedback
+    /// lines and the consumed-action tail.
+    fn finish_world_step_tail(
+        &mut self,
+        game_dir: Option<&Path>,
+        plane: WorldPlane,
+        transition: Option<WorldPlaneTransitionEntry>,
+        slow_line: Option<&'static str>,
+    ) -> io::Result<MoveOutcome> {
         self.advance_turn();
 
         if let Some(game_dir) = game_dir {
@@ -1159,7 +1251,6 @@ impl PlayState {
         // active-object slot numbers, terrain-class names". Only the
         // consequences below (damage, status, hourly report) produce a
         // result line.
-        let _ = direction;
         self.message = String::new();
         // `commands.md §5.2` / `vehicles.md §6` (u5-spec#297, R524): a
         // furled frigate "prints the plain compass word followed by a
@@ -1262,15 +1353,16 @@ impl PlayState {
     ///
     /// Returns whether any call reported a hostile interaction (an adjacent
     /// engagement or a reached ranged attack: the walker's claimed
-    /// reactions), or the outcome of a reaction that changed mode.
+    /// reactions), or the outcome of a reaction that changed mode together
+    /// with the number of calls after the interrupted one.
     fn run_difficult_terrain_object_updates(
         &mut self,
         game_dir: Option<&Path>,
         plane: WorldPlane,
         calls: u8,
-    ) -> io::Result<Result<bool, MoveOutcome>> {
+    ) -> io::Result<Result<bool, (MoveOutcome, u8)>> {
         let mut hostile = false;
-        for _ in 0..calls {
+        for call in 0..calls {
             if self.time_stop_counter == 0 && !self.combat_active {
                 let gate = self.overworld_walker_effect_gates();
                 if gate.walkers_run() {
@@ -1292,7 +1384,7 @@ impl PlayState {
                             self.apply_pending_outdoor_reactions(game_dir, plane)?
                         && (outcome.is_transition() || self.combat_active)
                     {
-                        return Ok(Err(outcome));
+                        return Ok(Err((outcome, calls - call - 1)));
                     }
                 }
             }

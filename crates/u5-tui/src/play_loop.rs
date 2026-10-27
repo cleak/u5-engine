@@ -15,7 +15,7 @@ use u5_runtime::{
     INPUT_CODE_NORTHEAST, INPUT_CODE_NORTHWEST, INPUT_CODE_SOUTH, INPUT_CODE_SOUTHEAST,
     INPUT_CODE_SOUTHWEST, INPUT_CODE_WEST, PLAY_EXIT_TO_DOS_KEY, PLAY_IGNORED_INPUT_KEY,
     PLAY_MUSIC_TOGGLE_KEY, PLAY_SCRIPT_MAX_IDLE_TICKS, PLAY_TYPEAHEAD_TOGGLE_KEY,
-    PlayInputDisposition, PlayOptions, PlayState, TileAtlas, TileGraphicsDepth,
+    PlayInputDisposition, PlayOptions, PlayState, SoundEffect, TileAtlas, TileGraphicsDepth,
     handle_play_key_input, hash_bytes, hash_palette_indices, input_function_key_code,
     load_tile_atlas, run_potion_flash_soundless_timing,
 };
@@ -180,11 +180,29 @@ pub fn run_interactive_play_loop<R: BufRead>(
                 continue;
             }
         };
+        let effects_before = state.sound_effect_serial;
         if handle_play_key_input(state, key, &suffix, game_dir)? == PlayInputDisposition::Quit {
             break;
         }
+        if key_flushed_typeahead(state, effects_before) {
+            queued_input.clear();
+        }
     }
     Ok(())
+}
+
+/// `audio.md §7.4`: a refused overworld or town step "Prints `Blocked!`,
+/// beeps, flushes keyboard type-ahead", whatever the Buffer setting - the
+/// setting governs only the per-read flush of `input.md §6`. The beep marks
+/// the refusal arms that flush, the test the visual shell applies: the silent
+/// whirlpool refusal and the under-sail arms take neither, and combat's own
+/// blocked-step beep publishes no flush.
+pub fn key_flushed_typeahead(state: &PlayState, effects_before: u64) -> bool {
+    !state.combat_active
+        && state
+            .sound_effects_after(effects_before)
+            .iter()
+            .any(|effect| matches!(effect, SoundEffect::BlockedStep))
 }
 
 /// Walk a pending third-mantra resolution to its end in a shell with no
@@ -683,6 +701,7 @@ pub fn handle_play_script_command(
     game_dir: &Path,
 ) -> io::Result<PlayInputDisposition> {
     settle_play_script_exploration_gate(state, game_dir)?;
+    run_play_script_input_helper_entry(state);
     let command = command.trim();
     if is_typeahead_toggle_token(command) {
         return handle_play_key_input(state, PLAY_TYPEAHEAD_TOGGLE_KEY, "", game_dir);
@@ -761,8 +780,13 @@ pub fn handle_play_script_command(
                     break;
                 }
                 settle_play_script_exploration_gate(state, game_dir)?;
+                run_play_script_input_helper_entry(state);
+                let effects_before = state.sound_effect_serial;
                 if handle_play_key_input(state, key, "", game_dir)? == PlayInputDisposition::Quit {
                     return Ok(PlayInputDisposition::Quit);
+                }
+                if key_flushed_typeahead(state, effects_before) {
+                    break;
                 }
             }
             return Ok(PlayInputDisposition::Continue);
@@ -793,6 +817,29 @@ fn play_script_direction_prompt_digit(state: &PlayState, command: &str) -> Optio
         [digit @ b'1'..=b'9'] => u5_runtime::input_keypad_digit_direction_code(digit - b'0'),
         _ => None,
     }
+}
+
+/// `overworld.md §5` item 5 (u5-spec#305 Q5): "Input-helper entry: **one
+/// world tick, unconditionally**, at every prompt, the session's first prompt
+/// included." A script command is a key read at that prompt, so the step the
+/// last key (or the load) left owed runs before it, as the interactive loop's
+/// [`run_terminal_input_wait_pass`] and the visual shell's entry step do.
+/// Without it a script never rolled the wind, never took the session's first
+/// full step and never set the loaded world-tick gate byte back to one
+/// (playtest P13-03).
+///
+/// A prompt still open means the command that owed the step has not
+/// returned, so the step is dropped, as the visual shell drops it; the key
+/// that finishes the command owes it again.
+fn run_play_script_input_helper_entry(state: &mut PlayState) {
+    if !state.overworld_input_helper_entry_owed {
+        return;
+    }
+    if !play_state_accepts_typeahead(state) {
+        state.overworld_input_helper_entry_owed = false;
+        return;
+    }
+    let _ = state.run_overworld_input_helper_entry_step();
 }
 
 fn settle_play_script_exploration_gate(state: &mut PlayState, game_dir: &Path) -> io::Result<()> {
