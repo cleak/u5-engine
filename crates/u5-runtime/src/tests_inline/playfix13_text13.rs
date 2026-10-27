@@ -125,3 +125,26 @@ fn playtest_p13_08_mounted_shop_refusal_keeps_the_dispatcher_feed() {
         ]
     );
 }
+
+/// P13-10: `overworld.md §7.1` step 3 prints `Dost thou pay?` "with no
+/// trailing feed. Wait for a key", and `text-output.md §10.2`: a prompt a
+/// command waits at mid-run gets no marker row of its own - "a marker-and-
+/// cursor row that appears beneath such a prompt ... is the next command
+/// cycle's pair". So the question is the window's last row while it waits.
+#[test]
+fn playtest_p13_10_troll_toll_question_keeps_the_cursor_inline() {
+    let mut state = britannia_state(open_world_grid(), 2, 1);
+    state.gold = 100;
+    state.emit_message_line("Caught!\n\nThe trolls demand a 54 gp toll!\n\nDost thou pay?");
+    state.active_yes_no_prompt = Some(YesNoPromptSession::new(
+        YesNoPromptKind::TrollBridgeToll { toll: 54 },
+    ));
+
+    assert!(state.message_window_live_row_suppressed());
+    let rows = p4window_rows(&state);
+    assert_eq!(
+        rows.iter().rev().find(|row| !row.is_empty()).map(String::as_str),
+        Some(TROLL_BRIDGE_TOLL_QUESTION),
+        "{rows:#?}"
+    );
+}
