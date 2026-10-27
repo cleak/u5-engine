@@ -5910,7 +5910,7 @@ fn z_stats_shared_inventory_pages_use_the_counted_picker_row_and_wrap_long_label
     state.special_items[SPECIAL_ITEM_SEXTANT_INDEX] = 255;
     state.potion_stock[POTION_BLUE_INDEX] = 4;
     open_z_stats_page_for_test(&mut state, ZStatsPage::SpecialUse);
-    // The eight Moonstones head the page; scan past them.
+    // The potion row and the eight Moonstones lead the page; scan past them.
     state.active_z_stats.as_mut().unwrap().inventory_cursor = MOONSTONE_SLOT_COUNT;
     let rows = z_stats_page_rows_for_test(&state);
     assert!(rows.iter().any(|row| row == "Sextant"), "rows: {rows:?}");

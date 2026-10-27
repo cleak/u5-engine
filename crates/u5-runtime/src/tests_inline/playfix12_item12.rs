@@ -66,3 +66,24 @@ fn playtest_p12_11_the_wind_change_scroll_returns_silently_in_a_dungeon() {
         "the prompt still completes: {rows:?}"
     );
 }
+
+/// `inventory.md §4.7` makes the Z-stats Items page the 38-slot family, and
+/// the only order the spec gives that family (§4.5's classification table,
+/// §7's enumeration) puts the eight moonstones after the Sceptre and before
+/// the shards. Playtest P12-13: the moonstones headed the page.
+#[test]
+fn playtest_p12_13_the_items_page_keeps_the_use_item_enumeration_order() {
+    let mut state = test_state(open_grid(), 5, 5);
+    state.scroll_stock[SCROLL_LIGHT_INDEX] = 2;
+    state.potion_stock[POTION_BLUE_INDEX] = 2;
+    state.special_items[SPECIAL_ITEM_SCEPTRE_LB_INDEX] = 255;
+    state.special_items[SPECIAL_ITEM_SPYGLASS_INDEX] = 255;
+    open_z_stats_page_for_test(&mut state, ZStatsPage::SpecialUse);
+    let rows = z_stats_page_rows_for_test(&state);
+    // Scroll, potion, Sceptre, then the moonstones (the scroll row's rune
+    // label is in the runic font, so compare positions, not text).
+    assert!(rows[0].starts_with(" 2-"), "rows: {rows:?}");
+    assert!(rows[1].ends_with("Blue"), "rows: {rows:?}");
+    assert_eq!(rows[2], "Sceptre", "rows: {rows:?}");
+    assert!(rows[3].starts_with(Z_STATS_MOONSTONE_LABEL), "rows: {rows:?}");
+}

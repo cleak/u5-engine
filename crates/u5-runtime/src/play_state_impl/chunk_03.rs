@@ -5620,28 +5620,27 @@ impl PlayState {
     }
 
     fn z_stats_special_use_rows(&self) -> Vec<String> {
-        let mut rows = Vec::new();
-        // The eight Moonstones head this page. `inventory.md §4.5` gives
-        // the row form - "the word `Moonstone_`, then a single runic
-        // letter naming the stone" - and a capture of the stock game
-        // confirms it exactly: `Moonstone` in the text font at window
-        // columns 1..9, a space, then the phase glyph at column 11, drawn
-        // from `RUNES.CH` at `SKY_STRIP_MOON_PHASE_RUNE_BASE + phase`.
-        // All eight are listed, so seven fill the frame and the page
-        // badge points at the eighth.
+        // `inventory.md §4.5` gives the moonstone row form - "the word
+        // `Moonstone_`, then a single runic letter naming the stone" - and a
+        // capture of the stock game confirms it exactly: `Moonstone` in the
+        // text font at window columns 1..9, a space, then the phase glyph at
+        // column 11, drawn from `RUNES.CH` at
+        // `SKY_STRIP_MOON_PHASE_RUNE_BASE + phase`. §4.7: this page
+        // catalogues "all eight moonstones by phase glyph whether or not any
+        // is carried".
         //
         // The phase cell is left blank for now: the panel's text window
         // renders from one fixed-cell font, and drawing this cell needs
         // the §4.5 per-cell font switch that the runic selector cell also
         // wants (`cleak/u5-spec#195`). Emitting the rune byte through the
         // text font would print a digit, which is worse than a gap.
-        for phase in 0..MOONSTONE_SLOT_COUNT {
+        let moonstone_rows = (0..MOONSTONE_SLOT_COUNT).map(|phase| {
             let rune = crate::gameplay_chrome::SKY_STRIP_MOON_PHASE_RUNE_BASE + phase as u8;
-            rows.push(format!(
+            format!(
                 "{Z_STATS_MOONSTONE_LABEL} {}",
                 crate::stats_panel::panel_runic_char(rune)
-            ));
-        }
+            )
+        });
         // Keys, gems, torches and the grapple belong to the counters
         // screen (`§4.7`'s `Equipment` literals), not here; the stock
         // game's items page does not list them. §4.5: "Grapple and the
@@ -5654,17 +5653,38 @@ impl PlayState {
         // builds - through §4.7's shared row renderer, rather than the
         // invented, clipped `Name: count` rows this page used to print
         // (playtest H43). The carried-moonstone rows are U-Use's own
-        // predicate; this page lists all eight above instead.
+        // predicate; this page lists all eight instead.
+        //
+        // Order: §4.7 makes this page the 38-slot family, and the only
+        // order the spec gives that family is the use-item enumeration
+        // (§4.5's classification table, §7): scrolls, potions, Magic
+        // Carpet, Skull Keys, Amulet, Crown, Sceptre, *then* the eight
+        // moonstones, then the shards and late utilities. The moonstones
+        // used to head the page (playtest P12-13); the stock capture
+        // behind that carried nothing else, so it could not show the order.
+        let mut ahead = Vec::new();
+        let mut after = Vec::new();
         for row in self.use_item_picker_rows() {
-            if matches!(row.request, UseItemRequest::Moonstone(_)) {
-                continue;
-            }
             let name = row.decoration.decorate(&row.label);
-            rows.push(match row.quantity {
+            let text = match row.quantity {
                 Some(count) => z_stats_counted_row(count, &name),
                 None => name,
-            });
+            };
+            match row.request {
+                UseItemRequest::Moonstone(_) => {}
+                UseItemRequest::Scroll { .. }
+                | UseItemRequest::Potion { .. }
+                | UseItemRequest::MagicCarpet
+                | UseItemRequest::SkullKey
+                | UseItemRequest::AmuletOfLordBritish
+                | UseItemRequest::CrownOfLordBritish
+                | UseItemRequest::Sceptre => ahead.push(text),
+                _ => after.push(text),
+            }
         }
+        let mut rows = ahead;
+        rows.extend(moonstone_rows);
+        rows.extend(after);
         rows
     }
 
