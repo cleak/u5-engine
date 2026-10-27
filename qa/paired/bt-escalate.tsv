@@ -62,7 +62,13 @@ both	key	Up
 both	wait	900
 both	key	Right
 both	wait	900
-both	wait	3000
+# The capture narration (blackthorn.md §3, u5-spec#304 Q6) runs about 14 s from
+# the arrest, which fires on a walk key mid-route; the queued walk keys are
+# spent on the greeting and discarded. Wait it out, answer the guard-release
+# preamble, then sample the first demand.
+both	wait	16000
+both	key	space
+both	wait	1500
 both	shot	ask1	The first demand
 both	type	mul
 both	wait	1200
