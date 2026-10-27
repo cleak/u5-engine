@@ -76,3 +76,52 @@ fn playtest_p13_07_load_time_notice_closes_its_row_for_later_commands() {
     }
     let _ = fs::remove_dir_all(dir);
 }
+
+/// P13-08: `conversation.md §9` step 2, "The dispatcher first emits a single
+/// line feed", and §2: every line the dispatcher prints in place of a
+/// conversation "follows the dispatcher's own leading line feed". The
+/// mounted shop refusal is printed by that dispatcher after the schedule
+/// gate (`shops.md §2`), so it keeps the blank row under `Talk-` the closed
+/// refusal already had.
+#[test]
+fn playtest_p13_08_mounted_shop_refusal_keeps_the_dispatcher_feed() {
+    let dialogue = HashMap::new();
+    let raw = HashMap::new();
+    let mut state = test_state(open_grid(), 1, 1);
+    state.player.facing = Direction::East;
+    state.player.transport = TransportState::Horse {
+        type_byte: FIRST_PLAYABLE_HORSE_TILE,
+        tile: FIRST_PLAYABLE_HORSE_TILE,
+    };
+    state.load_scheduled_npcs(&[
+        NpcSlot {
+            slot: 0,
+            type_byte: 0,
+            dialog_id: 0,
+            schedule: [0; 16],
+            name: None,
+        },
+        NpcSlot {
+            slot: 1,
+            type_byte: 1,
+            dialog_id: 0x85,
+            schedule: [0, 0, 0, 2, 2, 2, 1, 1, 1, 0, 0, 0, 0, 8, 16, 20],
+            name: None,
+        },
+    ]);
+    state.emit_command_echo_line("Talk-East");
+    state.talk_facing_with_dialogue_and_keyword_raw(&dialogue, &raw, None);
+    state.flush_message_slot();
+
+    let tail = p4window_rows_from(&p4window_rows(&state), ">Talk-East");
+    assert_eq!(
+        tail[..5].to_vec(),
+        vec![
+            ">Talk-East".to_string(),
+            String::new(),
+            "A merchant says:".to_string(),
+            "\"GET THAT HORSE".to_string(),
+            "OUT OF HERE!\"".to_string(),
+        ]
+    );
+}

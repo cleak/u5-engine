@@ -30,7 +30,13 @@ pub const USE_ITEM_PROMPT_MESSAGE: &str = ITEM_SELECTION_PROMPT;
 /// horse-trader trigger (`0x83`) is exempt. This is a fixed merchant refusal,
 /// not a per-shop-role line, and "the dispatcher does not reject other
 /// transport markers here; on foot and magic carpet pass".
-pub const SHOP_MOUNTED_REFUSAL: &str = "A merchant says:\n\"GET THAT HORSE OUT OF HERE!\"";
+///
+/// It is printed by the same shared dispatcher as the schedule refusal, and
+/// `conversation.md §2`/§9 step 2 put "the dispatcher's own leading line
+/// feed" before every line it prints in place of a conversation, so the
+/// literal carries that feed and a blank row stands under the `Talk-` echo
+/// (playtest P13-08).
+pub const SHOP_MOUNTED_REFUSAL: &str = "\nA merchant says:\n\"GET THAT HORSE OUT OF HERE!\"";
 
 /// `shops.md §2`: the fixed refusal a shop trigger prints when its keeper is
 /// not open for business, "with these line breaks" and "a newline before the

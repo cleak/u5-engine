@@ -3153,7 +3153,7 @@ fn town_raw_tlk_shop_trigger_horseback_refusal_does_not_open_session() {
     // a fixed merchant line rather than one worded per shop role.
     assert_eq!(
         state.message,
-        "A merchant says:\n\"GET THAT HORSE OUT OF HERE!\""
+        "\nA merchant says:\n\"GET THAT HORSE OUT OF HERE!\""
     );
     assert!(state.active_shop.is_none());
     assert_eq!(state.turn, 1);
@@ -4501,7 +4501,7 @@ fn town_talk_horse_mounted_refuses_non_horse_trader_shops() {
     // merchant line rather than one worded per shop role.
     assert_eq!(
         state.message,
-        "A merchant says:
+        "\nA merchant says:
 \"GET THAT HORSE OUT OF HERE!\""
     );
     assert_eq!(state.turn, 1);
