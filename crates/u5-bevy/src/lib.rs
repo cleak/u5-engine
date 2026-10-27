@@ -11461,6 +11461,14 @@ fn animate_static_tiles(
         advanced = true;
     }
 
+    // `timing.md §8.2`: entering the overworld input helper steps the world
+    // once, with no wait, before the command wait's first timer-paced pass.
+    // The pump below only steps on its firings, so the entry step is taken
+    // here, on the frame the prompt comes back.
+    if !cinematic_active && run_visual_input_helper_entry(&mut visual.state) {
+        advanced = true;
+    }
+
     let (sweep_active, interval) = visual_animation_pump_interval(&visual.state, pump.interval);
     if !cinematic_active
         && advance_gameplay_animation_pump(&mut pump, time.delta_secs(), interval, sweep_active)
@@ -13875,6 +13883,12 @@ fn drive_visual(
     if !handled {
         return;
     }
+    // `timing.md §8.2`: a handled read - a command key, or the line or
+    // picker key that completes one - returns to the overworld input
+    // helper, which steps the world on entry. The line editor does not go
+    // through `handle_play_key_input`, so the shell marks it too; a prompt
+    // still open drops it again (`run_visual_input_helper_entry`).
+    visual.state.overworld_input_helper_entry_owed = true;
 
     let v: &mut VisualState = visual.as_mut();
     v.prompt_cursor_visible = visual_line_prompt_active(&v.state);
@@ -18972,6 +18986,25 @@ fn visual_modal_prompt_active(state: &PlayState) -> bool {
 /// nothing marked them as prompts.
 fn visual_shared_wait_prompt_open(state: &PlayState) -> bool {
     visual_modal_prompt_active(state) || state.prompt_waits_in_shared_wait()
+}
+
+/// The overworld input helper's entry world step, taken once each time the
+/// overworld command prompt comes back (`timing.md §8.2`: "On the overworld
+/// the input helper performs one world step when it is entered").
+///
+/// A prompt this shell treats as modal means the command that owed the step
+/// has not returned, so the step is dropped; the key that finishes the
+/// command owes it again. Everything else is
+/// [`PlayState::run_overworld_input_helper_entry_step`]'s decision.
+fn run_visual_input_helper_entry(state: &mut PlayState) -> bool {
+    if !state.overworld_input_helper_entry_owed {
+        return false;
+    }
+    if visual_shared_wait_prompt_open(state) {
+        state.overworld_input_helper_entry_owed = false;
+        return false;
+    }
+    state.run_overworld_input_helper_entry_step()
 }
 
 /// The idle redraw tick, which is also the only pass that toggles the
@@ -31012,11 +31045,18 @@ mod tests {
     /// and diagnostic systems under fixed generator seeds and asks for a
     /// spawn on every walk, its `engine.log` line, creatures that walk, and a
     /// fight on at least one walk.
+    ///
+    /// The fight is a lottery on the seed: about one walk in seven reaches
+    /// combat inside forty steps. The seeds are re-picked whenever the shell's
+    /// draw count per step changes - last when the overworld input helper's
+    /// entry world step (`timing.md §8.2`) added one wind draw per prompt,
+    /// which moved `0x0def`'s fight out of reach. `0x0100` and `0x0443`
+    /// engage at steps 34 and 24 under it.
     #[test]
     #[cfg(feature = "original-asset-tests")]
     fn the_visual_shell_meets_a_wandering_monster_on_the_swamp_long_walk() {
         let mut engaged = Vec::new();
-        for seed in [0x0123_u16, 0x0789, 0x0def] {
+        for seed in [0x0100_u16, 0x0443, 0x0789] {
             let dir = writable_original_asset_copy("swamp-long-walk");
             let walk = walk_the_swamp_through_the_visual_systems(&dir, seed);
             let _ = fs::remove_dir_all(&dir);

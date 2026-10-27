@@ -160,6 +160,17 @@ pub struct PlayState {
     /// repaint." Set by [`PlayState::load_scene`]; the first world step
     /// clears it and advances nothing.
     pub session_start_world_step_frozen: bool,
+    /// `timing.md §8.2`: "On the overworld the input helper performs one
+    /// world step when it is entered" - with no wait of its own (R371) - and
+    /// `stats-panel.md §2.3` places the overworld panel drain "in the shared
+    /// input helper, after that helper's world-tick call and before the
+    /// prompt newline and the key read". Set when the overworld loop is about
+    /// to re-enter that helper: at load and after every dispatched key. A
+    /// frontend with a timer-paced idle pump consumes it through
+    /// [`PlayState::run_overworld_input_helper_entry_step`]; the terminal
+    /// shell runs its own entry pass per key read instead. Transient, never
+    /// saved.
+    pub overworld_input_helper_entry_owed: bool,
     /// Completed Stonegate trapdoor tableau waiting for a frontend. This is a
     /// blocking, non-resumable presentation record and is never save data.
     pub pending_stonegate_trapdoor_playback: Option<StonegateTrapdoorPlayback>,

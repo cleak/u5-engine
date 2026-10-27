@@ -189,6 +189,9 @@ impl PlayState {
         // `animation.md §13.2`: the gating byte ships in the freeze state,
         // so the session's first world step is a bare repaint.
         state.session_start_world_step_frozen = true;
+        // `timing.md §8.2`: the first command prompt of the session enters
+        // the overworld input helper, which steps the world once on entry.
+        state.overworld_input_helper_entry_owed = true;
         Ok(state)
     }
 
@@ -925,6 +928,7 @@ impl PlayState {
             pending_potion_flash: None,
             message_window_flash_hold: MessageWindowFlashHold::default(),
             session_start_world_step_frozen: false,
+            overworld_input_helper_entry_owed: false,
             pending_stonegate_trapdoor_playback: None,
             pending_town_status_provision_pass: false,
             pending_town_npc_schedule_pass: false,
@@ -1402,6 +1406,7 @@ impl PlayState {
             pending_potion_flash: None,
             message_window_flash_hold: MessageWindowFlashHold::default(),
             session_start_world_step_frozen: false,
+            overworld_input_helper_entry_owed: false,
             pending_stonegate_trapdoor_playback: None,
             pending_town_status_provision_pass: false,
             pending_town_npc_schedule_pass: false,
@@ -1866,6 +1871,7 @@ impl PlayState {
             pending_potion_flash: None,
             message_window_flash_hold: MessageWindowFlashHold::default(),
             session_start_world_step_frozen: false,
+            overworld_input_helper_entry_owed: false,
             pending_stonegate_trapdoor_playback: None,
             pending_town_status_provision_pass: false,
             pending_town_npc_schedule_pass: false,

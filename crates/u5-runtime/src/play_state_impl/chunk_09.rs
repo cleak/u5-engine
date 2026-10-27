@@ -4306,6 +4306,57 @@ impl PlayState {
         self.advance_visual_tick_inner(true)
     }
 
+    /// The overworld input helper's entry world step, for a frontend whose
+    /// idle pump is paced on the timer.
+    ///
+    /// `timing.md §8.2`: "On the overworld the input helper performs one
+    /// world step when it is entered, and then, while a hoisted-sail heading
+    /// is cached, repeats a wait pass instead of entering the command wait
+    /// at all", and `RETRACTIONS.md` R371: "The entry step carries no wait of
+    /// its own." `stats-panel.md §2.3` puts the same call "in the shared
+    /// input helper, after that helper's world-tick call and before the
+    /// prompt newline and the key read". So each overworld command prompt
+    /// owes one unpaced world step on top of the command wait's one step per
+    /// timer edge (`timing.md §8.1`); a pump that only steps on its timer
+    /// firings is one world step - and, through the step's unconditional wind
+    /// roll, one gameplay draw - short at every prompt.
+    ///
+    /// Runs the step and returns `true` once the overworld loop is back at
+    /// its command prompt. While the command that set
+    /// [`Self::overworld_input_helper_entry_owed`] is still presenting (a
+    /// hold, staged narration, a sweep or a potion flash) the step stays
+    /// owed; a party with nobody able to act takes the loop's sleep arm,
+    /// which skips the input helper (`main-loop.md §6`), so it stays owed
+    /// until someone can act. An open prompt means the command has not
+    /// returned yet, and a town, dungeon or combat scene is not the overworld
+    /// helper, so those drop it: the next dispatched key owes it again.
+    pub fn run_overworld_input_helper_entry_step(&mut self) -> bool {
+        if !self.overworld_input_helper_entry_owed {
+            return false;
+        }
+        if self.cinematic_hold_owns_input()
+            || self.staged_narration_active()
+            || self.text_hold_active()
+            || self.visibility_sweep.is_some()
+            || self.pending_potion_flash.is_some()
+        {
+            return false;
+        }
+        if !matches!(self.area, Area::World { .. })
+            || self.combat_active
+            || self.prompt_waits_in_shared_wait()
+        {
+            self.overworld_input_helper_entry_owed = false;
+            return false;
+        }
+        if !matches!(self.party_capability(), PartyCapability::CanAct { .. }) {
+            return false;
+        }
+        self.overworld_input_helper_entry_owed = false;
+        let _ = self.advance_visual_tick();
+        true
+    }
+
     /// Whether an open prompt is waiting in the shared single-keystroke wait,
     /// which keeps running the world step on every no-key pass.
     ///
