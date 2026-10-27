@@ -1407,9 +1407,14 @@ impl PlayState {
                     }
                     self.special_items[SPECIAL_ITEM_MAGIC_CARPET_INDEX] =
                         self.special_items[SPECIAL_ITEM_MAGIC_CARPET_INDEX].saturating_sub(1);
+                    // `vehicles.md §2`/§4: the carpet markers are `0x14`/
+                    // `0x15`; the visual tile is not a marker, and a
+                    // carpet carrying it parks a non-carpet object on X-it
+                    // (playtest P12-12).
                     self.player.transport = TransportState::Carpet {
-                        type_byte: FIRST_PLAYABLE_MAGIC_CARPET_TILE,
-                        tile: FIRST_PLAYABLE_MAGIC_CARPET_TILE,
+                        type_byte: CARPET_MOUNTED,
+                        tile: transport_visual_tile_for_marker(CARPET_MOUNTED)
+                            .unwrap_or(FIRST_PLAYABLE_MAGIC_CARPET_TILE),
                     };
                     self.sail_cadence = 0;
                     self.sail_cached_direction = None;

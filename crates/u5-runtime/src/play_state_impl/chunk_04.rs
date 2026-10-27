@@ -1969,13 +1969,15 @@ impl PlayState {
         }
 
         // "Success prints `Boarded!\n`, selects one of the two carpet frames
-        // with equal probability" - markers `0x14` and `0x15`, which are the
-        // first two tiles of the playable carpet band.
-        let frame =
-            FIRST_PLAYABLE_MAGIC_CARPET_TILE + u5_prng_range_u16(&mut self.prng_state, 0, 1) as u8;
+        // with equal probability" - markers `0x14` and `0x15`. The marker,
+        // not the engine's visual tile, is the transport type: X-it parks a
+        // carpet object only from a carpet marker (playtest P12-12).
+        let pick = u5_prng_range_u16(&mut self.prng_state, 0, 1) as usize;
+        let marker = CARPET_MARKER_FRAMES[pick % CARPET_MARKER_FRAMES.len()];
         let transport = TransportState::Carpet {
-            type_byte: frame,
-            tile: frame,
+            type_byte: marker,
+            tile: transport_visual_tile_for_marker(marker)
+                .unwrap_or(FIRST_PLAYABLE_MAGIC_CARPET_TILE + pick as u8),
         };
 
         self.special_items[SPECIAL_ITEM_MAGIC_CARPET_INDEX] =
