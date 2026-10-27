@@ -741,10 +741,14 @@ pub fn selector_prompt_row_is_continuation(state: &crate::PlayState) -> bool {
     // beneath - a text-input row, not a command row. Measured 2026-09-11
     // (`town-wishing-well/coin`), where the original draws a bare cursor there
     // and this engine drew the command end cap.
+    // `blackthorn.md §7a` branch 1 has the same shape: the question ends
+    // `\n\nYour response?\n` and the answer starts "at the left edge of that
+    // next row", without a colon (playtest P12-01).
     state
         .active_wishing_well
         .as_ref()
         .is_some_and(|session| session.coin_accepted)
+        || state.blackthorn_guard_password_open()
 }
 
 /// `dungeon-mode.md §8`'s fountain question waits for `Y` or `N` on the

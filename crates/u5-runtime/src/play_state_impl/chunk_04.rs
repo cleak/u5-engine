@@ -6829,9 +6829,38 @@ impl PlayState {
         let mut input = String::new();
         input.push(key);
         input.push_str(suffix);
+        if matches!(active.prompt, BlackthornGuardDemandPrompt::PalacePassword) {
+            // `input.md §8`: Escape "clears the whole current line but does
+            // **not** submit or terminate it", and the Enter that ends the
+            // line is not part of it.
+            if key == '\u{1b}' && suffix.is_empty() {
+                return Some(MoveOutcome::PromptDeclined);
+            }
+            if let Some(cleared) = input.rfind('\u{1b}') {
+                input = input[cleared + 1..].to_string();
+            }
+            input.retain(|ch| !matches!(ch, '\r' | '\n'));
+            // `blackthorn.md §7a` branch 1: "the typed answer begins
+            // immediately at the left edge of that next row", and the reader
+            // echoes each accepted character (`input.md §8`) up to the
+            // fourteen it takes, upper-cased like every general typed string
+            // (`text-output.md §10.6`). The answered row stays in the
+            // transcript above the outcome; the engine replaced the whole
+            // window with `"Pass, friend!"` and the word was never shown
+            // (playtest P12-01). Return is "not echoed", so the row is left
+            // open.
+            let echo = input
+                .chars()
+                .take(crate::BLACKTHORN_GUARD_PASSWORD_INPUT_MAX)
+                .collect::<String>()
+                .to_ascii_uppercase();
+            if !echo.is_empty() {
+                self.emit_message_line(echo);
+                self.message_row_open_mid_line = true;
+            }
+        }
         // `blackthorn.md §7a` branch 2: the `:` answer row "echoes `Yes`
-        // or `No!`". The password branch echoes the typed word instead
-        // and is handled by the free-text path.
+        // or `No!`". The password branch echoed the typed word above.
         if !matches!(active.prompt, BlackthornGuardDemandPrompt::PalacePassword) {
             match key.to_ascii_lowercase() {
                 'y' => self.commit_prompt_reply(":", TOWN_ARREST_YES_REPLY),

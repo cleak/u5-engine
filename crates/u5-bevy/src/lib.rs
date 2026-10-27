@@ -18900,6 +18900,9 @@ fn visual_line_prompt_active_ignoring_text_hold(state: &PlayState) -> bool {
         // is typed into the ask that follows - which is why the stock game's
         // `ask3` beat reads back `:UL` after `mul` was typed at `ask2`.
         || state.blackthorn_prompt_echo().is_some()
+        // `blackthorn.md §7a` branch 1: the Badge password is typed on the
+        // colon-free row under `Your response?` (playtest P12-01).
+        || state.blackthorn_guard_password_open()
         // `karma.md §12`: only the virtue answer and the mantra are typed.
         // Once the altar has spoken the shrine "wait[s] for a command key" -
         // an acknowledgement, not text - and routing that key into the line
@@ -19163,6 +19166,10 @@ fn handle_visual_line_key(
                 // `karma.md`, the ruined shrine: each of its four answers is
                 // read "up to fifteen characters" (playtest H15).
                 Some(u5_runtime::SHRINE_RESTORATION_INPUT_MAX_LEN)
+            } else if state.blackthorn_guard_password_open() {
+                // `blackthorn.md §7a` branch 1: "The player may type up to
+                // fourteen characters" (playtest P12-01).
+                Some(u5_runtime::BLACKTHORN_GUARD_PASSWORD_INPUT_MAX)
             } else {
                 None
             };

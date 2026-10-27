@@ -333,12 +333,14 @@ fn function_key_reaches_the_command_dispatcher(state: &PlayState) -> bool {
 
 /// Whether an open prompt reads a typed line through the free-text reader
 /// (`input.md §8`) and takes each key it is handed as text: the conversation
-/// keyword and ASK-WHO prompts, Yell, the Blackthorn answer row, the wishing
-/// well's wish and the sage's topic. The shrine answers filter their own keys.
+/// keyword and ASK-WHO prompts, Yell, the Blackthorn answer row, the Badge
+/// password, the wishing well's wish and the sage's topic. The shrine answers
+/// filter their own keys.
 fn free_text_line_reader_open(state: &PlayState) -> bool {
     state.active_conversation.is_some()
         || state.active_yell.is_some()
         || state.blackthorn_prompt_echo().is_some()
+        || state.blackthorn_guard_password_open()
         || state
             .active_wishing_well
             .as_ref()
