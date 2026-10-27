@@ -308,6 +308,18 @@ impl PlayState {
             .map(|_| super::chunk_07::BLACKTHORN_ANSWER_ROW_PREFIX.to_string())
     }
 
+    /// `blackthorn.md §7a` branch 1: the Badge password question ends
+    /// `\n\nYour response?\n` and "the typed answer begins immediately at the
+    /// left edge of that next row", with no colon. That row is a free-text
+    /// input row, not a key wait, so it is live and the typed word echoes on
+    /// it (playtest P12-01).
+    pub fn blackthorn_guard_password_open(&self) -> bool {
+        self.active_blackthorn_guard_demand
+            .is_some_and(|demand| {
+                demand.prompt == crate::BlackthornGuardDemandPrompt::PalacePassword
+            })
+    }
+
     /// Whether the M-Mix reagent selection owns the keyboard.
     ///
     /// `text-output.md §10.6`: "a prompt that is waiting for a key keeps
@@ -386,7 +398,10 @@ impl PlayState {
                 .active_mix
                 .as_ref()
                 .is_some_and(|session| session.phase == MixPhase::Quantity)
-            || self.active_blackthorn_guard_demand.is_some()
+            // The yes/no demands read a key; the Badge password reads a typed
+            // line on the row under its question (§7a branch 1).
+            || (self.active_blackthorn_guard_demand.is_some()
+                && !self.blackthorn_guard_password_open())
             // `blackthorn.md §4.2`: "no print, character, window or input
             // event between the record and the end of the handoff", so the
             // exit beat opens no command row. After record `5` the window

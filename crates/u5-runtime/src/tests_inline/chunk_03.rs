@@ -1675,7 +1675,9 @@ fn save_play_options_read_public_location_tuple() {
     assert_eq!(options.camp_cooldown, 9);
     assert_eq!(options.camp_month_cookie, 7);
     assert_eq!(options.combat_round_counter, 8);
-    assert_eq!(options.party, default_party());
+    // The image's party size is zero: `save-load.md §4.2`'s load "validates
+    // nothing", so it is an empty roster, not a default Avatar (P12-02).
+    assert!(options.party.is_empty());
 }
 
 #[test]

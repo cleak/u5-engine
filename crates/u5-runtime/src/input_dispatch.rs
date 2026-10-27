@@ -333,12 +333,14 @@ fn function_key_reaches_the_command_dispatcher(state: &PlayState) -> bool {
 
 /// Whether an open prompt reads a typed line through the free-text reader
 /// (`input.md §8`) and takes each key it is handed as text: the conversation
-/// keyword and ASK-WHO prompts, Yell, the Blackthorn answer row, the wishing
-/// well's wish and the sage's topic. The shrine answers filter their own keys.
+/// keyword and ASK-WHO prompts, Yell, the Blackthorn answer row, the Badge
+/// password, the wishing well's wish and the sage's topic. The shrine answers
+/// filter their own keys.
 fn free_text_line_reader_open(state: &PlayState) -> bool {
     state.active_conversation.is_some()
         || state.active_yell.is_some()
         || state.blackthorn_prompt_echo().is_some()
+        || state.blackthorn_guard_password_open()
         || state
             .active_wishing_well
             .as_ref()
@@ -483,6 +485,24 @@ fn handle_play_key_input_inner(
         // conversation keyword, a Blackthorn answer.
         if matches!(input_byte_class(byte), InputByteClass::FunctionKey)
             && free_text_line_reader_open(state)
+        {
+            return Ok(PlayInputDisposition::Continue);
+        }
+        // The same table discards a bare direction code and every other byte
+        // it does not list - DEL among them. Without this an arrow at the
+        // wish or the Blackthorn answer was typed as a glyph and the one-key
+        // line submitted at once: `No effect...` at the well, a wrong mantra
+        // at the audience (playtest P12-14). Only a lone key is dropped; a
+        // typed line arrives with its own text. A conversation with no
+        // prompt on screen is not reading a line, as the Escape rule in
+        // `handle_active_conversation_key_input` already treats it.
+        if suffix.is_empty()
+            && matches!(free_text_input_action(byte), FreeTextInputAction::Discard)
+            && free_text_line_reader_open(state)
+            && !state
+                .active_conversation
+                .as_ref()
+                .is_some_and(|session| session.prompt_message().is_empty())
         {
             return Ok(PlayInputDisposition::Continue);
         }

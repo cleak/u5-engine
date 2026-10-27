@@ -1015,7 +1015,7 @@ fn cli_create_character_command_writes_saved_files_and_returns_without_play() {
 #[test]
 fn cli_binary_create_character_save_loads_through_play_script() {
     let dir = debug_game_dir();
-    fs::write(dir.join("INIT.GAM"), saved_game_seed_bytes(17, 0, 15, 15)).unwrap();
+    fs::write(dir.join("INIT.GAM"), one_member_party_seed(saved_game_seed_bytes(17, 0, 15, 15))).unwrap();
     fs::write(dir.join("INIT.OOL"), vec![0; OOL_PLANE_LEN]).unwrap();
 
     let create = Command::new(env!("CARGO_BIN_EXE_u5-engine"))
@@ -1120,7 +1120,7 @@ fn cli_binary_character_creation_stages_a_readonly_install() {
 #[test]
 fn cli_binary_play_script_confirmed_save_round_trips_to_temp_save() {
     let dir = debug_game_dir();
-    let mut save = saved_game_seed_bytes(0, 0, 10, 20);
+    let mut save = one_member_party_seed(saved_game_seed_bytes(0, 0, 10, 20));
     save[SAVE_AVATAR_NAME_OFFSET] = b'A';
     fs::write(dir.join(SAVED_GAM_FILENAME), save).unwrap();
     fs::write(dir.join(SAVED_OOL_FILENAME), vec![0; SAVED_OOL_LEN]).unwrap();
@@ -1402,4 +1402,16 @@ fn cli_interactive_chargen_follows_the_published_prompts() {
         assert!(!stdout.contains(invented), "{invented}: {stdout}");
     }
     let _ = fs::remove_dir_all(dir);
+}
+
+/// A synthetic seed whose travelling party is the one Good Avatar record.
+/// The bare seed's party size is zero, which `save-load.md §4.2` loads as an
+/// empty roster - straight into `blackthorn.md §7`'s rescue (playtest P12-02).
+fn one_member_party_seed(mut bytes: Vec<u8>) -> Vec<u8> {
+    use u5_runtime::*;
+    bytes[SAVE_PARTY_SIZE_OFFSET] = 1;
+    bytes[SAVE_ROSTER_OFFSET + SAVE_CHARACTER_STATUS_OFFSET] = b'G';
+    bytes[SAVE_ROSTER_OFFSET + SAVE_CHARACTER_HP_OFFSET] = 60;
+    bytes[SAVE_ROSTER_OFFSET + SAVE_CHARACTER_MAX_HP_OFFSET] = 150;
+    bytes
 }
