@@ -1216,4 +1216,5 @@ mod tests {
     include!("tests_inline/playfix11_p11combat.rs");
     include!("tests_inline/rc14_spec302.rs");
     include!("tests_inline/draw_parity.rs");
+    include!("tests_inline/queued_fixes.rs");
 }

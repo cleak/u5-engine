@@ -777,9 +777,9 @@ impl PlayState {
         self.area = Area::Dungeon { scene, level };
         self.sync_player_object();
         self.mark_visibility_dirty();
-        if advance_turn {
-            self.advance_turn();
-        }
+        // The step's turn is spent at the end of the chain, not here: see
+        // the setup below.
+        let turn_before_chain_tail = self.turn;
         // Section 8.1: "the arrival on the lower level narrates nothing of its
         // own beyond `      ...splat!`". The per-drop group above is the whole
         // of the chain's narration; the level/coordinate summary this used to
@@ -817,6 +817,18 @@ impl PlayState {
         // fight ends dungeon mode, there is no setup at all."
         if drops > 0 && matches!(self.area, Area::Dungeon { .. }) && !self.combat_active {
             self.setup_dungeon_active_monster_fresh();
+        }
+        // `dungeon-mode.md §8` (u5-spec#304 Q1): "The stats redraw and the
+        // hourly status tick follow the chain" - after the one fresh setup
+        // above, so the turn that carries the status/provision pass (poison
+        // tick, food, the Ring of Regeneration draw) is spent here rather
+        // than before the room entry and the setup (FC1). A room landing
+        // already spent it inside the room-entry helper, which runs the
+        // turn before handing off to the fight; spending it again here
+        // would charge the step twice, so this only runs when nothing in
+        // the tail did.
+        if advance_turn && self.turn == turn_before_chain_tail {
+            self.advance_turn();
         }
         Ok(MoveOutcome::Transition(
             AreaTransition::ChangedDungeonLevel { scene, level },
