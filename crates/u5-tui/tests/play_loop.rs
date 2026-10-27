@@ -697,7 +697,11 @@ fn play_script_idle_count_replays_no_turn_visual_ticks() {
 
 // from chunk_19
 #[test]
-fn play_script_idle_count_respects_pending_prompt_freeze() {
+fn play_script_idle_count_steps_the_world_at_the_arrest_offer() {
+    // The arrest offer is a Y/N prompt, and `input.md §2` (u5-spec#303 Q3,
+    // R626) has every Y/N prompt wait in the shared wait, which runs one world
+    // step on each no-key pass (`timing.md §8.2`). The step spends no turn and
+    // leaves the offer and its line where they were.
     let mut prompted = world_state(open_world_grid(), 4, 5);
     prompted.pending_town_arrest = Some(TownArrestPrompt {
         scene_byte: 1,
@@ -713,7 +717,7 @@ fn play_script_idle_count_respects_pending_prompt_freeze() {
     );
 
     assert_eq!(prompted.turn, 0);
-    assert_eq!(prompted.animation.frame, 0);
+    assert_eq!(prompted.animation.frame, 2, "two idle passes, two world steps");
     assert!(prompted.pending_town_arrest.is_some());
     assert_eq!(prompted.message, TOWN_ARREST_SURRENDER_PROMPT);
 }
