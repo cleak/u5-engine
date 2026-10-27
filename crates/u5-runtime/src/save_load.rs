@@ -761,6 +761,15 @@ pub fn decode_avatar_stats(bytes: &[u8]) -> AvatarStats {
 
 pub fn decode_save_party(bytes: &[u8]) -> Vec<PartyMember> {
     let party_size = bytes[SAVE_PARTY_SIZE_OFFSET] as usize;
+    // `save-load.md §4.2`: the load path "validates nothing", and
+    // `blackthorn.md §7` gives an empty roster its outcome - it "also falls
+    // into the third case", the rescue. A size of zero therefore loads as
+    // no members at all; inventing a default Avatar played on with a party
+    // the save never had and wrote size 1 back on the next Q (playtest
+    // P12-02). Sizes past six still take the fallback.
+    if party_size == 0 {
+        return Vec::new();
+    }
     if !(1..=6).contains(&party_size) {
         return default_party();
     }

@@ -126,3 +126,29 @@ fn playfix12_free_text_readers_discard_direction_codes_and_del() {
     state.flush_message_slot();
     assert_eq!(state.message_entries().len(), rows, "nothing was submitted");
 }
+
+/// P12-02. `save-load.md §4.2`: the load path "validates nothing", and
+/// `blackthorn.md §7`: "An empty roster also falls into the third case" - the
+/// rescue - and "produces no notes and no restoration work".
+#[test]
+fn playfix12_empty_saved_roster_loads_empty_and_falls_into_the_rescue() {
+    let mut bytes = vec![0; SAVED_GAM_LEN];
+    bytes[SAVE_AVATAR_NAME_OFFSET..SAVE_AVATAR_NAME_OFFSET + 5].copy_from_slice(b"AVATR");
+    bytes[SAVE_PARTY_SIZE_OFFSET] = 0;
+    assert!(decode_save_party(&bytes).is_empty(), "no invented member");
+    assert!(decode_party_names(&bytes).is_empty());
+
+    let dir = debug_game_dir();
+    write_empty_ool_mirrors(&dir);
+    let mut state = world_state(open_world_grid(), 64, 64);
+    state.party.clear();
+    state.party_names.clear();
+    assert_eq!(state.party_capability(), PartyCapability::Defeated);
+    assert!(matches!(
+        state.apply_exploration_turn_gate(&dir).unwrap(),
+        ExplorationTurnGateOutcome::Rescued { .. }
+    ));
+    state.run_blackthorn_rescue_to_handoff(&dir).unwrap();
+    assert!(state.party.is_empty(), "no restoration work invents a member");
+    let _ = fs::remove_dir_all(dir);
+}
