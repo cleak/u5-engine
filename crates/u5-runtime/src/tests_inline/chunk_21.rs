@@ -8476,6 +8476,55 @@ fn sage_unknown_topic_quotes_its_reply_and_repeats_the_question() {
     assert_eq!(state.gold, 200);
 }
 
+/// `shops.md §8.C`: "Tavern and sage honorifics address Avatar: `sir` for
+/// male, otherwise `milady`. The original honorific helper also clears the
+/// active-member override." `§8.8`: the sage question "does not depend on the
+/// selected speaking member". With a female companion selected as active the
+/// bill and the sage both said `milady` to a male Avatar, and the override
+/// survived the visit (playtest P12-03).
+#[test]
+fn tavern_and_sage_honorifics_address_avatar_and_clear_the_active_member() {
+    use crate::shop_runtime::{SageState, TavernState};
+    use crate::shop_session::ActiveShopSession;
+
+    let female_companion = |state: &mut PlayState| {
+        let mut second = state.party_roster[0].clone();
+        second.member.slot = 1;
+        second.gender = crate::SAVE_GENDER_FEMALE_BYTE;
+        state.party_roster.push(second);
+        state.party_roster[0].gender = crate::SAVE_GENDER_MALE_BYTE;
+        state.active_player = Some(1);
+    };
+
+    let mut state = test_state(open_grid(), 1, 1);
+    state.area = Area::Town {
+        scene: Scene::new(22).unwrap(),
+        floor: 0,
+    };
+    state.gold = 200;
+    female_companion(&mut state);
+    state.active_shop = Some(ActiveShopSession::Tavern(TavernState::PostListWait {
+        tavern: Tavern::TheCatsLair,
+        continuation_ready: true,
+    }));
+    let secondary = crate::shops::tavern_menu_letters(Tavern::TheCatsLair).secondary;
+    handle_play_key_input(&mut state, secondary, "", Path::new("")).unwrap();
+    assert!(state.message.contains(" of ye,\nsir."), "{:?}", state.message);
+    assert_eq!(state.active_player, None);
+
+    let mut state = test_state(open_grid(), 1, 1);
+    state.area = Area::Town {
+        scene: Scene::new(22).unwrap(),
+        floor: 0,
+    };
+    state.gold = 200;
+    female_companion(&mut state);
+    state.active_shop = Some(ActiveShopSession::Sage(SageState::default()));
+    handle_play_key_input(&mut state, 'Z', "ZZ", Path::new("")).unwrap();
+    assert!(state.message.contains("lore, sir?\""), "{:?}", state.message);
+    assert_eq!(state.active_player, None);
+}
+
 /// `shops.md §8.C` sage result table: "After typed topic | `\n\n`; empty
 /// input returns to tavern continuation". The two feeds follow the typed line
 /// even when it is empty, so an empty echo row and a blank row sit between
