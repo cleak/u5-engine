@@ -148,3 +148,54 @@ fn playtest_p13_10_troll_toll_question_keeps_the_cursor_inline() {
         "{rows:#?}"
     );
 }
+
+/// P13-11: `view.md §4`, the local view overlay "waits for a keypress"
+/// inside the command, and the shared modal wait "emits neither a line feed
+/// nor a prompt marker while it waits". The `View_a_gem!\n` echo's own feed
+/// opened the row that key is read on, as `Strange vision!\n` does for the
+/// death vision, so neither §10.4's blank nor an end cap is drawn under it.
+#[test]
+fn playtest_p13_11_gem_view_wait_draws_no_blank_or_marker_row() {
+    let dir = debug_game_dir();
+    let mut state = world_state(open_world_grid(), 5, 5);
+    state.gems = 2;
+    handle_play_key_input(&mut state, 'V', "", &dir).unwrap();
+    state.flush_message_slot();
+    assert!(state.active_view_overlay.is_some());
+
+    assert!(combat_prompt_row_follows_history(&state));
+    assert!(shop_pause_row_is_continuation(&state));
+    let rows = p4window_rows(&state);
+    let echo = rows
+        .iter()
+        .rposition(|row| row == ">View a gem!")
+        .expect("echo on screen");
+    // The wait row - drawn here as the live row - follows the echo with no
+    // blank row between them.
+    assert_eq!(
+        rows.get(echo + 1).map(String::as_str),
+        Some(">"),
+        "the wait row follows the echo: {rows:?}"
+    );
+
+    // The dismissing key ends the wait, and the next command takes the
+    // ordinary shape again.
+    handle_play_key_input(&mut state, ' ', "", &dir).unwrap();
+    assert!(state.active_view_overlay.is_none());
+    assert!(!shop_pause_row_is_continuation(&state));
+    let _ = fs::remove_dir_all(dir);
+}
+
+/// P13-11, the Peer spell: `magic.md §5.1` "submitting the name advances to
+/// the next row", Peer prints no completion line, and the overlay's wait is
+/// the same modal one.
+#[test]
+fn playtest_p13_11_peer_view_wait_draws_no_blank_or_marker_row() {
+    let mut state = world_state(open_world_grid(), 10, 20);
+    arm_spell(&mut state, PEER_SPELL_INDEX);
+    assert_eq!(state.cast_peer(0), MoveOutcome::Observed);
+    assert!(state.active_view_overlay.is_some());
+    assert!(state.view_overlay_row_opened_by_result);
+    assert!(combat_prompt_row_follows_history(&state));
+    assert!(shop_pause_row_is_continuation(&state));
+}

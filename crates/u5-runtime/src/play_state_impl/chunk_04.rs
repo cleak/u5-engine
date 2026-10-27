@@ -3442,6 +3442,12 @@ impl PlayState {
             return MoveOutcome::Blocked;
         }
 
+        // `view.md §4`: the overlay "waits for a keypress" inside the
+        // command, through the shared modal wait that "emits neither a line
+        // feed nor a prompt marker while it waits". The `View_a_gem!\n` echo's
+        // own feed opened the row that key is read on, so - as for the death
+        // vision - neither `text-output.md §10.4`'s blank nor the next cycle's
+        // marker is drawn until it is dismissed (playtest P13-11).
         match self.area {
             Area::Dungeon { scene, level } => {
                 self.gems = self.gems.saturating_sub(1);
@@ -3460,6 +3466,7 @@ impl PlayState {
                     mode: ViewOverlayMode::GemView,
                 });
                 self.message.clear();
+                self.view_overlay_row_opened_by_result = true;
                 MoveOutcome::Observed
             }
             Area::Town { scene, floor } => {
@@ -3478,6 +3485,7 @@ impl PlayState {
                     mode: ViewOverlayMode::GemView,
                 });
                 self.message.clear();
+                self.view_overlay_row_opened_by_result = true;
                 MoveOutcome::Observed
             }
             Area::World { plane } => {
@@ -3497,6 +3505,7 @@ impl PlayState {
                     mode: ViewOverlayMode::GemView,
                 });
                 self.message.clear();
+                self.view_overlay_row_opened_by_result = true;
                 MoveOutcome::Observed
             }
         }

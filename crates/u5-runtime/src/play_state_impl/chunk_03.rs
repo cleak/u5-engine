@@ -7104,6 +7104,11 @@ impl PlayState {
         self.advance_turn();
         let _ = self.activate_peer_view_overlay();
         self.message.clear();
+        // `magic.md §5.1`: "submitting the name advances to the next row", and
+        // Peer prints no completion line, so the overlay's modal wait reads
+        // its key at column 0 of that row with no feed or marker of its own
+        // (`view.md §4`; playtest P13-11).
+        self.view_overlay_row_opened_by_result = true;
         MoveOutcome::Observed
     }
 
