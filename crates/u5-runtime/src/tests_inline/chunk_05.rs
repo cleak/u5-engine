@@ -1379,7 +1379,8 @@ fn y_yell_ruined_shrine_four_response_success_restores_only_shrine_state() {
     assert_eq!(world.yell_command(Some("FALLAX")), MoveOutcome::Used);
     assert_eq!(world.turn, 1);
     assert!(world.active_shrine_restoration.is_some());
-    assert!(world.message.contains(SHRINE_RESTORATION_VIRTUE_PROMPT));
+    assert!(world.message.ends_with(SHRINE_RESTORATION_VIRTUE_QUESTION));
+    assert_eq!(world.typed_prompt_echo().as_deref(), Some(":"));
     assert_eq!(world.grid[shrine_index], WORLD_RUINED_SHRINE_TILE);
     assert_eq!(world.shrine_ruin_flags[0], 0x85);
     assert_eq!(world.word_of_power_seal_flags[0], 0xa7);
@@ -1397,25 +1398,30 @@ fn y_yell_ruined_shrine_four_response_success_restores_only_shrine_state() {
     assert_eq!(world.shrine_ruin_flags[0], 0x05);
     assert_eq!(world.word_of_power_seal_flags[0], 0xa7);
     assert!(world.visibility_dirty);
-    assert!(world.message.contains(SHRINE_RESTORATION_SUCCESS_BANNER));
     // `karma.md §7.1`: the banner ends the printed text; the second
     // flash/rumble adds none.
-    assert!(world.message.ends_with(SHRINE_RESTORATION_SUCCESS_BANNER));
-    // The uttered-word line opens the restoration transcript; the rumble and
-    // flash are presentation, recorded as diagnostics rather than narrated.
-    assert!(world
-        .message
-        .contains(crate::commands::WORD_OF_POWER_UTTERED_MESSAGE));
-    // The restoration prints the uttered-word line twice - once for the Yell
-    // that opened it and once for the successful restoration - where the
-    // presentation prose used to stand in for it.
+    assert_eq!(world.message, SHRINE_RESTORATION_SUCCESS_BANNER);
+    // The uttered-word line opens the restoration transcript, once; the
+    // rumble and flash are presentation, recorded as diagnostics rather than
+    // narrated.
+    let rows: Vec<String> = world
+        .message_transcript
+        .iter()
+        .map(|entry| entry.text.clone())
+        .collect();
     assert_eq!(
-        world
-            .message
-            .matches(crate::commands::WORD_OF_POWER_UTTERED_MESSAGE)
+        rows.iter()
+            .filter(|row| crate::commands::WORD_OF_POWER_UTTERED_MESSAGE.trim() == row.as_str())
             .count(),
-        1
+        1,
+        "{rows:?}"
     );
+    assert!(rows.ends_with(&[
+        "Mantra:AHM FOREVER".to_string(),
+        String::new(),
+        "The Shrine is".to_string(),
+        "restored!".to_string(),
+    ]));
 }
 
 #[test]
@@ -1453,16 +1459,21 @@ fn y_yell_ruined_shrine_failure_still_asks_all_fields_and_escape_only_clears() {
     assert_eq!(world.grid[ruined_index], WORLD_RUINED_SHRINE_TILE);
     assert_eq!(world.shrine_ruin_flags[0], 0x83);
     assert_eq!(world.word_of_power_seal_flags[0], 0x55);
-    assert!(!world.message.contains("No effect!"));
-    assert!(!world.message.contains(SHRINE_RESTORATION_SUCCESS_BANNER));
-    assert!(world.message.ends_with("Ahm\n"));
-    assert_eq!(
-        world
-            .message
-            .matches(SHRINE_RESTORATION_MANTRA_PROMPT)
-            .count(),
-        3
-    );
+    // "Emit one newline after the final mantra input": no refusal text.
+    assert_eq!(world.message, "\n");
+    assert!(!world.message_row_open_mid_line);
+    let rows: Vec<String> = world
+        .message_transcript
+        .iter()
+        .map(|entry| entry.text.clone())
+        .collect();
+    assert!(!rows.iter().any(|row| row.contains("No effect!")));
+    assert!(rows.ends_with(&[
+        ":".to_string(),
+        "Mantra:AHM".to_string(),
+        "Mantra:AHM".to_string(),
+        "Mantra:AHM".to_string(),
+    ]), "{rows:?}");
 }
 
 #[test]

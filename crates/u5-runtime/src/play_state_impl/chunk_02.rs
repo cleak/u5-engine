@@ -2182,6 +2182,17 @@ impl PlayState {
                         // mantra ends the interaction immediately without the
                         // unfocused-result record."
                         if session.virtue_buffer.trim().is_empty() {
+                            // `karma.md §7`: "Return submits without echoing
+                            // a newline. A blank submission therefore ends
+                            // meditation on the current prompt row" - so the
+                            // `:` row stays on screen, open, and the next
+                            // command's feed closes it with its marker row
+                            // directly under, as a blank mantra's `Mantra:`
+                            // does below. Dropping the session took the live
+                            // row away unlogged (playtest P12-18).
+                            self.emit_message_line(format!(":{}", session.virtue_buffer));
+                            self.message_row_open_mid_line = true;
+                            self.surface_command_row_follows_history = true;
                             // §7 "Exit pacing" runs after every arm.
                             self.begin_shrine_presentation_exit(0);
                             return Ok(Some(MoveOutcome::PromptDeclined));

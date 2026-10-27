@@ -839,6 +839,8 @@ pub fn shop_pause_row_is_continuation(state: &crate::PlayState) -> bool {
         || state.active_shrine.as_ref().is_some_and(|session| {
             matches!(session.phase, crate::z_stats::ShrinePhase::AltarQuest)
         })
+        // The Codex reader's wait after a record that ended on a feed.
+        || (codex_reader_key_wait(state) && !state.message_row_open_mid_line)
 
         // A staged presentation is not a turn cycle either, so the row under
         // it carries no end-cap triangle. It does carry the cursor: measured
@@ -893,7 +895,32 @@ pub fn shop_quantity_prompt_row_is_open(state: &crate::PlayState) -> bool {
 /// the layout to treat its final row as the open prompt so the cursor waits
 /// there and no live row - and no blank above one - is drawn.
 pub fn open_row_owns_the_cursor(state: &crate::PlayState) -> bool {
-    shop_quantity_prompt_row_is_open(state) || blackthorn_rescue_row_is_open(state)
+    shop_quantity_prompt_row_is_open(state)
+        || blackthorn_rescue_row_is_open(state)
+        || shrine_offering_chooser_row_is_open(state)
+}
+
+/// `karma.md §7`, completed-quest offering: record `34`'s "authored leading
+/// blank row and trailing space belong to the prompt", and the single-digit
+/// chooser reads its key there through the shared wait, which `input.md §3`
+/// has draw the cursor "at the current text cursor cell" with no feed or
+/// marker. So the question's last row keeps the cursor, after its space, and
+/// no command row opens under it (playtest P12-17).
+pub fn shrine_offering_chooser_row_is_open(state: &crate::PlayState) -> bool {
+    !state.staged_narration_active()
+        && state.active_shrine.as_ref().is_some_and(|session| {
+            matches!(session.phase, crate::z_stats::ShrinePhase::Offering)
+        })
+}
+
+/// `karma.md §8.2`: the Codex reader's key waits are presentation waits whose
+/// keys "produce no ordinary command echo", read through the shared wait that
+/// draws the cursor "at the current text cursor cell" (`input.md §3`) - not
+/// the command cycle's feed and end cap (`text-output.md §10.2`). A record
+/// that ends mid-row keeps the cursor inline after it; one that ends on a
+/// feed leaves it at column 0 of the row that feed opened (playtest P12-17).
+pub fn codex_reader_key_wait(state: &crate::PlayState) -> bool {
+    state.codex_presentation_steps != 0 && !state.staged_narration_active()
 }
 
 /// `blackthorn.md` §7 step 19: the rescue's "only blocking key read ... sits

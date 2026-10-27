@@ -415,13 +415,20 @@ pub struct ShrineRestorationSession {
     pub target_y: usize,
     pub response_index: usize,
     pub all_responses_match: bool,
-    pub transcript: String,
     pub buffer: String,
 }
 
 pub const SHRINE_RESTORATION_INPUT_MAX_LEN: usize = 15;
 pub const SHRINE_RESTORATION_VIRTUE_PROMPT: &str = "\nUpon what virtue\ndost thou\nmeditate?\n\n:";
 pub const SHRINE_RESTORATION_MANTRA_PROMPT: &str = "\nMantra:";
+/// The rows of [`SHRINE_RESTORATION_VIRTUE_PROMPT`] that sit above its answer
+/// row; the closing `:` opens the row the virtue is typed on.
+pub const SHRINE_RESTORATION_VIRTUE_QUESTION: &str = "\nUpon what virtue\ndost thou\nmeditate?\n\n";
+/// The text the virtue answer is typed after, on its own row.
+pub const SHRINE_RESTORATION_VIRTUE_ANSWER_PROMPT: &str = ":";
+/// [`SHRINE_RESTORATION_MANTRA_PROMPT`] without its leading feed, which only
+/// closes the previous answer's row: the text each mantra is typed after.
+pub const SHRINE_RESTORATION_MANTRA_ANSWER_PROMPT: &str = "Mantra:";
 pub const SHRINE_RESTORATION_SUCCESS_BANNER: &str = "\n\nThe Shrine is\nrestored!\n";
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -923,15 +930,25 @@ impl YellSession {
 }
 
 impl ShrineRestorationSession {
-    pub fn new(word_index: usize, target_x: usize, target_y: usize, opening: String) -> Self {
+    pub fn new(word_index: usize, target_x: usize, target_y: usize) -> Self {
         Self {
             word_index,
             target_x,
             target_y,
             response_index: 0,
             all_responses_match: true,
-            transcript: format!("{opening}{SHRINE_RESTORATION_VIRTUE_PROMPT}"),
             buffer: String::new(),
+        }
+    }
+
+    /// The prompt text the current answer is typed after: the virtue
+    /// question's closing `:` for the first read, `Mantra:` for the three
+    /// mantra reads (`karma.md §7.1`).
+    pub fn answer_prompt(&self) -> &'static str {
+        if self.response_index == 0 {
+            SHRINE_RESTORATION_VIRTUE_ANSWER_PROMPT
+        } else {
+            SHRINE_RESTORATION_MANTRA_ANSWER_PROMPT
         }
     }
 }

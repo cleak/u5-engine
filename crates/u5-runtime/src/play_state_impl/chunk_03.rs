@@ -265,6 +265,7 @@ impl PlayState {
     pub fn typed_prompt_echo(&self) -> Option<String> {
         self.spell_prompt_echo()
             .or_else(|| self.shrine_prompt_echo())
+            .or_else(|| self.shrine_restoration_prompt_echo())
             .or_else(|| self.blackthorn_prompt_echo())
     }
 
@@ -289,6 +290,9 @@ impl PlayState {
         self.blackthorn_prompt_echo().is_some()
             || crate::message_window::sage_topic_row_is_continuation(self)
             || self.active_yell.is_some()
+            // `karma.md §7.1`'s four reads are general typed strings, which
+            // `text-output.md §10.6` upper-cases (playtest P12-19).
+            || self.active_shrine_restoration.is_some()
     }
 
     pub fn blackthorn_prompt_echo(&self) -> Option<String> {
@@ -487,6 +491,10 @@ impl PlayState {
                     crate::z_stats::ShrinePhase::AltarAnnouncement
                 )
             })
+            // The Codex reader's wait after a record that left its row open
+            // (`karma.md §8.2`, `input.md §3`): the cursor waits inline after
+            // it, with no command row beneath (playtest P12-17).
+            || (crate::message_window::codex_reader_key_wait(self) && self.message_row_open_mid_line)
             // `blackthorn.md §4.1`'s acknowledgement reads a key with the
             // reaction on screen; the cursor sits inline after it.
             || (self.active_blackthorn.as_ref().is_some_and(|challenge| {

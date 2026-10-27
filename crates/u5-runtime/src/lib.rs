@@ -1222,4 +1222,5 @@ mod tests {
     include!("tests_inline/spec304_q6q7.rs");
     include!("tests_inline/queued_fixes.rs");
     include!("tests_inline/playfix12_item12.rs");
+    include!("tests_inline/playfix12_shr12.rs");
 }
