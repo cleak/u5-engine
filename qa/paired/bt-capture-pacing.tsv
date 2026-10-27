@@ -1,0 +1,103 @@
+# not-a-comparison: a pacing measurement of the Blackthorn capture narration.
+#
+# `blackthorn.md` Section 3 steps 1-8 publish the capture narration's order and
+# the throne approach's tick counts, but not how long the narration holds the
+# screen. Under synced keys (`--key-sync sendevent`) the original was still
+# printing its capture narration at `bt-audience`'s `ask1` beat while this
+# engine had already reached the first demand. This walks the same route as
+# `bt-audience` and then samples both sides once a second with no further keys,
+# so the stock side's narration can be timed beat by beat.
+#
+# Measured 2026-10-26 (`20261026-190700`, draw-parity efc8be79), stock side,
+# with `s01` about 1.9 s after the walk's last key:
+#
+#   s01      `Thou hast been chained and manacled!` under the subdued and
+#            dragged-away lines (the viewport already shows the audience map)
+#   s02-s05  `Footsteps!` added; the two guards appear in the south row at s04
+#   s06      `Blackthorn says:` / the greeting, then the `GUARD! Release` line:
+#            one queued walk key acknowledged the greeting
+#   s07-s22  the preamble record, then a wait for its acknowledgement that no
+#            queued key ever answers
+#
+# This engine prints the narration, the greeting and the preamble at once,
+# without the two lines above (neither is published), and spends two queued
+# walk keys on the two acknowledgements, so it shows the first demand from
+# `s01` on. The original kept only one of the keys typed during its
+# narration. What it does with the others, and how long the narration holds,
+# are not in `blackthorn.md` Section 3.
+# requires-seed: the party on the Blackthorn palace tile at 12:00
+both	wait	15000
+both	key	space
+both	wait	4000
+both	key	j
+both	wait	8000
+both	key	e
+both	wait	5000
+both	key	Up
+both	wait	900
+both	key	Up
+both	wait	900
+both	key	Up
+both	wait	900
+both	key	Left
+both	wait	900
+both	key	Up
+both	wait	900
+both	key	Up
+both	wait	900
+both	key	Up
+both	wait	900
+both	key	Up
+both	wait	900
+both	key	Up
+both	wait	900
+both	key	Up
+both	wait	900
+both	key	Up
+both	wait	900
+both	key	Right
+both	wait	900
+both	wait	1000
+both	shot	s01	01 s after the walk
+both	wait	1000
+both	shot	s02	02 s after the walk
+both	wait	1000
+both	shot	s03	03 s after the walk
+both	wait	1000
+both	shot	s04	04 s after the walk
+both	wait	1000
+both	shot	s05	05 s after the walk
+both	wait	1000
+both	shot	s06	06 s after the walk
+both	wait	1000
+both	shot	s07	07 s after the walk
+both	wait	1000
+both	shot	s08	08 s after the walk
+both	wait	1000
+both	shot	s09	09 s after the walk
+both	wait	1000
+both	shot	s10	10 s after the walk
+both	wait	1000
+both	shot	s11	11 s after the walk
+both	wait	1000
+both	shot	s12	12 s after the walk
+both	wait	1000
+both	shot	s13	13 s after the walk
+both	wait	1000
+both	shot	s14	14 s after the walk
+both	wait	1000
+both	shot	s15	15 s after the walk
+both	wait	1000
+both	shot	s16	16 s after the walk
+both	wait	1000
+both	shot	s17	17 s after the walk
+both	wait	1000
+both	shot	s18	18 s after the walk
+both	wait	1000
+both	shot	s19	19 s after the walk
+both	wait	1000
+both	shot	s20	20 s after the walk
+both	wait	1000
+both	shot	s21	21 s after the walk
+both	wait	1000
+both	shot	s22	22 s after the walk
