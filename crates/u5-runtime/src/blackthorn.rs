@@ -1274,18 +1274,97 @@ pub const BLACKTHORN_CAPTURE_STING_PAUSE_TICKS: u16 = 2;
 pub const BLACKTHORN_GUARD_APPROACH_STINGS: u16 = 5;
 pub const BLACKTHORN_GUARD_APPROACH_CLOSING_PAUSE_TICKS: u16 = 8;
 /// Timeline step 17: the 256-pixel throne reveal "is CPU-bound and measured
-/// about 0.99 s". Eighteen ticks is 0.989 s. "The reveal and envelope
-/// durations depend on the CPU and on calibration, and only the 3000-cycle
-/// class was measured."
-pub const BLACKTHORN_THRONE_REVEAL_HOLD_TICKS: u16 = 18;
+/// about 0.99 s". "The reveal and envelope durations depend on the CPU and on
+/// calibration, and only the 3000-cycle class was measured." In thousandths of
+/// a BIOS tick (0.99 s / 54.925 ms).
+pub const BLACKTHORN_THRONE_REVEAL_MILLITICKS: u32 = 18_025;
 /// Timeline step 18: "Quiet 8-tick pause (0.41 s)." Setup step 8: "After the
 /// quiet 8-tick pause that follows the throne reveal, print" the greeting.
 pub const BLACKTHORN_GREETING_PAUSE_TICKS: u16 = 8;
+/// Timeline step 1: "One world tick repaints the view. Print `\nThou art
+/// subdued and blindfolded!` (+0.12 s)", timed "from the frame where the
+/// `Talk-North` echo appears". The engine prints the echo at the arrest, so
+/// this is the measured span from the arrest to the first line, in
+/// thousandths of a tick (0.12 s). Measured, not normative.
+pub const BLACKTHORN_CAPTURE_FIRST_LINE_MILLITICKS: u32 = 2_185;
+/// Timeline step 8: "There is no wait here, only CPU time (about 0.03 s)."
+pub const BLACKTHORN_CAPTURE_SETUP_MILLITICKS: u32 = 546;
+
+/// `timing.md §4`: "a one-tick request waits for the **next** timer edge, not
+/// for a fixed interval from the moment it is issued", and `karma.md §7`'s
+/// "Pacing rule" (issue #304 Q8): "model a fixed tick lattice at the stock
+/// rate. A one-tick request completes at the first lattice edge after it is
+/// issued. Charge host time for every repaint, sting and printed row, using
+/// the approximate costs above (DOSBox 3000-cycle EGA, ±0.3 tick)". The costs,
+/// in thousandths of a tick, from that section's "Measured stock timeline":
+/// "a stored record's print about one video frame, about 0.3 tick, per text
+/// row it emits".
+pub const PRESENTATION_ROW_PRINT_MILLITICKS: u32 = 300;
+/// "a full repaint about 0.3 to 0.5 tick" (`karma.md §7`), the middle.
+pub const PRESENTATION_REPAINT_MILLITICKS: u32 = 400;
+/// "a sting's audio burst about 20 to 25 ms, under half a tick" (`karma.md
+/// §7`): 22.5 ms. "A repaint plus a sting fits inside one tick, so the sting
+/// never costs an extra edge" - which is why `audio.md §8.6` measures the
+/// timer-paced {5-tick wait, sting} at "about 0.274 s per repetition" and the
+/// footstep {sting, quiet 2-tick pause} at "about 0.11 s each": five and two
+/// ticks. The sting has no blocking length of its own on this host.
+pub const PRESENTATION_STING_MILLITICKS: u32 = 410;
+
+/// The lattice edge, in thousandths of a tick from the lattice's origin, at
+/// which a request issued at `issued` completes: "the first lattice edge after
+/// it is issued" (`karma.md §7`, "Pacing rule").
+pub const fn presentation_lattice_next_edge(issued: u32) -> u32 {
+    (issued / 1000 + 1) * 1000
+}
+
+/// The rows one print advances the message window by - each line feed and
+/// each wrap break, plus the break a row-filling last row makes on its own
+/// (`text-output.md §6`, "Line feeds and full rows": "the per-cell emitter
+/// has already wrapped by the time the chunk ends"). `karma.md §7` prices a
+/// print by these rows: "the Approach record's five line feeds about 1.5
+/// ticks ... the echo's two about 0.6".
+pub fn presentation_printed_rows(text: &str) -> u32 {
+    let width = crate::MESSAGE_WINDOW_WIDTH;
+    let mut rows = text.matches('\n').count() as u32;
+    let segments: Vec<&str> = text.split('\n').collect();
+    for (index, segment) in segments.iter().enumerate() {
+        if segment.is_empty() {
+            continue;
+        }
+        let lines = crate::text_wrap::wrap_text(segment, width, 0);
+        rows += lines.len().saturating_sub(1) as u32;
+        if index + 1 == segments.len() && lines.last().is_some_and(|line| line.chars().count() == width) {
+            rows += 1;
+        }
+    }
+    rows
+}
+
+/// Whether a print leaves the cursor mid-row: it ends in neither a line feed
+/// nor a row-filling last row. `text-output.md §6`: "When a chunk exactly
+/// fills the row, the per-cell emitter has already wrapped by the time the
+/// chunk ends ... A line feed arriving from any **later** call is
+/// unconditional and always costs a row".
+pub fn presentation_print_leaves_row_open(text: &str) -> bool {
+    let Some(last) = text.rsplit('\n').next() else {
+        return false;
+    };
+    if last.is_empty() {
+        return false;
+    }
+    let width = crate::MESSAGE_WINDOW_WIDTH;
+    !crate::text_wrap::wrap_text(last, width, 0)
+        .last()
+        .is_some_and(|line| line.chars().count() == width)
+}
 
 /// One presentation step of the capture narration that runs when its staged
 /// hold ends (`blackthorn.md §3`, capture narration timeline).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum BlackthornCaptureCue {
+    /// A line with nothing else to run: steps 1, 6, 10 and 12. Its release
+    /// states the row the line leaves ([`presentation_print_leaves_row_open`]).
+    Line,
     /// Step 4: "Fill the map viewport black (the blindfold)".
     Blindfold,
     /// One shared two-part sting (steps 5, 7 and 13; `audio.md §8.6`, the
@@ -1305,33 +1384,63 @@ pub enum BlackthornCaptureCue {
     /// Step 17's end: slot 8 revealed as seated Blackthorn, actor byte
     /// `0x78` assigned.
     ThroneRevealed,
-    /// Step 19: the greeting has printed; it ends on its trailing space, so
-    /// its row stays open for the acknowledgement.
+    /// Step 19: the greeting, whose text the caller supplies (it needs roster
+    /// record 0's name). It ends on its trailing space, so its row stays open
+    /// for the acknowledgement.
     Greeting,
+    /// Setup step 8's guard-release route (§6.3): step `n` of the acting
+    /// guard's six, each "with a stinger-plus-two-tick redraw".
+    GuardReleaseStep(u8),
+    /// Setup step 9: the route is over and the preamble record prints.
+    ReleaseRouteEnd,
 }
 
 /// The capture narration's pending state while its beats are staged.
 ///
 /// Setup steps 3 to 6 run inside the timeline (step 8), not when the arrest
-/// starts, so the map loaded up front waits here until that beat; and the
-/// guard-approach script, run in one go when its first sting is due, keeps
-/// its per-sting frames here for the stings that follow.
+/// starts, so the map loaded up front waits here until that beat; and a
+/// cutscene script run in one go when its first sting is due - the guard
+/// approach, later the guard-release route - keeps its per-sting frames here
+/// for the stings that follow.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct BlackthornCaptureNarration {
     /// The audience map, loaded when the narration was staged.
     pub map: Option<crate::MiscmapsCutsceneMap>,
-    /// The guard-approach script's run, once its first sting has come due.
-    pub approach: Option<BlackthornCutsceneVm>,
+    /// The script being staged, once its first sting has come due.
+    pub script: Option<BlackthornCutsceneVm>,
 }
 
 /// How long a capture narration beat holds before its cue and text.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum BlackthornCaptureHold {
-    /// A count of BIOS ticks (quiet pauses and timer waits alike).
-    Ticks(u16),
+    /// "A *quiet N-tick pause* is the quiet redraw pause of Section 6: N
+    /// repetitions of {one world tick, one one-BIOS-tick delay}." With
+    /// cinematic animation off it "does nothing, including its world ticks".
+    Quiet(u16),
+    /// "A *5-tick timer wait* is a counted hardware-tick wait of five BIOS
+    /// timer ticks." Never skipped, and not gated by cinematic animation.
+    TimerWait(u16),
+    /// Step 1's measured span from the arrest to the first line
+    /// ([`BLACKTHORN_CAPTURE_FIRST_LINE_MILLITICKS`]).
+    FirstLine,
+    /// Step 8's untimed setup ([`BLACKTHORN_CAPTURE_SETUP_MILLITICKS`]).
+    Setup,
     /// The throne-approach envelope's own length: "It blocks, and the view
     /// does not redraw while it plays."
     ThroneEnvelope,
+    /// Step 17's CPU-bound reveal ([`BLACKTHORN_THRONE_REVEAL_MILLITICKS`]).
+    ThroneReveal,
+}
+
+impl BlackthornCaptureHold {
+    /// The BIOS-tick requests this hold issues - the program constant
+    /// `timing.md §4` says an engine must reproduce. Untimed work issues none.
+    pub const fn tick_requests(self) -> u16 {
+        match self {
+            Self::Quiet(ticks) | Self::TimerWait(ticks) => ticks,
+            _ => 0,
+        }
+    }
 }
 
 /// One staged beat of the capture narration: hold, then cue, then text.
@@ -1342,9 +1451,9 @@ pub struct BlackthornCaptureBeat {
     pub text: Option<&'static str>,
 }
 
-/// `blackthorn.md §3`, "Capture narration timeline", steps 3 to 18 - every
-/// beat after the first line and the shrine selection, up to (not including)
-/// the greeting text, which needs the roster name.
+/// `blackthorn.md §3`, "Capture narration timeline", steps 1 and 3 to 19 -
+/// every beat from the first line to the greeting. The greeting beat carries
+/// [`BlackthornCaptureCue::Greeting`] and no text; the caller supplies it.
 ///
 /// `sound_on` selects step 7's count (eighteen or three). With
 /// `cinematic_animation` off, "every quiet pause does nothing, including its
@@ -1353,13 +1462,16 @@ pub fn blackthorn_capture_timeline(
     sound_on: bool,
     cinematic_animation: bool,
 ) -> Vec<BlackthornCaptureBeat> {
-    let quiet = |ticks: u16| if cinematic_animation { ticks } else { 0 };
-    let beat = |ticks: u16, cue, text| BlackthornCaptureBeat {
-        hold: BlackthornCaptureHold::Ticks(ticks),
-        cue,
-        text,
-    };
+    use BlackthornCaptureHold::{Quiet, TimerWait};
+    let quiet = |ticks: u16| Quiet(if cinematic_animation { ticks } else { 0 });
+    let beat = |hold, cue, text| BlackthornCaptureBeat { hold, cue, text };
     let mut beats = Vec::new();
+    // Step 1; step 2's shrine selection prints nothing.
+    beats.push(beat(
+        BlackthornCaptureHold::FirstLine,
+        None,
+        Some(BLACKTHORN_CAPTURE_SUBDUED_LINE),
+    ));
     // Steps 3 and 4.
     beats.push(beat(
         quiet(BLACKTHORN_CAPTURE_BLINDFOLD_PAUSE_TICKS),
@@ -1369,13 +1481,13 @@ pub fn blackthorn_capture_timeline(
     // Step 5.
     for _ in 0..BLACKTHORN_CAPTURE_STINGS_BEFORE_DRAGGED_LINE {
         beats.push(beat(
-            BLACKTHORN_CAPTURE_TIMER_WAIT_TICKS,
+            TimerWait(BLACKTHORN_CAPTURE_TIMER_WAIT_TICKS),
             Some(BlackthornCaptureCue::Sting),
             None,
         ));
     }
     // Step 6.
-    beats.push(beat(0, None, Some(BLACKTHORN_CAPTURE_DRAGGED_LINE)));
+    beats.push(beat(Quiet(0), None, Some(BLACKTHORN_CAPTURE_DRAGGED_LINE)));
     // Step 7.
     let after = if sound_on {
         BLACKTHORN_CAPTURE_STINGS_AFTER_DRAGGED_LINE_SOUND_ON
@@ -1384,7 +1496,7 @@ pub fn blackthorn_capture_timeline(
     };
     for _ in 0..after {
         beats.push(beat(
-            BLACKTHORN_CAPTURE_TIMER_WAIT_TICKS,
+            TimerWait(BLACKTHORN_CAPTURE_TIMER_WAIT_TICKS),
             Some(BlackthornCaptureCue::Sting),
             None,
         ));
@@ -1393,7 +1505,11 @@ pub fn blackthorn_capture_timeline(
     // pause's first world tick is the paint. With animation off there is no
     // world tick, so nothing paints here.
     if cinematic_animation {
-        beats.push(beat(0, Some(BlackthornCaptureCue::RevealPrisoners), None));
+        beats.push(beat(
+            BlackthornCaptureHold::Setup,
+            Some(BlackthornCaptureCue::RevealPrisoners),
+            None,
+        ));
     }
     // Step 10.
     beats.push(beat(
@@ -1414,7 +1530,7 @@ pub fn blackthorn_capture_timeline(
     // Step 13: {sting, quiet 2-tick pause} eight times.
     for index in 0..BLACKTHORN_CAPTURE_FOOTSTEP_STINGS {
         let hold = if index == 0 {
-            0
+            Quiet(0)
         } else {
             quiet(BLACKTHORN_CAPTURE_STING_PAUSE_TICKS)
         };
@@ -1430,7 +1546,7 @@ pub fn blackthorn_capture_timeline(
     // pause, then its closing quiet 8-tick pause.
     for index in 0..BLACKTHORN_GUARD_APPROACH_STINGS {
         let hold = if index == 0 {
-            0
+            Quiet(0)
         } else {
             quiet(BLACKTHORN_CAPTURE_STING_PAUSE_TICKS)
         };
@@ -1442,25 +1558,121 @@ pub fn blackthorn_capture_timeline(
     }
     // Step 16.
     beats.push(beat(
-        quiet(BLACKTHORN_CAPTURE_STING_PAUSE_TICKS)
-            + quiet(BLACKTHORN_GUARD_APPROACH_CLOSING_PAUSE_TICKS),
+        quiet(BLACKTHORN_CAPTURE_STING_PAUSE_TICKS + BLACKTHORN_GUARD_APPROACH_CLOSING_PAUSE_TICKS),
         Some(BlackthornCaptureCue::ThroneEnvelope),
         None,
     ));
     // Step 17: the reveal runs once the envelope has finished.
-    beats.push(BlackthornCaptureBeat {
-        hold: BlackthornCaptureHold::ThroneEnvelope,
-        cue: None,
-        text: None,
-    });
+    beats.push(beat(BlackthornCaptureHold::ThroneEnvelope, None, None));
     beats.push(beat(
-        BLACKTHORN_THRONE_REVEAL_HOLD_TICKS,
+        BlackthornCaptureHold::ThroneReveal,
         Some(BlackthornCaptureCue::ThroneRevealed),
         None,
     ));
-    // Step 18 is the hold before the greeting; the caller pushes the
-    // greeting itself with [`BLACKTHORN_GREETING_PAUSE_TICKS`].
+    // Steps 18 and 19.
+    beats.push(beat(
+        quiet(BLACKTHORN_GREETING_PAUSE_TICKS),
+        Some(BlackthornCaptureCue::Greeting),
+        None,
+    ));
     beats
+}
+
+/// The guard-release route of setup step 8 (`blackthorn.md §3`), as staged
+/// beats: §6.3's "quiet pause 11; the acting guard moves west once, north four
+/// times, and east once, with a stinger-plus-two-tick redraw after every
+/// step", then setup step 9's preamble, which the caller supplies.
+pub fn blackthorn_guard_release_timeline() -> Vec<BlackthornCaptureBeat> {
+    use BlackthornCaptureHold::Quiet;
+    let mut beats = Vec::new();
+    for index in 0..BLACKTHORN_GUARD_RELEASE_STEPS {
+        let hold = if index == 0 {
+            Quiet(BLACKTHORN_GUARD_RELEASE_OPENING_PAUSE_TICKS)
+        } else {
+            Quiet(BLACKTHORN_CAPTURE_STING_PAUSE_TICKS)
+        };
+        beats.push(BlackthornCaptureBeat {
+            hold,
+            cue: Some(BlackthornCaptureCue::GuardReleaseStep(index as u8)),
+            text: None,
+        });
+    }
+    beats.push(BlackthornCaptureBeat {
+        hold: Quiet(BLACKTHORN_CAPTURE_STING_PAUSE_TICKS),
+        cue: Some(BlackthornCaptureCue::ReleaseRouteEnd),
+        text: None,
+    });
+    beats
+}
+
+/// §6.3 "Guard release route": "quiet pause 11".
+pub const BLACKTHORN_GUARD_RELEASE_OPENING_PAUSE_TICKS: u16 = 11;
+/// §6.3: "moves west once, north four times, and east once".
+pub const BLACKTHORN_GUARD_RELEASE_STEPS: u16 = 6;
+
+/// When each beat releases, in thousandths of a tick after `start`, on the
+/// pacing rule's lattice ([`presentation_lattice_next_edge`]) anchored at
+/// the presentation's origin - the arrest for the narration, the greeting's
+/// key for the release route. `start` is the host work already done at the
+/// origin (a line printed there). `printed` gives the text a beat prints
+/// when the timeline leaves it to the caller (the greeting, the preamble).
+///
+/// Each quiet tick repaints, then waits for the next edge; a timer wait waits
+/// for its edges; a sting, the blindfold fill and every printed row cost host
+/// time after their release, so the request that follows them loses an edge
+/// whenever that work carries past one - "This is the term the published step
+/// counts leave out" (`karma.md §7`).
+pub fn blackthorn_capture_release_milliticks(
+    beats: &[BlackthornCaptureBeat],
+    start: u32,
+    envelope_milliticks: u32,
+    printed: impl Fn(&BlackthornCaptureBeat) -> Option<String>,
+) -> Vec<u32> {
+    let mut now = start;
+    let mut releases = Vec::with_capacity(beats.len());
+    for beat in beats {
+        match beat.hold {
+            BlackthornCaptureHold::Quiet(ticks) => {
+                for _ in 0..ticks {
+                    now = presentation_lattice_next_edge(now + PRESENTATION_REPAINT_MILLITICKS);
+                }
+            }
+            BlackthornCaptureHold::TimerWait(ticks) => {
+                for _ in 0..ticks {
+                    now = presentation_lattice_next_edge(now);
+                }
+            }
+            BlackthornCaptureHold::FirstLine => now += BLACKTHORN_CAPTURE_FIRST_LINE_MILLITICKS,
+            BlackthornCaptureHold::Setup => now += BLACKTHORN_CAPTURE_SETUP_MILLITICKS,
+            BlackthornCaptureHold::ThroneEnvelope => now += envelope_milliticks,
+            BlackthornCaptureHold::ThroneReveal => now += BLACKTHORN_THRONE_REVEAL_MILLITICKS,
+        }
+        releases.push(now);
+        match beat.cue {
+            Some(
+                BlackthornCaptureCue::Sting
+                | BlackthornCaptureCue::GuardApproachSting(_)
+                | BlackthornCaptureCue::GuardReleaseStep(_),
+            ) => now += PRESENTATION_STING_MILLITICKS,
+            Some(BlackthornCaptureCue::Blindfold) => now += PRESENTATION_REPAINT_MILLITICKS,
+            _ => {}
+        }
+        let text = beat.text.map(str::to_string).or_else(|| printed(beat));
+        if let Some(text) = text {
+            now += presentation_printed_rows(&text) * PRESENTATION_ROW_PRINT_MILLITICKS;
+        }
+    }
+    releases
+}
+
+/// Thousandths of a BIOS tick as seconds.
+pub fn milliticks_secs(milliticks: u32) -> f64 {
+    f64::from(milliticks) / 1000.0 * crate::narration::BIOS_TICK_SECS
+}
+
+/// Seconds as thousandths of a BIOS tick, rounded.
+pub fn secs_milliticks(secs: f64) -> u32 {
+    (secs / crate::narration::BIOS_TICK_SECS * 1000.0).round().max(0.0) as u32
 }
 
 /// `blackthorn.md §3` step 8 (u5-spec#298 Q8): "After the quiet 8-tick pause

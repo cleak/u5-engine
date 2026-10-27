@@ -5294,10 +5294,10 @@ impl PlayState {
         // Q6, `RETRACTIONS.md` R630): "One world tick repaints the view.
         // Print `\nThou art subdued and blindfolded!`". Setup step 1 prints
         // only this line; the rest of the narration follows the shrine
-        // selection, and an abandoned audience prints nothing more. The line
-        // ends mid-row, which the next line's first feed closes.
-        self.emit_message_line(crate::blackthorn::BLACKTHORN_CAPTURE_SUBDUED_LINE);
-        self.open_message_row();
+        // selection, and an abandoned audience prints nothing more. On the
+        // ordinary path the line is the narration's first staged beat, at its
+        // measured "+0.12 s" (`stage_blackthorn_capture_narration`); an
+        // abandoned audience prints it here, before its handoff.
 
         // `moons.md §3` (issue #190, `RETRACTIONS.md` R375): "The
         // Blackthorn audience cutscene repaints once, not twice. The
@@ -5331,6 +5331,7 @@ impl PlayState {
         // only one printed." Timeline step 2: "If no shrine qualifies, the
         // narration ends here" - before step 3's clear of the actor table.
         let Some(shrine_index) = self.blackthorn_selected_shrine() else {
+            self.emit_blackthorn_capture_first_line();
             // `moons.md §3` (R375): the routine's *second* repaint "paints
             // only on the routine's early-exit path". This is one of the
             // two early exits, so it is wired here and nowhere on the
@@ -5348,6 +5349,7 @@ impl PlayState {
         // liveness only - the §3 withdrawal is explicit that "**There is
         // no per-member jail flag.**"
         if self.blackthorn_eligible_party_member_count() == 0 {
+            self.emit_blackthorn_capture_first_line();
             // `moons.md §3` (R375): the routine's second repaint, on the
             // other early-exit path. See the shrine-scan exit above.
             self.refresh_cached_moon_glyphs_at_scene_entry();
@@ -5363,7 +5365,7 @@ impl PlayState {
         let map = load_miscmaps_cutscene_map(game_dir, BLACKTHORN_AUDIENCE_CUTSCENE_MAP_RECORD)?;
         self.blackthorn_capture = Some(crate::blackthorn::BlackthornCaptureNarration {
             map,
-            approach: None,
+            script: None,
         });
         self.stage_blackthorn_capture_narration();
 
@@ -5382,36 +5384,37 @@ impl PlayState {
         Ok(Some(MoveOutcome::Used))
     }
 
-    /// Stage `blackthorn.md §3`'s capture narration timeline, steps 3 to 19
-    /// (issue #304 Q6): every hold, sting, line and placement in order, with
-    /// the greeting of setup step 8 last.
+    /// `blackthorn.md §3`, timeline step 1's line, printed at once. Its last
+    /// row, `and blindfolded!`, fills all sixteen cells, so the cursor is
+    /// already at column 0 of the next row: "A line feed arriving from any
+    /// **later** call is unconditional and always costs a row"
+    /// (`text-output.md §6`). The next line's two feeds therefore leave two
+    /// blank rows under it, as the stock capture shows (`bt-capture-pacing`,
+    /// every beat from `s01`).
+    fn emit_blackthorn_capture_first_line(&mut self) {
+        let line = crate::blackthorn::BLACKTHORN_CAPTURE_SUBDUED_LINE;
+        self.emit_message_line(line);
+        self.message_row_open_mid_line = crate::blackthorn::presentation_print_leaves_row_open(line);
+    }
+
+    /// Stage `blackthorn.md §3`'s capture narration timeline, steps 1 and 3
+    /// to 19 (issue #304 Q6): every hold, sting, line and placement in order,
+    /// with the greeting of setup step 8 last.
+    ///
+    /// The holds are the published counts paced on `karma.md §7`'s lattice
+    /// ([`crate::blackthorn::blackthorn_capture_release_milliticks`]),
+    /// anchored at the arrest. Holding each count as whole ticks of wall
+    /// clock lost the edges the original loses to its printing: the dragged-
+    /// away, chained and `Footsteps!` lines each push the next request one
+    /// edge later, and the first line itself comes "+0.12 s" after the echo.
+    /// The engine ran about 0.3 s ahead of the stock game by the guards
+    /// (`bt-audience`/`ask1`, `bt-capture-pacing` 2026-10-27).
     fn stage_blackthorn_capture_narration(&mut self) {
-        use crate::blackthorn::{BlackthornCaptureCue, BlackthornCaptureHold};
-        use crate::narration::NarrationCue;
+        use crate::blackthorn::BlackthornCaptureCue;
         // Step 7: "With sound on, eighteen repetitions ...; with sound off,
         // three." `music_enabled` is the game's sound setting (Ctrl-S). The
         // engine has no cinematic-animation setting; it is always on.
         let timeline = crate::blackthorn::blackthorn_capture_timeline(self.music_enabled, true);
-        for beat in timeline {
-            let text = beat.text.unwrap_or_default();
-            let secs = match beat.hold {
-                BlackthornCaptureHold::Ticks(ticks) => crate::narration::bios_ticks_secs(ticks),
-                // `audio.md §8.6`: "It blocks, and the view does not redraw
-                // while it plays." The hold is the program's own length.
-                BlackthornCaptureHold::ThroneEnvelope => SoundEffect::BlackthornThroneApproachEnvelope
-                    .program(&mut crate::audio::RumbleJitter::default())
-                    .duration(true)
-                    .as_secs_f64(),
-            };
-            match beat.cue {
-                Some(cue) => self.staged_narration.push_secs_with_cue(
-                    secs,
-                    NarrationCue::BlackthornCapture(cue),
-                    text,
-                ),
-                None => self.staged_narration.push_secs(secs, text),
-            }
-        }
         // Steps 18 and 19, setup step 8 (u5-spec#298 Q8): after the quiet
         // 8-tick pause, the greeting to roster record 0 - "the Avatar's
         // record, never a member chosen any other way" - ending on one
@@ -5419,11 +5422,61 @@ impl PlayState {
         // acknowledgement key.**"
         let greeting =
             crate::blackthorn::blackthorn_greeting_line(&self.blackthorn_roster_record_zero_name());
-        self.staged_narration.push_secs_with_cue(
-            crate::narration::bios_ticks_secs(crate::blackthorn::BLACKTHORN_GREETING_PAUSE_TICKS),
-            NarrationCue::BlackthornCapture(BlackthornCaptureCue::Greeting),
-            greeting,
+        // `audio.md §8.6`: "It blocks, and the view does not redraw while it
+        // plays." The envelope's hold is the program's own length.
+        let envelope = crate::blackthorn::secs_milliticks(
+            SoundEffect::BlackthornThroneApproachEnvelope
+                .program(&mut crate::audio::RumbleJitter::default())
+                .duration(true)
+                .as_secs_f64(),
         );
+        let text_of = |beat: &crate::blackthorn::BlackthornCaptureBeat| match beat.cue {
+            Some(BlackthornCaptureCue::Greeting) => Some(greeting.clone()),
+            _ => beat.text.map(str::to_string),
+        };
+        let releases =
+            crate::blackthorn::blackthorn_capture_release_milliticks(&timeline, 0, envelope, &text_of);
+        self.stage_blackthorn_capture_beats(&timeline, &releases, text_of);
+    }
+
+    /// Push staged beats released at the given lattice times (thousandths of
+    /// a tick from the presentation's origin, which is now).
+    fn stage_blackthorn_capture_beats(
+        &mut self,
+        beats: &[crate::blackthorn::BlackthornCaptureBeat],
+        releases: &[u32],
+        text_of: impl Fn(&crate::blackthorn::BlackthornCaptureBeat) -> Option<String>,
+    ) {
+        use crate::narration::NarrationCue;
+        let mut previous = 0;
+        for (beat, &release) in beats.iter().zip(releases) {
+            let secs = crate::blackthorn::milliticks_secs(release - previous);
+            previous = release;
+            let text = text_of(beat).unwrap_or_default();
+            // Every capture beat carries a cue, so its release can state the
+            // row a line leaves (`finish_narration_cue_after_text`).
+            let cue = beat.cue.unwrap_or(crate::blackthorn::BlackthornCaptureCue::Line);
+            self.staged_narration
+                .push_secs_with_cue(secs, NarrationCue::BlackthornCapture(cue), text);
+        }
+    }
+
+    /// Stage setup step 8's guard-release route and step 9's preamble
+    /// (`blackthorn.md §3`, §6.3 "Guard release route") on the pacing rule's
+    /// lattice, anchored at the greeting's key with the release order
+    /// already printed there.
+    fn stage_blackthorn_guard_release_route(&mut self, release_line: &str, preamble: Option<String>) {
+        use crate::blackthorn::BlackthornCaptureCue;
+        self.blackthorn_capture = Some(crate::blackthorn::BlackthornCaptureNarration::default());
+        let route = crate::blackthorn::blackthorn_guard_release_timeline();
+        let text_of = |beat: &crate::blackthorn::BlackthornCaptureBeat| match beat.cue {
+            Some(BlackthornCaptureCue::ReleaseRouteEnd) => preamble.clone(),
+            _ => None,
+        };
+        let start = crate::blackthorn::presentation_printed_rows(release_line)
+            * crate::blackthorn::PRESENTATION_ROW_PRINT_MILLITICKS;
+        let releases = crate::blackthorn::blackthorn_capture_release_milliticks(&route, start, 0, &text_of);
+        self.stage_blackthorn_capture_beats(&route, &releases, text_of);
     }
 
     /// Run one staged narration cue as its beat is released, before the
@@ -5489,13 +5542,13 @@ impl PlayState {
                         vm.world_ticks,
                     ));
                     if let Some(capture) = self.blackthorn_capture.as_mut() {
-                        capture.approach = Some(vm);
+                        capture.script = Some(vm);
                     }
                 }
                 let frame = self
                     .blackthorn_capture
                     .as_ref()
-                    .and_then(|capture| capture.approach.as_ref())
+                    .and_then(|capture| capture.script.as_ref())
                     .and_then(|vm| vm.actors_at_each_sting.get(usize::from(index)).copied());
                 if let Some(actors) = frame {
                     self.apply_blackthorn_guard_frame(&actors);
@@ -5508,7 +5561,7 @@ impl PlayState {
                 if let Some(vm) = self
                     .blackthorn_capture
                     .as_mut()
-                    .and_then(|capture| capture.approach.take())
+                    .and_then(|capture| capture.script.take())
                 {
                     self.apply_blackthorn_cutscene_vm_to_audience_state(&vm);
                 }
@@ -5526,12 +5579,55 @@ impl PlayState {
                 self.apply_blackthorn_cutscene_vm_to_audience_state(&vm);
             }
             // Step 19: see [`Self::finish_narration_cue_after_text`].
-            BlackthornCaptureCue::Greeting => {}
+            BlackthornCaptureCue::Greeting | BlackthornCaptureCue::Line => {}
+            // Setup step 8's guard-release route (§6.3), run whole on its
+            // first step like the approach, each step then showing the
+            // acting guard where the script had it at that step's sting.
+            BlackthornCaptureCue::GuardReleaseStep(index) => {
+                if index == 0 {
+                    let mut vm = self.blackthorn_cutscene_vm_from_audience_state();
+                    vm.run(blackthorn_cutscene_beat_commands(
+                        BlackthornCutsceneBeat::GuardReleaseRoute,
+                    ));
+                    self.push_diagnostic(format!(
+                        "Blackthorn audience: the guard release advanced {} world ticks.",
+                        vm.world_ticks,
+                    ));
+                    if let Some(capture) = self.blackthorn_capture.as_mut() {
+                        capture.script = Some(vm);
+                    }
+                }
+                let frame = self
+                    .blackthorn_capture
+                    .as_ref()
+                    .and_then(|capture| capture.script.as_ref())
+                    .and_then(|vm| vm.actors_at_each_sting.get(usize::from(index)).copied());
+                if let Some(actors) = frame {
+                    self.apply_blackthorn_guard_frame(&actors);
+                }
+                self.emit_sound_effect(SoundEffect::BlackthornMovementStinger);
+            }
+            // Setup step 9: the route's last redraw is over; the script's
+            // end state stands, and the preamble prints.
+            BlackthornCaptureCue::ReleaseRouteEnd => {
+                if let Some(vm) = self
+                    .blackthorn_capture
+                    .as_mut()
+                    .and_then(|capture| capture.script.take())
+                {
+                    self.apply_blackthorn_cutscene_vm_to_audience_state(&vm);
+                }
+                self.blackthorn_capture = None;
+            }
         }
     }
 
     /// The part of a cue that follows its beat's text.
-    pub(crate) fn finish_narration_cue_after_text(&mut self, cue: crate::narration::NarrationCue) {
+    pub(crate) fn finish_narration_cue_after_text(
+        &mut self,
+        cue: crate::narration::NarrationCue,
+        text: &str,
+    ) {
         match cue {
             // Setup step 8: the greeting ends on "one trailing space and no
             // line feed", so its row stays open for the acknowledgement's
@@ -5543,7 +5639,21 @@ impl PlayState {
                 self.open_message_row();
                 self.blackthorn_capture = None;
             }
-            crate::narration::NarrationCue::BlackthornCapture(_) => {}
+            // The preamble record ends on its trailing space; the audience's
+            // second acknowledgement reads with that row open (§4.1).
+            crate::narration::NarrationCue::BlackthornCapture(
+                crate::blackthorn::BlackthornCaptureCue::ReleaseRouteEnd,
+            ) => {
+                self.open_message_row();
+            }
+            // Any other narration line: open unless it ends in a feed or on a
+            // row-filling last row - `Thou art subdued and blindfolded!`
+            // ends on `and blindfolded!`, all sixteen cells (`text-output.md
+            // §6`).
+            crate::narration::NarrationCue::BlackthornCapture(_) => {
+                self.message_row_open_mid_line =
+                    crate::blackthorn::presentation_print_leaves_row_open(text);
+            }
         }
     }
 
@@ -5988,16 +6098,21 @@ impl PlayState {
                     let release_line = crate::blackthorn::blackthorn_release_line(
                         self.blackthorn_roster_record_zero_gender(),
                     );
-                    self.emit_message_line(release_line);
+                    self.emit_message_line(release_line.clone());
                     self.open_message_row();
-                    let release =
-                        self.run_blackthorn_cutscene_beat(BlackthornCutsceneBeat::GuardReleaseRoute);
-                    self.push_diagnostic(format!(
-                        "Blackthorn audience: the guard release advanced {} world ticks.",
-                        release.world_ticks,
-                    ));
-                    self.blackthorn_audience_opening_text(game_dir)?
-                        .unwrap_or_default()
+                    // "Then run the guard-release route script of Section
+                    // 6.3", and step 9: "Print the preamble record". The
+                    // route takes its "quiet pause 11" and six steps "with a
+                    // stinger-plus-two-tick redraw after every step" before
+                    // the preamble, so both are staged; it used to run in one
+                    // go and print the preamble with the release order
+                    // (`bt-capture-pacing`/`s06`, `bt-correct`/`typed`,
+                    // 2026-10-27: the stock game still shows the order and
+                    // the guard walking).
+                    let preamble = self.blackthorn_audience_opening_text(game_dir)?;
+                    self.stage_blackthorn_guard_release_route(&release_line, preamble);
+                    self.active_blackthorn = Some(challenge);
+                    return Ok(MoveOutcome::PromptDeclined);
                 }
                 crate::blackthorn_session::BlackthornChallengeOutcome::PromptPresented {
                     ordinal,

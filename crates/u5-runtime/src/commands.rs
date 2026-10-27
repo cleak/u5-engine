@@ -1504,6 +1504,10 @@ pub const PARTY_SELECTION_PROMPT: &str = "Player: ";
 /// follows on the next row (`cleak/u5-spec#194` capture).
 pub const LOOK_RESULT_PREFIX: &str = "\nThou dost see";
 
+/// `conversation.md §2`, "The dispatcher's own lines": every dispatcher
+/// branch line "follows the dispatcher's own leading line feed" - one line
+/// feed, printed through the shared character printer before the dispatch.
+pub const TALK_DISPATCHER_LEADING_FEED: &str = "\n";
 /// The town arrest sequence's surrender question.
 ///
 /// `town-mode.md §1123` (literals added 2026-09-06, spec issue #206):

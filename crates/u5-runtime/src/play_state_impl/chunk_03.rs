@@ -693,7 +693,7 @@ impl PlayState {
             let cue = beat.cue;
             self.emit_staged_beat(beat);
             if let Some(cue) = cue {
-                self.finish_narration_cue_after_text(cue);
+                self.finish_narration_cue_after_text(cue, &text);
             }
             self.release_blackthorn_rescue_beat_audio(&text);
             self.release_stonegate_notice_beat_audio(&text);
@@ -750,7 +750,7 @@ impl PlayState {
             let cue = beat.cue;
             self.emit_staged_beat(beat);
             if let Some(cue) = cue {
-                self.finish_narration_cue_after_text(cue);
+                self.finish_narration_cue_after_text(cue, &text);
             }
             self.release_blackthorn_rescue_beat_audio(&text);
             self.release_stonegate_notice_beat_audio(&text);
