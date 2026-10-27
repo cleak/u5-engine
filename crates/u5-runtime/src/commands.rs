@@ -796,43 +796,94 @@ pub const SHRINE_KNEEL_NARRATION: &str = "...and thou dost kneel before the Alta
 /// `t2400`, and the closing Return's exit was still walking when the stock
 /// was back on the overworld (`shrine-mantra-close`, `shrine-unfocused`).
 pub const SHRINE_PRESENTATION_BIOS_TICKS_PER_WORLD_STEP: u16 = 1;
-/// The Approach-to-Kneel hold: §7's forty-six world steps, which "the walk is
-/// **at least** forty-five ticks" makes a floor of forty-six ticks.
+/// `karma.md §7`, "Pacing rule" (issue #304 Q8): "model a fixed tick lattice
+/// at the stock rate. A one-tick request completes at the first lattice edge
+/// after it is issued. Charge host time for every repaint, sting and printed
+/// row, using the approximate costs above (DOSBox 3000-cycle EGA, ±0.3 tick)
+/// unless a closer measurement for the target host exists."
 ///
-/// **Re-measured** 2026-10-26 (`qa/paired/shrine-three-mantras.tsv`, synced
-/// keys, four runs, message areas sampled every ~33 ms): the stock Kneel
-/// record comes 2653, 2661, 2663 and 2704 ms after the `E` key (mean 2670 ms,
-/// 48.6 ticks), the two sides' `E` echoes within 35 ms of each other, where
-/// the floor's forty-six ticks put this engine's at 2522 to 2543 ms. Each
-/// step's one-tick request waits for the *next* timer edge after a full
-/// repaint, so the forty-six steps run a little over a tick each - the same
-/// excess the ten-step question hold shows
-/// ([`SHRINE_VIRTUE_QUESTION_HOLD_WORLD_TICKS`]). Forty-nine ticks (2.69 s)
-/// is the nearest whole count. Kept at the floor, it hid behind the old
-/// sixteen-tick question hold: with that corrected to eleven the engine put
-/// the question up on `shrine-enter-pacing`'s `t2400` beat a sample before
-/// the original.
-pub const SHRINE_KNEEL_HOLD_BIOS_TICKS: u16 = 49;
+/// The costs are in thousandths of a tick, from "Measured stock timeline":
+///
+/// - "About 3.7 ticks of untimed preamble (the echo, the actor-table
+///   set-aside, the grid load and opening world step, the Approach record's
+///   print, and the first walk step's repaint), then the wait to the first
+///   edge" - [`SHRINE_ENTRY_PREAMBLE_MILLITICKS`];
+/// - "then 44 whole tick periods while the remaining 44 walk requests
+///   complete" - each paced walk step costs one tick, because "A repaint plus
+///   a sting fits inside one tick";
+/// - "then the handler's kneeling-pose repaint, about 0.7 tick, before the
+///   Kneel record begins" - [`SHRINE_KNEEL_POSE_REPAINT_MILLITICKS`];
+/// - "the Kneel record's print, with the handler's repaint before it and the
+///   first wait step's repaint after it, is about 2.5 ticks of work, so the
+///   first request ends on the third edge after the walk and the other nine
+///   take one tick each" - [`SHRINE_KNEEL_RECORD_WORK_MILLITICKS`].
+///
+/// This engine has no host tick lattice of its own, so the lattice is
+/// anchored at the `E` key (the spec takes "the keypress-to-echo latency as
+/// negligible"), which puts the phase residual *r* at 0.3 tick, inside the
+/// published `(0, 1]`.
+pub const SHRINE_ENTRY_PREAMBLE_MILLITICKS: u32 = 3_700;
+/// See [`SHRINE_ENTRY_PREAMBLE_MILLITICKS`].
+pub const SHRINE_KNEEL_POSE_REPAINT_MILLITICKS: u32 = 700;
+/// See [`SHRINE_ENTRY_PREAMBLE_MILLITICKS`].
+pub const SHRINE_KNEEL_RECORD_WORK_MILLITICKS: u32 = 2_500;
+/// `karma.md §7`: the walk's "forty-five one-tick delay requests".
+pub const SHRINE_WALK_DELAY_REQUESTS: u32 = 45;
+
+/// `karma.md §7` "Pacing rule": the lattice edge (in whole ticks from the
+/// lattice's origin) at which a one-tick request issued at `issued_millitick`
+/// completes - "the first lattice edge after it is issued".
+pub const fn shrine_lattice_request_end_tick(issued_millitick: u32) -> u32 {
+    issued_millitick / 1000 + 1
+}
+
+/// `karma.md §7` "Pacing rule" applied to the entry: when, in thousandths of
+/// a tick after the `E` key, the Kneel record and the virtue question begin.
+///
+/// Gives about 48.7 and 60.0 ticks - "about 49 and about 11.5 ticks at this
+/// setting with no fixed fudge constant".
+pub const fn shrine_entry_lattice_timeline() -> (u32, u32) {
+    // The first walk request is issued after the preamble and ends on the
+    // next edge; the other forty-four take one period each.
+    let first_walk_edge = shrine_lattice_request_end_tick(SHRINE_ENTRY_PREAMBLE_MILLITICKS);
+    let last_walk_edge = first_walk_edge + (SHRINE_WALK_DELAY_REQUESTS - 1);
+    let kneel = last_walk_edge * 1000 + SHRINE_KNEEL_POSE_REPAINT_MILLITICKS;
+    // The question's ten requests: the first after the Kneel record's work,
+    // the other nine one period each; the question prints on the last edge.
+    let first_question_edge =
+        shrine_lattice_request_end_tick(last_walk_edge * 1000 + SHRINE_KNEEL_RECORD_WORK_MILLITICKS);
+    let question = (first_question_edge + (SHRINE_VIRTUE_QUESTION_WORLD_STEPS as u32 - 1)) * 1000;
+    (kneel, question)
+}
+
+/// The Approach-to-Kneel hold in whole BIOS ticks: the pacing rule's Kneel
+/// time, to the nearest tick (48.7 -> 49).
+///
+/// `karma.md §7`, "Measured stock timeline" (issue #304 Q8): "Echo to Kneel:
+/// about 48.9 ticks (2687 ms)", and from the `E` keypress "about **48.4 to
+/// 49.4 ticks**". It replaces a figure measured on this project's own paired
+/// captures (2653 to 2704 ms, the same 49); see `docs/measured-constants.md`.
+/// The step count it spends stays the published forty-six
+/// ([`SHRINE_KNEEL_WORLD_STEPS`]).
+pub const SHRINE_KNEEL_HOLD_BIOS_TICKS: u16 = {
+    let (kneel, _) = shrine_entry_lattice_timeline();
+    ((kneel + 500) / 1000) as u16
+};
 /// `karma.md §12`: "After ten world ticks, record `29`: the question asking
-/// which virtue."
+/// which virtue." `karma.md §7`'s entry table gives the interval as "ten world
+/// steps and ten one-tick delay requests" and, since issue #304 Q8, its cost:
+/// "about 11.5 ticks from Kneel text to question text, because the Kneel
+/// record's print and the repaints on each side of it run past two edges, so
+/// the ten requests end on the twelfth edge after the walk's last".
 ///
-/// `karma.md §7`'s entry table gives the interval as "ten world steps and ten
-/// one-tick delay requests" - a step count, not its cost.
-///
-/// **Re-measured** 2026-10-26 (`qa/paired/shrine-three-mantras.tsv`, synced
-/// keys, four runs, both windows' message areas sampled every ~33 ms): the
-/// stock Kneel record to the stock question is 598, 624, 626 and 658 ms
-/// (mean 627 ms, 11.4 ticks). The same sampler read this engine's former
-/// sixteen ticks as 857 to 891 ms, so it adds no bias of its own. Eleven
-/// ticks (0.60 s) is the nearest whole count: each of the ten steps waits for
-/// the next timer edge, and the repaints and the record print take part of
-/// one more, as the mantra holds' six and twelve steps also come out a little
-/// over a tick a step (see [`SHRINE_MANTRA_FIRST_HOLD_BIOS_TICKS`]).
-///
-/// The sixteen this replaces rested on 600 ms screenshot samples
-/// (`shrine-enter-pacing`), which can only bound the interval to `(0, 600]`
-/// ms, and was read as about 1.6 ticks a step.
-pub const SHRINE_VIRTUE_QUESTION_HOLD_WORLD_TICKS: u16 = 11;
+/// On the pacing rule the question begins on that twelfth edge, 60 ticks after
+/// the key; the hold is what remains after [`SHRINE_KNEEL_HOLD_BIOS_TICKS`]
+/// - eleven ticks. The spec warns that "the twelve-edge result has little
+/// margin: slightly slower printing would make it thirteen".
+pub const SHRINE_VIRTUE_QUESTION_HOLD_WORLD_TICKS: u16 = {
+    let (_, question) = shrine_entry_lattice_timeline();
+    (question / 1000) as u16 - SHRINE_KNEEL_HOLD_BIOS_TICKS
+};
 /// The meditation's exit pacing, after the handler returns.
 ///
 /// `cleak/u5-spec#271` and `karma.md §7.2`: the handler "*returns to the

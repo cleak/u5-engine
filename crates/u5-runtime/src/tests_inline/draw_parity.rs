@@ -93,8 +93,8 @@ mod draw_parity {
     /// same day: 0.60 to 0.66 s, eleven ticks for its ten steps.
     #[test]
     fn shrine_walk_and_exit_cost_one_tick_a_step() {
-        // The walk's forty-six steps are its floor; the stock interval,
-        // sampled finely with synced keys, is 48.6 ticks (2026-10-26).
+        // The walk's forty-six steps are its floor; `karma.md §7`'s pacing
+        // rule puts the Kneel record at about 48.9 ticks (issue #304 Q8).
         assert_eq!(SHRINE_KNEEL_WORLD_STEPS, 46);
         assert_eq!(SHRINE_KNEEL_HOLD_BIOS_TICKS, 49);
         assert_eq!(SHRINE_EXIT_PACING_HOLD_BIOS_TICKS, 61);
