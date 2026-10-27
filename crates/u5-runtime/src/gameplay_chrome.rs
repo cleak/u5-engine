@@ -1341,7 +1341,11 @@ pub fn gameplay_chrome_content(state: &crate::PlayState) -> GameplayChromeConten
     // timed-effect slot only from the full-panel refresh, which runs again
     // when the picker or page closes. Nothing paints the slot meanwhile, so
     // it is absent while either owns the panel (playtest J23).
-    let panel_owned = state.active_z_stats.is_some() || picker.is_some();
+    // `shops.md` §8's inn Guest Register clears the same whole panel and
+    // frames it with the picker's nine-row frame (playtest P12-04).
+    let panel_owned = state.active_z_stats.is_some()
+        || picker.is_some()
+        || crate::stats_panel::inn_pickup_register_active(state);
     let timing_glyph = match browser.map(|browser| browser.page_indicator(&state.equipment_stock)) {
         Some(indicator) => page_badge_glyph(indicator),
         None if panel_owned => None,
