@@ -640,12 +640,17 @@ pub struct PlayState {
     /// round loop, and the loop is entered once per encounter: the sweep
     /// restart jumps back past the prologue" (`RETRACTIONS.md` R308).
     pub combat_round_loop_prologue_ran: bool,
-    /// The slot whose self-acting monster attack already printed its result
-    /// line inside its own dispatch, so the post-walk narrator skips it once.
-    /// Set only when that attack left no party-side actor standing: the
-    /// defeat recount's party control/faint tail must follow the `killed!`
-    /// line (`combat.md §11.1` "Order, stated once", `§14`; playtest P13-12).
-    pub combat_monster_attack_narrated_slot: Option<usize>,
+    /// Self-acting monster attacks of the current actor walk whose result
+    /// lines are still owed to the post-walk narrator, in dispatch order.
+    pub combat_owed_monster_attack_narrations:
+        Vec<(usize, crate::combat_frame::CombatMonsterAttackApplication)>,
+    /// Slots (one entry per attack) whose owed result line was printed
+    /// inside a dispatch instead, so the post-walk narrator skips each once.
+    /// That happens only when an attack left no party-side actor standing:
+    /// the defeat recount's party control/faint tail must follow every
+    /// result line already resolved (`combat.md §11.1` "Order, stated once",
+    /// `§14`; playtest P13-12).
+    pub combat_monster_attack_narrated_slots: Vec<usize>,
     /// `combat.md §4` restore phase: "If the resident tile-restoration flag
     /// is set when the round loop returns, clear that flag and invoke the
     /// display driver's tile-graphics save/restore/mutation entry with mode

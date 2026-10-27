@@ -8203,11 +8203,14 @@ pub(crate) fn append_combat_round_walk_messages(
     // `combat.md §6.3`: the narrator gate already ran inside each attack's
     // own dispatch, while the shared result field still described that
     // slot; this loop only prints what the gate let through.
-    // `combat.md §14`: an attack that ended the party's side already printed
-    // its result inside its dispatch, ahead of the faint tail.
-    let narrated_slot = state.combat_monster_attack_narrated_slot.take();
+    // `combat.md §14`: attacks resolved before one that ended the party's
+    // side already printed their results inside that dispatch, ahead of the
+    // faint tail.
+    state.combat_owed_monster_attack_narrations.clear();
+    let mut narrated_slots = std::mem::take(&mut state.combat_monster_attack_narrated_slots);
     for (slot, attack, narration) in attacks {
-        if narrated_slot == Some(slot) {
+        if let Some(index) = narrated_slots.iter().position(|&narrated| narrated == slot) {
+            narrated_slots.remove(index);
             continue;
         }
         if let Some(line) = combat_monster_attack_narrated_result_message(state, attack, narration)

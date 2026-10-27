@@ -8990,21 +8990,30 @@ impl PlayState {
         // recount below is about to print `<name> passes out!`, so the owed
         // result line and its hazard line print now, ahead of it, and the
         // post-walk narrator skips this slot (playtest P13-12).
-        if let Some(attack) = owed_monster_attack
-            && matches!(
+        // Earlier attacks of the same walk still owe their lines too, and
+        // they resolved first, so they print first.
+        if let Some(attack) = owed_monster_attack {
+            self.combat_owed_monster_attack_narrations.push((slot, attack));
+            if matches!(
                 self.combat_round_loop_control_census(false, false),
                 CombatRoundLoopControl::Exit(CombatRoundLoopExit::Defeat)
-            )
-        {
-            if let Some(line) = crate::input_dispatch::combat_monster_attack_narrated_result_message(
-                self,
-                attack,
-                crate::input_dispatch::CombatMonsterAttackNarration::SelfActingHostile,
             ) {
-                self.emit_combat_print(&format!("\n{line}\n"));
+                for (owed_slot, owed_attack) in
+                    std::mem::take(&mut self.combat_owed_monster_attack_narrations)
+                {
+                    if let Some(line) =
+                        crate::input_dispatch::combat_monster_attack_narrated_result_message(
+                            self,
+                            owed_attack,
+                            crate::input_dispatch::CombatMonsterAttackNarration::SelfActingHostile,
+                        )
+                    {
+                        self.emit_combat_print(&format!("\n{line}\n"));
+                    }
+                    self.flush_combat_pending_hazard_lines(Some(owed_slot));
+                    self.combat_monster_attack_narrated_slots.push(owed_slot);
+                }
             }
-            self.flush_combat_pending_hazard_lines(Some(slot));
-            self.combat_monster_attack_narrated_slot = Some(slot);
         }
 
         // `combat.md §7`: the recount that "first gives the party
@@ -9189,6 +9198,8 @@ impl PlayState {
         random_cardinal_direction_codes: &[u8],
         monster_attack_inputs_by_slot: &[(usize, CombatMonsterAttackInputs)],
     ) -> CombatRoundWalkApplication {
+        self.combat_owed_monster_attack_narrations.clear();
+        self.combat_monster_attack_narrated_slots.clear();
         let mut applications = Vec::new();
         let mut slot = start_slot;
         loop {
@@ -9279,6 +9290,9 @@ impl PlayState {
         // entry point and, if it is set, redraws the full party stats panel
         // and clears it" (`RETRACTIONS.md` R358).
         let _ = self.take_party_stats_panel_refresh();
+        // A fresh walk: nothing from an earlier, already narrated one is owed.
+        self.combat_owed_monster_attack_narrations.clear();
+        self.combat_monster_attack_narrated_slots.clear();
         let mut applications = Vec::new();
         let mut slot = start_slot;
         loop {

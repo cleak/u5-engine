@@ -652,6 +652,152 @@
         );
     }
 
+    fn two_rat_wipe_state(third_member: bool) -> PlayState {
+        let mut state = combat_ai_turn_state(6, 5);
+        let leader = state.party[0];
+        let size: u8 = if third_member { 3 } else { 2 };
+        for slot in 1..size {
+            state.party.push(PartyMember { slot, ..leader });
+        }
+        state.party_names = default_party_names(usize::from(size));
+        state.party_equipment = default_party_equipment(usize::from(size));
+        state.party_combat_defense = vec![0; usize::from(size)];
+        for member in &mut state.party {
+            member.hp = 1;
+        }
+        // Member 2 is on the automatic driver (`§6.1a`), so it is a foe to
+        // the census until the faint helper restores it.
+        state.combat_actors[1] = CombatActorDescriptor::from_row([
+            20,
+            1,
+            COMBAT_ACTOR_FLAG_SELECTABLE_80 | COMBAT_ACTOR_FLAG_CONTROLLED,
+            1,
+            1,
+            0,
+            1,
+            1,
+        ]);
+        state.active_objects[1] = ActiveObject {
+            type_byte: 0x80,
+            tile: 0x80,
+            x: 1,
+            y: 1,
+            ..ActiveObject::empty()
+        };
+        if third_member {
+            state.combat_actors[2] = CombatActorDescriptor::from_row([
+                20,
+                1,
+                COMBAT_ACTOR_FLAG_SELECTABLE_80,
+                2,
+                2,
+                0,
+                9,
+                9,
+            ]);
+            state.active_objects[2] = ActiveObject {
+                type_byte: 0x80,
+                tile: 0x80,
+                x: 9,
+                y: 9,
+                ..ActiveObject::empty()
+            };
+        }
+        state
+    }
+
+    fn place_rat(state: &mut PlayState, slot: usize, x: u8, y: u8) {
+        state.active_objects[slot] = ActiveObject {
+            type_byte: 0x90,
+            tile: 0x90,
+            x: usize::from(x),
+            y: usize::from(y),
+            ..ActiveObject::empty()
+        };
+        state.combat_actors[slot] = CombatActorDescriptor::from_row([
+            10,
+            1,
+            COMBAT_ACTOR_FLAG_SELECTABLE_40,
+            COMBAT_CLASS_GIANT_RAT,
+            slot as u8,
+            0,
+            x,
+            y,
+        ]);
+    }
+
+    fn walk_rats(state: &mut PlayState, start: usize, strikes: &[usize]) {
+        let strike = CombatMonsterAttackInputs {
+            forced_hit: Some(true),
+            ..CombatMonsterAttackInputs::default()
+        };
+        let inputs = strikes
+            .iter()
+            .map(|&slot| (slot, strike))
+            .collect::<Vec<_>>();
+        let walk = state.apply_combat_round_walk_from_slot_with_inputs(
+            start,
+            30,
+            false,
+            0,
+            false,
+            1,
+            1,
+            &[],
+            None,
+            0,
+            false,
+            None,
+            true,
+            &[],
+            &inputs,
+        );
+        crate::input_dispatch::append_combat_round_walk_messages(state, &walk);
+    }
+
+    #[test]
+    fn earlier_result_lines_of_the_walk_print_before_the_defeat_faint_tail() {
+        // `combat.md §11.1` / `§14`: every attack resolved before the one
+        // that ended the party's side owes its result line ahead of the
+        // faint tail too, in walk order (review of playtest P13-12).
+        let mut state = two_rat_wipe_state(true);
+        place_rat(&mut state, 7, 9, 8);
+        walk_rats(&mut state, 7, &[7, 8]);
+
+        let transcript = combat_descriptor_transcript(&state);
+        let first = transcript.find("Party member 3 killed!");
+        let second = transcript.find("Avatar killed!");
+        let faint = transcript.find("passes out!");
+        assert!(
+            first.is_some() && second.is_some() && faint.is_some(),
+            "transcript was {transcript:?}"
+        );
+        assert!(first < second && second < faint, "transcript was {transcript:?}");
+        assert_eq!(transcript.matches("killed!").count(), 2, "{transcript:?}");
+    }
+
+    #[test]
+    fn a_second_wipe_in_the_same_walk_does_not_repeat_the_first_result_line() {
+        // The faint helper restores the controlled member asleep and the walk
+        // goes on; a later rat ending the party again must not make the
+        // post-walk narrator print the first killing blow a second time.
+        let mut state = two_rat_wipe_state(false);
+        place_rat(&mut state, 9, 2, 1);
+        walk_rats(&mut state, 8, &[8, 9]);
+
+        let transcript = combat_descriptor_transcript(&state);
+        assert_eq!(transcript.matches("Avatar killed!").count(), 1, "{transcript:?}");
+        assert_eq!(
+            transcript.matches("Party member 2 killed!").count(),
+            1,
+            "{transcript:?}"
+        );
+        let first = transcript.find("Avatar killed!");
+        let faint = transcript.find("passes out!");
+        let second = transcript.find("Party member 2 killed!");
+        assert!(first < faint && faint < second, "{transcript:?}");
+    }
+
     #[test]
     fn a_successful_faint_sleep_replaces_the_vanish_bit_with_the_sleep_bit() {
         // `combat.md §6.3`: "the sleep helper replaces the whole result field
