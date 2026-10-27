@@ -867,7 +867,8 @@ fn board_non_ship_vehicle_still_requires_foot() {
         }
     );
     assert_eq!(state.active_objects.len(), 2);
-    assert_eq!(state.turn, 0);
+    // `commands.md §3`: B's refusals report "acted" (playtest P12-07).
+    assert_eq!(state.turn, 1);
     assert!(state.message.contains("On foot"));
 }
 
@@ -1013,7 +1014,7 @@ fn board_vehicle_refuses_unpromoted_balloon_family() {
 }
 
 #[test]
-fn board_town_horse_refuses_occupied_object_with_nay_without_turn() {
+fn board_town_horse_refuses_occupied_object_with_nay_spending_the_turn() {
     let mut state = test_state(vec![5; 32 * 32], 0, 0);
     state.player.facing = Direction::South;
     state.active_objects.push(ActiveObject {
@@ -1041,7 +1042,9 @@ fn board_town_horse_refuses_occupied_object_with_nay_without_turn() {
 
     assert_eq!(state.player.transport, TransportState::Foot);
     assert_eq!(state.message, BOARD_HORSE_NAY_REFUSAL);
-    assert_eq!(state.turn, 0);
+    // `commands.md §3`: "all four mounts and both refusals" are acted
+    // (playtest P12-07).
+    assert_eq!(state.turn, 1);
     assert!(!state.active_objects[1].is_empty());
     assert!(!state.active_objects[2].is_empty());
 }

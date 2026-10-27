@@ -1235,9 +1235,14 @@ fn use_command_routes_inline_magic_carpet_request() {
 
     // `inventory.md §7.1`: success "selects one of the two carpet frames with
     // equal probability" - markers `0x14` or `0x15`.
+    // The transport type is the marker, the tile its visual frame
+    // (playtest P12-12).
     let frame = match world.player.transport {
         TransportState::Carpet { type_byte, tile } => {
-            assert_eq!(type_byte, tile);
+            assert_eq!(
+                type_byte,
+                TRANSPORT_MARKER_MAGIC_CARPET_FIRST + (tile - FIRST_PLAYABLE_MAGIC_CARPET_TILE)
+            );
             tile
         }
         other => panic!("expected a carpet, got {other:?}"),
