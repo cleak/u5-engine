@@ -421,6 +421,16 @@ pub fn run_dungeon_entry_underfoot_reaction(
     {
         return Ok(false);
     }
+    // `dungeon-mode.md §4` step 7 / `§13.4`: a lost room fight "returns to
+    // the dungeon loop that framed it, and the loop's next capability check
+    // sees the result". That check ends the iteration and, with nobody able
+    // to act, stops the loop before another underfoot reaction can run; an
+    // asleep party cycles inside the check and never reaches one either. So
+    // a party still standing on the room cell does not re-enter the room
+    // (playtest P13-06).
+    if !matches!(state.party_capability(), PartyCapability::CanAct { .. }) {
+        return Ok(false);
+    }
     if state
         .resolve_current_dungeon_room_trigger(Some(game_dir))?
         .is_none()
@@ -8201,7 +8211,16 @@ pub(crate) fn append_combat_round_walk_messages(
     // `combat.md §6.3`: the narrator gate already ran inside each attack's
     // own dispatch, while the shared result field still described that
     // slot; this loop only prints what the gate let through.
+    // `combat.md §14`: attacks resolved before one that ended the party's
+    // side already printed their results inside that dispatch, ahead of the
+    // faint tail.
+    state.combat_owed_monster_attack_narrations.clear();
+    let mut narrated_slots = std::mem::take(&mut state.combat_monster_attack_narrated_slots);
     for (slot, attack, narration) in attacks {
+        if let Some(index) = narrated_slots.iter().position(|&narrated| narrated == slot) {
+            narrated_slots.remove(index);
+            continue;
+        }
         if let Some(line) = combat_monster_attack_narrated_result_message(state, attack, narration)
         {
             // `combat.md §11.1`, the order stated once: step 3 is "a newline",

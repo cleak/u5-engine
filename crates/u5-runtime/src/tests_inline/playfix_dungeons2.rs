@@ -290,3 +290,27 @@ fn playfix2_f15_unlit_party_search_keeps_the_blank_row_before_you_find() {
     assert_eq!(solo[..3], ["", "You find:", "darkness."], "{solo:?}");
     assert_eq!(rows_after_dir(true), solo);
 }
+
+/// P13-06: `dungeon-mode.md §13.4` - "Losing a fight in a dungeon room
+/// reaches the same place indirectly: combat returns to the dungeon loop
+/// that framed it, and the loop's next capability check sees the result".
+/// That check (`§4` step 7) ends the loop when nobody can act, so the party
+/// still standing on the room cell is not run through the room-entry helper
+/// a second time, and no second `Entering room...` prints.
+#[test]
+fn playtest_p13_06_a_lost_room_fight_does_not_re_enter_the_room() {
+    let mut grid = open_dungeon_record();
+    grid[dungeon_cell_index(0, 1, 1)] = 0xa0;
+    let mut state = dungeon_state(grid, 0, 1, 1);
+    for member in &mut state.party {
+        member.status = b'D';
+        member.hp = 0;
+    }
+    let rows_before = playfix2_transcript_rows(&state).len();
+
+    assert!(!run_dungeon_entry_underfoot_reaction(&mut state, Path::new("")).unwrap());
+
+    assert!(!state.combat_active);
+    assert_eq!(state.turn, 0);
+    assert_eq!(playfix2_transcript_rows(&state).len(), rows_before);
+}

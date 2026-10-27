@@ -8961,6 +8961,15 @@ impl PlayState {
             CombatActorDispatchAction::MonsterAi { ai_turn }
         };
 
+        // A monster attack's result line is narrated after the walk returns
+        // (`append_combat_round_walk_messages`), which prints the hazard line
+        // behind it; every other dispatch has printed all it will by now.
+        let owed_monster_attack = match &action {
+            CombatActorDispatchAction::MonsterAi {
+                ai_turn: Some(turn),
+            } => turn.monster_attack,
+            _ => None,
+        };
         if !matches!(action, CombatActorDispatchAction::PlayerReady) {
             // `combat.md §7` step 7's hazard pass follows every dispatched
             // action, monster or player alike. The middle tier's published
@@ -8969,17 +8978,41 @@ impl PlayState {
             // the note on the player command tail.
             let _ = self.apply_combat_post_dispatch_contact_for_actor_position(slot);
             self.clear_combat_interference_for_completed_action(slot);
-            // A monster attack's result line is narrated after the walk
-            // returns (`append_combat_round_walk_messages`), which prints the
-            // hazard line behind it; every other dispatch has printed all it
-            // will by now.
-            let attack_narration_owed = matches!(
-                &action,
-                CombatActorDispatchAction::MonsterAi { ai_turn: Some(turn) }
-                    if turn.monster_attack.is_some()
-            );
-            if !attack_narration_owed {
+            if owed_monster_attack.is_none() {
                 self.flush_combat_pending_hazard_lines(Some(slot));
+            }
+        }
+
+        // `combat.md §11.1` "Order, stated once": the result line (`killed!`)
+        // is step 5 of the attack's own resolution, and `§14` runs the party
+        // control/faint helper only on the defeat recount after the
+        // dispatched action. When this attack left no party-side actor, the
+        // recount below is about to print `<name> passes out!`, so the owed
+        // result line and its hazard line print now, ahead of it, and the
+        // post-walk narrator skips this slot (playtest P13-12).
+        // Earlier attacks of the same walk still owe their lines too, and
+        // they resolved first, so they print first.
+        if let Some(attack) = owed_monster_attack {
+            self.combat_owed_monster_attack_narrations.push((slot, attack));
+            if matches!(
+                self.combat_round_loop_control_census(false, false),
+                CombatRoundLoopControl::Exit(CombatRoundLoopExit::Defeat)
+            ) {
+                for (owed_slot, owed_attack) in
+                    std::mem::take(&mut self.combat_owed_monster_attack_narrations)
+                {
+                    if let Some(line) =
+                        crate::input_dispatch::combat_monster_attack_narrated_result_message(
+                            self,
+                            owed_attack,
+                            crate::input_dispatch::CombatMonsterAttackNarration::SelfActingHostile,
+                        )
+                    {
+                        self.emit_combat_print(&format!("\n{line}\n"));
+                    }
+                    self.flush_combat_pending_hazard_lines(Some(owed_slot));
+                    self.combat_monster_attack_narrated_slots.push(owed_slot);
+                }
             }
         }
 
@@ -9165,6 +9198,8 @@ impl PlayState {
         random_cardinal_direction_codes: &[u8],
         monster_attack_inputs_by_slot: &[(usize, CombatMonsterAttackInputs)],
     ) -> CombatRoundWalkApplication {
+        self.combat_owed_monster_attack_narrations.clear();
+        self.combat_monster_attack_narrated_slots.clear();
         let mut applications = Vec::new();
         let mut slot = start_slot;
         loop {
@@ -9255,6 +9290,9 @@ impl PlayState {
         // entry point and, if it is set, redraws the full party stats panel
         // and clears it" (`RETRACTIONS.md` R358).
         let _ = self.take_party_stats_panel_refresh();
+        // A fresh walk: nothing from an earlier, already narrated one is owed.
+        self.combat_owed_monster_attack_narrations.clear();
+        self.combat_monster_attack_narrated_slots.clear();
         let mut applications = Vec::new();
         let mut slot = start_slot;
         loop {
