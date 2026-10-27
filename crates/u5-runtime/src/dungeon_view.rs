@@ -77,7 +77,9 @@ pub const DUNGEON_BILLBOARD_ROWS: usize = 164;
 /// than abut. The overlap is invisible, since the mirrored copy's first
 /// column carries the same value as the left copy's last.
 ///
-/// Reported to the spec as `cleak/u5-spec#199`.
+/// Reported to the spec as `cleak/u5-spec#199`, and published since
+/// (`dungeon-mode.md §6.3`, `RETRACTIONS.md` R394): `x_right = 191 - x_left -
+/// width`, reflecting about x = 95 (`docs/measured-constants.md`).
 pub const DUNGEON_MIRROR_SPAN: i32 = 191;
 
 /// Directory slot count in each corridor art bank.

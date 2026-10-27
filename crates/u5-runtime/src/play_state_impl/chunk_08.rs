@@ -1794,18 +1794,11 @@ impl PlayState {
         // virtue". The engine used to print all three in this one call,
         // so the window jumped straight to the question.
         //
-        // The table gives no interval before the kneel record. Measured
-        // 2026-09-12 (`qa/paired/shrine-enter-pacing.tsv`, stock side,
-        // sampled every 600 ms after the `E` keypress): the approach
-        // record stands alone through `t1800` and the kneel record is up
-        // by `t2400`, so the hold is bounded to (1800, 2400] ms - about
-        // forty ~55 ms BIOS ticks. The question follows within the next
-        // 600 ms sample, which fits the published ten. Asked as
-        // `cleak/u5-spec#271`; forty is the midpoint of the measured
-        // bound, not a published figure.
-        // §7 "Entry pacing": the Approach-to-Kneel interval is the walk's
-        // forty-five world steps "plus the handler's own repaint step -
-        // forty-six world steps in all", spread across the measured hold.
+        // §7 "Entry pacing" (answering `cleak/u5-spec#271`): the
+        // Approach-to-Kneel interval is the walk's forty-five world steps
+        // "plus the handler's own repaint step - forty-six world steps in
+        // all", one tick each ([`SHRINE_KNEEL_HOLD_BIOS_TICKS`]; re-measured
+        // with synced keys 2026-10-26, see `docs/measured-constants.md`).
         self.staged_narration.push_ticks_counting_world_steps(
             SHRINE_KNEEL_HOLD_BIOS_TICKS,
             SHRINE_KNEEL_WORLD_STEPS,

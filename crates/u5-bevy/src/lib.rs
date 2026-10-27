@@ -273,10 +273,14 @@ const INTRO_ANIMATION_TICK_INTERVAL_SECS: f32 = BIOS_USER_TICK_INTERVAL_SECS;
 /// two independent regions of interest agreeing on the integer count) —
 /// the IBM PC BIOS timer tick to within 0.02 %, and identical at two
 /// emulated CPU speeds an order of magnitude apart, so it is timer-driven
-/// rather than loop-count-driven. The published spec set has no gameplay
-/// figure to contradict: `timing.md §5` is intro-scoped, and `input.md
-/// §12` says only that the idle tick runs "typically many times per
-/// second".
+/// rather than loop-count-driven. It was timed between on-screen
+/// transitions with no key involved, so the paired harness's old serial-key
+/// skew never touched it.
+///
+/// Published since (`timing.md §8.1`): "The tick period is therefore exactly
+/// **54.9254 ms (18.2065 Hz)**, given the untouched divisor", with the
+/// measurement above quoted as the independent check. This constant is that
+/// published period (`docs/measured-constants.md`).
 ///
 /// The validation anchor is the command cursor: `text-output.md §10.6`'s
 /// four-glyph barber pole advances one phase per tick, so a full cursor

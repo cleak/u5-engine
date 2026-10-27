@@ -814,6 +814,12 @@ pub const SHRINE_KNEEL_HOLD_BIOS_TICKS: u16 =
 /// than the walk's - about 1.6 ticks each, the kneeling family's animator
 /// running on each repaint - and `karma.md §7` publishes step counts, not
 /// their cost.
+///
+/// Caveat (2026-10-26, `docs/measured-constants.md`): the synced-key reaction
+/// probe on `shrine-three-mantras` timed the mantra holds, which run the same
+/// kneeling repaint, at about one tick a step, not 1.6. This value rests on
+/// 600 ms screenshot samples alone and wants a finer stock-side measurement
+/// of the Kneel-to-question interval before anyone builds on its rate.
 pub const SHRINE_VIRTUE_QUESTION_HOLD_WORLD_TICKS: u16 = 16;
 /// The meditation's exit pacing, after the handler returns.
 ///
@@ -834,18 +840,33 @@ pub const SHRINE_EXIT_PACING_HOLD_BIOS_TICKS: u16 =
 pub const SHRINE_MANTRA_PROMPT: &str = "Mantra:";
 
 /// `karma.md §12`'s mantra-questions row: "After a nonblank virtue answer,
-/// wait six world ticks and emit a newline." Converted at the ~1.6 ticks a
-/// kneeling step that [`SHRINE_VIRTUE_QUESTION_HOLD_WORLD_TICKS`] measures:
-/// six steps round to ten ticks.
+/// wait six world ticks and emit a newline", and `§7` "Entry pacing": every
+/// such wait is "a counted repetition of one world step plus one one-tick
+/// delay request" - six ticks at
+/// [`SHRINE_PRESENTATION_BIOS_TICKS_PER_WORLD_STEP`].
 ///
-/// **Measured constant, not yet independently calibrated** against its own
-/// paired capture. Re-check once a dedicated shrine-mantra-pacing capture
-/// answers it directly.
-pub const SHRINE_MANTRA_FIRST_HOLD_BIOS_TICKS: u16 = 10;
-/// `karma.md §12`: "waiting twelve world ticks after each nonblank answer."
-/// Twelve steps at the same rate round to nineteen ticks. Same calibration
-/// caveat as [`SHRINE_MANTRA_FIRST_HOLD_BIOS_TICKS`].
-pub const SHRINE_MANTRA_SUBSEQUENT_HOLD_BIOS_TICKS: u16 = 19;
+/// **Re-measured 2026-10-26 with synced keys** (`--key-sync sendevent
+/// --reaction-probe 1500`, `qa/paired/shrine-three-mantras.tsv`, one run,
+/// 25 keys within 9 ms): the stock frame first changes 401 ms after the
+/// virtue answer's Return, against 37 to 71 ms for a key it answers at once -
+/// about 0.35 s, six ticks (0.33 s) and well short of ten (0.55 s). This was
+/// ten, converted at a ~1.6 ticks-a-step rate never measured on this hold
+/// (it is a key-anchored interval). See `docs/measured-constants.md`.
+pub const SHRINE_MANTRA_FIRST_HOLD_BIOS_TICKS: u16 =
+    shrine_presentation_hold_bios_ticks(SHRINE_MANTRA_FIRST_WORLD_STEPS);
+/// `karma.md §12`: "waiting twelve world ticks after each nonblank answer",
+/// at one tick a step: twelve ticks.
+///
+/// Re-measured in the same run: the stock frame first changes 732, 765 and
+/// 765 ms after each mantra's Return - about 0.70 s less the 37 to 71 ms
+/// display latency, twelve to thirteen ticks (0.66 to 0.71 s). The engine,
+/// at the nineteen this replaces (also a ~1.6-a-step conversion), reacted
+/// at 1163 ms, 0.40 s behind each time. At twelve, four more synced runs
+/// (`shrine-three-mantras`, `shrine-flow`, `shrine-mantra-close`,
+/// `shrine-unfocused`) put the engine's reaction within one probe sample
+/// (0 to 33 ms) of the stock's 728 to 762 ms on all eight mantra Returns.
+pub const SHRINE_MANTRA_SUBSEQUENT_HOLD_BIOS_TICKS: u16 =
+    shrine_presentation_hold_bios_ticks(SHRINE_MANTRA_SUBSEQUENT_WORLD_STEPS);
 
 /// `karma.md §12`: an affordable offering finishes "with ten world ticks".
 pub const SHRINE_OFFERING_RESULT_WORLD_TICKS: usize = 10;

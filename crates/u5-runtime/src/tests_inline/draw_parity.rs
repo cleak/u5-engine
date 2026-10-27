@@ -84,9 +84,12 @@ mod draw_parity {
     /// `karma.md §7`: the approach walk and the exit are counted world steps
     /// at one one-tick delay each. Re-measured with synced keys
     /// (`shrine-enter-pacing`, 2026-10-26): the original kneels by `t2400`,
-    /// where the serial-fitted 72-tick hold kneeled at `t3600`. The
-    /// kneeling-phase holds are intervals between records and keep their
-    /// measured ~1.6 ticks a step.
+    /// where the serial-fitted 72-tick hold kneeled at `t3600`. The mantra
+    /// holds are key-anchored too and were re-measured the same way
+    /// (`shrine-three-mantras` reaction probe, 2026-10-26): the stock reacts
+    /// about 0.35 s after the virtue Return and 0.70 s after each mantra
+    /// Return, six and twelve ticks. Only the Kneel-to-question hold, an
+    /// interval between two stock records, keeps its measured sixteen.
     #[test]
     fn shrine_walk_and_exit_cost_one_tick_a_step() {
         assert_eq!(SHRINE_KNEEL_HOLD_BIOS_TICKS, SHRINE_KNEEL_WORLD_STEPS);
@@ -101,7 +104,15 @@ mod draw_parity {
         let kneel_secs = f64::from(SHRINE_KNEEL_HOLD_BIOS_TICKS) * crate::narration::BIOS_TICK_SECS;
         assert!((2.4..2.7).contains(&kneel_secs), "{kneel_secs}");
         assert_eq!(SHRINE_VIRTUE_QUESTION_HOLD_WORLD_TICKS, 16);
-        assert_eq!(SHRINE_MANTRA_FIRST_HOLD_BIOS_TICKS, 10);
-        assert_eq!(SHRINE_MANTRA_SUBSEQUENT_HOLD_BIOS_TICKS, 19);
+        assert_eq!(SHRINE_MANTRA_FIRST_HOLD_BIOS_TICKS, SHRINE_MANTRA_FIRST_WORLD_STEPS);
+        assert_eq!(SHRINE_MANTRA_FIRST_HOLD_BIOS_TICKS, 6);
+        assert_eq!(SHRINE_MANTRA_SUBSEQUENT_HOLD_BIOS_TICKS, SHRINE_MANTRA_SUBSEQUENT_WORLD_STEPS);
+        assert_eq!(SHRINE_MANTRA_SUBSEQUENT_HOLD_BIOS_TICKS, 12);
+        // The re-measured stock reactions, less a ~55 ms display latency:
+        // about 0.35 s and 0.70 s.
+        let first = f64::from(SHRINE_MANTRA_FIRST_HOLD_BIOS_TICKS) * crate::narration::BIOS_TICK_SECS;
+        let later = f64::from(SHRINE_MANTRA_SUBSEQUENT_HOLD_BIOS_TICKS) * crate::narration::BIOS_TICK_SECS;
+        assert!((0.30..0.40).contains(&first), "{first}");
+        assert!((0.62..0.75).contains(&later), "{later}");
     }
 }

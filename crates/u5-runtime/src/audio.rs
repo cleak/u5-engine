@@ -248,6 +248,13 @@ pub const ENVELOPE_CARRIER_DIVISOR: u16 = 60;
 ///
 /// This engine charged each band one outer calibrated unit, 880 us, and played
 /// the effect for 1.633 s - very nearly twice as long as the original.
+///
+/// The 0.859 s is the effect's own audible span on the stock side, not an
+/// interval from a key, so the old serial-key skew of the paired harness did
+/// not bias it. Published since (`audio.md §8.4`): two DOSBox Staging
+/// recordings at "**0.859 and 0.860 seconds**", "Approximately **0.86 seconds
+/// per invocation**", an observed target for that emulator setup rather than
+/// a period-hardware figure (`docs/measured-constants.md`).
 pub const FLASH_BAND_NANOS: u64 = 463_000;
 
 /// Convert an inner-unit count to nanoseconds.
