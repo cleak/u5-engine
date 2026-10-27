@@ -486,6 +486,24 @@ fn handle_play_key_input_inner(
         {
             return Ok(PlayInputDisposition::Continue);
         }
+        // The same table discards a bare direction code and every other byte
+        // it does not list - DEL among them. Without this an arrow at the
+        // wish or the Blackthorn answer was typed as a glyph and the one-key
+        // line submitted at once: `No effect...` at the well, a wrong mantra
+        // at the audience (playtest P12-14). Only a lone key is dropped; a
+        // typed line arrives with its own text. A conversation with no
+        // prompt on screen is not reading a line, as the Escape rule in
+        // `handle_active_conversation_key_input` already treats it.
+        if suffix.is_empty()
+            && matches!(free_text_input_action(byte), FreeTextInputAction::Discard)
+            && free_text_line_reader_open(state)
+            && !state
+                .active_conversation
+                .as_ref()
+                .is_some_and(|session| session.prompt_message().is_empty())
+        {
+            return Ok(PlayInputDisposition::Continue);
+        }
     }
     if state.endgame.is_some() {
         return handle_endgame_key_input(state, key, suffix, game_dir);
