@@ -6577,6 +6577,7 @@ fn finish_combat_attack_walk(
     // prints nothing - `§7` step 6 puts such a slot in group zero, so it "is
     // therefore driven from the player's prompt".
     // Everything else on the row is the shared narrator's.
+    let mut result_printed = false;
     if let Some((_, monster_attack)) = walk.monster_attack
         && let Some(line) = combat_monster_attack_narrated_result_message(
             state,
@@ -6585,6 +6586,7 @@ fn finish_combat_attack_walk(
         )
     {
         state.emit_combat_print(&format!("\n{line}\n"));
+        result_printed = true;
     }
     if let Some((target_slot, attack)) = walk.attack
         && let Some(line) = combat_weapon_attack_narrated_result_message(state, target_slot, attack)
@@ -6619,8 +6621,17 @@ fn finish_combat_attack_walk(
         // is never emitted, and the original shows no blank there. That
         // asymmetry is what makes this two rather than a wrapping artifact.
         state.emit_combat_print(&format!("\n\n{line}\n"));
+        result_printed = true;
     }
-    if !walk.text.is_empty() {
+    if result_printed && !walk.text.is_empty() {
+        // The result line ended with its own feed, so the cursor is at
+        // column 0 of a fresh row. `combat.md §8.2`'s next attempt "prints a
+        // newline, that item's name, and a colon on its own line", and that
+        // newline spends a blank row there exactly as it does after
+        // `Nothing!\n` - it is an ordinary print, not an echo on a marker
+        // row (playtest P13-16).
+        state.emit_combat_print(&walk.text);
+    } else if !walk.text.is_empty() {
         // `combat.md §8.2`: `Attack-` and `Aim! ` are what `A` adds on top
         // of the turn banner, and they are typed onto the marker row the
         // banner opened - `text-output.md §10.2`: "echoed command lines

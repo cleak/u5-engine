@@ -199,3 +199,41 @@ fn playtest_p13_11_peer_view_wait_draws_no_blank_or_marker_row() {
     assert!(combat_prompt_row_follows_history(&state));
     assert!(shop_pause_row_is_continuation(&state));
 }
+
+/// P13-16: `combat.md §8.2`, "When two or three items qualify, each attempt
+/// additionally prints a newline, that item's name, and a colon on its own
+/// line". After a result line, which ends with its own feed, that newline
+/// spends a blank row - as it already did after `Nothing!`.
+#[test]
+fn playtest_p13_16_next_item_line_after_a_result_has_a_blank_row() {
+    let dir = debug_game_dir();
+    let mut state = combat_player_command_state(6, 5);
+    state.party_equipment = default_party_equipment(1);
+    state.party_equipment[0][EQUIP_SLOT_HELM] = 3; // Spiked Helm
+    state.party_equipment[0][EQUIP_SLOT_WEAPON] = 23; // Short Sword
+    state.party_experience = vec![0];
+    state.combat_actors[8].hp_or_wound = 200;
+    state.pending_combat_actor_slot = Some(0);
+
+    handle_play_key_input(&mut state, 'A', "", &dir).unwrap();
+    assert!(state.active_combat_targeting.is_some());
+    handle_play_key_input(&mut state, char::from(INPUT_CODE_EAST), "", &dir).unwrap();
+    handle_play_key_input(&mut state, '\r', "", &dir).unwrap();
+    assert!(
+        state.active_combat_targeting.is_some(),
+        "the Short Sword attempt is open"
+    );
+
+    let texts: Vec<&str> = state
+        .message_entries()
+        .iter()
+        .map(|entry| entry.text.as_str())
+        .collect();
+    let sword = texts
+        .iter()
+        .rposition(|text| *text == "Short Sword:")
+        .unwrap_or_else(|| panic!("second item line: {texts:?}"));
+    assert_eq!(texts[sword - 1], "", "{texts:?}");
+    assert_ne!(texts[sword - 2], "", "{texts:?}");
+    let _ = fs::remove_dir_all(dir);
+}
