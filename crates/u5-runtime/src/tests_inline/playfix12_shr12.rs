@@ -103,3 +103,36 @@ fn playtest_p12_19_yell_restoration_echoes_answers_upper_cased() {
     );
     assert_eq!(world.shrine_ruin_flags[0], 0x01);
 }
+
+/// `karma.md §7`: "Return submits without echoing a newline. A blank
+/// submission therefore ends meditation on the current prompt row, without a
+/// result message". The `:` row stays, open, and the next command's feed
+/// closes it with its marker directly beneath - the shape a blank mantra's
+/// `Mantra:` row already had. The session was dropped with its live row
+/// unlogged, so the `:` vanished (P12-18).
+#[test]
+fn playtest_p12_18_blank_virtue_answer_keeps_its_colon_row() {
+    let dir = debug_game_dir();
+    let mut state = world_state(open_world_grid(), 5, 5);
+    let mut session = ShrineSession::new(ShrineVirtue::Honor);
+    session.phase = ShrinePhase::Virtue;
+    state.active_shrine = Some(session);
+    state.emit_message_line(format!("{SHRINE_VIRTUE_PROMPT}\n\n"));
+
+    assert_eq!(
+        state.step_active_shrine('\r', "", &dir).unwrap(),
+        Some(MoveOutcome::PromptDeclined)
+    );
+    let rows = shr12_rows(&state);
+    assert!(
+        rows.ends_with(&[
+            SHRINE_VIRTUE_PROMPT.to_string(),
+            String::new(),
+            ":".to_string()
+        ]),
+        "{rows:?}"
+    );
+    assert!(state.message_row_open_mid_line);
+    assert!(state.surface_command_row_follows_history);
+    let _ = fs::remove_dir_all(dir);
+}
