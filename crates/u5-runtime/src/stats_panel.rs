@@ -1424,7 +1424,8 @@ pub fn paint_panel_picker_text_window(system: &mut TextWindowSystem, state: &Pla
     let start_inverse = state.stats_panel_window_inverse ^ picker.inverse_pass_flips_window();
     let (line_inverse, _) = picker.inverse_pass(start_inverse);
     let mut window_inverse = false;
-    for (line, (_entry, line_column, text)) in picker.visible_lines().iter().enumerate() {
+    let lines = picker.visible_lines();
+    for (line, (entry, line_column, text)) in lines.iter().enumerate() {
         let selected = line_inverse.get(line).copied().unwrap_or(start_inverse);
         // Without the frame there are no side rules to leave clear, so
         // the highlight starts in window column 0 and the text is padded
@@ -1451,6 +1452,7 @@ pub fn paint_panel_picker_text_window(system: &mut TextWindowSystem, state: &Pla
         // outside the frame entirely", so the cap is the window's width
         // from this line's own start column, not the frame's interior.
         let cells = PANEL_PICKER_ROW_CELLS + 1 - usize::from(column);
+        let mut end_column = usize::from(column);
         for ch in text.chars().take(cells) {
             match panel_runic_code(ch) {
                 Some(code) => {
@@ -1459,6 +1461,22 @@ pub fn paint_panel_picker_text_window(system: &mut TextWindowSystem, state: &Pla
                     system.set_runic_output(false);
                 }
                 None => system.emit_byte(ch as u8),
+            }
+            end_column += 1;
+        }
+        // `inventory.md §4.5`: "the renderer homes the cursor to window column
+        // 1 before every row and pads a short row until the column count
+        // reaches fourteen", and "The selected item is drawn with its ordinary
+        // label **and padding** in inverted glyph pixels" - so the highlight
+        // bar runs to the frame's right rule, not to the end of the label.
+        // Only an entry's last display line is padded: a quantity line whose
+        // label moved to the next line is not ([`PickerPanelCells::run_pass`]
+        // pads the U-Use picker the same way).
+        let entry_ends_here = lines.get(line + 1).is_none_or(|(next, _, _)| next != entry);
+        if picker.ornamental_frame && entry_ends_here {
+            while end_column < usize::from(PANEL_PICKER_FRAME_RIGHT_COLUMN) {
+                system.emit_byte(b' ');
+                end_column += 1;
             }
         }
         if !picker.ornamental_frame {
