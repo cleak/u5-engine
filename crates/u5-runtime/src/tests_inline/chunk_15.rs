@@ -2515,6 +2515,9 @@
         state.flush_staged_narration();
         for _ in 0..2 {
             handle_play_key_input(&mut state, ' ', "", &dir).unwrap();
+            // The greeting's key stages the guard-release route before the
+            // preamble (`blackthorn.md §3` steps 8 and 9).
+            state.flush_staged_narration();
         }
         // blackthorn.md §3 step 3: "Clear the active-object table so the
         // audience scene can reuse those records as temporary cinematic
@@ -2669,6 +2672,9 @@
         // then is the first demand asked.
         assert!(!state.message.contains("authored demand"), "{}", state.message);
         state.submit_blackthorn_audience_answer("", &dir).unwrap();
+        // The guard-release route is staged before the preamble prints.
+        assert_ne!(state.message, "authored capture line");
+        state.flush_staged_narration();
         assert_eq!(state.message, "authored capture line");
         state.submit_blackthorn_audience_answer("", &dir).unwrap();
         // §4.1: record `11`, "then acknowledgement and two line feeds before
@@ -2759,8 +2765,9 @@
             Some(MoveOutcome::Used)
         );
         // `blackthorn.md §3` step 8: the guard-release route runs on the
-        // greeting page's acknowledgement key.
+        // greeting page's acknowledgement key, staged before the preamble.
         state.submit_blackthorn_audience_answer("", &dir).unwrap();
+        state.flush_staged_narration();
 
         for placement in BLACKTHORN_AUDIENCE_ACTOR_PLACEMENTS {
             let slot = placement.actor.slot_index() as usize;

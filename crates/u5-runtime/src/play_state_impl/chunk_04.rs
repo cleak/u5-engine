@@ -6799,6 +6799,21 @@ impl PlayState {
                 // the first mantra where this engine printed `"Thou art
                 // under arrest!"`.
                 self.message.clear();
+                // `conversation.md §2`, "The dispatcher's own lines": the
+                // branch lines all follow "the dispatcher's own leading line
+                // feed", which is printed before the dispatch on the dialogue
+                // index - the Minoc and tribute demands below that same
+                // `0xFF` dispatch carry it (measured 2026-09-12). A palace
+                // refusal prints no demand, but the feed is already out: the
+                // stock game shows two blank rows, not one, between the
+                // walk's last echo and `Thou art subdued and blindfolded!`
+                // (`bt-audience`, `bt-capture-pacing`, 2026-10-27), where
+                // this engine went straight to the capture's own feed. Only
+                // the audience path is reached with assets; the asset-less
+                // dialogue-map fallback keeps its surrender prompt as it was.
+                if game_dir.is_some() {
+                    self.emit_message_line(crate::commands::TALK_DISPATCHER_LEADING_FEED);
+                }
                 self.open_town_arrest(arrest, game_dir)
             }
         }
