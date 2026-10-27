@@ -1042,6 +1042,7 @@ impl PlayState {
         {
             self.message = BOARD_HORSE_NAY_REFUSAL.to_string();
             self.message_row_open_mid_line = false;
+            self.charge_board_refusal_acted();
             return MoveOutcome::Blocked;
         }
         if !self.player.transport.can_board(transport) {
@@ -1051,6 +1052,7 @@ impl PlayState {
             // (`commands.md §5.5`).
             self.message = BOARD_ON_FOOT_REFUSAL.to_string();
             self.message_row_open_mid_line = false;
+            self.charge_board_refusal_acted();
             return MoveOutcome::Blocked;
         }
 
@@ -1097,6 +1099,15 @@ impl PlayState {
         self.message = message;
         self.message_row_open_mid_line = false;
         MoveOutcome::Boarded
+    }
+
+    /// `commands.md §3`: B forwards "acted" on every path - "all four mounts
+    /// and both refusals" - except the final unknown-target `What?`, so the
+    /// `"Nay!"` and `On foot` refusals spend the mode's ordinary turn
+    /// (playtest P12-07).
+    fn charge_board_refusal_acted(&mut self) {
+        let turn_before = self.turn;
+        self.charge_tile_command_acted_exit(turn_before);
     }
 
     pub fn force_foot_transport(&mut self) {
