@@ -413,6 +413,16 @@ pub fn run_dungeon_entry_underfoot_reaction(
     {
         return Ok(false);
     }
+    // `dungeon-mode.md §4` step 7 / `§13.4`: a lost room fight "returns to
+    // the dungeon loop that framed it, and the loop's next capability check
+    // sees the result". That check ends the iteration and, with nobody able
+    // to act, stops the loop before another underfoot reaction can run; an
+    // asleep party cycles inside the check and never reaches one either. So
+    // a party still standing on the room cell does not re-enter the room
+    // (playtest P13-06).
+    if !matches!(state.party_capability(), PartyCapability::CanAct { .. }) {
+        return Ok(false);
+    }
     if state
         .resolve_current_dungeon_room_trigger(Some(game_dir))?
         .is_none()
