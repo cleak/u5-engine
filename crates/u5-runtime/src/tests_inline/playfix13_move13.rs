@@ -1,0 +1,75 @@
+// Regressions for the thirteenth exploratory playtest's movement findings
+// (P13-xx). Each test names the finding and the published sentence it rests
+// on.
+mod playfix13_move13 {
+    use super::*;
+
+    fn orc_at(x: usize, y: usize) -> ActiveObject {
+        ActiveObject {
+            type_byte: 0xc0,
+            tile: 0xc0,
+            x,
+            y,
+            z: WorldPlane::Underworld.save_floor(),
+            phase: 0,
+            aux1: 0,
+            aux3: 0,
+        }
+    }
+
+    #[test]
+    fn p13_01_difficult_step_that_fights_still_charges_its_terrain_and_turn() {
+        // `movement.md §8.1`: "Suppression does not remove the terrain's time
+        // charge" and "The ordinary consumed-action tail subsequently performs
+        // its own clock and upkeep work"; `active-objects.md §8`: "A generic
+        // terrain-combat call can therefore return". A hills step whose first
+        // extra call opens a fight still costs 4 + 2 minutes and a turn once
+        // the fight returns.
+        let dir = debug_game_dir();
+        fs::write(
+            dir.join(BRIT_CBT_FILE),
+            synthetic_combat_arena_record().repeat(BRIT_CBT_RECORDS),
+        )
+        .unwrap();
+        let mut grid = open_world_grid();
+        grid[world_cell_index(6, 5)] = 0x0a;
+        let mut state = world_state(grid, 5, 5);
+        state.active_objects.push(orc_at(7, 5));
+        let clock = state.clock;
+
+        let outcome = state
+            .step_world(Direction::East, 6, 5, WorldPlane::Underworld, Some(&dir))
+            .unwrap();
+
+        assert!(state.combat_active, "outcome {outcome:?}");
+        assert_eq!(state.turn, 0);
+        assert_eq!(state.clock, clock);
+        assert_eq!(
+            state.pending_difficult_terrain_step.map(|p| p.remaining_calls),
+            Some(1)
+        );
+
+        state.apply_combat_round_loop_exit(CombatRoundLoopExit::LeaveCombat);
+        // The orc is gone (say, slain), so the second extra call fights no one.
+        state.active_objects.truncate(1);
+        state
+            .resume_difficult_terrain_step_after_combat(&dir)
+            .unwrap();
+
+        assert!(!state.combat_active);
+        assert!(state.pending_difficult_terrain_step.is_none());
+        assert_eq!((state.player.x, state.player.y), (6, 5));
+        assert_eq!(state.turn, 1);
+        let mut expected = clock;
+        expected.advance_minutes(6);
+        assert_eq!(state.clock, expected);
+        // The call that fought reported a hostile interaction.
+        assert!(
+            !state
+                .message_entries()
+                .iter()
+                .any(|entry| entry.text.contains("Very slow!"))
+        );
+        let _ = fs::remove_dir_all(dir);
+    }
+}

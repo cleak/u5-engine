@@ -631,6 +631,12 @@ pub struct PlayState {
     /// walker. Lower entries survive a terrain-combat frame and resume when
     /// that frame returns to the world.
     pub pending_outdoor_reaction_slots: Vec<usize>,
+    /// `movement.md §8.1` / `active-objects.md §8` (u5-spec#305 Q4): the rest
+    /// of a difficult-terrain step whose extra object-update call opened a
+    /// terrain combat. The original's fight returns to that call, so its
+    /// remaining extra calls, the terrain charge, the ordinary turn and the
+    /// consumed-action tail still run once the combat frame returns.
+    pub pending_difficult_terrain_step: Option<PendingDifficultTerrainStep>,
     pub next_combat_actor_slot: usize,
     pub combat_terrain: [[u8; COMBAT_ARENA_SIDE]; COMBAT_ARENA_SIDE],
     pub combat_magic_effects: [[u8; COMBAT_ARENA_SIDE]; COMBAT_ARENA_SIDE],
@@ -1038,6 +1044,19 @@ pub struct PlayState {
     pub talk_branch_flags: HashMap<u8, u32>,
     pub conversation_signal_flags: [u8; TLK_GENERIC_SIGNAL_COUNT],
     pub inn_registry: Vec<InnGuestRecord>,
+}
+
+/// What a difficult-terrain step still owes after a terrain combat opened
+/// inside one of its extra object-update calls; see
+/// [`PlayState::pending_difficult_terrain_step`].
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct PendingDifficultTerrainStep {
+    pub plane: WorldPlane,
+    pub step: WorldDifficultTerrainStep,
+    /// Extra calls not yet started. The interrupted call's own proximity
+    /// pause is still owed ahead of them.
+    pub remaining_calls: u8,
+    pub transition: Option<WorldPlaneTransitionEntry>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]

@@ -767,7 +767,8 @@ pub use play_state_impl::{
     town_free_roaming_pen_tile_blocks,
 };
 pub use play_state_struct::{
-    MESSAGE_TRANSCRIPT_CAPACITY, MessageEntry, MessageWindowFlashHold, PlayState,
+    MESSAGE_TRANSCRIPT_CAPACITY, MessageEntry, MessageWindowFlashHold, PendingDifficultTerrainStep,
+    PlayState,
     SOUND_EFFECT_HISTORY_CAPACITY,
     SoundEffect, ViewOverlay, ViewOverlayKind, ViewOverlayMode, VisibilitySweep, WorldOverlayCache,
     WorldReturn,
@@ -1228,4 +1229,5 @@ mod tests {
     include!("tests_inline/input_helper_entry.rs");
     include!("tests_inline/ready_picker_highlight_pad.rs");
     include!("tests_inline/spec305.rs");
+    include!("tests_inline/playfix13_move13.rs");
 }
