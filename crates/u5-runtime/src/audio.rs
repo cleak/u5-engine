@@ -317,6 +317,16 @@ pub struct EnvelopeSegment {
 pub const SHADOWLORD_PRESENCE_NOTICE_ENVELOPE: EnvelopeSegment =
     EnvelopeSegment::new(1, 2000, 60_000, 1, 6600);
 
+/// `audio.md §8.6`, "Blackthorn throne approach envelope" (added 2026-10-26,
+/// issue #304 Q6): "After the guard-approach script, and before slot 8 is
+/// hidden and seated Blackthorn is revealed, run `(5, 100, 13000, 1, 2800)`.
+/// It blocks, and the view does not redraw while it plays." `blackthorn.md
+/// §3`, capture narration timeline, step 16. `audio.md §10.3` derives
+/// **559 ms** for its 13,000 iterations (measured 0.58 s at DOSBox 3000
+/// cycles).
+pub const BLACKTHORN_THRONE_APPROACH_ENVELOPE: EnvelopeSegment =
+    EnvelopeSegment::new(5, 100, 13_000, 1, 2800);
+
 impl EnvelopeSegment {
     pub const fn new(
         delta: i32,
@@ -2073,6 +2083,10 @@ pub enum SoundEffect {
     /// a hideout town and in Stonegate. See
     /// [`SHADOWLORD_PRESENCE_NOTICE_ENVELOPE`].
     ShadowlordPresenceNotice,
+    /// `blackthorn.md §3` capture narration timeline, step 16: the one
+    /// blocking envelope between the guard approach and the throne reveal.
+    /// See [`BLACKTHORN_THRONE_APPROACH_ENVELOPE`].
+    BlackthornThroneApproachEnvelope,
     /// `§8.4` shared major full-viewport flash. `bands` holds the 1,856
     /// gameplay-PRNG-drawn frequencies, already consumed from the gameplay
     /// stream by [`draw_major_flash_bands`].
@@ -2251,6 +2265,9 @@ impl SoundEffect {
             SoundEffect::LordBritishCampEnvelope(segment) => envelope_program(*segment),
             SoundEffect::ShadowlordPresenceNotice => {
                 envelope_program(SHADOWLORD_PRESENCE_NOTICE_ENVELOPE)
+            }
+            SoundEffect::BlackthornThroneApproachEnvelope => {
+                envelope_program(BLACKTHORN_THRONE_APPROACH_ENVELOPE)
             }
             SoundEffect::MajorFlash { bands } => major_flash_program(bands),
             SoundEffect::StonegateDescent => stonegate_descent_program(),

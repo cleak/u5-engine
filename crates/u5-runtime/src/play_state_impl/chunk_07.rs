@@ -5289,18 +5289,15 @@ impl PlayState {
     ) -> io::Result<Option<MoveOutcome>> {
         self.pending_town_arrest = None;
         self.blackthorn_audience_map = None;
-        // `blackthorn.md §3` setup step 1: "Print the capture narration: the
-        // party is overcome, blinded, and dragged away by guards." The section
-        // describes it without quoting it, and it precedes the `MISCMSG.DAT`
-        // cluster load of step 5, so the lines are resident rather than asset
-        // records - confirmed by their absence from that file.
-        //
-        // Measured 2026-09-09 (`qa/paired/bt-correct.tsv`, beat `after`): the
-        // original prints them after the arresting blow, two rows apart, where
-        // this engine went straight to the cutscene and printed nothing.
-        self.emit_message_line(BLACKTHORN_CAPTURE_NARRATION);
-        self.clear_non_player_active_objects();
-        self.mark_visibility_dirty();
+        self.blackthorn_capture = None;
+        // `blackthorn.md §3`, capture narration timeline, step 1 (issue #304
+        // Q6, `RETRACTIONS.md` R630): "One world tick repaints the view.
+        // Print `\nThou art subdued and blindfolded!`". Setup step 1 prints
+        // only this line; the rest of the narration follows the shrine
+        // selection, and an abandoned audience prints nothing more. The line
+        // ends mid-row, which the next line's first feed closes.
+        self.emit_message_line(crate::blackthorn::BLACKTHORN_CAPTURE_SUBDUED_LINE);
+        self.open_message_row();
 
         // `moons.md §3` (issue #190, `RETRACTIONS.md` R375): "The
         // Blackthorn audience cutscene repaints once, not twice. The
@@ -5330,9 +5327,9 @@ impl PlayState {
         // will demand a mantra for: scan the eight shrine ruin flags in
         // shrine order and take the first whose flag is *exactly* clear —
         // never ruined and never restored. If every flag is non-zero the
-        // whole audience is abandoned." The §3 withdrawal is explicit that
-        // this eight-slot scan selects a *shrine*, not a party member, and
-        // that there is no per-member Blackthorn jail flag.
+        // whole audience is abandoned, and the first narration line is the
+        // only one printed." Timeline step 2: "If no shrine qualifies, the
+        // narration ends here" - before step 3's clear of the actor table.
         let Some(shrine_index) = self.blackthorn_selected_shrine() else {
             // `moons.md §3` (R375): the routine's *second* repaint "paints
             // only on the routine's early-exit path". This is one of the
@@ -5354,41 +5351,222 @@ impl PlayState {
             // `moons.md §3` (R375): the routine's second repaint, on the
             // other early-exit path. See the shrine-scan exit above.
             self.refresh_cached_moon_glyphs_at_scene_entry();
+            self.clear_non_player_active_objects();
+            self.mark_visibility_dirty();
             self.push_diagnostic("Blackthorn audience found no eligible party member.".to_string());
             let outcome = self.apply_blackthorn_captive_cell_handoff(game_dir, "")?;
             return Ok(Some(outcome));
         }
 
+        // The map is read now so a missing asset fails at the arrest, but it
+        // goes on screen only at timeline step 8 (setup steps 3 to 6).
+        let map = load_miscmaps_cutscene_map(game_dir, BLACKTHORN_AUDIENCE_CUTSCENE_MAP_RECORD)?;
+        self.blackthorn_capture = Some(crate::blackthorn::BlackthornCaptureNarration {
+            map,
+            approach: None,
+        });
+        self.stage_blackthorn_capture_narration();
+
+        // The audience's first key read is setup step 8's greeting
+        // acknowledgement. Until the narration's last beat has printed the
+        // greeting, `cinematic_hold_owns_input` holds every key in the queue:
+        // "None of the narration's steps polls the keyboard ... Keys typed
+        // during the narration therefore wait in the keyboard queue in the
+        // order typed" (`blackthorn.md §3`, "Keys typed during the capture
+        // narration", issue #304 Q7). Under Buffer Off the acknowledgement
+        // uses one and the rest are discarded (`drain_buffered_hold_key`).
         let mut challenge =
             crate::blackthorn_session::BlackthornChallenge::for_shrine(shrine_index as u8);
-        self.blackthorn_audience_map =
-            load_miscmaps_cutscene_map(game_dir, BLACKTHORN_AUDIENCE_CUTSCENE_MAP_RECORD)?;
-        self.install_blackthorn_audience_actors();
-        let approach =
-            self.run_blackthorn_cutscene_beat(BlackthornCutsceneBeat::AudienceThroneApproach);
-        // `blackthorn.md §3` step 8 (u5-spec#298 Q8): after the approach's
-        // closing quiet 8-tick pause, the greeting to roster record 0 - "the
-        // Avatar's record, never a member chosen any other way" - ending on
-        // one trailing space and no line feed, then "**Wait for an
-        // acknowledgement key.**" The audience "takes **two** blocking key
-        // presses before the first demand is ever asked, one after the
-        // greeting page and one after the preamble record".
-        let greeting =
-            crate::blackthorn::blackthorn_greeting_line(&self.blackthorn_roster_record_zero_name());
-        self.emit_message_line(greeting);
-        // The greeting ends mid-row (its trailing space, no feed).
-        self.open_message_row();
         challenge.await_greeting_acknowledgement();
         self.active_blackthorn = Some(challenge);
-        // `blackthorn.md §4.1`: "Do not append an answer, prompt ordinal,
-        // roster slot number, cutscene timing value or other diagnostic
-        // information to the original text", so the tick counts go to the
-        // diagnostic channel (`cleak/u5-engine#21`).
-        self.push_diagnostic(format!(
-            "Blackthorn audience opened: the approach advanced {} world ticks.",
-            approach.world_ticks,
-        ));
         Ok(Some(MoveOutcome::Used))
+    }
+
+    /// Stage `blackthorn.md §3`'s capture narration timeline, steps 3 to 19
+    /// (issue #304 Q6): every hold, sting, line and placement in order, with
+    /// the greeting of setup step 8 last.
+    fn stage_blackthorn_capture_narration(&mut self) {
+        use crate::blackthorn::{BlackthornCaptureCue, BlackthornCaptureHold};
+        use crate::narration::NarrationCue;
+        // Step 7: "With sound on, eighteen repetitions ...; with sound off,
+        // three." `music_enabled` is the game's sound setting (Ctrl-S). The
+        // engine has no cinematic-animation setting; it is always on.
+        let timeline = crate::blackthorn::blackthorn_capture_timeline(self.music_enabled, true);
+        for beat in timeline {
+            let text = beat.text.unwrap_or_default();
+            let secs = match beat.hold {
+                BlackthornCaptureHold::Ticks(ticks) => crate::narration::bios_ticks_secs(ticks),
+                // `audio.md §8.6`: "It blocks, and the view does not redraw
+                // while it plays." The hold is the program's own length.
+                BlackthornCaptureHold::ThroneEnvelope => SoundEffect::BlackthornThroneApproachEnvelope
+                    .program(&mut crate::audio::RumbleJitter::default())
+                    .duration(true)
+                    .as_secs_f64(),
+            };
+            match beat.cue {
+                Some(cue) => self.staged_narration.push_secs_with_cue(
+                    secs,
+                    NarrationCue::BlackthornCapture(cue),
+                    text,
+                ),
+                None => self.staged_narration.push_secs(secs, text),
+            }
+        }
+        // Steps 18 and 19, setup step 8 (u5-spec#298 Q8): after the quiet
+        // 8-tick pause, the greeting to roster record 0 - "the Avatar's
+        // record, never a member chosen any other way" - ending on one
+        // trailing space and no line feed, then "**Wait for an
+        // acknowledgement key.**"
+        let greeting =
+            crate::blackthorn::blackthorn_greeting_line(&self.blackthorn_roster_record_zero_name());
+        self.staged_narration.push_secs_with_cue(
+            crate::narration::bios_ticks_secs(crate::blackthorn::BLACKTHORN_GREETING_PAUSE_TICKS),
+            NarrationCue::BlackthornCapture(BlackthornCaptureCue::Greeting),
+            greeting,
+        );
+    }
+
+    /// Run one staged narration cue as its beat is released, before the
+    /// beat's text prints.
+    pub(crate) fn release_narration_cue(&mut self, cue: crate::narration::NarrationCue) {
+        match cue {
+            crate::narration::NarrationCue::BlackthornCapture(cue) => {
+                self.release_blackthorn_capture_cue(cue);
+            }
+        }
+    }
+
+    /// `blackthorn.md §3`, capture narration timeline (issue #304 Q6).
+    fn release_blackthorn_capture_cue(&mut self, cue: crate::blackthorn::BlackthornCaptureCue) {
+        use crate::blackthorn::BlackthornCaptureCue;
+        match cue {
+            // Step 4: "Fill the map viewport black (the blindfold)".
+            BlackthornCaptureCue::Blindfold => {
+                self.cutscene_black_viewport = true;
+            }
+            // Steps 5, 7 and 13: the shared two-part sting (`audio.md §8.6`,
+            // the timer-paced and footstep rows).
+            BlackthornCaptureCue::Sting => {
+                self.emit_sound_effect(SoundEffect::BlackthornMovementStinger);
+            }
+            // Step 8: "Clear the actor table, load the map and the messages,
+            // and place the party (setup steps 3 to 6)." Step 9: the quiet
+            // 16-tick pause's "first world tick paints the cutscene map with
+            // the manacled prisoners", which ends the blindfold fill.
+            BlackthornCaptureCue::RevealPrisoners => {
+                self.clear_non_player_active_objects();
+                // Without the asset, the same blank grid the script VM falls
+                // back to, so the cutscene state is still the audience's.
+                self.blackthorn_audience_map = Some(
+                    self.blackthorn_capture
+                        .as_mut()
+                        .and_then(|capture| capture.map.take())
+                        .unwrap_or_else(|| MiscmapsCutsceneMap {
+                            record_index: BLACKTHORN_AUDIENCE_CUTSCENE_MAP_RECORD,
+                            tiles: vec![0; MISCMAPS_CUTSCENE_ROWS * MISCMAPS_CUTSCENE_VISIBLE_COLUMNS],
+                        }),
+                );
+                self.install_blackthorn_audience_party();
+                self.cutscene_black_viewport = false;
+                self.mark_visibility_dirty();
+            }
+            // Step 14: "Place the two guards at (4,10) and (6,10). They
+            // first show at the next redraw."
+            BlackthornCaptureCue::PlaceGuards => {
+                self.install_blackthorn_audience_guards();
+            }
+            // Step 15: the guard-approach script. It is run whole on its
+            // first sting, and each sting then shows the actors as the script
+            // left them at that sting.
+            BlackthornCaptureCue::GuardApproachSting(index) => {
+                if index == 0 {
+                    let mut vm = self.blackthorn_cutscene_vm_from_audience_state();
+                    vm.run(blackthorn_cutscene_beat_commands(
+                        BlackthornCutsceneBeat::AudienceThroneApproach,
+                    ));
+                    self.push_diagnostic(format!(
+                        "Blackthorn audience opened: the approach advanced {} world ticks.",
+                        vm.world_ticks,
+                    ));
+                    if let Some(capture) = self.blackthorn_capture.as_mut() {
+                        capture.approach = Some(vm);
+                    }
+                }
+                let frame = self
+                    .blackthorn_capture
+                    .as_ref()
+                    .and_then(|capture| capture.approach.as_ref())
+                    .and_then(|vm| vm.actors_at_each_sting.get(usize::from(index)).copied());
+                if let Some(actors) = frame {
+                    self.apply_blackthorn_guard_frame(&actors);
+                }
+                self.emit_sound_effect(SoundEffect::BlackthornMovementStinger);
+            }
+            // Step 16: one blocking software envelope; the hold that follows
+            // this beat is its length.
+            BlackthornCaptureCue::ThroneEnvelope => {
+                if let Some(vm) = self
+                    .blackthorn_capture
+                    .as_mut()
+                    .and_then(|capture| capture.approach.take())
+                {
+                    self.apply_blackthorn_cutscene_vm_to_audience_state(&vm);
+                }
+                self.emit_sound_effect(SoundEffect::BlackthornThroneApproachEnvelope);
+            }
+            // Step 17: "Hide slot 8 at (5,5) and reveal seated Blackthorn
+            // there with the 256-pixel transition ... Then assign actor byte
+            // `0x78`." The engine shows the seated figure when the
+            // transition's hold ends.
+            BlackthornCaptureCue::ThroneRevealed => {
+                let mut vm = self.blackthorn_cutscene_vm_from_audience_state();
+                vm.run(blackthorn_cutscene_beat_commands(
+                    BlackthornCutsceneBeat::AudienceThroneReveal,
+                ));
+                self.apply_blackthorn_cutscene_vm_to_audience_state(&vm);
+            }
+            // Step 19: see [`Self::finish_narration_cue_after_text`].
+            BlackthornCaptureCue::Greeting => {}
+        }
+    }
+
+    /// The part of a cue that follows its beat's text.
+    pub(crate) fn finish_narration_cue_after_text(&mut self, cue: crate::narration::NarrationCue) {
+        match cue {
+            // Setup step 8: the greeting ends on "one trailing space and no
+            // line feed", so its row stays open for the acknowledgement's
+            // print; stated here rather than read off the text. The
+            // narration is over.
+            crate::narration::NarrationCue::BlackthornCapture(
+                crate::blackthorn::BlackthornCaptureCue::Greeting,
+            ) => {
+                self.open_message_row();
+                self.blackthorn_capture = None;
+            }
+            crate::narration::NarrationCue::BlackthornCapture(_) => {}
+        }
+    }
+
+    /// Show the two guards where the guard-approach script had them at one
+    /// of its stings.
+    fn apply_blackthorn_guard_frame(
+        &mut self,
+        actors: &[Option<BlackthornCutsceneActorState>; crate::blackthorn::BLACKTHORN_CUTSCENE_ACTOR_SLOT_COUNT],
+    ) {
+        for guard in [BlackthornCutsceneActor::LeftGuard, BlackthornCutsceneActor::RightGuard] {
+            let slot = guard.slot_index() as usize;
+            let (Some(state), Some(object)) = (actors[slot], self.active_objects.get_mut(slot)) else {
+                continue;
+            };
+            object.x = state.x;
+            object.y = state.y;
+        }
+        self.mark_visibility_dirty();
+    }
+
+    /// Whether `blackthorn.md §3`'s capture narration is still staged.
+    pub fn blackthorn_capture_narration_active(&self) -> bool {
+        self.blackthorn_capture.is_some()
     }
 
     /// `blackthorn.md §4.1`: the audience preamble is record
@@ -5511,7 +5689,19 @@ impl PlayState {
         })
     }
 
+    /// Setup step 6 whole: the party, then the two guards. The narration
+    /// splits these (`blackthorn.md §3`, capture narration timeline, steps 8
+    /// and 14); this is for callers that set the cutscene up directly.
     pub fn install_blackthorn_audience_actors(&mut self) {
+        self.install_blackthorn_audience_party();
+        self.install_blackthorn_audience_guards();
+    }
+
+    /// Setup step 6's party placement. The seated-Blackthorn slot (slot 8)
+    /// "is not set up in this step: it still holds only the zeroed record
+    /// left by the clear of step 3" (`blackthorn.md §3`, issue #304 Q6,
+    /// `RETRACTIONS.md` R631).
+    pub fn install_blackthorn_audience_party(&mut self) {
         if self.active_objects.len() < OOL_SLOTS {
             self.active_objects.resize(OOL_SLOTS, ActiveObject::empty());
         }
@@ -5544,6 +5734,12 @@ impl PlayState {
             };
         }
         for placement in BLACKTHORN_AUDIENCE_ACTOR_PLACEMENTS {
+            if !matches!(
+                placement.actor,
+                BlackthornCutsceneActor::Avatar | BlackthornCutsceneActor::SecondPartyMember
+            ) {
+                continue;
+            }
             if placement.actor == BlackthornCutsceneActor::SecondPartyMember
                 && (nondead <= BLACKTHORN_FAILURE_VICTIM_SLOT
                     || self.party.len() <= BLACKTHORN_FAILURE_VICTIM_SLOT)
@@ -5551,23 +5747,45 @@ impl PlayState {
                 continue;
             }
             let slot = placement.actor.slot_index() as usize;
-            let actor_byte = match placement.actor {
-                BlackthornCutsceneActor::Avatar | BlackthornCutsceneActor::SecondPartyMember => {
-                    class_tile(&self.party, slot).unwrap_or(placement.tile)
-                }
-                _ => placement.tile,
-            };
-            self.active_objects[slot] = ActiveObject {
-                type_byte: actor_byte,
-                tile: actor_byte,
-                x: placement.x,
-                y: placement.y,
-                z: 0,
-                phase: STEADY_PHASE,
-                aux1: placement.actor.slot_index(),
-                aux3: BLACKTHORN_CUTSCENE_AUX3_ROLE_MARKER,
-            };
+            let actor_byte = class_tile(&self.party, slot).unwrap_or(placement.tile);
+            self.place_blackthorn_audience_actor(placement, actor_byte);
         }
+        let seated = BlackthornCutsceneActor::SeatedBlackthorn.slot_index() as usize;
+        self.active_objects[seated] = ActiveObject::empty();
+    }
+
+    /// Timeline step 14: "Place the two guards at (4,10) and (6,10)."
+    pub fn install_blackthorn_audience_guards(&mut self) {
+        if self.active_objects.len() < OOL_SLOTS {
+            self.active_objects.resize(OOL_SLOTS, ActiveObject::empty());
+        }
+        for placement in BLACKTHORN_AUDIENCE_ACTOR_PLACEMENTS {
+            if matches!(
+                placement.actor,
+                BlackthornCutsceneActor::LeftGuard | BlackthornCutsceneActor::RightGuard
+            ) {
+                self.place_blackthorn_audience_actor(placement, placement.tile);
+            }
+        }
+        self.mark_visibility_dirty();
+    }
+
+    fn place_blackthorn_audience_actor(
+        &mut self,
+        placement: crate::blackthorn::BlackthornCutsceneActorPlacement,
+        actor_byte: u8,
+    ) {
+        let slot = placement.actor.slot_index() as usize;
+        self.active_objects[slot] = ActiveObject {
+            type_byte: actor_byte,
+            tile: actor_byte,
+            x: placement.x,
+            y: placement.y,
+            z: 0,
+            phase: STEADY_PHASE,
+            aux1: placement.actor.slot_index(),
+            aux3: BLACKTHORN_CUTSCENE_AUX3_ROLE_MARKER,
+        };
     }
 
     pub fn blackthorn_cutscene_vm_from_audience_state(&self) -> BlackthornCutsceneVm {
@@ -5671,6 +5889,14 @@ impl PlayState {
         typed: &str,
         game_dir: &Path,
     ) -> io::Result<MoveOutcome> {
+        // `blackthorn.md §3`: the audience's first key read is the greeting
+        // acknowledgement, after the whole capture narration (issue #304
+        // Q6, Q7). A key that reaches here while the narration is still
+        // staged - a shell with no pump - finishes it first, so the greeting
+        // is on screen before its acknowledgement runs.
+        if self.blackthorn_capture_narration_active() {
+            self.flush_staged_narration();
+        }
         // `blackthorn.md §5` step 5: "Wait for player acknowledgement before
         // returning to the caller branch." The outcome is on screen and the
         // durable consequences have run; this key is what returns the party
@@ -6658,6 +6884,7 @@ impl PlayState {
         self.pending_town_arrest = None;
         self.active_blackthorn = None;
         self.blackthorn_audience_map = None;
+        self.blackthorn_capture = None;
         // `blackthorn.md §8`: "Carried-key count zeroed by the audience
         // cleanup | Durable inventory effect of the capture". The byte an
         // earlier revision of that table called a Blackthorn conversation

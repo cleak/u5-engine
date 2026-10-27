@@ -2510,6 +2510,9 @@
         // `blackthorn.md §3`: the greeting page and the preamble record each
         // take a blocking key before the first demand is asked.
         assert!(state.active_blackthorn.as_ref().unwrap().awaiting_acknowledgement());
+        // The capture narration reads no key (u5-spec#304 Q7); a shell with
+        // no pump runs it through before the acknowledgements.
+        state.flush_staged_narration();
         for _ in 0..2 {
             handle_play_key_input(&mut state, ' ', "", &dir).unwrap();
         }
@@ -2716,6 +2719,10 @@
             state.begin_blackthorn_audience_capture(&dir).unwrap(),
             Some(MoveOutcome::Used)
         );
+        // `blackthorn.md §3` timeline step 8 (u5-spec#304 Q6): the map goes
+        // on screen after the dragged-away stretch.
+        assert!(state.blackthorn_audience_map.is_none());
+        state.flush_staged_narration();
 
         let map = state
             .blackthorn_audience_map

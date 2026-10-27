@@ -132,6 +132,8 @@ fn spec299_q11_third_prisoner_survives_the_exit_beat() {
     state.party.push(audit_g5_companion(2));
     state.repaint_stats_panel();
     state.begin_blackthorn_audience_capture(&dir).unwrap();
+    // Party placement is timeline step 8 (u5-spec#304 Q6).
+    state.flush_staged_narration();
     assert_eq!((state.active_objects[2].x, state.active_objects[2].y), (0, 1));
     while state.active_blackthorn.as_ref().is_some_and(|c| c.current_prompt().is_none()) {
         state.submit_blackthorn_audience_answer("", &dir).unwrap();

@@ -3806,6 +3806,10 @@ fn apply_route_smoke_case_setup(
         }
         "blackthorn-audience-correct" | "blackthorn-audience-wrong" => {
             state.begin_blackthorn_audience_capture(game_dir)?;
+            // `blackthorn.md §3`'s capture narration is staged and reads no
+            // key (u5-spec#304 Q6, Q7); this shell has no pump, so it runs
+            // through to the greeting before the script's first key.
+            state.flush_staged_narration();
         }
         "blackthorn-rescue-refuge" => {
             state.apply_blackthorn_rescue_refuge(game_dir)?;

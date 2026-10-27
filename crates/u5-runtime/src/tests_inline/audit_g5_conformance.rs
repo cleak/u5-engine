@@ -874,6 +874,8 @@ fn q8_audience_with_avatar_gender(gender: u8) -> (PlayState, std::path::PathBuf)
     roster[0].gender = gender;
     state.party_roster = roster;
     state.begin_blackthorn_audience_capture(&dir).unwrap();
+    // The greeting is the capture narration's last beat (u5-spec#304 Q6).
+    state.flush_staged_narration();
     (state, dir)
 }
 

@@ -65,6 +65,18 @@ pub struct NarrationBeat {
     /// The beat's release repaints the stats panel from the next body queued
     /// in `PlayState::staged_stats_panels`.
     pub panel_repaint: bool,
+    /// A presentation step the beat's release runs before its text prints:
+    /// a sound, a viewport change or an actor placement that belongs at this
+    /// point of a timeline rather than at the moment the timeline is staged.
+    pub cue: Option<NarrationCue>,
+}
+
+/// What a [`NarrationBeat::cue`] does on release. Owned by the presentation
+/// that staged it; see `PlayState::release_narration_cue`.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum NarrationCue {
+    /// One step of `blackthorn.md §3`'s capture narration timeline.
+    BlackthornCapture(crate::blackthorn::BlackthornCaptureCue),
 }
 
 /// The queue plus how far into the current beat's wait we are.
@@ -100,6 +112,7 @@ impl StagedNarration {
             chained: false,
             world_steps: 0,
             panel_repaint: false,
+            cue: None,
         });
     }
 
@@ -113,6 +126,7 @@ impl StagedNarration {
             chained: false,
             world_steps: 0,
             panel_repaint: true,
+            cue: None,
         });
     }
 
@@ -126,6 +140,7 @@ impl StagedNarration {
             chained: false,
             world_steps: 0,
             panel_repaint: false,
+            cue: None,
         });
     }
 
@@ -167,6 +182,7 @@ impl StagedNarration {
             chained: true,
             world_steps: 0,
             panel_repaint: false,
+            cue: None,
         });
     }
 
@@ -185,6 +201,7 @@ impl StagedNarration {
             chained: false,
             world_steps,
             panel_repaint: false,
+            cue: None,
         });
     }
 
@@ -204,6 +221,32 @@ impl StagedNarration {
             chained: false,
             world_steps,
             panel_repaint: false,
+            cue: None,
+        });
+    }
+
+    /// Push a beat of a published BIOS-tick hold whose release runs `cue`
+    /// before printing `text` (which may be empty: a pure cue).
+    pub fn push_ticks_with_cue(
+        &mut self,
+        delay_bios_ticks: u16,
+        cue: NarrationCue,
+        text: impl Into<String>,
+    ) {
+        self.push_secs_with_cue(bios_ticks_secs(delay_bios_ticks), cue, text);
+    }
+
+    /// [`Self::push_ticks_with_cue`] for a hold in seconds - a blocking
+    /// sound whose length is the program's own, not a tick count.
+    pub fn push_secs_with_cue(&mut self, delay_secs: f64, cue: NarrationCue, text: impl Into<String>) {
+        self.beats.push_back(NarrationBeat {
+            delay_secs,
+            text: text.into(),
+            continues_open_row: false,
+            chained: false,
+            world_steps: 0,
+            panel_repaint: false,
+            cue: Some(cue),
         });
     }
 

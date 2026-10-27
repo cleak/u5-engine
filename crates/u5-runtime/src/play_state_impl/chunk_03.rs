@@ -680,6 +680,9 @@ impl PlayState {
             // `karma.md §7.2`: the viewport inversion is never restored - the
             // counted steps that follow the swell simply repaint over it.
             self.presentation_viewport_inverted = false;
+            if let Some(cue) = beat.cue {
+                self.release_narration_cue(cue);
+            }
             // An empty beat is a pure hold - a wait with nothing to print,
             // such as `karma.md §12`'s closing "ten world ticks". Emitting it
             // would spend a blank row the original does not.
@@ -687,7 +690,11 @@ impl PlayState {
                 continue;
             }
             let text = beat.text.clone();
+            let cue = beat.cue;
             self.emit_staged_beat(beat);
+            if let Some(cue) = cue {
+                self.finish_narration_cue_after_text(cue);
+            }
             self.release_blackthorn_rescue_beat_audio(&text);
             self.release_stonegate_notice_beat_audio(&text);
         }
@@ -733,8 +740,18 @@ impl PlayState {
             self.release_blackthorn_execution_hold();
             self.run_presentation_world_steps(beat.world_steps);
             self.presentation_viewport_inverted = false;
+            if let Some(cue) = beat.cue {
+                self.release_narration_cue(cue);
+            }
+            if beat.cue.is_some() && beat.text.is_empty() {
+                continue;
+            }
             let text = beat.text.clone();
+            let cue = beat.cue;
             self.emit_staged_beat(beat);
+            if let Some(cue) = cue {
+                self.finish_narration_cue_after_text(cue);
+            }
             self.release_blackthorn_rescue_beat_audio(&text);
             self.release_stonegate_notice_beat_audio(&text);
         }

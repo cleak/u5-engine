@@ -554,7 +554,11 @@ pub enum BlackthornCutsceneBeat {
     /// "per-question intermission", a name and placement R490 withdraws).
     AudienceExit,
     FailedChallengeReaction,
+    /// The guard-approach script of `blackthorn.md §6.3`.
     AudienceThroneApproach,
+    /// The caller's throne reveal that follows the approach envelope
+    /// (`blackthorn.md §3`, capture narration timeline, step 17).
+    AudienceThroneReveal,
     GuardReleaseRoute,
     ConditionalThroneCleanup,
 }
@@ -813,7 +817,14 @@ pub const BLACKTHORN_CUTSCENE_FAILED_CHALLENGE_REACTION: [BlackthornCutsceneComm
     BlackthornCutsceneCommand::End,
 ];
 
-pub const BLACKTHORN_CUTSCENE_AUDIENCE_THRONE_APPROACH: [BlackthornCutsceneCommand; 10] = [
+/// `blackthorn.md §6.3`, the "Guard approach" row: "One stinger-pause
+/// repetition; both guards move north together one animated step; then slot 6
+/// moves west while slot 7 moves east for three animated paired steps, opening
+/// the centre; quiet pause 8." That is the script; what follows it - the
+/// envelope, the throne reveal and the second quiet pause 8 - is the caller's
+/// (`blackthorn.md §3`, capture narration timeline, steps 16 to 18; issue
+/// #304 Q6), and is staged by `PlayState::begin_blackthorn_audience_capture`.
+pub const BLACKTHORN_CUTSCENE_AUDIENCE_THRONE_APPROACH: [BlackthornCutsceneCommand; 8] = [
     BlackthornCutsceneCommand::StingerPause,
     BlackthornCutsceneCommand::SetPairedMovement {
         actor: BlackthornCutsceneActor::RightGuard,
@@ -833,6 +844,14 @@ pub const BLACKTHORN_CUTSCENE_AUDIENCE_THRONE_APPROACH: [BlackthornCutsceneComma
         direction: crate::Direction::West,
     },
     BlackthornCutsceneCommand::QuietRedrawPause(8),
+    BlackthornCutsceneCommand::End,
+];
+
+/// `blackthorn.md §3`, capture narration timeline, step 17: "Hide slot 8 at
+/// (5,5) and reveal seated Blackthorn there with the 256-pixel transition.
+/// ... Then assign actor byte `0x78`." A caller action, run after the throne
+/// approach envelope (§6.3 "Guard approach" row).
+pub const BLACKTHORN_CUTSCENE_AUDIENCE_THRONE_REVEAL: [BlackthornCutsceneCommand; 2] = [
     BlackthornCutsceneCommand::RevealActor {
         actor: BlackthornCutsceneActor::SeatedBlackthorn,
         x: 5,
@@ -840,7 +859,6 @@ pub const BLACKTHORN_CUTSCENE_AUDIENCE_THRONE_APPROACH: [BlackthornCutsceneComma
         atlas_index: BLACKTHORN_SEATED_ATLAS_INDEX,
         actor_byte: BLACKTHORN_SEATED_ACTOR_BYTE,
     },
-    BlackthornCutsceneCommand::QuietRedrawPause(8),
     BlackthornCutsceneCommand::End,
 ];
 
@@ -891,6 +909,7 @@ pub const fn blackthorn_cutscene_beat_commands(
         BlackthornCutsceneBeat::AudienceThroneApproach => {
             &BLACKTHORN_CUTSCENE_AUDIENCE_THRONE_APPROACH
         }
+        BlackthornCutsceneBeat::AudienceThroneReveal => &BLACKTHORN_CUTSCENE_AUDIENCE_THRONE_REVEAL,
         BlackthornCutsceneBeat::GuardReleaseRoute => &BLACKTHORN_CUTSCENE_GUARD_RELEASE_ROUTE,
         BlackthornCutsceneBeat::ConditionalThroneCleanup => {
             &BLACKTHORN_CUTSCENE_CONDITIONAL_THRONE_CLEANUP
@@ -910,6 +929,12 @@ pub struct BlackthornCutsceneVm {
     pub world_ticks: u16,
     pub bios_ticks: u16,
     pub stinger_count: u16,
+    /// The actor slots as each sting played, one entry per sting in order.
+    /// A movement repetition moves its actors and then stings, so entry `n`
+    /// is what the redraw after sting `n` shows. Used to stage a script's
+    /// frames on the wall clock after running it in one go.
+    pub actors_at_each_sting:
+        Vec<[Option<BlackthornCutsceneActorState>; BLACKTHORN_CUTSCENE_ACTOR_SLOT_COUNT]>,
     pub ended: bool,
     repeat_count: u8,
     paired_movement: Option<(BlackthornCutsceneActor, crate::Direction)>,
@@ -932,6 +957,7 @@ impl BlackthornCutsceneVm {
             world_ticks: 0,
             bios_ticks: 0,
             stinger_count: 0,
+            actors_at_each_sting: Vec::new(),
             ended: false,
             repeat_count: 1,
             paired_movement: None,
@@ -1099,6 +1125,7 @@ impl BlackthornCutsceneVm {
         let repeat = self.repeat_count;
         for _ in 0..repeat {
             self.stinger_count = self.stinger_count.saturating_add(1);
+            self.actors_at_each_sting.push(self.actors);
             self.presentation_events
                 .push(BlackthornCutscenePresentationEvent::Stinger);
             self.quiet_redraw_pause(2);
@@ -1202,20 +1229,239 @@ pub const BLACKTHORN_CAPTIVE_CELL_Y: u8 = 7;
 /// `0xFF`, which is this value.
 pub const BLACKTHORN_CAPTIVE_CELL_FLOOR: i8 = -1;
 
-/// `blackthorn.md §3` setup step 1's capture narration, measured 2026-09-09
-/// (`qa/paired/bt-correct.tsv`, beat `after`). Two sentences, two rows apart:
+/// `blackthorn.md §3`, capture narration timeline (issue #304 Q6). "The
+/// line-feed prefixes above are part of each line: one before the first line,
+/// and two before each later one." "No other text is printed between the
+/// arrest and the greeting." The four lines are resident literals - setup step
+/// 1 runs before step 5 loads the `MISCMSG.DAT` cluster.
 ///
-/// ```text
-/// Thou art subdued and blindfolded!
+/// Step 1 (setup step 1, `RETRACTIONS.md` R630): only this line prints before
+/// the shrine selection, and it is the only line an abandoned audience prints.
+pub const BLACKTHORN_CAPTURE_SUBDUED_LINE: &str = "\nThou art subdued and blindfolded!";
+/// Timeline step 6, after the blindfold and the first five stings.
+pub const BLACKTHORN_CAPTURE_DRAGGED_LINE: &str = "\n\nStrong guards drag thee away!";
+/// Timeline step 10, after the quiet 16-tick pause that paints the prisoners.
+pub const BLACKTHORN_CAPTURE_CHAINED_LINE: &str = "\n\nThou hast been chained and manacled!";
+/// Timeline step 12, after the quiet 50-tick pause.
+pub const BLACKTHORN_CAPTURE_FOOTSTEPS_LINE: &str = "\n\nFootsteps!";
+
+/// Timeline step 3: the quiet 2-tick pause before the blindfold fill.
+pub const BLACKTHORN_CAPTURE_BLINDFOLD_PAUSE_TICKS: u16 = 2;
+/// Timeline steps 5 and 7: "A *5-tick timer wait* is a counted hardware-tick
+/// wait of five BIOS timer ticks. The slow-CPU gate skips only a request of
+/// exactly one tick, so this wait is never skipped. The cinematic-animation
+/// setting does not gate it either."
+pub const BLACKTHORN_CAPTURE_TIMER_WAIT_TICKS: u16 = 5;
+/// Timeline step 5: "Five repetitions of {5-tick timer wait, sting}".
+pub const BLACKTHORN_CAPTURE_STINGS_BEFORE_DRAGGED_LINE: u16 = 5;
+/// Timeline step 7: "With sound on, eighteen repetitions of {5-tick timer
+/// wait, sting}".
+pub const BLACKTHORN_CAPTURE_STINGS_AFTER_DRAGGED_LINE_SOUND_ON: u16 = 18;
+/// Timeline step 7: "with sound off, three" (static reading only).
+pub const BLACKTHORN_CAPTURE_STINGS_AFTER_DRAGGED_LINE_SOUND_OFF: u16 = 3;
+/// Timeline step 9: "Quiet 16-tick pause. Its first world tick paints the
+/// cutscene map with the manacled prisoners".
+pub const BLACKTHORN_CAPTURE_PRISONERS_PAUSE_TICKS: u16 = 16;
+/// Timeline step 11: "Quiet 50-tick pause (2.79 s)."
+pub const BLACKTHORN_CAPTURE_CHAINED_PAUSE_TICKS: u16 = 50;
+/// Timeline step 13: "eight repetitions of {sting, quiet 2-tick pause}".
+pub const BLACKTHORN_CAPTURE_FOOTSTEP_STINGS: u16 = 8;
+/// The quiet pause after each footstep sting and each guard-approach sting.
+pub const BLACKTHORN_CAPTURE_STING_PAUSE_TICKS: u16 = 2;
+/// Timeline step 15: the guard-approach script "plays five stings, each with
+/// a quiet 2-tick pause (0.55 s together), and ends with its quiet 8-tick
+/// pause".
+pub const BLACKTHORN_GUARD_APPROACH_STINGS: u16 = 5;
+pub const BLACKTHORN_GUARD_APPROACH_CLOSING_PAUSE_TICKS: u16 = 8;
+/// Timeline step 17: the 256-pixel throne reveal "is CPU-bound and measured
+/// about 0.99 s". Eighteen ticks is 0.989 s. "The reveal and envelope
+/// durations depend on the CPU and on calibration, and only the 3000-cycle
+/// class was measured."
+pub const BLACKTHORN_THRONE_REVEAL_HOLD_TICKS: u16 = 18;
+/// Timeline step 18: "Quiet 8-tick pause (0.41 s)." Setup step 8: "After the
+/// quiet 8-tick pause that follows the throne reveal, print" the greeting.
+pub const BLACKTHORN_GREETING_PAUSE_TICKS: u16 = 8;
+
+/// One presentation step of the capture narration that runs when its staged
+/// hold ends (`blackthorn.md §3`, capture narration timeline).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum BlackthornCaptureCue {
+    /// Step 4: "Fill the map viewport black (the blindfold)".
+    Blindfold,
+    /// One shared two-part sting (steps 5, 7 and 13; `audio.md §8.6`, the
+    /// timer-paced and footstep rows).
+    Sting,
+    /// Steps 8 and 9: clear the actor table, load the map, place the party;
+    /// the first world tick of the quiet 16-tick pause then "paints the
+    /// cutscene map with the manacled prisoners".
+    RevealPrisoners,
+    /// Step 14: "Place the two guards at (4,10) and (6,10)."
+    PlaceGuards,
+    /// Step 15: sting `n` of the guard-approach script, with the actors as
+    /// the script left them at that sting.
+    GuardApproachSting(u8),
+    /// Step 16: the blocking throne-approach envelope.
+    ThroneEnvelope,
+    /// Step 17's end: slot 8 revealed as seated Blackthorn, actor byte
+    /// `0x78` assigned.
+    ThroneRevealed,
+    /// Step 19: the greeting has printed; it ends on its trailing space, so
+    /// its row stays open for the acknowledgement.
+    Greeting,
+}
+
+/// The capture narration's pending state while its beats are staged.
 ///
-/// Strong guards drag thee away!
-/// ```
+/// Setup steps 3 to 6 run inside the timeline (step 8), not when the arrest
+/// starts, so the map loaded up front waits here until that beat; and the
+/// guard-approach script, run in one go when its first sting is due, keeps
+/// its per-sting frames here for the stings that follow.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct BlackthornCaptureNarration {
+    /// The audience map, loaded when the narration was staged.
+    pub map: Option<crate::MiscmapsCutsceneMap>,
+    /// The guard-approach script's run, once its first sting has come due.
+    pub approach: Option<BlackthornCutsceneVm>,
+}
+
+/// How long a capture narration beat holds before its cue and text.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum BlackthornCaptureHold {
+    /// A count of BIOS ticks (quiet pauses and timer waits alike).
+    Ticks(u16),
+    /// The throne-approach envelope's own length: "It blocks, and the view
+    /// does not redraw while it plays."
+    ThroneEnvelope,
+}
+
+/// One staged beat of the capture narration: hold, then cue, then text.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct BlackthornCaptureBeat {
+    pub hold: BlackthornCaptureHold,
+    pub cue: Option<BlackthornCaptureCue>,
+    pub text: Option<&'static str>,
+}
+
+/// `blackthorn.md §3`, "Capture narration timeline", steps 3 to 18 - every
+/// beat after the first line and the shrine selection, up to (not including)
+/// the greeting text, which needs the roster name.
 ///
-/// §3 describes this step without quoting it, and it runs before step 5 loads
-/// the `MISCMSG.DAT` cluster, so these are resident literals - they are not in
-/// that file.
-pub const BLACKTHORN_CAPTURE_NARRATION: &str =
-    "\n\nThou art subdued and blindfolded!\n\n\nStrong guards drag thee away!";
+/// `sound_on` selects step 7's count (eighteen or three). With
+/// `cinematic_animation` off, "every quiet pause does nothing, including its
+/// world ticks ... The timer waits and stings still run."
+pub fn blackthorn_capture_timeline(
+    sound_on: bool,
+    cinematic_animation: bool,
+) -> Vec<BlackthornCaptureBeat> {
+    let quiet = |ticks: u16| if cinematic_animation { ticks } else { 0 };
+    let beat = |ticks: u16, cue, text| BlackthornCaptureBeat {
+        hold: BlackthornCaptureHold::Ticks(ticks),
+        cue,
+        text,
+    };
+    let mut beats = Vec::new();
+    // Steps 3 and 4.
+    beats.push(beat(
+        quiet(BLACKTHORN_CAPTURE_BLINDFOLD_PAUSE_TICKS),
+        Some(BlackthornCaptureCue::Blindfold),
+        None,
+    ));
+    // Step 5.
+    for _ in 0..BLACKTHORN_CAPTURE_STINGS_BEFORE_DRAGGED_LINE {
+        beats.push(beat(
+            BLACKTHORN_CAPTURE_TIMER_WAIT_TICKS,
+            Some(BlackthornCaptureCue::Sting),
+            None,
+        ));
+    }
+    // Step 6.
+    beats.push(beat(0, None, Some(BLACKTHORN_CAPTURE_DRAGGED_LINE)));
+    // Step 7.
+    let after = if sound_on {
+        BLACKTHORN_CAPTURE_STINGS_AFTER_DRAGGED_LINE_SOUND_ON
+    } else {
+        BLACKTHORN_CAPTURE_STINGS_AFTER_DRAGGED_LINE_SOUND_OFF
+    };
+    for _ in 0..after {
+        beats.push(beat(
+            BLACKTHORN_CAPTURE_TIMER_WAIT_TICKS,
+            Some(BlackthornCaptureCue::Sting),
+            None,
+        ));
+    }
+    // Steps 8 and 9: no wait before the placement ("only CPU time"), and the
+    // pause's first world tick is the paint. With animation off there is no
+    // world tick, so nothing paints here.
+    if cinematic_animation {
+        beats.push(beat(0, Some(BlackthornCaptureCue::RevealPrisoners), None));
+    }
+    // Step 10.
+    beats.push(beat(
+        quiet(BLACKTHORN_CAPTURE_PRISONERS_PAUSE_TICKS),
+        if cinematic_animation {
+            None
+        } else {
+            Some(BlackthornCaptureCue::RevealPrisoners)
+        },
+        Some(BLACKTHORN_CAPTURE_CHAINED_LINE),
+    ));
+    // Steps 11 and 12.
+    beats.push(beat(
+        quiet(BLACKTHORN_CAPTURE_CHAINED_PAUSE_TICKS),
+        None,
+        Some(BLACKTHORN_CAPTURE_FOOTSTEPS_LINE),
+    ));
+    // Step 13: {sting, quiet 2-tick pause} eight times.
+    for index in 0..BLACKTHORN_CAPTURE_FOOTSTEP_STINGS {
+        let hold = if index == 0 {
+            0
+        } else {
+            quiet(BLACKTHORN_CAPTURE_STING_PAUSE_TICKS)
+        };
+        beats.push(beat(hold, Some(BlackthornCaptureCue::Sting), None));
+    }
+    // Step 14, after the last footstep's pause.
+    beats.push(beat(
+        quiet(BLACKTHORN_CAPTURE_STING_PAUSE_TICKS),
+        Some(BlackthornCaptureCue::PlaceGuards),
+        None,
+    ));
+    // Step 15: the script's five stings, each followed by its quiet 2-tick
+    // pause, then its closing quiet 8-tick pause.
+    for index in 0..BLACKTHORN_GUARD_APPROACH_STINGS {
+        let hold = if index == 0 {
+            0
+        } else {
+            quiet(BLACKTHORN_CAPTURE_STING_PAUSE_TICKS)
+        };
+        beats.push(beat(
+            hold,
+            Some(BlackthornCaptureCue::GuardApproachSting(index as u8)),
+            None,
+        ));
+    }
+    // Step 16.
+    beats.push(beat(
+        quiet(BLACKTHORN_CAPTURE_STING_PAUSE_TICKS)
+            + quiet(BLACKTHORN_GUARD_APPROACH_CLOSING_PAUSE_TICKS),
+        Some(BlackthornCaptureCue::ThroneEnvelope),
+        None,
+    ));
+    // Step 17: the reveal runs once the envelope has finished.
+    beats.push(BlackthornCaptureBeat {
+        hold: BlackthornCaptureHold::ThroneEnvelope,
+        cue: None,
+        text: None,
+    });
+    beats.push(beat(
+        BLACKTHORN_THRONE_REVEAL_HOLD_TICKS,
+        Some(BlackthornCaptureCue::ThroneRevealed),
+        None,
+    ));
+    // Step 18 is the hold before the greeting; the caller pushes the
+    // greeting itself with [`BLACKTHORN_GREETING_PAUSE_TICKS`].
+    beats
+}
 
 /// `blackthorn.md §3` step 8 (u5-spec#298 Q8): "After the quiet 8-tick pause
 /// that follows the throne reveal, print `\n\nBlackthorn says:\n\n"Ah, `, then

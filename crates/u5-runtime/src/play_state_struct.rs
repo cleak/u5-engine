@@ -887,6 +887,9 @@ pub struct PlayState {
     /// until the rescue hands off. `blackthorn.md §7` step 3 dissolves to the
     /// same black and step 9 draws the party on it.
     pub cutscene_black_viewport: bool,
+    /// `blackthorn.md §3`'s capture narration while its timeline is staged
+    /// (issue #304 Q6); `None` outside it.
+    pub blackthorn_capture: Option<crate::blackthorn::BlackthornCaptureNarration>,
     /// How many of `blackthorn.md §7` step 4's three cell reveals are on
     /// screen: the two Guardians, then the spectral figure.
     pub blackthorn_rescue_reveals_shown: u8,

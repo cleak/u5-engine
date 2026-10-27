@@ -1365,7 +1365,11 @@ pub fn gameplay_chrome_content(state: &crate::PlayState) -> GameplayChromeConten
     // `moons.md §3`: the audience's one sky repaint "always takes the erase
     // arm". Both viewport ribbons stay plain until the captive-cell handoff
     // clears the audience map (playtest P27).
-    if state.blackthorn_audience_map.is_some() {
+    //
+    // The capture narration that precedes the map (`blackthorn.md §3`
+    // timeline, issue #304 Q6) runs after those helpers: step 4's blindfold
+    // fill leaves both rows "blank, as described in the setup paragraph".
+    if state.blackthorn_audience_map.is_some() || state.blackthorn_capture_narration_active() {
         return GameplayChromeContent {
             top: ChromeGap::Unbroken,
             bottom: ChromeGap::Unbroken,
