@@ -115,7 +115,6 @@ fn spec304_q4_the_yell_restoration_readers_step_like_any_typed_word() {
         target_y: 21,
         response_index: 0,
         all_responses_match: true,
-        transcript: String::new(),
         buffer: String::new(),
     });
     assert!(state.prompt_waits_in_shared_wait());

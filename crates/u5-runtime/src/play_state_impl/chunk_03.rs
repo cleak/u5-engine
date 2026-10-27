@@ -265,6 +265,7 @@ impl PlayState {
     pub fn typed_prompt_echo(&self) -> Option<String> {
         self.spell_prompt_echo()
             .or_else(|| self.shrine_prompt_echo())
+            .or_else(|| self.shrine_restoration_prompt_echo())
             .or_else(|| self.blackthorn_prompt_echo())
     }
 
@@ -289,6 +290,9 @@ impl PlayState {
         self.blackthorn_prompt_echo().is_some()
             || crate::message_window::sage_topic_row_is_continuation(self)
             || self.active_yell.is_some()
+            // `karma.md §7.1`'s four reads are general typed strings, which
+            // `text-output.md §10.6` upper-cases (playtest P12-19).
+            || self.active_shrine_restoration.is_some()
     }
 
     pub fn blackthorn_prompt_echo(&self) -> Option<String> {

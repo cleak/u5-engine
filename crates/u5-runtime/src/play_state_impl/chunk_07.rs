@@ -1580,9 +1580,22 @@ impl PlayState {
                     ));
                     let utterance = crate::commands::WORD_OF_POWER_UTTERED_MESSAGE.to_string();
                     if let WordOfPowerTargetOutcome::RuinedShrine { x, y } = outcome {
+                        // `karma.md §7.1`: the uttered-word line, then
+                        // `\nUpon what virtue\ndost thou\nmeditate?\n\n:`.
+                        // Both are logged once, here; the closing `:` row is
+                        // the live row the virtue is typed on
+                        // ([`Self::shrine_restoration_prompt_echo`]). Writing
+                        // the whole exchange back into the slot on every
+                        // answer re-logged it and left stale prompt rows in
+                        // the window (playtest P12-16).
+                        self.emit_message_line(format!(
+                            "{utterance}{SHRINE_RESTORATION_VIRTUE_QUESTION}"
+                        ));
+                        // Stated, not inferred: the question's own trailing
+                        // feed left the cursor at column 0 of the answer row.
+                        self.message_row_open_mid_line = false;
                         self.active_shrine_restoration =
-                            Some(ShrineRestorationSession::new(word_index, x, y, utterance));
-                        self.message = self.render_active_shrine_restoration();
+                            Some(ShrineRestorationSession::new(word_index, x, y));
                         return MoveOutcome::Used;
                     }
                     // The seal-toggle outcomes' text is not published and no
@@ -1679,11 +1692,17 @@ impl PlayState {
         "A low rumble and full-viewport flash answer the word."
     }
 
-    pub fn render_active_shrine_restoration(&self) -> String {
+    /// The ruined-shrine restoration's live answer row: the prompt text the
+    /// current answer is typed after, then what has been typed so far.
+    ///
+    /// `karma.md §7.1` prints each prompt and then reads "up to fifteen
+    /// characters" on its row; `text-output.md §10.6` has the window as "a
+    /// log whose final line is being edited". The row is logged only when
+    /// the answer is submitted, as the E-Enter shrine's rows are.
+    pub fn shrine_restoration_prompt_echo(&self) -> Option<String> {
         self.active_shrine_restoration
             .as_ref()
-            .map(|session| format!("{}{}", session.transcript, session.buffer))
-            .unwrap_or_default()
+            .map(|session| format!("{}{}", session.answer_prompt(), session.buffer))
     }
 
     pub fn step_active_shrine_restoration(
@@ -1696,13 +1715,11 @@ impl PlayState {
         };
         if key == '\u{1b}' {
             session.buffer.clear();
-            self.message = format!("{}{}", session.transcript, session.buffer);
             self.active_shrine_restoration = Some(session);
             return None;
         }
         if matches!(key, '\u{8}' | '\u{7f}') {
             session.buffer.pop();
-            self.message = format!("{}{}", session.transcript, session.buffer);
             self.active_shrine_restoration = Some(session);
             return None;
         }
@@ -1714,14 +1731,18 @@ impl PlayState {
             response.push(key);
         }
         response.push_str(suffix);
+        // `text-output.md §10.6`: the general typed-string reader, "used for
+        // most free-text prompts", has "keys are uppercased"; only character
+        // names keep their case, and §7.1's four reads are ordinary ones
+        // (playtest P12-19). Matching is case-insensitive either way.
         session.buffer.extend(
             response
                 .chars()
                 .filter(|ch| ch.is_ascii() && !ch.is_control())
+                .map(|ch| ch.to_ascii_uppercase())
                 .take(SHRINE_RESTORATION_INPUT_MAX_LEN.saturating_sub(session.buffer.len())),
         );
         if response.is_empty() && !matches!(key, '\r' | '\n') {
-            self.message = format!("{}{}", session.transcript, session.buffer);
             self.active_shrine_restoration = Some(session);
             return None;
         }
@@ -1739,15 +1760,17 @@ impl PlayState {
         let matches = !session.buffer.is_empty()
             && crate::shrine_virtue::shrine_answer_matches(&session.buffer, required);
         session.all_responses_match &= matches;
-        session.transcript.push_str(&session.buffer);
+        // Submitting retires the live row: log it as typed. Return echoes no
+        // newline, so the cursor stays on that row - stated here rather than
+        // inferred - and the next print's leading feed is what closes it.
+        self.emit_message_line(format!("{}{}", session.answer_prompt(), session.buffer));
+        self.message_row_open_mid_line = true;
         session.buffer.clear();
 
         if session.response_index < 3 {
+            // `\nMantra:`: its leading feed closes the answer row above, and
+            // the label opens the next live row.
             session.response_index += 1;
-            session
-                .transcript
-                .push_str(SHRINE_RESTORATION_MANTRA_PROMPT);
-            self.message = session.transcript.clone();
             self.active_shrine_restoration = Some(session);
             return None;
         }
@@ -1764,9 +1787,7 @@ impl PlayState {
             // `karma.md §7.1` Success row: the banner, then the shared
             // flash/rumble a second time, "which adds no text" - the prose
             // description is a diagnostic, as on the utterance path.
-            session
-                .transcript
-                .push_str(SHRINE_RESTORATION_SUCCESS_BANNER);
+            self.emit_message_line(SHRINE_RESTORATION_SUCCESS_BANNER);
             self.diagnostics.push(format!(
                 "Shrine restored; {}",
                 Self::word_of_power_presentation_message()
@@ -1778,9 +1799,12 @@ impl PlayState {
             let _ = self.refresh_world_live_chunks_for_current_area();
             self.mark_visibility_dirty();
         } else {
-            session.transcript.push('\n');
+            // "Emit one newline after the final mantra input": it closes the
+            // last answer row and prints nothing of its own.
+            self.emit_message_line("\n");
         }
-        self.message = session.transcript;
+        // Stated for both arms: each ends on a feed, at column 0.
+        self.message_row_open_mid_line = false;
         Some(MoveOutcome::Used)
     }
 
