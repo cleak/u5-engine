@@ -8114,6 +8114,10 @@ impl PlayState {
             self.emit_message_line(format!("{}\n", crate::commands::TOWN_BED_REST_SLEEP_LINE));
             self.message = crate::commands::TOWN_BED_THROWN_OUT_LINE.to_string();
             self.message_row_open_mid_line = false;
+            // `commands.md §3`: H "Always" spends the turn - the bed loop's
+            // ten-minute steps are its own time, and the dispatcher's
+            // one-minute town epilogue still follows (playtest P12-08).
+            self.charge_tile_command_acted_exit(self.turn);
             return Ok(MoveOutcome::Blocked);
         }
         let mut recovered_hp = 0;
@@ -8134,6 +8138,8 @@ impl PlayState {
              woke {woke} asleep member(s)"
         ));
         self.message = crate::commands::TOWN_BED_REST_SLEEP_LINE.to_string();
+        // See the thrown-out arm above (playtest P12-08).
+        self.charge_tile_command_acted_exit(self.turn);
         Ok(MoveOutcome::Rested)
     }
 

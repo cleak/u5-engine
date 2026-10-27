@@ -112,3 +112,23 @@ fn playfix12_p12_12_ship_carpet_redeploy_parks_a_carpet_on_xit() {
     let parked = state.player.transport.parked_object(5, 5, 0).unwrap();
     assert_eq!(parked.type_byte, CARPET_PARKED);
 }
+
+/// P12-08: `commands.md §3` - H is not forwarded and "spends the turn on
+/// every path"; `overworld.md §5` step 6 then runs the two-minute outdoor
+/// turn and its upkeep pass after the camp's own five-minute loop.
+#[test]
+fn playfix12_p12_08_completed_camp_runs_the_outdoor_turn() {
+    let dir = debug_game_dir();
+    let mut state = britannia_state(open_world_grid(), 1, 1);
+    state.clock = GameClock::new(8, 0).unwrap();
+    state.prng_state = 0x0002;
+    state.toll_progress = 0;
+
+    assert_eq!(state.hole_up_command(&dir, Some(1)).unwrap(), MoveOutcome::Rested);
+
+    assert!(!state.combat_active);
+    assert_eq!(state.clock, GameClock::new(9, 2).unwrap());
+    // The camp ticks do not age the counter; the acted turn does.
+    assert_eq!(state.toll_progress, 1);
+    let _ = fs::remove_dir_all(dir);
+}
