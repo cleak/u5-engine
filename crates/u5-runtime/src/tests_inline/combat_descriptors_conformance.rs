@@ -581,6 +581,78 @@
     }
 
     #[test]
+    fn a_killing_blow_prints_before_the_defeat_recount_faint_tail() {
+        // `combat.md §11.1` "Order, stated once": the result line
+        // (`killed!`) is step 5 of the attack's own resolution, and `§14`
+        // runs the party control/faint helper only on the recount after the
+        // dispatched action. Playtest P13-12: a monster's killing blow on the
+        // last free party member printed `<name> passes out!` for the
+        // controlled member first and the victim's `killed!` after it.
+        let mut state = combat_ai_turn_state(6, 5);
+        let leader = state.party[0];
+        state.party.push(PartyMember { slot: 1, ..leader });
+        state.party_names = default_party_names(2);
+        state.party_equipment = default_party_equipment(2);
+        state.party_combat_defense = vec![0; 2];
+        state.party[0].hp = 1;
+        // The other member is on the automatic driver (`§6.1a`), so it is a
+        // foe to the census and the rat's blow leaves no friend standing.
+        state.combat_actors[1] = CombatActorDescriptor::from_row([
+            20,
+            1,
+            COMBAT_ACTOR_FLAG_SELECTABLE_80 | COMBAT_ACTOR_FLAG_CONTROLLED,
+            1,
+            1,
+            0,
+            1,
+            1,
+        ]);
+        state.active_objects[1] = ActiveObject {
+            type_byte: 0x80,
+            tile: 0x80,
+            x: 1,
+            y: 1,
+            ..ActiveObject::empty()
+        };
+        let strike = CombatMonsterAttackInputs {
+            forced_hit: Some(true),
+            ..CombatMonsterAttackInputs::default()
+        };
+
+        let walk = state.apply_combat_round_walk_from_slot_with_inputs(
+            8,
+            30,
+            false,
+            0,
+            false,
+            1,
+            1,
+            &[],
+            None,
+            0,
+            false,
+            None,
+            true,
+            &[],
+            &[(8, strike)],
+        );
+        crate::input_dispatch::append_combat_round_walk_messages(&mut state, &walk);
+
+        let transcript = combat_descriptor_transcript(&state);
+        let killed = transcript.find("killed!");
+        let faint = transcript.find("passes out!");
+        assert!(
+            killed.is_some() && faint.is_some() && killed < faint,
+            "transcript was {transcript:?}"
+        );
+        assert_eq!(
+            transcript.matches("killed!").count(),
+            1,
+            "the post-walk narrator must not print the line again: {transcript:?}"
+        );
+    }
+
+    #[test]
     fn a_successful_faint_sleep_replaces_the_vanish_bit_with_the_sleep_bit() {
         // `combat.md §6.3`: "the sleep helper replaces the whole result field
         // with sleep bit `0x04`, losing `0x02`. ... Do not preserve both

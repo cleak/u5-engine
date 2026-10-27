@@ -8193,7 +8193,13 @@ pub(crate) fn append_combat_round_walk_messages(
     // `combat.md §6.3`: the narrator gate already ran inside each attack's
     // own dispatch, while the shared result field still described that
     // slot; this loop only prints what the gate let through.
+    // `combat.md §14`: an attack that ended the party's side already printed
+    // its result inside its dispatch, ahead of the faint tail.
+    let narrated_slot = state.combat_monster_attack_narrated_slot.take();
     for (slot, attack, narration) in attacks {
+        if narrated_slot == Some(slot) {
+            continue;
+        }
         if let Some(line) = combat_monster_attack_narrated_result_message(state, attack, narration)
         {
             // `combat.md §11.1`, the order stated once: step 3 is "a newline",

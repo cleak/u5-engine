@@ -8961,6 +8961,15 @@ impl PlayState {
             CombatActorDispatchAction::MonsterAi { ai_turn }
         };
 
+        // A monster attack's result line is narrated after the walk returns
+        // (`append_combat_round_walk_messages`), which prints the hazard line
+        // behind it; every other dispatch has printed all it will by now.
+        let owed_monster_attack = match &action {
+            CombatActorDispatchAction::MonsterAi {
+                ai_turn: Some(turn),
+            } => turn.monster_attack,
+            _ => None,
+        };
         if !matches!(action, CombatActorDispatchAction::PlayerReady) {
             // `combat.md §7` step 7's hazard pass follows every dispatched
             // action, monster or player alike. The middle tier's published
@@ -8969,18 +8978,33 @@ impl PlayState {
             // the note on the player command tail.
             let _ = self.apply_combat_post_dispatch_contact_for_actor_position(slot);
             self.clear_combat_interference_for_completed_action(slot);
-            // A monster attack's result line is narrated after the walk
-            // returns (`append_combat_round_walk_messages`), which prints the
-            // hazard line behind it; every other dispatch has printed all it
-            // will by now.
-            let attack_narration_owed = matches!(
-                &action,
-                CombatActorDispatchAction::MonsterAi { ai_turn: Some(turn) }
-                    if turn.monster_attack.is_some()
-            );
-            if !attack_narration_owed {
+            if owed_monster_attack.is_none() {
                 self.flush_combat_pending_hazard_lines(Some(slot));
             }
+        }
+
+        // `combat.md §11.1` "Order, stated once": the result line (`killed!`)
+        // is step 5 of the attack's own resolution, and `§14` runs the party
+        // control/faint helper only on the defeat recount after the
+        // dispatched action. When this attack left no party-side actor, the
+        // recount below is about to print `<name> passes out!`, so the owed
+        // result line and its hazard line print now, ahead of it, and the
+        // post-walk narrator skips this slot (playtest P13-12).
+        if let Some(attack) = owed_monster_attack
+            && matches!(
+                self.combat_round_loop_control_census(false, false),
+                CombatRoundLoopControl::Exit(CombatRoundLoopExit::Defeat)
+            )
+        {
+            if let Some(line) = crate::input_dispatch::combat_monster_attack_narrated_result_message(
+                self,
+                attack,
+                crate::input_dispatch::CombatMonsterAttackNarration::SelfActingHostile,
+            ) {
+                self.emit_combat_print(&format!("\n{line}\n"));
+            }
+            self.flush_combat_pending_hazard_lines(Some(slot));
+            self.combat_monster_attack_narrated_slot = Some(slot);
         }
 
         // `combat.md §7`: the recount that "first gives the party
