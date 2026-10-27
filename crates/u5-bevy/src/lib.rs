@@ -30894,6 +30894,215 @@ mod tests {
         dir
     }
 
+    /// Replay a `qa/paired/*.tsv` script's post-load half through the
+    /// visual shell's own systems from a seed profile and a fixed generator
+    /// state, printing what each `shot` beat would show. A prediction aid for
+    /// paired captures, not a check: run it with
+    /// `U5_PREDICT_SCRIPT=<tsv> U5_PREDICT_SEED_DIR=<profile> U5_PREDICT_PRNG=<hex>`
+    /// and `--ignored --nocapture`. It starts at the `j` (Journey Onward)
+    /// key, taking the generator state as the host-clock seed with no draw
+    /// between the sample and the load, and steps 60 Hz frames.
+    #[test]
+    #[ignore]
+    #[cfg(feature = "original-asset-tests")]
+    fn predict_paired_script_from_seed() {
+        let (Ok(script), Ok(seed_dir), Ok(prng)) = (
+            std::env::var("U5_PREDICT_SCRIPT"),
+            std::env::var("U5_PREDICT_SEED_DIR"),
+            std::env::var("U5_PREDICT_PRNG"),
+        ) else {
+            return;
+        };
+        let prng = u16::from_str_radix(prng.trim_start_matches("0x"), 16).unwrap();
+        let dir = writable_original_asset_copy("predict-paired");
+        for entry in fs::read_dir(&seed_dir).unwrap() {
+            let entry = entry.unwrap();
+            if entry.file_type().unwrap().is_file() {
+                fs::copy(entry.path(), dir.join(entry.file_name())).unwrap();
+            }
+        }
+        let options = load_play_options_from_save(&dir).unwrap();
+        let mut state = PlayState::load_scene(&dir, options).unwrap();
+        state.prng_state = prng;
+        state.pace_combat_presentations = true;
+        state.harness_shortcut_keys = false;
+        let mut images = Assets::<Image>::default();
+        let image_handle = images.add(Image::new(
+            Extent3d {
+                width: VISUAL_PLAY_FRAME_WIDTH,
+                height: VISUAL_PLAY_FRAME_HEIGHT,
+                depth_or_array_layers: 1,
+            },
+            TextureDimension::D2,
+            vec![0; (VISUAL_PLAY_FRAME_WIDTH * VISUAL_PLAY_FRAME_HEIGHT * 4) as usize],
+            TextureFormat::Rgba8UnormSrgb,
+            RenderAssetUsages::default(),
+        ));
+        let mut app = App::new();
+        app.insert_resource(Time::<()>::default());
+        app.insert_resource(Time::<bevy::prelude::Real>::default());
+        app.insert_resource(ButtonInput::<KeyCode>::default());
+        app.insert_resource(images);
+        app.insert_resource(AnimationPump::default());
+        app.add_event::<SpeakerEffect>();
+        app.add_event::<AppExit>();
+        app.insert_resource(VisualState {
+            game_dir: dir.clone(),
+            state,
+            atlas: load_tile_atlas(&dir, TileGraphicsDepth::Ega16).unwrap(),
+            image_handle,
+            text_font: load_ibm_ch_font(&dir).unwrap(),
+            rune_font: load_runes_ch_font(&dir).unwrap(),
+            sound_effect_cursor: 0,
+            prompt_cursor_frame: 0,
+            input_line: String::new(),
+            prompt_cursor_visible: false,
+            sweep_idle_redraw_pending: false,
+            held_direction_repeat: HeldDirectionRepeat::default(),
+            typed_keys: Default::default(),
+            flush_typeahead_when_speaker_idle: false,
+            diagnostic_cursor: 0,
+        });
+        app.add_systems(
+            Update,
+            (drive_visual, animate_static_tiles, log_runtime_diagnostics).chain(),
+        );
+        let frame_ms = 1000.0 / 60.0;
+        let frame = Duration::from_micros(16_667);
+        let mut elapsed_ms = 0.0f64;
+        let mut transcript_seen = 0usize;
+        let mut was_combat = false;
+        let mut diagnostic_cursor = 0;
+        let mut report = |app: &mut App, label: &str, elapsed_ms: f64, transcript_seen: &mut usize, was_combat: &mut bool| {
+            let visual = app.world().resource::<VisualState>();
+            let st = &visual.state;
+            for line in take_new_runtime_diagnostics(st, &mut diagnostic_cursor) {
+                if line.contains("ncounter") || line.contains("combat") || line.contains("approaches") {
+                    println!("  [{elapsed_ms:>8.0} ms] diag {line}");
+                }
+            }
+            if !*was_combat && !st.combat_active {
+                for (slot, object) in st.active_objects.iter().enumerate().skip(1) {
+                    if !object.is_empty() && object.tile >= 0x80 {
+                        let dx = object.x as isize - st.player.x as isize;
+                        let dy = object.y as isize - st.player.y as isize;
+                        if dx.abs() <= 1 && dy.abs() <= 1 {
+                            println!("  [{elapsed_ms:>8.0} ms] adjacent object {slot}: type {:#04x} at ({}, {}) on tile {:#04x}", object.type_byte, object.x, object.y, st.grid.get(world_cell_index(object.x, object.y)).copied().unwrap_or(0));
+                        }
+                    }
+                }
+            }
+            let entries = st.message_entries();
+            for entry in entries.iter().skip(*transcript_seen) {
+                println!("  [{elapsed_ms:>8.0} ms] text {:?} (prng {:#06x})", entry.text, st.prng_state);
+            }
+            *transcript_seen = entries.len();
+            if st.combat_active && !*was_combat {
+                println!("  [{elapsed_ms:>8.0} ms] combat starts: arena centre tile {:#04x}", st.combat_terrain[5][5]);
+                for (index, actor) in st.combat_actors.iter().enumerate() {
+                    if !actor.is_empty() {
+                        let name = combat_class_stats(actor.owner_target_class).map(|s| s.name).unwrap_or("?");
+                        println!("      actor {index}: class {} ({name}) at ({}, {}) hp {}", actor.owner_target_class, actor.x, actor.y, actor.hp_or_wound);
+                    }
+                }
+            }
+            *was_combat = st.combat_active;
+            if !label.is_empty() {
+                let hp: Vec<String> = st
+                    .party
+                    .iter()
+                    .map(|m| format!("{}{}/{}", m.status as char, m.hp, m.max_hp))
+                    .collect();
+                println!(
+                    "SHOT {label} @{elapsed_ms:.0} ms: {:?} at ({}, {}) facing {:?} clock {:02}:{:02} combat {} party [{}] prng {:#06x}",
+                    st.area, st.player.x, st.player.y, st.player.facing, st.clock.hour, st.clock.minute,
+                    st.combat_active, hp.join(" "), st.prng_state
+                );
+                if st.combat_active {
+                    for (index, actor) in st.combat_actors.iter().enumerate().skip(COMBAT_PARTY_ACTOR_SLOTS) {
+                        if !actor.is_empty() {
+                            println!("      actor {index}: class {} at ({}, {}) hp {}", actor.owner_target_class, actor.x, actor.y, actor.hp_or_wound);
+                        }
+                    }
+                } else {
+                    for (slot, object) in st.active_objects.iter().enumerate().skip(1) {
+                        if !object.is_empty() {
+                            println!("      object {slot}: type {:#04x} at ({}, {})", object.type_byte, object.x, object.y);
+                        }
+                    }
+                }
+            }
+        };
+        let text = fs::read_to_string(&script).unwrap();
+        let mut started = false;
+        for line in text.lines() {
+            let fields: Vec<&str> = line.split('\t').collect();
+            if line.starts_with('#') || fields.len() < 3 || fields[0] == "dosbox" {
+                continue;
+            }
+            match fields[1] {
+                "key" if !started => {
+                    if fields[2] == "j" {
+                        started = true;
+                    }
+                }
+                _ if !started => {}
+                "wait" => {
+                    let ms: f64 = fields[2].parse().unwrap();
+                    let target = elapsed_ms + ms;
+                    while elapsed_ms + frame_ms <= target + 1e-6 {
+                        app.world_mut().resource_mut::<Time>().advance_by(frame);
+                        app.world_mut()
+                            .resource_mut::<Time<bevy::prelude::Real>>()
+                            .update_with_duration(frame);
+                        app.update();
+                        app.world_mut().resource_mut::<ButtonInput<KeyCode>>().clear();
+                        elapsed_ms += frame_ms;
+                        report(&mut app, "", elapsed_ms, &mut transcript_seen, &mut was_combat);
+                    }
+                }
+                "key" => {
+                    let code = match fields[2] {
+                        "space" => KeyCode::Space,
+                        "Up" => KeyCode::ArrowUp,
+                        "Down" => KeyCode::ArrowDown,
+                        "Left" => KeyCode::ArrowLeft,
+                        "Right" => KeyCode::ArrowRight,
+                        "Home" => KeyCode::Home,
+                        "End" => KeyCode::End,
+                        "Return" | "enter" => KeyCode::Enter,
+                        "Escape" | "esc" => KeyCode::Escape,
+                        letter if letter.len() == 1 => {
+                            let c = letter.chars().next().unwrap().to_ascii_uppercase();
+                            if c.is_ascii_digit() {
+                                [KeyCode::Digit0, KeyCode::Digit1, KeyCode::Digit2, KeyCode::Digit3, KeyCode::Digit4, KeyCode::Digit5, KeyCode::Digit6, KeyCode::Digit7, KeyCode::Digit8, KeyCode::Digit9][c as usize - '0' as usize]
+                            } else {
+                                [KeyCode::KeyA, KeyCode::KeyB, KeyCode::KeyC, KeyCode::KeyD, KeyCode::KeyE, KeyCode::KeyF, KeyCode::KeyG, KeyCode::KeyH, KeyCode::KeyI, KeyCode::KeyJ, KeyCode::KeyK, KeyCode::KeyL, KeyCode::KeyM, KeyCode::KeyN, KeyCode::KeyO, KeyCode::KeyP, KeyCode::KeyQ, KeyCode::KeyR, KeyCode::KeyS, KeyCode::KeyT, KeyCode::KeyU, KeyCode::KeyV, KeyCode::KeyW, KeyCode::KeyX, KeyCode::KeyY, KeyCode::KeyZ][c as usize - 'A' as usize]
+                            }
+                        }
+                        other => panic!("unmapped key {other}"),
+                    };
+                    println!("  [{elapsed_ms:>8.0} ms] key {} (prng {:#06x})", fields[2], app.world().resource::<VisualState>().state.prng_state);
+                    app.world_mut().resource_mut::<ButtonInput<KeyCode>>().press(code);
+                    app.world_mut().resource_mut::<Time>().advance_by(frame);
+                    app.world_mut()
+                        .resource_mut::<Time<bevy::prelude::Real>>()
+                        .update_with_duration(frame);
+                    app.update();
+                    app.world_mut().resource_mut::<ButtonInput<KeyCode>>().release(code);
+                    app.world_mut().resource_mut::<ButtonInput<KeyCode>>().clear();
+                    elapsed_ms += frame_ms;
+                    report(&mut app, "", elapsed_ms, &mut transcript_seen, &mut was_combat);
+                }
+                "shot" => {
+                    report(&mut app, fields[2], elapsed_ms, &mut transcript_seen, &mut was_combat);
+                }
+                _ => {}
+            }
+        }
+        let _ = fs::remove_dir_all(&dir);
+    }
+
     /// What one walk through the live visual systems produced.
     #[cfg(feature = "original-asset-tests")]
     struct VisualSwampWalk {
