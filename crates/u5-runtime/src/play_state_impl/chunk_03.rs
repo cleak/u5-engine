@@ -422,9 +422,18 @@ impl PlayState {
             // feed" and its reader "does **not** echo", so the cursor waits
             // after `to leave? ` and `text-output.md §10.2`'s mid-command
             // prompt draws no marker row beneath it. Playtest E03.
-            || self
-                .active_yes_no_prompt
-                .is_some_and(|session| matches!(session.kind, YesNoPromptKind::TownExit { .. }))
+            //
+            // `overworld.md §7.1` step 3's troll toll is the same shape: it
+            // prints `Dost thou pay?` "with no trailing feed. Wait for a key",
+            // and its answer echoes onto that row. `text-output.md §10.2`'s
+            // seven feed-and-marker sites do not include it, so the cursor
+            // waits after `pay?` with no marker row beneath (playtest P13-10).
+            || self.active_yes_no_prompt.is_some_and(|session| {
+                matches!(
+                    session.kind,
+                    YesNoPromptKind::TownExit { .. } | YesNoPromptKind::TrollBridgeToll { .. }
+                )
+            })
             // `commands.md §5.6` / `inventory.md §4.3`: a U-Use item that asks
             // for a target ends its question with a trailing space -
             // `On who: ` - so `§10.6` keeps the cursor on that row. Measured
@@ -7095,6 +7104,11 @@ impl PlayState {
         self.advance_turn();
         let _ = self.activate_peer_view_overlay();
         self.message.clear();
+        // `magic.md §5.1`: "submitting the name advances to the next row", and
+        // Peer prints no completion line, so the overlay's modal wait reads
+        // its key at column 0 of that row with no feed or marker of its own
+        // (`view.md §4`; playtest P13-11).
+        self.view_overlay_row_opened_by_result = true;
         MoveOutcome::Observed
     }
 

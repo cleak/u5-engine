@@ -1026,7 +1026,7 @@ fn world_enter_stonegate_keeps_exact_entry_narration_without_diagnostics() {
     // narration (playtest G31); no engine summary sentence does.
     assert_eq!(
         state.message,
-        "keep\n\nAn air of\nfalsehood doth\nsurround thee..."
+        "keep\n\nAn air of\nfalsehood doth\nsurround thee...\n"
     );
     assert!(!state.message.contains("Stonegate entry:"));
     let _ = fs::remove_dir_all(dir);

@@ -30,7 +30,13 @@ pub const USE_ITEM_PROMPT_MESSAGE: &str = ITEM_SELECTION_PROMPT;
 /// horse-trader trigger (`0x83`) is exempt. This is a fixed merchant refusal,
 /// not a per-shop-role line, and "the dispatcher does not reject other
 /// transport markers here; on foot and magic carpet pass".
-pub const SHOP_MOUNTED_REFUSAL: &str = "A merchant says:\n\"GET THAT HORSE OUT OF HERE!\"";
+///
+/// It is printed by the same shared dispatcher as the schedule refusal, and
+/// `conversation.md §2`/§9 step 2 put "the dispatcher's own leading line
+/// feed" before every line it prints in place of a conversation, so the
+/// literal carries that feed and a blank row stands under the `Talk-` echo
+/// (playtest P13-08).
+pub const SHOP_MOUNTED_REFUSAL: &str = "\nA merchant says:\n\"GET THAT HORSE OUT OF HERE!\"";
 
 /// `shops.md §2`: the fixed refusal a shop trigger prints when its keeper is
 /// not open for business, "with these line breaks" and "a newline before the
@@ -3436,6 +3442,12 @@ impl PlayState {
             return MoveOutcome::Blocked;
         }
 
+        // `view.md §4`: the overlay "waits for a keypress" inside the
+        // command, through the shared modal wait that "emits neither a line
+        // feed nor a prompt marker while it waits". The `View_a_gem!\n` echo's
+        // own feed opened the row that key is read on, so - as for the death
+        // vision - neither `text-output.md §10.4`'s blank nor the next cycle's
+        // marker is drawn until it is dismissed (playtest P13-11).
         match self.area {
             Area::Dungeon { scene, level } => {
                 self.gems = self.gems.saturating_sub(1);
@@ -3454,6 +3466,7 @@ impl PlayState {
                     mode: ViewOverlayMode::GemView,
                 });
                 self.message.clear();
+                self.view_overlay_row_opened_by_result = true;
                 MoveOutcome::Observed
             }
             Area::Town { scene, floor } => {
@@ -3472,6 +3485,7 @@ impl PlayState {
                     mode: ViewOverlayMode::GemView,
                 });
                 self.message.clear();
+                self.view_overlay_row_opened_by_result = true;
                 MoveOutcome::Observed
             }
             Area::World { plane } => {
@@ -3491,6 +3505,7 @@ impl PlayState {
                     mode: ViewOverlayMode::GemView,
                 });
                 self.message.clear();
+                self.view_overlay_row_opened_by_result = true;
                 MoveOutcome::Observed
             }
         }

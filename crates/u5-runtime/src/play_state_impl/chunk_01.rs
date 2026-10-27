@@ -1217,10 +1217,14 @@ impl PlayState {
                 // stock window still shows `falsehood doth` /
                 // `surround thee...` above `Talk-North`, where this engine's
                 // message slot was discarded unflushed.
-                let note = format!("\n{line}");
+                //
+                // `town-mode.md §13` "The notice's exact shape": a line feed,
+                // the three rows, and a closing line feed, so the cursor ends
+                // at column 0 and no row is left open (playtest P13-07).
+                let note = format!("\n{line}\n");
                 state.message_row_open_mid_line = false;
                 state.push_message_transcript_lines(&note);
-                state.message_row_open_mid_line = true;
+                state.message_row_open_mid_line = false;
                 state.message.push_str(&note);
                 state.message_flushed = state.message.clone();
                 // `town-mode.md §13` (u5-spec#300 Q4, Q17): "After the text,

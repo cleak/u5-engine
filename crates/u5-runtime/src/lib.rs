@@ -1230,4 +1230,5 @@ mod tests {
     include!("tests_inline/ready_picker_highlight_pad.rs");
     include!("tests_inline/spec305.rs");
     include!("tests_inline/playfix13_move13.rs");
+    include!("tests_inline/playfix13_text13.rs");
 }

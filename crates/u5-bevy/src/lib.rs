@@ -24942,6 +24942,12 @@ mod tests {
         state.view_gem();
         assert!(state.message.is_empty());
         assert!(state.active_view_overlay.is_some());
+        // This pins the overlay blit, not the key-wait row under the echo:
+        // `view.md §4`'s modal wait draws no marker and spends no blank
+        // (playtest P13-11, covered in `u5-runtime`). The fixture has no echo
+        // to hang that row from, so the base frame's command row is kept for
+        // the pixel-for-pixel message-window comparison below.
+        state.view_overlay_row_opened_by_result = false;
         let overlay = state
             .render_active_view_overlay(TileGraphicsDepth::Ega16)
             .unwrap();
