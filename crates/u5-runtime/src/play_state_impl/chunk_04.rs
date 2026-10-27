@@ -2308,8 +2308,14 @@ impl PlayState {
             self.request_cast_argument(CastArgumentRequest::Direction);
             return MoveOutcome::Blocked;
         };
-        if matches!(self.area, Area::Dungeon { .. }) {
-            self.message = "Not here!".to_string();
+        // `catalogs/item-list.md §7.1`, scroll 1: the wind applies "only
+        // when the active scene byte is below 33"; "Dungeon-class scenes
+        // return without changing wind after the prompt" - silently, with
+        // no refusal line (playtest P12-11). Combat is scene byte 0xFF
+        // (`spell-list.md §4`), so a combat read is gated the same way
+        // (`moons.md §3`; playtest P12-10).
+        if self.combat_active || matches!(self.area, Area::Dungeon { .. }) {
+            self.message.clear();
             return MoveOutcome::Blocked;
         }
 

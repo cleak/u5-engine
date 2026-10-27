@@ -469,7 +469,8 @@ fn scroll_wind_and_resurrection_debit_before_branch_gates() {
     );
     assert_eq!(dungeon.scroll_stock[SCROLL_WIND_CHANGE_INDEX], 0);
     assert_eq!(dungeon.turn, 1);
-    assert_eq!(dungeon.message, "Not here!");
+    // `item-list.md §7.1` scroll 1: a silent return (playtest P12-11).
+    assert_eq!(dungeon.message, "");
 
     let mut town = test_state(open_grid(), 1, 1);
     town.party[0].status = b'D';
