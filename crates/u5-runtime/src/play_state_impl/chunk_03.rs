@@ -4465,7 +4465,21 @@ impl PlayState {
                 // puts the `Arms` list - or its `(None ready)` placeholder -
                 // two rows higher than this engine did, starting at decoded
                 // panel row 3 where the engine started at row 5.
-                z_stats_place_panel_rows(&mut rows, 2, &lines);
+                //
+                // The empty placeholder is the exception. `§4.7` gives the
+                // `(None ready)` literal and no row, and the stock game
+                // does not put it where a readied list starts: measured
+                // 2026-10-26 (`reseed-falsehood-theft/p2`, an Avatar with
+                // nothing readied), the stock frame has `(None ready)` on
+                // panel row 5, same column and text, where this engine drew
+                // it on row 3 - the only panel difference in that capture.
+                let first_row = if lines.len() == 1 && lines[0].trim() == Z_STATS_NONE_READY_PLACEHOLDER
+                {
+                    Z_STATS_NONE_READY_PANEL_ROW_INDEX
+                } else {
+                    2
+                };
+                z_stats_place_panel_rows(&mut rows, first_row, &lines);
             }
             ZStatsPage::Counters => self.z_stats_counters_page_rows(&mut rows),
             page => {

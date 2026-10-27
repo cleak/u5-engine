@@ -807,6 +807,19 @@ fn handle_play_key_input_inner(
         state.z_stats_command();
         return Ok(PlayInputDisposition::Continue);
     }
+    // `commands.md §3` (R14a): "the dungeon loop advances its own clock at
+    // the head of the iteration, before the command is even parsed, so no
+    // dungeon command is distinguished by this status for timekeeping
+    // purposes". The inline `M`, `N`, `R` and `Y` forms below are read here
+    // rather than by the dungeon handler, so - as the inline `C`, `Z` and
+    // `J` above - each runs that loop head itself. Without it a suffix form
+    // after a no-action command found the previous head's charge still
+    // standing and spent no minute.
+    let inline_dungeon_loop_head = (matches!(key, 'M' | 'N' | 'R') && !suffix.is_empty())
+        || (matches!(key, 'Y' | 'y') && !suffix.trim().is_empty());
+    if inline_dungeon_loop_head && matches!(state.area, Area::Dungeon { .. }) {
+        state.advance_dungeon_loop_minute();
+    }
     if key == 'M' && !suffix.is_empty() {
         state.begin_command_echo_for(Command::Mix);
         // `karma.md §7`: "`M` always selects Mix Reagents, including at a

@@ -1220,4 +1220,5 @@ mod tests {
     include!("tests_inline/draw_parity.rs");
     include!("tests_inline/spec304_q8.rs");
     include!("tests_inline/spec304_q6q7.rs");
+    include!("tests_inline/queued_fixes.rs");
 }
