@@ -158,15 +158,23 @@ impl PlayState {
                 return outcome;
             }
         }
-        if let Some((_, object)) =
+        // `commands.md §5.8`: of Search's object-table shapes only the
+        // container (above) and the class `0x1F` corpse read the object at
+        // the cell. Anything else staged there - the drop chest's loot, a
+        // corpse's food or gold - is "the staged object" the duplicate guard
+        // sees, so the routine runs on to `nothing_of_note.\n` under the
+        // cell's preamble, and the later Get owns the transfer (playtest
+        // P13-14; `containers.md §5` classifies the live tile, "not any
+        // non-treasure active-object class returned by the coordinate
+        // lookup").
+        if let Some((object_slot, object)) =
             self.combat_loose_object_slot_at(x, y, actor.active_object_slot as usize)
+            && object.type_byte == FIXED_HIDDEN_TREASURE_OBJECT_TILE
+            && object.tile == FIXED_HIDDEN_TREASURE_OBJECT_TILE
+            && object.fixed_hidden_treasure_record().is_none()
         {
-            // `combat.md §8` hands Search "to one shared world-mode delegate",
-            // and the delegate's found-something wording in an arena is not
-            // published; no capture exercises it either. Left silent rather
-            // than borrowing the town handler's object naming.
-            let _ = object;
-            self.message.clear();
+            let member = self.combat_chest_member(actor_slot);
+            self.resolve_corpse_search(object_slot, member);
             return MoveOutcome::Searched;
         }
 

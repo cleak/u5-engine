@@ -565,3 +565,32 @@ fn playtest_f25_arena_search_assesses_a_drop_chest() {
         "Search grants nothing"
     );
 }
+
+/// `commands.md §5.8`: a staged object at the searched cell is what the
+/// duplicate guard sees, so Search still prints its preamble and
+/// `nothing_of_note.`; only a container or a class `0x1F` corpse reads the
+/// object itself. Playtest P13-14: the arena's Search printed nothing at all
+/// on a cell holding the loot an opened drop chest had staged.
+#[test]
+fn playtest_p13_14_arena_search_on_staged_loot_prints_nothing_of_note() {
+    let mut state = combat_player_command_state(8, 5);
+    state.active_objects[9] = ActiveObject {
+        type_byte: 0x0f, // `containers.md §8` class `0x0F` Food
+        tile: COMBAT_DEFAULT_DEATH_DROP_TILE,
+        x: 6,
+        y: 5,
+        phase: STEADY_PHASE,
+        aux1: 3,
+        ..ActiveObject::empty()
+    };
+    let staged = state.active_objects[9];
+
+    let outcome = state.search_combat_actor_direction(0, Direction::East);
+
+    assert_eq!(outcome, MoveOutcome::Searched);
+    assert_eq!(
+        state.message,
+        format!("{SEARCH_PREAMBLE}{SEARCH_NOTHING_OF_NOTE_ROW}")
+    );
+    assert_eq!(state.active_objects[9], staged, "Search grants nothing");
+}
