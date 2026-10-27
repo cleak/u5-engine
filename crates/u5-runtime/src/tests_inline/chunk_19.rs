@@ -505,13 +505,14 @@
             MoveOutcome::Rested
         );
 
-        assert_eq!(state.clock, GameClock::new(9, 0).unwrap());
+        assert_eq!(state.clock, GameClock::new(9, 1).unwrap());
         assert_eq!(state.message, crate::commands::TOWN_BED_REST_SLEEP_LINE);
         assert!(state.diagnostics.iter().any(|n| n.contains("town-bed rest 1h")));
         assert_eq!(
             state.turn,
             u64::from(TOWN_REST_INITIAL_SCHEDULE_BURST_TICKS)
                 + u64::from(TOWN_REST_TICKS_PER_HOUR)
+                + 1
         );
         let _ = fs::remove_dir_all(dir);
     }
@@ -556,7 +557,7 @@
             MoveOutcome::Rested
         );
 
-        assert_eq!(state.clock, GameClock::new(9, 0).unwrap());
+        assert_eq!(state.clock, GameClock::new(9, 1).unwrap());
         assert_eq!(state.message, crate::commands::TOWN_BED_REST_SLEEP_LINE);
         assert!(state.diagnostics.iter().any(|n| n.contains("town-bed rest 1h")));
         let _ = fs::remove_dir_all(dir);
@@ -618,12 +619,14 @@
             MoveOutcome::Rested
         );
 
-        assert_eq!(state.clock, GameClock::new(19, 0).unwrap());
+        assert_eq!(state.clock, GameClock::new(19, 1).unwrap());
         assert_eq!(
             state.turn,
-            u64::from(TOWN_REST_INITIAL_SCHEDULE_BURST_TICKS) + 9
+            u64::from(TOWN_REST_INITIAL_SCHEDULE_BURST_TICKS) + 10
         );
-        assert_eq!(state.torch_counter, 10);
+        // Ninety minutes of bed loop, then the acted town minute
+        // (`commands.md §3`, playtest P12-08).
+        assert_eq!(state.torch_counter, 9);
         assert_eq!(state.light_spell_counter, 0);
         assert_eq!((state.npcs[0].x, state.npcs[0].y), (4, 1));
         assert_eq!(
@@ -660,10 +663,10 @@
             MoveOutcome::Blocked
         );
 
-        assert_eq!(state.clock, GameClock::new(20, 0).unwrap());
+        assert_eq!(state.clock, GameClock::new(20, 1).unwrap());
         assert_eq!(
             state.turn,
-            u64::from(TOWN_REST_INITIAL_SCHEDULE_BURST_TICKS) + 1
+            u64::from(TOWN_REST_INITIAL_SCHEDULE_BURST_TICKS) + 2
         );
         assert_eq!(state.grid[32 + 1], 55 ^ 0xdd);
         assert_eq!(state.party[0].status, b'G');
@@ -735,7 +738,7 @@
             state.hole_up_command(&dir, Some(2)).unwrap(),
             MoveOutcome::Blocked
         );
-        assert_eq!(state.clock, GameClock::new(20, 0).unwrap());
+        assert_eq!(state.clock, GameClock::new(20, 1).unwrap());
         assert_eq!((state.npcs[0].x, state.npcs[0].y), scheduled);
         assert_eq!(
             (state.active_objects[1].x, state.active_objects[1].y),
@@ -790,11 +793,12 @@
             MoveOutcome::Rested
         );
 
-        assert_eq!(state.clock, GameClock::new(9, 0).unwrap());
+        assert_eq!(state.clock, GameClock::new(9, 1).unwrap());
         assert_eq!(
             state.turn,
             u64::from(TOWN_REST_INITIAL_SCHEDULE_BURST_TICKS)
                 + u64::from(TOWN_REST_TICKS_PER_HOUR)
+                + 1
         );
         assert_eq!(state.party[0].hp, 5);
         assert_eq!(state.party[0].mana, 0);
@@ -962,7 +966,7 @@
         );
 
         assert!(state.active_rest.is_none());
-        assert_eq!(state.turn, 12);
+        assert_eq!(state.turn, 13);
         // `rest-and-camp.md §5`: five hours or fewer takes the same late
         // bypass as the cooldown refusal, so it prints the no-effect line
         // rather than the success line - "the player is told the party
@@ -1017,7 +1021,7 @@
         );
 
         assert!(state.active_rest.is_none());
-        assert_eq!(state.turn, 12);
+        assert_eq!(state.turn, 13);
         // `rest-and-camp.md §5`: five hours or fewer takes the same late
         // bypass as the cooldown refusal, so it prints the no-effect line
         // rather than the success line - "the player is told the party
@@ -1060,7 +1064,7 @@
 
         assert!(state.active_rest.is_none());
         assert_eq!(state.party[1].status, b'P');
-        assert_eq!(state.turn, 12);
+        assert_eq!(state.turn, 13);
         // `rest-and-camp.md §5`: five hours or fewer takes the same late
         // bypass as the cooldown refusal, so it prints the no-effect line
         // rather than the success line - "the player is told the party
@@ -1095,11 +1099,12 @@
         );
 
         assert!(state.active_rest.is_none());
-        assert_eq!(state.clock, GameClock::new(9, 0).unwrap());
+        assert_eq!(state.clock, GameClock::new(9, 1).unwrap());
         assert_eq!(
             state.turn,
             u64::from(TOWN_REST_INITIAL_SCHEDULE_BURST_TICKS)
                 + u64::from(TOWN_REST_TICKS_PER_HOUR)
+                + 1
         );
         assert_eq!(state.message, crate::commands::TOWN_BED_REST_SLEEP_LINE);
         let _ = fs::remove_dir_all(dir);
@@ -1139,7 +1144,7 @@
         // rather than the success line - "the player is told the party
         // rested when nothing happened" is the error the section names.
         assert!(state.message.starts_with("NO EFFECT!"));
-        assert_eq!(state.turn, 12);
+        assert_eq!(state.turn, 13);
         assert!(!state.combat_active);
         let _ = fs::remove_dir_all(dir);
     }
@@ -1180,7 +1185,7 @@
         // rested when nothing happened" is the error the section names.
         assert!(state.message.starts_with("NO EFFECT!"));
         assert_eq!(state.party[1].status, b'P');
-        assert_eq!(state.turn, 12);
+        assert_eq!(state.turn, 13);
         let _ = fs::remove_dir_all(dir);
     }
 
@@ -1199,12 +1204,13 @@
             MoveOutcome::Rested
         );
 
-        assert_eq!(state.clock, GameClock::new(7, 30).unwrap());
-        assert_eq!(state.turn, 24);
+        assert_eq!(state.clock, GameClock::new(7, 32).unwrap());
+        assert_eq!(state.turn, 25);
         assert_eq!(state.torch_counter, 0);
         assert_eq!(state.light_spell_counter, 0);
-        // Twenty-four five-minute ticks wrap the twelve-frame animation clock.
-        assert_eq!(state.animation.frame, 0);
+        // Twenty-four five-minute ticks wrap the twelve-frame animation clock;
+        // the acted outdoor turn after the camp adds one (playtest P12-08).
+        assert_eq!(state.animation.frame, 1);
         assert_eq!(state.ambient_light, FULL_DAYLIGHT);
         assert!(state.visibility_dirty);
         // `rest-and-camp.md §5`: five hours or fewer takes the same late
@@ -1263,7 +1269,7 @@
             MoveOutcome::Rested
         );
 
-        assert_eq!(state.turn, 12);
+        assert_eq!(state.turn, 13);
         assert!(state.party[0].hp < 50);
         assert!(
             state
@@ -1362,7 +1368,7 @@
         assert_eq!(state.party[3].hp, 6);
         assert_eq!(state.party[3].mana, 4);
         assert_eq!(state.party[4].status, b'P');
-        assert_eq!(state.party[4].hp, 7);
+        assert_eq!(state.party[4].hp, 6);
         assert_eq!(state.party[4].mana, 98);
         // `rest-and-camp.md §5`: five hours or fewer takes the same late
         // bypass as the cooldown refusal, so it prints the no-effect line
@@ -1395,7 +1401,7 @@
         );
 
         assert_eq!(state.party[0].status, b'P');
-        assert_eq!(state.party[0].hp, 3);
+        assert_eq!(state.party[0].hp, 2);
         assert_eq!(state.party[0].mana, 98);
         // `rest-and-camp.md §5`: five hours or fewer takes the same late
         // bypass as the cooldown refusal, so it prints the no-effect line
@@ -1568,7 +1574,7 @@
         );
 
         assert!(!state.combat_active, "fixture seed must complete the camp");
-        assert_eq!(state.clock, GameClock::new(14, 0).unwrap());
+        assert_eq!(state.clock, GameClock::new(14, 2).unwrap());
         assert_eq!(state.camp_cooldown, 8);
         assert_eq!(state.party[0].hp, 1);
         assert_eq!(state.prng_state, expected_prng_state);
@@ -1593,7 +1599,7 @@
         );
 
         assert!(!state.combat_active, "fixture seed must complete the camp");
-        assert_eq!(state.clock, GameClock::new(14, 0).unwrap());
+        assert_eq!(state.clock, GameClock::new(14, 2).unwrap());
         assert!(state.party[0].hp > 1);
         assert_eq!(state.camp_cooldown, COMPLETED_LONG_CAMP_COOLDOWN_HOURS);
         // Six hours with the cooldown expired: this one really did rest.

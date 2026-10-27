@@ -466,7 +466,8 @@ fn exit_vehicle_furled_ship_without_support_redeploys_stowed_carpet() {
     assert_eq!(
         state.player.transport,
         TransportState::Carpet {
-            type_byte: FIRST_PLAYABLE_MAGIC_CARPET_TILE,
+            // The carpet marker, not the visual tile (playtest P12-12).
+            type_byte: CARPET_MOUNTED,
             tile: FIRST_PLAYABLE_MAGIC_CARPET_TILE,
         }
     );
@@ -665,18 +666,22 @@ fn exit_ship_fallbacks_save_load_round_trip_vehicle_state() {
     );
     assert_eq!(
         skiff_options.transport,
+        // The furled north frigate `0x24` launches a north skiff `0x28`
+        // (`vehicles.md §5`, playtest P12-09).
         TransportState::Skiff {
-            type_byte: TRANSPORT_MARKER_SKIFF_FIRST + 2,
-            tile: FIRST_PLAYABLE_SKIFF_TILE + 2,
+            type_byte: TRANSPORT_MARKER_SKIFF_FIRST,
+            tile: FIRST_PLAYABLE_SKIFF_TILE,
         }
     );
     let skiff_reloaded = PlayState::load_scene(&skiff_dir, skiff_options).unwrap();
     assert_eq!(skiff_reloaded.active_objects[1], parked_with_one_less_skiff);
     assert_eq!(
         skiff_reloaded.player.transport,
+        // The furled north frigate `0x24` launches a north skiff `0x28`
+        // (`vehicles.md §5`, playtest P12-09).
         TransportState::Skiff {
-            type_byte: TRANSPORT_MARKER_SKIFF_FIRST + 2,
-            tile: FIRST_PLAYABLE_SKIFF_TILE + 2,
+            type_byte: TRANSPORT_MARKER_SKIFF_FIRST,
+            tile: FIRST_PLAYABLE_SKIFF_TILE,
         }
     );
     let _ = fs::remove_dir_all(skiff_dir);
@@ -711,10 +716,12 @@ fn exit_ship_fallbacks_save_load_round_trip_vehicle_state() {
         carpet_state.special_items[SPECIAL_ITEM_MAGIC_CARPET_INDEX],
         0
     );
+    // The live state already carries the carpet marker the reload decodes
+    // (playtest P12-12).
     assert_eq!(
         carpet_state.player.transport,
         TransportState::Carpet {
-            type_byte: FIRST_PLAYABLE_MAGIC_CARPET_TILE,
+            type_byte: TRANSPORT_MARKER_MAGIC_CARPET_FIRST,
             tile: FIRST_PLAYABLE_MAGIC_CARPET_TILE,
         }
     );

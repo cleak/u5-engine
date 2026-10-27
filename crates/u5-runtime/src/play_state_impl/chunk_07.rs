@@ -1042,6 +1042,7 @@ impl PlayState {
         {
             self.message = BOARD_HORSE_NAY_REFUSAL.to_string();
             self.message_row_open_mid_line = false;
+            self.charge_board_refusal_acted();
             return MoveOutcome::Blocked;
         }
         if !self.player.transport.can_board(transport) {
@@ -1051,6 +1052,7 @@ impl PlayState {
             // (`commands.md §5.5`).
             self.message = BOARD_ON_FOOT_REFUSAL.to_string();
             self.message_row_open_mid_line = false;
+            self.charge_board_refusal_acted();
             return MoveOutcome::Blocked;
         }
 
@@ -1097,6 +1099,15 @@ impl PlayState {
         self.message = message;
         self.message_row_open_mid_line = false;
         MoveOutcome::Boarded
+    }
+
+    /// `commands.md §3`: B forwards "acted" on every path - "all four mounts
+    /// and both refusals" - except the final unknown-target `What?`, so the
+    /// `"Nay!"` and `On foot` refusals spend the mode's ordinary turn
+    /// (playtest P12-07).
+    fn charge_board_refusal_acted(&mut self) {
+        let turn_before = self.turn;
+        self.charge_tile_command_acted_exit(turn_before);
     }
 
     pub fn force_foot_transport(&mut self) {
@@ -1374,11 +1385,19 @@ impl PlayState {
                         self.message.clear();
                         return Ok(MoveOutcome::Blocked);
                     }
+                    // `vehicles.md §5`: the party "launches into a skiff
+                    // facing the same direction", by "advancing the marker
+                    // one sprite run" from the furled ship run - the facing
+                    // is the ship marker's low two bits, not the party's
+                    // pre-boarding facing (playtest P12-09).
+                    let facing = transport_marker_facing(transport.save_marker())
+                        .unwrap_or(self.player.facing);
+                    self.player.facing = facing;
                     self.player.transport = TransportState::Skiff {
                         type_byte: FIRST_PLAYABLE_SKIFF_TILE,
                         tile: FIRST_PLAYABLE_SKIFF_TILE,
                     }
-                    .with_facing(self.player.facing);
+                    .with_facing(facing);
                     self.sail_cadence = 0;
                     self.sail_cached_direction = None;
                     self.sync_player_object();
@@ -1396,9 +1415,14 @@ impl PlayState {
                     }
                     self.special_items[SPECIAL_ITEM_MAGIC_CARPET_INDEX] =
                         self.special_items[SPECIAL_ITEM_MAGIC_CARPET_INDEX].saturating_sub(1);
+                    // `vehicles.md §2`/§4: the carpet markers are `0x14`/
+                    // `0x15`; the visual tile is not a marker, and a
+                    // carpet carrying it parks a non-carpet object on X-it
+                    // (playtest P12-12).
                     self.player.transport = TransportState::Carpet {
-                        type_byte: FIRST_PLAYABLE_MAGIC_CARPET_TILE,
-                        tile: FIRST_PLAYABLE_MAGIC_CARPET_TILE,
+                        type_byte: CARPET_MOUNTED,
+                        tile: transport_visual_tile_for_marker(CARPET_MOUNTED)
+                            .unwrap_or(FIRST_PLAYABLE_MAGIC_CARPET_TILE),
                     };
                     self.sail_cadence = 0;
                     self.sail_cached_direction = None;
@@ -8114,6 +8138,10 @@ impl PlayState {
             self.emit_message_line(format!("{}\n", crate::commands::TOWN_BED_REST_SLEEP_LINE));
             self.message = crate::commands::TOWN_BED_THROWN_OUT_LINE.to_string();
             self.message_row_open_mid_line = false;
+            // `commands.md §3`: H "Always" spends the turn - the bed loop's
+            // ten-minute steps are its own time, and the dispatcher's
+            // one-minute town epilogue still follows (playtest P12-08).
+            self.charge_tile_command_acted_exit(self.turn);
             return Ok(MoveOutcome::Blocked);
         }
         let mut recovered_hp = 0;
@@ -8134,6 +8162,8 @@ impl PlayState {
              woke {woke} asleep member(s)"
         ));
         self.message = crate::commands::TOWN_BED_REST_SLEEP_LINE.to_string();
+        // See the thrown-out arm above (playtest P12-08).
+        self.charge_tile_command_acted_exit(self.turn);
         Ok(MoveOutcome::Rested)
     }
 

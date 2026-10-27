@@ -596,6 +596,15 @@ impl PlayState {
             // published line; the slot is left holding the conflict banner,
             // which is what the original's pane shows on entry.
             let _entered = self.enter_sleep_ambush_combat(monster, z, game_dir)?;
+        } else {
+            // `commands.md §3` (issue #300 Q14): H is not forwarded, so it
+            // "spends the turn on every path" - a camp that runs to its end
+            // still reaches the ordinary outdoor turn (`overworld.md §5`
+            // step 6: two minutes, the upkeep pass and the object
+            // epilogue). The five-minute elapse loop above is the
+            // handler's own time, not that tail (playtest P12-08). The
+            // dungeon's acted pass is its own (no charge here).
+            self.charge_tile_command_acted_exit(self.turn);
         }
         Ok(MoveOutcome::Rested)
     }
