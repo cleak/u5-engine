@@ -43,6 +43,30 @@ fn playfix12_p12_07_board_what_stays_free() {
     assert_eq!(state.turn, turn);
 }
 
+/// P12-09: `vehicles.md §5` - a furled frigate with no landing support
+/// "launches into a skiff facing the same direction" by advancing the
+/// marker one sprite run, so a furled east frigate `0x25` becomes skiff
+/// `0x29`, whatever the party's separate facing field still holds.
+#[test]
+fn playfix12_p12_09_ship_to_skiff_launch_keeps_the_ship_facing() {
+    let mut state = world_state(vec![1; WORLD_CELLS], 5, 5);
+    state.player.facing = Direction::North;
+    state.player.transport = TransportState::Ship {
+        type_byte: 0x25,
+        tile: transport_visual_tile_for_marker(0x25).unwrap(),
+        sails_hoisted: false,
+        hull: 8,
+        skiffs: 1,
+    };
+    state.sync_player_object();
+
+    assert_eq!(state.exit_vehicle(), MoveOutcome::ExitedVehicle);
+
+    assert!(matches!(state.player.transport, TransportState::Skiff { .. }));
+    assert_eq!(state.player.transport.save_marker(), 0x29);
+    assert_eq!(state.player.facing, Direction::East);
+}
+
 /// P12-12: `inventory.md §7.1` - U-Use "selects one of the two carpet
 /// frames", markers `0x14`/`0x15`; `vehicles.md §5` - X-it then parks a
 /// carpet object that "must remain boardable", which B-Board takes as

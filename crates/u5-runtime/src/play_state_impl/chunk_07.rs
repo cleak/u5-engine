@@ -1385,11 +1385,19 @@ impl PlayState {
                         self.message.clear();
                         return Ok(MoveOutcome::Blocked);
                     }
+                    // `vehicles.md §5`: the party "launches into a skiff
+                    // facing the same direction", by "advancing the marker
+                    // one sprite run" from the furled ship run - the facing
+                    // is the ship marker's low two bits, not the party's
+                    // pre-boarding facing (playtest P12-09).
+                    let facing = transport_marker_facing(transport.save_marker())
+                        .unwrap_or(self.player.facing);
+                    self.player.facing = facing;
                     self.player.transport = TransportState::Skiff {
                         type_byte: FIRST_PLAYABLE_SKIFF_TILE,
                         tile: FIRST_PLAYABLE_SKIFF_TILE,
                     }
-                    .with_facing(self.player.facing);
+                    .with_facing(facing);
                     self.sail_cadence = 0;
                     self.sail_cached_direction = None;
                     self.sync_player_object();
