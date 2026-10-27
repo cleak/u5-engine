@@ -330,6 +330,43 @@ fn playfix4_h46_herbalist_carry_cap_refusal_has_a_blank_row_each_side() {
     assert!(rows[first + 2].starts_with("A..."), "{rows:#?}");
 }
 
+/// P12-06: `shops.md §8.C` reagent table, "Already carrying 99": after the
+/// refusal the overlay "consume[s] one command key, then redraw[s] stock".
+/// `commands.md §5.1`: the end-cap marker "belongs to the turn loop", and that
+/// key is the shop's own read, so the waiting row is a bare continuation row.
+/// The shell drew the turn loop's triangle there.
+#[test]
+fn playtest_p12_06_herbalist_carry_cap_key_wait_draws_no_turn_loop_marker() {
+    use crate::shop_runtime::ReagentShopState;
+    use crate::shop_session::ActiveShopSession;
+    let mut state = test_state(open_grid(), 1, 1);
+    state.area = Area::Town {
+        scene: Scene::new(1).unwrap(),
+        floor: 0,
+    };
+    state.gold = 3000;
+    state.reagents = [99; 8];
+    state.active_shop = Some(ActiveShopSession::Reagent(ReagentShopState::Greeting {
+        herbalist: Herbalist::TheHerbalist,
+    }));
+    state.emit_message_line("\n\"Welcome!\" ");
+    state.open_message_row();
+    for key in ['Y', 'A'] {
+        handle_play_key_input(&mut state, key, "", Path::new("")).unwrap();
+    }
+    assert!(matches!(
+        state.active_shop,
+        Some(ActiveShopSession::Reagent(ReagentShopState::CapRefusalWait { .. }))
+    ));
+    assert!(crate::shop_pause_row_is_continuation(&state));
+
+    handle_play_key_input(&mut state, 'Z', "", Path::new("")).unwrap();
+    assert!(matches!(
+        state.active_shop,
+        Some(ActiveShopSession::Reagent(ReagentShopState::PickReagent { .. }))
+    ));
+}
+
 /// H47: `shops.md §8.C` inn table, "Sleep / morning": `Morning!\n`, and "A
 /// poisoned member's recovery death adds `\n`, the member name, and
 /// ` has\npassed away.\n`" - a blank row between `Morning!` and the name.
