@@ -136,3 +136,41 @@ fn playtest_p12_18_blank_virtue_answer_keeps_its_colon_row() {
     assert!(state.surface_command_row_follows_history);
     let _ = fs::remove_dir_all(dir);
 }
+
+/// `text-output.md §10.2`: the end cap is the mode loop's; "a prompt a
+/// command parks at in the middle of its own run" shows its row with the
+/// cursor on it "and nothing underneath". `karma.md §7`: record `34`'s
+/// trailing space belongs to the prompt; §8.2: Codex keys "produce no
+/// ordinary command echo"; `input.md §3`: the shared wait draws the cursor
+/// at the current text cursor cell (P12-17).
+#[test]
+fn playtest_p12_17_shrine_handler_waits_open_no_command_row() {
+    // The offering chooser keeps the cursor on the question's own row.
+    let mut offering = world_state(open_world_grid(), 5, 5);
+    let mut session = ShrineSession::new(ShrineVirtue::Honor);
+    session.phase = ShrinePhase::Offering;
+    offering.active_shrine = Some(session);
+    offering.emit_message_line("\n\nOffer how many\ngold? ");
+    assert!(open_row_owns_the_cursor(&offering));
+
+    // The Codex reader: inline after a record that ends mid-row...
+    let mut codex = world_state(open_world_grid(), 5, 5);
+    codex.codex_presentation_steps = 1;
+    codex.emit_message_line("\nThe Codex lies before thee...");
+    assert!(codex.message_window_live_row_suppressed());
+    // ...and a bare cursor, no end cap, on the row a record's feed opened.
+    codex.emit_message_line("\nThe book is open!\n\n");
+    assert!(!codex.message_window_live_row_suppressed());
+    assert!(shop_pause_row_is_continuation(&codex));
+    // An ordinary command row is unaffected once the reader is done.
+    codex.codex_presentation_steps = 0;
+    assert!(!shop_pause_row_is_continuation(&codex));
+
+    // The restoration's typed reads carry their own live row, a
+    // continuation of the block above - no end-capped command row.
+    let mut world = shr12_ruined_honesty_state();
+    assert_eq!(world.yell_command(Some("FALLAX")), MoveOutcome::Used);
+    assert_eq!(world.typed_prompt_echo().as_deref(), Some(":"));
+    world.step_active_shrine_restoration('\r', "honesty");
+    assert_eq!(world.typed_prompt_echo().as_deref(), Some("Mantra:"));
+}
