@@ -1037,31 +1037,21 @@ impl PlayState {
                 return Ok(MoveOutcome::Blocked);
             }
         }
-        if let Some((object_slot, object)) = self
+        if let Some(object) = self
             .world_object_slot_at(nx, ny)
             .filter(|_| !onto_boardable_vehicle)
-            .map(|(slot, object)| (slot, *object))
+            .map(|(_, object)| *object)
         {
             if ship_under_sail {
                 let _ = self.apply_sailing_collision(tile);
                 return Ok(MoveOutcome::Blocked);
             }
-            if let Some(game_dir) = game_dir {
-                if game_dir.join(BRIT_CBT_FILE).exists()
-                    && !is_whirlpool_object(object)
-                    && terrain_combat_base_class(object).is_some()
-                {
-                    self.advance_turn();
-                    let _setup_report = self.enter_terrain_combat_from_world_object(
-                        game_dir,
-                        plane,
-                        object_slot,
-                        object,
-                    )?;
-                    return Ok(MoveOutcome::Used);
-                }
-            }
-            let _note = self.terrain_encounter_note(game_dir, plane, object)?;
+            // `encounters.md §2.1` (issue #305 Q4, R634/R638): "A party step
+            // into a monster's cell is refused ... and outdoors that refusal
+            // consumes no turn ... so the bump itself never starts combat and
+            // the monster does not react to that keypress." Contact combat
+            // comes only from the walker's orthogonal adjacency reaction or
+            // from A-Attack.
             // `audio.md §7.4`: refusal by a blocking object. Aboard a vehicle
             // a whirlpool-class blocker "returns completely silently, with no
             // message at all", so it is the one arm here that neither prints
@@ -1209,6 +1199,9 @@ impl PlayState {
         self.apply_troll_bridge_ambush(plane);
         self.append_world_damage_tile_message(game_dir, plane)?;
         self.append_world_status_tile_message(plane);
+        // `overworld.md §5` (issue #305 Q5): the Underworld earthquake draw
+        // follows the underfoot arms and precedes Rough seas.
+        self.apply_underworld_earthquake_check();
         // `overworld.md §6.2.5`: rough seas fires on "every otherwise
         // eligible consumed action on that terrain", after the action's
         // time increment and party cleanup and ahead of the encounter

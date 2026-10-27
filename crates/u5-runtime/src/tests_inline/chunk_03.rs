@@ -2881,6 +2881,7 @@ fn town_entry_applies_night_gate_substitution() {
         fortunes_of_war: 0,
         camp_cooldown: 0,
         camp_month_cookie: 0,
+        world_tick_gate: WORLD_TICK_GATE_STEADY,
         active_player: None,
         combat_round_counter: 0,
         combat_interference_sources: [0; COMBAT_ACTOR_SLOTS],

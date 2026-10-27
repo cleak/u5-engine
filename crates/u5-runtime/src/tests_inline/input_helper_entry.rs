@@ -47,11 +47,11 @@ mod input_helper_entry {
         assert_eq!(state.prng_state, u5_prng_advance_state(seed));
     }
 
-    /// Journey Onward: the load owes the first prompt's entry step, and the
-    /// session-start freeze (`animation.md §13.2`) makes that first world
-    /// step a bare repaint, so the command wait's first timer pass is the
-    /// first to draw. Before this the pump's first firing was the frozen
-    /// one, and every pass after it ran one draw behind.
+    /// A load from a save holding zero in the world-tick gate byte
+    /// (`animation.md §13.2`, R639: "A first step is bare only when the
+    /// loaded file holds zero in the byte"): the first prompt's entry step
+    /// is the bare one, so the command wait's first timer pass is the first
+    /// to draw. Stock saves hold the steady value and take no freeze.
     #[test]
     fn the_session_start_freeze_falls_on_the_first_entry_step() {
         let mut state = world_at_prompt();

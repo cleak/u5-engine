@@ -31048,15 +31048,16 @@ mod tests {
     ///
     /// The fight is a lottery on the seed: about one walk in seven reaches
     /// combat inside forty steps. The seeds are re-picked whenever the shell's
-    /// draw count per step changes - last when the overworld input helper's
-    /// entry world step (`timing.md §8.2`) added one wind draw per prompt,
-    /// which moved `0x0def`'s fight out of reach. `0x0100` and `0x0443`
-    /// engage at steps 34 and 24 under it.
+    /// draw count per step changes - last when the session's first entry
+    /// step stopped being bare (`animation.md §13.2`, R639) and a step into
+    /// a creature stopped starting a fight (`encounters.md §2.1`, R634),
+    /// which moved `0x0443` out of reach. `0x0100`, `0x02ef` and
+    /// `0x0470` engage at steps 11, 26 and 35 under them.
     #[test]
     #[cfg(feature = "original-asset-tests")]
     fn the_visual_shell_meets_a_wandering_monster_on_the_swamp_long_walk() {
         let mut engaged = Vec::new();
-        for seed in [0x0100_u16, 0x0443, 0x0789] {
+        for seed in [0x0100_u16, 0x02ef, 0x0470] {
             let dir = writable_original_asset_copy("swamp-long-walk");
             let walk = walk_the_swamp_through_the_visual_systems(&dir, seed);
             let _ = fs::remove_dir_all(&dir);

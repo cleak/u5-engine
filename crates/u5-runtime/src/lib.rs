@@ -1223,4 +1223,5 @@ mod tests {
     include!("tests_inline/queued_fixes.rs");
     include!("tests_inline/input_helper_entry.rs");
     include!("tests_inline/ready_picker_highlight_pad.rs");
+    include!("tests_inline/spec305.rs");
 }

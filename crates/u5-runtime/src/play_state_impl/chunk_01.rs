@@ -174,6 +174,7 @@ impl PlayState {
     }
 
     pub fn load_scene(game_dir: &Path, options: PlayOptions) -> io::Result<Self> {
+        let world_tick_gate = options.world_tick_gate;
         let mut state = match options.target {
             PlayTarget::Town(scene) => Self::load_town_scene(game_dir, scene, options),
             PlayTarget::Dungeon(scene) => Self::load_dungeon_scene(game_dir, scene, options),
@@ -186,9 +187,12 @@ impl PlayState {
         // screens leave it at the bottom. `cleak/u5-engine#11`; asked on
         // the spec side as `cleak/u5-spec#210`.
         state.message_window_top_offset = MESSAGE_WINDOW_LOAD_CURSOR_ROWS;
-        // `animation.md §13.2`: the gating byte ships in the freeze state,
-        // so the session's first world step is a bare repaint.
-        state.session_start_world_step_frozen = true;
+        // `animation.md §13.2` (R639): the gate byte "is part of the save
+        // image ... and the load restores it", and "A first step is bare
+        // only when the loaded file holds zero in the byte". Stock saves hold
+        // the steady value, so on Journey Onward the first prompt's entry
+        // step is a full step with its wind draw.
+        state.session_start_world_step_frozen = world_tick_gate == 0;
         // `timing.md §8.2`: the first command prompt of the session enters
         // the overworld input helper, which steps the world once on entry.
         state.overworld_input_helper_entry_owed = true;
@@ -422,6 +426,12 @@ impl PlayState {
         save[SAVE_NATURAL_MOONGATE_COUNTER_OFFSET] = self.natural_moongate_counter;
         save[SAVE_CAMP_COOLDOWN_OFFSET] = self.camp_cooldown;
         save[SAVE_CAMP_MONTH_COOKIE_OFFSET] = self.camp_month_cookie;
+        // `formats/saved-gam.md §10`: the world tick sets the gate byte back
+        // to one at its own tail, so a zero survives only until the
+        // session's first world step has run.
+        if !self.session_start_world_step_frozen {
+            save[SAVE_WORLD_TICK_GATE_OFFSET] = WORLD_TICK_GATE_STEADY;
+        }
         if let Some(tracker) = self.door_tracker {
             save[SAVE_DOOR_TRACKER_PREVIOUS_TILE_OFFSET] = tracker.previous_tile;
             save[SAVE_DOOR_TRACKER_X_OFFSET] = u8::try_from(tracker.x).map_err(|_| {
@@ -2268,6 +2278,10 @@ impl PlayState {
             // says nothing about turn cost. Corroborated only in aggregate
             // by the defect-13 replay. Open spec question 2 in
             // `turn-clock-wind-report.md`.
+            //
+            // Now published (issue #305 Q4, R637): "A blocked town step
+            // still counts as acted, so that turn's full epilogue runs, NPC
+            // engagement included" (`town-mode.md §14`).
             self.advance_turn();
             return Ok(MoveOutcome::Blocked);
         }

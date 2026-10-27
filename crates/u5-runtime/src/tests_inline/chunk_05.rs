@@ -602,8 +602,10 @@ fn exit_vehicle_parked_object_is_written_to_the_live_saved_gam_table() {
     assert_eq!(options.transport, TransportState::Foot);
     assert_eq!(options.saved_active_objects.as_ref().unwrap()[0], parked);
     let reloaded = PlayState::load_scene(&dir, options).unwrap();
-    // `animation.md §13.2`: a loaded session starts in the freeze state.
-    assert!(reloaded.session_start_world_step_frozen);
+    // `animation.md §13.2` (R639): the save wrote the gate byte's steady
+    // value, so the reloaded session's first world step is not bare.
+    assert_eq!(saved_gam[SAVE_WORLD_TICK_GATE_OFFSET], WORLD_TICK_GATE_STEADY);
+    assert!(!reloaded.session_start_world_step_frozen);
     assert_eq!(reloaded.player.transport, TransportState::Foot);
     assert_eq!(reloaded.active_objects[1], parked);
     assert_eq!(reloaded.world_object_at(5, 5), Some(&parked));
@@ -987,7 +989,7 @@ fn refused_hoisted_frigate_step_runs_exact_collision_payload_without_a_turn() {
 }
 
 #[test]
-fn rough_seas_hits_each_non_dead_member_after_one_repaint_tick() {
+fn rough_seas_hits_each_non_dead_member_after_one_world_tick() {
     let mut grid = open_world_grid();
     grid[world_cell_index(5, 5)] = BRIT_DEEP_WATER_TILE;
     let mut state = world_state(grid, 5, 5);
@@ -999,13 +1001,14 @@ fn rough_seas_hits_each_non_dead_member_after_one_repaint_tick() {
     state.party[2].status = PARTY_STATUS_DEAD;
     state.party[2].hp = 0;
     state.prng_state = 0x2468;
-    // `overworld.md §6.2.5` puts "one world repaint tick" between the
-    // impact rumble and absorption and scores the whole ordered sequence at
-    // "exactly `N` gameplay draws" - repeated by its conformance vector,
-    // "consume exactly `N` gameplay draws in `1..8`". The repaint therefore
-    // costs the gameplay stream nothing, so the expected stream position is
-    // the absorption draws alone.
-    let mut expected_prng = state.prng_state;
+    // `overworld.md §6.2.5` (R642): the impact presentation's world tick
+    // takes "one `0..63` wind check, its follow-ups when it fires, and the
+    // animator's draws for eligible on-screen objects" before the `N`
+    // absorption draws.
+    let mut ticked = state.clone();
+    let _ = ticked.advance_visual_tick();
+    let mut expected_prng = ticked.prng_state;
+    assert_ne!(expected_prng, state.prng_state, "the tick takes its wind draw");
     let expected_rolls = [0usize, 1, 3, 4, 5]
         .map(|slot| {
             (
