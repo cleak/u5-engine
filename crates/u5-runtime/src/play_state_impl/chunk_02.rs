@@ -2200,17 +2200,29 @@ impl PlayState {
                         // Measured: the answered `:` row stays on screen
                         // with a blank row under it, and the mantra label
                         // opens below as the next row to type into.
-                        self.emit_message_line(format!(":{}\n\n", session.virtue_buffer));
-                        // `karma.md §12`: "wait six world ticks" before the
-                        // first `Mantra:` row opens. `shrine_prompt_echo`
-                        // already suppresses the live Mantra row while
-                        // staged narration is pending, so a pure hold here
-                        // is enough - nothing new needs printing once it
-                        // clears.
-                        self.staged_narration.push_ticks_counting_world_steps(
+                        //
+                        // `karma.md §7`: "Return submits without echoing a
+                        // newline", and §12: "After a nonblank virtue answer,
+                        // wait six world ticks and emit a newline. Ask
+                        // `\nMantra:`". So the answer's row stays open through
+                        // the hold, and both feeds - the handler's newline,
+                        // which closes it, and the ask's leading one, the
+                        // blank - come only when the hold ends. Measured
+                        // 2026-10-26 (`shrine-three-mantras`, synced keys):
+                        // the stock frame does not change for about 0.35 s
+                        // after this Return, where this engine logged the
+                        // answer and both feeds at once.
+                        self.emit_message_line(format!(":{}", session.virtue_buffer));
+                        // Stated, not inferred from the text: the cursor is
+                        // still on the answer's row.
+                        self.message_row_open_mid_line = true;
+                        // The live `Mantra:` row is the ask's own text;
+                        // `shrine_prompt_echo` keeps it off screen while
+                        // the hold is pending.
+                        self.staged_narration.push_ticks_counting_world_steps_on_open_row(
                             SHRINE_MANTRA_FIRST_HOLD_BIOS_TICKS,
                             SHRINE_MANTRA_FIRST_WORLD_STEPS,
-                            String::new(),
+                            "\n\n",
                         );
                     }
                     // "Backspace or Left erases the last character"; Left

@@ -724,10 +724,19 @@ pub fn handle_play_script_command(
         // An open prompt is still the shared wait, which steps the world on
         // every no-key pass (`input.md §2`, u5-spec#303 Q3); a `.` key would
         // instead be read by the prompt as a key.
+        // The shrine and Codex reads and the endgame's ten shared-wait sites
+        // are among them (u5-spec#304 Q4), each pass stepping the world.
         if state.prompt_waits_in_shared_wait() {
             for _ in 0..count {
                 state.prompt_wait_pass();
             }
+            return Ok(PlayInputDisposition::Continue);
+        }
+        // `endgame.md §8.3` step 8 (u5-spec#304 Q4, R629): a final-narrative
+        // page wait is a tight loop on the raw key check, with "no cursor
+        // blink, no world step and no one-tick pacing". A pass with no key
+        // there does nothing at all - and a `.` would be read as the page key.
+        if state.endgame_raw_key_page_wait_open() {
             return Ok(PlayInputDisposition::Continue);
         }
         for _ in 0..count {

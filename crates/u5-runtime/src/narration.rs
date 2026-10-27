@@ -188,6 +188,25 @@ impl StagedNarration {
         });
     }
 
+    /// [`Self::push_ticks_counting_world_steps`] for a beat written against a
+    /// row the previous print left open; see
+    /// [`NarrationBeat::continues_open_row`].
+    pub fn push_ticks_counting_world_steps_on_open_row(
+        &mut self,
+        delay_bios_ticks: u16,
+        world_steps: u16,
+        text: impl Into<String>,
+    ) {
+        self.beats.push_back(NarrationBeat {
+            delay_secs: bios_ticks_secs(delay_bios_ticks),
+            text: text.into(),
+            continues_open_row: true,
+            chained: false,
+            world_steps,
+            panel_repaint: false,
+        });
+    }
+
     /// Counted world steps of the head beat that have come due by
     /// `now_secs`, spread evenly across its hold; each step is handed out
     /// once. The rest are carried on the beat when it is released.

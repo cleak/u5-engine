@@ -807,6 +807,14 @@ impl PlayState {
         // four runs each side): the stock fall took 6 HP every time, the
         // draw straight after the torch roll; this engine, rolling the
         // monster's seventeen draws in between, took 4 every time.
+        //
+        // Published since (`dungeon-mode.md §8`, u5-spec#304 Q1): "The
+        // active dungeon monster gets its fresh setup (Section 4.1) exactly
+        // once per chain, after the last descent's sweep ... On a room
+        // landing the room is entered at once ... if the scene is still a
+        // dungeon when that fight ends, the view initialiser runs and then
+        // the one setup. When the chain runs off the bottom, or the room
+        // fight ends dungeon mode, there is no setup at all."
         if drops > 0 && matches!(self.area, Area::Dungeon { .. }) && !self.combat_active {
             self.setup_dungeon_active_monster_fresh();
         }

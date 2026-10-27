@@ -88,8 +88,9 @@ mod draw_parity {
     /// holds are key-anchored too and were re-measured the same way
     /// (`shrine-three-mantras` reaction probe, 2026-10-26): the stock reacts
     /// about 0.35 s after the virtue Return and 0.70 s after each mantra
-    /// Return, six and twelve ticks. Only the Kneel-to-question hold, an
-    /// interval between two stock records, keeps its measured sixteen.
+    /// Return, six and twelve ticks. The Kneel-to-question hold, an interval
+    /// between two stock records, was re-measured with a finer sampler the
+    /// same day: 0.60 to 0.66 s, eleven ticks for its ten steps.
     #[test]
     fn shrine_walk_and_exit_cost_one_tick_a_step() {
         assert_eq!(SHRINE_KNEEL_HOLD_BIOS_TICKS, SHRINE_KNEEL_WORLD_STEPS);
@@ -103,7 +104,10 @@ mod draw_parity {
         // the 3.6 s the serial-fitted hold gave.
         let kneel_secs = f64::from(SHRINE_KNEEL_HOLD_BIOS_TICKS) * crate::narration::BIOS_TICK_SECS;
         assert!((2.4..2.7).contains(&kneel_secs), "{kneel_secs}");
-        assert_eq!(SHRINE_VIRTUE_QUESTION_HOLD_WORLD_TICKS, 16);
+        assert_eq!(SHRINE_VIRTUE_QUESTION_HOLD_WORLD_TICKS, 11);
+        let question =
+            f64::from(SHRINE_VIRTUE_QUESTION_HOLD_WORLD_TICKS) * crate::narration::BIOS_TICK_SECS;
+        assert!((0.59..0.66).contains(&question), "{question}");
         assert_eq!(SHRINE_MANTRA_FIRST_HOLD_BIOS_TICKS, SHRINE_MANTRA_FIRST_WORLD_STEPS);
         assert_eq!(SHRINE_MANTRA_FIRST_HOLD_BIOS_TICKS, 6);
         assert_eq!(SHRINE_MANTRA_SUBSEQUENT_HOLD_BIOS_TICKS, SHRINE_MANTRA_SUBSEQUENT_WORLD_STEPS);

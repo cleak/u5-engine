@@ -803,24 +803,23 @@ pub const SHRINE_KNEEL_HOLD_BIOS_TICKS: u16 =
 /// `karma.md §12`: "After ten world ticks, record `29`: the question asking
 /// which virtue."
 ///
-/// **Measured** 2026-09-19 (`qa/paired/shrine-enter-pacing.tsv`): the
-/// original's question comes one 600 ms sample after its Kneel record, which
-/// ten ticks (0.55 s) does not reproduce and sixteen (0.88 s) does. That is
-/// an interval between two records on the stock side, so the serial-key skew
-/// that misled [`SHRINE_KNEEL_HOLD_BIOS_TICKS`] does not touch it, and the
-/// synced-key re-measurement of 2026-10-26 confirms it: at ten ticks the
-/// engine put the question up at `t2400` beside the Kneel record, where the
-/// original still showed the Kneel record alone. The kneeling steps cost more
-/// than the walk's - about 1.6 ticks each, the kneeling family's animator
-/// running on each repaint - and `karma.md §7` publishes step counts, not
-/// their cost.
+/// `karma.md §7`'s entry table gives the interval as "ten world steps and ten
+/// one-tick delay requests" - a step count, not its cost.
 ///
-/// Caveat (2026-10-26, `docs/measured-constants.md`): the synced-key reaction
-/// probe on `shrine-three-mantras` timed the mantra holds, which run the same
-/// kneeling repaint, at about one tick a step, not 1.6. This value rests on
-/// 600 ms screenshot samples alone and wants a finer stock-side measurement
-/// of the Kneel-to-question interval before anyone builds on its rate.
-pub const SHRINE_VIRTUE_QUESTION_HOLD_WORLD_TICKS: u16 = 16;
+/// **Re-measured** 2026-10-26 (`qa/paired/shrine-three-mantras.tsv`, synced
+/// keys, four runs, both windows' message areas sampled every ~33 ms): the
+/// stock Kneel record to the stock question is 598, 624, 626 and 658 ms
+/// (mean 627 ms, 11.4 ticks). The same sampler read this engine's former
+/// sixteen ticks as 857 to 891 ms, so it adds no bias of its own. Eleven
+/// ticks (0.60 s) is the nearest whole count: each of the ten steps waits for
+/// the next timer edge, and the repaints and the record print take part of
+/// one more, as the mantra holds' six and twelve steps also come out a little
+/// over a tick a step (see [`SHRINE_MANTRA_FIRST_HOLD_BIOS_TICKS`]).
+///
+/// The sixteen this replaces rested on 600 ms screenshot samples
+/// (`shrine-enter-pacing`), which can only bound the interval to `(0, 600]`
+/// ms, and was read as about 1.6 ticks a step.
+pub const SHRINE_VIRTUE_QUESTION_HOLD_WORLD_TICKS: u16 = 11;
 /// The meditation's exit pacing, after the handler returns.
 ///
 /// `cleak/u5-spec#271` and `karma.md §7.2`: the handler "*returns to the

@@ -11479,7 +11479,7 @@ fn animate_static_tiles(
                 advanced = true;
                 break 'step;
             }
-            let gate_outcome = if visual_modal_prompt_active(&visual.state) {
+            let gate_outcome = if visual_shared_wait_prompt_open(&visual.state) {
                 None
             } else {
                 let game_dir = visual.game_dir.clone();
@@ -18960,6 +18960,20 @@ fn visual_modal_prompt_active(state: &PlayState) -> bool {
         || state.endgame.is_some()
 }
 
+/// Whether the idle pump's pass belongs to an open prompt's shared wait
+/// rather than to the command wait.
+///
+/// [`visual_modal_prompt_active`] plus the reads that own no keyboard surface
+/// of their own: the shrine's two altar waits and offering chooser and the
+/// Codex reader (`input.md §2`, u5-spec#304 Q4). Each of those waits through
+/// the shared wait under the presentation's suspended scene value, so a pass
+/// there is the presentation's world step - not the command wait's
+/// exploration gate and ordinary world step, which these used to get because
+/// nothing marked them as prompts.
+fn visual_shared_wait_prompt_open(state: &PlayState) -> bool {
+    visual_modal_prompt_active(state) || state.prompt_waits_in_shared_wait()
+}
+
 /// The idle redraw tick, which is also the only pass that toggles the
 /// `combat.md §7` combat-overlay blink flag - it reaches it through
 /// `idle_wait_pass`, which calls `advance_visual_tick` on the command-wait
@@ -18972,7 +18986,7 @@ fn visual_modal_prompt_active(state: &PlayState) -> bool {
 /// long as the cursor stayed open. The cursor's real claim on the keyboard is
 /// expressed where it belongs, in [`combat_targeting_cursor_owns_keyboard`].
 fn visual_idle_tick(state: &mut PlayState, game_dir: &Path) -> bool {
-    if visual_modal_prompt_active(state) {
+    if visual_shared_wait_prompt_open(state) {
         // `input.md §2` (u5-spec#303 Q3, R626): a prompt "waits exactly as
         // the command prompt does in the same scene", so each no-key pass at
         // one still runs the world step - and its gameplay draws. Only the
@@ -27496,6 +27510,44 @@ mod tests {
         chest.start_surface_object_chest_prompt(2, 1, SurfaceChestVerb::Open);
         assert!(chest.active_surface_chest.is_some());
         assert!(!escape_is_inert_in_gameplay(&chest));
+    }
+
+    /// u5-spec#304 Q4: the shrine's altar waits and offering chooser and the
+    /// Codex reader own no keyboard surface, and the pump used to give them
+    /// the command wait's pass - its ordinary world step, with the world
+    /// animator over the suspended table. Each is a shared wait under the
+    /// presentation's scene value, so a pass is one presentation step.
+    #[test]
+    fn visual_idle_tick_steps_the_presentation_at_the_shrine_and_codex_waits() {
+        for phase in [
+            u5_runtime::ShrinePhase::AltarAnnouncement,
+            u5_runtime::ShrinePhase::AltarQuest,
+            u5_runtime::ShrinePhase::Offering,
+            u5_runtime::ShrinePhase::Virtue,
+        ] {
+            let mut state = world_state(open_world_grid(), 10, 20);
+            let mut session = u5_runtime::ShrineSession::new(ShrineVirtue::Honesty);
+            session.phase = phase;
+            state.active_shrine = Some(session);
+            // Only the presentation step repaints over an unrestored
+            // inversion (`karma.md §7.2`).
+            state.presentation_viewport_inverted = true;
+            assert!(visual_shared_wait_prompt_open(&state), "{phase:?}");
+            let mut expected = state.clone();
+            expected.advance_presentation_world_step();
+            assert!(visual_idle_tick(&mut state, Path::new(".")), "{phase:?}");
+            assert_eq!(state.prng_state, expected.prng_state, "{phase:?}");
+            assert_eq!(state.active_objects, expected.active_objects, "{phase:?}");
+            assert_eq!(state.turn, 0, "{phase:?}");
+            assert!(!state.presentation_viewport_inverted, "{phase:?}");
+        }
+        let mut codex = world_state(open_world_grid(), 10, 20);
+        codex.codex_presentation_steps = 2;
+        let mut expected = codex.clone();
+        expected.advance_presentation_world_step();
+        assert!(visual_idle_tick(&mut codex, Path::new(".")));
+        assert_eq!(codex.prng_state, expected.prng_state);
+        assert_eq!(codex.active_objects, expected.active_objects);
     }
 
     #[test]

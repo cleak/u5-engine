@@ -2122,11 +2122,24 @@ impl PlayState {
     /// slow-CPU gate, which is the rate taken here. Nothing runs while the
     /// absorption hold still shows the arena: `§5.2`'s forty paced
     /// iterations, the first of which draws the tableau, follow it.
+    ///
+    /// Not at the ten key waits that go through the shared wait
+    /// ([`Self::endgame_key_wait_in_shared_wait`], u5-spec#304 Q4): there the
+    /// shared wait's own no-key pass is the world step
+    /// ([`Self::endgame_shared_wait_step`]), and running this as well would
+    /// animate the tableau, and draw for it, twice a tick. The clock is
+    /// re-anchored instead, so the pump does not catch up once the wait ends.
     pub fn advance_endgame_tableau_animation_to(&mut self, now_secs: f64) -> bool {
         if self.endgame_absorption_arena.is_some() {
             return false;
         }
         let tick = (now_secs.max(0.0) / crate::narration::BIOS_TICK_SECS) as u64;
+        if self.endgame_key_wait_in_shared_wait() {
+            if let Some(endgame) = self.endgame.as_mut() {
+                endgame.tableau_animation_tick = Some(tick);
+            }
+            return false;
+        }
         let Some(endgame) = self.endgame.as_mut() else {
             return false;
         };

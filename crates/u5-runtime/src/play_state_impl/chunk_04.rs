@@ -6023,6 +6023,9 @@ impl PlayState {
             false
         } else {
             self.prng_state = stranger_host_seed.unwrap_or_else(host_clock_prng_seed_now);
+            // `conversation.md §9` step 3 (u5-spec#304 Q2): one draw over
+            // `0..1`, the opener's only one; "On result `1` the NPC
+            // introduces itself", on `0` nothing follows the description.
             self.random_range_u8(0, 1) != 0
         };
         let mut suspended_after_opening = false;
@@ -6607,6 +6610,10 @@ impl PlayState {
         // the selected branch below is a deterministic high-to-low scan.
         self.prng_state = host_seed;
         if self.keys != 0 || self.gems != 0 || self.torches != 0 {
+            // `conversation.md §10` item 1 (u5-spec#304 Q3): "one draw from
+            // the inclusive range `0..2`: `0` picks keys, `1` gems, `2`
+            // torches. If the party has none of the picked item it draws
+            // again from `0..2`, one draw per attempt".
             loop {
                 let stock = match self.random_range_u8(0, 2) {
                     0 => &mut self.keys,

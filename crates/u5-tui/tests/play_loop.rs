@@ -722,6 +722,49 @@ fn play_script_idle_count_steps_the_world_at_the_arrest_offer() {
     assert_eq!(prompted.message, TOWN_ARREST_SURRENDER_PROMPT);
 }
 
+// u5-spec#304 Q4
+#[test]
+fn play_script_idle_count_steps_the_shrine_reads_and_not_the_narrative_pages() {
+    // `input.md §2`: the shrine's typed virtue reader waits through the
+    // shared wait under the presentation's suspended scene value, so each
+    // no-key pass runs one presentation world step (`karma.md §7`), and the
+    // `.` a pass used to send is not typed into the answer.
+    let mut shrine = world_state(open_world_grid(), 4, 5);
+    shrine.active_shrine = Some(ShrineSession::entering(ShrineVirtue::Honesty));
+    let mut expected = shrine.clone();
+    for _ in 0..3 {
+        expected.advance_presentation_world_step();
+    }
+    assert_eq!(
+        handle_play_script_command(&mut shrine, "idle:3", Path::new("")).unwrap(),
+        PlayInputDisposition::Continue
+    );
+    assert_eq!(shrine.prng_state, expected.prng_state, "three hold-cost steps");
+    assert_eq!(shrine.animation.frame, expected.animation.frame);
+    assert_eq!(shrine.active_shrine.as_ref().unwrap().virtue_buffer, "");
+    assert_eq!(shrine.turn, 0);
+
+    // `endgame.md §8.3` step 8: a final-narrative page wait is a raw-key
+    // tight loop - no world step, and a pass is not the page key.
+    let mut narrative = test_state(open_grid(), 1, 1);
+    narrative.enter_endgame_with_messages(None);
+    narrative.endgame.as_mut().unwrap().outcome = Some(EndgameOutcome::Victory);
+    narrative.endgame.as_mut().unwrap().cinematic.step =
+        u5_runtime::endgame_cinematic::EndgameCinematicStep::NarrativeWindow(1);
+    let before = narrative.clone();
+    assert_eq!(
+        handle_play_script_command(&mut narrative, "idle:4", Path::new("")).unwrap(),
+        PlayInputDisposition::Continue
+    );
+    assert_eq!(narrative.prng_state, before.prng_state);
+    assert_eq!(narrative.animation.frame, before.animation.frame);
+    assert_eq!(
+        narrative.endgame.as_ref().unwrap().cinematic.step,
+        u5_runtime::endgame_cinematic::EndgameCinematicStep::NarrativeWindow(1),
+        "still on the same page"
+    );
+}
+
 // from chunk_19
 #[test]
 fn play_script_idle_count_rejects_bad_counts() {

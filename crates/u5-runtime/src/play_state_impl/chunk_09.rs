@@ -4323,22 +4323,32 @@ impl PlayState {
     /// routine's callers, so the Z-stats pages step too, and the arrest
     /// offer is one of the Y/N confirmations.
     ///
-    /// Left out, and still frozen: the shrine and Codex presentation, whose
-    /// world steps are counted by `karma.md §7` itself, and the endgame, whose
-    /// "tight loops on the raw key check" `input.md §2` lists among the
-    /// readers that bypass the shared wait.
+    /// The shrine and Codex presentation and the endgame are answered by
+    /// u5-spec#304 Q4 (R628, R629), and each has its own predicate:
+    /// [`Self::presentation_key_wait_in_shared_wait`] and
+    /// [`Self::endgame_key_wait_in_shared_wait`]. Outside their key waits -
+    /// the counted holds, the endgame's display-driven beats and its six
+    /// raw-key page waits - neither steps.
+    ///
+    /// The Yell restoration's four typed readers (`karma.md §7.1`) are typed
+    /// words read on the overworld, outside any presentation, so they wait
+    /// as every other typed-word reader does (`input.md §2`).
     pub fn prompt_waits_in_shared_wait(&self) -> bool {
-        if self.endgame.is_some()
-            || self.active_shrine.is_some()
-            || self.active_shrine_restoration.is_some()
+        if self.endgame.is_some() {
+            return self.endgame_key_wait_in_shared_wait();
+        }
+        if self.active_shrine.is_some()
+            || self.codex_presentation_steps != 0
+            || self.pending_shrine_third_mantra.is_some()
         {
-            return false;
+            return self.presentation_key_wait_in_shared_wait();
         }
         self.active_conversation.is_some()
             || self.active_z_stats.is_some()
             || self.pending_town_arrest.is_some()
             || self.blackthorn_prompt_echo().is_some()
             || self.active_yell.is_some()
+            || self.active_shrine_restoration.is_some()
             || self.active_wishing_well.is_some()
             || self.active_shop.is_some()
             || self.active_party_selector.is_some()
@@ -4364,12 +4374,127 @@ impl PlayState {
     /// The step keeps its own scene-band and Negate Time gates
     /// ([`Self::advance_visual_tick`]), so a prompt in a first-person dungeon
     /// scene still steps nothing (`input.md §2`).
+    ///
+    /// Inside the shrine and Codex presentation the step is the
+    /// presentation's own ([`Self::advance_presentation_world_step`]):
+    /// `karma.md §7` "Random-stream cost" has each no-key pass run "one more
+    /// world step, at the same per-step cost as a hold step at that point".
+    /// In the endgame it is the tableau's ([`Self::endgame_shared_wait_step`]).
     pub fn prompt_wait_pass(&mut self) -> bool {
         if !self.prompt_waits_in_shared_wait() {
             return false;
         }
-        let _ = self.advance_visual_tick();
+        if self.endgame.is_some() {
+            self.endgame_shared_wait_step();
+        } else if self.active_shrine.is_some() || self.codex_presentation_steps != 0 {
+            self.advance_presentation_world_step();
+        } else {
+            let _ = self.advance_visual_tick();
+        }
         true
+    }
+
+    /// Whether the shrine or Codex presentation is waiting on a key through
+    /// the shared wait.
+    ///
+    /// `input.md §2` (u5-spec#304 Q4): "The shrine meditation's reads also go
+    /// through the shared wait: the typed virtue reader, the three mantra
+    /// readers, the ordaining arm's two command-key waits and the
+    /// completed-quest offering's single-digit chooser. So do the Codex urn's
+    /// key waits ... Both presentations raise the scene value to a suspended
+    /// value outside the band before any of these reads and restore it only
+    /// after the reads are over, so each no-key pass runs one world step on
+    /// top of the presentation's counted holds." `karma.md §7`: "No scene, the
+    /// Abyss included, exempts these reads."
+    ///
+    /// Those are the session's phases - Virtue, Mantra, the two altar waits,
+    /// Offering - and an open Codex reader. The counted holds between them
+    /// read no key ("no hold has an abort-on-key path, and none reads the
+    /// keyboard at all"), so while one is pending this is false: the hold's
+    /// own steps are the only ones.
+    pub fn presentation_key_wait_in_shared_wait(&self) -> bool {
+        if self.staged_narration_active() || self.pending_shrine_third_mantra.is_some() {
+            return false;
+        }
+        self.active_shrine.is_some() || self.codex_presentation_steps != 0
+    }
+
+    /// Whether the endgame is waiting on a key through the shared wait.
+    ///
+    /// `input.md §2` (u5-spec#304 Q4, R629): "Every other endgame key wait
+    /// goes through the shared wait: the greeting, both box questions (each
+    /// re-reads on a rejected key; the second is asked only after a No), the
+    /// six rite page waits and the wait after the box becomes the Orb, ten
+    /// sites in all ... each no-key pass of those ten waits steps the world."
+    /// `endgame.md §8.3` step 8: the six page waits of the final narrative
+    /// presentation are "a tight loop on the raw keyboard check: no cursor
+    /// blink, no world step and no one-tick pacing" - so a narrative window,
+    /// like every display-driven beat between the waits, is false here.
+    ///
+    /// The rite's six waits are the pages after the first: `§5` puts the
+    /// forty-tick pause, not a key, between page one and `He says:`, and
+    /// [`Self::endgame_victory_reads_no_key`] covers that pause.
+    pub fn endgame_key_wait_in_shared_wait(&self) -> bool {
+        let Some(endgame) = self.endgame.as_ref() else {
+            return false;
+        };
+        if self.cinematic_hold_owns_input()
+            || self.endgame_absorption_arena.is_some()
+            || self.endgame_entry_presentation_pending()
+            || self.endgame_victory_reads_no_key()
+        {
+            return false;
+        }
+        if endgame.greeting_page_pending {
+            return true;
+        }
+        match endgame.outcome {
+            // Both box questions: the first, and the clarification asked
+            // after a No.
+            None => true,
+            Some(crate::EndgameOutcome::Victory) => match endgame.cinematic.step {
+                crate::endgame_cinematic::EndgameCinematicStep::RiteMessage(_) => true,
+                crate::endgame_cinematic::EndgameCinematicStep::ThroneTableau => matches!(
+                    endgame.victory_tableau_phase,
+                    crate::EndgameVictoryTableauPhase::OrbAwaitingAcknowledgement
+                ),
+                _ => false,
+            },
+            // `endgame.md §6`: the waiting branch is terminal and reads no
+            // key; its jitter loop is its own paced loop.
+            Some(crate::EndgameOutcome::MissingBoxOrRefused) => false,
+        }
+    }
+
+    /// Whether the endgame is in one of the six page waits of its final
+    /// narrative presentation: one before each of windows 2 to 6 and one
+    /// before the certificate backdrop (`endgame.md §8.3` step 8, `§8.4`).
+    /// They bypass the shared wait (`input.md §2`, R629), so a pass there
+    /// runs no world step.
+    pub fn endgame_raw_key_page_wait_open(&self) -> bool {
+        self.endgame.as_ref().is_some_and(|endgame| {
+            matches!(
+                endgame.cinematic.step,
+                crate::endgame_cinematic::EndgameCinematicStep::NarrativeWindow(_)
+            )
+        })
+    }
+
+    /// One world step of an endgame shared-wait pass.
+    ///
+    /// The endgame owns a temporary active-object table, so the step's
+    /// object pass is the tableau's per-slot animator
+    /// ([`Self::animate_endgame_tableau_sprites`], `endgame.md §4`), not the
+    /// world animator; the rest of `animation.md §13.2`'s step - the wind
+    /// check, the ambient tick and the shared animation clock - runs as at
+    /// any other wait, behind the same Negate Time freeze.
+    pub fn endgame_shared_wait_step(&mut self) {
+        let _ = self.animate_endgame_tableau_sprites();
+        if self.time_stop_counter == 0 && !self.negate_time_active() {
+            let _ = self.idle_wind_drift();
+            self.tick_ambient_audio_repeats();
+        }
+        self.advance_animation_clock();
     }
 
     /// One counted world step of the shrine/Codex presentation
