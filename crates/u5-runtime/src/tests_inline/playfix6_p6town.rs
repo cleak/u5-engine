@@ -41,7 +41,9 @@ fn p6town_entering_a_hideout_town_prints_its_air_line() {
         &rows[name + 1..],
         &["", "An air of", "falsehood doth", "surround thee..."]
     );
-    assert!(state.message_row_open_mid_line);
+    // §13 "The notice's exact shape": the notice ends with its own line feed
+    // (playtest P13-07).
+    assert!(!state.message_row_open_mid_line);
     assert!(!state.message.contains("hatred"));
     assert_eq!(
         state

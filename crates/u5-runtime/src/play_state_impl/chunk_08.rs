@@ -2741,8 +2741,8 @@ impl PlayState {
             // the entry log just replaced, so they never reached the window
             // on an `E`-Enter (playtest G31). Print them again under the
             // entry narration. That narration ends with its own line feed, so
-            // the rows start on a fresh row; the last row is left open, as
-            // the load-time producer leaves it, for the prompt's feed.
+            // the rows start on a fresh row, and the notice's own closing
+            // feed ends the last one (u5-spec#300 Q4/Q17).
             //
             // The hosting settlement's single "air of" line had the same
             // problem: `load_town_scene` put it in the message slot this
@@ -2758,11 +2758,17 @@ impl PlayState {
             if let Some(note) = note {
                 // `town-mode.md §13` (u5-spec#300 Q4): every notice begins
                 // with its own line feed, so "exactly **one** blank row"
-                // stands between the centred name and `An air of`.
-                let note = format!("\n{note}");
+                // stands between the centred name and `An air of`. It also
+                // ends with its own line feed (§13 "The notice's exact
+                // shape"), so the full-width `surround thee...` row is closed
+                // and "the next command prompt follows after the ordinary
+                // blank row between commands". Leaving the row flagged open
+                // here swallowed every later result's leading feed
+                // (playtest P13-07).
+                let note = format!("\n{note}\n");
                 next.message_row_open_mid_line = false;
                 next.push_message_transcript_lines(&note);
-                next.message_row_open_mid_line = true;
+                next.message_row_open_mid_line = false;
                 next.message.push_str(&note);
                 next.message_flushed = next.message.clone();
             }
