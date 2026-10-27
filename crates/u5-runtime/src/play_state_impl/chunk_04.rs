@@ -3087,6 +3087,8 @@ impl PlayState {
             fortunes_of_war: self.fortunes_of_war,
             camp_cooldown: self.camp_cooldown,
             camp_month_cookie: self.camp_month_cookie,
+            // A rebuilt area is not a load: no world tick is owed bare.
+            world_tick_gate: WORLD_TICK_GATE_STEADY,
             active_player: self.active_player,
             combat_round_counter: self.combat_round_counter,
             combat_interference_sources: self.combat_interference_sources,

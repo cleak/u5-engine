@@ -4024,6 +4024,9 @@ impl PlayState {
         self.apply_troll_bridge_ambush(plane);
         self.append_world_damage_tile_message(Some(game_dir), plane)?;
         self.append_world_status_tile_message(plane);
+        // `overworld.md §5` (issue #305 Q5): the Underworld earthquake draw
+        // follows the underfoot arms and precedes Rough seas.
+        self.apply_underworld_earthquake_check();
         // `overworld.md §6.2.5`: rough seas follows committed action work and
         // cleanup, but precedes the remaining encounter epilogue.
         let _ = self.apply_rough_seas_if_eligible();
@@ -7896,7 +7899,20 @@ impl PlayState {
                 )
             };
             self.emit_message_line(line);
+            self.message_row_open_mid_line = false;
             self.player.facing = direction;
+            // `dungeon-mode.md §14` (issue #305 Q1): then, in both facing
+            // cases, "One composite redraw", a type-ahead flush and a plain
+            // two-tick timer wait that "runs no world step and takes no random
+            // draw", and only then the teardown and the §14.1 launch. "The
+            // only random draws between the contact step's last draw and the
+            // room painter's first draw are the step 3 redraw's own": the
+            // monster still stands on its pre-step cell, the forward cell, so
+            // a lit view paints it once and takes its two `0..100` pose
+            // draws (none unlit or under Negate Time), plus whatever else in
+            // view the corridor painter draws for. The wait itself is pure
+            // pacing and is not modelled here.
+            self.redraw_dungeon_first_person_view();
             self.free_active_object_slot(slot);
             self.mark_visibility_dirty();
             if combat_class_stats(object.aux1).is_some() {
@@ -7944,6 +7960,21 @@ impl PlayState {
         // command had just printed.
         self.push_diagnostic(move_message);
         Ok(None)
+    }
+
+    /// One first-person repaint taken by the dungeon loop itself rather
+    /// than by a frontend: the corridor painter runs for its generator
+    /// draws (`dungeon-mode.md §6.9`) and the pixels are discarded. A
+    /// flavour-3 wall flourish is "consumed on every render that tests such
+    /// a wall" (§6.4), so this render takes its own.
+    pub fn redraw_dungeon_first_person_view(&mut self) {
+        self.dungeon_flourish_draw = None;
+        let _ = self.render_dungeon_viewport(
+            VIEWPORT_PLAYER_ROW,
+            TileGraphicsDepth::Ega16,
+            None,
+            None,
+        );
     }
 
     /// `dungeon-mode.md §14` (u5-spec#298 Q33, R551): the active monster's

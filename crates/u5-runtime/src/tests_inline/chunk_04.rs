@@ -307,7 +307,10 @@ fn world_movement_blocks_active_object_without_turn() {
 }
 
 #[test]
-fn world_movement_into_combat_class_object_selects_brit_cbt_arena() {
+fn world_movement_into_combat_class_object_is_refused_without_a_turn() {
+    // `encounters.md §2.1` (issue #305 Q4, R634/R638): "A party step into a
+    // monster's cell is refused (it prints `Blocked!` ...), and outdoors that
+    // refusal consumes no turn ... so the bump itself never starts combat".
     let dir = debug_game_dir();
     let record = synthetic_combat_arena_record();
     fs::write(dir.join(BRIT_CBT_FILE), record.repeat(BRIT_CBT_RECORDS)).unwrap();
@@ -322,37 +325,23 @@ fn world_movement_into_combat_class_object_selects_brit_cbt_arena() {
         aux1: 0,
         aux3: 0,
     });
+    let prng_before = state.prng_state;
 
     assert_eq!(
         state
             .step_with_game_dir(Direction::East, Some(&dir))
             .unwrap(),
-        MoveOutcome::Used
+        MoveOutcome::Blocked
     );
 
     assert_eq!((state.player.x, state.player.y), (0, 0));
-    assert_eq!(state.turn, 1);
-    assert!(state.combat_active);
-    assert_eq!(state.pending_combat_terrain_trigger_slot, Some(1));
-    assert_eq!(state.message, combat_banner_line());
-    // `combat.md §5`: monster descriptors start at index six, but their
-    // active-object records "continue from the first record left free by
-    // the seated party", so "the descriptor's active-object link byte is
-    // the authoritative pairing ... an engine should follow the link
-    // rather than assume the two indexes are equal." The stock roster is
-    // one live member, so the first monster's record is one.
-    let first_monster = state.combat_actors[COMBAT_PARTY_ACTOR_SLOTS];
-    let first_monster_record = usize::from(first_monster.active_object_slot);
-    assert_eq!(first_monster_record, 1);
-    assert_eq!(state.active_objects[first_monster_record].tile, 0xc0);
-    assert_eq!(
-        (
-            state.active_objects[first_monster_record].x,
-            state.active_objects[first_monster_record].y
-        ),
-        (0, 15)
-    );
-    assert!(!state.message.contains("out of scope"));
+    assert_eq!(state.turn, 0);
+    assert_eq!(state.clock, GameClock::default());
+    assert!(!state.combat_active);
+    assert_eq!(state.pending_combat_terrain_trigger_slot, None);
+    assert_eq!(state.message, "Blocked!");
+    assert_eq!(state.prng_state, prng_before, "the refusal takes no draw");
+    assert_eq!(state.active_objects[1].x, 1, "the monster did not react");
     let _ = fs::remove_dir_all(dir);
 }
 

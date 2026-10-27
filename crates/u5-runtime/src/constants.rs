@@ -546,6 +546,11 @@ pub const SAVE_CAMP_MONTH_COOKIE_OFFSET: usize = 0x02e7;
 /// `formats/saved-gam.md §4`: remaining duration paired with the shared
 /// effect code at [`SAVE_ACTIVE_EFFECT_CODE_OFFSET`]. `0xFF` is permanent.
 pub const SAVE_ACTIVE_EFFECT_DURATION_OFFSET: usize = 0x02e8;
+/// `formats/saved-gam.md §10`: the world tick's ambient/animation gate byte
+/// (`animation.md §13.2`). One is the steady value; zero is the freeze state.
+pub const SAVE_WORLD_TICK_GATE_OFFSET: usize = 0x02eb;
+/// The gate byte's steady value, which the world tick writes at its tail.
+pub const WORLD_TICK_GATE_STEADY: u8 = 1;
 pub const SAVE_WIND_OFFSET: usize = 0x02ec;
 /// `formats/saved-gam.md §5`: "The five bytes after wind form the
 /// persisted location cluster" — scene byte sits immediately

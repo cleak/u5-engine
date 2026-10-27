@@ -5730,9 +5730,10 @@ const COMBAT_FIREBALL_ROUTE_SEED: u16 = 5;
 /// own turns between the cast and the checkpoint draw from the stream, and
 /// some draws take it back out of flight. Seed zero stopped landing when
 /// `animation.md §13.2`'s bare first world step (audit A019) removed one
-/// wind draw from the front of the stream. Two is the lowest seed at which
-/// the case's own validator passes.
-const COMBAT_CAUSE_FEAR_ROUTE_SEED: u16 = 2;
+/// wind draw from the front of the stream, and lands again now that R639
+/// (u5-spec#305 Q5) restores the gate byte from the save and puts that draw
+/// back.
+const COMBAT_CAUSE_FEAR_ROUTE_SEED: u16 = 0;
 
 fn first_nonzero_prng_roll_seed(max: u16) -> u16 {
     for candidate in 0..=u16::MAX {
@@ -8395,7 +8396,10 @@ fn validate_route_smoke_case_state(
                     .diagnostics
                     .iter()
                     .any(|line| line.contains("entered dungeon combat"))
-                || monster_object.tile != expected_tile
+                // The class's four-frame family, not its first frame: the
+                // arena's first world step animates it, and since R639 (the
+                // gate byte is restored from the save) that step is not bare.
+                || monster_object.tile & !0x03 != expected_tile
                 || !monster_on_published_source
                 || !party_on_entry_row
                 || !ambush_terrain_ok

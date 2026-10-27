@@ -191,7 +191,13 @@ impl PlayState {
 
     pub fn spawn_native_world_encounter(&mut self, plane: WorldPlane) -> Option<usize> {
         let scroll_base = world_scroll_base(self.player.x, self.player.y);
-        for attempt in 0..ENCOUNTER_SPAWNER_RETRY_LIMIT {
+        // `encounters.md §4` steps 1-5 (issue #305 Q3, R633): each candidate
+        // is two inclusive `0..31` draws, column then row, added to the
+        // scroll base. "Step 2 rejections do not count toward this limit;
+        // they are redrawn as often as needed" - only the step 3 zero bucket
+        // and the step 4 shore filter count toward the 128.
+        let mut attempt = 0u8;
+        while attempt < ENCOUNTER_SPAWNER_RETRY_LIMIT {
             let x = (scroll_base.0
                 + usize::from(
                     self.random_range_u8(0, (OVERWORLD_CHUNK_BUFFER_WINDOW_SIDE - 1) as u8),
@@ -216,9 +222,11 @@ impl PlayState {
 
             let tile = self.grid[world_cell_index(x, y)];
             let Some(type_byte) = self.native_world_encounter_type(plane, tile, attempt) else {
+                attempt += 1;
                 continue;
             };
             if sea_creature_spawn_seeds_aux(type_byte) && (tile & 0xf0) == 0x60 {
+                attempt += 1;
                 continue;
             }
 
@@ -1287,15 +1295,17 @@ impl PlayState {
             self.draw_dungeon_wall_decoration(level, x, y, band, placement, viewport);
         }
 
-        if let Some(sprites) = sprites {
-            for band in (0..=last_visible_band).rev() {
-                let step = band as isize;
-                let x =
-                    dungeon_floor_wrap_coord(self.player.x as i16 + (fdx * step) as i16) as usize;
-                let y =
-                    dungeon_floor_wrap_coord(self.player.y as i16 + (fdy * step) as i16) as usize;
-                self.draw_dungeon_cell_contents(level, x, y, band, viewport, sprites);
-            }
+        // The far-to-near pass runs whether or not this caller has sprite
+        // banks to blit: its field strokes and the active monster's pose
+        // draws are gameplay-generator draws (`dungeon-mode.md §6.9`), so a
+        // repaint without banks - the contact redraw of §14 - takes them too.
+        for band in (0..=last_visible_band).rev() {
+            let step = band as isize;
+            let x = dungeon_floor_wrap_coord(self.player.x as i16 + (fdx * step) as i16) as usize;
+            let y = dungeon_floor_wrap_coord(self.player.y as i16 + (fdy * step) as i16) as usize;
+            self.draw_dungeon_cell_contents(level, x, y, band, viewport, sprites);
+        }
+        if sprites.is_some() {
             self.dungeon_fountain_frame = (self.dungeon_fountain_frame + 1) % 3;
         }
     }
@@ -1356,12 +1366,12 @@ impl PlayState {
         y: usize,
         band: usize,
         viewport: &mut TileViewport,
-        banks: &DungeonSpriteBanks,
+        banks: Option<&DungeonSpriteBanks>,
     ) {
         let raw = self.dungeon_cell(level, x, y);
         let cell = dungeon_renderer_cell_byte(raw);
         let (rising, floor) = dungeon_object_family_slots(cell);
-        if let Some(objects) = banks.objects() {
+        if let Some(objects) = banks.and_then(DungeonSpriteBanks::objects) {
             if let Some(base) = rising {
                 self.draw_dungeon_object_sprite(viewport, objects, base + band, band, true);
             }
@@ -1397,7 +1407,7 @@ impl PlayState {
         // The raw 0x08 bit is a separate static rising-pit overlay after
         // ordinary object and field painting. It is not a visit marker.
         if cell >> 4 < 9 && raw & 0x08 != 0 {
-            if let Some(objects) = banks.objects() {
+            if let Some(objects) = banks.and_then(DungeonSpriteBanks::objects) {
                 self.draw_dungeon_object_sprite(viewport, objects, 8 + band, band, true);
             }
         }
@@ -1483,7 +1493,7 @@ impl PlayState {
         y: usize,
         band: usize,
         viewport: &mut TileViewport,
-        banks: &DungeonSpriteBanks,
+        banks: Option<&DungeonSpriteBanks>,
     ) {
         if band == 0 {
             return;
@@ -1499,9 +1509,6 @@ impl PlayState {
         if family >= DUNGEON_MONSTER_INITIAL_STATES.len() {
             return;
         }
-        let Some(sheet) = banks.monster(family) else {
-            return;
-        };
 
         let (left_pose, right_pose) = if self.negate_time_active() {
             self.active_objects[slot].phase = DUNGEON_MONSTER_INITIAL_STATES[family];
@@ -1513,6 +1520,9 @@ impl PlayState {
                 dungeon_monster_pose_step(object.phase, left, right);
             self.active_objects[slot].phase = new_state;
             (left_pose, right_pose)
+        };
+        let Some(sheet) = banks.and_then(|banks| banks.monster(family)) else {
+            return;
         };
 
         let depth = band - 1;
@@ -4306,6 +4316,57 @@ impl PlayState {
         self.advance_visual_tick_inner(true)
     }
 
+    /// The overworld input helper's entry world step, for a frontend whose
+    /// idle pump is paced on the timer.
+    ///
+    /// `timing.md §8.2`: "On the overworld the input helper performs one
+    /// world step when it is entered, and then, while a hoisted-sail heading
+    /// is cached, repeats a wait pass instead of entering the command wait
+    /// at all", and `RETRACTIONS.md` R371: "The entry step carries no wait of
+    /// its own." `stats-panel.md §2.3` puts the same call "in the shared
+    /// input helper, after that helper's world-tick call and before the
+    /// prompt newline and the key read". So each overworld command prompt
+    /// owes one unpaced world step on top of the command wait's one step per
+    /// timer edge (`timing.md §8.1`); a pump that only steps on its timer
+    /// firings is one world step - and, through the step's unconditional wind
+    /// roll, one gameplay draw - short at every prompt.
+    ///
+    /// Runs the step and returns `true` once the overworld loop is back at
+    /// its command prompt. While the command that set
+    /// [`Self::overworld_input_helper_entry_owed`] is still presenting (a
+    /// hold, staged narration, a sweep or a potion flash) the step stays
+    /// owed; a party with nobody able to act takes the loop's sleep arm,
+    /// which skips the input helper (`main-loop.md §6`), so it stays owed
+    /// until someone can act. An open prompt means the command has not
+    /// returned yet, and a town, dungeon or combat scene is not the overworld
+    /// helper, so those drop it: the next dispatched key owes it again.
+    pub fn run_overworld_input_helper_entry_step(&mut self) -> bool {
+        if !self.overworld_input_helper_entry_owed {
+            return false;
+        }
+        if self.cinematic_hold_owns_input()
+            || self.staged_narration_active()
+            || self.text_hold_active()
+            || self.visibility_sweep.is_some()
+            || self.pending_potion_flash.is_some()
+        {
+            return false;
+        }
+        if !matches!(self.area, Area::World { .. })
+            || self.combat_active
+            || self.prompt_waits_in_shared_wait()
+        {
+            self.overworld_input_helper_entry_owed = false;
+            return false;
+        }
+        if !matches!(self.party_capability(), PartyCapability::CanAct { .. }) {
+            return false;
+        }
+        self.overworld_input_helper_entry_owed = false;
+        let _ = self.advance_visual_tick();
+        true
+    }
+
     /// Whether an open prompt is waiting in the shared single-keystroke wait,
     /// which keeps running the world step on every no-key pass.
     ///
@@ -4530,8 +4591,9 @@ impl PlayState {
     /// second gate", while §13.2's wind check is one of the things "one
     /// world step advances" behind both gates. Callers that the spec
     /// describes as repainting rather than stepping the world take this
-    /// entry point, so their published gameplay-draw counts stay exact -
-    /// see [`Self::apply_rough_seas_if_eligible`] and `overworld.md §6.2.5`.
+    /// entry point, so their published gameplay-draw counts stay exact. (The
+    /// impact presentation used to be one; R642 makes its tick a full world
+    /// step.)
     pub fn advance_world_repaint_tick(&mut self) {
         let _ = self.advance_visual_tick_inner(false);
     }
@@ -4568,11 +4630,10 @@ impl PlayState {
         if !self.combat_active && self.endgame.is_none() {
             self.sync_player_object();
         }
-        // `animation.md §13.2`: "The shipped initial value of the byte is
-        // the freeze state, so the very first world step of a session is a
-        // bare repaint." Like the `§13.1` skip state it advances nothing -
-        // no object animation, no wind check, no ambience tick and no tile
-        // passes - and the step consumes it.
+        // `animation.md §13.2` (R639): a loaded gate byte of zero makes the
+        // session's first world step bare. Like the `§13.1` skip state it
+        // advances nothing - no object animation, no wind check, no ambience
+        // tick and no tile passes - and the step consumes it.
         if std::mem::take(&mut self.session_start_world_step_frozen) {
             return None;
         }
@@ -5796,6 +5857,34 @@ impl PlayState {
             ) || CARPET_MARKER_FRAMES.contains(&marker))
     }
 
+    /// `overworld.md §5`, "Where the gameplay draws fall in one iteration"
+    /// (issue #305 Q5), consumed-turn tail: "**on the Underworld plane only
+    /// (party Z non-zero), one `0..255` draw on every consumed turn**, where
+    /// the value 105 prints `EARTHQUAKE!`, runs the full-viewport flash of
+    /// `systems/audio.md` Section 8.4 (1856 draws) and then one `1..8` damage
+    /// draw per non-Dead member". It sits after the underfoot arms and
+    /// before Rough seas. Returns whether the earthquake fired.
+    pub fn apply_underworld_earthquake_check(&mut self) -> bool {
+        if !matches!(
+            self.area,
+            Area::World {
+                plane: WorldPlane::Underworld
+            }
+        ) {
+            return false;
+        }
+        if self.random_range_u8(0, u8::MAX) != UNDERWORLD_EARTHQUAKE_VALUE {
+            return false;
+        }
+        // The line's own framing is not published; it is printed as a
+        // closed consequence row, like the other per-turn tail lines.
+        self.emit_message_line(UNDERWORLD_EARTHQUAKE_LINE);
+        self.message_row_open_mid_line = false;
+        self.emit_major_flash();
+        let _ = self.apply_outdoor_impact_party_damage();
+        true
+    }
+
     /// Run the rough-seas presentation and shared non-frigate absorption.
     /// The caller has already committed exactly one ordinary outdoor action.
     pub fn apply_rough_seas_if_eligible(&mut self) -> Option<OutdoorImpactAbsorption> {
@@ -5803,22 +5892,14 @@ impl PlayState {
             return None;
         }
         self.push_impact_line("Rough seas!");
-        // Stage one plays the impact rumble and the repaint tick itself
-        // (R611).
+        // Stage one plays the impact rumble and the world tick itself
+        // (R611). `overworld.md §6.2.5` (R642): the sequence consumes "the
+        // `N` absorption draws plus the draws of the impact presentation's
+        // world tick (one `0..63` wind check, its follow-ups when it fires,
+        // and the animator's draws for eligible on-screen objects)", the
+        // tick's draws falling "between the clock step and the first
+        // absorption draw".
         self.outdoor_impact_presentation();
-        // `overworld.md §6.2.5`: "Order is `Rough seas!`, impact figure at
-        // the party cell, impact rumble, one world repaint tick, then
-        // absorption." The same section scopes the whole sequence's cost
-        // over that same order - "`N` damaged members advance the audio
-        // LFSR `300 + 160N` times in all, while consuming exactly `N`
-        // gameplay draws" (the `300` is the impact rumble, which precedes
-        // the tick) - and its conformance vector repeats it: "consume
-        // exactly `N` gameplay draws in `1..8`". So the repaint tick here
-        // must cost the gameplay stream nothing, which is the repaint half
-        // `animation.md §13` separates out ("The viewport rebuild and
-        // redraw run whenever the master redraw gate is set, regardless of
-        // the second gate"), not a full §13.2 world step with its wind
-        // check - which is what stage one's tick is.
         Some(self.apply_outdoor_impact_absorption())
     }
 
@@ -5831,12 +5912,12 @@ impl PlayState {
     /// ranged attacks ..., rough seas and every drowning pass" (u5-spec#300
     /// Q27, #301 Q3; R611 withdrew "a short tone plays"). "This stage writes
     /// no character state and no vehicle state, and prints no narration
-    /// line." The repaint tick is the gameplay-draw-free repaint half (see
-    /// [`Self::apply_rough_seas_if_eligible`]).
+    /// line." The tick is a full world step: `audio.md §8.9` (R642) has it
+    /// draw "as any world tick does (`animation.md` Section 13.2)".
     fn outdoor_impact_presentation(&mut self) {
         self.mark_visibility_dirty();
         self.emit_sound_effect(SoundEffect::RoughSeasImpactRumble);
-        self.advance_world_repaint_tick();
+        let _ = self.advance_visual_tick();
     }
 
     /// `overworld.md §6.2.4` stage two — impact absorption. The stage
@@ -6372,9 +6453,11 @@ impl PlayState {
         // the slot falls back to the random four-direction walker, which
         // rolls one cardinal direction and makes a single attempt at it".
         // Byte 6 "carries **no facing**" (§3, R340), so the fallback is a
-        // fresh shared-stream roll, not the slot's last step replayed. The
-        // spec does not publish the roll-to-direction order; one uniform
-        // draw over the four cardinals is used.
+        // fresh shared-stream roll, not the slot's last step replayed. Issue
+        // #305 Q2: exactly one inclusive `0..3` draw, "Only that one cell is
+        // tested ... If the check refuses it, the slot does not move this
+        // turn and the walker takes no further draw and no second attempt";
+        // an accepted cell still goes through the committer's chance gates.
         let direction = OUTDOOR_RANDOM_WALK_DIRECTIONS[usize::from(self.random_range_u8(0, 3))];
         let (dx, dy) = direction.delta();
         self.try_step_outdoor_active_object(slot, object, dx, dy, direction, last_vacated)
@@ -7302,8 +7385,14 @@ mod time_cascade_and_daylight_spec_tests {
     }
 }
 
-/// `active-objects.md §8` random four-direction walker: the cardinal picked
-/// by its single `[0, 3]` draw.
+/// `overworld.md §5` (issue #305 Q5): the Underworld per-turn `0..255`
+/// draw's earthquake value, and its line.
+const UNDERWORLD_EARTHQUAKE_VALUE: u8 = 105;
+const UNDERWORLD_EARTHQUAKE_LINE: &str = "EARTHQUAKE!\n";
+
+/// `active-objects.md §8` random four-direction walker (issue #305 Q2): "0
+/// is north (same column, row minus one), 1 is east (column plus one, same
+/// row), 2 is south (same column, row plus one) and 3 is west".
 const OUTDOOR_RANDOM_WALK_DIRECTIONS: [Direction; 4] = [
     Direction::North,
     Direction::East,

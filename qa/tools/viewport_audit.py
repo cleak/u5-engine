@@ -60,7 +60,7 @@ def viewport_cell_histograms(path: pathlib.Path) -> list[dict] | None:
     # that is a large constant difference on every beat.
     if not capture_is_frame_filling(image):
         return None
-    origin_x, origin_y, scale_x, scale_y = frame_rect(image.size)
+    origin_x, origin_y, scale_x, scale_y = frame_rect(image.size, image)
     box = (
         int(origin_x + VIEWPORT_LEFT * scale_x),
         int(origin_y + VIEWPORT_TOP * scale_y),

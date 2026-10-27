@@ -106,6 +106,10 @@ pub struct PlayOptions {
     /// month cookie at `0x02E7`. The apparition draw writes it; no
     /// shipped consumer reads it.
     pub camp_month_cookie: u8,
+    /// `formats/saved-gam.md §10`: the world-tick gate byte at `0x02EB`,
+    /// which the load restores (`animation.md §13.2`, R639). A session's
+    /// first world step is bare only when this is zero.
+    pub world_tick_gate: u8,
     pub active_player: Option<usize>,
     pub combat_round_counter: u8,
     pub combat_interference_sources: [u8; COMBAT_ACTOR_SLOTS],
@@ -204,6 +208,8 @@ impl Default for PlayOptions {
             fortunes_of_war: 0,
             camp_cooldown: 0,
             camp_month_cookie: 0,
+            // The new-game seed and every stock save hold the steady value.
+            world_tick_gate: WORLD_TICK_GATE_STEADY,
             active_player: None,
             combat_round_counter: 0,
             combat_interference_sources: [0; COMBAT_ACTOR_SLOTS],

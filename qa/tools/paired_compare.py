@@ -65,14 +65,53 @@ def glyph_table(path: pathlib.Path) -> dict[int, tuple]:
 TABLES = {name: glyph_table(path) for name, path in FONTS.items()}
 
 
-def frame_rect(size: tuple[int, int]) -> tuple[int, int, float, float]:
+def frame_rect(
+    size: tuple[int, int], image: "Image.Image | None" = None
+) -> tuple[int, int, float, float]:
     """Origin and per-pixel scale of the 320x200 frame inside a capture."""
     width, height = size
     if width == 640 and height == 400:
         # A DOSBox capture is an exact 2:1 downscale with no letterbox.
         return 0, 0, width / 320.0, height / 200.0
+    if image is not None and dosbox_letterboxed_640x480(image):
+        # The 640x400 frame centred in a 640x480 window; see
+        # `dosbox_letterboxed_640x480`.
+        return 0, DOSBOX_LETTERBOX_BAR, 2.0, 2.0
     frame_w = round(height * 4 / 3)
     return (width - frame_w) // 2, 0, frame_w / 320.0, height / 200.0
+
+
+# A DOSBox window that kept its 640x480 start-up size centres the 640x400
+# frame in it, leaving a 40-pixel black bar above and below.
+DOSBOX_LETTERBOX_BAR = 40
+
+
+def dosbox_letterboxed_640x480(image: "Image.Image") -> bool:
+    """Is this a 640x480 DOSBox capture holding the 640x400 frame letterboxed?
+
+    DOSBox opens its window at 640x480 (`dosbox.log`: "Using 640x480 window
+    size") and normally shrinks it to 640x400 when the game sets its graphics
+    mode. Some runs keep the larger window, and the frame is then centred in it
+    at the same 2:1 scale with black bars of 40 rows top and bottom. Measured
+    2026-10-27 (`hut-ready-refusals-20261027-054319`, every beat): the content
+    sits in rows 40-439, and cropping those rows gives captures that agree with
+    the engine on every beat. Read through the frame-filling rect instead, each
+    cell was sampled 2.4 capture rows per frame row from the top bar down, so
+    the panel, the viewport, the chrome and the message window all "differed"
+    - and `capture_is_frame_filling` let it through, because the content's
+    640x384-ish box is within its aspect tolerance of 1.6. Fifty-six DOSBox
+    captures from 2026-09-11 on have that shape; the 640x480 captures of early
+    September are a different, stretched shape with content from row 0, which
+    is why this checks the bars and not the size alone.
+    """
+    if image.size != (640, 480):
+        return False
+    rgb = image.convert("RGB")
+    bar = DOSBOX_LETTERBOX_BAR
+    bars = (0, 0, 640, bar), (0, 480 - bar, 640, 480)
+    if any(rgb.crop(box).getbbox() is not None for box in bars):
+        return False
+    return rgb.crop((0, bar, 640, 480 - bar)).getbbox() is not None
 
 
 # The two shapes a usable capture's content can have. A DOSBox capture is the
@@ -164,7 +203,7 @@ def decode_region(
     # nothing, which is worse. See `capture_is_frame_filling`.
     if not capture_is_frame_filling(image):
         return None
-    origin_x, origin_y, scale_x, scale_y = frame_rect(image.size)
+    origin_x, origin_y, scale_x, scale_y = frame_rect(image.size, image)
     pixels = image.load()
     rows = []
     for row in range(rows_count):
@@ -795,7 +834,7 @@ def compare_cached(artifact: pathlib.Path, cache: dict) -> tuple:
 
 
 # Bump when a classifier change would alter a cached verdict.
-CACHE_VERSION = 37
+CACHE_VERSION = 38
 
 
 # A scenario whose *roster panel* is a lottery and whose message window is
@@ -1176,7 +1215,7 @@ class FrameSampler:
         self.image = image.convert("RGB")
         self.size = self.image.size
         self.pixels = self.image.load()
-        self.rect = frame_rect(self.size)
+        self.rect = frame_rect(self.size, self.image)
 
     @classmethod
     def open(cls, path: pathlib.Path) -> "FrameSampler | None":

@@ -1225,4 +1225,7 @@ mod tests {
     include!("tests_inline/playfix12_shr12.rs");
     include!("tests_inline/playfix12_bt12.rs");
     include!("tests_inline/playfix12_veh12.rs");
+    include!("tests_inline/input_helper_entry.rs");
+    include!("tests_inline/ready_picker_highlight_pad.rs");
+    include!("tests_inline/spec305.rs");
 }

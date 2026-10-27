@@ -27,6 +27,11 @@ pub fn handle_play_key_input(
     let disposition = run_with_command_epilogue(state, game_dir, |state| {
         handle_play_key_input_inner(state, key, suffix, game_dir, &mut deferred_prompt_key)
     })?;
+    // `timing.md §8.2`: once this key's command returns, the overworld loop
+    // re-enters its input helper, which steps the world on entry. A key that
+    // only answered part of a command leaves a prompt open, and
+    // `PlayState::run_overworld_input_helper_entry_step` drops the step then.
+    state.overworld_input_helper_entry_owed = true;
     // The terminal harness's inline direction form (`G8`, `Lw`) is the
     // command key and then the prompt's own key, so the second half runs as
     // its own input event exactly as a two-key script would - including a

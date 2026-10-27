@@ -155,11 +155,22 @@ pub struct PlayState {
     /// flash plays. See [`MessageWindowFlashHold`]. Transient presentation
     /// state, never saved.
     pub message_window_flash_hold: MessageWindowFlashHold,
-    /// `animation.md §13.2`: "The shipped initial value of the byte is the
-    /// freeze state, so the very first world step of a session is a bare
-    /// repaint." Set by [`PlayState::load_scene`]; the first world step
-    /// clears it and advances nothing.
+    /// `animation.md §13.2` (R639): the world tick's gate byte is restored
+    /// from the save (`0x02EB`), and "A first step is bare only when the
+    /// loaded file holds zero in the byte". Set by [`PlayState::load_scene`]
+    /// from that byte; the first world step clears it and advances nothing.
     pub session_start_world_step_frozen: bool,
+    /// `timing.md §8.2`: "On the overworld the input helper performs one
+    /// world step when it is entered" - with no wait of its own (R371) - and
+    /// `stats-panel.md §2.3` places the overworld panel drain "in the shared
+    /// input helper, after that helper's world-tick call and before the
+    /// prompt newline and the key read". Set when the overworld loop is about
+    /// to re-enter that helper: at load and after every dispatched key. A
+    /// frontend with a timer-paced idle pump consumes it through
+    /// [`PlayState::run_overworld_input_helper_entry_step`]; the terminal
+    /// shell runs its own entry pass per key read instead. Transient, never
+    /// saved.
+    pub overworld_input_helper_entry_owed: bool,
     /// Completed Stonegate trapdoor tableau waiting for a frontend. This is a
     /// blocking, non-resumable presentation record and is never save data.
     pub pending_stonegate_trapdoor_playback: Option<StonegateTrapdoorPlayback>,

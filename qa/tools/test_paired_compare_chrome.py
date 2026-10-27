@@ -209,5 +209,51 @@ class ChromeComparisonTest(unittest.TestCase):
         self.assertEqual(pc.random_sky_beats("sail-calm"), frozenset())
 
 
+class DosboxLetterboxTest(unittest.TestCase):
+    """A DOSBox window that kept its 640x480 size letterboxes the frame.
+
+    `hut-ready-refusals-20261027-054319`: the 640x400 frame sat in rows
+    40-439 of a 640x480 capture, and reading it as frame-filling made every
+    beat differ in the panel, viewport, chrome and message window.
+    """
+
+    def setUp(self) -> None:
+        self.directory = tempfile.TemporaryDirectory()
+        self.root = pathlib.Path(self.directory.name)
+        self.frame = Frame().sky(9).wind("East").text(13, 25, "Ready...")
+
+    def tearDown(self) -> None:
+        self.directory.cleanup()
+
+    def save(self, name: str, image: Image.Image) -> pathlib.Path:
+        path = self.root / name
+        image.save(path)
+        return path
+
+    def test_a_letterboxed_capture_decodes_like_the_native_one(self) -> None:
+        native = self.frame.image.resize((640, 400), Image.NEAREST)
+        boxed = Image.new("RGB", (640, 480), BLACK)
+        boxed.paste(native, (0, pc.DOSBOX_LETTERBOX_BAR))
+        self.assertTrue(pc.dosbox_letterboxed_640x480(boxed))
+        self.assertEqual(pc.frame_rect(boxed.size, boxed), (0, 40, 2.0, 2.0))
+        native_path = self.save("native.png", native)
+        boxed_path = self.save("boxed.png", boxed)
+        self.assertEqual(pc.decode(boxed_path), pc.decode(native_path))
+        self.assertEqual(pc.decode_panel(boxed_path), pc.decode_panel(native_path))
+        self.assertIsNone(
+            pc.describe_chrome(
+                pc.chrome_differences(
+                    pc.FrameSampler.open(native_path), pc.FrameSampler.open(boxed_path)
+                )
+            )
+        )
+
+    def test_a_stretched_640x480_capture_keeps_the_filling_rect(self) -> None:
+        # The early-September 640x480 captures fill the window from row 0.
+        stretched = self.frame.image.resize((640, 480), Image.NEAREST)
+        self.assertFalse(pc.dosbox_letterboxed_640x480(stretched))
+        self.assertEqual(pc.frame_rect(stretched.size, stretched), (0, 0, 2.0, 2.4))
+
+
 if __name__ == "__main__":
     unittest.main()

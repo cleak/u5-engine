@@ -27912,9 +27912,8 @@ fn dungeon_fight_charges_one_loop_head_minute_per_origin() {
 
 /// Residual 5, the outdoor origins that are not an A-Attack (that one is
 /// `overworld_attack_fight_exit_spends_no_outdoor_turn`). A bump into a
-/// hostile spends the one outdoor turn its own command spent
-/// (`commands.md §3`: the move is acted) and the exit adds nothing
-/// (`combat.md §4`: "a **zero** increment"). A camp ambush costs only the
+/// hostile is no longer an origin: it is refused with no turn and no fight
+/// (`encounters.md §2.1`, issue #305 Q4, R634). A camp ambush costs only the
 /// camp's own five-minute steps: "the camp wrapper makes no trailing clock
 /// call" (`moons.md §3`), and the interrupted rest "stops immediately"
 /// (`rest-and-camp.md §6`). The exit used to run a second outdoor turn after
@@ -27939,17 +27938,13 @@ fn overworld_bump_and_camp_ambush_fights_charge_no_turn_at_the_exit() {
         aux1: 0,
         aux3: 0,
     });
-    let turn_before = state.turn;
+    let (turn_before, clock_before) = (state.turn, state.clock);
     handle_play_key_input(&mut state, char::from(INPUT_CODE_EAST), "", &dir).unwrap();
-    assert!(state.combat_active, "the bump frames the arena");
-    assert_eq!(state.turn, turn_before + 1, "the bump's own outdoor turn");
-    let (turn_in_arena, clock_in_arena) = (state.turn, state.clock);
-    state.apply_combat_round_loop_exit(CombatRoundLoopExit::Victory);
-    assert!(!state.combat_active);
+    assert!(!state.combat_active, "the bump is refused, not a fight");
     assert_eq!(
         (state.turn, state.clock),
-        (turn_in_arena, clock_in_arena),
-        "bump: nothing at the exit"
+        (turn_before, clock_before),
+        "bump: the refusal consumes no outdoor turn"
     );
     let _ = fs::remove_dir_all(dir);
 
