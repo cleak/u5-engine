@@ -22,6 +22,12 @@ pub const ITEM_PICKER_ESCAPE_MESSAGE: &str = "None!";
 /// `inventory.md §4.7` empty-state placeholder, printed when the
 /// six-slot equipment block holds nothing readied.
 pub const Z_STATS_NONE_READY_PLACEHOLDER: &str = "(None ready)";
+/// Index into the nine Z-stats panel rows (screen rows 1..=9) where the Arms
+/// page draws [`Z_STATS_NONE_READY_PLACEHOLDER`]: screen row 5. `inventory.md
+/// §4.7` publishes the literal but no row; this is a clean runtime
+/// observation of the stock game (paired `reseed-falsehood-theft`, beat
+/// `p2`, 2026-10-26), two rows below where a readied list starts.
+pub const Z_STATS_NONE_READY_PANEL_ROW_INDEX: usize = 4;
 /// `inventory.md §4.7` empty-state placeholder, printed when an
 /// inventory page's row scanner finds no slot with a non-zero count.
 pub const Z_STATS_NONE_OWNED_PLACEHOLDER: &str = "(None owned!)";

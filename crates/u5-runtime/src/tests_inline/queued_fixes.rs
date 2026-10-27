@@ -90,3 +90,37 @@ fn fc1_fall_into_a_room_spends_the_step_turn_once() {
     one_minute.advance_minutes(1);
     assert_eq!(state.clock, one_minute);
 }
+
+/// Z1. `inventory.md §4.7` publishes the `Arms\n\n` heading and the
+/// `(None ready)` placeholder but no row for the placeholder. Clean runtime
+/// observation (paired `reseed-falsehood-theft`, beat `p2`, 2026-10-26): with
+/// nothing readied the stock game draws `(None ready)` on panel row 5,
+/// same column and text as the engine, which drew it on row 3. A readied list
+/// still starts on row 3 (`zstats-pages/p2`, 2026-09-10).
+#[test]
+fn z1_none_ready_placeholder_sits_on_panel_row_five() {
+    let mut state = test_state(open_grid(), 1, 1);
+    state
+        .party_equipment
+        .resize(state.party.len(), [EQUIPMENT_EMPTY; EQUIPMENT_SLOT_COUNT]);
+    state.party_equipment[0] = [EQUIPMENT_EMPTY; EQUIPMENT_SLOT_COUNT];
+    let session = ZStatsSession {
+        selected_party_index: 0,
+        page: ZStatsPage::Equipment,
+        inventory_cursor: 0,
+    };
+    let rows = state.z_stats_panel_rows(&session);
+    assert_eq!(rows[0].trim(), "Arms", "rows: {rows:?}");
+    assert_eq!(rows[4], format!(" {Z_STATS_NONE_READY_PLACEHOLDER}"), "rows: {rows:?}");
+    for (index, row) in rows.iter().enumerate() {
+        if index != 0 && index != 4 {
+            assert!(row.is_empty(), "row {index} should be blank: {rows:?}");
+        }
+    }
+
+    // A readied item still lists from row 3.
+    state.party_equipment[0][EQUIP_SLOT_RING] = EQUIPMENT_ID_RING_REGENERATION as u8;
+    let rows = state.z_stats_panel_rows(&session);
+    assert!(rows[2].starts_with(' ') && !rows[2].trim().is_empty(), "rows: {rows:?}");
+    assert!(!rows.iter().any(|row| row.contains(Z_STATS_NONE_READY_PLACEHOLDER)));
+}
