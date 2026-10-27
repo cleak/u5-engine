@@ -476,6 +476,38 @@ fn play_script_typeahead_replays_simple_movement_queue() {
     assert!(state.message.is_empty());
 }
 
+#[test]
+fn play_script_blocked_step_flushes_the_typeahead_queue() {
+    // Playtest P13-02, `audio.md §7.4`: a refused town step "Prints
+    // `Blocked!`, beeps, flushes type-ahead", so with Buffer On the keys
+    // queued behind it are discarded rather than run.
+    let mut grid = open_grid();
+    grid[4 * 32 + 5] = 0x01; // impassable on foot
+    let mut state = test_state(grid, 4, 4);
+
+    handle_play_script_command(&mut state, "buffer", Path::new("")).unwrap();
+    handle_play_script_command(&mut state, "dss", Path::new("")).unwrap();
+
+    assert!(state.typeahead_buffer_enabled);
+    assert_eq!((state.player.x, state.player.y), (4, 4));
+    // The town refusal spends its own turn; the queued steps spend none.
+    assert_eq!(state.turn, 1);
+}
+
+#[test]
+fn interactive_blocked_step_flushes_the_typeahead_queue() {
+    // Playtest P13-02: the interactive loop's queue takes the same flush.
+    let mut grid = open_grid();
+    grid[4 * 32 + 5] = 0x01; // impassable on foot
+    let mut state = test_state(grid, 4, 4);
+    state.typeahead_buffer_enabled = true;
+    let mut input = std::io::Cursor::new(b"dss\n".to_vec());
+
+    run_interactive_play_loop(&mut state, Path::new(""), None, &mut input).unwrap();
+
+    assert_eq!((state.player.x, state.player.y), (4, 4));
+}
+
 // from chunk_19
 #[test]
 fn play_script_command_label_sanitizes_control_sequences() {

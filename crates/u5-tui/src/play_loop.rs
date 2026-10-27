@@ -15,7 +15,7 @@ use u5_runtime::{
     INPUT_CODE_NORTHEAST, INPUT_CODE_NORTHWEST, INPUT_CODE_SOUTH, INPUT_CODE_SOUTHEAST,
     INPUT_CODE_SOUTHWEST, INPUT_CODE_WEST, PLAY_EXIT_TO_DOS_KEY, PLAY_IGNORED_INPUT_KEY,
     PLAY_MUSIC_TOGGLE_KEY, PLAY_SCRIPT_MAX_IDLE_TICKS, PLAY_TYPEAHEAD_TOGGLE_KEY,
-    PlayInputDisposition, PlayOptions, PlayState, TileAtlas, TileGraphicsDepth,
+    PlayInputDisposition, PlayOptions, PlayState, SoundEffect, TileAtlas, TileGraphicsDepth,
     handle_play_key_input, hash_bytes, hash_palette_indices, input_function_key_code,
     load_tile_atlas, run_potion_flash_soundless_timing,
 };
@@ -180,11 +180,29 @@ pub fn run_interactive_play_loop<R: BufRead>(
                 continue;
             }
         };
+        let effects_before = state.sound_effect_serial;
         if handle_play_key_input(state, key, &suffix, game_dir)? == PlayInputDisposition::Quit {
             break;
         }
+        if key_flushed_typeahead(state, effects_before) {
+            queued_input.clear();
+        }
     }
     Ok(())
+}
+
+/// `audio.md §7.4`: a refused overworld or town step "Prints `Blocked!`,
+/// beeps, flushes keyboard type-ahead", whatever the Buffer setting - the
+/// setting governs only the per-read flush of `input.md §6`. The beep marks
+/// the refusal arms that flush, the test the visual shell applies: the silent
+/// whirlpool refusal and the under-sail arms take neither, and combat's own
+/// blocked-step beep publishes no flush.
+pub fn key_flushed_typeahead(state: &PlayState, effects_before: u64) -> bool {
+    !state.combat_active
+        && state
+            .sound_effects_after(effects_before)
+            .iter()
+            .any(|effect| matches!(effect, SoundEffect::BlockedStep))
 }
 
 /// Walk a pending third-mantra resolution to its end in a shell with no
@@ -761,8 +779,12 @@ pub fn handle_play_script_command(
                     break;
                 }
                 settle_play_script_exploration_gate(state, game_dir)?;
+                let effects_before = state.sound_effect_serial;
                 if handle_play_key_input(state, key, "", game_dir)? == PlayInputDisposition::Quit {
                     return Ok(PlayInputDisposition::Quit);
+                }
+                if key_flushed_typeahead(state, effects_before) {
+                    break;
                 }
             }
             return Ok(PlayInputDisposition::Continue);
