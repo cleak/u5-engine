@@ -2425,25 +2425,28 @@ impl PlayState {
         // reached the window at all - which is why the `Stonegate entry:`
         // summary this replaced was never visible in a capture despite
         // having tests over it.
+        // `town-mode.md §13` "The notice's exact shape": every notice, "in a
+        // hideout town and in Stonegate alike", is a line feed, the three
+        // rows and a closing line feed, so each one ends at column 0 and
+        // leaves no row open (playtest P13-07).
         let composed = match self.message.is_empty() {
-            true => first,
-            false => format!("{}\n\n{first}", self.message),
+            true => format!("\n{first}\n"),
+            false => format!("{}\n\n{first}\n", self.message),
         };
+        self.message_row_open_mid_line = false;
         self.emit_message_line(composed);
+        self.message_row_open_mid_line = false;
         self.emit_sound_effect(SoundEffect::ShadowlordPresenceNotice);
         let tone_secs = SoundEffect::ShadowlordPresenceNotice
             .program(&mut crate::audio::RumbleJitter::default())
             .duration(true)
             .as_secs_f64();
         for line in lines {
-            // Each notice "carries its own leading blank row". The notice
-            // before it ended on `surround thee...` with no feed of its own
-            // here, so the emit above left that row open mid-line; say so
-            // rather than infer it. The first feed closes that row and the
-            // second spends the blank.
-            self.staged_narration.push_secs(tone_secs, format!("\n\n{line}"));
+            // Each notice "carries its own leading blank row": the notice
+            // before it closed its own last row, so this leading feed spends
+            // the blank, and this one's closing feed ends its own row.
+            self.staged_narration.push_secs(tone_secs, format!("\n{line}\n"));
         }
-        self.message_row_open_mid_line = true;
     }
 
     /// The tone of a staged Stonegate notice, played as its text is released
@@ -2451,7 +2454,10 @@ impl PlayState {
     /// 1, 6600)`"). Only Stonegate stages these notices; a hideout town's
     /// single notice plays its tone at once.
     pub(crate) fn release_stonegate_notice_beat_audio(&mut self, text: &str) {
-        let Some(line) = text.strip_prefix("\n\n") else {
+        let Some(line) = text
+            .strip_prefix('\n')
+            .and_then(|text| text.strip_suffix('\n'))
+        else {
             return;
         };
         if (0..SHADOWLORD_COUNT)

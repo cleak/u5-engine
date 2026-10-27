@@ -237,3 +237,75 @@ fn playtest_p13_16_next_item_line_after_a_result_has_a_blank_row() {
     assert_ne!(texts[sword - 2], "", "{texts:?}");
     let _ = fs::remove_dir_all(dir);
 }
+
+/// P13-07 in Stonegate: §13's notice shape holds "in a hideout town and in
+/// Stonegate alike". An `E`-Enter reprints only the first notice under the
+/// narration; the later ones are still staged behind the previous tone, so
+/// each prints once, one blank row apart, and the next result keeps its
+/// blank row.
+#[test]
+fn playtest_p13_07_stonegate_entry_notices_close_their_rows() {
+    let dir = debug_game_dir();
+    let scene = Scene::new(STONEGATE_SCENE_BYTE).unwrap();
+    fs::write(dir.join("KEEP.DAT"), location_pages()).unwrap();
+    fs::write(dir.join("KEEP.NPC"), vec![0; (scene.block + 1) * 576]).unwrap();
+    fs::write(dir.join("KEEP.TLK"), [0, 0]).unwrap();
+    fs::write(
+        dir.join(WORLD_LOCATION_TABLE_FILE),
+        "BRITANNIA 10 20 KEEP:4 7 0x12 KEEP\n",
+    )
+    .unwrap();
+    let mut grid = open_world_grid();
+    grid[world_cell_index(10, 20)] = 0x12;
+    let mut state = britannia_state(grid, 10, 20);
+    state.shadowlord_hideouts = [0, SHADOWLORD_VANQUISHED, 3];
+    state.begin_command_echo_for(Command::Enter);
+    state.enter_current_location(&dir).unwrap();
+    assert!(!state.message_row_open_mid_line);
+    state.flush_staged_narration();
+    assert!(!state.message_row_open_mid_line);
+
+    let tail = p13text_get_north_rows(&mut state, &dir);
+    assert_eq!(&tail[..3], &[">Get-North", "", "Nothing to get!"], "{tail:?}");
+    let rows = p4window_rows(&state);
+    let get = rows.iter().rposition(|row| row == ">Get-North").unwrap();
+    assert_eq!(
+        &rows[get - 8..get],
+        &[
+            "An air of",
+            "cowardice doth",
+            "surround thee...",
+            "",
+            "An air of",
+            "falsehood doth",
+            "surround thee...",
+            "",
+        ],
+        "{rows:?}"
+    );
+    let _ = fs::remove_dir_all(dir);
+}
+
+/// P13-07, a save loaded inside Stonegate: the load-time notices close their
+/// rows too, so later results keep their blank row.
+#[test]
+fn playtest_p13_07_stonegate_load_notices_close_their_rows() {
+    let dir = debug_game_dir();
+    let scene = Scene::new(STONEGATE_SCENE_BYTE).unwrap();
+    fs::write(dir.join("KEEP.DAT"), location_pages()).unwrap();
+    fs::write(dir.join("KEEP.NPC"), vec![0; (scene.block + 1) * 576]).unwrap();
+    fs::write(dir.join("KEEP.TLK"), [0, 0]).unwrap();
+    let mut options = PlayOptions::default();
+    options.target = PlayTarget::Town(scene);
+    options.start = Some((1, 1));
+    options.shadowlord_hideouts = [0, SHADOWLORD_VANQUISHED, 3];
+    let mut state = PlayState::load_town_scene(&dir, scene, options).unwrap();
+    assert!(!state.message_row_open_mid_line);
+    state.flush_staged_narration();
+    assert!(!state.message_row_open_mid_line);
+    for _ in 0..2 {
+        let tail = p13text_get_north_rows(&mut state, &dir);
+        assert_eq!(&tail[..3], &[">Get-North", "", "Nothing to get!"], "{tail:?}");
+    }
+    let _ = fs::remove_dir_all(dir);
+}

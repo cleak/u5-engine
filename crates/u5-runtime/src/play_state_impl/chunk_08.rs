@@ -2750,11 +2750,19 @@ impl PlayState {
             // (playtest K03/K10). §13: "After the map has been loaded and
             // the host recorded, a settlement that hosts a Shadowlord prints
             // one line naming which".
-            let note = next.stonegate_entry_presentation_message().or_else(|| {
-                next.resident_shadowlord
-                    .and_then(Self::shadowlord_air_line_for_index)
-                    .filter(|_| next.shadowlord_notice_capability_gate_passes())
-            });
+            //
+            // Only Stonegate's *first* notice is reprinted here: every later
+            // one is still staged behind the previous notice's tone and
+            // prints with its own tone as it is released. Reprinting the
+            // whole presentation printed those notices twice.
+            let note = next
+                .stonegate_entry_presentation_message()
+                .and_then(|_| next.stonegate_entry_presentation_lines().into_iter().next())
+                .or_else(|| {
+                    next.resident_shadowlord
+                        .and_then(Self::shadowlord_air_line_for_index)
+                        .filter(|_| next.shadowlord_notice_capability_gate_passes())
+                });
             if let Some(note) = note {
                 // `town-mode.md §13` (u5-spec#300 Q4): every notice begins
                 // with its own line feed, so "exactly **one** blank row"

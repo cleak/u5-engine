@@ -103,6 +103,9 @@ fn playtest_g31_entering_stonegate_prints_the_air_rows_for_living_shadowlords() 
         state.enter_current_location(&dir).unwrap(),
         MoveOutcome::Transition(AreaTransition::EnteredLocation(scene))
     );
+    // The second notice waits behind the first notice's tone
+    // (`audio.md §8.6`); let it print.
+    state.flush_staged_narration();
 
     let rows: Vec<&str> = state
         .message_entries()
