@@ -2629,7 +2629,9 @@ fn handle_active_shop_key_input(
                     provision_quote_record_id,
                     no_sale_record_id,
                     tavern_vendor_name,
-                    active_speaker_is_female(state),
+                    // `shops.md §8.C`: "Tavern and sage honorifics address
+                    // Avatar", not the selected speaking member (P12-03).
+                    avatar_is_female(state),
                     // `shops.md` §4: the bill's count "is the number of
                     // nondead party members".
                     state
@@ -2641,6 +2643,11 @@ fn handle_active_shop_key_input(
                 ),
                 surcharge,
             );
+            // `shops.md §8.C`: "The original honorific helper also clears the
+            // active-member override."
+            if tavern_outcome_prints_honorific(&outcome) {
+                state.active_player = None;
+            }
             // The provision quantity's echo row is one transition a later key
             // continues (the next digit while the reader is still taking
             // keys; `quantity_entry_pending` below states it open). The
@@ -2697,6 +2704,15 @@ fn handle_active_shop_key_input(
                         // sage, which reads back `You respond:` / `SPIR` for a
                         // topic typed lower-case.
                         state.emit_message_line(line.to_uppercase());
+                        state.push_explicit_blank_message_entry();
+                    } else {
+                        // "After typed topic | `\n\n`" has no exception for
+                        // an empty line: the empty echo row closes and a
+                        // blank row follows before the continuation question.
+                        // The continuation ran straight onto the echo row
+                        // (playtest P12-05).
+                        state.flush_message_slot();
+                        state.push_explicit_blank_message_entry();
                         state.push_explicit_blank_message_entry();
                     }
                     step_sage(s, SageInput::Keyword(&line), &mut state.gold)
@@ -2768,6 +2784,17 @@ fn handle_active_shop_key_input(
                 state.emit_message_line_continuing_row("Yes");
                 state.push_explicit_blank_message_entry();
             }
+            // `shops.md §8.C`: "Tavern and sage honorifics address Avatar ...
+            // The original honorific helper also clears the active-member
+            // override." `§8.8`: the sage question "does not depend on the
+            // selected speaking member" (P12-03).
+            let avatar_female = avatar_is_female(state);
+            if matches!(
+                outcome,
+                SageOutcome::NoTopicMatch | SageOutcome::RefusedShortFunds { .. }
+            ) {
+                state.active_player = None;
+            }
             let mut message = match outcome {
                 // `shops.md §8.C` sage result table: "Unknown topic |
                 // `"That, I cannot help thee with.\n\n`, then repeat the topic
@@ -2776,7 +2803,7 @@ fn handle_active_shop_key_input(
                 // the sentence bare and never asked again (playtest E55).
                 SageOutcome::NoTopicMatch => format!(
                     "\"That, I cannot help thee with.\n\n{}",
-                    sage_topic_question(speaker_is_female)
+                    sage_topic_question(avatar_female)
                 ),
                 outcome => format_sage_outcome_with_shoppe(
                     outcome,
@@ -2786,7 +2813,7 @@ fn handle_active_shop_key_input(
                             scene,
                         )
                     }),
-                    speaker_is_female,
+                    avatar_female,
                     game_dir,
                 ),
             };
@@ -4354,6 +4381,37 @@ fn active_speaker_is_female(state: &PlayState) -> bool {
         state.party_names.get(slot),
     )
     .is_some_and(PartyRosterRecord::is_female)
+}
+
+/// `shops.md §8.C`: "Tavern and sage honorifics address Avatar: `sir` for
+/// male, otherwise `milady`." Avatar is the leader slot, whatever member the
+/// player has selected as active.
+fn avatar_is_female(state: &PlayState) -> bool {
+    crate::party::party_roster_record_for_active_slot(
+        &state.party_roster,
+        0,
+        state.party_names.first(),
+    )
+    .is_some_and(PartyRosterRecord::is_female)
+}
+
+/// The tavern results whose text carries `shops.md §8.C`'s honorific: the
+/// bills (paid or not), the Blue Boar list and fine-choice line, the
+/// fourth-drink warning and the sage's topic question. Each runs the
+/// original honorific helper, which "also clears the active-member override".
+fn tavern_outcome_prints_honorific(outcome: &crate::shop_runtime::TavernOutcome) -> bool {
+    use crate::shop_runtime::TavernOutcome;
+    matches!(
+        outcome,
+        TavernOutcome::EnteredSagePrompt
+            | TavernOutcome::RoundDrinkServed { .. }
+            | TavernOutcome::SecondaryTavernSelected { .. }
+            | TavernOutcome::RefusedShortFunds { .. }
+            | TavernOutcome::PickBlueBoarDrink
+            | TavernOutcome::ConfirmEnoughDrink
+            | TavernOutcome::BlueBoarDrinkServed { .. }
+            | TavernOutcome::BlueBoarRefusedShortFunds { .. }
+    )
 }
 
 /// **Measured** 2026-09-07 (`qa/paired/shop-arms-menus.tsv`, Iolo's Bows):

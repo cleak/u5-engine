@@ -3222,6 +3222,88 @@
         );
     }
 
+    /// `shops.md` §8 / §8.4: the Guest Register clears `(24, 1)..(38, 9)` -
+    /// the whole panel, food/gold box included - and frames it, so four
+    /// guests sit inside one framed panel. The ordinary panel's divider ran
+    /// through the third guest and the food/gold box framed the fourth
+    /// (playtest P12-04).
+    #[test]
+    fn inn_pickup_register_frames_the_whole_panel_for_four_guests() {
+        let mut state = test_state(open_grid(), 1, 1);
+        let names: [&[u8; 9]; 4] = [
+            b"KATRINA\0\0",
+            b"SENTRI\0\0\0",
+            b"GWENNO\0\0\0",
+            b"JOHNE\0\0\0\0",
+        ];
+        let mut guest_indices = [0; INN_REGISTRY_CAP];
+        for (index, name) in names.iter().enumerate() {
+            guest_indices[index] = index;
+            state.inn_registry.push(InnGuestRecord {
+                registry_slot: index as u8,
+                scene_marker: 0x11,
+                name: **name,
+                member: PartyMember {
+                    slot: 4 + index as u8,
+                    class_byte: b'B',
+                    status: b'G',
+                    climb_stat: 7,
+                    mana: 3,
+                    hp: 12,
+                    max_hp: 28,
+                    level: 3,
+                },
+                strength: 17,
+                intelligence: 19,
+                experience: 700,
+                equipment: [1, 2, 3, 4, 5, 6],
+                stay_counter: 1,
+            });
+        }
+        state.active_shop = Some(crate::shop_session::ActiveShopSession::Innkeeper(
+            crate::shop_runtime::InnkeeperState::PickUpCompanion {
+                inn: Inn::TheWayfarerInn,
+                guest_indices,
+                guest_count: 4,
+                base_lodging_charge: 22,
+                highlight: 0,
+            },
+        ));
+
+        let system = render_play_text_window_system(&state, state.active_player, None);
+        let left = INN_PICKUP_REGISTER_LEFT;
+        let right =
+            INN_PICKUP_REGISTER_LEFT + crate::stats_panel::PANEL_PICKER_FRAME_RIGHT_COLUMN;
+        let bottom =
+            INN_PICKUP_REGISTER_TOP + crate::stats_panel::INN_PICKUP_REGISTER_FRAME_BOTTOM_ROW;
+        assert_eq!(bottom, INN_PICKUP_REGISTER_BOTTOM);
+        let glyph = |x: u8, y: u8| system.cell(x, y).map(|cell| cell.byte);
+        assert_eq!(
+            glyph(left, INN_PICKUP_REGISTER_TOP),
+            Some(crate::stats_panel::PANEL_PICKER_FRAME_TOP_LEFT)
+        );
+        assert_eq!(
+            glyph(right, bottom),
+            Some(crate::stats_panel::PANEL_PICKER_FRAME_BOTTOM_RIGHT)
+        );
+        for row in (INN_PICKUP_REGISTER_TOP + 1)..bottom {
+            assert_eq!(
+                glyph(left, row),
+                Some(crate::stats_panel::PANEL_PICKER_FRAME_VERTICAL_RULE),
+                "left rule at row {row}"
+            );
+        }
+        let register = system
+            .region_rows(left, INN_PICKUP_REGISTER_TOP, right, bottom, b' ')
+            .join("\n");
+        for line in ["1 KATRINA", "2 SENTRI", "3 GWENNO", "4 JOHNE"] {
+            assert!(register.contains(line), "{register}");
+        }
+        assert!(!register.contains("F:"), "food/gold cleared: {register}");
+        // The chrome's roster/food divider band is gone while it is open.
+        assert!(crate::gameplay_chrome::gameplay_chrome_content(&state).stats_panel_single_box);
+    }
+
     #[test]
     fn arms_sell_browser_clears_and_widens_window_one_then_restores_window_two() {
         let mut state = test_state(open_grid(), 1, 1);

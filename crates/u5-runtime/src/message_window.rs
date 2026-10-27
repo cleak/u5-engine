@@ -823,6 +823,17 @@ pub fn shop_pause_row_is_continuation(state: &crate::PlayState) -> bool {
             )
         )
     ) || sage_topic_row_is_continuation(state)
+        // `shops.md §8.C` reagent table, "Already carrying 99": the refusal
+        // ends `\n\n`, then the overlay "consume[s] one command key, then
+        // redraw[s] stock". That read is the shop's own, not a mode loop's
+        // input helper, so `commands.md §5.1`'s marker - which "belongs to
+        // the turn loop" - is not drawn on it (playtest P12-06).
+        || matches!(
+            state.active_shop,
+            Some(crate::shop_session::ActiveShopSession::Reagent(
+                crate::shop_runtime::ReagentShopState::CapRefusalWait { .. }
+            ))
+        )
         // `view.md §3`'s modal death-vision view reads its dismissing key
         // outside any turn cycle, and `text-output.md §10.2` gives the
         // end-cap triangle to the cycle - "before it reads the key". Measured

@@ -81,6 +81,13 @@ pub const INN_PICKUP_REGISTER_TOP: u8 = 1;
 pub const INN_PICKUP_REGISTER_INITIAL_RIGHT: u8 = 38;
 pub const INN_PICKUP_REGISTER_FRAME_RIGHT: u8 = 39;
 pub const INN_PICKUP_REGISTER_BOTTOM: u8 = 9;
+/// Window-local row carrying the register's bottom ornaments.
+///
+/// `shops.md` §8: the register "draws row borders at window-local `(0, row)`
+/// and `(14, row)` over rows `1..7`" inside the `(24, 1)..(39, 9)` frame, so
+/// the top ornaments sit on row 0 and the bottom ones on row 8 - the
+/// picker's nine-row frame.
+pub const INN_PICKUP_REGISTER_FRAME_BOTTOM_ROW: u8 = 8;
 pub const INN_PICKUP_REGISTER_BORDER_FIRST_ROW: u8 = 2;
 pub const INN_PICKUP_REGISTER_BORDER_LAST_ROW: u8 = 8;
 pub const ARMS_SELL_BROWSER_TEXT_WINDOW_INDEX: usize = STATS_PANEL_TEXT_WINDOW_INDEX;
@@ -277,6 +284,16 @@ pub fn paint_talk_shop_text_window(system: &mut TextWindowSystem, message: &str)
     system.set_active_window(TALK_SHOP_TEXT_WINDOW_INDEX);
 }
 
+/// Whether the inn's multi-guest Guest Register owns the side panel.
+pub fn inn_pickup_register_active(state: &PlayState) -> bool {
+    matches!(
+        state.active_shop,
+        Some(crate::shop_session::ActiveShopSession::Innkeeper(
+            crate::shop_runtime::InnkeeperState::PickUpCompanion { .. }
+        ))
+    )
+}
+
 pub fn paint_inn_pickup_register_text_window(system: &mut TextWindowSystem, state: &PlayState) {
     let Some(crate::shop_session::ActiveShopSession::Innkeeper(
         crate::shop_runtime::InnkeeperState::PickUpCompanion {
@@ -306,6 +323,12 @@ pub fn paint_inn_pickup_register_text_window(system: &mut TextWindowSystem, stat
         INN_PICKUP_REGISTER_FRAME_RIGHT,
         INN_PICKUP_REGISTER_BOTTOM,
     );
+    // `shops.md` §8: the clear covers the whole `(24, 1)..(38, 9)` panel -
+    // roster rows, divider and food/gold box alike - and the frame is drawn
+    // around it. Without the frame the ordinary panel's divider ran through
+    // the third guest and the food/gold box framed the fourth (playtest
+    // P12-04).
+    paint_ornamental_frame(system, INN_PICKUP_REGISTER_FRAME_BOTTOM_ROW);
 
     // `shops.md §8.C` "Multiple-guest selection": "the framed list headings
     // are `    GUEST` and `  REGISTER:\n\n`", at window-local `(1, 1)` and
