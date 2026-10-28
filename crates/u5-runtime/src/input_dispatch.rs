@@ -892,14 +892,18 @@ fn handle_play_key_input_inner(
     // A suffix that names no party member but is a direction alias is the
     // inline direction form instead, which goes through the top-down
     // direction prompt below (playtest S24).
-    let jimmy_inline_direction = key == 'J'
-        && !matches!(state.area, Area::Dungeon { .. })
-        && parse_inline_party_index(suffix).is_none()
-        && suffix.chars().any(|ch| Direction::from_play_key(ch).is_some());
-    if matches!(key, 'J' | 'j')
-        && (!suffix.is_empty() || matches!(state.area, Area::Dungeon { .. }))
-        && !jimmy_inline_direction
-    {
+    //
+    // Above ground, anything else is the plain `J` key: `input.md §6` folds
+    // a lowercase `j` to `J`, and `commands.md §5.4` has Jimmy await a
+    // direction that "accepts only the four directions and Space". So a bare
+    // `j`, or `J` followed by a non-direction (`Jx`), opens `Jimmy-` and
+    // waits - it acted on the facing cell, and could break a key on a door
+    // no direction ever chose (playtest P14-03).
+    let in_dungeon = matches!(state.area, Area::Dungeon { .. });
+    if key == 'j' && !in_dungeon {
+        key = 'J';
+    }
+    if matches!(key, 'J' | 'j') && (in_dungeon || parse_inline_party_index(suffix).is_some()) {
         // `dungeon-mode.md §4` step 1 / `§15`: the dungeon's minute sits at
         // the head of every iteration, whatever the command. `J` is read by
         // this shared intercept rather than the dungeon handler, so it runs
@@ -948,11 +952,18 @@ fn handle_play_key_input_inner(
         && let Some(direction) = inline_direction.take()
     {
         *deferred_prompt_key = Some(direction_prompt_key(direction));
-        // The legacy `l` alias looks at the facing tile when it has no
-        // direction; with one it is `L` and its prompt.
+        // With a direction the `l` alias is `L` and its prompt.
         if key == 'l' {
             key = 'L';
         }
+    }
+    // Without one it is `L` too: `input.md §6` folds a lowercase letter to
+    // upper case, and `commands.md §5.4` has Look await a direction. The
+    // alias looked at the facing tile with no direction chosen (playtest
+    // P14-03). The dungeon's `l` is its own focus prompt, so only the
+    // top-down scenes fold.
+    if key == 'l' && matches!(active_route, SceneRoute::Overworld | SceneRoute::TownFamily) {
+        key = 'L';
     }
     let inline_rest = parse_inline_rest_request(suffix);
     let inline_drink = parse_inline_yes_no(suffix);
