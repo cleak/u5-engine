@@ -6737,6 +6737,10 @@ fn handle_combat_targeting_cursor_key(
 fn emit_held_combat_faint_lines(state: &mut PlayState, lines: Vec<String>) {
     for line in lines {
         state.emit_message_line(line);
+        // `combat.md §6.3`: the faint print carries no line feed of its own
+        // (`\nShadow Lord escapes!\n<member> passes out!`), so the row
+        // stays open for the next producer.
+        state.message_row_open_mid_line = true;
     }
 }
 

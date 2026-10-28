@@ -5048,7 +5048,12 @@ impl PlayState {
         let line = format!("{name} passes out!");
         match self.combat_held_faint_lines.as_mut() {
             Some(held) => held.push(line),
-            None => self.emit_message_line(line),
+            None => {
+                self.emit_message_line(line);
+                // `§6.3`: no line feed after ` passes out!`; the row stays
+                // open for the next producer.
+                self.message_row_open_mid_line = true;
+            }
         }
 
         // `combat.md §6.3`: narration completes before this blocking cue;
