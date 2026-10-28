@@ -195,15 +195,31 @@
         // `combat.md §8` Shape A "prints the verb label, then requires ...",
         // so the delegate's own refusal follows the label instead of erasing
         // it - the same order the dead-actor arm of this shape uses.
-        assert!(
-            state.message.starts_with(&format!(
-                "{}{COMBAT_JIMMY_NO_KEYS_MESSAGE}",
-                combat_command_branch_published_label(CombatCommandBranch::Jimmy)
-                    .expect("`§8` publishes the Jimmy label")
-            )),
-            "message was {:?}",
-            state.message
+        //
+        // The row is the arena's marker row (`combat.md §8.1`: the feed and
+        // marker have "no gate"; `text-output.md §10.2`: the echoed verb
+        // begins at column 25), so it is a command echo, not ordinary output
+        // drawn one column left with no end-cap (playtest P16-01).
+        let expected_row = format!(
+            "{}{COMBAT_JIMMY_NO_KEYS_MESSAGE}",
+            combat_command_branch_published_label(CombatCommandBranch::Jimmy)
+                .expect("`§8` publishes the Jimmy label")
         );
+        let row = state
+            .message_transcript
+            .iter()
+            .find(|entry| entry.text == expected_row)
+            .unwrap_or_else(|| {
+                panic!(
+                    "`{expected_row}` is in the transcript: {:?}",
+                    state
+                        .message_transcript
+                        .iter()
+                        .map(|entry| (&entry.text, entry.is_command_echo))
+                        .collect::<Vec<_>>()
+                )
+            });
+        assert!(row.is_command_echo, "the refusal row carries the marker");
         assert!(
             state.active_direction_prompt.is_none(),
             "the refusal precedes the direction prompt"
