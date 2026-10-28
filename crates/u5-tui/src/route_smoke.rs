@@ -1650,7 +1650,9 @@ pub fn route_smoke_cases() -> Vec<RouteSmokeCase> {
             options: PlayOptions::default(),
             script: &["T", "6", "NAME"],
             expected: RouteSmokeExpectation::Town(castle),
-            min_turn: 1,
+            // The conversation is still open, so its Talk turn is still owed
+            // (`town-mode.md §7` step 4, playtest P14-10).
+            min_turn: 0,
             expected_frame_kind: "tile viewport",
         },
         RouteSmokeCase {
@@ -7430,6 +7432,8 @@ fn validate_route_smoke_case_state(
         }
         "castle-talk-ordinary-keyword-route" => {
             if state.active_conversation.is_none()
+                || state.turn != 0
+                || !state.pending_talk_conversation_turn
                 || state.active_shop.is_some()
                 || state.message.is_empty()
                 || state.message.contains("[w")
