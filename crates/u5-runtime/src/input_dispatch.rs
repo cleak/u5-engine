@@ -7080,6 +7080,17 @@ fn handle_combat_multistage_command(
                 state.z_stats_for_combat_party_actor(member);
             } else {
                 state.start_party_selector(PartySelectorTarget::ZStats);
+                // `combat.md §8.1`: the turn handler's feed and marker run
+                // "on every pass, before the key read", with no gate - a
+                // charmed monster "is keyboard-driven, gets its reduced
+                // banner, the feed and the marker". `Player: ` is what this
+                // key prints on that marker row, so it is the row's command
+                // echo; left in the slot it flushed as ordinary output with
+                // no end-cap (playtest P16-02).
+                let prompt = std::mem::take(&mut state.message);
+                if !prompt.is_empty() {
+                    state.emit_combat_command_echo_line(&prompt);
+                }
             }
             state.pending_combat_actor_slot = Some(actor_slot);
             true
@@ -7275,8 +7286,19 @@ fn handle_combat_multistage_command(
             if *branch == CombatCommandBranch::Jimmy && state.keys == 0 {
                 // `combat.md §8` Shape A prints the verb label first and the
                 // delegate's own line after it. The label is already in the
-                // slot.
-                state.message.push_str(COMBAT_JIMMY_NO_KEYS_MESSAGE);
+                // slot. The row is still the arena's marker row
+                // (`combat.md §8.1`: the feed and marker have "no gate";
+                // `text-output.md §10.2`: the echoed verb begins at column
+                // 25), so it goes out as a command echo like every other arm
+                // here. Pushing it onto the message slot flushed it as
+                // ordinary output, one column left with no end-cap
+                // (playtest P16-01). The row is closed as before, so the
+                // next banner's leading feed still leaves the blank row the
+                // ordinary flush did.
+                let mut echo = std::mem::take(&mut state.message);
+                echo.push_str(COMBAT_JIMMY_NO_KEYS_MESSAGE);
+                echo.push('\n');
+                state.emit_combat_command_echo_line(&echo);
                 let _ = apply_combat_committed_action_maintenance(state, actor_slot);
                 advance_combat_round_after_actor_and_append_message(state, actor_slot);
                 return true;

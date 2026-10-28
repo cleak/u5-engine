@@ -167,6 +167,16 @@ fn sealed_dungeon_name_for_x(x: usize) -> Option<&'static str> {
     })
 }
 
+/// `view.md §3` rows 5a-5c: the appender rows, matched on the live tile
+/// alone - "`0xFA`, `0xFB`, `0xDE` or `0xDF`" - whether or not the row then
+/// appends anything.
+pub(crate) fn look_terrain_tile_takes_appender_row(tile: u8) -> bool {
+    matches!(
+        tile,
+        0xfa | 0xfb | ETERNAL_FLAME_LOOK_TILE | WORD_OF_POWER_SEALED_TILE
+    )
+}
+
 impl PlayState {
     /// Apply the primary tavern round's north-first table-setting rewrite.
     /// At either vertical edge the out-of-range lookup uses the town-grid
@@ -4061,10 +4071,8 @@ impl PlayState {
                     // the terrain description of the substituted cell is
                     // what Look reports.
                     let tile = self.grid[TOWN_GRID_SIDE * TOWN_GRID_SIDE - 1];
-                    self.message = format!(
-                        "{LOOK_RESULT_PREFIX}\n{}",
-                        self.look_description(tile, look_table, TOWN_GRID_SIDE - 1)
-                    );
+                    let description = self.look_description(tile, look_table, TOWN_GRID_SIDE - 1);
+                    self.present_look_terrain_description(tile, &description);
                     return Ok(MoveOutcome::Observed);
                 }
                 let x = x as usize;
@@ -4131,10 +4139,8 @@ impl PlayState {
                 if surface_town_fountain_look_tile(tile) {
                     return Ok(self.start_surface_fountain_drink_prompt(direction));
                 }
-                self.message = format!(
-                    "{LOOK_RESULT_PREFIX}\n{}",
-                    self.look_description(tile, look_table, x)
-                );
+                let description = self.look_description(tile, look_table, x);
+                self.present_look_terrain_description(tile, &description);
                 Ok(MoveOutcome::Observed)
             }
             Area::World { .. } => {
@@ -4195,9 +4201,30 @@ impl PlayState {
                 // inline form, `You see: mountains at (240, 72) on
                 // BRITANNIA.`, where a paired capture of Deceit's exit reads
                 // `Thou dost see` / `mountains` (`cleak/u5-engine#5`).
-                self.message = format!("{LOOK_RESULT_PREFIX}\n{description}");
+                self.present_look_terrain_description(tile, &description);
                 Ok(MoveOutcome::Observed)
             }
+        }
+    }
+
+    /// Print a terrain-path look result (`view.md §3` row 5) under the shared
+    /// `Thou dost see` preamble.
+    ///
+    /// `view.md §3`: "The shared line-spacing cleanup belongs to the
+    /// plain-description path only ... A tile that matched an appender row
+    /// returns as soon as its suffix is printed and never reaches the
+    /// cleanup", even when the row appends nothing - "So a clock tile emits
+    /// its description and time and nothing further." That cleanup is the
+    /// feed closing the look row (`text-output.md §10.4`), and no stored
+    /// description carries one, so an appender result leaves its row open
+    /// and the next poll's leading feed closes it with no blank row between
+    /// (playtest P16-03). The row state is stated here, not inferred from
+    /// the text.
+    fn present_look_terrain_description(&mut self, tile: u8, description: &str) {
+        self.message = format!("{LOOK_RESULT_PREFIX}\n{description}");
+        if look_terrain_tile_takes_appender_row(tile) {
+            self.flush_message_slot();
+            self.leave_last_transcript_row_open();
         }
     }
 

@@ -1088,6 +1088,22 @@ impl PlayState {
             // shows under the echo (playtest S18).
             self.message_row_open_mid_line = false;
         }
+        // The same close for a result row its producer stated it left open
+        // ([`Self::leave_last_transcript_row_open`]: `view.md §3`'s look
+        // appender rows, Blackthorn's closing records). This echo stands on
+        // the marker row that "the next poll's leading feed" opened
+        // (`text-output.md §10.4`), so the open row is closed from here on.
+        // Left set, the flag outlived its row: a second `Look` at a clock lost
+        // the blank under `Look-North`, and `East`/`Blocked!` after one lost
+        // the blank before the next greeting (review of playtest P16-03).
+        if self.message_row_open_mid_line
+            && self
+                .message_transcript
+                .last()
+                .is_some_and(|entry| entry.leaves_row_open)
+        {
+            self.message_row_open_mid_line = false;
+        }
         let continues_open_row = surface_row_follows
             || (self.combat_active && self.combat_prompt_row_opened_by_banner);
         let text = echo.text.to_string();
