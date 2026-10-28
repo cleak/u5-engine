@@ -3192,6 +3192,16 @@ impl PlayState {
             // sentence. Multiple failures produce multiple lines in party
             // order."
             self.emit_message_line(OUTDOOR_SWAMP_POISONED_LINE);
+            // §8.2: "The ordinary party-upkeep pass follows and charges one
+            // HP to each member now Poisoned on that same action. A sleeper
+            // who failed is now Poisoned and takes that hit too." `time.md
+            // §5`: "Outdoor swamp acquisition occurs before this upkeep
+            // pass". This engine runs the pass with the action's clock
+            // advance, ahead of the underfoot chain, so a member it did not
+            // yet see as Poisoned takes that pass's one-point hit here
+            // (playtest P15-04). Members already Poisoned were skipped above
+            // and were charged by the pass itself.
+            self.apply_poison_upkeep_hit(index);
         }
         // "The caller then pauses one world tick even if everyone saved or
         // was skipped."
