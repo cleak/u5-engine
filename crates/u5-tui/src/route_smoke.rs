@@ -3185,7 +3185,10 @@ fn append_asset_backed_conversation_route_smoke_cases(cases: &mut Vec<RouteSmoke
                     },
                     script,
                     expected: RouteSmokeExpectation::Town(scene),
-                    min_turn: 1,
+                    // `town-mode.md §7` step 4: the explicit Talk's turn is
+                    // spent when the conversation closes (playtest P14-10),
+                    // so a route that leaves it open has spent none yet.
+                    min_turn: u64::from(asset_backed_conversation_route_exits(name)),
                     expected_frame_kind: "tile viewport",
                 });
             }
@@ -7442,6 +7445,8 @@ fn validate_route_smoke_case_state(
             let exits = asset_backed_conversation_route_exits(case_name);
             if (!exits && state.active_conversation.is_none())
                 || (exits && state.active_conversation.is_some())
+                // The open conversation still owes its Talk turn (P14-10).
+                || (!exits && (state.turn != 0 || !state.pending_talk_conversation_turn))
                 || state.active_shop.is_some()
                 || state.message.is_empty()
                 || state.message.contains("[w")
