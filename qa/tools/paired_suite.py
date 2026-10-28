@@ -122,6 +122,46 @@ def scenario_fixed_clock(path: pathlib.Path) -> str | None:
     return match.group(1) if match else None
 
 
+EMULATOR_LOAD_LATENCY_ENV = "U5_EMULATOR_LOAD_LATENCY_MS"
+
+
+def scenario_emulator_load_latency(path: pathlib.Path) -> str | None:
+    """The `# emulator-load-latency: MS` a scenario pins, if any.
+
+    `intro.md` Section 7, "Timing of the load path": the stock game's
+    Journey Onward is untimed work that DOSBox at 3000 cycles takes about
+    216 ms over after the border appears (plus about 1.7 s when the tile
+    archive loads), while the engine loads at once, so an idle-draw count
+    taken after a load starts a few draws apart. "A parity harness that
+    counts idle draws against this emulator may model the gap as an optional
+    emulator-profile latency between the key read and the first idle pass.
+    ... It is a test setting, not a game rule, and must never be expressed
+    as ticks." Whole milliseconds; the header wins over
+    `--emulator-load-latency` for that scenario, as `# fixed-clock:` does.
+    """
+    match = re.search(r"^# emulator-load-latency:\s*(\d+)\s*$", path.read_text(), re.M)
+    return match.group(1) if match else None
+
+
+def scenario_environment(path: pathlib.Path, base: dict | None = None) -> tuple[dict | None, list[str]]:
+    """The environment a scenario runs under, and a note per header that set it.
+
+    `None` when no header pins anything, so the run inherits the suite's own
+    environment (and with it any `--fixed-clock` or `--emulator-load-latency`).
+    """
+    environ = dict(os.environ if base is None else base)
+    notes = []
+    pinned = scenario_fixed_clock(path)
+    if pinned is not None:
+        environ["U5_FIXED_HOST_CLOCK"] = pinned
+        notes.append(f"clock {path.stem}\tfixed at {pinned} by its header")
+    latency = scenario_emulator_load_latency(path)
+    if latency is not None:
+        environ[EMULATOR_LOAD_LATENCY_ENV] = latency
+        notes.append(f"load  {path.stem}\temulator load latency {latency} ms by its header")
+    return (environ if notes else None), notes
+
+
 def captures_are_usable(artifact: str) -> bool:
     """Did this run capture the game frame, or something else?
 
@@ -246,6 +286,20 @@ def main() -> None:
             "for up to MS milliseconds. Sets U5_PAIRED_REACTION_PROBE_MS."
         ),
     )
+    parser.add_argument(
+        "--emulator-load-latency",
+        type=int,
+        metavar="MS",
+        help=(
+            "engine side only: pause MS wall-clock milliseconds between a "
+            "title-menu load's key read and the first idle pass, modelling "
+            "the stock game's untimed load work under DOSBox (intro.md 7, "
+            "'a test setting, not a game rule'). Sets "
+            "U5_EMULATOR_LOAD_LATENCY_MS, which only the clean engine reads. "
+            "No default; about 280 fits fixed 3000 cycles with a preview "
+            "already run."
+        ),
+    )
     parser.add_argument("scenarios", nargs="*")
     args = parser.parse_args()
     if args.fixed_clock:
@@ -255,6 +309,13 @@ def main() -> None:
         os.environ["U5_PAIRED_KEY_SYNC"] = args.key_sync
     if args.reaction_probe:
         os.environ["U5_PAIRED_REACTION_PROBE_MS"] = str(args.reaction_probe)
+    if args.emulator_load_latency is not None:
+        if args.emulator_load_latency < 0:
+            parser.error("--emulator-load-latency must be zero or more milliseconds")
+        # Inherited by `game-dev-u5-paired` and from it by both launched
+        # sides, but only the clean engine reads it; DOSBox has no use for
+        # it and the stock side keeps its own load time.
+        os.environ[EMULATOR_LOAD_LATENCY_ENV] = str(args.emulator_load_latency)
 
     table = seeds()
     # `seeds.tsv` lives in the same directory and is not a scenario.
@@ -311,11 +372,9 @@ def main() -> None:
         if profile is not None:
             cmd += ["--seed-save", str(profile)]
         cmd.append(str(ROOT / f"{name}.tsv"))
-        env = None
-        pinned = scenario_fixed_clock(ROOT / f"{name}.tsv")
-        if pinned is not None:
-            env = dict(os.environ, U5_FIXED_HOST_CLOCK=pinned)
-            print(f"clock {name}\tfixed at {pinned} by its header", flush=True)
+        env, notes = scenario_environment(ROOT / f"{name}.tsv")
+        for note in notes:
+            print(note, flush=True)
         result = run_scenario(cmd, env)
         artifact_of = lambda out: (
             re.findall(r"/[\w./-]*artifacts/u5/paired/[\w.-]+", out) or [""]

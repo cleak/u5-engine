@@ -1499,6 +1499,91 @@ pub fn run_visual_intro_loop(
     Ok(())
 }
 
+/// QA timing control: when this environment variable holds a positive whole
+/// number of milliseconds, the visual shell pauses that long of wall-clock
+/// time between a title-menu load's key read and the first gameplay frame
+/// that steps the world.
+///
+/// `intro.md §7`, "Timing of the load path" (u5-spec#306): nothing from the
+/// menu pass that reads `J` to the first command-wait pass waits, "An
+/// implementation must not add any wait to it, and an instant load is correct
+/// behaviour." The stock game under DOSBox at 3000 cycles still takes about
+/// 216 ms of untimed work after the border appears (plus about 1.7 s when the
+/// tile archive is loaded), so an engine that loads instantly runs a few idle
+/// draws ahead of it. "A parity harness that counts idle draws against this
+/// emulator may model the gap as an optional emulator-profile latency between
+/// the key read and the first idle pass ... It is a test setting, not a game
+/// rule, and must never be expressed as ticks." This is that setting: the
+/// paired harness sets it for the engine side only, and unset (or zero, or
+/// unparseable, as [`u5_runtime::prng::FIXED_HOST_CLOCK_ENV`] treats a bad
+/// value) the load is instant and nothing changes.
+pub const EMULATOR_LOAD_LATENCY_ENV: &str = "U5_EMULATOR_LOAD_LATENCY_MS";
+
+/// Parse an [`EMULATOR_LOAD_LATENCY_ENV`] value: whole milliseconds, with
+/// zero meaning no latency.
+fn parse_emulator_load_latency(text: &str) -> Option<Duration> {
+    let millis: u64 = text.trim().parse().ok()?;
+    (millis > 0).then(|| Duration::from_millis(millis))
+}
+
+/// The emulator-profile load latency from [`EMULATOR_LOAD_LATENCY_ENV`], when
+/// set and valid.
+fn emulator_load_latency_from_env() -> Option<Duration> {
+    std::env::var(EMULATOR_LOAD_LATENCY_ENV)
+        .ok()
+        .and_then(|text| parse_emulator_load_latency(&text))
+}
+
+/// The pending [`EMULATOR_LOAD_LATENCY_ENV`] pause after a title-menu load.
+///
+/// Inserted only when the setting is present, so the default shell never
+/// sees it. While it holds, the gameplay systems do nothing but queue what
+/// is typed (`input.md §6`), the way the BIOS buffer holds keys typed during
+/// a slow load: no world step, no draw, no key read and no repaint. The
+/// pause is pure wall-clock time ([`Time<Real>`]), never a tick count.
+/// When it ends, the input helper's entry step (`timing.md §8.2`) runs on
+/// that frame exactly as it would have run on the first gameplay frame, and
+/// the first command-wait pass follows one timer interval later
+/// (`timing.md §8.1`), so the latency sits between the key read and the
+/// entry step that immediately precedes the first idle pass - where the
+/// stock game's untimed load work sits (`intro.md §7`, measured segments).
+#[derive(Resource, Debug)]
+struct EmulatorLoadLatency {
+    latency: Duration,
+    /// [`Time<Real>`] elapsed at the first gameplay frame of the pause.
+    started_at: Option<Duration>,
+    finished: bool,
+}
+
+impl EmulatorLoadLatency {
+    fn new(latency: Duration) -> Self {
+        Self {
+            latency,
+            started_at: None,
+            finished: false,
+        }
+    }
+
+    /// Whether the pause is still in force (no frame has yet found it over).
+    fn holding(&self) -> bool {
+        !self.finished
+    }
+
+    /// Advance the pause to the real-time reading `now`; `true` while it
+    /// still holds. The first call starts it.
+    fn hold_at(&mut self, now: Duration) -> bool {
+        if self.finished {
+            return false;
+        }
+        let started_at = *self.started_at.get_or_insert(now);
+        if now.saturating_sub(started_at) < self.latency {
+            return true;
+        }
+        self.finished = true;
+        false
+    }
+}
+
 fn optional_env_path(name: &str) -> Option<PathBuf> {
     match std::env::var(name) {
         Ok(value) => Some(PathBuf::from(value)),
@@ -11247,11 +11332,28 @@ fn animate_static_tiles(
     real_time: Res<Time<bevy::prelude::Real>>,
     mut pump: ResMut<AnimationPump>,
     visual: Option<ResMut<VisualState>>,
+    load_latency: Option<ResMut<EmulatorLoadLatency>>,
     mut images: ResMut<Assets<Image>>,
 ) {
     let Some(mut visual) = visual else {
         return;
     };
+
+    // `intro.md §7` "Timing of the load path": the optional emulator-profile
+    // latency between the load's key read and the first idle pass. A test
+    // setting, present only when `U5_EMULATOR_LOAD_LATENCY_MS` asked for it.
+    // While it holds nothing steps, draws or repaints; the frame the load
+    // presented stays up. On the frame it ends the pump restarts from zero,
+    // as it stands on the first gameplay frame of an instant load, so the
+    // entry step below runs now and the first idle pass one interval later.
+    if let Some(mut hold) = load_latency
+        && hold.holding()
+    {
+        pump.accumulator = 0.0;
+        if hold.hold_at(real_time.elapsed()) {
+            return;
+        }
+    }
 
     // `endgame.md §4` (issue #298 Q43, `RETRACTIONS.md` R558/R559): the
     // tableau sprites run on the ordinary per-slot animator "through every
@@ -11822,6 +11924,13 @@ fn transition_visual_intro_to_gameplay(
         flush_typeahead_when_speaker_idle: false,
         diagnostic_cursor: 0,
     });
+    // `intro.md §7` "Timing of the load path": the optional emulator-profile
+    // latency a parity harness may ask for. Every title-menu load reaches
+    // gameplay through here; unset, nothing is inserted and the load is
+    // instant, which the spec calls correct behaviour.
+    if let Some(latency) = emulator_load_latency_from_env() {
+        commands.insert_resource(EmulatorLoadLatency::new(latency));
+    }
     commands.remove_resource::<VisualIntroState>();
 }
 
@@ -13677,6 +13786,7 @@ fn drive_visual(
     speaker_queue: Option<Res<SpeakerQueue>>,
     speaker_voices: Query<(), With<SpeakerVoice>>,
     visual: Option<ResMut<VisualState>>,
+    load_latency: Option<Res<EmulatorLoadLatency>>,
     mut images: ResMut<Assets<Image>>,
     mut exit: EventWriter<AppExit>,
     mut speaker: EventWriter<SpeakerEffect>,
@@ -13702,6 +13812,13 @@ fn drive_visual(
             shift: shift_pressed,
             control: control_pressed,
         }));
+    // The optional emulator-profile load latency ([`EmulatorLoadLatency`],
+    // `intro.md §7`): the load is still "running", so nothing reads a key
+    // yet. What is typed waits in the queue for the first command wait,
+    // which follows the input helper's entry step once the pause ends.
+    if load_latency.is_some_and(|hold| hold.holding()) {
+        return;
+    }
     let effects_queued_now = queue_pending_speaker_effects(&mut visual, &mut speaker);
     // `audio.md §2`: "Most effects own the calling thread until they finish,
     // so gameplay and command input do not continue underneath them" - and
@@ -31708,6 +31825,170 @@ mod tests {
                 ..PlayOptions::default()
             },
         )
+    }
+
+    /// `intro.md §7` "Timing of the load path": the emulator-profile latency
+    /// is a whole-millisecond test setting, and anything else - unset, zero
+    /// or unparseable - is an instant load, "correct behaviour".
+    #[test]
+    fn emulator_load_latency_setting_parses_whole_milliseconds_only() {
+        assert_eq!(
+            parse_emulator_load_latency("280"),
+            Some(Duration::from_millis(280))
+        );
+        assert_eq!(
+            parse_emulator_load_latency(" 1700 "),
+            Some(Duration::from_millis(1700))
+        );
+        assert_eq!(parse_emulator_load_latency("0"), None);
+        assert_eq!(parse_emulator_load_latency(""), None);
+        assert_eq!(parse_emulator_load_latency("280ms"), None);
+        assert_eq!(parse_emulator_load_latency("-5"), None);
+        assert_eq!(parse_emulator_load_latency("0.28"), None);
+        assert_eq!(EMULATOR_LOAD_LATENCY_ENV, "U5_EMULATOR_LOAD_LATENCY_MS");
+    }
+
+    /// The pause is wall-clock time measured from its first frame, never a
+    /// count of frames or ticks, and it ends exactly once.
+    #[test]
+    fn emulator_load_latency_holds_for_its_wall_clock_span_then_ends_once() {
+        let mut hold = EmulatorLoadLatency::new(Duration::from_millis(280));
+        assert!(hold.holding());
+        assert!(hold.hold_at(Duration::from_millis(1_000)));
+        assert!(hold.hold_at(Duration::from_millis(1_279)));
+        assert!(hold.holding());
+        assert!(!hold.hold_at(Duration::from_millis(1_280)));
+        assert!(!hold.holding());
+        assert!(!hold.hold_at(Duration::from_millis(1_281)));
+    }
+
+    /// `intro.md §7` "Timing of the load path" and `timing.md §8.1`-`§8.2`:
+    /// the emulator-profile latency delays the input helper's entry step and
+    /// the first idle pass by its own wall-clock span and changes nothing
+    /// else. Two shells over the same freshly loaded overworld scene - the
+    /// state a Journey Onward hands to gameplay, entry step owed - one with
+    /// the setting absent (the default path, as it stood) and one with a
+    /// 200 ms latency, at 10 ms host frames: during the pause nothing draws,
+    /// steps or reads a key, and a key typed in it stays queued; afterwards
+    /// the delayed shell repeats the default shell's generator state frame
+    /// for frame, 20 frames late, so the draw count is unchanged.
+    #[test]
+    #[cfg(feature = "original-asset-tests")]
+    fn emulator_load_latency_delays_the_first_idle_pass_without_changing_draws() {
+        const FRAME: Duration = Duration::from_millis(10);
+        const LATENCY_FRAMES: usize = 20;
+        const FRAMES: usize = 120;
+        let mut default_shell = britannia_meadow_shell("load-latency-default");
+        let mut delayed_shell = britannia_meadow_shell("load-latency-delayed");
+        assert!(
+            default_shell
+                .visual()
+                .state
+                .overworld_input_helper_entry_owed
+        );
+        let initial = default_shell.visual().state.prng_state;
+        assert_eq!(delayed_shell.visual().state.prng_state, initial);
+        delayed_shell
+            .app
+            .insert_resource(EmulatorLoadLatency::new(FRAME * LATENCY_FRAMES as u32));
+
+        // The default path: no resource, so the entry step - one world tick
+        // and its wind draw (`animation.md §13.2`) - runs on the first
+        // gameplay frame, exactly as before this setting existed.
+        assert!(
+            default_shell
+                .app
+                .world()
+                .get_resource::<EmulatorLoadLatency>()
+                .is_none()
+        );
+        let mut default_states = Vec::with_capacity(FRAMES);
+        for _ in 0..FRAMES {
+            default_shell.tick_by(FRAME);
+            default_states.push(default_shell.visual().state.prng_state);
+        }
+        assert_ne!(
+            default_states[0], initial,
+            "the entry step draws on the first frame"
+        );
+        assert!(
+            !default_shell
+                .visual()
+                .state
+                .overworld_input_helper_entry_owed
+        );
+
+        // The pause: a key typed in it is queued, not read; nothing draws.
+        delayed_shell.key_event(KeyCode::KeyZ, bevy::input::ButtonState::Pressed);
+        delayed_shell.tick_by(FRAME);
+        delayed_shell.key_event(KeyCode::KeyZ, bevy::input::ButtonState::Released);
+        for _ in 1..LATENCY_FRAMES {
+            delayed_shell.tick_by(FRAME);
+        }
+        assert_eq!(delayed_shell.visual().state.prng_state, initial);
+        assert!(
+            delayed_shell
+                .visual()
+                .state
+                .overworld_input_helper_entry_owed
+        );
+        assert_eq!(delayed_shell.visual().typed_keys.len(), 1, "the key waits");
+        assert!(
+            delayed_shell
+                .app
+                .world()
+                .resource::<EmulatorLoadLatency>()
+                .holding()
+        );
+        // Drop the key before the pause ends, so the comparison below sees
+        // idle passes only.
+        delayed_shell.visual_mut().typed_keys.clear();
+
+        let mut delayed_states = Vec::with_capacity(FRAMES);
+        for _ in 0..FRAMES {
+            delayed_shell.tick_by(FRAME);
+            delayed_states.push(delayed_shell.visual().state.prng_state);
+        }
+        assert!(
+            !delayed_shell
+                .app
+                .world()
+                .resource::<EmulatorLoadLatency>()
+                .holding()
+        );
+        assert_eq!(
+            delayed_states, default_states,
+            "after the pause the same entry step and idle passes draw the same stream, \
+             shifted by exactly the latency"
+        );
+    }
+
+    /// A key typed during the emulator-profile latency is read by the first
+    /// command wait after the pause, behind the input helper's entry step.
+    #[test]
+    #[cfg(feature = "original-asset-tests")]
+    fn a_key_typed_during_the_emulator_load_latency_is_read_after_the_entry_step() {
+        const FRAME: Duration = Duration::from_millis(10);
+        let mut shell = britannia_meadow_shell("load-latency-key");
+        shell
+            .app
+            .insert_resource(EmulatorLoadLatency::new(Duration::from_millis(100)));
+        let start = shell.position();
+        shell.key_event(KeyCode::ArrowLeft, bevy::input::ButtonState::Pressed);
+        shell.tick_by(FRAME);
+        shell.key_event(KeyCode::ArrowLeft, bevy::input::ButtonState::Released);
+        for _ in 0..5 {
+            shell.tick_by(FRAME);
+        }
+        assert_eq!(shell.position(), start, "no key is read while the load runs");
+        assert_eq!(shell.visual().typed_keys.len(), 1);
+        // The frame the pause ends runs the entry step; the next reads the key.
+        for _ in 0..5 {
+            shell.tick_by(FRAME);
+        }
+        assert!(!shell.visual().state.overworld_input_helper_entry_owed);
+        shell.tick_by(FRAME);
+        assert!(shell.visual().typed_keys.is_empty(), "the queued key was read");
     }
 
     /// Playtest H15, `input.md §8`: the reader "accepts printable ASCII bytes

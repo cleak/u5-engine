@@ -190,6 +190,31 @@ default serial delivery, 2-7 ms with `sendevent`. `--reaction-probe MS`
 additionally records when each side's frame reacted to every key. The suite
 appends the measured skew to each result line when the harness recorded one.
 
+`--emulator-load-latency MS` sets `U5_EMULATOR_LOAD_LATENCY_MS`, which only
+the clean engine reads (DOSBox inherits it and ignores it). The engine then
+pauses MS wall-clock milliseconds between a title-menu load's key read and the
+input helper's entry step that comes just before the first idle pass. Nothing
+happens in the pause: no world step, draw, key read or repaint. Keys typed
+during it wait in the queue, as they would behind a slow load. `intro.md`
+Section 7, "Timing of the load path", allows exactly this and no more. The
+load path has no wait in it, "an instant load is correct behaviour", and a
+parity harness "may model the gap as an optional emulator-profile latency
+between the key read and the first idle pass ... It is a test setting, not a
+game rule, and must never be expressed as ticks."
+
+Without it, the engine reaches its first idle pass about 67 ms after `j`, and
+stock at fixed 3000 cycles 306-361 ms after it. So with
+`--fixed-clock 12:00:00.00 --key-sync sendevent` the engine sits 5 draws ahead
+(ship-commands X-it probe: engine k=153, stock k=148). The suggested value is
+**280** (about 5 x 55 ms), for a run where a Return-to-View preview has already
+loaded the tile archive. Add about 1700 when it has not (`intro.md` Section 7,
+step 4). The menu's two-tick poll grid still moves stock's lead between 4 and
+6 draws depending on its phase, so the latency centres the offset rather than
+removing it. There is no default; pass it explicitly. A scenario can pin its
+own value with a `# emulator-load-latency: MS` header. The header wins over the
+flag for that scenario, the way `# fixed-clock: HH:MM:SS.CC` wins over
+`--fixed-clock`.
+
 `seeds.tsv` is the machine-readable half of the table below: it names the
 profile that holds each scenario's seed, where the table says what the seed
 must *contain*. Both are needed - the table is what lets a seed be rebuilt, the
