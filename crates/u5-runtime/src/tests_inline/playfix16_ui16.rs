@@ -47,6 +47,18 @@ fn playtest_p16_03_look_appender_rows_leave_the_look_row_open() {
         assert!(text.ends_with(tail), "{tile:#04x}: {text:?}");
         assert!(open, "{tile:#04x}: an appender row skips the cleanup feed");
         assert!(state.message_row_open_mid_line);
+
+        // `text-output.md §10.4`: "the next poll's leading feed closes the
+        // open row". The next command's echo stands on the row that feed
+        // opened, so the flag must not outlive it - left set, a second
+        // `Look` lost the blank under its echo and a later greeting lost the
+        // blank above it.
+        state.begin_command_echo(top_down_command_echo('L').unwrap());
+        assert!(
+            !state.message_row_open_mid_line,
+            "{tile:#04x}: the next echo's poll closed the appender row"
+        );
+        state.abort_command_echo();
     }
 
     let mut grid = open_grid();
