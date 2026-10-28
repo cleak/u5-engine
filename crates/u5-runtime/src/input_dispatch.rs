@@ -7071,6 +7071,17 @@ fn handle_combat_multistage_command(
                 state.z_stats_for_combat_party_actor(member);
             } else {
                 state.start_party_selector(PartySelectorTarget::ZStats);
+                // `combat.md §8.1`: the turn handler's feed and marker run
+                // "on every pass, before the key read", with no gate - a
+                // charmed monster "is keyboard-driven, gets its reduced
+                // banner, the feed and the marker". `Player: ` is what this
+                // key prints on that marker row, so it is the row's command
+                // echo; left in the slot it flushed as ordinary output with
+                // no end-cap (playtest P16-02).
+                let prompt = std::mem::take(&mut state.message);
+                if !prompt.is_empty() {
+                    state.emit_combat_command_echo_line(&prompt);
+                }
             }
             state.pending_combat_actor_slot = Some(actor_slot);
             true

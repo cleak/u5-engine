@@ -1805,6 +1805,19 @@
         );
         assert!(monster.active_z_stats.is_none());
         assert!(monster.message.contains(PARTY_SELECTION_PROMPT));
+        // `combat.md §8.1`: the feed and marker run "with no gate" - a
+        // charmed monster "gets its reduced banner, the feed and the
+        // marker" - so `Player: ` is written on that marker row as its
+        // command echo, end-cap and all (playtest P16-02).
+        let last = monster
+            .message_transcript
+            .last()
+            .expect("the prompt is in the transcript");
+        assert_eq!(last.text.trim_end(), PARTY_SELECTION_PROMPT.trim_end());
+        assert!(
+            last.is_command_echo,
+            "`Player: ` sits on the arena's marker row"
+        );
     }
 
     /// `combat.md` §3: "Only a party-side actor participates in direction
