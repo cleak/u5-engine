@@ -34,3 +34,22 @@ fn playtest_p14_03_jimmy_and_look_without_a_direction_open_the_prompt() {
         assert_eq!(state.turn, turn_before, "{key}{suffix}: nothing acted yet");
     }
 }
+
+/// P14-04: `dungeon-mode.md §15` - the dungeon's minute "sits at the head of
+/// each iteration ... so a command the dispatcher reports as \"no action\"
+/// ... still costs a minute underground". A function key answers the same
+/// `What?` as `!`, so it costs the same minute.
+#[test]
+fn playtest_p14_04_dungeon_function_key_costs_the_loop_minute() {
+    for key in [INPUT_CODE_F1, INPUT_CODE_F10] {
+        let mut state = dungeon_state(open_dungeon_record(), 0, 1, 1);
+        let before = state.clock;
+        handle_play_key_input(&mut state, char::from(key), "", Path::new("")).unwrap();
+        assert_eq!(
+            (state.clock.hour, state.clock.minute),
+            (before.hour, before.minute + 1),
+            "key {key:#04x}"
+        );
+        assert_eq!(state.turn, 0, "key {key:#04x} takes no turn");
+    }
+}

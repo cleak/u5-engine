@@ -497,6 +497,15 @@ fn handle_play_key_input_inner(
             // result line instead. Measured 2026-09-11 (`stray-keys/fkey`),
             // where the original draws `?What?` and this engine drew a bare
             // `What?` with no separating row.
+            //
+            // "Like any other" includes the dungeon clock too:
+            // `dungeon-mode.md §15` puts the minute "at the head of each
+            // iteration", so a key the dispatcher answers with "no action"
+            // still costs a minute underground. `!` spent it and F1 did not
+            // (playtest P14-04).
+            if matches!(state.area, Area::Dungeon { .. }) && !state.combat_active {
+                state.advance_dungeon_loop_minute();
+            }
             state.emit_command_echo_line(unassigned_refusal_echo(0));
             mark_combat_short_reprompt(state);
             return Ok(PlayInputDisposition::Continue);
