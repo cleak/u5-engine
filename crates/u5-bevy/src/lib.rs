@@ -13358,12 +13358,18 @@ fn cancel_visual_intro_panel(intro: &mut VisualIntroState) -> bool {
         VisualIntroPanel::SubtitleIgnition { .. }
             | VisualIntroPanel::StartMenuReveal(_)
             | VisualIntroPanel::MenuLabelHold { .. }
+            | VisualIntroPanel::Menu
     ) {
         // Escape reaches the same non-consuming ignition status poll as every
         // other key, so let the ordinary step finish the loader and offer the
         // byte to the menu rather than dropping it in this frontend shortcut.
         // The logo reveal's status test is the same: Escape aborts it like
-        // any other key.
+        // any other key. With the menu panel up, `systems/intro.md §3` lets
+        // "any keystroke" interrupt the flourish and `§4`'s signature walker
+        // aborts on "any pending key"; `§7` step 8's message waits "for a
+        // key", and `§6.2` discards Esc as an "other key", which still breaks
+        // the "two hundred consecutive no-key passes" (playtest P16-15,
+        // P16-16).
         return step_visual_intro(intro, '\x1b');
     }
     // `u4-transfer.md §6.5`: once the drive has been selected no key
@@ -13396,7 +13402,7 @@ fn cancel_visual_intro_panel(intro: &mut VisualIntroState) -> bool {
         return true;
     }
     let Some((subflow, result, message)) = (match intro.panel {
-        VisualIntroPanel::Menu => None,
+        VisualIntroPanel::Menu => unreachable!("the menu treats Esc as an ordinary key above"),
         VisualIntroPanel::SubtitleIgnition { .. } => {
             unreachable!("subtitle ignition Escape is handled above")
         }
@@ -23484,6 +23490,48 @@ mod tests {
         assert_eq!(intro.menu_idle_ticks, 0);
         assert_eq!(intro.title_tick_visible_frame, 2);
         assert_eq!(intro.title_tick_frame, title_tick_next_frame(2));
+        assert!(intro.launch_result.lock().unwrap().is_none());
+        let _ = fs::remove_dir_all(&intro.game_dir);
+    }
+
+    /// Playtest P16-15: `systems/intro.md §3` lets "any keystroke"
+    /// interrupt the flourish, and Escape is an ordinary key byte there.
+    #[test]
+    #[cfg(feature = "original-asset-tests")]
+    fn escape_skips_the_title_flourish_like_any_other_key() {
+        let mut intro = visual_intro_state_with_panel(debug_game_dir(), VisualIntroPanel::Menu);
+        intro.dispatch = UnifiedMenuDispatch::new();
+        intro.title_flourish_step = 23;
+        intro.title_flourish_complete = false;
+
+        assert!(cancel_visual_intro_panel(&mut intro));
+
+        assert!(intro.title_flourish_complete);
+        assert!(intro.title_sequence_skipped);
+        assert_eq!(intro.title_flourish_step, title_flourish_total_steps() - 1);
+        let _ = fs::remove_dir_all(&intro.game_dir);
+    }
+
+    /// Playtest P16-16: `systems/intro.md §7` step 8 waits "for a key", and
+    /// `§6.2` discards Escape as an "other key", which breaks the run of
+    /// consecutive no-key passes.
+    #[test]
+    #[cfg(feature = "original-asset-tests")]
+    fn escape_dismisses_the_menu_message_and_restarts_the_idle_count() {
+        let mut intro = visual_intro_state_with_panel(debug_game_dir(), VisualIntroPanel::Menu);
+        intro.message = "No active game".to_string();
+        intro.message_waiting_for_key = true;
+        intro.menu_idle_ticks = 57;
+
+        assert!(cancel_visual_intro_panel(&mut intro));
+        assert!(intro.message.is_empty());
+        assert!(!intro.message_waiting_for_key);
+        assert_eq!(intro.menu_idle_ticks, 0);
+
+        intro.menu_idle_ticks = 127;
+        assert!(cancel_visual_intro_panel(&mut intro));
+        assert!(matches!(intro.panel, VisualIntroPanel::Menu));
+        assert_eq!(intro.menu_idle_ticks, 0);
         assert!(intro.launch_result.lock().unwrap().is_none());
         let _ = fs::remove_dir_all(&intro.game_dir);
     }
