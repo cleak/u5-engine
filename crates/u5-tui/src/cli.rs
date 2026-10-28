@@ -10,11 +10,12 @@ use std::path::{Path, PathBuf};
 use u5_runtime::{
     ChargenAvatar, ChargenSession, ChargenSessionStep, ChargenStats, DEFAULT_GAME_DIR,
     FIRST_PLAYABLE_FRIGATE_TILE, FIRST_PLAYABLE_FULL_SHIP_HULL, FIRST_PLAYABLE_SKIFF_TILE,
-    GameClock, PendingVehicleAcquisition, PlayOptions, PlayTarget, ShrineVirtue, TileGraphicsDepth,
-    TransportState, WindState, chargen_stats_from_winners, commit_chargen_save,
-    decode_moonstone_gate_slots, load_play_options_from_init, load_play_options_from_save,
-    load_question_records, load_save_image_template,
-    parse_u8_literal, question_record_display_text, run_chargen_tournament,
+    GameClock, PendingVehicleAcquisition, PlayOptions, PlayTarget, SAVE_FORTUNES_OF_WAR_OFFSET,
+    SAVE_MORAL_STANDING_OFFSET, ShrineVirtue, TileGraphicsDepth, TransportState, WindState,
+    chargen_stats_from_winners, commit_chargen_save, decode_moonstone_gate_slots,
+    load_play_options_from_init, load_play_options_from_save, load_question_records,
+    load_save_image_template, parse_u8_literal, question_record_display_text,
+    run_chargen_tournament,
 };
 
 use crate::runtime_game_dir::prepare_writable_game_dir;
@@ -728,8 +729,16 @@ where
         // of its template save, so it keeps the slots too rather than writing
         // eight recovered sentinels from the default options (playtest
         // P15-05). A missing template fails at the write itself.
+        //
+        // The same holds for the two world-state bytes the default options
+        // would otherwise zero (playtest P16-11): `formats/saved-gam.md §10`
+        // gives the moral-standing selector (`0x02E2`) a factory value of 75,
+        // and of the early-game encounter-size damper (`0x03B3`) says "A save
+        // tool should preserve whatever value it finds".
         if let Ok(template) = load_save_image_template(&game_dir, options.save_template_source) {
             options.moonstone_slots = decode_moonstone_gate_slots(&template);
+            options.moral_standing = template[SAVE_MORAL_STANDING_OFFSET];
+            options.fortunes_of_war = template[SAVE_FORTUNES_OF_WAR_OFFSET];
         }
     }
     if let Some(wind) = wind_override {
