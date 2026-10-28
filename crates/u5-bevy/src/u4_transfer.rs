@@ -62,11 +62,6 @@ const UI_BACKGROUND: u8 = U4_PREVIEW_PALETTE.background;
 /// Ordinary text ink: the fixed-cell printer's active window colour.
 const TEXT_INK: u8 = U4_PREVIEW_PALETTE.accent;
 
-/// `§6.5`: how many cells a right-panel value write covers. Column 10
-/// to the right panel's inner edge, so a shorter value blanks whatever
-/// the longer one before it left behind.
-const VALUE_FIELD_CELLS: u8 = 8;
-
 /// Which whole-screen page still has to be painted before the pending
 /// edits are applied.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -421,7 +416,9 @@ fn paint_comparison_screen(buffer: &mut IntroDisplayBuffer, font: &FixedCellFont
     // selected, once with the right — not once per display page.
     for panel in U4PreviewPanel::BOTH {
         for (row, label) in U4_PREVIEW_FIELD_LABELS {
-            paint_label(buffer, font, panel, row, label, false);
+            // The strip text, leading spaces included, at column 3.
+            let (column, row) = panel_cell(panel, U4_PREVIEW_FIELD_LABEL_COLUMN, row);
+            draw_text(buffer, font, label, column, row, TEXT_INK, UI_BACKGROUND);
         }
     }
 }
@@ -528,7 +525,10 @@ fn paint_panel(buffer: &mut IntroDisplayBuffer, font: &FixedCellFont, panel: U4P
 
 /// `§6.2`/`§6.5` move (a): reprint one label, normal or inverse video.
 /// Highlighting is a per-window inverse toggle applied around the
-/// single label reprint; nothing else is repainted.
+/// single label reprint; nothing else is repainted. `§6.2`: the stage
+/// machine reprints the word itself, at column 7 for `Name:`, 5 for the
+/// two-space labels and 3 for `Class:`/`Level:`, so the leading spaces
+/// of the strip text are never inverted (playtest P16-18).
 fn paint_label(
     buffer: &mut IntroDisplayBuffer,
     font: &FixedCellFont,
@@ -537,13 +537,15 @@ fn paint_label(
     label: &str,
     inverse: bool,
 ) {
-    let (column, row) = panel_cell(panel, U4_PREVIEW_FIELD_LABEL_COLUMN, row);
+    let word = label.trim_start_matches(' ');
+    let leading = u8::try_from(label.len() - word.len()).expect("labels are short");
+    let (column, row) = panel_cell(panel, U4_PREVIEW_FIELD_LABEL_COLUMN + leading, row);
     let (foreground, background) = if inverse {
         (UI_BACKGROUND, TEXT_INK)
     } else {
         (TEXT_INK, UI_BACKGROUND)
     };
-    draw_text(buffer, font, label, column, row, foreground, background);
+    draw_text(buffer, font, word, column, row, foreground, background);
 }
 
 fn paint_panel_lines(
@@ -676,10 +678,10 @@ fn apply_edit(buffer: &mut IntroDisplayBuffer, font: &FixedCellFont, edit: &U4Pr
         U4PreviewEdit::AcceptedName(name) => {
             let window = U4PreviewPanel::Result.window();
             let row = window.top_left_y + U4_PREVIEW_NAME_ROW;
-            // A row spans the window's capacity - both corner columns are
-            // inclusive (`text-output.md` §4, `RETRACTIONS.md` R344) - so
-            // the cell at `bottom_right_x` is one of the cells to clear.
-            blank_cells(buffer, window.top_left_x, row, window.column_count());
+            // `§6.5`: the right panel's name row is empty until this one
+            // write, and centring only positions the cursor
+            // (`text-output.md` §5), so no padding is painted over the
+            // panel's bars and rule (playtest P16-17).
             draw_text(
                 buffer,
                 font,
@@ -726,9 +728,12 @@ fn apply_edit(buffer: &mut IntroDisplayBuffer, font: &FixedCellFont, edit: &U4Pr
     }
 }
 
+/// `§6.5` move (b): each right-panel row is written once, onto cells
+/// nothing has printed to, and "nothing else on the screen is redrawn",
+/// so only the value's own cells are painted. Blanking a wider field cut
+/// the panel's accent rule in cell 17 (playtest P16-17).
 fn paint_right_value(buffer: &mut IntroDisplayBuffer, font: &FixedCellFont, row: u8, value: &str) {
     let (column, row) = panel_cell(U4PreviewPanel::Result, U4_PREVIEW_VALUE_COLUMN, row);
-    blank_cells(buffer, column, row, VALUE_FIELD_CELLS);
     draw_text(buffer, font, value, column, row, TEXT_INK, UI_BACKGROUND);
 }
 
@@ -917,13 +922,32 @@ mod tests {
                 let (column, row) = panel_cell(panel, U4_PREVIEW_FIELD_LABEL_COLUMN, label_row);
                 // `§6.5` move (a): the opening stage has already put
                 // the Name row into inverse video in both panels.
+                // `§6.2`: only the word is reprinted in inverse; its
+                // leading spaces stay as the strip printed them.
                 let inverse = label_row == U4PreviewStage::NameConfirm.row();
+                let word = label.trim_start_matches(' ');
+                let leading = u8::try_from(label.len() - word.len()).unwrap();
                 let (foreground, background) = if inverse {
                     (UI_BACKGROUND, TEXT_INK)
                 } else {
                     (TEXT_INK, UI_BACKGROUND)
                 };
-                assert_text_at_in(&surface, &font, label, column, row, foreground, background);
+                assert_text_at(
+                    &surface,
+                    &font,
+                    &label[..label.len() - word.len()],
+                    column,
+                    row,
+                );
+                assert_text_at_in(
+                    &surface,
+                    &font,
+                    word,
+                    column + leading,
+                    row,
+                    foreground,
+                    background,
+                );
             }
         }
         cleanup(screen);
@@ -1035,6 +1059,66 @@ mod tests {
             changed_rows, permitted,
             "a stage redraw repainted rows outside the four published moves"
         );
+        cleanup(screen);
+    }
+
+    /// Playtest P16-18: `§6.2` puts the highlighted word at column 7 for
+    /// `Name:` and column 5 for `Sex:`; the leading spaces are not inverted.
+    #[test]
+    fn the_stage_highlight_covers_only_the_label_word() {
+        let mut screen = screen(true);
+        let font = advance_to_comparison(&mut screen);
+        screen.step('Y');
+        let _ = screen.render();
+        let surface = screen.surface().clone();
+        for panel in U4PreviewPanel::BOTH {
+            let (column, row) = panel_cell(panel, 3, U4PreviewStage::SexConfirm.row());
+            assert_text_at(&surface, &font, "  ", column, row);
+            assert_text_at_in(
+                &surface,
+                &font,
+                "Sex:",
+                column + 2,
+                row,
+                UI_BACKGROUND,
+                TEXT_INK,
+            );
+            let (column, row) = panel_cell(panel, 3, U4PreviewStage::NameConfirm.row());
+            assert_text_at(&surface, &font, "    Name:", column, row);
+        }
+        cleanup(screen);
+    }
+
+    /// Playtest P16-17: `§6.5` writes each right-panel value, and the
+    /// accepted name, without repainting anything beyond the text, so the
+    /// panel's bars and accent rule survive every stage.
+    #[test]
+    fn right_panel_writes_leave_the_panel_frame_intact() {
+        let mut screen = screen(true);
+        advance_to_comparison(&mut screen);
+        for key in ['N', 'Z', 'z', '\r', 'Y', ' ', ' ', ' ', ' ', ' '] {
+            screen.step(key);
+        }
+        assert_eq!(
+            screen.session().phase(),
+            U4PreviewPhase::Stage(U4PreviewStage::Intellect)
+        );
+        let _ = screen.render();
+        let surface = screen.surface().clone();
+        let at = |x: usize, y: usize| surface.pixels[y * surface.width + x];
+        let origin = usize::from(U4PreviewPanel::Result.origin_x());
+        let top = usize::from(U4PreviewPanel::Result.window().top_left_y);
+        for row in [3usize, 5, 6, 8, 9, 11, 12, 13] {
+            for y in (top + row) * CH_CELL_SIDE..(top + row + 1) * CH_CELL_SIDE {
+                assert_eq!(at(origin + 143, y), UI_COLOUR_SLOT_1, "rule on row {row}");
+                assert_eq!(
+                    at(origin + 145, y),
+                    UI_COLOUR_SLOT_2,
+                    "right bar on row {row}"
+                );
+                assert_eq!(at(origin + 3, y), UI_COLOUR_SLOT_2, "left bar on row {row}");
+            }
+        }
         cleanup(screen);
     }
 
