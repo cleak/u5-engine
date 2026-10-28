@@ -13863,6 +13863,7 @@ fn drive_visual(
     // not run the shifted-digit-to-direction translation, so Shift is not a
     // direction modifier for the top-row digits at its prompt.
     let digit_translation = !dungeon_skips_digit_translation(&visual.state);
+    let keypad_digits = shift_pressed && dungeon_command_prompt_reads_keypad_digits(&visual.state);
     let repeat_command = held_direction_repeat_command(
         &keyboard,
         time.delta(),
@@ -13870,6 +13871,7 @@ fn drive_visual(
         shift_pressed && digit_translation,
         control_pressed,
         modal_prompt_active,
+        keypad_digits,
     );
     while let Some(typed) = visual.typed_keys.pop_front() {
         // `input.md §6`: "when the flush flag is set, drop all pending
@@ -13934,10 +13936,9 @@ fn drive_visual(
         } else {
             // `dungeon-mode.md §10` (u5-spec#300 Q15, R589): "Shift with a
             // top-row key types punctuation rather than a digit, so it
-            // selects no member" at the dungeon prompt too; the dungeon
-            // exception covers only NumLock, which this frontend cannot see.
-            let shift_for_key = typed.shift;
-            match key_code_to_command_char(typed.key, shift_for_key, typed.control) {
+            // selects no member" at the dungeon prompt too. The Shift-held
+            // keypad, though, delivers digits there (playtest P16-20).
+            match visual_play_command_char(&visual.state, typed.key, typed.shift, typed.control) {
                 None => false,
                 Some(ch) => {
                     let game_dir = visual.game_dir.clone();
@@ -14114,6 +14115,55 @@ fn dungeon_skips_digit_translation(state: &PlayState) -> bool {
         })
 }
 
+/// `input.md §5`: "With Shift held and NumLock off, the keypad delivers
+/// digits", which only the shared reader translates to directions; "Dungeon
+/// mode's own command reader is the one exception to the whole rule", and
+/// `dungeon-mode.md §10` has it select a solo member with a digit. So at the
+/// bare dungeon command prompt Shift with keypad `1`-`4`/`6`-`9` is that
+/// digit, not a turn or a step (playtest P16-20). Other dungeon prompts keep
+/// the translated keypad: which of them bypass the shared reader is not
+/// published.
+fn dungeon_command_prompt_reads_keypad_digits(state: &PlayState) -> bool {
+    dungeon_skips_digit_translation(state) && !visual_modal_prompt_active(state)
+}
+
+/// The command byte a typed key gives the play dispatcher outside the line
+/// editors: [`key_code_to_command_char`], except for the Shift-held keypad
+/// at the dungeon command prompt.
+fn visual_play_command_char(
+    state: &PlayState,
+    key: KeyCode,
+    shift_pressed: bool,
+    control_pressed: bool,
+) -> Option<char> {
+    if shift_pressed
+        && !control_pressed
+        && dungeon_command_prompt_reads_keypad_digits(state)
+        && let Some(digit) = shifted_keypad_digit(key)
+    {
+        return Some(digit);
+    }
+    key_code_to_command_char(key, shift_pressed, control_pressed)
+}
+
+/// The ASCII digit a keypad key delivers with Shift held and NumLock off.
+fn shifted_keypad_digit(key: KeyCode) -> Option<char> {
+    use KeyCode::*;
+    Some(match key {
+        Numpad0 => '0',
+        Numpad1 => '1',
+        Numpad2 => '2',
+        Numpad3 => '3',
+        Numpad4 => '4',
+        Numpad5 => '5',
+        Numpad6 => '6',
+        Numpad7 => '7',
+        Numpad8 => '8',
+        Numpad9 => '9',
+        _ => return None,
+    })
+}
+
 fn held_direction_key_to_command_char(
     key: KeyCode,
     shift_pressed: bool,
@@ -14138,15 +14188,26 @@ fn held_direction_repeat_command(
     shift_pressed: bool,
     control_pressed: bool,
     modal_prompt_active: bool,
+    keypad_digits: bool,
 ) -> Option<char> {
     if modal_prompt_active {
         repeat.release();
         return None;
     }
+    // A Shift-held keypad key at the dungeon command prompt is a digit
+    // ([`dungeon_command_prompt_reads_keypad_digits`]), never a held turn.
+    let direction_char = |key: KeyCode| {
+        if keypad_digits && shifted_keypad_digit(key).is_some() {
+            return None;
+        }
+        held_direction_key_to_command_char(key, shift_pressed, control_pressed)
+    };
 
-    if let Some(key) = keyboard.get_just_pressed().copied().find(|key| {
-        held_direction_key_to_command_char(*key, shift_pressed, control_pressed).is_some()
-    }) {
+    if let Some(key) = keyboard
+        .get_just_pressed()
+        .copied()
+        .find(|key| direction_char(*key).is_some())
+    {
         repeat.press(key);
         return None;
     }
@@ -14158,10 +14219,7 @@ fn held_direction_repeat_command(
         repeat.release();
         return None;
     }
-    repeat
-        .advance(delta)
-        .then(|| held_direction_key_to_command_char(key, shift_pressed, control_pressed))
-        .flatten()
+    repeat.advance(delta).then(|| direction_char(key)).flatten()
 }
 
 fn summarize_intro(intro: &mut VisualIntroState) -> String {
@@ -20253,6 +20311,37 @@ mod tests {
         assert!(state.active_direction_prompt.is_some());
         assert!(!dungeon_skips_digit_translation(&state));
         assert_eq!(key_code_to_command_char(KeyCode::Digit8, true, false), Some('*'));
+    }
+
+    /// Playtest P16-20: `input.md §5` has Shift-held keypad keys deliver
+    /// digits that only the shared reader translates, and the dungeon command
+    /// reader is "the one exception", so they select a member there.
+    #[test]
+    fn dungeon_command_prompt_reads_shifted_keypad_keys_as_digits() {
+        let mut state = dungeon_state(open_dungeon_record(), 0, 1, 1);
+        for (key, digit) in [
+            (KeyCode::Numpad4, '4'),
+            (KeyCode::Numpad2, '2'),
+            (KeyCode::Numpad9, '9'),
+            (KeyCode::Numpad5, '5'),
+        ] {
+            assert_eq!(
+                visual_play_command_char(&state, key, true, false),
+                Some(digit)
+            );
+        }
+        // Unshifted, the keypad is still the cursor keys.
+        assert_eq!(
+            visual_play_command_char(&state, KeyCode::Numpad4, false, false),
+            Some(char::from(u5_runtime::INPUT_CODE_WEST))
+        );
+        // A resident prompt reached from the dungeon translates.
+        handle_play_key_input(&mut state, 'h', "", Path::new("")).unwrap();
+        assert!(state.active_rest.is_some());
+        assert_eq!(
+            visual_play_command_char(&state, KeyCode::Numpad4, true, false),
+            Some(char::from(u5_runtime::INPUT_CODE_WEST))
+        );
     }
 
     #[test]
