@@ -1272,10 +1272,28 @@ impl PlayState {
     }
 
     pub fn surface_object_chest_stat(object: ActiveObject) -> Option<u8> {
+        // `magic.md` (An Sanct): the chest-on-floor scan matches "object kind
+        // 1 — the chest object class", and `doors-and-z-transitions.md §3.2`:
+        // "There is no reachable state in which a container exists but
+        // cannot be opened." A kind-1 record is a chest whatever its
+        // content byte holds: class 0 still opens (to `Chest empty!`), is
+        // searched and is picked (playtest P14-13, Lord British's treasury).
+        if object.type_byte == INVENTORY_ADD_CLASS_CODE_CONTAINER {
+            return Some(object.aux1);
+        }
         let is_furniture_chest = (TILE_FURNITURE_FIRST..=TILE_FURNITURE_LAST)
             .contains(&object.type_byte)
             || (TILE_FURNITURE_FIRST..=TILE_FURNITURE_LAST).contains(&object.tile);
         (is_furniture_chest && object.aux1 != 0).then_some(object.aux1)
+    }
+
+    /// The chest record a G-Get hands to the chest helper. `commands.md
+    /// §5.8` / `containers.md §3` step 4: a container-class (kind-1) record
+    /// answers Get with `Open_it_first!` and changes nothing, so it is left
+    /// to the class dispatcher rather than opened here.
+    fn surface_get_chest_slot_at(&self, x: usize, y: usize) -> Option<(usize, ActiveObject)> {
+        self.surface_object_chest_slot_at(x, y)
+            .filter(|(_, object)| object.type_byte != INVENTORY_ADD_CLASS_CODE_CONTAINER)
     }
 
     pub fn jimmy_surface_object_chest_at(
@@ -2139,7 +2157,7 @@ impl PlayState {
         // class dispatcher: a chest record's class is the one the dispatcher
         // would refuse with `Open it first!`, and the tile-class chest this
         // finds is not that record.
-        if self.surface_object_chest_slot_at(tx, ty).is_some() {
+        if self.surface_get_chest_slot_at(tx, ty).is_some() {
             return Ok(self.begin_surface_object_chest_interaction(tx, ty, SurfaceChestVerb::Get));
         }
         if let Some(outcome) = self.get_native_object_pickup_at(tx, ty) {
@@ -2321,7 +2339,7 @@ impl PlayState {
         {
             return Ok(outcome);
         }
-        if self.surface_object_chest_slot_at(tx, ty).is_some() {
+        if self.surface_get_chest_slot_at(tx, ty).is_some() {
             return Ok(self.begin_surface_object_chest_interaction(tx, ty, SurfaceChestVerb::Get));
         }
         if let Some(outcome) = self.get_native_object_pickup_at(tx, ty) {
