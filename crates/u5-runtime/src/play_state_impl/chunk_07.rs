@@ -5157,6 +5157,19 @@ impl PlayState {
         self.sync_player_object();
         self.mark_visibility_dirty();
         self.advance_town_arrest_wait_to_morning();
+        // `town-mode.md §14`, "Surrender, in order": after the jail loop has
+        // run the clock into the 08:00 hour, "town entry setup is re-run as a
+        // fresh entry of Yew (Section 5: roster reload, map load ...)". The
+        // roster is therefore placed for the wake hour, not for the arrest
+        // hour the party was taken at (playtest P16-12).
+        let (grid, beacon_sources) =
+            load_town_runtime_floor_with_beacon_sources(game_dir, scene, floor, self.clock.hour)?;
+        self.grid = grid;
+        self.light_beacon.sources = beacon_sources;
+        self.load_scheduled_npcs(&npc_slots);
+        let _ = self.restore_resident_shadowlord_after_floor_reload();
+        self.sync_player_object();
+        self.mark_visibility_dirty();
         // `moons.md §3` (issue #190; wake time corrected 2026-10-25,
         // u5-spec#300 Q33, `RETRACTIONS.md` R617): "The town arrest jail
         // relocation refreshes. The relocation arm - the one that moves the
