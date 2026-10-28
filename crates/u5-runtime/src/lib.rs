@@ -111,6 +111,7 @@ pub mod shoppe_bark;
 pub mod shoppe_records;
 pub mod shops;
 pub mod shrine_presentation;
+pub mod shrine_presentation_frame;
 pub mod shrine_virtue;
 pub mod signs_io;
 pub mod sky_view;

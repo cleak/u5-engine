@@ -17981,65 +17981,7 @@ fn render_blackthorn_audience_viewport(
     Ok(Some(viewport))
 }
 
-/// `karma.md §7` "Entry pacing": while the shrine presentation is up, the
-/// gameplay viewport is the shrine's own eleven-by-eleven grid - record `1`
-/// of `MISCMAPS.DAT` - and not the overworld map. The presentation clears
-/// every active-object slot's type byte for its duration, so no actor is
-/// drawn over it, including the party.
-///
-/// The approach walk is drawn over it. §7's "The two poses, exactly" table
-/// gives the walking pose as the party's own on-foot sprite "stamped at
-/// `(5, 10)` on frame 5, stepping to `(5, 9)`, `(5, 8)`, `(5, 7)` and
-/// `(5, 6)`", and the kneeling pose at that last cell. Frames 1-4 draw "no
-/// avatar and no other actor at all", which is the bare backdrop.
-/// `cleak/u5-engine#30`; the tiles come from `cleak/u5-spec#273`.
-fn render_shrine_presentation_viewport(
-    state: &PlayState,
-    atlas: &TileAtlas,
-) -> io::Result<Option<TileViewport>> {
-    let Some(map) = state.shrine_presentation_map.as_ref() else {
-        return Ok(None);
-    };
-    let cells = u5_runtime::MISCMAPS_CUTSCENE_VISIBLE_COLUMNS;
-    let rows = u5_runtime::MISCMAPS_CUTSCENE_ROWS;
-    let width = cells * TILE_ATLAS_SIDE;
-    let height = rows * TILE_ATLAS_SIDE;
-    let mut viewport = TileViewport {
-        depth: atlas.depth,
-        cells_wide: cells,
-        cells_high: rows,
-        width,
-        height,
-        pixels: vec![0; width * height],
-    };
-    for y in 0..rows {
-        for x in 0..cells {
-            let tile = map.tile(x, y).unwrap_or(0);
-            blit_tile_id_to_viewport(&mut viewport, atlas, usize::from(tile), x, y)?;
-        }
-    }
-    if let Some((tile, column, row)) = state
-        .shrine_approach_walk
-        .as_ref()
-        .and_then(|walk| walk.pose_tile())
-    {
-        blit_tile_id_to_viewport(&mut viewport, atlas, usize::from(tile), column, row)?;
-    }
-    // `karma.md §7.2`: the offering and Codex turn-in arms invert "the whole
-    // viewport" with one exclusive-or fill that is never undone; the counted
-    // steps after the swell repaint over it. The same inversion as the
-    // potion flash (`audio.md §6`), every colour bit flipped.
-    if state.presentation_viewport_inverted {
-        let mask = match viewport.depth {
-            TileGraphicsDepth::Ega16 => u5_runtime::POTION_FLASH_PALETTE_XOR_MASK,
-            TileGraphicsDepth::Cga4 => 0x03,
-        };
-        for pixel in &mut viewport.pixels {
-            *pixel ^= mask;
-        }
-    }
-    Ok(Some(viewport))
-}
+use u5_runtime::shrine_presentation_frame::render_shrine_presentation_viewport;
 
 /// `blackthorn.md §7.1` step 6: the second rescue dissolve publishes a black
 /// viewport with exactly the full party-on-foot tile `0x11C` at `(5,5)`.

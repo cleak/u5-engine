@@ -938,6 +938,37 @@ mod tests {
         let _ = fs::remove_dir_all(dir);
     }
 
+    /// Playtest P15-08: `karma.md §8` - the Codex presentation "shows the
+    /// eleven-by-eleven Codex map from `MISCMAPS.DAT`, record 2". The
+    /// `--save-screen` and `--save-frame` viewport kept drawing the surface
+    /// around `(233, 233)` while the reader waited.
+    #[test]
+    fn save_screen_draws_the_codex_presentation_map_not_the_surface() {
+        use u5_runtime::shrine_presentation_frame::render_shrine_presentation_viewport;
+        use u5_runtime::test_fixtures::{open_grid, synthetic_tile_atlas, test_state};
+        let mut state = test_state(open_grid(), 5, 5);
+        let atlas = synthetic_tile_atlas(TileGraphicsDepth::Ega16);
+        let surface = save_screen_viewport(&mut state, &atlas).unwrap().unwrap();
+        let mut tiles = vec![0x44u8; 121];
+        tiles[2 * 11 + 5] = 0x41;
+        state.shrine_presentation_map = Some(u5_runtime::MiscmapsCutsceneMap {
+            record_index: 2,
+            tiles,
+        });
+        let codex = render_shrine_presentation_viewport(&state, &atlas)
+            .unwrap()
+            .unwrap();
+        let drawn = save_screen_viewport(&mut state, &atlas).unwrap().unwrap();
+        assert_eq!((drawn.cells_wide, drawn.cells_high), (11, 11));
+        assert!(drawn.pixels == codex.pixels);
+        assert!(drawn.pixels != surface.pixels);
+
+        let dir = temp_output_dir("p15-08");
+        let report = save_frame_capture_state(state, &atlas, &dir.join("frame.png")).unwrap();
+        assert_eq!(report.byte_hash, hash_bytes(&codex.to_rgba()));
+        let _ = fs::remove_dir_all(dir);
+    }
+
     /// Playtest F49: the tavern's provision quantity question keeps the
     /// cursor on its own row (`text-output.md §10.6`), so the oracle places
     /// no live command row under it - the Bevy shell's rule.
@@ -1463,6 +1494,15 @@ fn save_screen_viewport(
         endgame_frame_shows_tableau, render_endgame_tableau_viewport,
     };
     if !endgame_frame_shows_tableau(state) {
+        // `karma.md §7`/`§8`: a shrine or Codex presentation shows its own
+        // `MISCMAPS.DAT` grid, not the surface view (playtest P15-08).
+        if let Some(viewport) =
+            u5_runtime::shrine_presentation_frame::render_shrine_presentation_viewport(
+                state, atlas,
+            )?
+        {
+            return Ok(Some(viewport));
+        }
         return state.render_top_down_frame(VIEWPORT_RADIUS, atlas);
     }
     if state.endgame_absorption_arena_view().is_some()
