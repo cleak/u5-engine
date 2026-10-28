@@ -77,3 +77,33 @@ fn playfix16_p16_05_a_save_resume_replays_the_room_clear_demotion() {
     assert_eq!(state.grid[dungeon_cell_index(0, 4, 4)], 0x68, "saved bytes are kept");
     let _ = fs::remove_dir_all(dir);
 }
+
+/// P16-06: `formats/cbt.md §5` names special id `0xE8` "Poison field", and
+/// `combat.md §11` lists `0xE8` among "the common hook's recognized placed
+/// markers"; the Poison row turns a Good party target Poisoned. A party
+/// member standing on a room-placed `0xE8` is poisoned by the hook.
+#[test]
+fn playfix16_p16_06_a_room_placed_poison_field_poisons_a_good_member() {
+    let mut state = combat_player_command_state(8, 0);
+    state.party[0].status = b'G';
+    // The seated Avatar's real linked byte (`combat_party_actor_byte`): the
+    // Poison row rejects a linked byte of `0x80` or more, which the generic
+    // fixture's stand-in sprite would trip.
+    state.active_objects[0].type_byte = combat_party_actor_byte(b'A');
+    state.active_objects[0].tile = combat_party_actor_byte(b'A');
+    // Plain floor underfoot: the fixture's `0x04` is swamp, whose terrain
+    // arm would poison without any marker.
+    state.combat_terrain = [[GET_TILE_WALL_TORCH_REPLACEMENT; COMBAT_ARENA_SIDE]; COMBAT_ARENA_SIDE];
+    state.active_objects[9] = ActiveObject {
+        type_byte: DUNGEON_ROOM_SPECIAL_SOURCE_E8,
+        tile: DUNGEON_ROOM_SPECIAL_SOURCE_E8,
+        x: 5,
+        y: 5,
+        ..ActiveObject::empty()
+    };
+
+    let application = state.apply_combat_post_dispatch_contact_for_actor_position(0);
+
+    assert!(application.is_some(), "the hook recognized the marker");
+    assert_eq!(state.party[0].status, b'P');
+}

@@ -1095,7 +1095,13 @@ pub enum CombatArenaFieldKind {
 impl CombatArenaFieldKind {
     pub const fn from_kind_byte(kind: u8) -> Option<Self> {
         match kind {
-            COMBAT_FIELD_KIND_POISON => Some(Self::Poison),
+            // `formats/cbt.md §5` special id `0xE8` is "Poison field", and
+            // `combat.md §11` names `0xE8` among "the common hook's
+            // recognized placed markers": a room-placed poison field takes
+            // the same contact arm as a cast one (playtest P16-06). The
+            // `0xE9`/`0xEA` members of that list are left out until their
+            // field identities are published consistently.
+            COMBAT_FIELD_KIND_POISON | DUNGEON_ROOM_SPECIAL_SOURCE_E8 => Some(Self::Poison),
             COMBAT_FIELD_KIND_SLEEP => Some(Self::Sleep),
             COMBAT_FIELD_KIND_FIRE => Some(Self::Fire),
             COMBAT_FIELD_KIND_ENERGY => Some(Self::Energy),
