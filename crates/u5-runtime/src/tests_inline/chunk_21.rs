@@ -2676,7 +2676,7 @@ fn play_input_talk_without_suffix_opens_keyword_session() {
     assert!(state.message.contains("Greetings"));
     assert!(state.active_direction_prompt.is_none());
     assert!(state.active_conversation.is_some());
-    assert_eq!(state.turn, 1);
+    assert_eq!(state.turn, 0); // spent at the close (playtest P14-10)
     // commands.md section 5.3: the `-` suffix means "a direction is
     // awaited. The chosen direction's name is appended on the same
     // line", so the transcript keeps one `Talk-East` echo rather than a
@@ -2701,7 +2701,7 @@ fn play_input_talk_without_suffix_opens_keyword_session() {
     assert!(transcript_has(&state, "I mend gear"));
     assert_eq!(state.message, TLK_KEYWORD_PROMPT);
     assert!(state.active_conversation.is_some());
-    assert_eq!(state.turn, 1);
+    assert_eq!(state.turn, 0); // spent at the close (playtest P14-10)
 
     assert_eq!(
         handle_play_key_input(&mut state, 'X', "YZZY", &dir).unwrap(),
@@ -2710,7 +2710,7 @@ fn play_input_talk_without_suffix_opens_keyword_session() {
     assert!(transcript_has(&state, TLK_NO_KEYWORD_MATCH_MESSAGE.trim()));
     assert_eq!(state.message, TLK_KEYWORD_PROMPT);
     assert!(state.active_conversation.is_some());
-    assert_eq!(state.turn, 1);
+    assert_eq!(state.turn, 0); // spent at the close (playtest P14-10)
     let _ = fs::remove_dir_all(dir);
 }
 
@@ -3440,7 +3440,10 @@ fn town_raw_tlk_no_keyword_opens_runner_backed_conversation_session() {
     assert!(state.message.contains("Greetings"));
     assert!(state.message.ends_with(TLK_KEYWORD_PROMPT));
     assert!(state.active_conversation.is_some());
-    assert_eq!(state.turn, 1);
+    // `town-mode.md §7` step 4: the Talk turn is spent when the
+    // conversation closes (playtest P14-10).
+    assert_eq!(state.turn, 0);
+    assert!(state.pending_talk_conversation_turn);
 
     let (text, ended) = state.submit_active_conversation_keyword("gift");
     assert_eq!(text, conversation_framed_response("Take this gift"));

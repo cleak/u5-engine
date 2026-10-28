@@ -265,4 +265,53 @@ mod playfix14_town14 {
         );
         let _ = fs::remove_dir_all(dir);
     }
+
+    #[test]
+    fn p14_10_an_explicit_talk_spends_its_turn_when_the_conversation_closes() {
+        // `town-mode.md §7` step 4: the minute, the underfoot/status pass and
+        // the walkers run "When the dispatcher returns and the action
+        // consumed a turn", and the Talk dispatcher runs the whole
+        // conversation (`conversation.md §2`).
+        let dir = debug_game_dir();
+        let enc = |s: &str| s.bytes().map(|b| b ^ 0x80).collect::<Vec<u8>>();
+        let fields = ["Maris", "a quiet sage", "Greetings", "I read books", "Farewell"];
+        let mut dialogue: HashMap<u16, Vec<String>> = HashMap::new();
+        dialogue.insert(0x10, fields.iter().map(|f| f.to_string()).collect());
+        let mut raw: HashMap<u16, Vec<Vec<u8>>> = HashMap::new();
+        raw.insert(0x10, fields.iter().map(|f| enc(f)).collect());
+        let mut state = test_state(open_grid(), 1, 1);
+        state.player.facing = Direction::East;
+        state.load_scheduled_npcs(&[
+            NpcSlot {
+                slot: 0,
+                type_byte: 0,
+                dialog_id: 0,
+                schedule: [0; 16],
+                name: None,
+            },
+            NpcSlot {
+                slot: 1,
+                type_byte: 1,
+                dialog_id: 0x10,
+                schedule: [0, 0, 0, 2, 2, 2, 1, 1, 1, 0, 0, 0, 0, 8, 16, 20],
+                name: None,
+            },
+        ]);
+        let clock = state.clock;
+
+        assert_eq!(
+            state.talk_facing_with_dialogue_and_keyword_raw(&dialogue, &raw, None),
+            MoveOutcome::Talked
+        );
+        assert!(state.active_conversation.is_some());
+        assert_eq!(state.turn, 0, "no turn before the NPC speaks");
+        assert_eq!(state.clock, clock);
+
+        handle_play_key_input(&mut state, '\r', "", &dir).unwrap();
+
+        assert!(state.active_conversation.is_none());
+        assert!(!state.pending_talk_conversation_turn);
+        assert_eq!(state.turn, 1, "the Talk turn is spent once, at the close");
+        let _ = fs::remove_dir_all(dir);
+    }
 }

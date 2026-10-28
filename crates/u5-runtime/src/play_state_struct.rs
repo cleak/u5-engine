@@ -985,6 +985,13 @@ pub struct PlayState {
     /// the moment it opens (playtest J16). Set when the shop opens; the
     /// shop-key dispatcher spends it when the session closes.
     pub pending_talk_shop_turn: bool,
+    /// `town-mode.md §7` step 4 / `conversation.md §2`: the same deferral
+    /// for an explicit Talk that opened an ordinary conversation. The Talk
+    /// dispatcher runs the whole conversation, so the turn epilogue - clock
+    /// minute, underfoot and status pass (which ages the karma turn-step
+    /// counter, `karma.md §4.1`), both walkers - runs once it closes, not
+    /// before the greeting (playtest P14-10).
+    pub pending_talk_conversation_turn: bool,
     pub active_conversation_join_candidate: Option<String>,
     pub active_z_stats: Option<crate::z_stats::ZStatsSession>,
     /// `inventory.md §4`: the outside-combat party-member selector that

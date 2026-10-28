@@ -669,7 +669,19 @@ fn handle_play_key_input_inner(
         return Ok(disposition);
     }
     if state.active_conversation.is_some() {
-        return Ok(handle_active_conversation_key_input(state, key, suffix));
+        let disposition = handle_active_conversation_key_input(state, key, suffix);
+        // `town-mode.md §7` step 4: the explicit Talk that opened this
+        // conversation spends its turn once the conversation closes
+        // (playtest P14-10), as a Talk-opened shop does above.
+        if state.active_conversation.is_none()
+            && std::mem::take(&mut state.pending_talk_conversation_turn)
+            && !state.combat_active
+        {
+            let turn_before = state.turn;
+            state.advance_turn();
+            state.apply_top_down_post_turn_effects_after_turn(turn_before, game_dir)?;
+        }
+        return Ok(disposition);
     }
     if state
         .resolve_blackthorn_guard_demand_input(key, suffix, Some(game_dir))

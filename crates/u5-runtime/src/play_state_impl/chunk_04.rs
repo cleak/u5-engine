@@ -5391,8 +5391,6 @@ impl PlayState {
             .map(String::as_str)
             .unwrap_or("no description");
 
-        self.advance_talk_turn();
-
         let scene_for_flags = match self.area {
             Area::Town { scene, .. } => Some(scene),
             _ => None,
@@ -5416,9 +5414,20 @@ impl PlayState {
                 let (rendered, suspended) = self.active_conversation_opening_rendered();
                 let opening = self.finish_conversation_opening(&rendered, suspended);
                 self.emit_tlk_message(opening);
+                // `town-mode.md §7` step 4: the epilogue runs "When the
+                // dispatcher returns", and the Talk dispatcher runs the whole
+                // conversation (`conversation.md §2`). A conversation still
+                // open owes its turn to the moment it closes (playtest
+                // P14-10); one that stopped in its opening spends it now.
+                if self.active_conversation.is_some() {
+                    self.pending_talk_conversation_turn = !self.talk_entered_by_contact;
+                } else {
+                    self.advance_talk_turn();
+                }
                 return MoveOutcome::Talked;
             }
         }
+        self.advance_talk_turn();
 
         // Compose the inputs for the byte-runner once per call; the
         // avatar name is the first party member's name (or "Avatar"
