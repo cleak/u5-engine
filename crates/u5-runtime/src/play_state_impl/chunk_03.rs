@@ -1483,7 +1483,7 @@ impl PlayState {
                 self.z_stats_for_party(index);
             }
             PartySelectorTarget::Search { direction } => {
-                if let Err(error) = self.search_direction_with_game_dir(direction, game_dir) {
+                if let Err(error) = self.search_direction_with_member(direction, game_dir, index) {
                     self.message = error.to_string();
                 }
             }
@@ -4139,8 +4139,8 @@ impl PlayState {
                             self.message = PARTY_SELECTOR_CANCEL_REPLY.to_string();
                             MoveOutcome::Observed
                         }
-                        ActingMemberSelection::Selected(_) => {
-                            self.search_direction_with_game_dir(direction, game_dir)?
+                        ActingMemberSelection::Selected(slot) => {
+                            self.search_direction_with_member(direction, game_dir, slot)?
                         }
                         ActingMemberSelection::Prompt => {
                             self.start_party_selector(PartySelectorTarget::Search { direction })
@@ -4995,8 +4995,16 @@ impl PlayState {
     /// (`hut-ready-picker/shield`): the original logs nothing when the
     /// highlight moves, and this engine logged an extra `Item: ` on the
     /// first movement after a refusal.
+    ///
+    /// A silent equip (`inventory.md §5.2`: "no fresh `Item:_` prompt")
+    /// leaves the slot empty while the prompt row it last flushed - a
+    /// refusal block ending in `Item: `, say - is still the open row. That
+    /// row counts too: re-rendering into the empty slot logged a second
+    /// consecutive `Item:` row (playtest P15-11).
     fn refresh_ready_prompt_slot(&mut self, rendered: String) {
-        if self.message.ends_with(&rendered) {
+        if self.message.ends_with(&rendered)
+            || (self.message.is_empty() && self.message_flushed.ends_with(&rendered))
+        {
             return;
         }
         self.message = rendered;

@@ -1847,7 +1847,7 @@ impl PlayState {
     /// `None!` before any roll.
     pub fn search_surface_object_trap_at(&mut self, x: usize, y: usize) -> Option<MoveOutcome> {
         self.surface_object_chest_slot_at(x, y)?;
-        Some(match self.shared_acting_member_selection(true) {
+        Some(match self.search_lookup_acting_member() {
             ActingMemberSelection::Selected(member_index) => self
                 .finish_surface_object_trap_search_at(x, y, member_index)
                 .unwrap_or(MoveOutcome::Blocked),
@@ -2469,6 +2469,33 @@ impl PlayState {
         let entries = load_secret_door_entries(game_dir)?.unwrap_or_default();
         let chest_entries = load_dungeon_chest_content_entries(game_dir)?;
         Ok(self.search_direction_secret(direction, &entries, chest_entries.as_deref()))
+    }
+
+    /// The direction form of Search after its acting-member exchange
+    /// chose `member` (`commands.md §5.8`). That choice is the searching
+    /// member for the whole search - `containers.md §9`: "Before the
+    /// lookup, Search chooses the searching member through the shared
+    /// acting-member selection" - so the corpse and container lookups do
+    /// not run a second exchange (playtest P15-10).
+    pub fn search_direction_with_member(
+        &mut self,
+        direction: Direction,
+        game_dir: &Path,
+        member: usize,
+    ) -> io::Result<MoveOutcome> {
+        self.search_acting_member = Some(member);
+        let outcome = self.search_direction_with_game_dir(direction, game_dir);
+        self.search_acting_member = None;
+        outcome
+    }
+
+    /// The searching member for the corpse and container lookups: the one
+    /// the Search command already chose, else the shared selection.
+    fn search_lookup_acting_member(&self) -> ActingMemberSelection {
+        match self.search_acting_member {
+            Some(member) => ActingMemberSelection::Selected(member),
+            None => self.shared_acting_member_selection(true),
+        }
     }
 
     pub fn search_facing_secret(
@@ -3106,7 +3133,7 @@ impl PlayState {
         y: usize,
     ) -> Option<MoveOutcome> {
         if self.moldy_corpse_search_slot_at(x, y).is_some() {
-            return Some(match self.shared_acting_member_selection(true) {
+            return Some(match self.search_lookup_acting_member() {
                 ActingMemberSelection::Selected(member_index) => self
                     .finish_moldy_corpse_search_at(x, y, member_index)
                     .unwrap_or(MoveOutcome::Blocked),

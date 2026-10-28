@@ -1035,6 +1035,12 @@ pub struct PlayState {
     pub active_rest: Option<crate::z_stats::RestSession>,
     pub active_jimmy: Option<crate::z_stats::JimmySession>,
     pub active_surface_chest: Option<crate::z_stats::SurfaceChestSession>,
+    /// The member the direction form of Search already chose through the
+    /// shared acting-member exchange, held only while that search runs.
+    /// `commands.md §5.8`/`containers.md §9`: the corpse and container
+    /// lookups use this one choice instead of selecting again (playtest
+    /// P15-10).
+    pub search_acting_member: Option<usize>,
     pub active_shrine: Option<crate::z_stats::ShrineSession>,
     /// The open Codex reader's key position.
     ///
