@@ -188,6 +188,16 @@ mod spec307 {
     }
 
     #[test]
+    fn q3_attacked_ends_with_its_own_line_feed() {
+        // §6.2.5: "The outdoor epilogue's engagement notices both begin and
+        // end with a line feed (`Attacked!` and `WHIRLPOOL!`)".
+        let mut state = rough_seas_state();
+        state.emit_encounter_line("Attacked!");
+        assert!(!state.message_row_open_mid_line);
+        assert!(!state.message_transcript.last().unwrap().leaves_row_open);
+    }
+
+    #[test]
     fn q3_whirlpool_after_rough_seas_spends_a_blank_row() {
         // §6.2.5 table: "Whirlpool engages | `Rough seas!`, blank,
         // `WHIRLPOOL!`, blank, next prompt row" (playtest P13-04 case 3).

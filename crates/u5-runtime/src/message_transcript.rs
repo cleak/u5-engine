@@ -1223,14 +1223,19 @@ impl PlayState {
             .is_some_and(|entry| entry.bare_marker)
         {
             self.emit_message_line(format!("\n{line}"));
-            return;
+        } else {
+            self.emit_message_line(line);
+            if let Some(entry) = self.message_transcript.last_mut()
+                && entry.text == line
+            {
+                entry.starts_fresh_row = true;
+            }
         }
-        self.emit_message_line(line);
-        if let Some(entry) = self.message_transcript.last_mut()
-            && entry.text == line
-        {
-            entry.starts_fresh_row = true;
-        }
+        // `overworld.md §6.2.5` (issue #307 Q3): "The outdoor epilogue's
+        // engagement notices both begin and end with a line feed", so the
+        // cursor is left at column 0 of a fresh row. Stated explicitly: the
+        // transcript text carries no trailing feed.
+        self.close_message_row();
     }
 
     /// Take back the newest [`MessageEntry::bare_marker`] row: the wind held
