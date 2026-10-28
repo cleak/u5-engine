@@ -219,4 +219,50 @@ mod playfix14_town14 {
         }
         let _ = fs::remove_dir_all(dir);
     }
+
+    #[test]
+    fn p14_08_prisoner_thanks_is_bracketed_by_line_feeds() {
+        // `doors-and-z-transitions.md §3.1`: "the visible quoted line `I
+        // thank thee!`, bracketed by newlines". The `Jimmy-East` echo ends
+        // its row, so the leading feed leaves one blank row.
+        let dir = debug_game_dir();
+        let mut grid = open_grid();
+        grid[32 + 2] = JIMMY_MANACLES_TILE;
+        let mut state = test_state(grid, 1, 1);
+        state.party[0].climb_stat = 30;
+        state.load_scheduled_npcs(&[
+            NpcSlot {
+                slot: 0,
+                type_byte: 0,
+                dialog_id: 0,
+                schedule: [0; 16],
+                name: None,
+            },
+            NpcSlot {
+                slot: 1,
+                type_byte: 0x0E,
+                dialog_id: 2,
+                schedule: [1, 2, 3, 2, 2, 2, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0],
+                name: None,
+            },
+        ]);
+
+        p4window_keys(
+            &mut state,
+            &dir,
+            &['J', char::from(input_direction_code(InputDirection::East))],
+        );
+
+        let rows = p4window_rows(&state);
+        assert_eq!(
+            p4window_rows_from(&rows, ">Jimmy-East")[..3],
+            [
+                ">Jimmy-East".to_string(),
+                String::new(),
+                "I thank thee!".to_string()
+            ],
+            "{rows:?}"
+        );
+        let _ = fs::remove_dir_all(dir);
+    }
 }

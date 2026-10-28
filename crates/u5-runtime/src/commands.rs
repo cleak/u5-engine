@@ -2165,6 +2165,11 @@ pub const DUNGEON_CHEST_JIMMY_NO_KEYS: &str = "\nNo keys!\n";
 /// key: with a key count of zero it prints `No keys!` and returns immediately,
 /// before the direction prompt and before any tile is examined."
 pub const COMBAT_JIMMY_NO_KEYS_MESSAGE: &str = "No keys!";
+/// `doors-and-z-transitions.md §3.1` (restraints): "The thanks is fixed
+/// command text - the visible quoted line `I thank thee!`, bracketed by
+/// newlines". After the `Jimmy-North` echo has closed its row the leading
+/// feed spends a blank row (playtest P14-08).
+pub const JIMMY_PRISONER_THANKS_LINE: &str = "\nI thank thee!\n";
 pub const DUNGEON_CHEST_JIMMY_KEY_BROKE: &str = "\nKey broke!\n";
 pub const DUNGEON_CHEST_JIMMY_UNLOCKED: &str = "\nChest unlocked\n";
 pub const DUNGEON_CHEST_JIMMY_ALREADY_OPEN: &str = "\nAlready open!\n";

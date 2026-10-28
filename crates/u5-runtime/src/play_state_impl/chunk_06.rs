@@ -1195,7 +1195,7 @@ impl PlayState {
             if town_npc_removal_recorded(type_byte) {
                 self.mark_removed_town_npc_once(scene, npc_slot);
             }
-            self.message = "I thank thee!".to_string();
+            self.message = JIMMY_PRISONER_THANKS_LINE.to_string();
         }
         self.advance_turn();
         MoveOutcome::LockTried

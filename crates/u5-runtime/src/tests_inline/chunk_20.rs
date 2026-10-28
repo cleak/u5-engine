@@ -774,7 +774,7 @@ fn town_jimmy_restraint_release_updates_live_npc_and_native_removal_mask() {
     assert_eq!(state.grid[32 + 2], JIMMY_MANACLES_TILE);
     assert_eq!(state.keys, DEFAULT_KEY_STOCK);
     assert_eq!(state.turn, 1);
-    assert_eq!(state.message, "I thank thee!");
+    assert_eq!(state.message, JIMMY_PRISONER_THANKS_LINE);
 
     state.load_scheduled_npcs(&slots);
     assert!(state.npcs.is_empty());
@@ -822,12 +822,12 @@ fn town_jimmy_restraint_release_marks_a_townsperson_once() {
 
     let (state, messages) = release(0x44);
     assert_eq!(state.removed_town_npc_flags.get(&17), Some(&0b10));
-    assert_eq!(messages, vec!["I thank thee!".to_string(), String::new()]);
+    assert_eq!(messages, vec![JIMMY_PRISONER_THANKS_LINE.to_string(), String::new()]);
     assert_eq!(state.moral_standing, 2);
 
     let (state, messages) = release(0x70);
     assert!(state.removed_town_npc_flags.get(&17).is_none_or(|mask| *mask == 0));
-    assert_eq!(messages, vec!["I thank thee!".to_string(); 2]);
+    assert_eq!(messages, vec![JIMMY_PRISONER_THANKS_LINE.to_string(); 2]);
     assert_eq!(state.moral_standing, 4);
 }
 

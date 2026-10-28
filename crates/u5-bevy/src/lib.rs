@@ -2113,7 +2113,7 @@ fn validate_visual_route_final_state(
                             .any(|mode| *mode != JIMMY_RELEASE_AI_MODE)
                 })
                 || state.active_jimmy.is_some()
-                || state.message != "I thank thee!"
+                || state.message != u5_runtime::JIMMY_PRISONER_THANKS_LINE
             {
                 return Err(io::Error::other(
                     "prisoner-release visual route did not preserve the live release mutation, reward, and dialogue-gated contact",

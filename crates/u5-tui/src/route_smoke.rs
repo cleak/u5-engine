@@ -6978,7 +6978,7 @@ fn validate_route_smoke_case_state(
                             .any(|mode| *mode != JIMMY_RELEASE_AI_MODE)
                 })
                 || state.active_jimmy.is_some()
-                || state.message != "I thank thee!"
+                || state.message != u5_runtime::JIMMY_PRISONER_THANKS_LINE
             {
                 return Err(io::Error::other(format!(
                     "route smoke `{case_name}` did not apply the live prisoner release mutation and reward: turn={}, keys={}, moral={}, mask={:#010x}, tile={:#04x}, npc={released_snapshot:?}, active_jimmy={}, message={:?}",
