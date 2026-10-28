@@ -129,4 +129,69 @@ mod playfix14_combat14 {
         );
         assert!(!state.stats_panel_refresh_requested);
     }
+
+    /// P14-11. `combat.md §3`'s vector table: when the last party actor
+    /// leaves, "the direction and `Escape!` lines occur first; the immediate
+    /// side recount then" runs, and `§14` / `§6.3` put the faint tail's
+    /// `<name> passes out!` in that recount. The faint line printed above
+    /// the step's own `South` echo, and left `Escape!` without its feed.
+    #[test]
+    fn p14_11_the_last_free_member_leaving_prints_its_echo_before_the_faint_line() {
+        let mut state = combat_ai_turn_state(8, 5);
+        let leader = state.party[0];
+        state.party.push(PartyMember { slot: 1, ..leader });
+        state.party_names = default_party_names(2);
+        state.party_equipment = default_party_equipment(2);
+        state.party_combat_defense = vec![0; 2];
+        let edge_y = (COMBAT_ARENA_SIDE - 1) as u8;
+        // Slot 0 is the last free member, standing on the south edge; slot 1
+        // is on the automatic driver (`§6.1a`), a foe to the census.
+        state.combat_actors[0] = CombatActorDescriptor::from_row([
+            20,
+            1,
+            COMBAT_ACTOR_FLAG_SELECTABLE_80,
+            0,
+            0,
+            0,
+            5,
+            edge_y,
+        ]);
+        state.active_objects[0].y = usize::from(edge_y);
+        state.combat_actors[1] = CombatActorDescriptor::from_row([
+            20,
+            1,
+            COMBAT_ACTOR_FLAG_SELECTABLE_80 | COMBAT_ACTOR_FLAG_CONTROLLED,
+            1,
+            1,
+            0,
+            1,
+            1,
+        ]);
+        state.active_objects[1] = ActiveObject {
+            type_byte: 0x80,
+            tile: 0x80,
+            x: 1,
+            y: 1,
+            ..ActiveObject::empty()
+        };
+        state.pending_combat_actor_slot = Some(0);
+
+        handle_play_key_input(&mut state, char::from(INPUT_CODE_SOUTH), "", Path::new("")).unwrap();
+
+        let rows = p14_rows(&state);
+        let south = rows
+            .iter()
+            .position(|row| row == "South")
+            .unwrap_or_else(|| panic!("South echo: {rows:#?}"));
+        assert_eq!(
+            rows.get(south + 1).map(String::as_str),
+            Some("Escape!"),
+            "{rows:#?}"
+        );
+        let faint = rows
+            .iter()
+            .position(|row| row.ends_with("passes out!"))
+            .unwrap_or_else(|| panic!("faint line: {rows:#?}"));
+        assert_eq!(faint, south + 2, "{rows:#?}");
+    }
 }

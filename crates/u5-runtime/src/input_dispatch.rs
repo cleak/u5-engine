@@ -6732,6 +6732,14 @@ fn handle_combat_targeting_cursor_key(
     PlayInputDisposition::Continue
 }
 
+/// Print the `<name> passes out!` lines [`handle_combat_key_input`] held
+/// while its command was applied, now that the command's echo is down.
+fn emit_held_combat_faint_lines(state: &mut PlayState, lines: Vec<String>) {
+    for line in lines {
+        state.emit_message_line(line);
+    }
+}
+
 fn handle_combat_key_input(state: &mut PlayState, key: char, suffix: &str) -> PlayInputDisposition {
     if state.active_combat_targeting.is_some() {
         return handle_combat_targeting_cursor_key(state, key, suffix);
@@ -6760,13 +6768,21 @@ fn handle_combat_key_input(state: &mut PlayState, key: char, suffix: &str) -> Pl
     // own transcript starts with the command output and never reprints it.
     // The free re-prompt below reinstates the pending slot without reopening
     // the turn, which is what keeps that path on the short form.
-    let Some(application) = state.apply_combat_player_command_with_inputs(actor_slot, input) else {
+    // `combat.md §13`: the post-dispatch recount's faint line follows the
+    // step's own echo, so it is held while the command is applied
+    // (playtest P14-11).
+    state.combat_held_faint_lines = Some(Vec::new());
+    let application = state.apply_combat_player_command_with_inputs(actor_slot, input);
+    let held_faint_lines = state.combat_held_faint_lines.take().unwrap_or_default();
+    let Some(application) = application else {
         state.message.clear();
+        emit_held_combat_faint_lines(state, held_faint_lines);
         return PlayInputDisposition::Continue;
     };
     let echo = combat_player_command_application_message(state, &application);
     state.message = echo.clone();
     if handle_combat_multistage_command(state, actor_slot, &application.action, suffix) {
+        emit_held_combat_faint_lines(state, held_faint_lines);
         return PlayInputDisposition::Continue;
     }
     // The key was read on the marker row, so what it echoes is written
@@ -6781,6 +6797,7 @@ fn handle_combat_key_input(state: &mut PlayState, key: char, suffix: &str) -> Pl
     if !echo.is_empty() {
         state.emit_combat_command_echo_line(&echo);
     }
+    emit_held_combat_faint_lines(state, held_faint_lines);
     if let Some(shape) = combat_player_command_action_reprompt_shape(&application.action) {
         match shape {
             // `combat.md §8.1`: "**Short re-prompt, banner not reprinted** ...
