@@ -1203,7 +1203,10 @@ impl PlayState {
             {
                 let index = slot - 1;
                 self.active_player = Some(index);
-                self.active_player_save_byte = encode_active_player_slot(Some(index));
+                // A live selection replaces the loaded byte; once a later
+                // path clears it, the save writes the sentinel, not a stale
+                // index that a smaller party could leave out of range.
+                self.active_player_save_byte = 0xff;
                 self.party_member_display_name(index)
             }
             _ => {

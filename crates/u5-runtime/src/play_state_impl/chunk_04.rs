@@ -2145,6 +2145,11 @@ impl PlayState {
                 .party
                 .iter()
                 .position(|member| matches!(member.status, b'G' | b'P'));
+            if self.active_player.is_some() {
+                // A live selection replaces a loaded out-of-range byte
+                // (playtest P15-02).
+                self.active_player_save_byte = 0xff;
+            }
         }
         if let Some(slot) = self.active_player.filter(|slot| *slot < self.party.len()) {
             self.apply_shared_party_damage(slot, 1);

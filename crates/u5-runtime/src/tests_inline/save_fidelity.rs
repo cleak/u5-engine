@@ -926,3 +926,39 @@ fn out_of_range_active_player_byte_survives_load_and_save() {
         let _ = fs::remove_dir_all(dir);
     }
 }
+
+/// Playtest P15-02 follow-up: the loaded out-of-range `0x02D5` byte is only
+/// kept while nothing has selected a member since the load. Once a selection
+/// is made and a later path clears it, the save writes the `0xFF` sentinel
+/// rather than the stale loaded index.
+#[test]
+fn loaded_active_player_byte_is_dropped_after_a_live_selection() {
+    let dir = shipped_layout_iolos_hut_dir();
+    let mut template = shipped_layout_iolos_hut_save();
+    template[SAVE_ACTIVE_PLAYER_OFFSET] = 0x05;
+    template[SAVE_PARTY_SIZE_OFFSET] = 1;
+    fs::write(dir.join("SAVED.GAM"), template).unwrap();
+    fs::write(dir.join(SAVED_OOL_FILENAME), vec![0; SAVED_OOL_LEN]).unwrap();
+    write_empty_ool_mirrors(&dir);
+
+    let options = load_play_options_from_save(&dir).unwrap();
+    let scene = Scene::new(SHIPPED_IOLOS_HUT_SCENE).unwrap();
+    let mut state = PlayState::load_town_scene(&dir, scene, options).unwrap();
+    // The daylight telescope picks the first living member when nothing
+    // is selected (`view.md`), a selection path other than the digit.
+    state.clock.hour = 12;
+    state.party[0].status = b'G';
+    state.party[0].hp = 50;
+    state.party[0].max_hp = 50;
+    state.look_through_telescope();
+    assert_eq!(state.active_player, Some(0));
+    state.active_player = None;
+
+    assert_eq!(
+        state.save_game_command(&dir, Some(true)).unwrap(),
+        MoveOutcome::Saved
+    );
+    let saved = fs::read(dir.join("SAVED.GAM")).unwrap();
+    assert_eq!(saved[SAVE_ACTIVE_PLAYER_OFFSET], 0xff);
+    let _ = fs::remove_dir_all(dir);
+}

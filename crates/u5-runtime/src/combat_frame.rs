@@ -7515,6 +7515,9 @@ impl PlayState {
         match resolve_combat_active_player_digit(key) {
             CombatActivePlayerSelectionOutcome::Clear => {
                 self.active_player = None;
+                // `formats/saved-gam.md §4`: the digit writes the sentinel,
+                // so a loaded out-of-range byte is gone (playtest P15-02).
+                self.active_player_save_byte = 0xff;
                 CombatActivePlayerSelectionOutcome::Clear
             }
             // `combat.md §8.4` (issue #293, corrected by issue #307 Q1,
@@ -7549,6 +7552,9 @@ impl PlayState {
                         }) =>
             {
                 self.active_player = Some(slot);
+                // A live selection replaces a loaded out-of-range byte, so a
+                // later clear saves the sentinel (playtest P15-02).
+                self.active_player_save_byte = 0xff;
                 CombatActivePlayerSelectionOutcome::SelectPartySlot(slot)
             }
             CombatActivePlayerSelectionOutcome::SelectPartySlot(_)
