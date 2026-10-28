@@ -39,6 +39,7 @@ pub mod dungeon_tables_io_movement;
 pub mod dungeon_view;
 pub mod end_io;
 pub mod endgame;
+pub mod endgame_certificate_frame;
 pub mod endgame_cinematic;
 pub mod endgame_narrative_frame;
 pub mod endgame_tableau_frame;
@@ -1235,4 +1236,5 @@ mod tests {
     include!("tests_inline/playfix14_town14.rs");
     include!("tests_inline/playfix14_input14.rs");
     include!("tests_inline/playfix14_combat14.rs");
+    include!("tests_inline/playfix15_end15.rs");
 }

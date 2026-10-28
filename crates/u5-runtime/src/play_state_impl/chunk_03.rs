@@ -4482,6 +4482,13 @@ impl PlayState {
         {
             return rows.join("\n");
         }
+        // `endgame.md §8.4`/`§9.5`: the certificate page follows the sixth
+        // window and is the terminal screen (playtest P15-06).
+        if let Some(rows) =
+            crate::endgame_certificate_frame::endgame_certificate_full_screen_text_rows(self)
+        {
+            return rows.join("\n");
+        }
         let active_cursor = self.active_player;
         let frame = render_play_text_window_ascii(self, active_cursor, input_echo);
         if stats_panel_active_cursor_resets(self, active_cursor) {

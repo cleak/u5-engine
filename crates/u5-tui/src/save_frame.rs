@@ -1190,6 +1190,13 @@ pub fn compose_gameplay_screen(
     if let Some(window) = endgame_narrative_window_on_screen(state) {
         return compose_endgame_narrative_window_rgba(state, game_dir, window);
     }
+    // `endgame.md §8.4`/`§9`: after the sixth window the parchment page and
+    // the certificate printed over it are the whole screen (P15-06).
+    if u5_runtime::endgame_certificate_frame::endgame_certificate_on_screen(state) {
+        return u5_runtime::endgame_certificate_frame::compose_endgame_certificate_rgba(
+            state, game_dir, ibm, runes,
+        );
+    }
     let mut rgba = vec![0u8; width * height * 4];
     for pixel in rgba.chunks_exact_mut(4) {
         pixel.copy_from_slice(&[0, 0, 0, 0xff]);
