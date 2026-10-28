@@ -163,3 +163,36 @@ fn playfix16_p16_08_combat_blink_fails_at_once_in_a_dungeon_fight() {
     );
     let _ = fs::remove_dir_all(dir);
 }
+
+/// P16-09: `dungeon-mode.md §8.1` puts combat's blank row between
+/// `Entering room...` and the first turn banner. After an edge exit lost a
+/// fight, the loss line's row is closed (the stock capture's blank row under
+/// `BATTLE IS LOST!`), so the arena's column flag must not still say it is
+/// open: the next fight's first banner keeps its blank row.
+#[test]
+fn playfix16_p16_09_an_edge_loss_leaves_no_open_arena_row_for_the_next_fight() {
+    let game_dir = std::path::Path::new(".");
+    let mut state = combat_player_command_state(8, 0);
+    state.combat_actors[0].y = 0;
+    state.active_objects[0].y = 0;
+    state.pending_combat_actor_slot = Some(0);
+    state.next_combat_actor_slot = 1;
+
+    handle_play_key_input(&mut state, 'w', "", game_dir).unwrap();
+
+    assert!(!state.combat_active, "the edge exit ended the fight");
+    assert!(!state.combat_transcript_row_open);
+
+    // The next fight's banner, printed with its leading newline.
+    state.emit_combat_print("\nAvatar, armed");
+    let entries = state.message_entries();
+    let banner = entries
+        .iter()
+        .rposition(|entry| entry.text == "Avatar, armed")
+        .expect("the banner is printed");
+    assert!(
+        entries[banner - 1].explicit_blank,
+        "a blank row precedes the banner: {:?}",
+        entries.iter().map(|entry| &entry.text).collect::<Vec<_>>()
+    );
+}

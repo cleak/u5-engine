@@ -6894,6 +6894,15 @@ fn handle_combat_key_input(state: &mut PlayState, key: char, suffix: &str) -> Pl
             // marked this row open). Whatever the framer prints on the way
             // back to the world closes it, so the ordinary
             // `text-output.md §10.4` blank applies.
+            //
+            // The arena's own column flag has to say so too: the print above
+            // left `combat_transcript_row_open` set, and the dungeon room
+            // setup never prints a banner of its own to reset it, so the
+            // next fight's first turn banner spent its leading newline
+            // closing this long-gone row and `dungeon-mode.md §8.1`'s blank
+            // row between `Entering room...` and the banner went missing
+            // (playtest P16-09).
+            state.combat_transcript_row_open = false;
         } else {
             state.apply_combat_round_loop_exit(exit);
             // `combat.md §14`: the accepted Escape key "appends the character
