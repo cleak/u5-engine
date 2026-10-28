@@ -1476,7 +1476,7 @@ impl PlayState {
                 self.z_stats_for_party(index);
             }
             PartySelectorTarget::Search { direction } => {
-                if let Err(error) = self.search_direction_with_game_dir(direction, game_dir) {
+                if let Err(error) = self.search_direction_with_member(direction, game_dir, index) {
                     self.message = error.to_string();
                 }
             }
@@ -4132,8 +4132,8 @@ impl PlayState {
                             self.message = PARTY_SELECTOR_CANCEL_REPLY.to_string();
                             MoveOutcome::Observed
                         }
-                        ActingMemberSelection::Selected(_) => {
-                            self.search_direction_with_game_dir(direction, game_dir)?
+                        ActingMemberSelection::Selected(slot) => {
+                            self.search_direction_with_member(direction, game_dir, slot)?
                         }
                         ActingMemberSelection::Prompt => {
                             self.start_party_selector(PartySelectorTarget::Search { direction })
