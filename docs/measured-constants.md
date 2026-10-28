@@ -107,6 +107,12 @@ entered them. Listed so the inventory is complete.
 | `SPEAKER_VOLUME` | `u5-bevy/src/lib.rs` | 0.9 | engine: level-matched over the rendered suite | RMS / peak of engine renders | 2026-10-26 |
 | `PROPORTIONAL_TEXT_LINE_HEIGHT` | `u5-bevy/src/lib.rs` | 9 px | spec-observed stride (#70) | frame geometry | 2026-10-26 |
 
+## Published as untimed (deliberately not modelled)
+
+| Span | Engine | Spec | Date |
+|---|---|---|---|
+| Journey Onward load path: menu key read to the first command-wait pass | No hold. The engine reaches its first idle pass about 67 ms after the key | `intro.md §7` "Timing of the load path" and `timing.md §8.2` (u5-spec 2ba0812, issue #306): "It is untimed CPU work plus file reads. An implementation must not add any wait to it, and an instant load is correct behaviour." The stock's first idle pass falls about 216 ms after the load border at DOSBox 3000 cycles (288 to 387 ms after the key; about 1.7 s more when the tile archive still has to load), which the spec publishes as emulator-only figures. So the engine runs about 4 to 6 idle draws ahead of a stock capture after a load (the ship-commands probe saw 5: Rough seas damage index 153 vs 148 at x-j 8270 ms). The spec allows a parity harness to model this as "an optional emulator-profile latency ... a test setting, not a game rule, and must never be expressed as ticks"; no such harness setting exists yet | 2026-10-27 |
+
 String literals whose comments say **Measured** (refusals, prompts, row
 spacing) are content and layout observations from still frames. They carry no
 timing and are not listed row by row.
