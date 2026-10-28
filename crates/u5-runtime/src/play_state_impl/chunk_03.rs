@@ -4980,8 +4980,16 @@ impl PlayState {
     /// (`hut-ready-picker/shield`): the original logs nothing when the
     /// highlight moves, and this engine logged an extra `Item: ` on the
     /// first movement after a refusal.
+    ///
+    /// A silent equip (`inventory.md §5.2`: "no fresh `Item:_` prompt")
+    /// leaves the slot empty while the prompt row it last flushed - a
+    /// refusal block ending in `Item: `, say - is still the open row. That
+    /// row counts too: re-rendering into the empty slot logged a second
+    /// consecutive `Item:` row (playtest P15-11).
     fn refresh_ready_prompt_slot(&mut self, rendered: String) {
-        if self.message.ends_with(&rendered) {
+        if self.message.ends_with(&rendered)
+            || (self.message.is_empty() && self.message_flushed.ends_with(&rendered))
+        {
             return;
         }
         self.message = rendered;

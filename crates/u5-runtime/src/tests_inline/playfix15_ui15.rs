@@ -68,7 +68,11 @@ mod playfix15_ui15 {
             "no second picker opens: {:?}",
             rows(&state)
         );
-        assert!(player_rows(&state) <= 1, "one `Player:` row: {:?}", rows(&state));
+        assert!(
+            player_rows(&state) <= 1,
+            "one `Player:` row: {:?}",
+            rows(&state)
+        );
         assert_eq!(state.turn, turn + 1, "the corpse search ran");
         assert!(
             state.message.contains("Thou dost find"),
@@ -102,9 +106,70 @@ mod playfix15_ui15 {
             "no second picker opens: {:?}",
             rows(&state)
         );
-        assert!(player_rows(&state) <= 1, "one `Player:` row: {:?}", rows(&state));
+        assert!(
+            player_rows(&state) <= 1,
+            "one `Player:` row: {:?}",
+            rows(&state)
+        );
         assert!(state.message.contains("no trap!"), "{:?}", state.message);
         // The member-pinned lookup leaves nothing behind for a later caller.
         assert!(state.search_acting_member.is_none());
+    }
+
+    /// P15-11: `inventory.md §5.2` - "Ordinary successful equip and unequip
+    /// print no result message, no item name echo and no fresh `Item:_`
+    /// prompt. The picker remains active." A refusal's block already ends in
+    /// `Item: `, so a success after it, then a highlight move, must not log
+    /// a second consecutive `Item:` row.
+    #[test]
+    fn p15_11_a_ready_success_after_a_refusal_adds_no_second_item_row() {
+        const INV_RING: usize = 42;
+        const PROT_RING: usize = 43;
+        const REGEN_RING: usize = 44;
+        const SP_COLLAR: usize = 46;
+        const ANKH: usize = 47;
+        let dir = debug_game_dir();
+        let mut state = p4window_world_state();
+        for item in INV_RING..=ANKH {
+            state.equipment_stock[item] = 1;
+        }
+        state.party_equipment[0] = [EQUIPMENT_EMPTY; EQUIPMENT_SLOT_COUNT];
+        assert_eq!(
+            state.ready_equipment(InlineReadyRequest {
+                party_index: 0,
+                item_id: ANKH,
+            }),
+            MoveOutcome::Used
+        );
+        state.message.clear();
+
+        p4window_keys(&mut state, &dir, &['R', '\r']);
+        assert!(state.active_ready.as_ref().unwrap().selected_party_index == Some(0));
+        // The amulet slot is taken: refused.
+        state.active_ready.as_mut().unwrap().cursor = SP_COLLAR;
+        p4window_keys(&mut state, &dir, &['\r']);
+        // Then a ring, which readies silently.
+        state.active_ready.as_mut().unwrap().cursor = PROT_RING;
+        p4window_keys(&mut state, &dir, &['\r']);
+        assert!(state.party_equipment[0].contains(&(PROT_RING as u8)));
+        // Then a highlight move.
+        p4window_keys(&mut state, &dir, &[char::from(INPUT_CODE_SOUTH)]);
+
+        let rows = p4window_rows(&state);
+        let tail = p4window_rows_from(&rows, "amulet!");
+        assert_eq!(tail, ["amulet!", "", "Item:"], "{rows:?}");
+
+        // The finding's variant: a ring refusal next prints its block under
+        // the one `Item:` row.
+        state.active_ready.as_mut().unwrap().cursor = REGEN_RING;
+        p4window_keys(&mut state, &dir, &['\r']);
+        let rows = p4window_rows(&state);
+        assert!(
+            !rows
+                .windows(2)
+                .any(|pair| pair[0] == "Item:" && pair[1] == "Item:"),
+            "{rows:?}"
+        );
+        let _ = fs::remove_dir_all(dir);
     }
 }
