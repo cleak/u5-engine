@@ -518,6 +518,42 @@ fn the_clear_and_re_place_pass_puts_a_mid_route_npc_back_on_its_waypoint() {
     assert!(state.npcs[0].active_object.is_some());
 }
 
+#[test]
+fn the_clear_and_re_place_pass_erases_a_riderless_horse() {
+    // `npc-schedules.md §12`: the pass "clears every non-party active-object
+    // record and then re-places each live scheduled NPC"; `shops.md §8.4`
+    // says the same of the inn night. An X-it riderless horse (type `0x10`)
+    // survived a bed Hole-Up (playtest P16-13 part c).
+    let mut state = test_state(npc_open_grid(), 20, 20);
+    state.npcs.push(wandering_npc(1, 3, 3, (9, 9)));
+    state.active_objects.push(ActiveObject {
+        type_byte: 0x10,
+        tile: 0x10,
+        x: 12,
+        y: 12,
+        z: 0,
+        phase: STEADY_PHASE,
+        aux1: 0,
+        aux3: 0,
+    });
+
+    state.clear_and_replace_scheduled_npcs();
+
+    assert!(
+        !state
+            .active_objects
+            .iter()
+            .skip(1)
+            .any(|object| object.type_byte == 0x10),
+        "the riderless horse is cleared"
+    );
+    let slot = state.npcs[0].active_object.expect("the NPC is relinked");
+    assert_eq!(
+        (state.active_objects[slot].x, state.active_objects[slot].y),
+        (9, 9)
+    );
+}
+
 /// A hoisted frigate on open deep water, which is the only terrain the
 /// released sail step accepts.
 fn under_sail_world(x: usize, y: usize, wind: WindState) -> PlayState {
