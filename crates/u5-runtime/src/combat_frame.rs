@@ -5040,7 +5040,21 @@ impl PlayState {
             .get(roster_slot)
             .and_then(|bytes| party_name_to_string(bytes))
             .unwrap_or_default();
-        self.emit_message_line(format!("{name} passes out!"));
+        // `combat.md §13`/`§14`: on a keyboard-driven command this recount
+        // runs after the step has printed its own lines - "the direction
+        // and `Escape!` lines occur first" - but the engine assembles that
+        // echo only once the command has been applied, so the line waits
+        // for it (playtest P14-11).
+        let line = format!("{name} passes out!");
+        match self.combat_held_faint_lines.as_mut() {
+            Some(held) => held.push(line),
+            None => {
+                self.emit_message_line(line);
+                // `§6.3`: no line feed after ` passes out!`; the row stays
+                // open for the next producer.
+                self.message_row_open_mid_line = true;
+            }
+        }
 
         // `combat.md §6.3`: narration completes before this blocking cue;
         // equipment removal and the sleep helper follow only after it ends.
@@ -9546,7 +9560,7 @@ impl PlayState {
                 // exactly that boundary - a refused command's re-prompt
                 // calls `open_pending_combat_player_turn` directly, without
                 // passing back through here, so it does not drain again.
-                self.drain_stats_panel_refresh();
+                self.drain_stats_panel_refresh_at_combat_prompt();
                 self.open_pending_combat_player_turn(ready_player_slot_from_round_walk(
                     &application,
                 ));

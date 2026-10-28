@@ -6767,6 +6767,18 @@ fn handle_combat_targeting_cursor_key(
     PlayInputDisposition::Continue
 }
 
+/// Print the `<name> passes out!` lines [`handle_combat_key_input`] held
+/// while its command was applied, now that the command's echo is down.
+fn emit_held_combat_faint_lines(state: &mut PlayState, lines: Vec<String>) {
+    for line in lines {
+        state.emit_message_line(line);
+        // `combat.md §6.3`: the faint print carries no line feed of its own
+        // (`\nShadow Lord escapes!\n<member> passes out!`), so the row
+        // stays open for the next producer.
+        state.message_row_open_mid_line = true;
+    }
+}
+
 fn handle_combat_key_input(state: &mut PlayState, key: char, suffix: &str) -> PlayInputDisposition {
     if state.active_combat_targeting.is_some() {
         return handle_combat_targeting_cursor_key(state, key, suffix);
@@ -6795,13 +6807,21 @@ fn handle_combat_key_input(state: &mut PlayState, key: char, suffix: &str) -> Pl
     // own transcript starts with the command output and never reprints it.
     // The free re-prompt below reinstates the pending slot without reopening
     // the turn, which is what keeps that path on the short form.
-    let Some(application) = state.apply_combat_player_command_with_inputs(actor_slot, input) else {
+    // `combat.md §13`: the post-dispatch recount's faint line follows the
+    // step's own echo, so it is held while the command is applied
+    // (playtest P14-11).
+    state.combat_held_faint_lines = Some(Vec::new());
+    let application = state.apply_combat_player_command_with_inputs(actor_slot, input);
+    let held_faint_lines = state.combat_held_faint_lines.take().unwrap_or_default();
+    let Some(application) = application else {
         state.message.clear();
+        emit_held_combat_faint_lines(state, held_faint_lines);
         return PlayInputDisposition::Continue;
     };
     let echo = combat_player_command_application_message(state, &application);
     state.message = echo.clone();
     if handle_combat_multistage_command(state, actor_slot, &application.action, suffix) {
+        emit_held_combat_faint_lines(state, held_faint_lines);
         return PlayInputDisposition::Continue;
     }
     // The key was read on the marker row, so what it echoes is written
@@ -6816,6 +6836,7 @@ fn handle_combat_key_input(state: &mut PlayState, key: char, suffix: &str) -> Pl
     if !echo.is_empty() {
         state.emit_combat_command_echo_line(&echo);
     }
+    emit_held_combat_faint_lines(state, held_faint_lines);
     if let Some(shape) = combat_player_command_action_reprompt_shape(&application.action) {
         match shape {
             // `combat.md §8.1`: "**Short re-prompt, banner not reprinted** ...
@@ -8320,7 +8341,7 @@ fn drive_combat_round_walk_and_append_message(state: &mut PlayState) {
             // `stats-panel.md §2.3`'s fourth consumer, drained once per
             // acting character at the round walker's `AwaitingPlayer`
             // boundary - see the sibling call in `combat_frame.rs`.
-            state.drain_stats_panel_refresh();
+            state.drain_stats_panel_refresh_at_combat_prompt();
             // `combat.md §8.1`: opening a keyboard-driven turn prints the
             // turn banner, before any key is read.
             state.open_pending_combat_player_turn(ready_player_slot_from_input_round_walk(

@@ -372,6 +372,11 @@ pub struct PlayState {
     /// narrator produced, by acting slot, held until that actor's own output
     /// (its command echo, its attack narration) has printed.
     pub combat_pending_hazard_lines: Vec<(usize, String)>,
+    /// `combat.md §13`/`§14`: while a keyboard-driven combat command is being
+    /// applied, the party control/faint helper's `<name> passes out!` lines,
+    /// held until that command's own echo (`South` / `Escape!`) has printed.
+    /// `None` outside such a command: the helper prints at once.
+    pub combat_held_faint_lines: Option<Vec<String>>,
     /// `magic.md §7`: save-backed per-victim source slots used by the C-Cast
     /// interference gate. This state intentionally survives combat boundaries.
     pub combat_interference_sources: [u8; COMBAT_ACTOR_SLOTS],
