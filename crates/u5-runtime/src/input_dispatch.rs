@@ -467,6 +467,16 @@ fn handle_play_key_input_inner(
     game_dir: &Path,
     deferred_prompt_key: &mut Option<char>,
 ) -> io::Result<PlayInputDisposition> {
+    // `input.md §4` step 3: an extended key that does not classify "is
+    // returned as 'no key'", and the engine "treats them as 'no key' and
+    // continues polling". Every keyboard read goes through that one poll, so
+    // the key never reaches *any* reader - not the command prompt, and not
+    // an open prompt or single-key wait either. Checked only at the command
+    // prompt, Delete answered `Exit to DOS?` with `N`, closed the gem map
+    // and ended the arms-shop welcome pause (playtest P14-05).
+    if key == PLAY_IGNORED_INPUT_KEY {
+        return Ok(PlayInputDisposition::Continue);
+    }
     // `conversation.md §7.3`: a key that arrives during a `0x83` pause "is
     // consumed and ends the pause at once", and `0x8F` blocks for "exactly
     // one command keystroke (any key; its value is discarded)". Whatever the
@@ -497,6 +507,15 @@ fn handle_play_key_input_inner(
             // result line instead. Measured 2026-09-11 (`stray-keys/fkey`),
             // where the original draws `?What?` and this engine drew a bare
             // `What?` with no separating row.
+            //
+            // "Like any other" includes the dungeon clock too:
+            // `dungeon-mode.md §15` puts the minute "at the head of each
+            // iteration", so a key the dispatcher answers with "no action"
+            // still costs a minute underground. `!` spent it and F1 did not
+            // (playtest P14-04).
+            if matches!(state.area, Area::Dungeon { .. }) && !state.combat_active {
+                state.advance_dungeon_loop_minute();
+            }
             state.emit_command_echo_line(unassigned_refusal_echo(0));
             mark_combat_short_reprompt(state);
             return Ok(PlayInputDisposition::Continue);
@@ -727,16 +746,9 @@ fn handle_play_key_input_inner(
         state.run_under_sail_advance_body(Some(game_dir))?;
         return Ok(PlayInputDisposition::Continue);
     }
-    // `input.md §2` step 3: an extended key that does not classify "is
-    // returned as 'no key'", and the engine "treats them as 'no key' and
-    // continues polling". Nothing is printed, no turn passes, and the
-    // message window is left exactly as it was - `Input ignored.` and
-    // `Function key ignored.` stood here, and no spec text carries either
-    // (playtest M5). It is no command either, so it takes no drunken
-    // even-odds gate below.
-    if key == PLAY_IGNORED_INPUT_KEY {
-        return Ok(PlayInputDisposition::Continue);
-    }
+    // An unclassified extended key ("no key", `input.md §2` step 3) was
+    // dropped at the top of this function: nothing is printed and no turn
+    // passes (playtest M5), and it takes no drunken even-odds gate below.
     // `systems/shops.md` tavern drunkenness: every top-level town command
     // performs a fresh even-odds gate. Active prompts/sessions above consume
     // their own keys before this point and therefore are not commands.
@@ -904,14 +916,18 @@ fn handle_play_key_input_inner(
     // A suffix that names no party member but is a direction alias is the
     // inline direction form instead, which goes through the top-down
     // direction prompt below (playtest S24).
-    let jimmy_inline_direction = key == 'J'
-        && !matches!(state.area, Area::Dungeon { .. })
-        && parse_inline_party_index(suffix).is_none()
-        && suffix.chars().any(|ch| Direction::from_play_key(ch).is_some());
-    if matches!(key, 'J' | 'j')
-        && (!suffix.is_empty() || matches!(state.area, Area::Dungeon { .. }))
-        && !jimmy_inline_direction
-    {
+    //
+    // Above ground, anything else is the plain `J` key: `input.md §6` folds
+    // a lowercase `j` to `J`, and `commands.md §5.4` has Jimmy await a
+    // direction that "accepts only the four directions and Space". So a bare
+    // `j`, or `J` followed by a non-direction (`Jx`), opens `Jimmy-` and
+    // waits - it acted on the facing cell, and could break a key on a door
+    // no direction ever chose (playtest P14-03).
+    let in_dungeon = matches!(state.area, Area::Dungeon { .. });
+    if key == 'j' && !in_dungeon {
+        key = 'J';
+    }
+    if matches!(key, 'J' | 'j') && (in_dungeon || parse_inline_party_index(suffix).is_some()) {
         // `dungeon-mode.md §4` step 1 / `§15`: the dungeon's minute sits at
         // the head of every iteration, whatever the command. `J` is read by
         // this shared intercept rather than the dungeon handler, so it runs
@@ -960,11 +976,18 @@ fn handle_play_key_input_inner(
         && let Some(direction) = inline_direction.take()
     {
         *deferred_prompt_key = Some(direction_prompt_key(direction));
-        // The legacy `l` alias looks at the facing tile when it has no
-        // direction; with one it is `L` and its prompt.
+        // With a direction the `l` alias is `L` and its prompt.
         if key == 'l' {
             key = 'L';
         }
+    }
+    // Without one it is `L` too: `input.md §6` folds a lowercase letter to
+    // upper case, and `commands.md §5.4` has Look await a direction. The
+    // alias looked at the facing tile with no direction chosen (playtest
+    // P14-03). The dungeon's `l` is its own focus prompt, so only the
+    // top-down scenes fold.
+    if key == 'l' && matches!(active_route, SceneRoute::Overworld | SceneRoute::TownFamily) {
+        key = 'L';
     }
     let inline_rest = parse_inline_rest_request(suffix);
     let inline_drink = parse_inline_yes_no(suffix);

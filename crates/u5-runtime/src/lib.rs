@@ -1233,4 +1233,5 @@ mod tests {
     include!("tests_inline/playfix13_text13.rs");
     include!("tests_inline/spec307.rs");
     include!("tests_inline/playfix14_town14.rs");
+    include!("tests_inline/playfix14_input14.rs");
 }

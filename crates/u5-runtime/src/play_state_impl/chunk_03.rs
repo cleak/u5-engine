@@ -1655,10 +1655,18 @@ impl PlayState {
                     return slot;
                 }
             }
+            return self
+                .active_player
+                .filter(|slot| *slot < self.party.len())
+                .unwrap_or(0);
         }
-        self.active_player
-            .filter(|slot| *slot < self.party.len())
-            .unwrap_or(0)
+        // `inventory.md §4`: "Outside combat, Z starts with the normal
+        // party-member selector, initially indicating the first slot ... the
+        // currently active world member does not change the initial
+        // indication", and `commands.md §6`: New Order's second prompt
+        // "starts on the first slot". It is one shared selector (§4.3), so
+        // a Set Active Plr choice seeds none of them (playtest P14-09).
+        0
     }
 
     pub fn render_active_z_stats(&self) -> String {
