@@ -8285,7 +8285,7 @@ fn drive_combat_round_walk_and_append_message(state: &mut PlayState) {
             // `stats-panel.md §2.3`'s fourth consumer, drained once per
             // acting character at the round walker's `AwaitingPlayer`
             // boundary - see the sibling call in `combat_frame.rs`.
-            state.drain_stats_panel_refresh();
+            state.drain_stats_panel_refresh_at_combat_prompt();
             // `combat.md §8.1`: opening a keyboard-driven turn prints the
             // turn banner, before any key is read.
             state.open_pending_combat_player_turn(ready_player_slot_from_input_round_walk(

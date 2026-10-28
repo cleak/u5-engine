@@ -9546,7 +9546,7 @@ impl PlayState {
                 // exactly that boundary - a refused command's re-prompt
                 // calls `open_pending_combat_player_turn` directly, without
                 // passing back through here, so it does not drain again.
-                self.drain_stats_panel_refresh();
+                self.drain_stats_panel_refresh_at_combat_prompt();
                 self.open_pending_combat_player_turn(ready_player_slot_from_round_walk(
                     &application,
                 ));

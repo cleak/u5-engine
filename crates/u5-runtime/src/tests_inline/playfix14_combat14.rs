@@ -98,4 +98,35 @@ mod playfix14_combat14 {
             assert!(!state.message_row_open_mid_line, "{code}");
         }
     }
+
+    /// P14-02. `stats-panel.md §2.2.1` row 15: combat poisoning of a Good
+    /// member raises the deferred request, and `§2.3` / `combat.md §8`
+    /// drain it "at the top of a human-controlled actor's command prompt
+    /// ... before the keystroke is read". A committed cast drives the round
+    /// walker to the next actor's prompt *inside* the same command, so that
+    /// prompt is where the `P` must reach the panel - not one prompt later,
+    /// once the command epilogue has raised the request after the drain.
+    #[test]
+    fn p14_02_a_deferred_combat_change_reaches_the_panel_at_the_next_actors_prompt() {
+        let mut state = combat_state_after_the_conflict_banner(8, 5);
+        state.repaint_stats_panel();
+        // The command epilogue's entry framing, then the poison site's own
+        // mechanism (`combat_frame.rs` Poison Wind arm).
+        state.stats_panel_command_refresh = crate::stats_panel::PanelRefreshMode::Immediate;
+        state.stats_panel_command_baseline = crate::stats_panel::stats_panel_snapshot_of(&state);
+        state.party[0].status = b'P';
+        state.stats_panel_command_refresh = crate::stats_panel::PanelRefreshMode::Deferred;
+        assert_eq!(state.stats_panel.statuses[0], Some(b'G'));
+
+        // The walker reaches the next human actor's prompt mid-command.
+        state.pending_combat_actor_slot = None;
+        state.ensure_pending_combat_player_turn();
+        assert!(state.pending_combat_actor_slot.is_some());
+        assert_eq!(
+            state.stats_panel.statuses[0],
+            Some(b'P'),
+            "the waiting prompt shows the poisoned status"
+        );
+        assert!(!state.stats_panel_refresh_requested);
+    }
 }

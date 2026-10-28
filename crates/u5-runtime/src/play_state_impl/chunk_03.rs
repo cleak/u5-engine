@@ -644,6 +644,26 @@ impl PlayState {
         self.repaint_stats_panel();
     }
 
+    /// Combat's §2.3 consumer runs *inside* the command that raised the
+    /// request: a committed action drives the round walker to the next
+    /// human actor's prompt before the command epilogue applies the
+    /// command's panel mechanism. A deferred site's raise (`§2.2.1` - combat
+    /// poisoning, the Escape key, the Sword's compulsion, ...) has happened
+    /// by then, so it is settled here, ahead of the drain, and the baseline
+    /// moves past it so the epilogue does not raise it a second time
+    /// (playtest P14-02: Poison Wind's `P` only reached the panel one prompt
+    /// late).
+    pub(crate) fn drain_stats_panel_refresh_at_combat_prompt(&mut self) {
+        if self.stats_panel_command_refresh == crate::stats_panel::PanelRefreshMode::Deferred {
+            let snapshot = crate::stats_panel::stats_panel_snapshot_of(self);
+            if snapshot != self.stats_panel_command_baseline {
+                self.request_stats_panel_refresh();
+                self.stats_panel_command_baseline = snapshot;
+            }
+        }
+        self.drain_stats_panel_refresh();
+    }
+
     /// Whether a cinematic hold owns the loop, so a key belongs in the
     /// buffer rather than to a command.
     pub fn cinematic_hold_owns_input(&self) -> bool {
