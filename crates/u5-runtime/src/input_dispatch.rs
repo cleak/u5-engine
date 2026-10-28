@@ -467,6 +467,16 @@ fn handle_play_key_input_inner(
     game_dir: &Path,
     deferred_prompt_key: &mut Option<char>,
 ) -> io::Result<PlayInputDisposition> {
+    // `input.md §4` step 3: an extended key that does not classify "is
+    // returned as 'no key'", and the engine "treats them as 'no key' and
+    // continues polling". Every keyboard read goes through that one poll, so
+    // the key never reaches *any* reader - not the command prompt, and not
+    // an open prompt or single-key wait either. Checked only at the command
+    // prompt, Delete answered `Exit to DOS?` with `N`, closed the gem map
+    // and ended the arms-shop welcome pause (playtest P14-05).
+    if key == PLAY_IGNORED_INPUT_KEY {
+        return Ok(PlayInputDisposition::Continue);
+    }
     // `conversation.md §7.3`: a key that arrives during a `0x83` pause "is
     // consumed and ends the pause at once", and `0x8F` blocks for "exactly
     // one command keystroke (any key; its value is discarded)". Whatever the
@@ -724,16 +734,9 @@ fn handle_play_key_input_inner(
         state.run_under_sail_advance_body(Some(game_dir))?;
         return Ok(PlayInputDisposition::Continue);
     }
-    // `input.md §2` step 3: an extended key that does not classify "is
-    // returned as 'no key'", and the engine "treats them as 'no key' and
-    // continues polling". Nothing is printed, no turn passes, and the
-    // message window is left exactly as it was - `Input ignored.` and
-    // `Function key ignored.` stood here, and no spec text carries either
-    // (playtest M5). It is no command either, so it takes no drunken
-    // even-odds gate below.
-    if key == PLAY_IGNORED_INPUT_KEY {
-        return Ok(PlayInputDisposition::Continue);
-    }
+    // An unclassified extended key ("no key", `input.md §2` step 3) was
+    // dropped at the top of this function: nothing is printed and no turn
+    // passes (playtest M5), and it takes no drunken even-odds gate below.
     // `systems/shops.md` tavern drunkenness: every top-level town command
     // performs a fresh even-odds gate. Active prompts/sessions above consume
     // their own keys before this point and therefore are not commands.

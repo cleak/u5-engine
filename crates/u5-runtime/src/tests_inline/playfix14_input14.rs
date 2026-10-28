@@ -53,3 +53,31 @@ fn playtest_p14_04_dungeon_function_key_costs_the_loop_minute() {
         assert_eq!(state.turn, 0, "key {key:#04x} takes no turn");
     }
 }
+
+/// P14-05: `input.md §4` step 3 - an extended key that does not classify
+/// "is returned as 'no key'" and the engine "continues polling". It never
+/// reaches a reader, so it answers no `Exit to DOS?` and dismisses no view.
+#[test]
+fn playtest_p14_05_no_key_leaves_single_key_waits_open() {
+    let game_dir = Path::new("");
+    let mut state = world_state(open_world_grid(), 5, 5);
+    handle_play_key_input(&mut state, PLAY_EXIT_TO_DOS_KEY, "", game_dir).unwrap();
+    assert!(state.active_yes_no_prompt.is_some());
+    let message_before = state.message.clone();
+    handle_play_key_input(&mut state, PLAY_IGNORED_INPUT_KEY, "escape", game_dir).unwrap();
+    assert!(
+        state.active_yes_no_prompt.is_some(),
+        "Exit to DOS? is still waiting"
+    );
+    assert_eq!(state.message, message_before);
+
+    let mut state = world_state(open_world_grid(), 5, 5);
+    state.gems = 3;
+    handle_play_key_input(&mut state, 'V', "", game_dir).unwrap();
+    assert!(state.active_view_overlay.is_some(), "the gem map is up");
+    handle_play_key_input(&mut state, PLAY_IGNORED_INPUT_KEY, "escape", game_dir).unwrap();
+    assert!(
+        state.active_view_overlay.is_some(),
+        "the gem map waits for an accepted key"
+    );
+}
