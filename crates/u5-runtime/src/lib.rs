@@ -1239,4 +1239,5 @@ mod tests {
     include!("tests_inline/playfix14_combat14.rs");
     include!("tests_inline/playfix15_end15.rs");
     include!("tests_inline/playfix15_ui15.rs");
+    include!("tests_inline/playfix16_dun16.rs");
 }

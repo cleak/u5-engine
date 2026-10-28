@@ -4760,15 +4760,20 @@ impl PlayState {
             let endgame_tableau_map = snapshot.endgame_tableau_map.clone();
             let dungeon_room_clear_on_success = snapshot.dungeon_room_clear_on_success;
             self.restore_combat_frame_with_trigger_reconcile(snapshot, body_retrieval_exit);
-            if result_code != COMBAT_ROUND_RESULT_DEFEAT {
-                if let Some(clear) = dungeon_room_clear_on_success {
-                    set_dungeon_room_clear_bit(
-                        &mut self.dungeon_room_clear_bitmap,
-                        clear.scene,
-                        clear.room_slot,
-                    );
-                    self.mark_visibility_dirty();
-                }
+            // `formats/dungeon-dat.md §4`: after room combat the engine
+            // patches the trigger to `0xA?` "It also sets a saved room-clear
+            // bit keyed by dungeon and room id" - with no outcome condition,
+            // and `combat.md §14` has the framer discard the round loop's
+            // word, so a loss or a whole-party escape is not told apart from
+            // a win. Gating the bit on the result left the visit-local `0xA?`
+            // patch and the durable bit disagreeing (playtest P16-04).
+            if let Some(clear) = dungeon_room_clear_on_success {
+                set_dungeon_room_clear_bit(
+                    &mut self.dungeon_room_clear_bitmap,
+                    clear.scene,
+                    clear.room_slot,
+                );
+                self.mark_visibility_dirty();
             }
             if enter_endgame_after_restore {
                 self.enter_endgame_with_resources(endgame_messages, endgame_tableau_map);
