@@ -1729,6 +1729,32 @@ fn paid_inn_rest_night_recovery_restores_by_class_and_kills_poisoned() {
 }
 
 #[test]
+fn paid_inn_rest_assigns_mana_target_even_when_above_it() {
+    // `shops.md §8.4` R bullet (playtest P15-01): the MP branch sets, it
+    // does not only raise. Bard Int 17 at MP 15 -> 8; Mage Int 22 at 40 -> 22.
+    let mut state = test_state(open_grid(), 1, 1);
+    let member = |slot, class_byte, mana| PartyMember {
+        slot,
+        class_byte,
+        status: b'G',
+        climb_stat: 10,
+        mana,
+        hp: 20,
+        max_hp: 20,
+        level: 3,
+    };
+    state.party = vec![member(0, b'A', 30), member(1, b'B', 15), member(2, b'M', 40)];
+    state.party_intelligence = vec![30, 17, 22];
+
+    let (_hp, mana, _cured) = state.apply_inn_rest_night_recovery();
+
+    assert_eq!(state.party[0].mana, 30);
+    assert_eq!(state.party[1].mana, 8);
+    assert_eq!(state.party[2].mana, 22);
+    assert_eq!(mana, 0);
+}
+
+#[test]
 fn inn_rest_refusals_preserve_gold() {
     // `shops.md §8.4`: there is no separate minimum-gold gate (R420); two
     // gold buys a one-member Wayfarer room at the raw rate.

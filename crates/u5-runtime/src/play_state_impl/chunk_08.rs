@@ -1078,11 +1078,14 @@ impl PlayState {
             }
 
             let intelligence = self.party_intelligence.get(index).copied().unwrap_or(0);
+            // `shops.md §8.4` R bullet: Avatar and Mage "set current MP to
+            // Intelligence"; Bard "sets current MP to half Intelligence". An
+            // assignment with no cap test, like the camp block
+            // (`magic.md §11`), so a listed class above its target ends the
+            // rest with fewer MP (playtest P15-01).
             if let Some(mana_target) = inn_rest_mana_target(member.class_byte, intelligence) {
-                if member.mana < mana_target {
-                    recovered_mana += u16::from(mana_target - member.mana);
-                    member.mana = mana_target;
-                }
+                recovered_mana += u16::from(mana_target.saturating_sub(member.mana));
+                member.mana = mana_target;
             }
         }
         (recovered_hp, recovered_mana, status_changes)
