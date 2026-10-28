@@ -470,6 +470,9 @@ impl PlayState {
         // entry starts from the authored roster and forgets the scene's
         // earlier rewrites instead of replaying them (playtest G24).
         self.discard_town_npc_mutations_for_current_scene();
+        // A fresh roster load starts from an empty table (`active-objects.md
+        // §10`): the previous roster's links are gone with it.
+        self.clear_non_player_active_objects();
         self.relink_npc_objects();
     }
 
@@ -783,9 +786,21 @@ impl PlayState {
             return;
         };
         let floor = floor as u8;
-        self.clear_non_player_active_objects();
+        // `town-mode.md §11`: the floor change's partial reset touches NPCs
+        // only - "NPCs not on the new floor are unlinked, NPCs on the new
+        // floor are linked". Loose records - a parked carpet or horse
+        // (`vehicles.md §2`), a dropped item - keep their slots and floor
+        // bytes for the whole visit; only fresh entry clears slots 1..31
+        // (`active-objects.md §10`). Clearing every non-player slot here lost
+        // an X-it carpet on the first floor change (playtest P14-06).
+        self.sync_player_object();
         for index in 0..self.npcs.len() {
-            self.npcs[index].active_object = None;
+            if let Some(slot) = self.npcs[index].active_object.take()
+                && slot != 0
+                && let Some(object) = self.active_objects.get_mut(slot)
+            {
+                *object = ActiveObject::empty();
+            }
             let npc = &self.npcs[index];
             // `npc-schedules.md §12`: the re-place pass "re-places each live
             // scheduled NPC", and §11 links every one that lands on the

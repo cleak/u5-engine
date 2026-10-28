@@ -138,4 +138,62 @@ mod playfix14_town14 {
         assert!(!state.active_objects[1].is_empty());
         let _ = fs::remove_dir_all(dir);
     }
+
+    #[test]
+    fn p14_06_floor_relink_keeps_a_parked_carpet_and_unlinks_npcs() {
+        // `town-mode.md §11`: on a floor change "NPCs not on the new floor
+        // are unlinked, NPCs on the new floor are linked"; nothing removes a
+        // loose record, and `vehicles.md §2` keeps a parked vehicle as an
+        // active-object record with its floor marker.
+        let mut state = test_state(open_grid(), 5, 5);
+        state.load_scheduled_npcs(&[
+            NpcSlot {
+                slot: 0,
+                type_byte: 0,
+                dialog_id: 0,
+                schedule: [0; 16],
+                name: None,
+            },
+            NpcSlot {
+                slot: 1,
+                type_byte: 0x50,
+                dialog_id: 2,
+                schedule: [7, 7, 7, 1, 1, 1, 5, 5, 5, 0, 0, 0, 0, 8, 16, 20],
+                name: None,
+            },
+        ]);
+        let npc_slot = state.npcs[0].active_object.expect("NPC linked on floor 0");
+        let carpet = ActiveObject {
+            type_byte: CARPET_TRANSPORT_FIRST,
+            tile: CARPET_TRANSPORT_FIRST,
+            x: 3,
+            y: 4,
+            z: 0,
+            phase: 0,
+            aux1: 0,
+            aux3: 0,
+        };
+        let carpet_slot = state.allocate_active_object_slot(carpet).unwrap();
+
+        // Up to floor 1, where the NPC is not, and back down.
+        let Area::Town { scene, .. } = state.area else {
+            unreachable!()
+        };
+        state.area = Area::Town { scene, floor: 1 };
+        state.relink_npc_objects();
+        assert_eq!(state.active_objects[carpet_slot], carpet);
+        assert!(state.active_objects[npc_slot].is_empty());
+        assert!(state.npcs[0].active_object.is_none());
+
+        state.area = Area::Town { scene, floor: 0 };
+        state.relink_npc_objects();
+        assert_eq!(state.active_objects[carpet_slot], carpet);
+        assert!(state.npcs[0].active_object.is_some());
+        let linked = state
+            .active_objects
+            .iter()
+            .filter(|object| object.type_byte == 0x50)
+            .count();
+        assert_eq!(linked, 1, "the NPC is linked exactly once");
+    }
 }
