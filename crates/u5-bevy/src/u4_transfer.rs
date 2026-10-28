@@ -42,7 +42,7 @@ use u5_runtime::{
     U4PreviewMessagePlacement, U4PreviewPageLine, U4PreviewPanel, U4PreviewPhase, U4PreviewSession,
     U4PreviewSource, commit_u4_transfer_save, load_ibm_ch_font, parse_u4_preview_source,
     read_disk_file, u4_preview_field_label, u4_preview_panel_bars, u4_preview_panel_rule_polyline,
-    u4_preview_prompt_frame_cells,
+    u4_preview_prompt_frame_cells, u4_preview_sex_text,
 };
 
 use crate::{
@@ -664,7 +664,26 @@ fn apply_edit(buffer: &mut IntroDisplayBuffer, font: &FixedCellFont, edit: &U4Pr
             // (c) Clear the message-line window and print the message.
             paint_message(buffer, font, &stage.message);
         }
-        U4PreviewEdit::RightValue { row, text } => paint_right_value(buffer, font, *row, text),
+        U4PreviewEdit::RightValue { row, text } => {
+            // The gender flip rewrites the value the Sex stage already
+            // wrote there. `§6.5`: the region repainted is "the single cell
+            // run that changed", which for `Female` -> `Male` includes the
+            // two trailing cells the shorter word no longer covers. The run
+            // ends well short of the accent rule in cell 17.
+            let (column, cell_row) =
+                panel_cell(U4PreviewPanel::Result, U4_PREVIEW_VALUE_COLUMN, *row);
+            let run = text
+                .len()
+                .max(u4_preview_sex_text(true).len())
+                .max(u4_preview_sex_text(false).len());
+            blank_cells(
+                buffer,
+                column,
+                cell_row,
+                u8::try_from(run).unwrap_or(u8::MAX),
+            );
+            paint_right_value(buffer, font, *row, text);
+        }
         U4PreviewEdit::NameField(entry) => {
             let (column, row) = name_field_cell();
             blank_cells(
@@ -1086,6 +1105,39 @@ mod tests {
             let (column, row) = panel_cell(panel, 3, U4PreviewStage::NameConfirm.row());
             assert_text_at(&surface, &font, "    Name:", column, row);
         }
+        cleanup(screen);
+    }
+
+    /// The Sex stage writes the imported gender before the question, so a
+    /// female source flipped with `N` must not leave `Malele` behind once
+    /// the value writes stop blanking a fixed field (playtest P16-17).
+    #[test]
+    fn a_gender_flip_from_female_leaves_no_trailing_letters() {
+        let mut source = synthetic_source(true);
+        source.male = false;
+        let mut screen = U4TransferScreen::from_source(preview_game_dir(), source);
+        let font = advance_to_comparison(&mut screen);
+        screen.step('Y');
+        screen.step('N');
+        let _ = screen.render();
+        let surface = screen.surface().clone();
+        let (column, row) = panel_cell(
+            U4PreviewPanel::Result,
+            U4_PREVIEW_VALUE_COLUMN,
+            U4PreviewStage::SexConfirm.row(),
+        );
+        assert_text_at(&surface, &font, "Male", column, row);
+        // The two cells `Female` used past `Male` are as empty as a cell
+        // nothing ever wrote to.
+        let untouched = cell_row(&surface, column + 6, row);
+        assert_eq!(cell_row(&surface, column + 4, row), untouched);
+        assert_eq!(cell_row(&surface, column + 5, row), untouched);
+        let origin = usize::from(U4PreviewPanel::Result.origin_x());
+        let y = usize::from(row) * CH_CELL_SIDE;
+        assert_eq!(
+            surface.pixels[y * surface.width + origin + 143],
+            UI_COLOUR_SLOT_1
+        );
         cleanup(screen);
     }
 
