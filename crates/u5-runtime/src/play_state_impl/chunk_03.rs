@@ -2218,7 +2218,19 @@ impl PlayState {
                 }
                 CastFollowupKind::CombatCreatureCursor { x, y } => {
                     if ch == '\u{1b}' {
-                        self.message = format!("{COMBAT_CREATURE_TARGET_PROMPT}None!");
+                        // `magic.md §8`: the prompt is one `Creature: `
+                        // row, and the spec's cancels complete the open
+                        // prompt's own row (`On who: None!`, `magic.md
+                        // §5.1`). Assigning the whole line here added a
+                        // second `Creature: None!` row under the waiting
+                        // label (playtest P14-01). The `None!` word itself
+                        // is the engine's carried-over choice; the spec
+                        // names no cancel word for this prompt.
+                        self.commit_live_prompt_reply(
+                            COMBAT_CREATURE_TARGET_PROMPT,
+                            SELECTION_CANCELLED_LITERAL,
+                            false,
+                        );
                         return Ok(None);
                     }
                     if matches!(ch, ' ' | '\r' | '\n') {
