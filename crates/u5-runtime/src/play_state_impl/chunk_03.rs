@@ -4831,7 +4831,7 @@ impl PlayState {
         }
     }
 
-    /// Pay the exploration charge R-Ready, Z-stats or an E-Enter shrine visit owes once none of
+    /// Pay the exploration charge R-Ready, Z-stats or an E-Enter shrine or Codex visit owes once none of
     /// their prompts is open any more. Returns the turn counter before the
     /// charge so the caller can run the post-action pass, or `None` when
     /// nothing was owed or a prompt is still waiting.
@@ -4848,6 +4848,7 @@ impl PlayState {
             || self.active_party_selector.is_some()
             || self.active_z_stats.is_some()
             || self.active_shrine.is_some()
+            || self.codex_presentation_steps != 0
             || self.cinematic_hold_owns_input()
         {
             return None;

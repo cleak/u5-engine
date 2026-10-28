@@ -1910,7 +1910,14 @@ impl PlayState {
         // presentation is temporary, not a scene the party walks into.
         if tile == CODEX_SHRINE_ENTRY_TILE && plane == WorldPlane::Britannia {
             let _ = self.complete_open_direction_echo("Enter ", CODEX_SHRINE_ENTER_ECHO_TAIL);
-            return self.read_codex_urn_after_entry(game_dir);
+            let outcome = self.read_codex_urn_after_entry(game_dir)?;
+            // `commands.md §3`, the `E` row: every overworld non-transition
+            // outcome is acted, and the Codex arm restores the scene it left
+            // (`karma.md §8`). Like the shrine arm, the outdoor turn is owed
+            // once the reader and its exit walk have finished (playtest
+            // P15-09).
+            self.exploration_acted_charge_owed = true;
+            return Ok(outcome);
         }
         // `commands.md §5.5` Enter class table: "| ruins | `ruins` with no
         // newline; this is a direct non-transition arm |", and
