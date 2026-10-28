@@ -353,6 +353,12 @@ pub struct PlayState {
     /// deriving any additional behaviour from it.
     pub camp_month_cookie: u8,
     pub active_player: Option<usize>,
+    /// `formats/saved-gam.md §4` / `save-load.md §4.2` (playtest P15-02):
+    /// the raw `0x02D5` byte as loaded. The load "normalises no restored
+    /// byte", so a stored slot at or past the party size - which
+    /// `active_player` cannot hold - is written back as it was while no
+    /// selection has replaced it.
+    pub active_player_save_byte: u8,
     pub combat_round_counter: u8,
     /// `combat.md §6.3`: global combat action-result/narration scratch.
     /// It is reset before actor dispatch and has no resumable combat lifetime.

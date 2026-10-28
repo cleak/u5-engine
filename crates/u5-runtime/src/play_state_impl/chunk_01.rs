@@ -529,7 +529,18 @@ impl PlayState {
                 ..SAVE_DUNGEON_WORKING_BUFFER_OFFSET + SAVE_DUNGEON_WORKING_BUFFER_LEN]
                 .copy_from_slice(&self.grid);
         }
-        save[SAVE_ACTIVE_PLAYER_OFFSET] = encode_active_player_slot(self.active_player);
+        // `formats/saved-gam.md §4`: "saving and loading preserves it
+        // as-is" (playtest P15-02). A loaded slot index the party cannot
+        // hold decodes to no selection; write the loaded byte back rather
+        // than the `0xFF` sentinel until a selection replaces it.
+        save[SAVE_ACTIVE_PLAYER_OFFSET] = match self.active_player {
+            None if self.active_player_save_byte != 0xff
+                && usize::from(self.active_player_save_byte) >= self.party.len() =>
+            {
+                self.active_player_save_byte
+            }
+            selected => encode_active_player_slot(selected),
+        };
         save[SAVE_COMBAT_ROUND_COUNTER_OFFSET] = self.combat_round_counter;
         // `formats/saved-gam.md §4`: a loaded raw marker the transport still
         // decodes from is written back as it was (playtest N25).
@@ -1032,6 +1043,7 @@ impl PlayState {
             camp_cooldown: options.camp_cooldown,
             camp_month_cookie: options.camp_month_cookie,
             active_player: options.active_player,
+            active_player_save_byte: options.active_player_save_byte,
             combat_round_counter: options.combat_round_counter,
             combat_action_result: 0,
             combat_wound_classified_at_hit: None,
@@ -1519,6 +1531,7 @@ impl PlayState {
             camp_cooldown: options.camp_cooldown,
             camp_month_cookie: options.camp_month_cookie,
             active_player: options.active_player,
+            active_player_save_byte: options.active_player_save_byte,
             combat_round_counter: options.combat_round_counter,
             combat_action_result: 0,
             combat_wound_classified_at_hit: None,
@@ -1989,6 +2002,7 @@ impl PlayState {
             camp_cooldown: options.camp_cooldown,
             camp_month_cookie: options.camp_month_cookie,
             active_player: options.active_player,
+            active_player_save_byte: options.active_player_save_byte,
             combat_round_counter: options.combat_round_counter,
             combat_action_result: 0,
             combat_wound_classified_at_hit: None,

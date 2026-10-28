@@ -2885,6 +2885,7 @@ fn town_entry_applies_night_gate_substitution() {
         camp_month_cookie: 0,
         world_tick_gate: WORLD_TICK_GATE_STEADY,
         active_player: None,
+        active_player_save_byte: 0xff,
         combat_round_counter: 0,
         combat_interference_sources: [0; COMBAT_ACTOR_SLOTS],
         transport: TransportState::Foot,

@@ -334,6 +334,7 @@ pub fn play_options_from_save_bytes_named(
         camp_month_cookie: bytes[SAVE_CAMP_MONTH_COOKIE_OFFSET],
         world_tick_gate: bytes[SAVE_WORLD_TICK_GATE_OFFSET],
         active_player: decode_active_player_slot(bytes[SAVE_ACTIVE_PLAYER_OFFSET], party_size),
+        active_player_save_byte: bytes[SAVE_ACTIVE_PLAYER_OFFSET],
         combat_round_counter: bytes[SAVE_COMBAT_ROUND_COUNTER_OFFSET],
         combat_interference_sources,
         transport,

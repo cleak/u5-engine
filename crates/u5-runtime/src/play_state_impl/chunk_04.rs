@@ -3096,6 +3096,7 @@ impl PlayState {
             // A rebuilt area is not a load: no world tick is owed bare.
             world_tick_gate: WORLD_TICK_GATE_STEADY,
             active_player: self.active_player,
+            active_player_save_byte: self.active_player_save_byte,
             combat_round_counter: self.combat_round_counter,
             combat_interference_sources: self.combat_interference_sources,
             // `overworld.md §9.2`: "Nothing about ... party transport ...

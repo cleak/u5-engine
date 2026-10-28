@@ -111,6 +111,12 @@ pub struct PlayOptions {
     /// first world step is bare only when this is zero.
     pub world_tick_gate: u8,
     pub active_player: Option<usize>,
+    /// `formats/saved-gam.md §4` / `save-load.md §4.2` (playtest P15-02):
+    /// the raw `0x02D5` byte as loaded. The load "normalises no restored
+    /// byte", so a stored slot at or past the party size - which
+    /// `active_player` cannot hold - is written back as it was while no
+    /// selection has replaced it.
+    pub active_player_save_byte: u8,
     pub combat_round_counter: u8,
     pub combat_interference_sources: [u8; COMBAT_ACTOR_SLOTS],
     pub transport: TransportState,
@@ -211,6 +217,7 @@ impl Default for PlayOptions {
             // The new-game seed and every stock save hold the steady value.
             world_tick_gate: WORLD_TICK_GATE_STEADY,
             active_player: None,
+            active_player_save_byte: 0xff,
             combat_round_counter: 0,
             combat_interference_sources: [0; COMBAT_ACTOR_SLOTS],
             transport: TransportState::Foot,
