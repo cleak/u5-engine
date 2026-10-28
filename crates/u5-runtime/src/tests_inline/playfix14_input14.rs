@@ -81,3 +81,21 @@ fn playtest_p14_05_no_key_leaves_single_key_waits_open() {
         "the gem map waits for an accepted key"
     );
 }
+
+/// P14-09: `inventory.md §4` - "Outside combat, Z starts with the normal
+/// party-member selector, initially indicating the first slot ... the
+/// currently active world member does not change the initial indication";
+/// `commands.md §6`: New Order's second prompt "starts on the first slot".
+#[test]
+fn playtest_p14_09_selectors_start_on_the_first_slot_whatever_the_active_player() {
+    let mut state = world_state(open_world_grid(), 5, 5);
+    three_member_party(&mut state);
+    state.active_player = Some(1);
+    assert_eq!(state.z_stats_initial_party_index(), 0);
+
+    state.start_party_selector(PartySelectorTarget::NewOrder { first: Some(2) });
+    assert_eq!(
+        state.active_party_selector.map(|session| session.highlight),
+        Some(0)
+    );
+}
