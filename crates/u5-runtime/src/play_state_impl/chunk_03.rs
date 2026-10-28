@@ -5111,6 +5111,18 @@ impl PlayState {
                             return true;
                         }
                         self.message = self.render_ready_session(&session);
+                    } else if index < self.party.len() {
+                        // `commands.md §5.8`: "An ineligible pick prints
+                        // `Disabled!\n\n` and repeats the prompt", and
+                        // `inventory.md §4.3` has R-Ready share that surface
+                        // with its own `Player:_` question. The refusal sat
+                        // in the slot with no prompt after it, so the window
+                        // drew a command marker while the selector still
+                        // waited (playtest P16-10). Print it, then repeat
+                        // `Player: ` the way the Cast and Search callers do.
+                        let refusal = std::mem::take(&mut self.message);
+                        self.emit_message_line(refusal);
+                        self.message = self.render_ready_session(&session);
                     }
                     self.active_ready = Some(session);
                 }
