@@ -124,10 +124,41 @@ impl PlayState {
         let Some((object_slot, object)) =
             self.combat_loose_object_slot_at(x, y, actor.active_object_slot as usize)
         else {
+            // `containers.md §3` step 5: with no object matched, the shared
+            // Get handler classifies the live tile, and its wall-torch arm
+            // borrows `0xB0`/`0xB1` "from any approach direction" - the arm
+            // that "in non-combat scenes ... calls one further shared
+            // resident routine", so it runs in an arena too (`combat.md §8`
+            // G row: "the shared Get handler"; playtest P16-07).
+            if let Some(outcome) = self.get_combat_arena_wall_torch(x, y) {
+                return outcome;
+            }
             self.message = GET_NOTHING_REFUSAL.to_string();
             return MoveOutcome::Blocked;
         };
         self.get_combat_arena_object(object_slot, object)
+    }
+
+    /// `containers.md §7` wall-torch borrow against the arena terrain: the
+    /// cell becomes floor `0x44`, the torch counter is set to 100, and
+    /// `Borrowed!` prints with the action snap. The arena's own turn
+    /// accounting owns the action cost, so no exploration turn is spent.
+    fn get_combat_arena_wall_torch(&mut self, x: usize, y: usize) -> Option<MoveOutcome> {
+        let tile = *self.combat_terrain.get(y)?.get(x)?;
+        if !matches!(
+            tile,
+            GET_TILE_WALL_TORCH_SOURCE_FIRST | GET_TILE_WALL_TORCH_SOURCE_SECOND
+        ) {
+            return None;
+        }
+        self.combat_terrain[y][x] = GET_TILE_WALL_TORCH_REPLACEMENT;
+        self.mark_visibility_dirty();
+        self.apply_borrowed_lit_fixture_light(tile);
+        self.message = GET_TILE_BORROWED_LINE.to_string();
+        // audio.md §8.1 borrowed fixed object: the 40-update action snap
+        // after the line.
+        self.emit_sound_effect(SoundEffect::ActionSnap);
+        Some(MoveOutcome::Got)
     }
 
     /// The roster member behind an arena actor: `traps.md §2.1` has a

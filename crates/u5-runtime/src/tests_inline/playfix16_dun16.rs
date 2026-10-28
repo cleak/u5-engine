@@ -107,3 +107,31 @@ fn playfix16_p16_06_a_room_placed_poison_field_poisons_a_good_member() {
     assert!(application.is_some(), "the hook recognized the marker");
     assert_eq!(state.party[0].status, b'P');
 }
+
+/// P16-07: `combat.md §8`'s G row runs "the shared Get handler", whose
+/// `containers.md §3` step 5 falls through to the live-tile cascade, and
+/// `containers.md §7` borrows a wall torch "from any approach direction".
+/// Get beside an arena wall torch borrows it.
+#[test]
+fn playfix16_p16_07_arena_get_borrows_a_wall_torch() {
+    let mut state = combat_player_command_state(8, 0);
+    state.combat_terrain[5][4] = GET_TILE_WALL_TORCH_SOURCE_SECOND;
+    state.torch_counter = 0;
+    let serial = state.sound_effect_serial;
+
+    let outcome = state.get_combat_actor_direction(0, Direction::West);
+
+    assert_eq!(outcome, MoveOutcome::Got);
+    assert_eq!(state.combat_terrain[5][4], GET_TILE_WALL_TORCH_REPLACEMENT);
+    assert_eq!(state.torch_counter, BORROWED_FIXTURE_TORCH_DURATION);
+    assert_eq!(state.message, GET_TILE_BORROWED_LINE);
+    assert_eq!(
+        state.sound_effects_after(serial),
+        vec![SoundEffect::ActionSnap]
+    );
+
+    // Any other tile still answers the cascade's refusal.
+    let outcome = state.get_combat_actor_direction(0, Direction::North);
+    assert_eq!(outcome, MoveOutcome::Blocked);
+    assert_eq!(state.message, GET_NOTHING_REFUSAL);
+}
