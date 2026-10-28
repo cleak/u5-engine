@@ -3787,16 +3787,25 @@ impl PlayState {
                 }
                 continue;
             }
-            if self.party[index].status != b'P' || !self.party[index].living() {
-                continue;
+            if self.apply_poison_upkeep_hit(index) {
+                damaged += 1;
             }
-            self.party[index].apply_damage(FIRST_PLAYABLE_HOURLY_POISON_DAMAGE);
-            if self.party[index].hp == 0 && self.active_player == Some(index) {
-                self.active_player = None;
-            }
-            damaged += 1;
         }
         damaged
+    }
+
+    /// The status pass's per-member poison charge: "exactly 1 current hit
+    /// point" from a living member whose status is exactly Poisoned, with
+    /// the selector cleared if that takes it to zero (`time.md §5`).
+    pub(crate) fn apply_poison_upkeep_hit(&mut self, index: usize) -> bool {
+        if self.party[index].status != b'P' || !self.party[index].living() {
+            return false;
+        }
+        self.party[index].apply_damage(FIRST_PLAYABLE_HOURLY_POISON_DAMAGE);
+        if self.party[index].hp == 0 && self.active_player == Some(index) {
+            self.active_player = None;
+        }
+        true
     }
 
     /// `time.md §5` hour-gated part, provision counter already zero: "The

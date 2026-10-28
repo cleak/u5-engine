@@ -1415,3 +1415,36 @@ fn one_member_party_seed(mut bytes: Vec<u8>) -> Vec<u8> {
     bytes[SAVE_ROSTER_OFFSET + SAVE_CHARACTER_MAX_HP_OFFSET] = 150;
     bytes
 }
+
+/// Playtest P15-05: `--write-seed` without `--from-save` used to carry the
+/// default options' eight recovered Moonstone sentinels (X/Y 0, scene
+/// `0xFF`) into the seed, removing every natural moongate. `overworld.md §9`
+/// anchors the gates on the saved slots, so the seed keeps its template's.
+#[test]
+fn write_seed_keeps_the_template_moonstone_slots() {
+    let dir = debug_game_dir();
+    let mut template = saved_game_seed_bytes(0, 0, 100, 100);
+    let xs = [224u8, 96, 38, 50, 166, 104, 23, 187];
+    let ys = [133u8, 102, 224, 37, 19, 194, 126, 167];
+    for index in 0..MOONSTONE_SLOT_COUNT {
+        template[SAVE_MOONSTONE_X_OFFSET + index] = xs[index];
+        template[SAVE_MOONSTONE_Y_OFFSET + index] = ys[index];
+        template[SAVE_MOONSTONE_SCENE_OFFSET + index] = 0;
+        template[SAVE_MOONSTONE_Z_OFFSET + index] = 0;
+    }
+    fs::write(dir.join("SAVED.GAM"), &template).unwrap();
+    let args = parse_cli_args([
+        "--write-seed",
+        "--scene",
+        "BRITANNIA",
+        "--at",
+        "100,100",
+        dir.to_str().unwrap(),
+    ])
+    .unwrap();
+    assert!(args.write_seed);
+    for (index, slot) in args.play_options.moonstone_slots.iter().enumerate() {
+        assert_eq!((slot.x, slot.y, slot.scene), (xs[index], ys[index], 0), "slot {index}");
+    }
+    let _ = fs::remove_dir_all(dir);
+}

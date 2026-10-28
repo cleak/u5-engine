@@ -104,3 +104,31 @@ fn handler_charged_turn_keeps_the_result_on_the_verb_row_when_the_epilogue_print
         ]
     );
 }
+
+/// `movement.md §8.2` / `time.md §5` (playtest P15-04): "Outdoor swamp
+/// acquisition occurs before this upkeep pass, so a member poisoned by that
+/// action's swamp save immediately takes the ordinary one-point poison hit."
+/// A member already Poisoned is skipped by the save and takes only the pass's
+/// one point; a Dead member takes nothing.
+#[test]
+fn swamp_poisoning_charges_the_same_action_poison_hit() {
+    let dir = debug_game_dir();
+    let mut state = swamp_poison_state(true);
+    state.party[0].hp = 60;
+    state.party[0].max_hp = 60;
+    assert!(
+        state
+            .handle_top_down_key_with_inline(' ', &dir, None, None, None, None)
+            .unwrap()
+    );
+    assert_eq!(state.party[0].status, b'P');
+    assert_eq!(state.party[0].hp, 59, "{:?}", transcript_texts(&state));
+    // The next action: already Poisoned, so no new save and one pass hit.
+    assert!(
+        state
+            .handle_top_down_key_with_inline(' ', &dir, None, None, None, None)
+            .unwrap()
+    );
+    assert_eq!(state.party[0].hp, 58);
+    let _ = fs::remove_dir_all(dir);
+}

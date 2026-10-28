@@ -882,3 +882,83 @@ fn spec300_q3_last_summoned_shadowlord_survives_leaving_and_shard() {
     assert_eq!(saved[SAVE_ACTIVE_SHADOWLORD_OFFSET], 1);
     let _ = fs::remove_dir_all(dir);
 }
+
+/// `save-load.md §4.2`: the load "normalises no restored byte", and
+/// `formats/saved-gam.md §4` gives `0x02D5` as a slot index `0..7` that
+/// "saving and loading preserves as-is". A stored slot at or past the party
+/// size used to come back as `0xFF` after Journey Onward plus Q (playtest
+/// P15-02); the `0` digit still writes the sentinel.
+#[test]
+fn out_of_range_active_player_byte_survives_load_and_save() {
+    for (byte, press_zero, expected) in [
+        (0x02u8, false, 0x02u8),
+        (0x05, false, 0x05),
+        (0x07, false, 0x07),
+        (0x00, false, 0x00),
+        (0xff, false, 0xff),
+        (0x05, true, 0xff),
+    ] {
+        let dir = shipped_layout_iolos_hut_dir();
+        let mut template = shipped_layout_iolos_hut_save();
+        template[SAVE_ACTIVE_PLAYER_OFFSET] = byte;
+        template[SAVE_PARTY_SIZE_OFFSET] = 1;
+        fs::write(dir.join("SAVED.GAM"), template).unwrap();
+        fs::write(dir.join(SAVED_OOL_FILENAME), vec![0; SAVED_OOL_LEN]).unwrap();
+        write_empty_ool_mirrors(&dir);
+
+        let options = load_play_options_from_save(&dir).unwrap();
+        let scene = Scene::new(SHIPPED_IOLOS_HUT_SCENE).unwrap();
+        let mut state = PlayState::load_town_scene(&dir, scene, options).unwrap();
+        assert_eq!(state.party.len(), 1);
+        if press_zero {
+            let _ = state.set_active_player_command('0');
+        }
+
+        assert_eq!(
+            state.save_game_command(&dir, Some(true)).unwrap(),
+            MoveOutcome::Saved
+        );
+        let saved = fs::read(dir.join("SAVED.GAM")).unwrap();
+        assert_eq!(
+            saved[SAVE_ACTIVE_PLAYER_OFFSET], expected,
+            "byte {byte:#04x}, zero pressed {press_zero}"
+        );
+        let _ = fs::remove_dir_all(dir);
+    }
+}
+
+/// Playtest P15-02 follow-up: the loaded out-of-range `0x02D5` byte is only
+/// kept while nothing has selected a member since the load. Once a selection
+/// is made and a later path clears it, the save writes the `0xFF` sentinel
+/// rather than the stale loaded index.
+#[test]
+fn loaded_active_player_byte_is_dropped_after_a_live_selection() {
+    let dir = shipped_layout_iolos_hut_dir();
+    let mut template = shipped_layout_iolos_hut_save();
+    template[SAVE_ACTIVE_PLAYER_OFFSET] = 0x05;
+    template[SAVE_PARTY_SIZE_OFFSET] = 1;
+    fs::write(dir.join("SAVED.GAM"), template).unwrap();
+    fs::write(dir.join(SAVED_OOL_FILENAME), vec![0; SAVED_OOL_LEN]).unwrap();
+    write_empty_ool_mirrors(&dir);
+
+    let options = load_play_options_from_save(&dir).unwrap();
+    let scene = Scene::new(SHIPPED_IOLOS_HUT_SCENE).unwrap();
+    let mut state = PlayState::load_town_scene(&dir, scene, options).unwrap();
+    // The daylight telescope picks the first living member when nothing
+    // is selected (`view.md`), a selection path other than the digit.
+    state.clock.hour = 12;
+    state.party[0].status = b'G';
+    state.party[0].hp = 50;
+    state.party[0].max_hp = 50;
+    state.look_through_telescope();
+    assert_eq!(state.active_player, Some(0));
+    state.active_player = None;
+
+    assert_eq!(
+        state.save_game_command(&dir, Some(true)).unwrap(),
+        MoveOutcome::Saved
+    );
+    let saved = fs::read(dir.join("SAVED.GAM")).unwrap();
+    assert_eq!(saved[SAVE_ACTIVE_PLAYER_OFFSET], 0xff);
+    let _ = fs::remove_dir_all(dir);
+}

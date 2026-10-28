@@ -2145,6 +2145,11 @@ impl PlayState {
                 .party
                 .iter()
                 .position(|member| matches!(member.status, b'G' | b'P'));
+            if self.active_player.is_some() {
+                // A live selection replaces a loaded out-of-range byte
+                // (playtest P15-02).
+                self.active_player_save_byte = 0xff;
+            }
         }
         if let Some(slot) = self.active_player.filter(|slot| *slot < self.party.len()) {
             self.apply_shared_party_damage(slot, 1);
@@ -3096,6 +3101,7 @@ impl PlayState {
             // A rebuilt area is not a load: no world tick is owed bare.
             world_tick_gate: WORLD_TICK_GATE_STEADY,
             active_player: self.active_player,
+            active_player_save_byte: self.active_player_save_byte,
             combat_round_counter: self.combat_round_counter,
             combat_interference_sources: self.combat_interference_sources,
             // `overworld.md §9.2`: "Nothing about ... party transport ...

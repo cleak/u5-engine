@@ -12,7 +12,8 @@ use u5_runtime::{
     FIRST_PLAYABLE_FRIGATE_TILE, FIRST_PLAYABLE_FULL_SHIP_HULL, FIRST_PLAYABLE_SKIFF_TILE,
     GameClock, PendingVehicleAcquisition, PlayOptions, PlayTarget, ShrineVirtue, TileGraphicsDepth,
     TransportState, WindState, chargen_stats_from_winners, commit_chargen_save,
-    load_play_options_from_init, load_play_options_from_save, load_question_records,
+    decode_moonstone_gate_slots, load_play_options_from_init, load_play_options_from_save,
+    load_question_records, load_save_image_template,
     parse_u8_literal, question_record_display_text, run_chargen_tournament,
 };
 
@@ -720,6 +721,16 @@ where
         options = load_play_options_from_save(&game_dir)?;
     } else if from_init {
         options = load_play_options_from_init(&game_dir)?;
+    } else if write_seed {
+        // `overworld.md §9`: natural gates are anchored on the eight saved
+        // Moonstone slots, and `formats/saved-gam.md §7.2` reads scene `0xFF`
+        // as "not a valid Gate Travel target". The seed writer keeps the rest
+        // of its template save, so it keeps the slots too rather than writing
+        // eight recovered sentinels from the default options (playtest
+        // P15-05). A missing template fails at the write itself.
+        if let Ok(template) = load_save_image_template(&game_dir, options.save_template_source) {
+            options.moonstone_slots = decode_moonstone_gate_slots(&template);
+        }
     }
     if let Some(wind) = wind_override {
         // `weather.md §2`/§9: the wind is one saved byte, the banner is drawn

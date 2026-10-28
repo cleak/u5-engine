@@ -1174,6 +1174,9 @@ impl PlayState {
         self.message = match slot {
             Some(0) => {
                 self.active_player = None;
+                // The digit writes the sentinel; a loaded out-of-range byte
+                // is no longer the selection (playtest P15-02).
+                self.active_player_save_byte = 0xff;
                 SET_ACTIVE_PLAYER_NONE_REPLY.to_string()
             }
             // A dead member is not a valid selection. `commands.md` §7 gives
@@ -1200,6 +1203,10 @@ impl PlayState {
             {
                 let index = slot - 1;
                 self.active_player = Some(index);
+                // A live selection replaces the loaded byte; once a later
+                // path clears it, the save writes the sentinel, not a stale
+                // index that a smaller party could leave out of range.
+                self.active_player_save_byte = 0xff;
                 self.party_member_display_name(index)
             }
             _ => {
