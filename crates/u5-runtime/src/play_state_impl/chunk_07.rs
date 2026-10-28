@@ -5021,7 +5021,7 @@ impl PlayState {
         }
         if live_sprite >= TOWN_NPC_CONTACT_CONFLICT_ACTOR_FIRST {
             self.mark_visibility_dirty();
-            self.emit_message_line(TOWN_NPC_CONTACT_ATTACKED_LINE);
+            self.emit_town_attacked_line();
             // `town-mode.md §14`: the NPC-conflict chain, "entered both from
             // A-Attack and from post-action cleanup, ... hands the target
             // NPC's linked active-object slot to the same terrain-combat
@@ -5193,6 +5193,17 @@ impl PlayState {
         )))
     }
 
+    /// `town-mode.md §14`: the town conflict outcome "prints `Attacked!` with
+    /// its leading line feed"; `text-output.md §10.2` lists `Attacked!` (both
+    /// copies) as a literal that begins with a line feed, and §10.4: after a
+    /// result that ends in a feed that leading feed spends a blank row of its
+    /// own (playtest P14-12). On a row still open mid-line it only closes it.
+    /// The row is left open afterwards, as the bare literal always left it.
+    pub(crate) fn emit_town_attacked_line(&mut self) {
+        self.emit_message_line(format!("\n{TOWN_NPC_CONTACT_ATTACKED_LINE}"));
+        self.message_row_open_mid_line = true;
+    }
+
     /// `town-mode.md §14` (u5-spec#300 Q7): the refusal's conflict
     /// follow-up. The fight's target is "the roster index held in the
     /// retained contact state"; when its linked actor byte is at least
@@ -5223,7 +5234,7 @@ impl PlayState {
             return Ok(());
         }
         self.mark_visibility_dirty();
-        self.emit_message_line(TOWN_NPC_CONTACT_ATTACKED_LINE);
+        self.emit_town_attacked_line();
         let trigger = ActiveObject {
             type_byte,
             tile: type_byte,
