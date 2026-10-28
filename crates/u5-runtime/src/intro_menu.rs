@@ -179,10 +179,12 @@ impl IntroMenu {
         if !matches!(self.phase, IntroMenuPhase::AwaitingSelection) {
             return IntroMenuOutput::IgnoredKey;
         }
+        // A discarded key is still a pass that read a key, so it breaks the
+        // run of "consecutive no-key passes" too (playtest P16-16).
+        self.idle_passes = 0;
         let Some(action) = intro_menu_action(key) else {
             return IntroMenuOutput::IgnoredKey;
         };
-        self.idle_passes = 0;
         let rows = INTRO_MENU_ROW_COUNT as u8;
         let row = match action {
             IntroMenuAction::MoveHighlightUp => {
@@ -492,6 +494,20 @@ mod tests {
             menu.step(crate::INPUT_CODE_SOUTH),
             IntroMenuOutput::PresentMenu
         );
+        assert_eq!(menu.idle_passes, 0);
+        assert_eq!(menu.idle_pass(), IntroMenuOutput::PresentMenu);
+    }
+
+    /// `intro.md §6.2`: a discarded key such as Escape is still a pass
+    /// that returned a key, so it restarts the consecutive no-key count.
+    #[test]
+    fn a_discarded_key_restarts_the_idle_pass_count() {
+        let mut menu = IntroMenu::new();
+        menu.dismiss_title();
+        for _ in 0..(crate::INTRO_MENU_IDLE_TIMEOUT_PASSES - 1) {
+            menu.idle_pass();
+        }
+        assert_eq!(menu.step(0x1b), IntroMenuOutput::IgnoredKey);
         assert_eq!(menu.idle_passes, 0);
         assert_eq!(menu.idle_pass(), IntroMenuOutput::PresentMenu);
     }

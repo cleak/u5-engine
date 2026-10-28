@@ -1280,6 +1280,17 @@ impl U4PreviewSession {
                     action: U4PreviewAction::None,
                 }
             }
+            // `u4-transfer.md §12` hands the field to the shared typed-entry
+            // helper, and `text-output.md §10.6` has Escape erase the whole
+            // typed buffer without submitting (playtest P16-19). `§6.5`'s
+            // "no key aborts the transfer" still holds: the stage stays.
+            '\x1b' => {
+                self.entry.clear();
+                U4PreviewResponse {
+                    edits: vec![U4PreviewEdit::NameField(String::new())],
+                    action: U4PreviewAction::None,
+                }
+            }
             '\x08' | '\x7f' => {
                 self.entry.pop();
                 U4PreviewResponse {
@@ -1760,6 +1771,33 @@ mod tests {
             }
         }
         assert_eq!(seen, expected.len());
+    }
+
+    /// Playtest P16-19: Escape in the replacement-name field erases the
+    /// typed buffer (`text-output.md §10.6`) and leaves the stage open.
+    #[test]
+    fn escape_erases_the_typed_replacement_name() {
+        let mut session = session_at_first_stage(avatar_source());
+        session.key('N');
+        session.key('Q');
+        session.key('r');
+        let response = session.key('\x1b');
+        assert_eq!(
+            response.edits,
+            vec![U4PreviewEdit::NameField(String::new())]
+        );
+        assert_eq!(
+            session.phase(),
+            U4PreviewPhase::Stage(U4PreviewStage::NameReplace)
+        );
+        for key in ['K', 'a', 'y', '\x08'] {
+            session.key(key);
+        }
+        let response = session.key('\r');
+        assert_eq!(
+            response.edits[0],
+            U4PreviewEdit::AcceptedName("Ka".to_string())
+        );
     }
 
     #[test]
