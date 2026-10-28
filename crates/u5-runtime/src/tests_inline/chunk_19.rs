@@ -1244,7 +1244,12 @@
     }
 
     #[test]
-    fn world_rest_with_watch_applies_underfoot_damage_sidecar_each_tick() {
+    fn world_rest_with_watch_does_not_apply_underfoot_damage_each_tick() {
+        // Playtest P15-03: `dungeon-mode.md §11` step 2 and `rest-and-camp.md
+        // §5` list the camp step's work - the clock advance and the ring
+        // roll - and the underfoot arms run only in the consumed-turn tail
+        // (`overworld.md §5` step 6g). A one-hour camp on a hazard tile is
+        // therefore at most one 1..8 hit, never twelve.
         let dir = debug_game_dir();
         fs::write(
             dir.join(WORLD_DAMAGE_TILE_TABLE_FILE),
@@ -1270,24 +1275,12 @@
         );
 
         assert_eq!(state.turn, 13);
-        assert!(state.party[0].hp < 50);
+        assert!(state.party[0].hp >= 42, "hp {}", state.party[0].hp);
         assert!(
-            state
+            !state
                 .diagnostics
                 .iter()
-                .any(|note| note.contains("underfoot world damage triggered 12 tick(s)"))
-        );
-        assert!(
-            state
-                .diagnostics
-                .iter()
-                .any(|note| note.contains("drowning damage"))
-        );
-        assert!(
-            state
-                .diagnostics
-                .iter()
-                .any(|note| note.contains("party slot 0"))
+                .any(|note| note.contains("underfoot world damage triggered"))
         );
         let _ = fs::remove_dir_all(dir);
     }

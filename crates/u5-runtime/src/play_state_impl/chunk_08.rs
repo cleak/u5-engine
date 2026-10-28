@@ -384,8 +384,6 @@ impl PlayState {
         // overworld camp reads `hours? (1-9) 3`, `Zzzzzz...`, a blank row,
         // then the result line.
         self.emit_message_line(CAMP_BODY_SLEEP_LINE);
-        let mut world_damage_ticks = 0;
-        let mut last_world_damage = None;
         let mut interrupted = false;
         let mut ambush_monster = None;
         // `dungeon-mode.md §11` step 2: the dungeon H path elapses the rest
@@ -410,14 +408,12 @@ impl PlayState {
                 // between the two camp surfaces.
                 self.advance_wilderness_camp_tick(minutes_per_tick);
                 let _ = self.apply_rest_with_watch_recovery_tick();
-                if let Area::World { plane } = self.area {
-                    if let Some((_effect, report)) =
-                        self.apply_world_underfoot_damage(Some(game_dir), plane)?
-                    {
-                        world_damage_ticks += 1;
-                        last_world_damage = Some(report);
-                    }
-                }
+                // No underfoot hazard here (playtest P15-03): the step's only
+                // other work is the ring roll (`dungeon-mode.md §11` step 2,
+                // `rest-and-camp.md §5`), and the lava/swamp arms belong to
+                // the consumed-turn tail (`overworld.md §5` step 6g), which
+                // runs once after the camp. Burning the party per five-minute
+                // step killed a full-HP Avatar in a two-hour camp.
                 // `rest-and-camp.md §6`: the shared camp loop "invokes that
                 // predicate once when a five-minute step observes that the
                 // game-hour byte changed, not on every five-minute step";
@@ -514,13 +510,6 @@ impl PlayState {
         } else {
             camp_messages.success
         };
-        if let Some(report) = last_world_damage {
-            // Unpublished (`cleak/u5-spec#262`): tick counts and the damage
-            // report are engine bookkeeping, not the camp result text.
-            self.push_diagnostic(format!(
-                "underfoot world damage triggered {world_damage_ticks} tick(s); last {report}"
-            ));
-        }
         self.append_pending_hourly_status_message();
         if !interrupted
             && !refused
