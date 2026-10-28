@@ -7503,22 +7503,35 @@ impl PlayState {
                 self.active_player = None;
                 CombatActivePlayerSelectionOutcome::Clear
             }
-            // `combat.md §8.4` (issue #293): "A member is eligible when it is
-            // a party-side actor in the arena with that roster slot and none
-            // of the disabled, asleep or dead-marked bits". Descriptors are
-            // packed (`§5`), so the digit names a roster slot, not a
-            // descriptor index.
+            // `combat.md §8.4` (issue #293, corrected by issue #307 Q1,
+            // `RETRACTIONS.md` R643): a member is eligible when it is "a
+            // party-side actor in the arena with that roster slot, none of
+            // the disabled, asleep or dead-marked bits is set, and the
+            // slot-to-group helper of Section 6.1a puts it in the
+            // player-command group". The group test refuses a member under
+            // control (possession, Sword of Chaos, Charm) and the traitor's
+            // slot "exactly as if no member matched": `Invalid!`, with the
+            // selection "left as it was". Without it a controlled member
+            // could be selected, and the handler's sentinel gate then skipped
+            // the whole group-0 side with no key read (playtest P13-13).
+            // Descriptors are packed (`§5`), so the digit names a roster
+            // slot, not a descriptor index.
             CombatActivePlayerSelectionOutcome::SelectPartySlot(slot)
                 if slot < self.party.len()
                     && self
                         .combat_actors
                         .iter()
                         .take(COMBAT_PARTY_ACTOR_SLOTS)
-                        .any(|actor| {
+                        .enumerate()
+                        .any(|(descriptor_slot, actor)| {
                             actor.is_party_side()
                                 && usize::from(actor.owner_target_class) == slot
                                 && !actor.is_status_disabled()
                                 && !actor.is_marked_dead()
+                                && combat_slot_takes_player_command_path(
+                                    descriptor_slot,
+                                    *actor,
+                                )
                         }) =>
             {
                 self.active_player = Some(slot);

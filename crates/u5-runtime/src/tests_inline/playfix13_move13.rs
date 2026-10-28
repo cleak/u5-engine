@@ -104,8 +104,10 @@ mod playfix13_move13 {
     #[test]
     fn p13_15_attacked_after_an_open_row_closes_it_without_a_blank() {
         // The same leading feed closes a row still open mid-line.
+        // (This used `Rough seas!` as its open row; issue #307 Q3 settled
+        // that that line ends in a feed, so a neutral open row stands in.)
         let mut state = world_state(open_world_grid(), 5, 5);
-        state.emit_message_line("Rough seas!");
+        state.emit_message_line("Open row");
         state.message_row_open_mid_line = true;
 
         state.emit_encounter_line("Attacked!");
@@ -113,7 +115,7 @@ mod playfix13_move13 {
         let rows = rows(&state);
         assert_eq!(
             rows[rows.len() - 2..],
-            ["Rough seas!".to_string(), "Attacked!".to_string()],
+            ["Open row".to_string(), "Attacked!".to_string()],
             "{rows:?}"
         );
     }

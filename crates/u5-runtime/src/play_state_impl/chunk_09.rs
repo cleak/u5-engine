@@ -5892,6 +5892,13 @@ impl PlayState {
             return None;
         }
         self.push_impact_line("Rough seas!");
+        // `overworld.md §6.2.5` "Rough seas line placement" (issue #307 Q3):
+        // "The stored line is `Rough seas!` followed by one line feed, with
+        // no leading feed", so "it leaves the cursor at column 0 of a fresh
+        // row" and a same-turn `\nAttacked!` or `\nWHIRLPOOL!\n` "spends one
+        // blank row" (playtest P13-04 cases 2-3). Stated explicitly: the row
+        // state is not inferred from the slot text, which stays bare.
+        self.close_message_row();
         // Stage one plays the impact rumble and the world tick itself
         // (R611). `overworld.md §6.2.5` (R642): the sequence consumes "the
         // `N` absorption draws plus the draws of the impact presentation's

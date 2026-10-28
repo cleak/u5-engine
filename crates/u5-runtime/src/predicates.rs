@@ -684,7 +684,10 @@ pub enum SpawnTerrainBranch {
     /// Terrain tile `0x04` on the full underworld plane — direct Rot
     /// Worm sprite-run selection.
     UnderworldTile4RotWorm,
-    /// Surface town-outline tile `0x0C`/`0x0D` — reject.
+    /// Mountain `0x0C` / high peak `0x0D` — reject, on **both** planes.
+    /// `encounters.md §4` (issue #307 Q2, `RETRACTIONS.md` R644): "This test
+    /// runs before the plane is consulted, so an Underworld mountain or
+    /// high-peak candidate never reaches the underworld land bucket".
     HardReject,
     /// Water / river / waterfall / open-water tile that needs the
     /// sixteen-in-sixty-five allowance die before bucket selection.

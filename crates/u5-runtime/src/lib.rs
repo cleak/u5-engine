@@ -1231,4 +1231,5 @@ mod tests {
     include!("tests_inline/spec305.rs");
     include!("tests_inline/playfix13_move13.rs");
     include!("tests_inline/playfix13_text13.rs");
+    include!("tests_inline/spec307.rs");
 }
