@@ -569,6 +569,18 @@ impl PlayState {
                     handled!(outcome);
                 }
                 'J' => {
+                    // `doors-and-z-transitions.md §3`: outside the dungeon
+                    // the handler checks "key inventory up front: if the key
+                    // inventory is zero, Jimmy prints \"No keys!\" and
+                    // returns" - before its direction prompt, as the arena
+                    // copy does (`combat.md §7.1`), so the row reads
+                    // `Jimmy-No keys!`. The turn is still committed (§3.1)
+                    // (playtest P14-07).
+                    if self.keys == 0 && !matches!(self.area, Area::Dungeon { .. }) {
+                        self.advance_turn();
+                        self.message = "No keys!".to_string();
+                        handled!(MoveOutcome::Blocked);
+                    }
                     if let Some(direction) = inline_direction {
                         let outcome = self.jimmy_direction_with_game_dir_and_member(
                             direction,

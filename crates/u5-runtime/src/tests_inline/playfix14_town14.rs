@@ -196,4 +196,27 @@ mod playfix14_town14 {
             .count();
         assert_eq!(linked, 1, "the NPC is linked exactly once");
     }
+
+    #[test]
+    fn p14_07_town_jimmy_with_no_keys_refuses_before_the_direction_prompt() {
+        // `doors-and-z-transitions.md §3`: other scenes "check key inventory
+        // up front: if the key inventory is zero, Jimmy prints \"No keys!\"
+        // and returns"; `combat.md §7.1`: "before the direction prompt".
+        let dir = debug_game_dir();
+        for mut state in [test_state(open_grid(), 5, 5), p4window_world_state()] {
+            state.keys = 0;
+            let turn = state.turn;
+
+            p4window_keys(&mut state, &dir, &['J']);
+
+            assert!(state.active_direction_prompt.is_none());
+            assert_eq!(state.turn, turn + 1);
+            let rows = p4window_rows(&state);
+            assert!(
+                rows.iter().any(|row| row.ends_with("Jimmy-No keys!")),
+                "{rows:?}"
+            );
+        }
+        let _ = fs::remove_dir_all(dir);
+    }
 }
