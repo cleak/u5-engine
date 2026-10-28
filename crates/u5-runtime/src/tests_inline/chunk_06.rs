@@ -2252,7 +2252,8 @@
         state.keys = 0;
         state.npcs.push(RuntimeNpc {
             slot: 1,
-            type_byte: 1,
+            // Kind 1 is the chest object class (`magic.md`, An Sanct).
+            type_byte: 0x50,
             dialog_id: 0,
             schedule: [0; NPC_SCHEDULE_RECORD_LEN],
             state: NPC_STATE_IDLE,
@@ -2265,7 +2266,7 @@
             stuck_counter: 0,
             active_object: Some(1),
         });
-        state.active_objects.push(npc_active_object(1, 8, 6, 0xff));
+        state.active_objects.push(npc_active_object(0x50, 8, 6, 0xff));
 
         assert_eq!(
             state.search_facing_with_game_dir(&dir).unwrap(),

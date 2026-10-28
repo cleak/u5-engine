@@ -593,7 +593,8 @@ fn town_jimmy_ordinary_npc_is_not_a_pickpocket_target() {
         },
         NpcSlot {
             slot: 1,
-            type_byte: 1,
+            // Kind 1 is the chest object class (`magic.md`, An Sanct).
+            type_byte: 0x50,
             dialog_id: 2,
             schedule: [0, 0, 0, 2, 2, 2, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0],
             name: None,
@@ -625,7 +626,8 @@ fn town_jimmy_ordinary_npc_does_not_roll_or_break_a_key() {
         },
         NpcSlot {
             slot: 1,
-            type_byte: 1,
+            // Kind 1 is the chest object class (`magic.md`, An Sanct).
+            type_byte: 0x50,
             dialog_id: 2,
             schedule: [0, 0, 0, 2, 2, 2, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0],
             name: None,
