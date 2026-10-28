@@ -483,6 +483,21 @@ fn inn_rest_runs_the_clock_to_six_whatever_hour_it_began_at() {
 }
 
 #[test]
+fn inn_rest_begun_mid_hour_still_wakes_at_six_sharp() {
+    // `shops.md §8.4`: "the rest always ends at 06:00, whatever hour it
+    // began at" (playtest P16-14: a 21:37 rental woke at 06:38).
+    let mut state = test_state(open_grid(), 5, 5);
+    state.clock.hour = 21;
+    state.clock.minute = 38;
+    let hours = state.advance_inn_rest_clock_to_morning();
+    assert_eq!(hours, 9);
+    assert_eq!(
+        (state.clock.hour, state.clock.minute),
+        (INN_REST_WAKE_HOUR, 0)
+    );
+}
+
+#[test]
 fn the_clear_and_re_place_pass_puts_a_mid_route_npc_back_on_its_waypoint() {
     // `npc-schedules.md §12`: "every non-party active-object record is
     // cleared, and every scheduled NPC is re-placed at the position its

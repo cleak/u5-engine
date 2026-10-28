@@ -1043,10 +1043,15 @@ impl PlayState {
     /// "The shared hourly provision cadence may apply as the clock advances",
     /// so the steps go through the ordinary per-turn clock rather than
     /// writing the hour byte directly.
+    ///
+    /// Each step runs to the next hour boundary, so a rest that began
+    /// mid-hour still ends at 06:00 rather than at six and the rental minute
+    /// (`npc-schedules.md §12`: "which ends at 06:00"; playtest P16-14).
     pub fn advance_inn_rest_clock_to_morning(&mut self) -> u8 {
         let mut hours = 0u8;
         while self.clock.hour != INN_REST_WAKE_HOUR && hours < HOURS_PER_DAY {
-            self.advance_turn_with_minutes(MINUTES_PER_HOUR);
+            let to_boundary = MINUTES_PER_HOUR.saturating_sub(self.clock.minute).max(1);
+            self.advance_turn_with_minutes(to_boundary);
             hours += 1;
         }
         hours
