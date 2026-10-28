@@ -7814,7 +7814,12 @@ impl PlayState {
     /// makes exactly two generator advances, so a failure consumes fourteen.
     ///
     /// The spec's "combat refusal state", tested before the variant, is
-    /// "named here only by its effect"; this engine models no such state yet.
+    /// "named here only by its effect". `combat.md §4`'s entry-mode table
+    /// supplies the setter: "Bit value 2 marks a dungeon context (it refuses
+    /// the In Por-style and Klimb arena actions ...)", and every dungeon
+    /// entry (contact `2`, room `2` plus the high bit, dungeon camp `6`)
+    /// carries it, so a combat Blink framed from a dungeon fails at once
+    /// (playtest P16-08).
     /// The validator stand-in is the same legal-cell mask Conjure, Swarm and
     /// Summon use; its exact occupancy contract is still open
     /// (`OPEN-QUESTIONS.md` section 3, issue #298 Q3).
@@ -7835,6 +7840,14 @@ impl PlayState {
             self.cast_spell_resource_gate(caster_index, BLINK_SPELL_INDEX, BLINK_COST)
         {
             return outcome;
+        }
+
+        // `magic.md §8`: "The refusal state is tested first; when it is set
+        // the cast fails at once and nothing is drawn."
+        if self.combat_frame_is_dungeon_context() {
+            self.advance_turn();
+            self.fail_committed_spell_cast();
+            return MoveOutcome::Blocked;
         }
 
         // audio.md §6: Blink is variant 3; magic.md §8: it plays after the
@@ -7883,6 +7896,15 @@ impl PlayState {
         // `Success!\n` with no sound".
         self.message = crate::commands::SPELL_SUCCESS_LINE.to_string();
         MoveOutcome::Cast
+    }
+
+    /// `combat.md §4`: the entry mode's bit value 2, which every dungeon
+    /// combat entry sets and no surface entry does - read here from the
+    /// area the frame snapshot will restore.
+    fn combat_frame_is_dungeon_context(&self) -> bool {
+        self.combat_frame_snapshot
+            .as_ref()
+            .is_some_and(|snapshot| matches!(snapshot.area, Area::Dungeon { .. }))
     }
 
     pub fn current_blink_context(&self) -> (PlayTarget, i8, usize, usize) {

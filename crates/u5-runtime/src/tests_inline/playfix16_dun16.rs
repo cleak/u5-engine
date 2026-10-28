@@ -135,3 +135,31 @@ fn playfix16_p16_07_arena_get_borrows_a_wall_torch() {
     assert_eq!(outcome, MoveOutcome::Blocked);
     assert_eq!(state.message, GET_NOTHING_REFUSAL);
 }
+
+/// P16-08: `combat.md §4` - "Bit value 2 marks a dungeon context (it refuses
+/// the In Por-style and Klimb arena actions ...)" - and `magic.md §8`: "The
+/// refusal state is tested first; when it is set the cast fails at once and
+/// nothing is drawn." Combat Blink in a dungeon room prints `Failed!`, plays
+/// no variant, draws nothing and leaves the caster in place.
+#[test]
+fn playfix16_p16_08_combat_blink_fails_at_once_in_a_dungeon_fight() {
+    let dir = playfix2_room_game_dir();
+    let mut state = playfix16_room_fight(&dir);
+    state.spell_charges[BLINK_SPELL_INDEX] = 1;
+    state.party[0].mana = 8;
+    state.party[0].level = 8;
+    let before = (state.combat_actors[0].x, state.combat_actors[0].y);
+    let prng_before = state.prng_state;
+    let serial = state.sound_effect_serial;
+
+    assert_eq!(state.cast_combat_blink(0), MoveOutcome::Blocked);
+
+    assert_eq!(state.message, "Failed!");
+    assert_eq!((state.combat_actors[0].x, state.combat_actors[0].y), before);
+    assert_eq!(state.prng_state, prng_before, "nothing is drawn");
+    assert_eq!(
+        state.sound_effects_after(serial),
+        vec![SoundEffect::CastFailure]
+    );
+    let _ = fs::remove_dir_all(dir);
+}
