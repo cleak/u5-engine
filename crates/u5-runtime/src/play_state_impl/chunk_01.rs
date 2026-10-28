@@ -1292,7 +1292,7 @@ impl PlayState {
                 ),
             ));
         }
-        let grid = if let Some(buffer) = options.saved_dungeon_working_buffer.clone() {
+        let grid = if let Some(mut buffer) = options.saved_dungeon_working_buffer.clone() {
             if buffer.len() != SAVE_DUNGEON_WORKING_BUFFER_LEN {
                 return Err(io::Error::new(
                     io::ErrorKind::InvalidData,
@@ -1302,6 +1302,13 @@ impl PlayState {
                     ),
                 ));
             }
+            // `systems/save-load.md`: "save/load restores room completion by
+            // replaying the cleared-room demotion pass", and `dungeon-mode.md
+            // §5` runs it "When a level is loaded or reloaded". The pass only
+            // turns a cleared room's `0xF?` cells into `0xA?`, so the rest of
+            // the saved working copy (`formats/dungeon-dat.md §5`) is kept
+            // byte for byte (playtest P16-05).
+            apply_dungeon_room_clear_bitmap(&mut buffer, scene, &options.dungeon_room_clear_bitmap);
             buffer
         } else {
             let mut grid = load_dungeon_record(game_dir, scene)?;

@@ -41,3 +41,39 @@ fn playfix16_p16_04_a_lost_room_fight_still_sets_the_room_clear_bit() {
     );
     let _ = fs::remove_dir_all(dir);
 }
+
+/// P16-05: `systems/save-load.md` - "save/load restores room completion by
+/// replaying the cleared-room demotion pass" - and `dungeon-mode.md §5`'s
+/// "When a level is loaded or reloaded". Resuming inside the dungeon keeps
+/// the saved working copy, but a cleared room's other `0xF?` cells in it are
+/// demoted; an uncleared room's cell and every other byte are kept.
+#[test]
+fn playfix16_p16_05_a_save_resume_replays_the_room_clear_demotion() {
+    let dir = debug_game_dir();
+    let scene = DungeonScene::new(37).unwrap();
+    let mut buffer = open_dungeon_record();
+    buffer[dungeon_cell_index(0, 3, 6)] = 0xf4;
+    buffer[dungeon_cell_index(1, 7, 6)] = 0xf4;
+    buffer[dungeon_cell_index(0, 5, 5)] = 0xf6;
+    buffer[dungeon_cell_index(0, 4, 4)] = 0x68;
+    let mut options = PlayOptions {
+        target: PlayTarget::Dungeon(scene),
+        floor: 0,
+        start: Some((2, 6)),
+        saved_dungeon_working_buffer: Some(buffer.clone()),
+        ..PlayOptions::default()
+    };
+    assert!(set_dungeon_room_clear_bit(
+        &mut options.dungeon_room_clear_bitmap,
+        scene,
+        4
+    ));
+
+    let state = PlayState::load_dungeon_scene(&dir, scene, options).unwrap();
+
+    assert_eq!(state.grid[dungeon_cell_index(0, 3, 6)], 0xa4);
+    assert_eq!(state.grid[dungeon_cell_index(1, 7, 6)], 0xa4);
+    assert_eq!(state.grid[dungeon_cell_index(0, 5, 5)], 0xf6, "room 6 is not cleared");
+    assert_eq!(state.grid[dungeon_cell_index(0, 4, 4)], 0x68, "saved bytes are kept");
+    let _ = fs::remove_dir_all(dir);
+}
