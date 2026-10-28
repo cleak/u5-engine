@@ -100,14 +100,42 @@ mod input_helper_entry {
         assert_eq!(state.prng_state, seed);
     }
 
-    /// The published entry step is the overworld helper's; a town prompt is
-    /// left as it was.
+    /// Playtest P16-21. Town-family scenes share the helper:
+    /// `town-mode.md §7` step 1 drains the panel request on the full-prompt
+    /// arm "after the world-tick call", and `stats-panel.md §2.3` gives Town
+    /// "the same helper at the same position". So a town prompt takes the
+    /// entry step and its wind draw.
     #[test]
-    fn a_town_prompt_takes_no_entry_step() {
+    fn a_town_prompt_takes_the_entry_step() {
         let mut state = test_state(open_grid(), 5, 5);
+        state.active_objects.truncate(1);
         state.prng_state = quiet_wind_seed();
         let seed = state.prng_state;
         state.overworld_input_helper_entry_owed = true;
+
+        assert!(state.run_overworld_input_helper_entry_step());
+
+        assert!(!state.overworld_input_helper_entry_owed);
+        assert_eq!(
+            state.prng_state,
+            u5_prng_advance_state(seed),
+            "one wind roll"
+        );
+    }
+
+    /// The harpsichord digit's town-only re-poll returns to the helper's
+    /// quick-poll arm (`text-output.md §10.2`), which is not published with
+    /// the entry tick, so it takes none.
+    #[test]
+    fn a_harpsichord_re_poll_takes_no_entry_step() {
+        let mut grid = open_grid();
+        grid[6 * 32 + 5] = HARPSICHORD_TILE;
+        let mut state = test_state(grid, 5, 5);
+        state.active_objects.truncate(1);
+        assert!(state.seated_at_harpsichord());
+        handle_play_key_input(&mut state, '1', "", &debug_game_dir()).expect("digit");
+        state.prng_state = quiet_wind_seed();
+        let seed = state.prng_state;
 
         assert!(!state.run_overworld_input_helper_entry_step());
 

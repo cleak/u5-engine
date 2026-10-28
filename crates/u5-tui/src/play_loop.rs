@@ -758,10 +758,18 @@ pub fn handle_play_script_command(
         if state.endgame_raw_key_page_wait_open() {
             return Ok(PlayInputDisposition::Continue);
         }
+        // Each `.` is a no-key pass inside the command wait, not a command
+        // returning to the input helper, so it owes no new entry world step:
+        // the helper takes one step per prompt (`overworld.md §5` item 5,
+        // `town-mode.md §7` step 1), however long the wait (playtest P16-21).
+        let entry_owed = state.overworld_input_helper_entry_owed;
         for _ in 0..count {
             if handle_play_key_input(state, '.', "", game_dir)? == PlayInputDisposition::Quit {
                 return Ok(PlayInputDisposition::Quit);
             }
+        }
+        if state.harness_shortcut_keys {
+            state.overworld_input_helper_entry_owed = entry_owed;
         }
         return Ok(PlayInputDisposition::Continue);
     }

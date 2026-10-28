@@ -171,6 +171,13 @@ pub struct PlayState {
     /// shell runs its own entry pass per key read instead. Transient, never
     /// saved.
     pub overworld_input_helper_entry_owed: bool,
+    /// `text-output.md §10.2` / `town-mode.md §7.2`: the last key was a digit
+    /// played on the harpsichord, whose town-only re-poll result returns to
+    /// the input helper's quick-poll arm. Only the full-prompt arm is
+    /// published with the entry world tick (`town-mode.md §7` step 1), so
+    /// [`PlayState::run_overworld_input_helper_entry_step`] takes none for
+    /// it. Transient, never saved.
+    pub town_input_helper_quick_poll: bool,
     /// Completed Stonegate trapdoor tableau waiting for a frontend. This is a
     /// blocking, non-resumable presentation record and is never save data.
     pub pending_stonegate_trapdoor_playback: Option<StonegateTrapdoorPlayback>,

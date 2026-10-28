@@ -777,6 +777,13 @@ impl PlayState {
             // together.
             self.npcs[index].set_settled_at_waypoint(waypoint);
         }
+        // `npc-schedules.md §12`: the pass "clears every non-party
+        // active-object record" before it re-places the roster, and
+        // `shops.md §8.4` says the same of the inn night, so a riderless
+        // horse parked by X-it does not outlive an inn night or a bed
+        // Hole-Up step (playtest P16-13). The relink below allocates the
+        // roster's slots afresh.
+        self.clear_non_player_active_objects();
         self.relink_npc_objects();
         self.mark_visibility_dirty();
     }

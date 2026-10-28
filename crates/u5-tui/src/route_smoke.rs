@@ -4026,9 +4026,11 @@ fn apply_route_smoke_case_setup(
         }
         "castle-hourly-poison-starvation-pass" => {
             state.prng_state = 0x3456;
+            pin_route_prng_at_town_key_read(state);
         }
         "castle-hourly-ring-regeneration-pass" => {
             state.prng_state = ring_regeneration_first_heal_seed();
+            pin_route_prng_at_town_key_read(state);
         }
         "castle-poison-gas-step" => {
             seed_town_poison_gas_route(state);
@@ -4037,11 +4039,13 @@ fn apply_route_smoke_case_setup(
             seed_town_jimmy_unoccupied_target(state, TOWN_DOOR_MAGIC_PLAIN_TILE);
             state.party[0].climb_stat = 0;
             state.prng_state = 0x3456;
+            pin_route_prng_at_town_key_read(state);
         }
         "castle-jimmy-empty-restraint-no-picker" => {
             seed_town_jimmy_unoccupied_target(state, JIMMY_STOCKS_TILE);
             state.party[0].climb_stat = 0;
             state.prng_state = 0x3456;
+            pin_route_prng_at_town_key_read(state);
         }
         "castle-jimmy-prisoner-release" | "reload-castle-jimmy-prisoner-release" => {
             seed_town_jimmy_prisoner_route(state);
@@ -4975,6 +4979,14 @@ fn poison_gas_first_poison_seed() -> u16 {
         }
     }
     unreachable!("PRNG range cycle must hit a poison roll")
+}
+
+/// A case that pins the PRNG stream pins it at the command's key read. Town
+/// prompts take the input helper's entry world step before that read
+/// (`town-mode.md §7` step 1, playtest P16-21), and its wind roll would come
+/// off the pinned stream first, so the step counts as already taken.
+fn pin_route_prng_at_town_key_read(state: &mut PlayState) {
+    state.overworld_input_helper_entry_owed = false;
 }
 
 fn ring_regeneration_first_heal_seed() -> u16 {

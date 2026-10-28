@@ -359,6 +359,40 @@ fn spec300_q33_surrender_awakening_line_and_wake_minute() {
     assert_eq!((state.clock.hour, state.clock.minute), (8, 19));
 }
 
+/// Playtest P16-12. `town-mode.md §14`, "Surrender, in order": the clock
+/// runs into the 08:00 hour and "then town entry setup is re-run as a fresh
+/// entry of Yew (Section 5: roster reload ...)", so every Yew resident wakes
+/// on its waypoint for the wake hour, not the 22:00 arrest hour.
+#[test]
+fn surrender_places_the_yew_roster_for_the_wake_hour() {
+    let Some(assets) = crate::test_fixtures::configured_original_asset_dir() else {
+        return;
+    };
+    let mut state = test_state(open_grid(), 5, 5);
+    state.clock = GameClock::new(22, 0).unwrap();
+    state.pending_town_arrest = Some(TownArrestPrompt {
+        scene_byte: 1,
+        floor: 0,
+        npc_slot: 2,
+    });
+    state.emit_message_line(TOWN_ARREST_SURRENDER_PROMPT);
+    state.open_message_row();
+    handle_play_key_input(&mut state, 'Y', "", &assets).unwrap();
+    assert_eq!(state.clock.hour, 8);
+    assert!(!state.npcs.is_empty());
+    let mut moved = 0;
+    for npc in &state.npcs {
+        let night = npc.waypoint_position(waypoint_for_hour(&npc.schedule, 22));
+        let morning = npc.waypoint_position(waypoint_for_hour(&npc.schedule, 8));
+        assert_eq!((npc.x, npc.y, npc.z), morning, "slot {}", npc.slot);
+        moved += usize::from(night != morning);
+    }
+    assert!(
+        moved > 0,
+        "some resident's 22:00 and 08:00 waypoints differ"
+    );
+}
+
 /// `rest-and-camp.md §4` (u5-spec#300 Q8): at the town bed "Every other key
 /// is discarded silently: no echo, line feed, message, reprint or cursor
 /// movement. Escape does not cancel". Escape used to answer `None!` and spend

@@ -4347,8 +4347,18 @@ impl PlayState {
     /// owed; a party with nobody able to act takes the loop's sleep arm,
     /// which skips the input helper (`main-loop.md §6`), so it stays owed
     /// until someone can act. An open prompt means the command has not
-    /// returned yet, and a town, dungeon or combat scene is not the overworld
-    /// helper, so those drop it: the next dispatched key owes it again.
+    /// returned yet, and a dungeon or combat scene does not use this helper,
+    /// so those drop it: the next dispatched key owes it again.
+    ///
+    /// Town-family scenes share the helper. `town-mode.md §7` step 1 drains
+    /// the stats-panel request on its full-prompt arm "after the world-tick
+    /// call and before the prompt newline and the key read", and
+    /// `stats-panel.md §2.3` gives Town "the same helper at the same
+    /// position" as the overworld, so a town command prompt owes the same
+    /// entry step (playtest P16-21: 1000 town passes never rolled the wind,
+    /// which `weather.md` calls "a defect, not parity"). The harpsichord's
+    /// quick-poll re-prompt drops it
+    /// ([`Self::town_input_helper_quick_poll`]).
     pub fn run_overworld_input_helper_entry_step(&mut self) -> bool {
         if !self.overworld_input_helper_entry_owed {
             return false;
@@ -4361,7 +4371,9 @@ impl PlayState {
         {
             return false;
         }
-        if !matches!(self.area, Area::World { .. })
+        let town_quick_poll = std::mem::take(&mut self.town_input_helper_quick_poll);
+        if !matches!(self.area, Area::World { .. } | Area::Town { .. })
+            || (town_quick_poll && matches!(self.area, Area::Town { .. }))
             || self.combat_active
             || self.prompt_waits_in_shared_wait()
         {

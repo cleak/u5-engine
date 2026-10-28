@@ -1448,3 +1448,30 @@ fn write_seed_keeps_the_template_moonstone_slots() {
     }
     let _ = fs::remove_dir_all(dir);
 }
+
+/// Playtest P16-11: `--write-seed` zeroed the template's moral-standing
+/// selector (`0x02E2`, factory 75) and early-game encounter damper (`0x03B3`,
+/// factory 1). `formats/saved-gam.md §10`: "A save tool should preserve
+/// whatever value it finds".
+#[test]
+fn write_seed_keeps_the_template_moral_standing_and_encounter_damper() {
+    use u5_runtime::*;
+    let dir = debug_game_dir();
+    let mut template = saved_game_seed_bytes(0, 0, 100, 100);
+    template[SAVE_MORAL_STANDING_OFFSET] = 75;
+    template[SAVE_FORTUNES_OF_WAR_OFFSET] = 1;
+    fs::write(dir.join("SAVED.GAM"), &template).unwrap();
+    let args = parse_cli_args([
+        "--write-seed",
+        "--scene",
+        "BRITANNIA",
+        "--at",
+        "100,100",
+        dir.to_str().unwrap(),
+    ])
+    .unwrap();
+    assert!(args.write_seed);
+    assert_eq!(args.play_options.moral_standing, 75);
+    assert_eq!(args.play_options.fortunes_of_war, 1);
+    let _ = fs::remove_dir_all(dir);
+}

@@ -32484,13 +32484,26 @@ mod tests {
             shell.text().contains("Blocked!"),
             "the walk reached the wall"
         );
-        let queued = shell.app.world().resource::<SpeakerQueue>().0.len();
-        assert!(queued <= 1, "{queued} programs still queued at release");
-        // One blocked-step beep is 176 ms; nothing may wait behind it. (The
-        // square's fountain still rumbles on every idle tick, so the voice
-        // itself is not asked to fall silent.)
+        // The square's fountain rumbles on every idle tick (`audio.md
+        // §8.10`), a program of a couple of milliseconds, so how many of
+        // those happen to be queued at the release frame depends only on the
+        // idle pump's phase. The backlog this test guards is the blocked
+        // beeps, so it counts those.
+        let beeps_queued = |shell: &VisualShellHarness| {
+            shell
+                .app
+                .world()
+                .resource::<SpeakerQueue>()
+                .0
+                .iter()
+                .filter(|queued| queued.program.duration(true) > Duration::from_millis(50))
+                .count()
+        };
+        let queued = beeps_queued(&shell);
+        assert!(queued <= 1, "{queued} beeps still queued at release");
+        // One blocked-step beep is 176 ms; nothing may wait behind it.
         shell.ticks(18);
-        assert!(shell.app.world().resource::<SpeakerQueue>().0.is_empty());
+        assert_eq!(beeps_queued(&shell), 0);
     }
 
     /// Playtest H12, `audio.md §6` and `§10.3`: through the shell's own
