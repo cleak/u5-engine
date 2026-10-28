@@ -210,7 +210,18 @@ stock at fixed 3000 cycles 306-361 ms after it. So with
 loaded the tile archive. Add about 1700 when it has not (`intro.md` Section 7,
 step 4). The menu's two-tick poll grid still moves stock's lead between 4 and
 6 draws depending on its phase, so the latency centres the offset rather than
-removing it. There is no default; pass it explicitly. A scenario can pin its
+removing it. There is no default; pass it explicitly. The standard full sweep
+passes it:
+
+```
+python3 qa/tools/paired_suite.py --engine-dir <worktree> --fixed-clock 12:00:00.00 \
+  --key-sync sendevent --emulator-load-latency 280
+```
+
+Measured on 2026-10-28 (main f9b3188d): with 280, 156 of 179 scenarios match,
+against 153 without it. Seven idle-time scenarios become matches (ship-commands,
+paws-sage, paws-tavern, shop-arms-sell, town-talk-after-entry, use-potions,
+use-target-cancel), and no scenario regresses to DIFFER. A scenario can pin its
 own value with a `# emulator-load-latency: MS` header. The header wins over the
 flag for that scenario, the way `# fixed-clock: HH:MM:SS.CC` wins over
 `--fixed-clock`.
