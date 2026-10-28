@@ -304,7 +304,9 @@ fn save_frame_capture_state(
             rgba,
             "composed combat frame",
         )
-    } else if let Some(viewport) = state.render_top_down_frame(VIEWPORT_RADIUS, &atlas)? {
+    } else if let Some(viewport) = save_screen_viewport(&mut state, atlas)? {
+        // The viewport `--save-screen` composes: `endgame.md §3.1`'s tableau
+        // rather than the dungeon the party left (playtest P15-07).
         (
             viewport.width as u32,
             viewport.height as u32,
@@ -908,6 +910,32 @@ mod tests {
         let tableau = render_endgame_tableau_viewport(&state, &atlas).unwrap();
         assert_eq!((drawn.cells_wide, drawn.cells_high), (11, 11));
         assert!(drawn.pixels == tableau.pixels);
+    }
+
+    /// Playtest P15-07: `endgame.md §3.1` - the tableau "is the ordinary
+    /// eleven-by-eleven world viewport". `--save-frame` labelled its capture
+    /// "endgame tableau" but drew the Doom corridor the party left.
+    #[test]
+    fn save_frame_draws_the_endgame_tableau_not_the_dungeon_left_behind() {
+        use u5_runtime::endgame_tableau_frame::render_endgame_tableau_viewport;
+        use u5_runtime::test_fixtures::{dungeon_state, open_dungeon_record, synthetic_tile_atlas};
+        let mut state = dungeon_state(open_dungeon_record(), 0, 1, 1);
+        state.party_names = vec![*b"Avatar\0\0\0"];
+        state.enter_endgame_with_messages(None);
+        state.endgame_entry_redraw_pending = true;
+        for _ in 0..500 {
+            if !state.advance_endgame_display_frame() {
+                break;
+            }
+        }
+        let atlas = synthetic_tile_atlas(u5_runtime::TileGraphicsDepth::Ega16);
+        let tableau = render_endgame_tableau_viewport(&state, &atlas).unwrap();
+        let dir = temp_output_dir("p15-07");
+        let report = save_frame_capture_state(state, &atlas, &dir.join("frame.png")).unwrap();
+        assert_eq!(report.frame_kind, "endgame tableau");
+        assert_eq!((report.width, report.height), (176, 176));
+        assert_eq!(report.byte_hash, hash_bytes(&tableau.to_rgba()));
+        let _ = fs::remove_dir_all(dir);
     }
 
     /// Playtest F49: the tavern's provision quantity question keeps the
