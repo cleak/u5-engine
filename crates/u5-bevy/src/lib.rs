@@ -10770,6 +10770,10 @@ enum VisualIntroPanel {
         transition: Option<RectangleDissolve>,
     },
     Acknowledgements(Box<AcknowledgementsPanelState>),
+    /// `systems/intro.md §7`: Journey Onward's read of `SAVED.GAM` (or
+    /// `SAVED.OOL`) did not return data, so the load stalls in its retry
+    /// wrapper with the loading page still up (playtest P17-04).
+    JourneyOnwardRetry,
     ReturnToView {
         preview_frames: Vec<IntroDisplayBuffer>,
         frame_metadata: Vec<VisualReturnToViewFrameMeta>,
@@ -12353,6 +12357,9 @@ fn advance_visual_intro_animation_tick(intro: &mut VisualIntroState) -> bool {
         if matches!(intro.panel, VisualIntroPanel::Acknowledgements(_)) {
             return advance_visual_intro_acknowledgements(intro);
         }
+        if matches!(intro.panel, VisualIntroPanel::JourneyOnwardRetry) {
+            return advance_visual_intro_journey_onward_retry(intro);
+        }
         // One Return-to-View preview tick spans two BIOS ticks, so the pump
         // has to fold pairs of ticks into a single preview step — otherwise
         // both the preview and the idle band above it run at twice the
@@ -13191,6 +13198,9 @@ enum VisualIntroPanelOutcome {
 fn step_visual_intro_panel(intro: &mut VisualIntroState, ch: char) -> bool {
     let outcome = match &mut intro.panel {
         VisualIntroPanel::Menu => return false,
+        // `disk-prompt.md §8`: with the visible prompt a no-op there is no
+        // key for the stalled read to take (playtest P17-04).
+        VisualIntroPanel::JourneyOnwardRetry => return false,
         VisualIntroPanel::SubtitleIgnition { .. } => {
             unreachable!("subtitle ignition input is handled before panel dispatch")
         }
@@ -13320,6 +13330,10 @@ fn cancel_visual_intro_panel(intro: &mut VisualIntroState) -> bool {
         // P16-16).
         return step_visual_intro(intro, '\x1b');
     }
+    // `systems/intro.md §7`: nothing aborts the stalled Journey Onward read.
+    if matches!(intro.panel, VisualIntroPanel::JourneyOnwardRetry) {
+        return false;
+    }
     // `u4-transfer.md §6.5`: once the drive has been selected no key
     // aborts the transfer — `Esc` at any confirmation prompt is simply
     // ignored, and there is no cancel path back to the menu. `§6.3`'s
@@ -13351,6 +13365,9 @@ fn cancel_visual_intro_panel(intro: &mut VisualIntroState) -> bool {
     }
     let Some((subflow, result, message)) = (match intro.panel {
         VisualIntroPanel::Menu => unreachable!("the menu treats Esc as an ordinary key above"),
+        VisualIntroPanel::JourneyOnwardRetry => {
+            unreachable!("the Journey Onward stall ignores Escape above")
+        }
         VisualIntroPanel::SubtitleIgnition { .. } => {
             unreachable!("subtitle ignition Escape is handled above")
         }
@@ -13455,6 +13472,51 @@ fn step_visual_chargen_panel(
     }
 }
 
+/// `systems/intro.md §7` steps 6-12 of Journey Onward. Returns `false`
+/// when `SAVED.GAM` or `SAVED.OOL` could not be read, which the caller turns
+/// into the retry stall; otherwise the subflow has been completed, either
+/// with the empty-save message or with the gameplay launch published.
+fn attempt_visual_journey_onward_load(intro: &mut VisualIntroState) -> bool {
+    let subflow = IntroSubflow::JourneyOnward;
+    let Ok(save_image) =
+        read_save_image_file(&intro.game_dir.join(SAVED_GAM_FILENAME), SAVED_GAM_FILENAME)
+    else {
+        return false;
+    };
+    // Leaving the stall restores the panel the menu dispatch expects.
+    if matches!(intro.panel, VisualIntroPanel::JourneyOnwardRetry) {
+        intro.panel = VisualIntroPanel::Menu;
+    }
+    if !save_image_has_active_avatar(&save_image) {
+        intro
+            .dispatch
+            .complete_subflow(subflow, IntroSubflowResult::Cancelled);
+        intro.message = visual_intro_empty_save_message();
+        intro.message_waiting_for_key = true;
+        return true;
+    }
+    let Ok(options) = load_play_options_from_save(&intro.game_dir) else {
+        intro.panel = VisualIntroPanel::JourneyOnwardRetry;
+        return false;
+    };
+    intro
+        .dispatch
+        .complete_subflow(subflow, IntroSubflowResult::SaveReady);
+    *intro
+        .launch_result
+        .lock()
+        .expect("visual intro launch lock poisoned") = Some(options);
+    true
+}
+
+/// The Journey Onward retry stall's per-tick re-read (playtest P17-04).
+fn advance_visual_intro_journey_onward_retry(intro: &mut VisualIntroState) -> bool {
+    if !matches!(intro.panel, VisualIntroPanel::JourneyOnwardRetry) {
+        return false;
+    }
+    attempt_visual_journey_onward_load(intro)
+}
+
 fn resolve_visual_intro_subflow(intro: &mut VisualIntroState, subflow: IntroSubflow) -> bool {
     intro.menu_idle_ticks = 0;
     intro.message_waiting_for_key = false;
@@ -13478,28 +13540,16 @@ fn resolve_visual_intro_subflow(intro: &mut VisualIntroState, subflow: IntroSubf
             // the clean engine (its display backend has no
             // separately-managed modes).
             draw_visual_intro_journey_loading_indicator(intro);
-            let save_image =
-                read_save_image_file(&intro.game_dir.join(SAVED_GAM_FILENAME), SAVED_GAM_FILENAME)
-                    .unwrap_or_else(|err| {
-                        panic!("Journey Onward requires readable SAVED.GAM: {err}")
-                    });
-            if !save_image_has_active_avatar(&save_image) {
-                intro
-                    .dispatch
-                    .complete_subflow(subflow, IntroSubflowResult::Cancelled);
-                intro.message = visual_intro_empty_save_message();
-                intro.message_waiting_for_key = true;
-                return true;
+            if !attempt_visual_journey_onward_load(intro) {
+                // `systems/intro.md §7`: "a missing or unreadable SAVED.GAM
+                // stalls in the wrapper" - the read retries until it
+                // returns data, and `disk-prompt.md §8` lets a
+                // single-directory install drop the visible prompt but not
+                // the retry. Stall on the loading page and retry each tick
+                // instead of ending the program (playtest P17-04).
+                intro.panel = VisualIntroPanel::JourneyOnwardRetry;
             }
-            let options = load_play_options_from_save(&intro.game_dir)
-                .unwrap_or_else(|err| panic!("Journey Onward requires loadable SAVED.GAM: {err}"));
-            intro
-                .dispatch
-                .complete_subflow(subflow, IntroSubflowResult::SaveReady);
-            *intro
-                .launch_result
-                .lock()
-                .expect("visual intro launch lock poisoned") = Some(options);
+            return true;
         }
         IntroSubflow::CharacterCreation => {
             let records = load_question_records(&intro.game_dir)
@@ -14173,6 +14223,9 @@ fn held_direction_repeat_command(
 fn summarize_intro(intro: &mut VisualIntroState) -> String {
     match &intro.panel {
         VisualIntroPanel::Menu => {}
+        VisualIntroPanel::JourneyOnwardRetry => {
+            return "Journey Onward: waiting for SAVED.GAM and SAVED.OOL to read.".to_string(); // audit: not a player-facing line
+        }
         VisualIntroPanel::MenuLabelHold {
             ticks_left,
             queued_keys,
@@ -14401,6 +14454,10 @@ fn render_intro_frame(intro: &mut VisualIntroState) -> Vec<u8> {
     }
     if matches!(intro.panel, VisualIntroPanel::ReturnToView { .. }) {
         return render_return_to_view_intro_frame(intro);
+    }
+    if matches!(intro.panel, VisualIntroPanel::JourneyOnwardRetry) {
+        // The loading page drawn before the read stays up while it stalls.
+        return intro.surface.to_rgba();
     }
     if matches!(intro.panel, VisualIntroPanel::U4Transfer { .. }) {
         return render_u4_transfer_intro_frame(intro);
@@ -23298,6 +23355,51 @@ mod tests {
 
         assert!(!intro.pending_auto_return_to_view);
         assert!(matches!(intro.panel, VisualIntroPanel::Menu));
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    /// Playtest P17-04: `systems/intro.md §7` - "a missing or unreadable
+    /// SAVED.GAM stalls in the wrapper" whose read "retries indefinitely
+    /// until the read returns data"; a menu selection must not end the
+    /// program. The stall retries each tick and resumes once the file reads.
+    #[test]
+    fn playtest_p17_04_journey_onward_stalls_and_retries_on_a_missing_save() {
+        let dir = std::env::temp_dir().join(format!(
+            "u5-p17-04-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        fs::create_dir_all(&dir).unwrap();
+        let mut intro = read_only_intro_state_for_local_assets(&dir, VisualIntroPanel::Menu);
+        assert_eq!(
+            intro.dispatch.submit_menu_key(b'J'),
+            UnifiedMenuStep::EnteredSubflow(IntroSubflow::JourneyOnward)
+        );
+
+        assert!(resolve_visual_intro_subflow(
+            &mut intro,
+            IntroSubflow::JourneyOnward
+        ));
+        assert!(matches!(intro.panel, VisualIntroPanel::JourneyOnwardRetry));
+        assert!(!advance_visual_intro_animation_tick(&mut intro));
+        assert!(!step_visual_intro_panel(&mut intro, 'x'));
+        assert!(matches!(intro.panel, VisualIntroPanel::JourneyOnwardRetry));
+        assert!(intro.launch_result.lock().unwrap().is_none());
+
+        // The read succeeds once the file is there; this one is the
+        // empty-save template, so the ordinary step 8 message follows.
+        fs::write(
+            dir.join(SAVED_GAM_FILENAME),
+            u5_runtime::test_fixtures::saved_game_seed_bytes(0, 0, 0, 0),
+        )
+        .unwrap();
+        assert!(advance_visual_intro_animation_tick(&mut intro));
+        assert!(matches!(intro.panel, VisualIntroPanel::Menu));
+        assert!(intro.message_waiting_for_key);
+        assert_eq!(intro.message, visual_intro_empty_save_message());
         let _ = fs::remove_dir_all(dir);
     }
 
