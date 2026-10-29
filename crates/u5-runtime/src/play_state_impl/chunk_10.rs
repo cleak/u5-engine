@@ -746,21 +746,23 @@ impl PlayState {
 
     /// `npc-schedules.md §12`, "**The clear-and-re-place pass.**"
     ///
-    /// "Three callers run the same pass that clears every non-party
-    /// active-object record and then re-places each live scheduled NPC at the
-    /// position its schedule gives for the *current* hour: entering the
-    /// location (the initialisation described in Section 4), the H-Hole-Up
-    /// hours command when it finishes its rested hours, and an inn's
-    /// rest-for-the-night, which ends at 06:00 and re-places the roster for
-    /// that hour before returning control (`systems/shops.md` Section 8.4).
-    /// After any of the three, an NPC that was mid-route is standing on its
-    /// scheduled position rather than where it had walked to, and its queued
-    /// route is gone."
+    /// "Four triggers run the same pass that clears every non-party
+    /// active-object record and then re-places each live scheduled NPC at
+    /// the position its schedule gives for the *current* hour: entering the
+    /// location ..., the town-bed H-Hole-Up hours command after **every**
+    /// ten-minute step of its sleep ..., an inn's rest-for-the-night ...,
+    /// and every floor change inside the location (stairs, ladder, grate or
+    /// trapdoor; `systems/town-mode.md` Section 11), which also clears parked
+    /// vehicles and resets each re-placed NPC to idle. After any of the
+    /// four, an NPC that was mid-route is standing on its scheduled position
+    /// rather than where it had walked to, and its queued route is gone."
+    /// (u5-spec#308 Q1, `RETRACTIONS.md` R646.)
     ///
     /// Town entry reaches the same result through
     /// [`Self::load_scheduled_npcs`], which builds every runtime record from
     /// the entry hour and then relinks; this is the pass for the two rest
-    /// callers, which keep their existing records.
+    /// callers and the floor change ([`Self::reload_town_floor`]), which keep
+    /// their existing records.
     pub fn clear_and_replace_scheduled_npcs(&mut self) {
         if !matches!(self.area, Area::Town { .. }) {
             return;
@@ -780,9 +782,9 @@ impl PlayState {
         // `npc-schedules.md §12`: the pass "clears every non-party
         // active-object record" before it re-places the roster, and
         // `shops.md §8.4` says the same of the inn night, so a riderless
-        // horse parked by X-it does not outlive an inn night or a bed
-        // Hole-Up step (playtest P16-13). The relink below allocates the
-        // roster's slots afresh.
+        // horse parked by X-it does not outlive an inn night, a bed
+        // Hole-Up step (playtest P16-13) or a floor change (u5-spec#308 Q1,
+        // R645). The relink below allocates the roster's slots afresh.
         self.clear_non_player_active_objects();
         self.relink_npc_objects();
         self.mark_visibility_dirty();
@@ -793,13 +795,12 @@ impl PlayState {
             return;
         };
         let floor = floor as u8;
-        // `town-mode.md §11`: the floor change's partial reset touches NPCs
-        // only - "NPCs not on the new floor are unlinked, NPCs on the new
-        // floor are linked". Loose records - a parked carpet or horse
-        // (`vehicles.md §2`), a dropped item - keep their slots and floor
-        // bytes for the whole visit; only fresh entry clears slots 1..31
-        // (`active-objects.md §10`). Clearing every non-player slot here lost
-        // an X-it carpet on the first floor change (playtest P14-06).
+        // Frees and re-allocates the roster's own slots only; loose records
+        // keep theirs. Callers that need the table cleared first - fresh
+        // entry, the rest reseats and every floor change (`npc-schedules.md
+        // §12`, u5-spec#308 Q1, R645/R646) - clear it before calling this.
+        // The one reload that keeps the table is the same-floor reload after
+        // an NPC death (`town-mode.md §3`).
         self.sync_player_object();
         for index in 0..self.npcs.len() {
             if let Some(slot) = self.npcs[index].active_object.take()

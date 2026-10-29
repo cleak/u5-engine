@@ -9687,6 +9687,7 @@ fn apply_visual_route_command(
             dungeon_room_entry_seed_for_direction(Direction::South),
             true,
             false,
+            None,
         )?;
         return Ok(PlayInputDisposition::Continue);
     }

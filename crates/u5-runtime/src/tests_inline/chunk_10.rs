@@ -1914,11 +1914,13 @@ fn town_climb_uses_clean_location_floor_table_for_basement_page() {
     let _ = fs::remove_dir_all(dir);
 }
 
-/// `town-mode.md §11`: the floor change's partial reset touches NPCs only;
-/// a loose record keeps its slot and floor byte (playtest P14-06), and no
-/// slot is compacted.
+/// `town-mode.md §11` as corrected by u5-spec#308 Q1 (`RETRACTIONS.md`
+/// R645): a floor change runs the full reseat, so "every active-object
+/// record except the party's is cleared, which erases any parked horse or
+/// magic carpet and any other loose object". This replaces the playtest
+/// P14-06 expectation that a loose record keeps its slot across the change.
 #[test]
-fn town_climb_keeps_loose_active_objects_without_compacting_slots() {
+fn town_climb_clears_loose_active_objects_without_compacting_slots() {
     let dir = debug_game_dir();
     let scene = Scene::new(17).unwrap();
     fs::write(dir.join("CASTLE.DAT"), location_pages()).unwrap();
@@ -1944,8 +1946,7 @@ fn town_climb_keeps_loose_active_objects_without_compacting_slots() {
 
     assert_eq!(state.active_objects.len(), 3);
     assert_eq!(state.active_objects[0].z, 1);
-    assert_eq!(state.active_objects[1].type_byte, 192);
-    assert_eq!(state.active_objects[1].z, 0);
+    assert!(state.active_objects[1].is_empty(), "the loose record is erased");
     assert!(state.active_objects[2].is_empty());
     let _ = fs::remove_dir_all(dir);
 }

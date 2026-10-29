@@ -5716,6 +5716,7 @@ fn seed_dungeon_room_party_entry_route(state: &mut PlayState, game_dir: &Path) -
         dungeon_room_entry_seed_for_direction(Direction::South),
         true,
         false,
+        None,
     )?;
     Ok(())
 }

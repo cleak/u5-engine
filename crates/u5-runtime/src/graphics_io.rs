@@ -220,8 +220,9 @@ pub fn blit_terrain_tile_to_viewport(
 /// noise for the four field tiles.
 ///
 /// "First the driver refreshes four actor-half 'field' tiles - atlas ids
-/// `0x1E8` (a poison field), `0x1E9` (a sleep field), `0x1EA` and `0x1EB`
-/// (a force field) - with fresh pseudo-random pixel bits ... These are the
+/// `0x1E8` (a poison field), `0x1E9` (a sleep field), `0x1EA` (the fire
+/// field) and `0x1EB` (the energy field, Look text `a force field`; ids named
+/// 2026-10-28, issue #308 Q3) - with fresh pseudo-random pixel bits ... These are the
 /// combat field-effect tiles, so those fields are themselves re-randomised
 /// on every animation step." Every other actor id takes the ordinary path.
 pub fn blit_actor_tile_to_viewport(

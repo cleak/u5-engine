@@ -128,6 +128,13 @@ pub const DUNGEON_ROOM_ORDINARY_SOURCE_FIRST: u8 = 0x40;
 pub const DUNGEON_ROOM_SPECIAL_SOURCE_MASK: u8 = 0xfc;
 pub const DUNGEON_ROOM_SPECIAL_SOURCE_B4: u8 = 0xb4;
 pub const DUNGEON_ROOM_SPECIAL_SOURCE_E8: u8 = 0xe8;
+/// `formats/cbt.md §5` (added for u5-spec#308 Q3): "`0xE9` | Sleep field".
+pub const DUNGEON_ROOM_SPECIAL_SOURCE_E9: u8 = 0xe9;
+/// `formats/cbt.md §5` (added for u5-spec#308 Q3): "`0xEA` | Fire field".
+pub const DUNGEON_ROOM_SPECIAL_SOURCE_EA: u8 = 0xea;
+/// `formats/cbt.md §5` (added for u5-spec#308 Q3): "`0xEB` | Energy field
+/// (Look text `a force field`)".
+pub const DUNGEON_ROOM_SPECIAL_SOURCE_EB: u8 = 0xeb;
 pub const DUNGEON_ROOM_SPECIAL_SOURCE_EC: u8 = 0xec;
 
 /// `formats/cbt.md §5` outdoor metadata band slices. Per-arena setup

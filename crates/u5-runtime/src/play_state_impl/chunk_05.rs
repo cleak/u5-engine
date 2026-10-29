@@ -505,8 +505,16 @@ impl PlayState {
             return self.enter_endgame_from_game_dir(game_dir);
         }
         let marked_helper = !helper_state && !doom_final_room;
-        if marked_helper {
-            self.grid[dungeon_cell_index(level, x, y)] = 0xa0 | slot;
+        let trigger_cell = marked_helper.then(|| dungeon_cell_index(level, x, y));
+        // `dungeon-mode.md §5` (u5-spec#308 Q2): with an arena to fight in,
+        // the `0xF?` to `0xA?` patch waits for the normal return from room
+        // combat and is skipped on the loss result (see
+        // `apply_combat_round_loop_exit`). With no arena there is no fight to
+        // lose, so the patch is made at once.
+        if !dungeon_cbt_available
+            && let Some(cell) = trigger_cell
+        {
+            self.grid[cell] = 0xa0 | slot;
         }
         self.mark_visibility_dirty();
         self.advance_turn();
@@ -522,6 +530,7 @@ impl PlayState {
                 entry_seed,
                 !helper_state,
                 doom_final_room,
+                trigger_cell,
             )?;
             // `dungeon-mode.md §14` room cells (u5-spec#298 Q1, R528): the
             // party is put back on the room cell and the movement applier

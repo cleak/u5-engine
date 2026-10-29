@@ -1095,16 +1095,18 @@ pub enum CombatArenaFieldKind {
 impl CombatArenaFieldKind {
     pub const fn from_kind_byte(kind: u8) -> Option<Self> {
         match kind {
-            // `formats/cbt.md §5` special id `0xE8` is "Poison field", and
-            // `combat.md §11` names `0xE8` among "the common hook's
-            // recognized placed markers": a room-placed poison field takes
-            // the same contact arm as a cast one (playtest P16-06). The
-            // `0xE9`/`0xEA` members of that list are left out until their
-            // field identities are published consistently.
+            // `combat.md §11` (u5-spec#308 Q3, `RETRACTIONS.md` R649): "The
+            // four marker ids are `0xE8` Poison, `0xE9` Sleep, `0xEA` Fire
+            // and `0xEB` Energy", and "A dungeon-room special source byte
+            // `0xE9` or `0xEA` ... produces a marker that behaves exactly
+            // like a cast one". A room-placed record carries the raw id
+            // (`formats/cbt.md §5`); this engine's cast markers carry the
+            // field-kind byte, so both spellings name the same field. The
+            // room-placed `0xE8` Poison arm is playtest P16-06.
             COMBAT_FIELD_KIND_POISON | DUNGEON_ROOM_SPECIAL_SOURCE_E8 => Some(Self::Poison),
-            COMBAT_FIELD_KIND_SLEEP => Some(Self::Sleep),
-            COMBAT_FIELD_KIND_FIRE => Some(Self::Fire),
-            COMBAT_FIELD_KIND_ENERGY => Some(Self::Energy),
+            COMBAT_FIELD_KIND_SLEEP | DUNGEON_ROOM_SPECIAL_SOURCE_E9 => Some(Self::Sleep),
+            COMBAT_FIELD_KIND_FIRE | DUNGEON_ROOM_SPECIAL_SOURCE_EA => Some(Self::Fire),
+            COMBAT_FIELD_KIND_ENERGY | DUNGEON_ROOM_SPECIAL_SOURCE_EB => Some(Self::Energy),
             _ => None,
         }
     }

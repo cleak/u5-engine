@@ -1456,11 +1456,42 @@ impl PlayState {
         }))
     }
 
+    /// `town-mode.md §3`, "Every floor change is a full reload", as
+    /// corrected by u5-spec#308 Q1 (`RETRACTIONS.md` R645): the transition
+    /// re-runs the location load and then runs "the full NPC reseat (clear
+    /// every non-party record, including parked vehicles, then re-place the
+    /// roster at its current-hour waypoints; Section 11)". Every in-location
+    /// floor change - stairs, ladder, grate, trapdoor - reaches the reseat
+    /// through this entry.
     pub fn reload_town_floor(
         &mut self,
         game_dir: &Path,
         scene: Scene,
         next_floor: i8,
+    ) -> io::Result<()> {
+        self.reload_town_floor_page(game_dir, scene, next_floor, true)
+    }
+
+    /// `town-mode.md §3` (added for u5-spec#308 Q1): "During play inside a
+    /// location, the only page reload that skips the reseat is the
+    /// same-floor reload after an NPC death, which preserves the table".
+    /// The NPC-conflict chain's reload is that one; it keeps the table's
+    /// loose records and only relinks the roster it already holds.
+    pub fn reload_town_floor_preserving_objects(
+        &mut self,
+        game_dir: &Path,
+        scene: Scene,
+        floor: i8,
+    ) -> io::Result<()> {
+        self.reload_town_floor_page(game_dir, scene, floor, false)
+    }
+
+    fn reload_town_floor_page(
+        &mut self,
+        game_dir: &Path,
+        scene: Scene,
+        next_floor: i8,
+        reseat: bool,
     ) -> io::Result<()> {
         let (next_grid, beacon_sources) = load_town_runtime_floor_with_beacon_sources(
             game_dir,
@@ -1497,7 +1528,19 @@ impl PlayState {
         self.refresh_cached_moon_glyphs_at_scene_entry();
         self.clear_town_floor_reload_door_state();
         self.restore_revealed_town_secret_doors_for_floor(game_dir, scene, next_floor)?;
-        self.relink_npc_objects();
+        if reseat {
+            // `town-mode.md §11` (R645): "every active-object record except
+            // the party's is cleared, which erases any parked horse or magic
+            // carpet and any other loose object, and every roster NPC is
+            // re-placed at its current-hour waypoint with its walk state
+            // reset to idle and its queued route discarded". "A vehicle
+            // erased this way is not restored by returning to the floor it
+            // was parked on." This withdraws the relink-only floor change
+            // that kept loose records (playtest P14-06).
+            self.clear_and_replace_scheduled_npcs();
+        } else {
+            self.relink_npc_objects();
+        }
         self.mark_visibility_dirty();
         Ok(())
     }

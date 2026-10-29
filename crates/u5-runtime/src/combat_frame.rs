@@ -79,13 +79,26 @@ const COMBAT_FIXED_MAGIC_STRIKE_ITEM_ID: usize = 33;
 /// prints (an edge step or, in a dungeon arena, an in-arena K), and the
 /// room-encounter refusal.
 pub const COMBAT_DEPARTURE_LEAVE_LINE: &str = "Leave!\n";
+
+/// `combat.md §11` (u5-spec#308 Q3, R650): a field-pass draw "below 16 (a
+/// 1-in-16 chance) removes that marker".
+pub const COMBAT_FIELD_DISSOLVE_DRAW_BELOW: u8 = 16;
 pub const COMBAT_DEPARTURE_ESCAPE_LINE: &str = "Escape!\n";
 pub const COMBAT_ALL_MUST_USE_SAME_EXIT_LINE: &str = "All must use the same exit!\n";
 
+/// `dungeon-mode.md §5`, "Room trigger" (u5-spec#308 Q2): "The in-place
+/// patch, and the room-clear bitmap write that goes with it, are made on the
+/// normal return from room combat, for every room including the deny-listed
+/// rooms ...; when room combat returns the loss result (the party side
+/// emptied while foes remain) the helper skips both."
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct PendingDungeonRoomClear {
     pub scene: DungeonScene,
     pub room_slot: u8,
+    /// The working-record index of the `0xF?` trigger cell the helper
+    /// patches to `0xA?` on the normal return; `None` when the room was
+    /// entered from a cell already in the `0xA?` state.
+    pub trigger_cell: Option<usize>,
 }
 
 pub const COMBAT_TERRAIN_REVEAL_PIXEL_COUNT: usize = 16 * 16;
@@ -1866,7 +1879,21 @@ impl PlayState {
         let _ = self.apply_combat_absorbable_field_contact_for_actor_position(actor_slot);
         let _ = self.apply_combat_post_dispatch_contact_for_actor_position(actor_slot);
         self.clear_combat_interference_for_completed_action(actor_slot);
+        self.apply_combat_maintenance_endpoint(actor_slot).0
+    }
+
+    /// `combat.md §11`, "Field markers dissolve at random" (u5-spec#308 Q3,
+    /// `RETRACTIONS.md` R650): the shared combat maintenance endpoint "runs
+    /// three steps in this order: 1. The worn-ring hook. 2. The field pass.
+    /// ... 3. The timed-magic counter ageing." It is reached "After a
+    /// committed command-prompted action" and "On every skipped turn while an
+    /// active player is selected".
+    pub(crate) fn apply_combat_maintenance_endpoint(
+        &mut self,
+        actor_slot: usize,
+    ) -> (Option<CombatMagicRingPassOutcome>, ActiveEffectAgeOutcome) {
         let ring_pass = self.apply_visible_combat_magic_ring_pass_to_slot(actor_slot);
+        let _ = self.apply_combat_field_dissolution_pass();
         let age_outcome = self.age_active_effect();
         if age_outcome.expired {
             // `stats-panel.md §2.2.1` row 23: a timed-effect countdown
@@ -1874,7 +1901,38 @@ impl PlayState {
             // deferred; the world turn's same countdown repaints inline.
             self.stats_panel_command_refresh = crate::stats_panel::PanelRefreshMode::Deferred;
         }
-        ring_pass
+        (ring_pass, age_outcome)
+    }
+
+    /// `combat.md §11` step 2 of the maintenance endpoint (u5-spec#308 Q3,
+    /// R650): "It walks all thirty-two active-object records in ascending
+    /// index order. Each record whose tile byte is in the `0xE8..0xEB` field
+    /// family (Poison, Sleep, Fire, Energy alike, whether cast or placed by a
+    /// room source) gets one inclusive `0..255` gameplay draw. A draw below
+    /// 16 (a 1-in-16 chance) removes that marker: the record's tile,
+    /// position and auxiliary bytes are cleared. Nothing is printed, no
+    /// sound plays and no redraw is requested by the pass. The draw is
+    /// consumed whether or not the marker is removed ... Other active
+    /// objects (items, corpses, actor sprites) are not examined and cost
+    /// nothing."
+    ///
+    /// A field record is recognised through
+    /// [`CombatArenaFieldKind::from_kind_byte`], which accepts both the raw
+    /// room-placed ids and this engine's cast-marker kind bytes. Returns
+    /// how many markers were removed.
+    pub fn apply_combat_field_dissolution_pass(&mut self) -> usize {
+        let mut removed = 0;
+        for slot in 0..self.active_objects.len().min(OOL_SLOTS) {
+            if CombatArenaFieldKind::from_kind_byte(self.active_objects[slot].type_byte).is_none() {
+                continue;
+            }
+            let draw = self.random_range_u8(0, u8::MAX);
+            if draw < COMBAT_FIELD_DISSOLVE_DRAW_BELOW {
+                self.active_objects[slot] = ActiveObject::empty();
+                removed += 1;
+            }
+        }
+        removed
     }
 
     pub(crate) fn clear_combat_interference_for_completed_action(&mut self, victim_slot: usize) {
@@ -4428,8 +4486,12 @@ impl PlayState {
             actors,
             is_combat_arena_tile_walkable,
         );
+        // `combat.md §11` (R649): `0xEB` is "the movement validator's
+        // single blocking id", cast or room-placed alike.
         for object in self.active_objects.iter().take(OOL_SLOTS) {
-            if object.type_byte != COMBAT_FIELD_KIND_ENERGY {
+            if CombatArenaFieldKind::from_kind_byte(object.type_byte)
+                != Some(CombatArenaFieldKind::Energy)
+            {
                 continue;
             }
             if object.x < COMBAT_ARENA_SIDE && object.y < COMBAT_ARENA_SIDE {
@@ -4760,14 +4822,24 @@ impl PlayState {
             let endgame_tableau_map = snapshot.endgame_tableau_map.clone();
             let dungeon_room_clear_on_success = snapshot.dungeon_room_clear_on_success;
             self.restore_combat_frame_with_trigger_reconcile(snapshot, body_retrieval_exit);
-            // `formats/dungeon-dat.md §4`: after room combat the engine
-            // patches the trigger to `0xA?` "It also sets a saved room-clear
-            // bit keyed by dungeon and room id" - with no outcome condition,
-            // and `combat.md §14` has the framer discard the round loop's
-            // word, so a loss or a whole-party escape is not told apart from
-            // a win. Gating the bit on the result left the visit-local `0xA?`
-            // patch and the durable bit disagreeing (playtest P16-04).
-            if let Some(clear) = dungeon_room_clear_on_success {
+            // `dungeon-mode.md §5` (u5-spec#308 Q2): "The in-place patch,
+            // and the room-clear bitmap write that goes with it, are made on
+            // the normal return from room combat, for every room including
+            // the deny-listed rooms ...; when room combat returns the loss
+            // result (the party side emptied while foes remain) the helper
+            // skips both." The patch and the bit therefore always agree
+            // (playtest P16-04), and a lost room stays armed. "Whether
+            // fleeing a room counts as the loss result is not established";
+            // the engine's escape exits keep the success word they already
+            // returned.
+            if let Some(clear) = dungeon_room_clear_on_success
+                && result_code != COMBAT_ROUND_RESULT_DEFEAT
+            {
+                if let Some(cell) = clear.trigger_cell
+                    && let Some(byte) = self.grid.get_mut(cell)
+                {
+                    *byte = 0xa0 | clear.room_slot;
+                }
                 set_dungeon_room_clear_bit(
                     &mut self.dungeon_room_clear_bitmap,
                     clear.scene,
@@ -7580,7 +7652,8 @@ impl PlayState {
             return Some(false);
         }
         if self.active_objects.iter().take(OOL_SLOTS).any(|object| {
-            object.type_byte == COMBAT_FIELD_KIND_ENERGY
+            CombatArenaFieldKind::from_kind_byte(object.type_byte)
+                == Some(CombatArenaFieldKind::Energy)
                 && object.x == destination.x as usize
                 && object.y == destination.y as usize
         }) {
@@ -7946,14 +8019,7 @@ impl PlayState {
                 let post_dispatch_contact =
                     self.apply_combat_post_dispatch_contact_for_actor_position(actor_slot);
                 self.clear_combat_interference_for_completed_action(actor_slot);
-                let ring_pass = self.apply_visible_combat_magic_ring_pass_to_slot(actor_slot);
-                let age_outcome = self.age_active_effect();
-                if age_outcome.expired {
-                    // `stats-panel.md §2.2.1` row 23: see the sibling site
-                    // in `apply_combat_committed_action_tail`.
-                    self.stats_panel_command_refresh =
-                        crate::stats_panel::PanelRefreshMode::Deferred;
-                }
+                let (ring_pass, age_outcome) = self.apply_combat_maintenance_endpoint(actor_slot);
                 (
                     absorbable_contact,
                     post_dispatch_contact,
@@ -8998,6 +9064,16 @@ impl PlayState {
             }
             CombatActorDispatchAction::MonsterAi { ai_turn }
         };
+
+        // `combat.md §11` (u5-spec#308 Q3, R650): "When a different party
+        // member is the selected active player, the turn of every other
+        // command-group actor ... is denied before its banner by the
+        // active-player gate (Section 8.1), and that denial enters the same
+        // endpoint directly." `§12` names the same "early active-player
+        // denial route".
+        if matches!(action, CombatActorDispatchAction::ActivePlayerSentinelSkipped) {
+            let _ = self.apply_combat_maintenance_endpoint(slot);
+        }
 
         // A monster attack's result line is narrated after the walk returns
         // (`append_combat_round_walk_messages`), which prints the hazard line
@@ -10552,6 +10628,40 @@ mod combat_death_batch_tests {
             CombatActorDispatchAction::PlayerReady
         );
         assert!(sentinel_unset.combat_actors[0].is_controlled());
+    }
+
+    #[test]
+    fn an_active_player_skip_enters_the_maintenance_endpoint() {
+        // `combat.md §11` (u5-spec#308 Q3, R650): with a different party
+        // member selected, "the turn of every other command-group actor ...
+        // is denied before its banner by the active-player gate ..., and
+        // that denial enters the same endpoint directly. So with an active
+        // player selected, each skipped turn of every other command-group
+        // actor costs one draw per field marker and can dissolve markers."
+        let mut with_marker = sword_of_chaos_dispatch_state();
+        with_marker.active_player = Some(3);
+        with_marker.active_objects[12] = ActiveObject {
+            type_byte: 0xea,
+            tile: 0xea,
+            x: 1,
+            y: 1,
+            ..ActiveObject::empty()
+        };
+        let mut without = with_marker.clone();
+        without.active_objects[12] = ActiveObject::empty();
+
+        assert_eq!(
+            dispatch_party_slot_zero(&mut with_marker),
+            CombatActorDispatchAction::ActivePlayerSentinelSkipped
+        );
+        assert_eq!(
+            dispatch_party_slot_zero(&mut without),
+            CombatActorDispatchAction::ActivePlayerSentinelSkipped
+        );
+
+        let mut expected = without.prng_state;
+        let _ = u5_prng_range_u16(&mut expected, 0, 255);
+        assert_eq!(with_marker.prng_state, expected);
     }
 
     #[test]

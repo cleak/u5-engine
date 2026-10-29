@@ -139,12 +139,18 @@ mod playfix14_town14 {
         let _ = fs::remove_dir_all(dir);
     }
 
-    #[test]
-    fn p14_06_floor_relink_keeps_a_parked_carpet_and_unlinks_npcs() {
-        // `town-mode.md §11`: on a floor change "NPCs not on the new floor
-        // are unlinked, NPCs on the new floor are linked"; nothing removes a
-        // loose record, and `vehicles.md §2` keeps a parked vehicle as an
-        // active-object record with its floor marker.
+    /// The pass-14 P14-06 finding ("a parked carpet or horse should still be
+    /// there ... when the party returns to its floor") is withdrawn by
+    /// u5-spec#308 Q1. `town-mode.md §11` (R645): the floor change runs the
+    /// full reseat - "every active-object record except the party's is
+    /// cleared, which erases any parked horse or magic carpet ... and every
+    /// roster NPC is re-placed at its current-hour waypoint with its walk
+    /// state reset to idle and its queued route discarded" - and "A vehicle
+    /// erased this way is not restored by returning to the floor it was
+    /// parked on."
+    fn p14_06_parked_vehicles_fixture() -> (std::path::PathBuf, PlayState, Scene) {
+        let dir = debug_game_dir();
+        fs::write(dir.join("CASTLE.DAT"), location_pages()).unwrap();
         let mut state = test_state(open_grid(), 5, 5);
         state.load_scheduled_npcs(&[
             NpcSlot {
@@ -162,32 +168,48 @@ mod playfix14_town14 {
                 name: None,
             },
         ]);
-        let npc_slot = state.npcs[0].active_object.expect("NPC linked on floor 0");
-        let carpet = ActiveObject {
-            type_byte: CARPET_TRANSPORT_FIRST,
-            tile: CARPET_TRANSPORT_FIRST,
-            x: 3,
-            y: 4,
-            z: 0,
-            phase: 0,
-            aux1: 0,
-            aux3: 0,
-        };
-        let carpet_slot = state.allocate_active_object_slot(carpet).unwrap();
-
-        // Up to floor 1, where the NPC is not, and back down.
         let Area::Town { scene, .. } = state.area else {
             unreachable!()
         };
-        state.area = Area::Town { scene, floor: 1 };
-        state.relink_npc_objects();
-        assert_eq!(state.active_objects[carpet_slot], carpet);
-        assert!(state.active_objects[npc_slot].is_empty());
+        (dir, state, scene)
+    }
+
+    fn p14_06_park(state: &mut PlayState, type_byte: u8, x: usize) -> usize {
+        state
+            .allocate_active_object_slot(ActiveObject {
+                type_byte,
+                tile: type_byte,
+                x,
+                y: 4,
+                z: 0,
+                phase: 0,
+                aux1: 0,
+                aux3: 0,
+            })
+            .unwrap()
+    }
+
+    #[test]
+    fn p14_06_withdrawn_floor_round_trip_erases_parked_vehicles() {
+        let (dir, mut state, scene) = p14_06_parked_vehicles_fixture();
+        let carpet_slot = p14_06_park(&mut state, CARPET_TRANSPORT_FIRST, 3);
+        let horse_slot = p14_06_park(&mut state, HORSE_OBJECT_FIRST, 4);
+
+        state.reload_town_floor(&dir, scene, 1).unwrap();
+        assert!(state.active_objects[carpet_slot].is_empty(), "carpet gone on the far floor");
+        assert!(state.active_objects[horse_slot].is_empty());
         assert!(state.npcs[0].active_object.is_none());
 
-        state.area = Area::Town { scene, floor: 0 };
-        state.relink_npc_objects();
-        assert_eq!(state.active_objects[carpet_slot], carpet);
+        state.reload_town_floor(&dir, scene, 0).unwrap();
+        let vehicles = state
+            .active_objects
+            .iter()
+            .skip(1)
+            .filter(|object| {
+                matches!(object.type_byte, CARPET_TRANSPORT_FIRST | HORSE_OBJECT_FIRST)
+            })
+            .count();
+        assert_eq!(vehicles, 0, "not restored by returning to the floor");
         assert!(state.npcs[0].active_object.is_some());
         let linked = state
             .active_objects
@@ -195,6 +217,47 @@ mod playfix14_town14 {
             .filter(|object| object.type_byte == 0x50)
             .count();
         assert_eq!(linked, 1, "the NPC is linked exactly once");
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn p14_06_withdrawn_floor_change_reseats_a_mid_route_walker() {
+        // `npc-schedules.md §12` (R646): "After any of the four, an NPC that
+        // was mid-route is standing on its scheduled position rather than
+        // where it had walked to, and its queued route is gone."
+        let (dir, mut state, scene) = p14_06_parked_vehicles_fixture();
+        let waypoint = (state.npcs[0].x, state.npcs[0].y, state.npcs[0].z);
+        state.npcs[0].x = waypoint.0 + 2;
+        state.npcs[0].state = NPC_STATE_REPLAY_QUEUE;
+        state.npcs[0].move_queue = vec![1, 1, 2];
+        state.npcs[0].move_queue_pos = 1;
+        state.sync_npc_active_object(0, 0);
+
+        state.reload_town_floor(&dir, scene, 1).unwrap();
+
+        let npc = &state.npcs[0];
+        assert_eq!((npc.x, npc.y, npc.z), waypoint);
+        assert_eq!(npc.state, NPC_STATE_IDLE);
+        assert!(npc.move_queue.is_empty());
+        assert_eq!(npc.move_queue_pos, 0);
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn p14_06_npc_death_reload_keeps_the_table() {
+        // `town-mode.md §3` (u5-spec#308 Q1): "the only page reload that
+        // skips the reseat is the same-floor reload after an NPC death,
+        // which preserves the table".
+        let (dir, mut state, scene) = p14_06_parked_vehicles_fixture();
+        let carpet_slot = p14_06_park(&mut state, CARPET_TRANSPORT_FIRST, 3);
+        let carpet = state.active_objects[carpet_slot];
+
+        state
+            .reload_town_floor_preserving_objects(&dir, scene, 0)
+            .unwrap();
+
+        assert_eq!(state.active_objects[carpet_slot], carpet);
+        let _ = fs::remove_dir_all(dir);
     }
 
     #[test]

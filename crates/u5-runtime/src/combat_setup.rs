@@ -1136,6 +1136,7 @@ impl PlayState {
         entry_seed: u8,
         scan_sources: bool,
         enter_endgame_after_successful_absorbable_combat: bool,
+        trigger_cell: Option<usize>,
     ) -> io::Result<String> {
         let bank = load_dungeon_cbt(game_dir)?;
         let record = bank.record(arena_index).ok_or_else(|| {
@@ -1217,8 +1218,11 @@ impl PlayState {
         }
         if !enter_endgame_after_successful_absorbable_combat {
             if let Some(snapshot) = &mut self.combat_frame_snapshot {
-                snapshot.dungeon_room_clear_on_success =
-                    Some(PendingDungeonRoomClear { scene, room_slot });
+                snapshot.dungeon_room_clear_on_success = Some(PendingDungeonRoomClear {
+                    scene,
+                    room_slot,
+                    trigger_cell,
+                });
             }
         }
         if enter_endgame_after_successful_absorbable_combat && has_absorbable_field {

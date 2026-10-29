@@ -19287,6 +19287,9 @@ fn combat_step_defers_field_contact_until_completed_dispatch_without_consuming_m
 
     let mut expected_prng = state.prng_state;
     let expected_raw = u5_prng_range_u16(&mut expected_prng, 0, 10) as u8;
+    // `combat.md §11` (u5-spec#308 Q3, R650): the committed action's
+    // maintenance endpoint then gives the marker its field-pass draw.
+    let dissolve_draw = u5_prng_range_u16(&mut expected_prng, 0, 255);
     let application = state
         .apply_combat_player_command_with_inputs(0, CombatPlayerCommandInput::Key(' '))
         .expect("pass should complete the actor dispatch");
@@ -19307,8 +19310,11 @@ fn combat_step_defers_field_contact_until_completed_dispatch_without_consuming_m
     ));
     assert_eq!(state.prng_state, expected_prng);
     assert_eq!(state.party[0].hp, 20u16.saturating_sub(expected_raw as u16));
-    assert_eq!(
-        state.active_objects[1],
+    // Contact does not consume the marker; only the field pass's 1-in-16
+    // draw can remove it.
+    let expected_marker = if dissolve_draw < 16 {
+        ActiveObject::empty()
+    } else {
         ActiveObject {
             type_byte: COMBAT_FIELD_KIND_FIRE,
             tile: COMBAT_FIELD_KIND_FIRE,
@@ -19319,7 +19325,8 @@ fn combat_step_defers_field_contact_until_completed_dispatch_without_consuming_m
             aux1: 0,
             aux3: 0,
         }
-    );
+    };
+    assert_eq!(state.active_objects[1], expected_marker);
     assert!(state.visibility_dirty);
 }
 

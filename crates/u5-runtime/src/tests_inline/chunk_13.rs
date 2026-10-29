@@ -18909,7 +18909,9 @@ fn dungeon_room_trigger_loads_selected_dungeon_cbt_record_when_available() {
         MoveOutcome::Moved
     );
 
-    assert_eq!(state.grid[dungeon_cell_index(0, 2, 1)], 0xa7);
+    // `dungeon-mode.md §5` (u5-spec#308 Q2): the `0xF?` to `0xA?` patch is
+    // made on the normal return from room combat, not on entry.
+    assert_eq!(state.grid[dungeon_cell_index(0, 2, 1)], 0xf7);
     assert!(state.combat_active);
     assert_eq!(state.message, DUNGEON_ROOM_ENTRY_NARRATION);
     assert_eq!(state.combat_terrain[0][0], 0x00);
@@ -18945,6 +18947,7 @@ fn dungeon_room_trigger_loads_selected_dungeon_cbt_record_when_available() {
     );
     let application = state.apply_combat_round_loop_exit(CombatRoundLoopExit::LeaveCombat);
     assert_eq!(application.result_code, COMBAT_ROUND_RESULT_SUCCESS);
+    assert_eq!(state.grid[dungeon_cell_index(0, 2, 1)], 0xa7);
     assert!(dungeon_room_clear_bit_is_set(
         &state.dungeon_room_clear_bitmap,
         scene,

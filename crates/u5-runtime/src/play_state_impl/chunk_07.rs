@@ -432,8 +432,7 @@ impl PlayState {
         // descriptor is still present.
         let _ = self.apply_combat_absorbable_field_contact_for_actor_position(actor_slot);
         let _ = self.apply_combat_post_dispatch_contact_for_actor_position(actor_slot);
-        let _ = self.apply_visible_combat_magic_ring_pass_to_slot(actor_slot);
-        let _ = self.age_active_effect();
+        let _ = self.apply_combat_maintenance_endpoint(actor_slot);
         let exit = match self.combat_round_loop_control(true, false) {
             CombatRoundLoopControl::Exit(exit) => exit,
             CombatRoundLoopControl::ContinueActorWalk | CombatRoundLoopControl::StartNextRound => {
@@ -3016,7 +3015,7 @@ impl PlayState {
         if scene.byte != pending.scene_byte {
             return Ok(false);
         }
-        self.reload_town_floor(game_dir, scene, floor)?;
+        self.reload_town_floor_preserving_objects(game_dir, scene, floor)?;
         // `encounters.md §7`: the chain "does not re-place the player:
         // the player's position comes from the world-state globals
         // throughout."

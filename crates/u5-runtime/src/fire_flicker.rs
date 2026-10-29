@@ -12,8 +12,9 @@
 //! ## The two parts of one step
 //!
 //! `§12.4`: "First the driver refreshes four actor-half 'field' tiles —
-//! atlas ids `0x1E8` (a poison field), `0x1E9` (a sleep field), `0x1EA` and
-//! `0x1EB` (a force field) — with fresh pseudo-random pixel bits from a
+//! atlas ids `0x1E8` (a poison field), `0x1E9` (a sleep field), `0x1EA` (the
+//! fire field) and `0x1EB` (the energy field, Look text `a force field`; ids
+//! named 2026-10-28, issue #308 Q3) — with fresh pseudo-random pixel bits from a
 //! generator the driver owns. These are the combat field-effect tiles, so
 //! those fields are themselves re-randomised on every animation step. Then
 //! it uses one of the refreshed tiles as a noise source and, for each fire

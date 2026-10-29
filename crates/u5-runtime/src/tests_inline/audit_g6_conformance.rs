@@ -255,8 +255,8 @@ fn a127_per_step_gate_refuses_any_occupant_but_the_workspace_keeps_the_cutoff() 
     state.relink_npc_objects();
     assert!(!state.npc_workspace_cell_open(0, 3, 1, 0, 20, 20));
     // Remove the occupant the way the engine's own removals do - its live
-    // slot with it. A floor relink unlinks only roster NPCs (`town-mode.md
-    // §11`), so a record left behind would stay put (playtest P14-06).
+    // slot with it. The bare relink below frees only roster NPC slots, so a
+    // record left behind would stay put.
     if let Some(slot) = state.npcs[1].active_object {
         state.free_active_object_slot(slot);
     }
