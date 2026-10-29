@@ -716,10 +716,7 @@ impl U4PreviewSource {
     /// The commit-side record this preview hands to the save writer.
     pub fn to_transfer_source(&self) -> U4TransferSource {
         U4TransferSource {
-            // The preview decodes each name byte as one `char`
-            // (`byte as char`), so map back per char to keep bytes at or
-            // above `0x80` byte-exact (`§7` copies the name verbatim).
-            name: self.name.chars().map(|ch| ch as u32 as u8).collect(),
+            name: u4_preview_text_bytes(&self.name).collect(),
             male: self.male,
             class_index: self.class_index,
             strength: self.strength,
@@ -729,6 +726,18 @@ impl U4PreviewSource {
             is_avatar: self.is_avatar,
         }
     }
+}
+
+/// The preview decodes each `PARTY.SAV` name byte as one `char`
+/// (`byte as char`), and a typed replacement name is printable ASCII, so
+/// every preview string maps back to one byte per `char`. This keeps
+/// bytes at or above `0x80` byte-exact for the save writer and for the
+/// fixed-cell glyph draws (`§7` copies the name verbatim; playtest P17-02).
+pub fn u4_preview_text_bytes(text: &str) -> impl Iterator<Item = u8> + '_ {
+    text.chars().map(|ch| {
+        u8::try_from(u32::from(ch))
+            .unwrap_or_else(|_| panic!("u4 preview text holds only byte-sized chars, got {ch:?}"))
+    })
 }
 
 pub const fn u4_preview_sex_text(male: bool) -> &'static str {
@@ -973,7 +982,9 @@ impl U4PreviewSession {
     /// corrections already applied.
     pub fn committed_source(&self) -> U4TransferSource {
         let mut source = self.source.to_transfer_source();
-        source.name = self.name.as_bytes().to_vec();
+        // Not `as_bytes()`: that is UTF-8, which turns a source byte at or
+        // above `0x80` into two (playtest P17-02).
+        source.name = u4_preview_text_bytes(&self.name).collect();
         source.male = self.male;
         source
     }
@@ -1361,9 +1372,7 @@ pub fn synthetic_party_sav_fixture(source: &U4PreviewSource) -> Vec<u8> {
         let at = record + offset;
         bytes[at..at + 2].copy_from_slice(&value.to_le_bytes());
     }
-    for (index, byte) in source
-        .name
-        .bytes()
+    for (index, byte) in u4_preview_text_bytes(&source.name)
         .take(U4_PREVIEW_VALIDATED_NAME_BYTES)
         .enumerate()
     {
@@ -1930,6 +1939,28 @@ mod tests {
         }
         let parsed = parse_u4_preview_source(&bytes).expect("all-zero standings never reject");
         assert!(parsed.is_avatar);
+    }
+
+    /// Playtest P17-02: `§5.2` accepts any name byte that is NUL or at
+    /// least `0x20`, and `§7` copies the name. A byte at or above `0x80`
+    /// must reach the commit as itself, not as its UTF-8 encoding.
+    #[test]
+    fn playtest_p17_02_high_name_bytes_commit_byte_exact() {
+        let mut bytes = synthetic_party_sav_fixture(&avatar_source());
+        let name_at = U4_PREVIEW_RECORD_OFFSET + RECORD_NAME;
+        bytes[name_at..name_at + 8].copy_from_slice(b"ABCDEFG\xe9");
+        let parsed = parse_u4_preview_source(&bytes).expect("0xE9 is a valid name byte");
+        assert_eq!(parsed.name.chars().count(), 8);
+
+        let session = U4PreviewSession::new(parsed);
+        let committed = session.committed_source();
+        assert_eq!(committed.name, b"ABCDEFG\xe9".to_vec());
+
+        let mut save = vec![0u8; crate::SAVED_GAM_LEN];
+        crate::u4_transfer::apply_u4_transfer_to_save(&mut save, &committed, None)
+            .expect("transfer applies");
+        let slot = crate::SAVE_ROSTER_OFFSET;
+        assert_eq!(&save[slot..slot + 9], b"ABCDEFG\xe9\0");
     }
 
     #[test]

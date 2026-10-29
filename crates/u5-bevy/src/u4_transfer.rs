@@ -27,6 +27,7 @@ use u5_runtime::intro_menu::{IntroSubflow, IntroSubflowResult};
 use u5_runtime::text_wrap::{TextWindowDescriptor, text_window_centred_start_column};
 #[cfg(test)]
 use u5_runtime::u4_preview_panel_title_text;
+use u5_runtime::u4_preview_text_bytes;
 use u5_runtime::{
     CH_CELL_SIDE, FixedCellFont, U4_PREVIEW_AVATAR_VERDICT_ROW, U4_PREVIEW_COMMIT_COLUMN,
     U4_PREVIEW_COMMIT_MESSAGE_WINDOW, U4_PREVIEW_COMMIT_ROW, U4_PREVIEW_FIELD_LABEL_COLUMN,
@@ -330,7 +331,8 @@ fn draw_text(
     foreground: u8,
     background: u8,
 ) {
-    for (offset, byte) in text.bytes().enumerate() {
+    // One glyph per preview char, not per UTF-8 byte (playtest P17-02).
+    for (offset, byte) in u4_preview_text_bytes(text).enumerate() {
         buffer.draw_fixed_glyph_cell(
             font,
             byte,
@@ -372,7 +374,7 @@ fn panel_cell(panel: U4PreviewPanel, column: u8, row: u8) -> (u8, u8) {
 /// on odd-length lines but shifts every even-length line one whole cell
 /// left." (`RETRACTIONS.md` R344.)
 fn centred_column(window: TextWindowDescriptor, text: &str) -> u8 {
-    let chars = u8::try_from(text.len()).unwrap_or(u8::MAX);
+    let chars = u8::try_from(text.chars().count()).unwrap_or(u8::MAX);
     window.top_left_x + text_window_centred_start_column(window.column_count(), chars)
 }
 
