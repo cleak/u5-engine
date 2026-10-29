@@ -3394,7 +3394,17 @@ impl PlayState {
         // poisoned reads one hit point lower on the original than here,
         // in the same frame that prints `Poisoned!`. That point is the
         // drink's own turn.
-        self.advance_turn();
+        //
+        // That turn is the dungeon loop's acted charge, not one this answer
+        // takes for itself: the command epilogue charges it once the prompt
+        // has closed and runs the `§4` step 6 post-action pass behind it,
+        // exactly as on the `No.` arm. Charging it here left the epilogue
+        // nothing to settle, so the post-action pass never ran and the
+        // upkeep's `Starving!` waited under the next command (playtest
+        // P19-02).
+        if self.dungeon_acted_turn_before.is_none() {
+            self.advance_turn();
+        }
         MoveOutcome::Observed
     }
 
