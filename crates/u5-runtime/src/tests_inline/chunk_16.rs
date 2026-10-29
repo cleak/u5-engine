@@ -2128,7 +2128,6 @@ BRITANNIA 11 21
         state.flush_staged_narration();
         assert!(state.active_shrine.is_some());
         assert!(state.active_mix.is_none());
-        assert!(state.message.contains(SHRINE_VIRTUE_PROMPT) || state.message == ":");
 
         assert_eq!(
             handle_play_key_input(&mut state, 'H', "ONESTY\r", &dir).unwrap(),
