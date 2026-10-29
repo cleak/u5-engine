@@ -2825,14 +2825,15 @@ impl PlayState {
         })
     }
 
-    /// `combat.md §6.1a` + `magic.md §8` creature-prompt targeters: Charm
-    /// toggles the controlled/charmed bit, and "a second successful Charm on
-    /// the same actor clears it". The shared creature-prompt predicate
-    /// rejects any actor already carrying the bit, which would make the
-    /// clearing half unreachable, so Charm keeps every other eligibility test
-    /// and re-targets an already-marked actor regardless of which group its
-    /// toggled descriptor now falls in.
-    pub fn charm_prompt_target_is_eligible(&self, target_slot: usize, caster_group: u8) -> bool {
+    /// `combat.md §6.1a` Writers #2: Charm's "eligibility gate is the same
+    /// slot-to-group helper the round walker uses, and it accepts any
+    /// non-zero result". A party-side slot is accepted only as the traitor or
+    /// while it carries the bit (the toggle then clears it, `magic.md §8`'s
+    /// "second successful Charm"); a charmed monster-side slot is group 0
+    /// (`§16.1`) and is refused, since "Charm's gate admits only slots
+    /// already in the automatic group" (#307 Q1, playtest P17-13). The
+    /// caster's group plays no part.
+    pub fn charm_prompt_target_is_eligible(&self, target_slot: usize, _caster_group: u8) -> bool {
         let Some(actor) = self.combat_actors.get(target_slot).copied() else {
             return false;
         };
@@ -2851,7 +2852,7 @@ impl PlayState {
         if self.combat_actor_stands_on_restraint_arena_cell(actor) {
             return false;
         }
-        actor.is_controlled() || self.combat_target_group_for_slot(target_slot) != caster_group
+        self.combat_target_group_for_slot(target_slot) != COMBAT_TARGET_GROUP_PARTY
     }
 
     /// `catalogs/spell-list.md` id 34: Charm names its victim — a party-side
