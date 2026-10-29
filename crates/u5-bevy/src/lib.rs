@@ -13290,13 +13290,12 @@ fn step_visual_intro_panel(intro: &mut VisualIntroState, ch: char) -> bool {
                 IntroSubflow::CharacterCreation,
                 IntroSubflowResult::SaveReady,
             );
-            // `systems/chargen.md §1`/`§9`: chargen returns to the intro
-            // menu and the player explicitly chooses Journey Onward. The
-            // completed subflow leaves Character Creation cached, so move the
-            // visible highlight to Journey Onward; otherwise Enter immediately
-            // starts chargen again. Do not replace the menu labels with an
-            // engine-authored completion notice.
-            set_visual_intro_menu_highlight(intro, IntroSubflow::JourneyOnward);
+            // `systems/chargen.md §9`: chargen returns to the intro menu and
+            // "the player must press the "Journey Onward" key explicitly".
+            // `systems/intro.md §6.2`: the highlight index survives and "the
+            // bar always reflects the last selection made", so it stays on
+            // Create New Character (playtest P17-03). Do not replace the
+            // menu labels with an engine-authored completion notice.
             intro.modal_backing = None;
             intro.menu_idle_ticks = 0;
             intro.message_waiting_for_key = false;
@@ -29363,6 +29362,52 @@ mod tests {
         assert!(
             intro.surface.pixels.iter().any(|pixel| *pixel != 0),
             "chargen fixed prompt should draw into the intro display buffer"
+        );
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    /// Playtest P17-03: `systems/intro.md §6.2` - the highlight index
+    /// survives and "the bar always reflects the last selection made", and
+    /// `systems/chargen.md §9` has the player press Journey Onward
+    /// explicitly. Nothing moves the bar to Journey Onward after chargen.
+    #[test]
+    fn playtest_p17_03_chargen_commit_keeps_the_menu_bar_on_create() {
+        let dir = debug_game_dir();
+        let mut session = ChargenSession::new(chargen_records(), (0u8..=127).collect()).unwrap();
+        session.submit_name("Avatar");
+        session.submit_gender_key(b'M');
+        session.advance_intro();
+        for _ in 0..7 {
+            session.submit_answer_key(b'A');
+        }
+        assert!(matches!(
+            session.current_step(),
+            ChargenSessionStep::PresentIntro { .. }
+        ));
+        // The chargen writer's seeds (`chargen.md §9`), synthetic here.
+        fs::write(
+            dir.join(u5_runtime::INIT_GAM_FILENAME),
+            u5_runtime::test_fixtures::saved_game_seed_bytes(0, 0, 0, 0),
+        )
+        .unwrap();
+        fs::write(
+            dir.join(u5_runtime::INIT_OOL_FILENAME),
+            vec![0u8; u5_runtime::OOL_PLANE_LEN],
+        )
+        .unwrap();
+        let mut intro = read_only_intro_state_for_local_assets(&dir, VisualIntroPanel::Menu);
+        intro.dispatch.submit_menu_key(b'C');
+        intro.panel = VisualIntroPanel::CharacterCreation {
+            session,
+            input_line: String::new(),
+        };
+
+        assert!(step_visual_intro_panel(&mut intro, ' '));
+
+        assert!(matches!(intro.panel, VisualIntroPanel::Menu));
+        assert_eq!(
+            visual_intro_menu_highlight(&intro),
+            IntroSubflow::CharacterCreation
         );
         let _ = fs::remove_dir_all(dir);
     }
