@@ -2848,7 +2848,7 @@ fn handle_active_shop_key_input(
                         &mut state.gold,
                     )
                 }
-                SageState::Confirm { .. } if no || key_byte == b' ' => step_sage(
+                SageState::Confirm { .. } if no => step_sage(
                     s,
                     SageInput::Confirm {
                         accepted: false,

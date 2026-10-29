@@ -6442,6 +6442,33 @@ fn end_to_end_sage_rumour_prefers_shoppe_record_rendering() {
 }
 
 #[test]
+fn sage_fee_question_ignores_space() {
+    use crate::shop_runtime::SageState;
+    use crate::shop_session::ActiveShopSession;
+
+    // `shops.md §8.C`: "Matched topic | Record `84`, then `\n\nFair 'nuff?" `;
+    // Y/N only", and §8.A's shared Y/N primitive ignores other keys without
+    // redrawing or advancing. Space declined the fee (playtest P19-01).
+    let mut state = test_state(open_grid(), 1, 1);
+    state.gold = 200;
+    state.active_shop = Some(ActiveShopSession::Sage(SageState::default()));
+
+    handle_play_key_input(&mut state, 'H', "ONE", Path::new("")).unwrap();
+    assert_eq!(state.message, "Fair 'nuff?\" ");
+    handle_play_key_input(&mut state, ' ', "", Path::new("")).unwrap();
+
+    assert_eq!(state.gold, 200);
+    assert_eq!(state.message, "Fair 'nuff?\" ");
+    assert!(matches!(
+        state.active_shop,
+        Some(ActiveShopSession::Sage(SageState::Confirm { .. }))
+    ));
+
+    handle_play_key_input(&mut state, 'Y', "", Path::new("")).unwrap();
+    assert!(state.gold <= 150);
+}
+
+#[test]
 fn end_to_end_sage_short_funds_prefers_shoppe_record_rendering() {
     use crate::shop_runtime::SageState;
     use crate::shop_session::ActiveShopSession;
