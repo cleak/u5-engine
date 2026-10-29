@@ -22,7 +22,7 @@
 
 use std::path::PathBuf;
 
-use u5_runtime::gameplay_chrome::{ChromePalette, RibbonCapDirection};
+use u5_runtime::gameplay_chrome::{ChromePalette, RibbonCapDirection, prompt_cursor_glyph};
 use u5_runtime::intro_menu::{IntroSubflow, IntroSubflowResult};
 use u5_runtime::text_wrap::{TextWindowDescriptor, text_window_centred_start_column};
 #[cfg(test)]
@@ -41,9 +41,9 @@ use u5_runtime::{
     U4_PREVIEW_RIGHT_PANEL_TITLE_BLANKED_CELL, U4_PREVIEW_VALUE_COLUMN,
     U4_TRANSFER_U4_SOURCE_FILENAME, U4PreviewAction, U4PreviewEdit, U4PreviewMessage,
     U4PreviewMessagePlacement, U4PreviewPageLine, U4PreviewPanel, U4PreviewPhase, U4PreviewSession,
-    U4PreviewSource, commit_u4_transfer_save, load_ibm_ch_font, parse_u4_preview_source,
-    read_disk_file, u4_preview_field_label, u4_preview_panel_bars, u4_preview_panel_rule_polyline,
-    u4_preview_prompt_frame_cells, u4_preview_sex_text,
+    U4PreviewSource, U4PreviewStage, commit_u4_transfer_save, load_ibm_ch_font,
+    parse_u4_preview_source, read_disk_file, u4_preview_field_label, u4_preview_panel_bars,
+    u4_preview_panel_rule_polyline, u4_preview_prompt_frame_cells, u4_preview_sex_text,
 };
 
 use crate::{
@@ -98,6 +98,10 @@ pub(crate) struct U4TransferScreen {
     font: Option<FixedCellFont>,
     pending_page: Option<PendingPage>,
     pending_edits: Vec<U4PreviewEdit>,
+    /// Phase of the typed-entry field's animated cursor
+    /// (`text-output.md §10.6`), advanced once per presented frame as the
+    /// chargen name prompt's is.
+    cursor_pass: u64,
 }
 
 /// `§6.4`/`§11` step 4: read the Ultima IV player disk's `PARTY.SAV`.
@@ -153,6 +157,7 @@ impl U4TransferScreen {
             font: None,
             pending_page: Some(pending_page),
             pending_edits: Vec::new(),
+            cursor_pass: 0,
         }
     }
 
@@ -265,6 +270,28 @@ impl U4TransferScreen {
 
     pub(crate) fn render(&mut self) -> Vec<u8> {
         self.present();
+        // `§6.5`/`§12`: the replacement-name field is the shared typed-entry
+        // helper, whose readers all show the animated cursor that "cycles
+        // through four consecutive fixed-cell glyph codes, 0x05 through
+        // 0x08" (`text-output.md §10.6`) "at the end of what they have
+        // typed" (`input.md §8`; playtest P17-05). It is overlaid on the
+        // presented frame so the persistent surface keeps only the field.
+        if self.session.phase() == U4PreviewPhase::Stage(U4PreviewStage::NameReplace) {
+            self.cursor_pass = self.cursor_pass.wrapping_add(1);
+            let font = self.font();
+            let (column, row) = name_field_cell();
+            let typed = self.session.entry().chars().count();
+            let mut visible = self.surface.clone();
+            visible.draw_fixed_glyph_cell(
+                &font,
+                prompt_cursor_glyph(self.cursor_pass),
+                usize::from(column) + typed,
+                usize::from(row),
+                TEXT_INK,
+                UI_BACKGROUND,
+            );
+            return visible.to_rgba();
+        }
         self.surface.to_rgba()
     }
 
@@ -1198,6 +1225,58 @@ mod tests {
         let mut screen = screen(true);
         advance_to_comparison(&mut screen);
         assert!(matches!(screen.step('\x1b'), VisualIntroPanelOutcome::Stay));
+        cleanup(screen);
+    }
+
+    /// Playtest P17-05: `§12` makes the replacement-name field the shared
+    /// typed-entry helper, whose cursor "cycles through four consecutive
+    /// fixed-cell glyph codes, 0x05 through 0x08" (`text-output.md §10.6`)
+    /// at the end of what has been typed (`input.md §8`).
+    #[test]
+    fn playtest_p17_05_the_name_field_shows_the_animated_cursor() {
+        let mut screen = screen(true);
+        let font = advance_to_comparison(&mut screen);
+        screen.step('N');
+        let (column, row) = name_field_cell();
+        let width = new_intro_display_buffer().width;
+        let rgba_cell = |frame: &[u8], at: u8, at_row: u8| {
+            let x0 = usize::from(at) * CH_CELL_SIDE;
+            let y0 = usize::from(at_row) * CH_CELL_SIDE;
+            (y0..y0 + CH_CELL_SIDE)
+                .flat_map(|y| frame[(y * width + x0) * 4..][..CH_CELL_SIDE * 4].to_vec())
+                .collect::<Vec<u8>>()
+        };
+        let cursor_cell = |frame: &[u8], at: u8| rgba_cell(frame, at, row);
+        let glyph_cell = |glyph: u8| {
+            let mut scratch = new_intro_display_buffer();
+            scratch.clear(UI_BACKGROUND);
+            scratch.draw_fixed_glyph_cell(&font, glyph, 0, 0, TEXT_INK, UI_BACKGROUND);
+            rgba_cell(&scratch.to_rgba(), 0, 0)
+        };
+        let cursor_glyphs: Vec<Vec<u8>> = (0x05..=0x08).map(glyph_cell).collect();
+
+        let empty = screen.render();
+        let shown = cursor_cell(&empty, column);
+        assert!(
+            cursor_glyphs.contains(&shown),
+            "the empty field shows the cursor in its first cell"
+        );
+        for key in ['a', 'b', 'c'] {
+            screen.step(key);
+        }
+        let typed = screen.render();
+        let shown = cursor_cell(&typed, column + 3);
+        assert!(
+            cursor_glyphs.contains(&shown),
+            "the cursor follows the typed text"
+        );
+        // The persistent surface carries only the field itself.
+        let mut blank = new_intro_display_buffer();
+        blank.clear(UI_BACKGROUND);
+        assert_eq!(
+            rgba_cell(&screen.surface().to_rgba(), column + 3, row),
+            rgba_cell(&blank.to_rgba(), 0, 0)
+        );
         cleanup(screen);
     }
 
