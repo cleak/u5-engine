@@ -23619,18 +23619,20 @@ mod tests {
 
     #[test]
     #[cfg(feature = "original-asset-tests")]
-    fn visual_intro_journey_without_save_panics() {
+    fn visual_intro_journey_without_save_stalls_in_the_read_retry() {
+        // `systems/intro.md §7`: "a missing or unreadable SAVED.GAM stalls
+        // in the wrapper" rather than ending the program (playtest P17-04).
         let dir = debug_game_dir();
+        let _ = fs::remove_file(dir.join(SAVED_GAM_FILENAME));
         let mut intro = visual_intro_state_with_panel(dir.clone(), VisualIntroPanel::Menu);
 
-        let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-            resolve_visual_intro_subflow(&mut intro, IntroSubflow::JourneyOnward);
-        }));
+        assert!(resolve_visual_intro_subflow(
+            &mut intro,
+            IntroSubflow::JourneyOnward
+        ));
 
-        assert!(
-            result.is_err(),
-            "Journey Onward must panic when SAVED.GAM cannot be loaded"
-        );
+        assert!(matches!(intro.panel, VisualIntroPanel::JourneyOnwardRetry));
+        assert!(intro.launch_result.lock().unwrap().is_none());
         let _ = fs::remove_dir_all(dir);
     }
 
