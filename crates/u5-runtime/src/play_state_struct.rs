@@ -128,6 +128,12 @@ pub struct PlayState {
     /// needs the game directory; the framer's restore owes it to the input
     /// boundary as (scene, level the edge was reached at).
     pub pending_dungeon_surface_exit: Option<(DungeonScene, u8)>,
+    /// `dungeon-mode.md §4.1` (issue #304 Q1): "When the turn's monster step
+    /// reports contact before a fall chain, the contact fight ends ... The
+    /// chain then runs." The post-action pass's underfoot reaction owed
+    /// behind a contact fight as (level, x, y), drained once the fight has
+    /// returned.
+    pub pending_dungeon_underfoot_reaction: Option<(u8, usize, usize)>,
     pub natural_moongate_counter: u8,
     pub natural_moongate_live_cells: Vec<usize>,
     /// `overworld.md §9.2` (spec HEAD `c00bf63`): what the last blocking
