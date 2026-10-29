@@ -128,6 +128,24 @@ pub struct PlayState {
     /// needs the game directory; the framer's restore owes it to the input
     /// boundary as (scene, level the edge was reached at).
     pub pending_dungeon_surface_exit: Option<(DungeonScene, u8)>,
+    /// `dungeon-mode.md §4.1` (issue #304 Q1): "When the turn's monster step
+    /// reports contact before a fall chain, the contact fight ends ... The
+    /// chain then runs." The post-action pass's underfoot reaction owed
+    /// behind a contact fight as (level, x, y), drained once the fight has
+    /// returned.
+    pub pending_dungeon_underfoot_reaction: Option<(u8, usize, usize)>,
+    /// `dungeon-mode.md §14` contact sequence step 4, "Flush type-ahead": a
+    /// one-shot request a frontend takes after the key that raised it and
+    /// answers by discarding its queued keys (playtest P19-05).
+    pub typeahead_flush_requested: bool,
+    /// True only while the runtime itself paints the first-person view at
+    /// one of the dungeon loop's own redraw points
+    /// ([`PlayState::redraw_dungeon_first_person_view`]). The corridor
+    /// painter takes the active monster's pose draws only then; a frontend
+    /// repaint reuses [`Self::dungeon_monster_painted_poses`] (P19-06).
+    pub dungeon_runtime_paint: bool,
+    /// The active monster's (left, right) poses from the last runtime paint.
+    pub dungeon_monster_painted_poses: Option<(usize, usize)>,
     pub natural_moongate_counter: u8,
     pub natural_moongate_live_cells: Vec<usize>,
     /// `overworld.md §9.2` (spec HEAD `c00bf63`): what the last blocking

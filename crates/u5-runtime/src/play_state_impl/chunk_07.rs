@@ -7851,6 +7851,39 @@ impl PlayState {
         if woke {
             self.repaint_stats_panel();
         }
+        // `dungeon-mode.md §10` gives the pass in order as "the wake roll,
+        // the active-monster step, the encounter auto-face, the underfoot
+        // reaction", and `§14` steps the monster "After a successful dungeon
+        // action" with no exception for the cell underfoot. So the step, its
+        // draws and any contact come before the field, pit, bomb or
+        // teleport reaction on every acted turn (playtest P19-04). When the
+        // step launches a contact fight, `§4.1` (issue #304 Q1) has "the
+        // contact fight ends ... The chain then runs": the reaction is owed
+        // to the fight's return
+        // ([`Self::resume_dungeon_underfoot_reaction_after_combat`]).
+        let reaction_cell = (level, self.player.x, self.player.y);
+        if let Some(outcome) = self.apply_dungeon_active_monster_step(scene, level)? {
+            if self.combat_active {
+                self.pending_dungeon_underfoot_reaction = Some(reaction_cell);
+            } else if let Some(reaction) = self.apply_dungeon_underfoot_reaction(scene, game_dir)? {
+                return Ok(Some(reaction));
+            }
+            return Ok(Some(outcome));
+        }
+        self.apply_dungeon_underfoot_reaction(scene, game_dir)
+    }
+
+    /// The post-action pass's underfoot reaction (`dungeon-mode.md §8.1`'s
+    /// "Post-action underfoot consequences": teleport, pit, bomb and the
+    /// sleep, poison and fire fields) on the party's current cell.
+    pub fn apply_dungeon_underfoot_reaction(
+        &mut self,
+        scene: DungeonScene,
+        game_dir: &Path,
+    ) -> io::Result<Option<MoveOutcome>> {
+        let Area::Dungeon { level, .. } = self.area else {
+            return Ok(None);
+        };
         let x = self.player.x;
         let y = self.player.y;
         let tile = self.dungeon_cell(level, x, y);
@@ -7935,10 +7968,44 @@ impl PlayState {
             let _ = self.apply_dungeon_field_effect_at(level, x, y, tile, field);
             return Ok(None);
         }
-        if let Some(outcome) = self.apply_dungeon_active_monster_step(scene, level)? {
-            return Ok(Some(outcome));
-        }
         Ok(None)
+    }
+
+    /// Drain [`Self::pending_dungeon_underfoot_reaction`] once the contact
+    /// fight has returned: `dungeon-mode.md §4.1` (issue #304 Q1), "the
+    /// contact fight ends with its own view initialiser and the fresh setup
+    /// ... The chain then runs". It runs only while the party still stands
+    /// on the cell the pass found it on; where a reaction would run after a
+    /// fight that moved the party (the movement applier's codes 1-4, a
+    /// level change or a surface exit) is not published, so nothing runs
+    /// then.
+    pub fn resume_dungeon_underfoot_reaction_after_combat(
+        &mut self,
+        game_dir: &Path,
+    ) -> io::Result<Option<MoveOutcome>> {
+        if self.combat_active {
+            return Ok(None);
+        }
+        let Some((level, x, y)) = self.pending_dungeon_underfoot_reaction.take() else {
+            return Ok(None);
+        };
+        let Area::Dungeon {
+            scene,
+            level: current,
+        } = self.area
+        else {
+            return Ok(None);
+        };
+        if (current, self.player.x, self.player.y) != (level, x, y)
+            || matches!(self.party_capability(), PartyCapability::Defeated)
+        {
+            return Ok(None);
+        }
+        // The fight's closing lines are already on screen in the original by
+        // the time the reaction prints; record them first.
+        self.commit_command_echo();
+        self.flush_message_slot();
+        self.apply_dungeon_underfoot_reaction(scene, game_dir)
     }
 
     pub fn apply_dungeon_active_monster_step(
@@ -7985,6 +8052,9 @@ impl PlayState {
             // view the corridor painter draws for. The wait itself is pure
             // pacing and is not modelled here.
             self.redraw_dungeon_first_person_view();
+            // Step 4, "Flush type-ahead": keys typed before the contact are
+            // discarded and never reach the arena (playtest P19-05).
+            self.typeahead_flush_requested = true;
             self.free_active_object_slot(slot);
             self.mark_visibility_dirty();
             if combat_class_stats(object.aux1).is_some() {
@@ -8040,13 +8110,29 @@ impl PlayState {
     /// flavour-3 wall flourish is "consumed on every render that tests such
     /// a wall" (§6.4), so this render takes its own.
     pub fn redraw_dungeon_first_person_view(&mut self) {
+        if !matches!(self.area, Area::Dungeon { .. }) || self.combat_active {
+            return;
+        }
         self.dungeon_flourish_draw = None;
+        self.dungeon_runtime_paint = true;
         let _ = self.render_dungeon_viewport(
             VIEWPORT_PLAYER_ROW,
             TileGraphicsDepth::Ega16,
             None,
             None,
         );
+        self.dungeon_runtime_paint = false;
+    }
+
+    /// The dungeon's shared redraw (`dungeon-mode.md §6.9` composite redraw,
+    /// `§8.1`: "a blocked move and a turn ... each runs the shared redraw,
+    /// whose tick can carry the footstep tail"): the first-person paint with
+    /// its corridor-painter draws, then the local presentation tick. Each
+    /// no-key pass of the command wait is the same paint-then-tick
+    /// (`§4.1` "Render and poll"; playtest P19-06).
+    pub(crate) fn run_dungeon_shared_redraw(&mut self) {
+        self.redraw_dungeon_first_person_view();
+        self.tick_dungeon_footstep();
     }
 
     /// `dungeon-mode.md §14` (u5-spec#298 Q33, R551): the active monster's

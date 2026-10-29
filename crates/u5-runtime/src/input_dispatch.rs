@@ -129,6 +129,9 @@ fn run_with_command_epilogue(
     // the census makes it the majority; a handler that is one of the
     // exceptions sets its own mode while it runs.
     state.stats_panel_command_refresh = crate::stats_panel::PanelRefreshMode::Immediate;
+    // A type-ahead flush request belongs to the key that raised it; a
+    // frontend reads it once this call returns.
+    state.typeahead_flush_requested = false;
     state.stats_panel_command_baseline = crate::stats_panel::stats_panel_snapshot_of(state);
     let mut combat_was_active = state.combat_active;
     let mut result = command(state);
@@ -203,6 +206,15 @@ fn run_with_command_epilogue(
     // calls, terrain charge and consumed-action tail once the fight returns.
     if result.is_ok() && !state.combat_active && state.pending_difficult_terrain_step.is_some() {
         if let Err(error) = state.resume_difficult_terrain_step_after_combat(game_dir) {
+            result = Err(error);
+        }
+    }
+    // `dungeon-mode.md §4.1` (issue #304 Q1): a contact fight launched by the
+    // post-action monster step comes before the turn's underfoot reaction,
+    // which "then runs" once the fight has returned (playtest P19-04).
+    if result.is_ok() && !state.combat_active && state.pending_dungeon_underfoot_reaction.is_some()
+    {
+        if let Err(error) = state.resume_dungeon_underfoot_reaction_after_combat(game_dir) {
             result = Err(error);
         }
     }

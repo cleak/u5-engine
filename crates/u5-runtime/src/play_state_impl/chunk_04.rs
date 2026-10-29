@@ -3252,8 +3252,10 @@ impl PlayState {
             return MoveOutcome::Blocked;
         }
         self.player.facing = next;
-        // `audio.md §7.4`: a turn's redraw is a footstep tick (S25).
-        self.tick_dungeon_footstep();
+        // `audio.md §7.4`: a turn's redraw is a footstep tick (S25), and
+        // `dungeon-mode.md §8.1` has the turn run the shared redraw, which
+        // paints the new view first (playtest P19-06).
+        self.run_dungeon_shared_redraw();
         self.advance_turn();
         // `dungeon-mode.md §14`: a turn prints its verb and nothing else -
         // "`Turn left\n` / `Turn right\n`" - and the handler itself only

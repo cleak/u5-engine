@@ -13962,6 +13962,14 @@ fn drive_visual(
         if read && (!honours_queue || ends_text_hold) {
             visual.typed_keys.clear();
         }
+        // `dungeon-mode.md §14` contact step 4, "Flush type-ahead"
+        // (playtest P19-05).
+        if read && visual.state.typeahead_flush_requested {
+            visual.typed_keys.clear();
+            // One-shot: a later key read through a path that bypasses the
+            // command epilogue (a line editor) must not flush again.
+            visual.state.typeahead_flush_requested = false;
+        }
         if visual.state.sound_effect_serial != effects_before {
             // `audio.md §7.4`: the refused overworld or town step flushes
             // type-ahead after its beep, whatever the setting.
