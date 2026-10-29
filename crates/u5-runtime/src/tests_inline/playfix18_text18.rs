@@ -60,3 +60,44 @@ fn playtest_p18_03_paid_troll_toll_does_not_leave_the_row_open() {
     p18_assert_get_north_keeps_its_blank_row(&mut state, &dir);
     let _ = fs::remove_dir_all(dir);
 }
+
+/// P18-04: `rest-and-camp.md §4` - "The trailing space fills the second row
+/// exactly, so the cursor waits at column 0 of the next row", the
+/// `text-output.md §6` wrap the per-cell emitter has already taken when a
+/// chunk fills its row. At the bottom row that wrap scrolls the window.
+#[test]
+fn playtest_p18_04_row_filling_trailing_space_puts_the_cursor_on_the_next_row() {
+    let mut log = GameplayMessageLog::default();
+    log.push_command("Hole up- For");
+    log.push_output("how many hours? ");
+    let layout = layout_message_window_with_open_prompt(&log, None, None);
+    let hours = layout
+        .rows
+        .iter()
+        .find(|row| row.text == "how many hours?")
+        .expect("the prompt's second row is drawn");
+    assert_eq!(layout.inline_cursor, Some((MESSAGE_WINDOW_LEFT, hours.row + 1)));
+
+    let mut full = GameplayMessageLog::default();
+    for index in 0..MESSAGE_WINDOW_ROWS {
+        full.push_output(&format!("row {index}"));
+    }
+    full.push_command("Hole up- For");
+    full.push_output("how many hours? ");
+    let layout = layout_message_window_with_open_prompt(&full, None, None);
+    let hours = layout
+        .rows
+        .iter()
+        .find(|row| row.text == "how many hours?")
+        .expect("the prompt's second row is drawn");
+    assert_eq!(hours.row, MESSAGE_WINDOW_BOTTOM - 1, "the wrap scrolled the window");
+    assert_eq!(layout.inline_cursor, Some((MESSAGE_WINDOW_LEFT, MESSAGE_WINDOW_BOTTOM)));
+    assert!(layout.rows.iter().all(|row| row.row >= MESSAGE_WINDOW_TOP));
+
+    // A trailing space that does not fill the row keeps the cursor past it.
+    let mut short = GameplayMessageLog::default();
+    short.push_output("How many? ");
+    let layout = layout_message_window_with_open_prompt(&short, None, None);
+    let row = layout.rows.last().unwrap();
+    assert_eq!(layout.inline_cursor, Some((MESSAGE_WINDOW_LEFT + 10, row.row)));
+}

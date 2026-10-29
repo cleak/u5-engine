@@ -1266,11 +1266,30 @@ fn layout_message_window_inner(
         .filter(|row| row.trailing_spaces > 0)
         .map(|row| {
             (
-                (row.column as usize + row.glyphs.len() + row.trailing_spaces as usize)
-                    .min(MESSAGE_WINDOW_RIGHT as usize) as u8,
+                row.column as usize + row.glyphs.len() + row.trailing_spaces as usize,
                 row.row,
             )
         });
+    // `text-output.md §6`: "When a chunk exactly fills the row, the per-cell
+    // emitter has already wrapped by the time the chunk ends", so a trailing
+    // space that lands in the last cell leaves the cursor at column 0 of the
+    // next row - scrolling the window by one row when that row is past the
+    // bottom. `rest-and-camp.md §4`'s bed prompt is the published case: "The
+    // trailing space fills the second row exactly, so the cursor waits at
+    // column 0 of the next row" (playtest P18-04).
+    let trailing_space_cursor = trailing_space_cursor.map(|(column, row)| {
+        if column <= MESSAGE_WINDOW_RIGHT as usize {
+            return (column as u8, row);
+        }
+        if row < MESSAGE_WINDOW_BOTTOM {
+            return (MESSAGE_WINDOW_LEFT, row + 1);
+        }
+        rows.retain(|placed| placed.row > MESSAGE_WINDOW_TOP);
+        for placed in &mut rows {
+            placed.row -= 1;
+        }
+        (MESSAGE_WINDOW_LEFT, MESSAGE_WINDOW_BOTTOM)
+    });
     let inline_cursor = open_prompt.and_then(|prompt| {
         rows.last().map(|row| {
             (
