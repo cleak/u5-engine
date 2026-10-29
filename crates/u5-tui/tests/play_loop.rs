@@ -2094,3 +2094,54 @@ fn play_script_stops_when_combat_reaches_no_keyboard_turn() {
     assert!(state.combat_active);
     assert!(state.combat_actors[0].is_dragged_under(), "still held");
 }
+
+/// Playtest P19-05: `dungeon-mode.md §14`'s contact sequence - "3. One
+/// composite redraw ... 4. Flush type-ahead." With Buffer on, `dd` turns the
+/// party, the monster's step contacts, and the second queued `d` used to
+/// reach the ambush arena as a combat move (`East`).
+#[test]
+fn playfix19_p19_05_a_dungeon_contact_discards_the_queued_keys() {
+    let dir = debug_game_dir();
+    let level = 3u8;
+    let mut grid = open_dungeon_record();
+    for (x, y) in [(0usize, 7usize), (0, 1), (7, 0)] {
+        grid[dungeon_cell_index(level, x, y)] = 0xb0;
+    }
+    let mut base = dungeon_state(grid, level, 1, 0);
+    base.player.facing = Direction::West;
+    base.torch_counter = 0;
+    base.active_objects.push(ActiveObject {
+        type_byte: 1,
+        tile: 1,
+        x: 0,
+        y: 0,
+        z: 0,
+        phase: 0x20,
+        aux1: 21,
+        aux3: 0,
+    });
+    handle_play_script_command(&mut base, "buffer", &dir).unwrap();
+    // A generator seed whose single turn ends in the contact.
+    let seed = (1u16..2000)
+        .find(|seed| {
+            let mut probe = base.clone();
+            probe.prng_state = *seed;
+            handle_play_script_command(&mut probe, "d", &dir).unwrap();
+            probe.combat_active
+        })
+        .expect("some seed walks the monster onto the party");
+    let mut state = base.clone();
+    state.prng_state = seed;
+
+    handle_play_script_command(&mut state, "dd", &dir).unwrap();
+
+    assert!(state.combat_active, "the contact opened the arena");
+    assert!(
+        !state
+            .message_entries()
+            .iter()
+            .any(|entry| entry.text.contains("East")),
+        "the queued key never reached the arena"
+    );
+    let _ = fs::remove_dir_all(dir);
+}

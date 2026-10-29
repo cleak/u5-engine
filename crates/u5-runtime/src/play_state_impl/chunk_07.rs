@@ -8046,6 +8046,9 @@ impl PlayState {
             // view the corridor painter draws for. The wait itself is pure
             // pacing and is not modelled here.
             self.redraw_dungeon_first_person_view();
+            // Step 4, "Flush type-ahead": keys typed before the contact are
+            // discarded and never reach the arena (playtest P19-05).
+            self.typeahead_flush_requested = true;
             self.free_active_object_slot(slot);
             self.mark_visibility_dirty();
             if combat_class_stats(object.aux1).is_some() {

@@ -129,6 +129,9 @@ fn run_with_command_epilogue(
     // the census makes it the majority; a handler that is one of the
     // exceptions sets its own mode while it runs.
     state.stats_panel_command_refresh = crate::stats_panel::PanelRefreshMode::Immediate;
+    // A type-ahead flush request belongs to the key that raised it; a
+    // frontend reads it once this call returns.
+    state.typeahead_flush_requested = false;
     state.stats_panel_command_baseline = crate::stats_panel::stats_panel_snapshot_of(state);
     let mut combat_was_active = state.combat_active;
     let mut result = command(state);

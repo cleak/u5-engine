@@ -134,6 +134,10 @@ pub struct PlayState {
     /// behind a contact fight as (level, x, y), drained once the fight has
     /// returned.
     pub pending_dungeon_underfoot_reaction: Option<(u8, usize, usize)>,
+    /// `dungeon-mode.md §14` contact sequence step 4, "Flush type-ahead": a
+    /// one-shot request a frontend takes after the key that raised it and
+    /// answers by discarding its queued keys (playtest P19-05).
+    pub typeahead_flush_requested: bool,
     pub natural_moongate_counter: u8,
     pub natural_moongate_live_cells: Vec<usize>,
     /// `overworld.md §9.2` (spec HEAD `c00bf63`): what the last blocking

@@ -197,13 +197,16 @@ pub fn run_interactive_play_loop<R: BufRead>(
 /// setting governs only the per-read flush of `input.md §6`. The beep marks
 /// the refusal arms that flush, the test the visual shell applies: the silent
 /// whirlpool refusal and the under-sail arms take neither, and combat's own
-/// blocked-step beep publishes no flush.
+/// blocked-step beep publishes no flush. `dungeon-mode.md §14`'s contact
+/// sequence flushes too ("4. Flush type-ahead"), before the arena opens, so
+/// its request is honoured with combat already live (playtest P19-05).
 pub fn key_flushed_typeahead(state: &PlayState, effects_before: u64) -> bool {
-    !state.combat_active
-        && state
-            .sound_effects_after(effects_before)
-            .iter()
-            .any(|effect| matches!(effect, SoundEffect::BlockedStep))
+    state.typeahead_flush_requested
+        || (!state.combat_active
+            && state
+                .sound_effects_after(effects_before)
+                .iter()
+                .any(|effect| matches!(effect, SoundEffect::BlockedStep)))
 }
 
 /// Walk a pending third-mantra resolution to its end in a shell with no

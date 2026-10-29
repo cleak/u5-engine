@@ -83,3 +83,32 @@ fn playfix19_p19_04_a_contact_fight_comes_before_the_underfoot_reaction() {
     assert_eq!(state.pending_dungeon_underfoot_reaction, None);
     assert_eq!(state.party[0].status, b'P', "the field reacted after the fight");
 }
+
+/// P19-05: `dungeon-mode.md §14`'s contact sequence, "3. One composite
+/// redraw ... 4. Flush type-ahead." The contact asks its frontend to drop
+/// the queued keys before the arena opens.
+#[test]
+fn playfix19_p19_05_a_contact_requests_a_type_ahead_flush() {
+    let level = 3u8;
+    let mut grid = open_dungeon_record();
+    for (x, y) in [(0usize, 7usize), (0, 1), (7, 0)] {
+        grid[dungeon_cell_index(level, x, y)] = 0xb0;
+    }
+    let mut state = dungeon_state(grid, level, 1, 0);
+    playfix19_monster(&mut state, 0, 0);
+    state.prng_state = (1u16..)
+        .find(|seed| {
+            let mut probe = *seed;
+            u5_prng_range_u16(&mut probe, 0, 3) == 1
+        })
+        .unwrap();
+    let Area::Dungeon { scene, .. } = state.area else {
+        unreachable!()
+    };
+    assert!(!state.typeahead_flush_requested);
+
+    state.apply_dungeon_active_monster_step(scene, level).unwrap();
+
+    assert!(state.combat_active);
+    assert!(state.typeahead_flush_requested);
+}
