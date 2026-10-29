@@ -1021,6 +1021,12 @@ pub struct PlayState {
     /// the moment it opens (playtest J16). Set when the shop opens; the
     /// shop-key dispatcher spends it when the session closes.
     pub pending_talk_shop_turn: bool,
+    /// `view.md §3` (Fountains, Wishing-well text) / `town-mode.md §7`
+    /// step 4: an L-Look that opened the fountain's drinker selector or the
+    /// well's coin prompt owes its acted turn - clock minute, underfoot and
+    /// status pass, walkers - to the moment that handler returns, not to the
+    /// moment its prompt opens (playtest P19-03).
+    pub pending_look_prompt_turn: bool,
     /// `town-mode.md §7` step 4 / `conversation.md §2`: the same deferral
     /// for an explicit Talk that opened an ordinary conversation. The Talk
     /// dispatcher runs the whole conversation, so the turn epilogue - clock

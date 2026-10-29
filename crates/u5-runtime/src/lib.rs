@@ -1249,4 +1249,5 @@ mod tests {
     include!("tests_inline/playfix18_text18.rs");
     include!("tests_inline/playfix18_lit18.rs");
     include!("tests_inline/playfix19_dun19.rs");
+    include!("tests_inline/playfix19_town19.rs");
 }

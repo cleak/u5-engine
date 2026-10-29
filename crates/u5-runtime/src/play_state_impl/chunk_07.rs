@@ -4499,6 +4499,7 @@ impl PlayState {
                 self.append_town_poison_gas_message(game_dir, landed_scene, landed_floor)?;
                 self.apply_pending_town_status_provision_pass();
                 self.apply_pending_town_object_epilogue();
+                self.append_pending_hourly_status_message();
                 return Ok(Some(outcome));
             }
         }
@@ -4526,6 +4527,13 @@ impl PlayState {
         self.append_town_poison_gas_message(game_dir, scene, floor)?;
         self.apply_pending_town_status_provision_pass();
         self.apply_pending_town_object_epilogue();
+        // `time.md §5`: the status pass prints its starvation warning in the
+        // same hour-gated step that applies the damage, and `town-mode.md §7`
+        // step 4 runs that pass before the post-action cleanup that opens a
+        // contact. Left for the generic post-turn append, the warning waited
+        // under the next command whenever a contact or trapdoor outcome
+        // took the turn (playtest P19-02).
+        self.append_pending_hourly_status_message();
         self.apply_town_npc_contact_event(scene, floor, game_dir)
     }
 

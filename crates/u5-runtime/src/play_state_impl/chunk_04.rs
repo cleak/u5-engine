@@ -3399,7 +3399,17 @@ impl PlayState {
         // poisoned reads one hit point lower on the original than here,
         // in the same frame that prints `Poisoned!`. That point is the
         // drink's own turn.
-        self.advance_turn();
+        //
+        // That turn is the dungeon loop's acted charge, not one this answer
+        // takes for itself: the command epilogue charges it once the prompt
+        // has closed and runs the `§4` step 6 post-action pass behind it,
+        // exactly as on the `No.` arm. Charging it here left the epilogue
+        // nothing to settle, so the post-action pass never ran and the
+        // upkeep's `Starving!` waited under the next command (playtest
+        // P19-02).
+        if self.dungeon_acted_turn_before.is_none() {
+            self.advance_turn();
+        }
         MoveOutcome::Observed
     }
 
@@ -4016,10 +4026,42 @@ impl PlayState {
     /// the Minoc guard can raise its charity demand "after the first eligible
     /// Look while the party remains stationary", which is the cadence
     /// difference `#261` was filed for.
+    ///
+    /// `view.md §3`: the fountain and wishing-well handlers keep the command
+    /// open on their own prompts - the drinker selector, the coin question,
+    /// the wish - and only then "return to the command loop", and
+    /// `town-mode.md §7` runs the epilogue "When the dispatcher returns". So
+    /// a Look that opened one of those prompts leaves the charge pending for
+    /// the prompt's close; charging it here ran the minute, the starvation
+    /// warning and the walkers under the open question (playtest P19-03).
     fn charge_look_command_turn(&mut self) {
         if matches!(self.area, Area::Town { .. } | Area::World { .. }) {
-            self.advance_turn();
+            let prompt_open = self.active_wishing_well.is_some()
+                || self.active_party_selector.is_some_and(|session| {
+                    matches!(session.target, PartySelectorTarget::FountainDrink { .. })
+                });
+            if prompt_open {
+                self.pending_look_prompt_turn = true;
+            } else {
+                self.advance_turn();
+            }
         }
+    }
+
+    /// Spend the Look turn [`Self::charge_look_command_turn`] left pending,
+    /// once the fountain or well prompt it opened has closed.
+    pub fn settle_pending_look_prompt_turn(&mut self, game_dir: &Path) -> io::Result<()> {
+        let prompt_open = self.active_wishing_well.is_some()
+            || self.active_party_selector.is_some_and(|session| {
+                matches!(session.target, PartySelectorTarget::FountainDrink { .. })
+            });
+        if prompt_open || !std::mem::take(&mut self.pending_look_prompt_turn) {
+            return Ok(());
+        }
+        let turn_before = self.turn;
+        self.advance_turn();
+        self.apply_top_down_post_turn_effects_after_turn(turn_before, game_dir)?;
+        Ok(())
     }
 
     #[cfg(test)]
