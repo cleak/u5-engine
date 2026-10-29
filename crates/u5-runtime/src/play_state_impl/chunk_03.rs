@@ -361,6 +361,14 @@ impl PlayState {
             // alone" - no command row under the frozen spell row.
             || self.message_window_flash_hold_active()
             || self.mix_reagent_selection_active()
+            // `view.md §4.2.2` step 6: the sky prints `the night sky! ` and
+            // "then busy-wait[s] until any key is available" - inside the
+            // command, so the next poll's feed and marker have not been
+            // emitted yet (`text-output.md §10.4`, deferral) and no command
+            // row opens under the open sky row (playtest P18-05).
+            || self.active_view_overlay.as_ref().is_some_and(|overlay| {
+                matches!(overlay.mode, crate::ViewOverlayMode::SkyView)
+            })
             // `endgame.md §6`: the waiting branch is terminal and reads no
             // command, so no command row opens under record 10. Measured
             // 2026-10-16 (`doom-final-room`, beat `answered`, reading
@@ -4351,6 +4359,12 @@ impl PlayState {
     /// raised ... and the event continues exactly as a refusal."
     pub fn resolve_troll_bridge_toll_payment(&mut self, toll: i16, game_dir: &Path) -> io::Result<()> {
         self.commit_prompt_reply(TROLL_BRIDGE_TOLL_QUESTION, "Y");
+        // `overworld.md §7.1` step 3: "Echo the accepted letter and a line
+        // feed." `commit_prompt_reply` leaves the row flag alone, and the
+        // question's own feed-less row had left it open, so the flag outlived
+        // the paid toll and every later leading-feed result lost its blank
+        // row (playtest P18-03).
+        self.close_message_row();
         // `stats-panel.md §2.2.1` row 19: this is one of the twenty-three
         // deferred sites. The direct raise below is what makes the request
         // "never lowered by a rollback" - the generic end-of-command check
