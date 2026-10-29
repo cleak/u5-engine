@@ -1454,13 +1454,18 @@ pub const Z_STATS_ATTRIBUTE_LEFT_DIGITS: usize = 2;
 /// renders as the centred `Good Health`. The other four letters reuse
 /// the engine's existing status wording rather than inventing new
 /// published-looking text; they need a spec answer.
+///
+/// `inventory.md §4.7` keys the name off "the five-entry status table keyed
+/// by the status letter", and §4.2 publishes that alphabet as `G P D S C`,
+/// looked up so that "an out-of-range byte yields no letter rather than a
+/// wrong one". A byte outside it - `A` included - therefore prints nothing
+/// (playtest P17-08). `C` is in the alphabet but its name is unpublished.
 pub fn z_stats_health_line(status: u8) -> &'static str {
     match status {
         b'G' => "Good Health",
         b'P' => "Poisoned",
         b'S' => "Asleep",
         b'D' => "Dead",
-        b'A' => "Ashes",
         _ => "",
     }
 }

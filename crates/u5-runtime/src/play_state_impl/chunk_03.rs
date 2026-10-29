@@ -4645,7 +4645,6 @@ impl PlayState {
         let Some(member) = self.party.get(index).copied() else {
             return;
         };
-        let name = self.party_member_display_name(index);
         let gender = crate::party::party_roster_record_for_active_slot(
             &self.party_roster,
             index,
@@ -4670,9 +4669,10 @@ impl PlayState {
         // `Lv-2 Fighter` for Shamino, `Lv-2 Avatar` for the Avatar - not
         // the member's name, which `§4.7` already centres above.
         let class = crate::character_class_for_byte(member.class_byte);
-        let class_name = class
-            .map(|class| class.display_name())
-            .unwrap_or_else(|| name.as_str());
+        // §4.7: "the name is not repeated on that line", and §4.2's class
+        // lookup yields nothing for a byte outside the alphabet, so an
+        // unknown class prints no class name (playtest P17-08).
+        let class_name = class.map(|class| class.display_name()).unwrap_or("");
         // `inventory.md §4.7` (issue #302 Q2, R622): row 1 is "Per-class
         // indent, gender glyph, `_Lv-`, level (one cell), one space, class
         // name" - an indent from the per-class table, not a centring. Druid's

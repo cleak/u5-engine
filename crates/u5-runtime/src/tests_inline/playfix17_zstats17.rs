@@ -42,4 +42,38 @@ mod playfix17_zstats17 {
         assert_eq!(cell_byte(&system, 25, 5), Some(b'('));
         assert_ne!(cell_byte(&system, 25, 2), Some(b'('));
     }
+
+    /// `inventory.md §4.7`: the status name comes "from the five-entry status
+    /// table keyed by the status letter", and §4.2 publishes that alphabet as
+    /// `G P D S C`, looked up so "an out-of-range byte yields no letter rather
+    /// than a wrong one". The class name is "looked up from the record's class
+    /// letter through the nine-entry class table" and "the name is not
+    /// repeated on that line". A stored `A` printed `Ashes`, and an unknown
+    /// class byte printed the member's name (P17-08).
+    #[test]
+    fn playtest_p17_08_out_of_alphabet_status_and_class_print_nothing() {
+        assert_eq!(z_stats_health_line(b'A'), "");
+        assert_eq!(z_stats_health_line(b'G'), "Good Health");
+
+        let mut state = test_state(open_grid(), 5, 5);
+        state.party = vec![PartyMember {
+            slot: 0,
+            class_byte: b'Z',
+            status: b'A',
+            climb_stat: 15,
+            mana: 7,
+            hp: 240,
+            max_hp: 300,
+            level: 3,
+        }];
+        state.party_strengths = vec![16];
+        state.party_intelligence = vec![12];
+        state.party_experience = vec![123];
+        let name = state.party_member_display_name(0);
+        let rows = state.z_stats_panel_rows(&ZStatsSession::new(0));
+        assert!(rows[0].contains("Lv-3"), "rows: {rows:?}");
+        assert!(!name.is_empty() && !rows[0].contains(name.as_str()), "rows: {rows:?}");
+        assert_eq!(rows[1].trim(), "", "rows: {rows:?}");
+        assert!(!rows.iter().any(|row| row.contains("Ashes")), "rows: {rows:?}");
+    }
 }
