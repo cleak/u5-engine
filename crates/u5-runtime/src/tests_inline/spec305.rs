@@ -78,6 +78,30 @@ mod spec305 {
         assert!(!state.message_row_open_mid_line);
     }
 
+    /// `dungeon-mode.md §5`: room combat runs nested inside the room-entry
+    /// helper, so the step-6 post-action pass never runs on the arena's
+    /// table. An Advance into a room walked record 1 (party slot 1's sprite,
+    /// or the room's first source marker) one cell off its seat as if it
+    /// were the dungeon monster (playtest P18-02).
+    #[test]
+    fn the_post_action_pass_leaves_a_live_arena_table_alone() {
+        let (mut state, _scene, _level) = dungeon_contact_state(true);
+        let turn_before = state.turn;
+        state.advance_turn();
+        // The room helper has just opened the arena.
+        state.combat_active = true;
+        let record = state.active_objects[DUNGEON_ACTIVE_MONSTER_SLOT];
+        let prng = state.prng_state;
+
+        let outcome = state
+            .apply_dungeon_post_turn_effects_after_turn(turn_before, &debug_game_dir())
+            .unwrap();
+
+        assert_eq!(outcome, None);
+        assert_eq!(state.active_objects[DUNGEON_ACTIVE_MONSTER_SLOT], record);
+        assert_eq!(state.prng_state, prng);
+    }
+
     /// "The pair is absent when the view is unlit (no torch and no light
     /// spell: the repaint shows darkness and paints no sprite)".
     #[test]

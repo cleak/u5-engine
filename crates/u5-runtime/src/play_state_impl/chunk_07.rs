@@ -7823,6 +7823,16 @@ impl PlayState {
         if self.turn == turn_before {
             return Ok(None);
         }
+        // `dungeon-mode.md §5`: "Room combat runs nested inside the helper,
+        // which restores the dungeon scene afterwards", so the step-6 pass
+        // never sees the arena. A step that entered a room returns here with
+        // the arena's table live; the active-monster step would read record
+        // 1 - a party member's sprite or the room's first source marker - as
+        // the dungeon monster and walk it off its seat (`formats/cbt.md §5`,
+        // playtest P18-02).
+        if self.combat_active {
+            return Ok(None);
+        }
         let Area::Dungeon { scene, level } = self.area else {
             return Ok(None);
         };
