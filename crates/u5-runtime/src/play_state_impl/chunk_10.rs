@@ -802,6 +802,11 @@ impl PlayState {
         // The one reload that keeps the table is the same-floor reload after
         // an NPC death (`town-mode.md §3`).
         self.sync_player_object();
+        // Free every roster slot before allocating any: freeing inside the
+        // allocation loop let a later NPC's stale index wipe a slot already
+        // handed to an earlier NPC in the same pass, leaving two NPCs on one
+        // link and a sprite missing (`formats/saved-gam.md §12`: every NPC
+        // object is linked from that NPC's own record; playtest P18-01).
         for index in 0..self.npcs.len() {
             if let Some(slot) = self.npcs[index].active_object.take()
                 && slot != 0
@@ -809,6 +814,8 @@ impl PlayState {
             {
                 *object = ActiveObject::empty();
             }
+        }
+        for index in 0..self.npcs.len() {
             let npc = &self.npcs[index];
             // `npc-schedules.md §12`: the re-place pass "re-places each live
             // scheduled NPC", and §11 links every one that lands on the

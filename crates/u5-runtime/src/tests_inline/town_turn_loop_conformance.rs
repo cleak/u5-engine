@@ -554,6 +554,38 @@ fn the_clear_and_re_place_pass_erases_a_riderless_horse() {
     );
 }
 
+#[test]
+fn the_clear_and_re_place_pass_gives_each_npc_its_own_link() {
+    // `npc-schedules.md §12` re-places every roster NPC after clearing the
+    // table, and `formats/saved-gam.md §12` links each NPC object from that
+    // NPC's own record. Stale links in reverse order (a floor change after
+    // the roster had been allocated differently) made the second NPC wipe
+    // the slot just handed to the first and take it again, so both shared
+    // one link and one sprite vanished (playtest P18-01).
+    let mut state = test_state(npc_open_grid(), 20, 20);
+    let mut first = wandering_npc(1, 3, 3, (9, 9));
+    first.active_object = Some(2);
+    let mut second = wandering_npc(1, 5, 5, (11, 11));
+    second.slot = 2;
+    second.active_object = Some(1);
+    state.npcs.push(first);
+    state.npcs.push(second);
+
+    state.clear_and_replace_scheduled_npcs();
+
+    let a = state.npcs[0].active_object.expect("first NPC linked");
+    let b = state.npcs[1].active_object.expect("second NPC linked");
+    assert_ne!(a, b, "each NPC owns its own active-object slot");
+    assert_eq!(
+        (state.active_objects[a].x, state.active_objects[a].y),
+        (9, 9)
+    );
+    assert_eq!(
+        (state.active_objects[b].x, state.active_objects[b].y),
+        (11, 11)
+    );
+}
+
 /// A hoisted frigate on open deep water, which is the only terrain the
 /// released sail step accepts.
 fn under_sail_world(x: usize, y: usize, wind: WindState) -> PlayState {
