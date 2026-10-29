@@ -7987,7 +7987,11 @@ impl PlayState {
         let Some((level, x, y)) = self.pending_dungeon_underfoot_reaction.take() else {
             return Ok(None);
         };
-        let Area::Dungeon { scene, level: current } = self.area else {
+        let Area::Dungeon {
+            scene,
+            level: current,
+        } = self.area
+        else {
             return Ok(None);
         };
         if (current, self.player.x, self.player.y) != (level, x, y)

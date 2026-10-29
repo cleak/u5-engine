@@ -212,9 +212,7 @@ fn run_with_command_epilogue(
     // `dungeon-mode.md §4.1` (issue #304 Q1): a contact fight launched by the
     // post-action monster step comes before the turn's underfoot reaction,
     // which "then runs" once the fight has returned (playtest P19-04).
-    if result.is_ok()
-        && !state.combat_active
-        && state.pending_dungeon_underfoot_reaction.is_some()
+    if result.is_ok() && !state.combat_active && state.pending_dungeon_underfoot_reaction.is_some()
     {
         if let Err(error) = state.resume_dungeon_underfoot_reaction_after_combat(game_dir) {
             result = Err(error);
