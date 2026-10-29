@@ -884,15 +884,15 @@
     }
 
     #[test]
-    fn a_second_charm_clears_the_controlled_marker() {
-        // `magic.md §8` creature-prompt targeters: "a second successful Charm
-        // on the same actor clears it". The shared creature-prompt predicate
-        // rejects an actor that already carries the bit, which made the
-        // clearing half unreachable.
+    fn charm_on_a_sleeping_hostile_charms_it() {
+        // `combat.md §6.1a` Writers #2: Charm's "eligibility gate is the same
+        // slot-to-group helper the round walker uses, and it accepts any
+        // non-zero result"; the helper never reads the asleep bit. The
+        // engine refused a sleeper silently (playtest P17-12).
         let target_slot = COMBAT_PARTY_ACTOR_SLOTS;
         let mut state = combat_charm_state(
             target_slot,
-            COMBAT_ACTOR_FLAG_SELECTABLE_80 | COMBAT_ACTOR_FLAG_CONTROLLED,
+            COMBAT_ACTOR_FLAG_SELECTABLE_80 | COMBAT_ACTOR_FLAG_STATUS_DISABLED,
             COMBAT_CLASS_DAEMON,
         );
 
@@ -903,11 +903,71 @@
             MoveOutcome::Cast
         );
 
+        assert_eq!(state.message, "Daemon charmed!");
+        assert!(state.combat_actors[target_slot].is_controlled());
         assert!(
-            !state.combat_actors[target_slot].is_controlled(),
+            state.combat_actors[target_slot].is_status_disabled(),
+            "Charm does not wake a monster"
+        );
+    }
+
+    #[test]
+    fn a_second_charm_clears_the_bit_only_on_a_party_side_slot() {
+        // `combat.md §6.1a` Writers #2: the gate "accepts any non-zero result"
+        // of the slot-to-group helper, "so a party-side target is accepted
+        // only when it is the shipped traitor identity or already carries the
+        // bit, and in that second case the toggle clears". A charmed
+        // monster-side slot is group 0 (`§16.1`), and "Charm's gate admits
+        // only slots already in the automatic group" (#307 Q1), so a second
+        // Charm on it is refused rather than toggled back to hostile
+        // (playtest P17-13).
+        let target_slot = COMBAT_PARTY_ACTOR_SLOTS;
+        let mut state = combat_charm_state(
+            target_slot,
+            COMBAT_ACTOR_FLAG_SELECTABLE_80 | COMBAT_ACTOR_FLAG_CONTROLLED,
+            COMBAT_CLASS_DAEMON,
+        );
+        let charm = spell_index_from_code("AEX").unwrap();
+
+        assert_eq!(
+            state.cast_combat_charm_spell(0, charm, target_slot),
+            MoveOutcome::Blocked
+        );
+        assert!(
+            state.combat_actors[target_slot].is_controlled(),
+            "a charmed monster stays charmed"
+        );
+        assert!(!state.message.contains("charmed!"), "{}", state.message);
+
+        // The possessed party member: the bit puts her in the automatic
+        // group, so Charm accepts her and the toggle clears it.
+        let mut state = combat_charm_state(
+            1,
+            COMBAT_ACTOR_FLAG_SELECTABLE_80 | COMBAT_ACTOR_FLAG_CONTROLLED,
+            1,
+        );
+        state.party.push(PartyMember {
+            slot: 1,
+            class_byte: 1,
+            status: CharacterStatus::Good.save_byte(),
+            climb_stat: 0,
+            mana: 0,
+            hp: 20,
+            max_hp: 20,
+            level: 1,
+        });
+        state.party_intelligence.push(1);
+        assert_eq!(
+            state.cast_combat_charm_spell(0, charm, 1),
+            MoveOutcome::Cast,
+            "{}",
+            state.message
+        );
+        assert!(
+            !state.combat_actors[1].is_controlled(),
             "a second Charm clears the controlled/charmed bit"
         );
-        assert_eq!(state.message, "Daemon charmed!");
+        assert_ne!(state.message, "Failed!");
     }
 
     #[test]
@@ -948,10 +1008,10 @@
     }
 
     #[test]
-    fn charm_prompt_relaxes_only_the_already_marked_test() {
-        // The relaxation is scoped to actors that already carry bit `0x01`.
-        // Every other creature-prompt gate — empty, dead, hidden,
-        // status-disabled, same-group — still refuses.
+    fn charm_prompt_gate_is_the_slot_to_group_helper() {
+        // `combat.md §6.1a` Writers #2: the gate accepts any non-zero
+        // slot-to-group result. Every other creature-prompt gate — empty, dead, hidden,
+        // same-group — still refuses; the asleep bit is not a gate.
         let target_slot = COMBAT_PARTY_ACTOR_SLOTS;
         let caster_group = COMBAT_TARGET_GROUP_PARTY;
 
@@ -965,8 +1025,17 @@
             COMBAT_CLASS_DAEMON,
         );
         assert!(
-            marked.charm_prompt_target_is_eligible(target_slot, caster_group),
-            "an already-marked actor is re-targetable so the second cast can clear it"
+            !marked.charm_prompt_target_is_eligible(target_slot, caster_group),
+            "a charmed monster is group 0 and refused (playtest P17-13)"
+        );
+        let possessed = combat_charm_state(
+            1,
+            COMBAT_ACTOR_FLAG_SELECTABLE_80 | COMBAT_ACTOR_FLAG_CONTROLLED,
+            1,
+        );
+        assert!(
+            possessed.charm_prompt_target_is_eligible(1, caster_group),
+            "a party slot carrying the bit is re-targetable so Charm can clear it"
         );
 
         let dead = combat_charm_state(
@@ -988,7 +1057,10 @@
             COMBAT_ACTOR_FLAG_SELECTABLE_80 | COMBAT_ACTOR_FLAG_STATUS_DISABLED,
             COMBAT_CLASS_DAEMON,
         );
-        assert!(!asleep.charm_prompt_target_is_eligible(target_slot, caster_group));
+        assert!(
+            asleep.charm_prompt_target_is_eligible(target_slot, caster_group),
+            "a sleeping hostile is charmable (playtest P17-12)"
+        );
 
         // An unmarked party-side slot groups with the caster and is refused.
         let allied = combat_charm_state(1, COMBAT_ACTOR_FLAG_SELECTABLE_80, 1);

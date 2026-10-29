@@ -2007,3 +2007,59 @@ fn play_script_frame_after_a_heal_shows_the_repainted_panel() {
     );
     assert_eq!(observed, vec![(200, true, false)]);
 }
+
+/// Playtest P17-14: a fight whose only seated party member sleeps on a Sleep
+/// Field reaches no keyboard turn - the field re-sleeps her after every own
+/// dispatch (`combat.md §11`), and whether her asleep arm runs the
+/// maintenance pass that could dissolve it is open (`OPEN-QUESTIONS.md` §3,
+/// u5-spec#308 Q3). The play-script runner re-drove the round walker up to
+/// 1024 times with nothing on screen; it now stops on the second stalled
+/// pass with an error.
+#[test]
+fn play_script_stops_when_combat_reaches_no_keyboard_turn() {
+    let mut state = world_state(open_world_grid(), 10, 20);
+    state.party.truncate(1);
+    state.party[0].status = b'S';
+    state.party_combat_defense = vec![0; state.party.len()];
+    state.combat_active = true;
+    state.combat_round_loop_prologue_ran = true;
+    state.combat_terrain = [[0x05; COMBAT_ARENA_SIDE]; COMBAT_ARENA_SIDE];
+    state.active_objects = vec![ActiveObject::empty(); OOL_SLOTS];
+    state.active_objects[0] = ActiveObject {
+        type_byte: 0x80,
+        tile: 0x80,
+        x: 5,
+        y: 5,
+        ..ActiveObject::empty()
+    };
+    state.active_objects[1] = ActiveObject {
+        type_byte: COMBAT_FIELD_KIND_SLEEP,
+        tile: COMBAT_FIELD_KIND_SLEEP,
+        x: 5,
+        y: 5,
+        ..ActiveObject::empty()
+    };
+    state.combat_actors[0] = CombatActorDescriptor::from_row([
+        20,
+        1,
+        COMBAT_ACTOR_FLAG_SELECTABLE_80 | COMBAT_ACTOR_FLAG_STATUS_DISABLED,
+        0,
+        0,
+        0,
+        5,
+        5,
+    ]);
+    state.pending_combat_actor_slot = None;
+    state.next_combat_actor_slot = 0;
+    assert!(combat_awaits_automatic_turns(&state));
+
+    let error = handle_play_script_command(&mut state, "pass", Path::new(""))
+        .expect_err("a fight with no reachable keyboard turn stops the script");
+
+    assert!(
+        error.to_string().contains("combat reached no keyboard turn"),
+        "{error}"
+    );
+    assert!(state.combat_active);
+    assert_eq!(state.party[0].status, b'S', "the field still holds her asleep");
+}

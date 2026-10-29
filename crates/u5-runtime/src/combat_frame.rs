@@ -2825,22 +2825,23 @@ impl PlayState {
         })
     }
 
-    /// `combat.md §6.1a` + `magic.md §8` creature-prompt targeters: Charm
-    /// toggles the controlled/charmed bit, and "a second successful Charm on
-    /// the same actor clears it". The shared creature-prompt predicate
-    /// rejects any actor already carrying the bit, which would make the
-    /// clearing half unreachable, so Charm keeps every other eligibility test
-    /// and re-targets an already-marked actor regardless of which group its
-    /// toggled descriptor now falls in.
-    pub fn charm_prompt_target_is_eligible(&self, target_slot: usize, caster_group: u8) -> bool {
+    /// `combat.md §6.1a` Writers #2: Charm's "eligibility gate is the same
+    /// slot-to-group helper the round walker uses, and it accepts any
+    /// non-zero result". A party-side slot is accepted only as the traitor or
+    /// while it carries the bit (the toggle then clears it, `magic.md §8`'s
+    /// "second successful Charm"); a charmed monster-side slot is group 0
+    /// (`§16.1`) and is refused, since "Charm's gate admits only slots
+    /// already in the automatic group" (#307 Q1, playtest P17-13). The
+    /// caster's group plays no part.
+    pub fn charm_prompt_target_is_eligible(&self, target_slot: usize, _caster_group: u8) -> bool {
         let Some(actor) = self.combat_actors.get(target_slot).copied() else {
             return false;
         };
-        if actor.is_empty()
-            || actor.is_marked_dead()
-            || actor.is_dragged_under()
-            || actor.is_status_disabled()
-        {
+        // `combat.md §6.1a` Writers #2: the gate is the slot-to-group helper,
+        // which never reads the asleep bit `0x08` - Charm "on a Sleeping ...
+        // party member restores the roster status letter to Good" - so a
+        // sleeper is an ordinary target (playtest P17-12).
+        if actor.is_empty() || actor.is_marked_dead() || actor.is_dragged_under() {
             return false;
         }
         // `combat.md §7.1`: a restrained actor "is returned by the
@@ -2851,7 +2852,7 @@ impl PlayState {
         if self.combat_actor_stands_on_restraint_arena_cell(actor) {
             return false;
         }
-        actor.is_controlled() || self.combat_target_group_for_slot(target_slot) != caster_group
+        self.combat_target_group_for_slot(target_slot) != COMBAT_TARGET_GROUP_PARTY
     }
 
     /// `catalogs/spell-list.md` id 34: Charm names its victim — a party-side
@@ -2934,7 +2935,13 @@ impl PlayState {
         y: u8,
     ) -> Option<CombatCloneApplication> {
         let target_actor = self.combat_actors.get(target_slot).copied()?;
-        if !combat_actor_is_active_not_dead(target_actor) {
+        // `magic.md §8`: Clone has no sleeper refusal, so the asleep bit
+        // `0x08` that `combat_actor_is_active_not_dead` tests is not a gate
+        // here; the copy simply duplicates it (playtest P17-12).
+        if target_actor.is_empty()
+            || target_actor.is_marked_dead()
+            || !target_actor.has_field_lookup_selectable_bit()
+        {
             return None;
         }
         let target_object = self

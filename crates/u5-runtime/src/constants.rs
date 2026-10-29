@@ -275,6 +275,15 @@ pub const PCS_GLYPH_ADVANCE_GAP: u8 = 1;
 /// (unjustified) space by 5 pixels.
 pub const PCS_SPACE_ADVANCE: u8 = 5;
 pub const PLAY_SCRIPT_MAX_IDLE_TICKS: usize = 1024;
+/// Harness-only guard (playtest P17-14): how many consecutive exploration
+/// gate passes a play script lets combat drive its automatic turns without
+/// reaching a keyboard turn. One pass already runs the round walker to its
+/// own non-termination guard, so a second stalled pass means no prompted
+/// combatant can be reached - a lone party member asleep on a Sleep Field
+/// that no maintenance pass ever dissolves - and the script stops with an
+/// error instead of spinning through [`PLAY_SCRIPT_MAX_IDLE_TICKS`] such
+/// passes with no output.
+pub const PLAY_SCRIPT_MAX_COMBAT_STALL_PASSES: usize = 2;
 /// Runtime count of karma reaction records. The KARMA.DAT parser
 /// uses this same loop bound to walk the six NUL-terminated text
 /// records the format spec documents. Anchored to

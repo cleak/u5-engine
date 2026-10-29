@@ -483,6 +483,7 @@ pub use input_codes::{
 };
 pub use input_dispatch::{
     PlayInputDisposition, UNRECOGNISED_COMMAND_MESSAGE, advance_paced_combat_presentation,
+    combat_awaits_automatic_turns,
     handle_play_key_input, open_owed_combat_player_turn, run_dungeon_entry_underfoot_reaction,
     run_overworld_loop_head_hooks,
 };
@@ -1242,4 +1243,5 @@ mod tests {
     include!("tests_inline/playfix16_dun16.rs");
     include!("tests_inline/playfix16_ui16.rs");
     include!("tests_inline/playfix17_zstats17.rs");
+    include!("tests_inline/playfix17_combat17.rs");
 }
