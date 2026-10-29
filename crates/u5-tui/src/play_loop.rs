@@ -14,10 +14,11 @@ use u5_runtime::{
     Area, Direction, ExplorationTurnGateOutcome, INPUT_CODE_EAST, INPUT_CODE_NORTH,
     INPUT_CODE_NORTHEAST, INPUT_CODE_NORTHWEST, INPUT_CODE_SOUTH, INPUT_CODE_SOUTHEAST,
     INPUT_CODE_SOUTHWEST, INPUT_CODE_WEST, PLAY_EXIT_TO_DOS_KEY, PLAY_IGNORED_INPUT_KEY,
-    PLAY_MUSIC_TOGGLE_KEY, PLAY_SCRIPT_MAX_IDLE_TICKS, PLAY_TYPEAHEAD_TOGGLE_KEY,
-    PlayInputDisposition, PlayOptions, PlayState, SoundEffect, TileAtlas, TileGraphicsDepth,
-    handle_play_key_input, hash_bytes, hash_palette_indices, input_function_key_code,
-    load_tile_atlas, run_potion_flash_soundless_timing,
+    PLAY_MUSIC_TOGGLE_KEY, PLAY_SCRIPT_MAX_COMBAT_STALL_PASSES, PLAY_SCRIPT_MAX_IDLE_TICKS,
+    PLAY_TYPEAHEAD_TOGGLE_KEY, PlayInputDisposition, PlayOptions, PlayState, SoundEffect,
+    TileAtlas, TileGraphicsDepth, combat_awaits_automatic_turns, handle_play_key_input, hash_bytes,
+    hash_palette_indices, input_function_key_code, load_tile_atlas,
+    run_potion_flash_soundless_timing,
 };
 
 pub fn run_play_loop(
@@ -854,6 +855,7 @@ fn settle_play_script_exploration_gate(state: &mut PlayState, game_dir: &Path) -
     if !play_state_accepts_typeahead(state) {
         return Ok(());
     }
+    let mut combat_stalls = 0;
     for _ in 0..PLAY_SCRIPT_MAX_IDLE_TICKS {
         // The same three lines the interactive loop above runs before its own
         // gate call, for the same reason: a script has no animation pump, so
@@ -871,8 +873,23 @@ fn settle_play_script_exploration_gate(state: &mut PlayState, game_dir: &Path) -
         resolve_shrine_third_mantra_without_pump(state, game_dir)?;
         match state.apply_exploration_turn_gate(game_dir)? {
             ExplorationTurnGateOutcome::Ready { .. } => return Ok(()),
+            // Playtest P17-14: in combat each gate pass drives the round
+            // walker to its own guard, so a pass that still leaves the fight
+            // owing automatic turns found no keyboard turn to stop at. A
+            // second one in a row ends the script instead of re-driving the
+            // walker up to 1024 times with nothing on screen.
             ExplorationTurnGateOutcome::Slept { .. }
-            | ExplorationTurnGateOutcome::Rescued { .. } => {}
+                if state.combat_active && combat_awaits_automatic_turns(state) =>
+            {
+                combat_stalls += 1;
+                if combat_stalls >= PLAY_SCRIPT_MAX_COMBAT_STALL_PASSES {
+                    return Err(io::Error::other(format!(
+                        "combat reached no keyboard turn after {combat_stalls} automatic passes"
+                    )));
+                }
+            }
+            ExplorationTurnGateOutcome::Slept { .. }
+            | ExplorationTurnGateOutcome::Rescued { .. } => combat_stalls = 0,
         }
     }
     Err(io::Error::other(format!(

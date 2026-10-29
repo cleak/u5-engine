@@ -112,7 +112,7 @@ pub fn advance_combat_without_input(state: &mut PlayState, game_dir: &Path) -> i
 
 /// Combat is running and no combatant is waiting at the prompt, so the
 /// walker owes turns that read no key.
-pub(crate) fn combat_awaits_automatic_turns(state: &PlayState) -> bool {
+pub fn combat_awaits_automatic_turns(state: &PlayState) -> bool {
     state.combat_active
         && state.pending_combat_actor_slot.is_none()
         && state.active_combat_targeting.is_none()
