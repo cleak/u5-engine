@@ -66,3 +66,32 @@ fn p19_combat_potion_result_follows_item_potion_with_no_blank_row() {
         );
     }
 }
+
+/// P19-08 review: the same single-feed rule covers `inventory.md §7.1`'s
+/// other single-feed family. `Skull Key\n` is followed in dungeon exploration
+/// by `Not here!\n` with no leading feed, so the refusal sits on the row right
+/// under `Item: Skull Key`.
+#[test]
+fn p19_dungeon_skull_key_refusal_follows_item_skull_key_with_no_blank_row() {
+    let game_dir = std::path::Path::new(".");
+    let mut state = dungeon_state(open_dungeon_record(), 2, 1, 1);
+    state.special_items[SPECIAL_ITEM_SKULL_KEY_INDEX] = 2;
+    assert!(state.skull_key_refused_here());
+    combat2b_use_row(
+        &mut state,
+        |request| request == UseItemRequest::SkullKey,
+        game_dir,
+    );
+    state.flush_staged_narration();
+    let rows = combat2b_rows_text(&state);
+    let item = rows
+        .iter()
+        .rposition(|row| row == "Item: Skull Key")
+        .unwrap_or_else(|| panic!("rows: {rows:?}"));
+    assert_eq!(
+        rows.get(item + 1).map(String::as_str),
+        Some("Not here!"),
+        "rows: {rows:?}"
+    );
+    assert_eq!(state.special_items[SPECIAL_ITEM_SKULL_KEY_INDEX], 1);
+}
