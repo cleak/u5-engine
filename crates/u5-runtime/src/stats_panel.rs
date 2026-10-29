@@ -2047,27 +2047,24 @@ pub const STATS_PANEL_SHIP_HULL_PAD_BELOW: u8 = 10;
 /// to right from column 24 and padded out to column 32, then the
 /// middle counter fills columns 32..38.
 ///
-/// The two middle-counter variants are placed differently. The gold
-/// group runs a leading-space ladder that shifts the ` G:` label left
-/// as the number grows, so the last gold digit always lands in column
-/// 38 - reproduced here by right-justifying the group inside the
-/// remaining cells. The ship variant does **not** use that ladder: it
-/// is anchored left at column 32 and pads on the right instead.
+/// Both middle-counter variants start at column 32. The gold group
+/// runs a zero-to-three-space ladder before its ` G:` label (whose
+/// leading space is part of the label), so for 0..9999 the last gold
+/// digit lands in column 38. The ship variant does **not** use that
+/// ladder: it is anchored left at column 32 and pads on the right.
+///
+/// Neither the food nor the gold value is clamped (P19-07): the food
+/// counter is drawn at its natural decimal width, and an edited gold
+/// above 9999 keeps the label's leading space and overruns column 38.
 fn render_stats_panel_counter_row(state: &PlayState) -> String {
-    let food = format!("F:{}", state.food.min(9999));
+    let food = format!("F:{}", state.food);
     let middle = render_stats_panel_middle_counter(state);
-    let used = food.chars().count() + middle.chars().count();
-    let padding = match stats_panel_middle_counter(state.player.transport.save_marker()) {
-        StatsPanelMiddleCounter::PartyGold => STATS_PANEL_WIDTH.saturating_sub(used),
-        StatsPanelMiddleCounter::ShipHullCondition => {
-            usize::from(STATS_PANEL_MIDDLE_COUNTER_COLUMN - STATS_PANEL_TEXT_LEFT)
-                .saturating_sub(food.chars().count())
-        }
-    };
+    let padding = usize::from(STATS_PANEL_MIDDLE_COUNTER_COLUMN - STATS_PANEL_TEXT_LEFT)
+        .saturating_sub(food.chars().count());
     let line = format!("{food}{}{middle}", " ".repeat(padding));
-    // `stats-panel.md §6`, "Three-digit hulls run past the field": the ship
-    // variant has no clamp, so a hull of 100 or more puts its third digit in
-    // column 39, the stats window's last writable cell (§3's exception).
+    // `stats-panel.md §6`, "Three-digit hulls run past the field": the row
+    // has no clamp, so a hull of 100 or more (or an edited five-digit gold)
+    // puts a digit in column 39, the stats window's last writable cell.
     if line.chars().count() > STATS_PANEL_WIDTH {
         return truncate_ascii_chars(&line, STATS_PANEL_WIDTH + 1);
     }
@@ -2090,7 +2087,15 @@ pub fn stats_panel_repaint_requests_strip_scroll(state: &PlayState) -> bool {
 
 fn render_stats_panel_middle_counter(state: &PlayState) -> String {
     match stats_panel_middle_counter(state.player.transport.save_marker()) {
-        StatsPanelMiddleCounter::PartyGold => format!("G:{}", state.gold),
+        StatsPanelMiddleCounter::PartyGold => {
+            // `stats-panel.md §6` "Gold, ordinary case": one space each for
+            // gold below 1000, 100 and 10, then the literal ` G:`.
+            let ladder = [1000, 100, 10]
+                .iter()
+                .filter(|&&limit| state.gold < limit)
+                .count();
+            format!("{} G:{}", " ".repeat(ladder), state.gold)
+        }
         StatsPanelMiddleCounter::ShipHullCondition => {
             let hull = current_ship_hull(state).unwrap_or(0);
             let trailing = if hull < STATS_PANEL_SHIP_HULL_PAD_BELOW {
