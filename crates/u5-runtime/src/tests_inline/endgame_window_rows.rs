@@ -3,13 +3,14 @@
 // it (transcript, unflushed slot, open prompt, live-row kind).
 
 fn endgame_window_synthetic_messages() -> EndgameMessages {
-    // The shipped records' line-feed shapes (`§5.1`'s record table): record 0
+    // The shipped records' line-feed shapes (`§5.1`'s record table), with
+    // placeholder words of the same lengths so the rows wrap alike: record 0
     // opens with one feed, records 1 and 2 end `You reply: `, record 10 opens
     // and closes with a feed.
     let records: [&str; 11] = [
         "\nLord British says:\n\n\"Well met,\n",
-        "\"Didst thou bring my box?\"\n\nYou reply: ",
-        "\"The box!\"\n\n\"Didst thou bring it?\"\n\nYou reply: ",
+        "\"Query word asked of box?\"\n\nYou reply: ",
+        "\"Box now!\"\n\n\"Query word asked it?\"\n\nYou reply: ",
         "Rite 1",
         "Rite 2\n\n",
         "Rite 3\n\n",
@@ -135,8 +136,8 @@ fn endgame_greeting_page_keeps_the_blank_row_under_the_absorption_line() {
             "\"Well met,",
             "Avatar!\"",
             "",
-            "\"Didst thou",
-            "bring my box?\"",
+            "\"Query word",
+            "asked of box?\"",
             "",
             "You reply:_",
         ]
@@ -157,10 +158,10 @@ fn endgame_first_no_leaves_one_blank_row_before_the_sandalwood_question() {
         [
             "You reply: No",
             "",
-            "\"The box!\"",
+            "\"Box now!\"",
             "",
-            "\"Didst thou",
-            "bring it?\"",
+            "\"Query word",
+            "asked it?\"",
             "",
             "You reply:_",
         ],

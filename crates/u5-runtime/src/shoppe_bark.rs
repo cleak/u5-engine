@@ -410,8 +410,8 @@ pub fn render_shoppe_bark(bytes: &[u8], ctx: &ShoppeBarkContext) -> Result<Strin
         // says record `119` "carries its own leading spacing and prompt", and
         // eighteen records across seven bands carry `\n` bytes. The printable
         // test below starts at `0x20`, so every one of them was being dropped
-        // silently, joining the words on either side: record 119 rendered
-        // `Frigatesand small, lightSkiffs.Which would yelike to see?`.
+        // silently, joining the words on either side of each break in
+        // record 119.
         // Measured 2026-09-10 (`bd-shipwright/yes`).
         if byte == b'\n' {
             out.push('\n');
@@ -663,9 +663,8 @@ mod tests {
     /// A record's own `\n` bytes are part of its text. The printable test in
     /// [`render_shoppe_bark`] starts at `0x20`, so newlines were dropped and
     /// the words on either side ran together. Measured 2026-09-10
-    /// (`bd-shipwright/yes`): record `119` rendered `Frigatesand small,
-    /// lightSkiffs.Which would yelike to see?` where the original breaks the
-    /// lines.
+    /// (`bd-shipwright/yes`): record `119` rendered with the words either
+    /// side of each break joined, where the original breaks the lines.
     #[test]
     fn a_records_own_line_breaks_survive_rendering() {
         let ctx = ShoppeBarkContext::default();

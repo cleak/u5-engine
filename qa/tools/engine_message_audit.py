@@ -112,8 +112,7 @@ def main() -> None:
             # The literal is Rust source, so an embedded quotation mark
             # arrives as `\"`. The spec writes it plainly, and comparing the
             # escaped form made every quoted line - `"Pass, friend!"`,
-            # `"Hrumph."`, `"Hmph! Landlubber!"` - unmatchable, whether or
-            # not the spec published it.
+            # `"Hrumph."` - unmatchable, whether or not the spec published it.
             longest = longest.replace('\\"', '"').replace("\\\\", "\\")
             if len(longest) < 5:
                 continue

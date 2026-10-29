@@ -797,8 +797,8 @@ mod tests {
         use u5_runtime::test_fixtures::{debug_game_dir, dungeon_state, open_dungeon_record};
         let records: [&str; 11] = [
             "\nLord British says:\n\n\"Well met,\n",
-            "\"Didst thou bring my box?\"\n\nYou reply: ",
-            "\"The box!\"\n\n\"Didst thou bring it?\"\n\nYou reply: ",
+            "\"Query word asked of box?\"\n\nYou reply: ",
+            "\"Box now!\"\n\n\"Query word asked it?\"\n\nYou reply: ",
             "Rite 1",
             "Rite 2\n\n",
             "Rite 3\n\n",

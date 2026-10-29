@@ -7797,10 +7797,30 @@ fn validate_route_smoke_case_state(
             }
         }
         "shop-inn-rest-decline-route" => {
-            if state.gold != 999
-                || state.active_shop.is_some()
-                || !state.message.contains("Perhaps another time...")
-            {
+            // `shops.md §8.C` "Declined Rest offer": "A fresh unpaid visit
+            // uses records `178..181`". The farewell is read from
+            // `SHOPPE.DAT` rather than matched against a copy of its wording
+            // (playtest P18-06).
+            let farewell_printed =
+                u5_runtime::shoppe_bark::ShoppeTextRenderer::load_from_game_dir(game_dir)
+                    .ok()
+                    .is_some_and(|renderer| {
+                        (178..=181).any(|record| {
+                            renderer
+                                .render_record(
+                                    record,
+                                    &u5_runtime::shoppe_bark::ShoppeBarkContext::default(),
+                                )
+                                .ok()
+                                .and_then(|text| {
+                                    text.lines().next().map(str::trim).map(str::to_string)
+                                })
+                                .is_some_and(|line| {
+                                    !line.is_empty() && state.message.contains(&line)
+                                })
+                        })
+                    });
+            if state.gold != 999 || state.active_shop.is_some() || !farewell_printed {
                 return Err(io::Error::other(format!(
                     "route smoke `{case_name}` did not decline the inn room and end the visit"
                 )));
