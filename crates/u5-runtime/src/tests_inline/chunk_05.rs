@@ -2409,8 +2409,8 @@ fn ship_fire_requires_ship_and_inline_broadside_direction() {
     let mut ship = world_state(open_world_grid(), 5, 5);
     ship.player.facing = Direction::East;
     ship.player.transport = TransportState::Ship {
-        type_byte: 168,
-        tile: 168,
+        type_byte: 169,
+        tile: 169,
         sails_hoisted: false,
         hull: 0,
         skiffs: 0,
@@ -2440,12 +2440,39 @@ fn ship_fire_requires_ship_and_inline_broadside_direction() {
 }
 
 #[test]
+fn ship_fire_broadside_reads_ship_marker_heading_not_party_facing() {
+    // `vehicles.md §7` step 3 compares the firing direction with the ship's
+    // facing, the marker's low two bits (§2). After boarding an east-facing
+    // frigate (tile 169) while walking north, North is a broadside and East
+    // is the bow (playtest P17-10).
+    let mut ship = world_state(open_world_grid(), 5, 5);
+    ship.player.facing = Direction::North;
+    ship.player.transport = TransportState::Ship {
+        type_byte: 169,
+        tile: 169,
+        sails_hoisted: false,
+        hull: 0,
+        skiffs: 0,
+    };
+    ship.sync_player_object();
+
+    assert_eq!(ship.fire_ship_broadside(Some(Direction::East)), MoveOutcome::Blocked);
+    assert_eq!(ship.message, "Fire broadsides only!");
+    assert_eq!(ship.fire_ship_broadside(Some(Direction::West)), MoveOutcome::Blocked);
+    assert_eq!(ship.message, "Fire broadsides only!");
+    ship.message.clear();
+    assert_eq!(ship.fire_ship_broadside(Some(Direction::North)), MoveOutcome::Fired);
+    assert_ne!(ship.message, "Fire broadsides only!");
+    assert_eq!(ship.fire_ship_broadside(Some(Direction::South)), MoveOutcome::Fired);
+}
+
+#[test]
 fn ship_fire_broadside_removes_first_target_in_three_cell_trace() {
     let mut state = world_state(open_world_grid(), 10, 10);
     state.player.facing = Direction::East;
     state.player.transport = TransportState::Ship {
-        type_byte: 168,
-        tile: 168,
+        type_byte: 169,
+        tile: 169,
         sails_hoisted: false,
         hull: 0,
         skiffs: 0,
@@ -2505,8 +2532,8 @@ fn ship_fire_removed_target_is_written_to_the_live_saved_gam_table() {
     let mut state = britannia_state(open_world_grid(), 10, 10);
     state.player.facing = Direction::East;
     state.player.transport = TransportState::Ship {
-        type_byte: 168,
-        tile: 168,
+        type_byte: 169,
+        tile: 169,
         sails_hoisted: false,
         hull: FIRST_PLAYABLE_FULL_SHIP_HULL,
         skiffs: 1,
@@ -2556,8 +2583,8 @@ fn ship_fire_damage_and_removal_save_load_round_trip_overlay_state() {
     let mut state = britannia_state(open_world_grid(), 10, 10);
     state.player.facing = Direction::East;
     state.player.transport = TransportState::Ship {
-        type_byte: TRANSPORT_MARKER_SHIP_FURLED_FIRST,
-        tile: FIRST_PLAYABLE_FRIGATE_TILE,
+        type_byte: TRANSPORT_MARKER_SHIP_FURLED_FIRST + 1,
+        tile: FIRST_PLAYABLE_FRIGATE_TILE + 1,
         sails_hoisted: false,
         hull: FIRST_PLAYABLE_FULL_SHIP_HULL,
         skiffs: 1,
@@ -2633,8 +2660,8 @@ fn ship_fire_broadside_miss_still_consumes_turn() {
     let mut state = world_state(open_world_grid(), 10, 10);
     state.player.facing = Direction::East;
     state.player.transport = TransportState::Ship {
-        type_byte: 168,
-        tile: 168,
+        type_byte: 169,
+        tile: 169,
         sails_hoisted: false,
         hull: 0,
         skiffs: 0,

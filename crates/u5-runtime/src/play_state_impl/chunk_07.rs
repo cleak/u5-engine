@@ -3289,10 +3289,12 @@ impl PlayState {
         // and `commands.md §3` does not forward F's handler value, so the
         // refusal reports "acted" and costs the outdoor turn like every other
         // F outcome (playtest K18).
+        // Step 3 compares against the ship's own heading, the transport
+        // marker's low two bits (`vehicles.md §2`), never the party's
+        // walking or rowing facing from before boarding (playtest P17-10).
         let broadside = self
-            .player
-            .facing
-            .cardinal_facing_index()
+            .overworld_frigate_facing()
+            .and_then(Direction::cardinal_facing_index)
             .zip(direction.cardinal_facing_index())
             .is_some_and(|(ship_facing, fire_direction)| {
                 ship_broadside_direction_accepted(ship_facing, fire_direction)
