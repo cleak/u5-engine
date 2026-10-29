@@ -13577,7 +13577,7 @@ fn resolve_visual_intro_subflow(intro: &mut VisualIntroState, subflow: IntroSubf
         // single-directory implementation collapses into an ordinary
         // file-existence check with no screen of its own.
         IntroSubflow::UltimaIvTransfer => {
-            match u4_transfer::enter_u4_transfer(intro.game_dir.clone()) {
+            match u4_transfer::enter_u4_transfer(intro.game_dir.clone(), &mut intro.dispatch) {
                 u4_transfer::U4TransferEntry::Screen(screen) => {
                     intro.panel = VisualIntroPanel::U4Transfer { screen };
                     intro.message_waiting_for_key = false;

@@ -24,6 +24,7 @@ use std::path::PathBuf;
 
 use u5_runtime::gameplay_chrome::{ChromePalette, RibbonCapDirection, prompt_cursor_glyph};
 use u5_runtime::intro_menu::{IntroSubflow, IntroSubflowResult};
+use u5_runtime::menu_dispatch::UnifiedMenuDispatch;
 use u5_runtime::text_wrap::{TextWindowDescriptor, text_window_centred_start_column};
 #[cfg(test)]
 use u5_runtime::u4_preview_panel_title_text;
@@ -108,12 +109,20 @@ pub(crate) struct U4TransferScreen {
 ///
 /// A file that will not read at all is media (`§3`); a file that reads
 /// but fails `§5.2`'s gate lands on `§6.3`'s bad-data page.
-pub(crate) fn enter_u4_transfer(game_dir: PathBuf) -> U4TransferEntry {
+pub(crate) fn enter_u4_transfer(
+    game_dir: PathBuf,
+    dispatch: &mut UnifiedMenuDispatch,
+) -> U4TransferEntry {
     let Ok(bytes) = read_disk_file(&game_dir.join(U4_TRANSFER_U4_SOURCE_FILENAME)) else {
         return U4TransferEntry::MediaUnavailable;
     };
     let session = match parse_u4_preview_source(&bytes) {
-        Ok(source) => U4PreviewSession::new(source),
+        Ok(mut source) => {
+            // `§5.3`: a one-shot latch for the run, never cleared between
+            // attempts (playtest P17-06).
+            source.is_avatar = dispatch.latch_u4_avatarhood(source.is_avatar);
+            U4PreviewSession::new(source)
+        }
         Err(_rejected) => U4PreviewSession::rejected(),
     };
     U4TransferEntry::Screen(Box::new(U4TransferScreen::new(game_dir, session)))
@@ -1443,6 +1452,40 @@ mod tests {
                 .exists()
         );
         cleanup(screen);
+    }
+
+    /// Playtest P17-06: `§5.3`'s Avatarhood flag "is set at most once and
+    /// is **never cleared** for the remainder of the run ... do not assume
+    /// it resets between attempts".
+    #[test]
+    fn playtest_p17_06_avatarhood_latches_for_the_rest_of_the_run() {
+        let dir = u5_runtime::test_fixtures::debug_game_dir();
+        let party = dir.join(U4_TRANSFER_U4_SOURCE_FILENAME);
+        let mut dispatch = UnifiedMenuDispatch::new();
+        let attempt =
+            |dispatch: &mut UnifiedMenuDispatch| match enter_u4_transfer(dir.clone(), dispatch) {
+                U4TransferEntry::Screen(screen) => screen.session().source().is_avatar,
+                U4TransferEntry::MediaUnavailable => panic!("PARTY.SAV is present"),
+            };
+
+        std::fs::write(
+            &party,
+            synthetic_party_sav_fixture(&synthetic_source(false)),
+        )
+        .unwrap();
+        assert!(!attempt(&mut dispatch), "no Avatar source seen yet");
+        std::fs::write(&party, synthetic_party_sav_fixture(&synthetic_source(true))).unwrap();
+        assert!(attempt(&mut dispatch));
+        std::fs::write(
+            &party,
+            synthetic_party_sav_fixture(&synthetic_source(false)),
+        )
+        .unwrap();
+        assert!(
+            attempt(&mut dispatch),
+            "a later attempt in the same run keeps the latched Avatarhood"
+        );
+        let _ = std::fs::remove_dir_all(dir);
     }
 
     #[test]

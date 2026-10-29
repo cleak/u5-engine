@@ -27,6 +27,10 @@ pub struct UnifiedMenuDispatch {
     /// (`chargen.md §6`'s virtue picker) leaves the stream advanced for the
     /// Journey Onward that follows it.
     gameplay_prng: Option<u16>,
+    /// `u4-transfer.md §5.3`: the Avatarhood flag "is set at most once and
+    /// is **never cleared** for the remainder of the run ... do not assume
+    /// it resets between attempts" (playtest P17-06).
+    u4_avatarhood_latched: bool,
 }
 
 /// One reported state-change to the harness.
@@ -90,6 +94,14 @@ impl UnifiedMenuDispatch {
             state = crate::prng::u5_prng_advance_state(state);
         }
         self.gameplay_prng = Some(state);
+    }
+
+    /// `u4-transfer.md §5.3`: fold one transfer attempt's Avatarhood test
+    /// into the run's one-shot latch and return the latched value. A
+    /// passing attempt sets it; nothing clears it.
+    pub fn latch_u4_avatarhood(&mut self, attempt_passed: bool) -> bool {
+        self.u4_avatarhood_latched |= attempt_passed;
+        self.u4_avatarhood_latched
     }
 
     /// Title-screen tick.
