@@ -694,6 +694,9 @@ fn handle_play_key_input_inner(
             state.charge_cast_refusal_turn();
             state.apply_top_down_post_turn_effects_after_turn(turn_before, game_dir)?;
         }
+        // `view.md §3`: the fountain's Look turn waits for the drinker pick
+        // or its cancel (playtest P19-03).
+        state.settle_pending_look_prompt_turn(game_dir)?;
         settle_exploration_acted_charge(state, game_dir)?;
         return Ok(PlayInputDisposition::Continue);
     }
@@ -1390,6 +1393,9 @@ fn handle_active_wishing_well_key_input(
     if let Some(outcome) = state.step_active_wishing_well(key, suffix) {
         state.apply_post_turn_effects_after_outcome(turn_before, game_dir, outcome)?;
     }
+    // `view.md §3` / `town-mode.md §7`: the Look that opened the well
+    // spends its turn once the handler returns (playtest P19-03).
+    state.settle_pending_look_prompt_turn(game_dir)?;
     Ok(PlayInputDisposition::Continue)
 }
 
