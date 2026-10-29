@@ -361,6 +361,14 @@ impl PlayState {
             // alone" - no command row under the frozen spell row.
             || self.message_window_flash_hold_active()
             || self.mix_reagent_selection_active()
+            // `view.md §4.2.2` step 6: the sky prints `the night sky! ` and
+            // "then busy-wait[s] until any key is available" - inside the
+            // command, so the next poll's feed and marker have not been
+            // emitted yet (`text-output.md §10.4`, deferral) and no command
+            // row opens under the open sky row (playtest P18-05).
+            || self.active_view_overlay.as_ref().is_some_and(|overlay| {
+                matches!(overlay.mode, crate::ViewOverlayMode::SkyView)
+            })
             // `endgame.md §6`: the waiting branch is terminal and reads no
             // command, so no command row opens under record 10. Measured
             // 2026-10-16 (`doom-final-room`, beat `answered`, reading

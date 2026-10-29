@@ -635,7 +635,24 @@ fn handle_play_key_input_inner(
         return handle_active_yell_key_input(state, key, suffix, game_dir);
     }
     if state.active_view_overlay.is_some() {
+        // `view.md §4.2.2` step 6: the sky prints `the night sky! ` - "the
+        // trailing space and the absence of a newline" - so once its key wait
+        // ends the command returns with that row still open, and the next
+        // poll's leading feed closes it: the marker lands directly beneath,
+        // with no derived blank (`text-output.md §10.4`). Stated here, where
+        // the view knows it was the sky, not inferred from the text (playtest
+        // P18-05).
+        let sky_row_open = state
+            .active_view_overlay
+            .as_ref()
+            .is_some_and(|overlay| matches!(overlay.mode, crate::ViewOverlayMode::SkyView));
+        if sky_row_open {
+            state.flush_message_slot();
+        }
         state.clear_active_view_overlay();
+        if sky_row_open {
+            state.leave_last_transcript_row_open();
+        }
         return Ok(PlayInputDisposition::Continue);
     }
     if state.active_ready.is_some() {

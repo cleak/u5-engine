@@ -149,3 +149,31 @@ fn playtest_p18_07_gated_tavern_lore_letter_echoes_nothing() {
         }))
     ));
 }
+
+/// P18-05: `view.md §4.2.2` step 6 prints `the night sky! ` "note the
+/// trailing space and the absence of a newline - then busy-wait[s] until any
+/// key is available". While it waits the command has not returned, so no
+/// marker row is drawn (`text-output.md §10.4`, deferral); once the key is
+/// spent the next poll's feed closes the open row and the marker lands
+/// directly beneath it, with no blank between.
+#[test]
+fn playtest_p18_05_night_sky_row_stays_open_for_the_next_marker() {
+    let dir = debug_game_dir();
+    let mut state = britannia_state(open_world_grid(), 5, 5);
+    state.activate_night_sky_overlay(Some("Looking..."));
+    state.flush_message_slot();
+
+    let waiting = p4window_rows_from(&p4window_rows(&state), "the night sky!");
+    assert_eq!(waiting, vec!["the night sky!".to_string()], "{:?}", p4window_rows(&state));
+
+    handle_play_key_input(&mut state, 'x', "", &dir).unwrap();
+    assert!(state.active_view_overlay.is_none());
+    let dismissed = p4window_rows_from(&p4window_rows(&state), "the night sky!");
+    assert_eq!(
+        dismissed,
+        vec!["the night sky!".to_string(), ">".to_string()],
+        "{:?}",
+        p4window_rows(&state)
+    );
+    let _ = fs::remove_dir_all(dir);
+}
