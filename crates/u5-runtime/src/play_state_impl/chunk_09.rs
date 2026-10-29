@@ -1513,13 +1513,26 @@ impl PlayState {
         let (left_pose, right_pose) = if self.negate_time_active() {
             self.active_objects[slot].phase = DUNGEON_MONSTER_INITIAL_STATES[family];
             dungeon_monster_negate_poses(family)
-        } else {
+        } else if self.dungeon_runtime_paint {
             let left = u5_prng_range_u16(&mut self.prng_state, 0, 100) < 50;
             let right = u5_prng_range_u16(&mut self.prng_state, 0, 100) < 50;
             let (new_state, left_pose, right_pose) =
                 dungeon_monster_pose_step(object.phase, left, right);
             self.active_objects[slot].phase = new_state;
+            self.dungeon_monster_painted_poses = Some((left_pose, right_pose));
             (left_pose, right_pose)
+        } else {
+            // `dungeon-mode.md §4.1` "Render and poll" and `§6.9`: the two
+            // pose draws belong to the dungeon loop's own paints - each
+            // no-key pass, the shared redraw of a move, turn or blocked
+            // step, the contact redraw - not to however often a frontend
+            // repaints (playtest P19-06). A frontend frame shows the poses
+            // the last of those paints chose, and takes no draw.
+            self.dungeon_monster_painted_poses.unwrap_or_else(|| {
+                let (_, left_pose, right_pose) =
+                    dungeon_monster_pose_step(object.phase, false, false);
+                (left_pose, right_pose)
+            })
         };
         let Some(sheet) = banks.and_then(|banks| banks.monster(family)) else {
             return;
@@ -4873,8 +4886,11 @@ impl PlayState {
             self.under_sail_wait_cursor_poll_pending = false;
             self.advance_visual_tick();
             // `audio.md §7.4`: "every idle iteration of the dungeon command
-            // wait" ticks the footstep rumble (playtest S25).
-            self.tick_dungeon_footstep();
+            // wait" ticks the footstep rumble (playtest S25). `dungeon-mode.md
+            // §4.1`: "Each no-key pass first waits one timer tick ... and
+            // then repaints, so every pass consumes the corridor painter's
+            // draws" (playtest P19-06).
+            self.run_dungeon_shared_redraw();
             return Ok(IdleWaitPass::CommandWait);
         }
         if self.under_sail_wait_cursor_poll_pending {

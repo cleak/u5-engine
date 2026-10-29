@@ -112,3 +112,94 @@ fn playfix19_p19_05_a_contact_requests_a_type_ahead_flush() {
     assert!(state.combat_active);
     assert!(state.typeahead_flush_requested);
 }
+
+/// A lit party at `(3, 3)` facing north; with `in_view` the monster stands
+/// one cell ahead, otherwise behind the party where no paint reaches it.
+fn playfix19_lit_view(in_view: bool) -> PlayState {
+    let mut grid = open_dungeon_record();
+    grid[dungeon_cell_index(0, 3, 4)] = 0xb0;
+    let mut state = dungeon_state(grid, 0, 3, 3);
+    state.player.facing = Direction::North;
+    state.torch_counter = 50;
+    state.light_spell_counter = 0;
+    if in_view {
+        playfix19_monster(&mut state, 3, 2);
+    } else {
+        playfix19_monster(&mut state, 6, 6);
+    }
+    state.prng_state = 0x09eb;
+    state
+}
+
+/// The generator `state` holds after two further `0..100` pose draws.
+fn playfix19_after_pose_draws(state: &PlayState) -> u16 {
+    let mut prng = state.prng_state;
+    let _ = u5_prng_range_u16(&mut prng, 0, 100);
+    let _ = u5_prng_range_u16(&mut prng, 0, 100);
+    prng
+}
+
+/// P19-06: `dungeon-mode.md §4.1` "Render and poll", "Each no-key pass first
+/// waits one timer tick ... and then repaints, so every pass consumes the
+/// corridor painter's draws: in a lit view with the active monster visible,
+/// its two pose draws".
+#[test]
+fn playfix19_p19_06_each_idle_pass_takes_the_visible_monsters_pose_draws() {
+    let mut seen = playfix19_lit_view(true);
+    let mut unseen = playfix19_lit_view(false);
+
+    seen.idle_wait_pass(None).unwrap();
+    unseen.idle_wait_pass(None).unwrap();
+
+    assert_eq!(seen.prng_state, playfix19_after_pose_draws(&unseen));
+}
+
+/// P19-06: `§8.1`, "a blocked move and a turn ... each runs the shared
+/// redraw", which paints the view (`§6.9`).
+#[test]
+fn playfix19_p19_06_turns_and_blocked_steps_repaint_with_the_pose_draws() {
+    // Turn back to face the monster from the east.
+    let mut seen = playfix19_lit_view(true);
+    let mut unseen = playfix19_lit_view(false);
+    for state in [&mut seen, &mut unseen] {
+        state.player.facing = Direction::East;
+        let _ = state.turn_dungeon(false);
+    }
+    assert_eq!(seen.player.facing, Direction::North);
+    assert_eq!(seen.prng_state, playfix19_after_pose_draws(&unseen), "turn");
+
+    // Back up into the wall behind the party, the monster still ahead.
+    let mut seen = playfix19_lit_view(true);
+    let mut unseen = playfix19_lit_view(false);
+    for state in [&mut seen, &mut unseen] {
+        let Area::Dungeon { scene, level } = state.area else {
+            unreachable!()
+        };
+        let outcome = state
+            .step_dungeon_back(Direction::South, 3, 4, scene, level, None)
+            .unwrap();
+        assert_eq!(outcome, MoveOutcome::Blocked);
+        assert_eq!(state.player.facing, Direction::North);
+    }
+    assert_eq!(seen.prng_state, playfix19_after_pose_draws(&unseen), "blocked");
+}
+
+/// P19-06: the draws are tied to the loop's redraw points, "not to how
+/// often a frontend renders" - a frontend frame repaints the poses the last
+/// runtime paint chose and takes no draw.
+#[test]
+fn playfix19_p19_06_a_frontend_render_takes_no_pose_draw() {
+    let mut state = playfix19_lit_view(true);
+    state.redraw_dungeon_first_person_view();
+    let prng = state.prng_state;
+    let phase = state.active_objects[DUNGEON_ACTIVE_MONSTER_SLOT].phase;
+
+    for _ in 0..3 {
+        state
+            .render_dungeon_viewport(VIEWPORT_PLAYER_ROW, TileGraphicsDepth::Ega16, None, None)
+            .unwrap();
+    }
+
+    assert_eq!(state.prng_state, prng);
+    assert_eq!(state.active_objects[DUNGEON_ACTIVE_MONSTER_SLOT].phase, phase);
+}

@@ -8104,13 +8104,29 @@ impl PlayState {
     /// flavour-3 wall flourish is "consumed on every render that tests such
     /// a wall" (§6.4), so this render takes its own.
     pub fn redraw_dungeon_first_person_view(&mut self) {
+        if !matches!(self.area, Area::Dungeon { .. }) || self.combat_active {
+            return;
+        }
         self.dungeon_flourish_draw = None;
+        self.dungeon_runtime_paint = true;
         let _ = self.render_dungeon_viewport(
             VIEWPORT_PLAYER_ROW,
             TileGraphicsDepth::Ega16,
             None,
             None,
         );
+        self.dungeon_runtime_paint = false;
+    }
+
+    /// The dungeon's shared redraw (`dungeon-mode.md §6.9` composite redraw,
+    /// `§8.1`: "a blocked move and a turn ... each runs the shared redraw,
+    /// whose tick can carry the footstep tail"): the first-person paint with
+    /// its corridor-painter draws, then the local presentation tick. Each
+    /// no-key pass of the command wait is the same paint-then-tick
+    /// (`§4.1` "Render and poll"; playtest P19-06).
+    pub(crate) fn run_dungeon_shared_redraw(&mut self) {
+        self.redraw_dungeon_first_person_view();
+        self.tick_dungeon_footstep();
     }
 
     /// `dungeon-mode.md §14` (u5-spec#298 Q33, R551): the active monster's

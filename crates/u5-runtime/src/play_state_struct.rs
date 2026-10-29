@@ -138,6 +138,14 @@ pub struct PlayState {
     /// one-shot request a frontend takes after the key that raised it and
     /// answers by discarding its queued keys (playtest P19-05).
     pub typeahead_flush_requested: bool,
+    /// True only while the runtime itself paints the first-person view at
+    /// one of the dungeon loop's own redraw points
+    /// ([`PlayState::redraw_dungeon_first_person_view`]). The corridor
+    /// painter takes the active monster's pose draws only then; a frontend
+    /// repaint reuses [`Self::dungeon_monster_painted_poses`] (P19-06).
+    pub dungeon_runtime_paint: bool,
+    /// The active monster's (left, right) poses from the last runtime paint.
+    pub dungeon_monster_painted_poses: Option<(usize, usize)>,
     pub natural_moongate_counter: u8,
     pub natural_moongate_live_cells: Vec<usize>,
     /// `overworld.md §9.2` (spec HEAD `c00bf63`): what the last blocking

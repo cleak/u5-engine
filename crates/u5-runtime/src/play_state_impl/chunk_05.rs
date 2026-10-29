@@ -50,14 +50,14 @@ impl PlayState {
         let ny = ny.rem_euclid(DUNGEON_SIDE as isize) as usize;
         if self.dungeon_active_monster_at(nx, ny).is_some() {
             self.message = MOVEMENT_BLOCKED_REFUSAL.to_string();
-            self.tick_dungeon_footstep();
+            self.run_dungeon_shared_redraw();
             return Ok(MoveOutcome::Blocked);
         }
 
         let tile = self.dungeon_cell(level, nx, ny);
         if back_step && dungeon_back_step_rejected(tile) {
             self.message = MOVEMENT_BLOCKED_REFUSAL.to_string();
-            self.tick_dungeon_footstep();
+            self.run_dungeon_shared_redraw();
             return Ok(MoveOutcome::Blocked);
         }
         // `dungeon-mode.md` Section 8.1, "Electric contact": it "prints
@@ -129,7 +129,7 @@ impl PlayState {
         }
         if !is_dungeon_walkable(tile) {
             self.message = MOVEMENT_BLOCKED_REFUSAL.to_string();
-            self.tick_dungeon_footstep();
+            self.run_dungeon_shared_redraw();
             return Ok(MoveOutcome::Blocked);
         }
 
@@ -177,6 +177,9 @@ impl PlayState {
         self.player.y = ny;
         self.sync_player_object();
         self.mark_visibility_dirty();
+        // The post-step shared redraw paints from the new cell before its
+        // tick plays the 11 (`dungeon-mode.md §8.1`; playtest P19-06).
+        self.redraw_dungeon_first_person_view();
         self.emit_sound_effect(SoundEffect::DungeonFootstep { intensity: second });
         self.arm_dungeon_footstep_tail();
     }
