@@ -24,17 +24,10 @@ pub const BLACKTHORN_INPUT_PROMPT: &str = BLACKTHORN_RESPONSE_PROMPT;
 /// all: the first wrong answer printed the rebuke and the threat and then
 /// stopped, so the ask the player was answering was never on screen.
 pub const BLACKTHORN_SECOND_DEMAND: &str = "\"Now tell me, what is the Mantra of {}?\"";
-/// **Measured**: what a wrong mantra draws when the interrogation ends.
-/// **Measured** 2026-09-08 (`qa/paired/bt-escalate.tsv`) with a party of
-/// three, driving the loop's four asks with wrong answers. Blackthorn's
-/// wording escalates and the second ask names the companion at risk.
-pub const BLACKTHORN_FIRST_WRONG_LINE: &str =
-    "\"Make not the mistake of laughing at me, simple one!\"";
-/// `blackthorn.md §4.1`: record `8` "begins with two line feeds and the
-/// quoted sand/threat prefix" and stops where the name goes. This is that
-/// record's shape, for the paths that run without `MISCMSG.DAT`.
-pub const BLACKTHORN_SAND_THREAT_PREFIX_FALLBACK: &str =
-    "\n\n\"I will ask thee until the sand has fallen. And then will ";
+// `blackthorn.md §4.1`'s first-wrong-answer rebuke (record `7`), sand/threat
+// prefix (record `8`) and merciful-death speech (record `5`) are read from
+// `MISCMSG.DAT` only: the spec names the records without publishing their
+// wording, so the engine carries no copy of it (playtest P18-06).
 /// The second and third asks.
 pub const BLACKTHORN_RESISTANCE_LINE: &str = "\"Resistance is futile! Thou must yield the truth unto me! Tell me, what is the Mantra of {}?\"";
 /// The fourth, shouted.
@@ -42,9 +35,6 @@ pub const BLACKTHORN_FINAL_DEMAND: &str =
     "\"My patience with thee has worn away! SPEAK UNTO ME THE MANTRA, NOW!\"";
 /// The execution narration, which carries no quotes - it is narration, not
 /// speech.
-/// **Measured** 2026-09-08 (`qa/paired/bt-correct.tsv`): what the right
-/// mantra draws. The companion dies either way; only the manner changes.
-pub const BLACKTHORN_MERCIFUL_DEATH_LINE: &str = "\"I thank thee, my friend! As a token of my esteem for thine honesty, I will grant thy companion a merciful death!\"";
 pub const BLACKTHORN_PENDULUM_NARRATION: &str =
     "With a wave of Blackthorn's hand, the pendulum blade falls!";
 pub const BLACKTHORN_DUNGEON_THREAT: &str =
@@ -6349,7 +6339,7 @@ impl PlayState {
                     self.blackthorn_reaction_text(
                         game_dir,
                         crate::MISCMSG_BLACKTHORN_MERCIFUL_DEATH,
-                        BLACKTHORN_MERCIFUL_DEATH_LINE,
+                        "",
                     )?
                 } else {
                     self.blackthorn_reaction_text(
@@ -6477,7 +6467,7 @@ impl PlayState {
                         let rebuke = self.blackthorn_reaction_text(
                             game_dir,
                             crate::MISCMSG_BLACKTHORN_FIRST_WRONG_REBUKE,
-                            BLACKTHORN_FIRST_WRONG_LINE,
+                            "",
                         )?;
                         // §4.1: record `8` comes "after its scene beat", and
                         // §6.1: "The script swap listed in Section 6.3 (`0x80`
@@ -6491,7 +6481,7 @@ impl PlayState {
                         let threat = self.blackthorn_reaction_text(
                             game_dir,
                             crate::MISCMSG_BLACKTHORN_SAND_THREAT_PREFIX,
-                            BLACKTHORN_SAND_THREAT_PREFIX_FALLBACK,
+                            "",
                         )?;
                         self.message = format!("{rebuke}{threat}{victim_name} die!\" ");
                         Ok(MoveOutcome::PromptDeclined)

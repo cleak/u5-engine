@@ -13,8 +13,9 @@
 # quoted with numbers rather than "later than two seconds". It is a pacing
 # measurement, not a conformance target: the engine prints the whole entry
 # inside one key handler, so its rows are expected to be ahead throughout.
-# The reading wanted is which stock beat first shows `kneel before the` and
-# which first shows `Upon what virtue`.
+# The reading wanted is which stock beat first shows `MISCMSG.DAT` record
+# `28` (the kneel narration) and which first shows record `29` (the virtue
+# question).
 #
 # This scenario measures pacing only and must be read as such, not as a
 # wording result. It measured nothing about conformance and its differing
@@ -25,8 +26,8 @@
 #   t0600  ...approach the / tranquil / Shrine...
 #   t1200  unchanged
 #   t1800  unchanged
-#   t2400  ...and thou dost / kneel before the / Altar.
-#   t3000  dost thou / meditate? / :
+#   t2400  record 28's last three rows (the kneel narration)
+#   t3000  record 29's last two rows and its `:` row (the virtue question)
 #   t3600  unchanged through t5000
 #
 # Approach to Kneel is bounded to (1800, 2400] ms - about forty ~55 ms BIOS

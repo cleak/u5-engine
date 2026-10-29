@@ -364,8 +364,8 @@ pub const SHRINE_MANTRA_ASK_COUNT: u8 = 3;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ShrinePhase {
-    /// **Measured** 2026-09-07: `E` on a shrine marker opens with
-    /// `Upon what virtue dost thou meditate?` and a `:` input row - the
+    /// **Measured** 2026-09-07: `E` on a shrine marker opens with the
+    /// virtue question (`MISCMSG.DAT` record `29`) and a `:` input row - the
     /// virtue is *typed*, not derived from which shrine the party is on.
     Virtue,
     Mantra,

@@ -117,7 +117,8 @@ fn playtest_p12_18_blank_virtue_answer_keeps_its_colon_row() {
     let mut session = ShrineSession::new(ShrineVirtue::Honor);
     session.phase = ShrinePhase::Virtue;
     state.active_shrine = Some(session);
-    state.emit_message_line(format!("{SHRINE_VIRTUE_PROMPT}\n\n"));
+    // A placeholder for `MISCMSG.DAT` record `29`, the virtue question.
+    state.emit_message_line("question\n\n");
 
     assert_eq!(
         state.step_active_shrine('\r', "", &dir).unwrap(),
@@ -126,7 +127,7 @@ fn playtest_p12_18_blank_virtue_answer_keeps_its_colon_row() {
     let rows = shr12_rows(&state);
     assert!(
         rows.ends_with(&[
-            SHRINE_VIRTUE_PROMPT.to_string(),
+            "question".to_string(),
             String::new(),
             ":".to_string()
         ]),

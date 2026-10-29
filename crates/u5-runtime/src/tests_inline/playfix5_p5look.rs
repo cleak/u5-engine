@@ -12,7 +12,7 @@
 #[test]
 fn playtest_j02_look_appenders_add_no_separator_or_brackets() {
     let table = parse_look2_dat(&look2_bytes(&[
-        (0xfa, "a grandfather clock, showing: "),
+        (0xfa, "clock placeholder: "),
         (ETERNAL_FLAME_LOOK_TILE as usize, "the Flame of "),
         (
             WORD_OF_POWER_SEALED_TILE as usize,
@@ -25,7 +25,7 @@ fn playtest_j02_look_appenders_add_no_separator_or_brackets() {
     state.clock = GameClock::new(15, 7).unwrap();
     assert_eq!(
         state.look_description(0xfa, Some(&table), 0),
-        "a grandfather clock, showing: 3:07 PM"
+        "clock placeholder: 3:07 PM"
     );
     assert_eq!(
         state.look_description(WORD_OF_POWER_SEALED_TILE, Some(&table), 240),

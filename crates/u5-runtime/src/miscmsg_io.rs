@@ -143,6 +143,13 @@ pub const MISCMSG_URN_CODEX_RANGE: std::ops::RangeInclusive<usize> = 37..=44;
 /// §3: "45 | Shrine entry | Approach narration before the kneeling and
 /// virtue-input records" (`RETRACTIONS.md` R417).
 pub const MISCMSG_SHRINE_ENTRY_NARRATION: usize = 45;
+/// `karma.md §7` "Entry text and input order", Kneel step: "Record `28`, the
+/// kneeling-at-the-altar narration, followed by its blank row". It carries
+/// no leading newline of its own.
+pub const MISCMSG_SHRINE_KNEEL_NARRATION: usize = 28;
+/// `karma.md §7`, Virtue-question step: "Record `29`: the question asking
+/// which virtue, then a blank row and `:`".
+pub const MISCMSG_SHRINE_VIRTUE_QUESTION: usize = 29;
 /// §3: "46 | Codex entry | Approach narration for the Codex presentation".
 pub const MISCMSG_CODEX_ENTRY_NARRATION: usize = 46;
 

@@ -151,7 +151,7 @@ a paired run at all.
 | `nb-stable-closed` | North Britanny's stable keeper is away from his working waypoint at 13:00, so Talk answers the `shops.md` §2 open-for-business refusal on both sides |
 | `cove-herbalist` | Cove's herbalist: the greeting, `Yes`, the lettered reagent list, a quote and the list redraw a declined quote leaves |
 | `cove-healer` | Cove's Sanctuary: the greeting, `Yes`, the attributed powers line and service question, and the refusal a service nobody needs draws |
-| `paws-tavern` | the Paws tavern at 13:00: greeting, `Yes`, the drink list, `R` for rations, the provision quote, a zero quantity, `"Hrumph."` and the attributed closing bark. **Compared 2026-09-08** against `shops.md` §8.C: the zero echo, `"Hrumph."`, then `"Anything else` / `for thee?" ` on the next two rows with no blank between, `No` on the question's own row, and the closing bark `"Hmph. Well, later then..."` / `says Dr. Cat.` Seed the run from the **overworld** Paws profile - an in-town seed puts the party beside the keeper and the scenario's walk-in then leads it away |
+| `paws-tavern` | the Paws tavern at 13:00: greeting, `Yes`, the drink list, `R` for rations, the provision quote, a zero quantity, `"Hrumph."` and the attributed closing bark. **Compared 2026-09-08** against `shops.md` §8.C: the zero echo, `"Hrumph."`, then `"Anything else` / `for thee?" ` on the next two rows with no blank between, `No` on the question's own row, and the closing bark (a `SHOPPE.DAT` no-sale record) / `says Dr. Cat.` Seed the run from the **overworld** Paws profile - an in-town seed puts the party beside the keeper and the scenario's walk-in then leads it away |
 | `paws-sleeper` | Paws' tavern keeper is still on a bed at 10:00, so Talk answers the sleeping gate: `"Zzzzzz..."`, quotes included. The route opens a door on the way |
 | `shop-arms-sell-ammunition` | Return on an ammunition row: `"We don't deal in used ammunition!" growls Gwenneth`, and the visit ends |
 | `shop-arms-sell-zero-price` | Return on a zero-price row: `"That, I cannot buy from thee." says Gwenneth`, and the browser continues |
@@ -160,7 +160,7 @@ a paired run at all.
 | `shop-arms-sell` | the Sell side of the same shop. **Retry until the `talk` shot shows the greeting**: the walk is thirty steps and the weaponsmith wanders, so a run that ends on `Nobody's here!` proves nothing (three of four attempts on 2026-09-07) |
 | `doom-final-room` | Doom's final room: the fall onto the room trigger, the arena, the absorption, and Lord British's dialogue. **Compared 2026-09-07**: both sides print `Entering room`, the arena banner, `Avatar is absorbed!`, `Lord British says: "Well met, Avatar!"`, the box question, and the seated reply, differing only by one capture's timing |
 | `doom-final-room-waiting` | the same room answering `No` twice, which reaches `endgame.md` §5's waiting branch: the `"I see...` lead-in, record 10, and §6's tableau rearrangement |
-| `doom-final-room-refusal` | the same room answering `No` to the first box question. **Compared 2026-09-07**: both sides reach `…secret passage in my chamber!"`, `"Didst thou bring it?"` and `You reply:` |
+| `doom-final-room-refusal` | the same room answering `No` to the first box question. **Compared 2026-09-07**: both sides reach the refusal's `ENDMSG.DAT` record `2` and `You reply:` |
 
 ## Running the suite
 

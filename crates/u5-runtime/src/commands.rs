@@ -740,12 +740,12 @@ pub const USE_SEXTANT_ONLY_OUTDOORS: &str = "Only outdoors!";
 /// coordinate printer below it is unchanged (`cleak/u5-spec#237`).
 pub const USE_SEXTANT_READING_LABEL: &str = "Position:";
 
-/// **Measured** 2026-09-07 (`qa/paired/shrine-enter.tsv`): a shrine is
-/// *entered*. Standing on the shrine marker tile and pressing `E` opens this
-/// question with an input row beneath it; the engine had `M` open a
-/// `Shrine of <virtue> mantra?` prompt on the overworld tile, which the
-/// original answers with Mix Reagents.
-pub const SHRINE_VIRTUE_PROMPT: &str = "Upon what virtue dost thou meditate?";
+// **Measured** 2026-09-07 (`qa/paired/shrine-enter.tsv`): a shrine is
+// *entered*. Standing on the shrine marker tile and pressing `E` opens the
+// virtue question with an input row beneath it. That question, and the two
+// narration records before it, are `MISCMSG.DAT` records `29`, `45` and `28`
+// (`karma.md §7` "Entry text and input order") and are read from the file at
+// runtime - see `MISCMSG_SHRINE_VIRTUE_QUESTION` (playtest P18-06).
 /// The rest of the measured entry: the `Enter ` echo completes by naming the
 /// shrine - which is what `gazetteer.md` §7 means when it says the one
 /// coordinate table also supplies "the shrine of *virtue*" name - and two
@@ -758,18 +758,12 @@ pub const SHRINE_ENTER_ECHO_PREFIX: &str = "the shrine of";
 /// Codex!\n` and immediately starts the shrine/Codex presentation". The
 /// literal completes the open `Enter ` echo, so it carries no verb of its own.
 pub const CODEX_SHRINE_ENTER_ECHO_TAIL: &str = "the Shrine of the Codex!";
-/// The line ends in an ellipsis, which is why the capture wraps `tranquil`
-/// and `Shrine...` onto separate rows: glyph-index decoding of the paired
-/// capture reads `0x2e 0x2e 0x2e` after `Shrine`, and the kneel line below
-/// ends in a single period.
 /// `formats/location-dat.md §11`: "Record `1` supplies ordinary virtue-shrine
 /// meditation and record `2` supplies the Codex presentation".
 pub const SHRINE_PRESENTATION_CUTSCENE_MAP_RECORD: usize = 1;
 /// `karma.md §8`: the Codex presentation "shows the eleven-by-eleven Codex
 /// map from `MISCMAPS.DAT`, record 2 (zero-based)".
 pub const CODEX_PRESENTATION_CUTSCENE_MAP_RECORD: usize = 2;
-pub const SHRINE_APPROACH_NARRATION: &str = "Thou dost approach the tranquil Shrine...";
-pub const SHRINE_KNEEL_NARRATION: &str = "...and thou dost kneel before the Altar.";
 /// The shrine presentation's wall-clock rate: one BIOS tick per counted
 /// world step.
 ///

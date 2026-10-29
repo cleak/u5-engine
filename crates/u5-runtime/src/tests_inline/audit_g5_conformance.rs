@@ -91,6 +91,8 @@ fn audit_g5_companion(slot: u8) -> PartyMember {
 #[test]
 fn audit_a032_avatar_plus_one_companion_is_enough_for_the_merciful_death() {
     let dir = debug_game_dir();
+    // Record `5` is read from `MISCMSG.DAT` only (playtest P18-06).
+    lit18_write_merciful_death_record(&dir);
     let mut state = test_state(open_grid(), 5, 5);
     state.party.push(audit_g5_companion(1));
     state.begin_blackthorn_audience_capture(&dir).unwrap();
@@ -209,6 +211,8 @@ fn audit_a037_hourglass_runs_e9_eb_e8_and_the_first_wrong_plays_the_beat() {
 #[test]
 fn audit_a036_merciful_death_lifts_the_roster_at_the_end_of_the_blade_hold() {
     let dir = debug_game_dir();
+    // Record `5` is read from `MISCMSG.DAT` only (playtest P18-06).
+    lit18_write_merciful_death_record(&dir);
     let mut state = test_state(open_grid(), 5, 5);
     state.party.push(audit_g5_companion(1));
     state.party.push(audit_g5_companion(2));

@@ -2886,9 +2886,9 @@ impl PlayState {
     /// typed prompt row is still open.
     ///
     /// `karma.md §12` renders record `30` "after the third nonblank mantra",
-    /// and that record is `\n\nThine thoughts are unfocused.\n`. The cursor is
-    /// sitting at the end of the `Mantra:AHM` row when it prints, so the
-    /// record's *first* newline is what closes that row and only the second
+    /// and that record is two line feeds, the result sentence and one more
+    /// line feed. The cursor is sitting at the end of the `Mantra:AHM` row
+    /// when it prints, so the record's *first* newline is what closes that row and only the second
     /// leaves a blank - the same split `combat.md §8.1` makes between the
     /// banner's newline and the turn loop's.
     ///
@@ -2907,7 +2907,7 @@ impl PlayState {
     ///
     /// Measured again 2026-09-18 (`shrine-unfocused/mantra3`, reading
     /// `scroll`): the original keeps its blank row between the last
-    /// `Mantra:AHM` and `Thine thoughts are unfocused.` and this engine ran
+    /// `Mantra:AHM` and record `30`'s sentence and this engine ran
     /// them together. `row_open` is now only a statement of the row state,
     /// which is what the transcript layer needs to apply the rule.
     fn emit_shrine_misc_record_after_open_row(

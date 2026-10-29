@@ -350,6 +350,8 @@ fn rc4_message_layout(state: &PlayState) -> crate::MessageWindowLayout {
 #[test]
 fn rc4_the_record_five_exit_beat_key_wait_draws_its_cursor_two_rows_down() {
     let dir = debug_game_dir();
+    // Record `5` is read from `MISCMSG.DAT` only (playtest P18-06).
+    lit18_write_merciful_death_record(&dir);
     let mut state = test_state(open_grid(), 5, 5);
     state.party.push(audit_g5_companion(1));
     state.party.push(audit_g5_companion(2));

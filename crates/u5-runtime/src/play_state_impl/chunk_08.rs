@@ -1837,7 +1837,31 @@ impl PlayState {
         // step. It prints the Approach record, and only then begins the
         // walk."
         self.advance_presentation_world_step();
-        self.emit_message_line(format!("\n{SHRINE_APPROACH_NARRATION}\n\n"));
+        // `karma.md §7` "Entry text and input order": "The authored
+        // narration comes from `MISCMSG.DAT`" - records `45`, `28` and `29`.
+        // The engine printed compiled-in copies of all three (playtest
+        // P18-06); each record is now passed through whole, which already
+        // carries the leading newline and trailing blank rows §7 describes.
+        // Without the file there is no authored text to print, so the beats
+        // keep their pacing and print nothing.
+        let messages = load_misc_messages(game_dir)?;
+        let record = |index: usize| {
+            messages
+                .as_ref()
+                .and_then(|messages| messages.record(index))
+                .map(|record| record.replace('\r', "\n"))
+                .unwrap_or_default()
+        };
+        let approach = record(MISCMSG_SHRINE_ENTRY_NARRATION);
+        let kneel = record(MISCMSG_SHRINE_KNEEL_NARRATION);
+        // Record `29` ends with the `:` of its input row. That row is the
+        // *live* row the shrine session serves (`text-output.md` §10.6), so
+        // the logged question stops at the blank row above it.
+        let question = record(MISCMSG_SHRINE_VIRTUE_QUESTION);
+        let question = question.strip_suffix(':').unwrap_or(&question).to_string();
+        if !approach.is_empty() {
+            self.emit_message_line(approach);
+        }
         // `karma.md §12`'s entry table paces this: the kneel record, then
         // "After ten world ticks, record `29`: the question asking which
         // virtue". The engine used to print all three in this one call,
@@ -1863,7 +1887,7 @@ impl PlayState {
             // record 29 likewise has no leading feed. The blank between
             // Approach and Kneel is record 45's trailing blank row
             // alone."
-            format!("{SHRINE_KNEEL_NARRATION}\n\n"),
+            kneel,
         );
         // The question is logged once, with the blank row the capture
         // shows beneath it; the answer row is the *live* row the shrine
@@ -1872,7 +1896,7 @@ impl PlayState {
         self.staged_narration.push_ticks_counting_world_steps(
             SHRINE_VIRTUE_QUESTION_HOLD_WORLD_TICKS,
             SHRINE_VIRTUE_QUESTION_WORLD_STEPS,
-            format!("{SHRINE_VIRTUE_PROMPT}\n\n"),
+            question,
         );
         self.active_shrine = Some(ShrineSession::entering(virtue));
         self.adopt_shrine_prompt_row();

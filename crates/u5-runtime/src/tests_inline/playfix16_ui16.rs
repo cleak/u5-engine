@@ -14,7 +14,7 @@
 fn playtest_p16_03_look_appender_rows_leave_the_look_row_open() {
     let table = parse_look2_dat(&look2_bytes(&[
         (0x40, "a target"),
-        (0xfa, "a grandfather clock, showing: "),
+        (0xfa, "clock placeholder: "),
         (ETERNAL_FLAME_LOOK_TILE as usize, "the Flame of "),
     ]))
     .unwrap();

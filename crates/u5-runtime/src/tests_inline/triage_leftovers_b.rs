@@ -41,6 +41,8 @@ fn triage_b_outdoor_walker_leaves_the_animator_phase_byte_alone() {
 #[test]
 fn triage_b_merciful_death_closing_feed_is_on_screen_during_the_blade_hold() {
     let dir = debug_game_dir();
+    // Record `5` is read from `MISCMSG.DAT` only (playtest P18-06).
+    lit18_write_merciful_death_record(&dir);
     let mut state = test_state(open_grid(), 5, 5);
     state.party.push(audit_g5_companion(1));
     state.party.push(audit_g5_companion(2));
