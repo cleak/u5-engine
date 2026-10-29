@@ -23,3 +23,46 @@ fn p19_counters_row_draws_edited_food_and_gold_unclamped() {
     assert_eq!(row(9999, 5), "F:9999      G:5");
     assert_eq!(row(0, 150), "F:0       G:150");
 }
+
+/// P19-08: `inventory.md §7.1` completes a potion's `Item:_` with exactly
+/// `Potion\n` and binds the combat target "without this prompt"; §7.2's
+/// `Healed!\n`, `Failed!\n`, `Poof!\n` and `Invisible!\n` carry no leading
+/// feed, so in combat the result sits on the row right under `Item: Potion`.
+#[test]
+fn p19_combat_potion_result_follows_item_potion_with_no_blank_row() {
+    let game_dir = std::path::Path::new(".");
+    for colour in [POTION_YELLOW_INDEX, POTION_BLUE_INDEX, POTION_PURPLE_INDEX] {
+        let mut state = combat2b_two_member_state();
+        state.party[1].hp = 5;
+        state.potion_stock[colour] = 1;
+        let seed = (1..=u16::MAX)
+            .find(|seed| {
+                let mut probe = state.clone();
+                probe.prng_state = *seed;
+                probe.potion_variation_roll() >= POTION_VARIATION_SELECTED_FIRST
+            })
+            .expect("some seed keeps the selected colour");
+        state.prng_state = seed;
+        combat2b_use_row(
+            &mut state,
+            |request| matches!(request, UseItemRequest::Potion { index, .. } if index == colour),
+            game_dir,
+        );
+        state.flush_staged_narration();
+        let rows = combat2b_rows_text(&state);
+        let item = rows
+            .iter()
+            .rposition(|row| row == "Item: Potion")
+            .unwrap_or_else(|| panic!("rows: {rows:?}"));
+        let expected = match colour {
+            POTION_YELLOW_INDEX => "Healed!",
+            POTION_BLUE_INDEX => "Failed!",
+            _ => "Poof!",
+        };
+        assert_eq!(
+            rows.get(item + 1).map(String::as_str),
+            Some(expected),
+            "colour {colour}, rows: {rows:?}"
+        );
+    }
+}

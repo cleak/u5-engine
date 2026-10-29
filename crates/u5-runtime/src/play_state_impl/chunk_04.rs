@@ -786,8 +786,14 @@ impl PlayState {
                     // `Item: Moonstone` / `cannot be buried` / `here!`.
                     let continuation = std::mem::take(&mut self.message);
                     self.emit_message_line_continuing_row(continuation);
-                } else if echoed.is_some()
-                    && !self.message.is_empty()
+                } else if echoed.is_some_and(|family| {
+                    // `inventory.md §7.1`'s completion table: `Potion\n` and
+                    // `Skull Key\n` end with a single feed, so their result
+                    // (`Healed!\n`, `Poof!\n`, `Not here!\n`, ...) sits on
+                    // the very next row - combat potion use reaches here with
+                    // its target bound (playtest P19-08).
+                    family != USE_ITEM_ECHO_POTION && family != USE_ITEM_ECHO_SKULL_KEY
+                }) && !self.message.is_empty()
                     && !self.message.starts_with('\n')
                 {
                     self.message.insert(0, '\n');
