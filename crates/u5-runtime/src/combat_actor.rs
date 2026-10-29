@@ -3204,6 +3204,10 @@ pub const fn resolve_conjure_spell_class(selector: u8) -> u8 {
     }
 }
 
+/// `magic.md §8` creature-prompt targeters (Polymorph, Clone). The asleep
+/// bit `0x08` is not a gate: `combat.md §8.2`'s occupancy lookup rejects
+/// dead, dragged-under and hidden slots only, and `magic.md §8` gives these
+/// spells no sleeper refusal (playtest P17-12).
 pub const fn creature_prompt_target_is_eligible(
     actor: CombatActorDescriptor,
     target_group: u8,
@@ -3213,7 +3217,6 @@ pub const fn creature_prompt_target_is_eligible(
     !actor.is_empty()
         && !actor.is_marked_dead()
         && !actor.is_dragged_under()
-        && !actor.is_status_disabled()
         && !actor.is_controlled()
         && !protected_or_immune
         && target_group != caster_group

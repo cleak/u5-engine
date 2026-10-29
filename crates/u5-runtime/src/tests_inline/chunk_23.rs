@@ -8066,7 +8066,7 @@ fn combat_summon_application_allocates_actor_and_object_on_legal_neighbor() {
 }
 
 #[test]
-fn creature_prompt_target_gate_rejects_empty_disabled_controlled_same_faction_and_protected() {
+fn creature_prompt_target_gate_rejects_empty_controlled_same_faction_and_protected_not_asleep() {
     let live_target = CombatActorDescriptor::from_row([
         20, 1, COMBAT_ACTOR_FLAG_SELECTABLE_80, 32, 0, 0, 5, 5,
     ]);
@@ -8098,7 +8098,8 @@ fn creature_prompt_target_gate_rejects_empty_disabled_controlled_same_faction_an
         1,
         false,
     ));
-    assert!(!creature_prompt_target_is_eligible(
+    // Playtest P17-12: a sleeper is an ordinary Polymorph/Clone target.
+    assert!(creature_prompt_target_is_eligible(
         CombatActorDescriptor::from_row(
             [20, 1, COMBAT_ACTOR_FLAG_STATUS_DISABLED, 32, 0, 0, 5, 5,]
         ),

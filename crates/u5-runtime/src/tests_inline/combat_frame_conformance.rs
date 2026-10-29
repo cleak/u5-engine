@@ -884,6 +884,34 @@
     }
 
     #[test]
+    fn charm_on_a_sleeping_hostile_charms_it() {
+        // `combat.md §6.1a` Writers #2: Charm's "eligibility gate is the same
+        // slot-to-group helper the round walker uses, and it accepts any
+        // non-zero result"; the helper never reads the asleep bit. The
+        // engine refused a sleeper silently (playtest P17-12).
+        let target_slot = COMBAT_PARTY_ACTOR_SLOTS;
+        let mut state = combat_charm_state(
+            target_slot,
+            COMBAT_ACTOR_FLAG_SELECTABLE_80 | COMBAT_ACTOR_FLAG_STATUS_DISABLED,
+            COMBAT_CLASS_DAEMON,
+        );
+
+        assert_eq!(
+            state
+                .cast_spell_from_suffix("1AEX7", std::path::Path::new(""))
+                .unwrap(),
+            MoveOutcome::Cast
+        );
+
+        assert_eq!(state.message, "Daemon charmed!");
+        assert!(state.combat_actors[target_slot].is_controlled());
+        assert!(
+            state.combat_actors[target_slot].is_status_disabled(),
+            "Charm does not wake a monster"
+        );
+    }
+
+    #[test]
     fn a_second_charm_clears_the_controlled_marker() {
         // `magic.md §8` creature-prompt targeters: "a second successful Charm
         // on the same actor clears it". The shared creature-prompt predicate
@@ -951,7 +979,7 @@
     fn charm_prompt_relaxes_only_the_already_marked_test() {
         // The relaxation is scoped to actors that already carry bit `0x01`.
         // Every other creature-prompt gate — empty, dead, hidden,
-        // status-disabled, same-group — still refuses.
+        // same-group — still refuses; the asleep bit is not a gate.
         let target_slot = COMBAT_PARTY_ACTOR_SLOTS;
         let caster_group = COMBAT_TARGET_GROUP_PARTY;
 
@@ -988,7 +1016,10 @@
             COMBAT_ACTOR_FLAG_SELECTABLE_80 | COMBAT_ACTOR_FLAG_STATUS_DISABLED,
             COMBAT_CLASS_DAEMON,
         );
-        assert!(!asleep.charm_prompt_target_is_eligible(target_slot, caster_group));
+        assert!(
+            asleep.charm_prompt_target_is_eligible(target_slot, caster_group),
+            "a sleeping hostile is charmable (playtest P17-12)"
+        );
 
         // An unmarked party-side slot groups with the caster and is refused.
         let allied = combat_charm_state(1, COMBAT_ACTOR_FLAG_SELECTABLE_80, 1);

@@ -1242,4 +1242,5 @@ mod tests {
     include!("tests_inline/playfix15_ui15.rs");
     include!("tests_inline/playfix16_dun16.rs");
     include!("tests_inline/playfix16_ui16.rs");
+    include!("tests_inline/playfix17_combat17.rs");
 }

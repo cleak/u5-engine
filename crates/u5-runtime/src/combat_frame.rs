@@ -2836,11 +2836,11 @@ impl PlayState {
         let Some(actor) = self.combat_actors.get(target_slot).copied() else {
             return false;
         };
-        if actor.is_empty()
-            || actor.is_marked_dead()
-            || actor.is_dragged_under()
-            || actor.is_status_disabled()
-        {
+        // `combat.md §6.1a` Writers #2: the gate is the slot-to-group helper,
+        // which never reads the asleep bit `0x08` - Charm "on a Sleeping ...
+        // party member restores the roster status letter to Good" - so a
+        // sleeper is an ordinary target (playtest P17-12).
+        if actor.is_empty() || actor.is_marked_dead() || actor.is_dragged_under() {
             return false;
         }
         // `combat.md §7.1`: a restrained actor "is returned by the
@@ -2934,7 +2934,13 @@ impl PlayState {
         y: u8,
     ) -> Option<CombatCloneApplication> {
         let target_actor = self.combat_actors.get(target_slot).copied()?;
-        if !combat_actor_is_active_not_dead(target_actor) {
+        // `magic.md §8`: Clone has no sleeper refusal, so the asleep bit
+        // `0x08` that `combat_actor_is_active_not_dead` tests is not a gate
+        // here; the copy simply duplicates it (playtest P17-12).
+        if target_actor.is_empty()
+            || target_actor.is_marked_dead()
+            || !target_actor.has_field_lookup_selectable_bit()
+        {
             return None;
         }
         let target_object = self
