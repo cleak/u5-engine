@@ -290,6 +290,14 @@ impl PlayState {
                 }
                 self.emit_message_line(SAVE_IN_PROGRESS_MESSAGE);
                 self.emit_message_line(SAVE_DONE_MESSAGE);
+                // `Done.` is the last row of the three and the window draws it
+                // closed, with `text-output.md §10.4`'s derived blank beneath.
+                // Say so: `emit_message_line` reads the feed-less literal as an
+                // open row, no later echo closes a row it was not told about,
+                // and every leading-feed result after a save (`Look`, `Get`,
+                // `Search`) then spent its feed closing it and lost the blank
+                // `commands.md §5.8` shows under the echo (playtest P18-03).
+                self.close_message_row();
                 Ok(MoveOutcome::Saved)
             }
         }

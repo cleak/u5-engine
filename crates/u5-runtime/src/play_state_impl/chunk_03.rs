@@ -4351,6 +4351,12 @@ impl PlayState {
     /// raised ... and the event continues exactly as a refusal."
     pub fn resolve_troll_bridge_toll_payment(&mut self, toll: i16, game_dir: &Path) -> io::Result<()> {
         self.commit_prompt_reply(TROLL_BRIDGE_TOLL_QUESTION, "Y");
+        // `overworld.md §7.1` step 3: "Echo the accepted letter and a line
+        // feed." `commit_prompt_reply` leaves the row flag alone, and the
+        // question's own feed-less row had left it open, so the flag outlived
+        // the paid toll and every later leading-feed result lost its blank
+        // row (playtest P18-03).
+        self.close_message_row();
         // `stats-panel.md §2.2.1` row 19: this is one of the twenty-three
         // deferred sites. The direct raise below is what makes the request
         // "never lowered by a rollback" - the generic end-of-command check
