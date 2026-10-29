@@ -61,3 +61,47 @@ fn playtest_p18_06_shrine_entry_text_is_read_from_miscmsg_dat() {
     );
     let _ = fs::remove_dir_all(dir);
 }
+
+/// A `MISCMSG.DAT` whose only nonempty record is a placeholder record `5`,
+/// for the merciful-death tests: the engine has no compiled-in copy of that
+/// record (P18-06). Every other record is empty, so the demands keep their
+/// spec-published wording. `blackthorn.md §5` "Rows on the correct-answer
+/// arm": the record's last wrapped row is `merciful death!"`, which "fills
+/// all sixteen cells"; the placeholder wraps the same way.
+fn lit18_write_merciful_death_record(dir: &Path) {
+    let mut miscmsg = Vec::new();
+    for index in 0..MISCMSG_DAT_RECORDS {
+        if index == crate::MISCMSG_BLACKTHORN_MERCIFUL_DEATH {
+            miscmsg.extend_from_slice(b"\"Placeholder record five merciful death!\"");
+        }
+        miscmsg.push(0);
+    }
+    fs::write(dir.join(MISCMSG_DAT_FILE), miscmsg).unwrap();
+}
+
+/// `blackthorn.md §4.1`: "Correct answer with at least two nondead members |
+/// Record `5`, the merciful-death speech". The record is read from the file:
+/// without one the arm prints no speech at all, rather than a stored copy
+/// (P18-06).
+#[test]
+fn playtest_p18_06_merciful_death_speech_is_read_from_miscmsg_dat() {
+    let run = |with_file: bool| {
+        let dir = debug_game_dir();
+        if with_file {
+            lit18_write_merciful_death_record(&dir);
+        }
+        let mut state = test_state(open_grid(), 5, 5);
+        state.party.push(audit_g5_companion(1));
+        state.party.push(audit_g5_companion(2));
+        state.begin_blackthorn_audience_capture(&dir).unwrap();
+        while state.active_blackthorn.as_ref().is_some_and(|c| c.current_prompt().is_none()) {
+            state.submit_blackthorn_audience_answer("", &dir).unwrap();
+        }
+        state.submit_blackthorn_audience_answer("Ahm", &dir).unwrap();
+        let printed = state.message.clone();
+        let _ = fs::remove_dir_all(dir);
+        printed
+    };
+    assert_eq!(run(true), "\"Placeholder record five merciful death!\"");
+    assert!(!run(false).contains("death"));
+}
