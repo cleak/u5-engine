@@ -1549,13 +1549,17 @@ pub fn paint_z_stats_page_text_window(system: &mut TextWindowSystem, state: &Pla
     // (`4-Sulfur Ash` occupies window columns 2..13), while a page whose
     // whole content is one placeholder line centres that line on interior
     // row 4 at column 1 - `(None owned!)` is thirteen characters and
-    // fills the content width exactly.
+    // fills the content width exactly. Only that placeholder is centred: a
+    // real one-entry list starts on interior row 1 like any other list
+    // (`inventory.md §4.4`: each pass "homes the cursor to window column 1
+    // of window row 1", and §4.7 gives the inventory pages the picker's row
+    // renderer; playtest P17-07).
     let single_placeholder = framed
         && rows
             .iter()
             .filter(|line| !line.trim_end().is_empty())
-            .count()
-            == 1;
+            .map(|line| line.trim())
+            .eq([crate::Z_STATS_NONE_OWNED_PLACEHOLDER]);
     if framed {
         paint_panel_picker_frame(system);
     }
@@ -1576,7 +1580,10 @@ pub fn paint_z_stats_page_text_window(system: &mut TextWindowSystem, state: &Pla
         } else {
             row + first_row
         };
-        if framed && row > PANEL_PICKER_ROWS {
+        // `inventory.md §4.4`: a wrapping entry that begins on window row 7
+        // "puts its label on row 8, so a page can show eight rows of text
+        // and no bottom border" (playtest P17-09).
+        if framed && row > PANEL_PICKER_ROWS + 1 {
             break;
         }
         // Advance past a centred row's leading spaces before emitting, so
