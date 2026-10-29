@@ -13966,6 +13966,9 @@ fn drive_visual(
         // (playtest P19-05).
         if read && visual.state.typeahead_flush_requested {
             visual.typed_keys.clear();
+            // One-shot: a later key read through a path that bypasses the
+            // command epilogue (a line editor) must not flush again.
+            visual.state.typeahead_flush_requested = false;
         }
         if visual.state.sound_effect_serial != effects_before {
             // `audio.md §7.4`: the refused overworld or town step flushes
