@@ -12840,27 +12840,20 @@ fn apply_pre_flourish_outcome(intro: &mut VisualIntroState) {
     resolve_visual_intro_subflow(intro, IntroSubflow::JourneyOnward);
 }
 
-/// `systems/intro.md §10`: steps 1 through 20 block on a keyboard poll. The
-/// key that leaves step 1 issues that step's rectangle dissolve instead of
-/// advancing directly; the dissolve's own tick handler advances the step once
-/// the transfer has completed. The key that leaves step 20 ends the sequence
-/// and returns to the intro menu.
+/// `systems/intro.md §10`: the panel's `step` is the step currently on the
+/// visible page. Step 0 is revealed without a wait; every later step is
+/// composed, waits for a key and only then is revealed, so "the key that
+/// dismisses step n - 1 is the key that presents step n" and, "after step 20
+/// is presented, one further keypress ends the sequence" (playtest P17-01).
+/// The key that presents step 1 also runs that step's post-reveal rectangle
+/// dissolve; it is one blocking call, so it is complete in the frame that
+/// presents step 1, and step 1 then stays up until the next key.
 fn step_visual_intro_story_panel(
     step: &mut usize,
     transition: &mut Option<RectangleDissolve>,
 ) -> VisualIntroPanelOutcome {
-    if transition.is_some() {
-        // `cleak/u5-spec#53`: the dissolve is a blocking local visual effect.
-        return VisualIntroPanelOutcome::Stay;
-    }
-    if *step == 1 {
-        *transition = Some(
-            RectangleDissolve::new(INTRO_STEP_1_RECT_TRANSITION)
-                .expect("published step-1 dissolve rectangle is well-formed"),
-        );
-        return VisualIntroPanelOutcome::Stay;
-    }
-    if *step + 1 >= INTRO_STORY_STEP_COUNT {
+    let next = *step + 1;
+    if next >= INTRO_STORY_STEP_COUNT {
         return VisualIntroPanelOutcome::ReturnToMenu {
             subflow: IntroSubflow::StorySlides,
             result: IntroSubflowResult::ReturnedToMenu,
@@ -12869,7 +12862,13 @@ fn step_visual_intro_story_panel(
             message: String::new(),
         };
     }
-    *step += 1;
+    debug_assert!(intro_story_step_waits_for_input(next));
+    *step = next;
+    // `cleak/u5-spec#53`: only step 1 has a post-reveal effect.
+    *transition = (next == 1).then(|| {
+        RectangleDissolve::new(INTRO_STEP_1_RECT_TRANSITION)
+            .expect("published step-1 dissolve rectangle is well-formed")
+    });
     VisualIntroPanelOutcome::Stay
 }
 
@@ -12877,56 +12876,7 @@ fn advance_visual_intro_panel_animation(
     panel: &mut VisualIntroPanel,
     title_tick_frame: &mut u8,
 ) -> bool {
-    advance_visual_intro_story_auto_step(panel)
-        || advance_visual_intro_story_dissolve(panel)
-        || advance_visual_intro_return_to_view(panel, title_tick_frame)
-}
-
-fn advance_visual_intro_story_auto_step(panel: &mut VisualIntroPanel) -> bool {
-    let VisualIntroPanel::Story {
-        step, transition, ..
-    } = panel
-    else {
-        return false;
-    };
-    if *step + 1 >= INTRO_STORY_STEP_COUNT || intro_story_step_waits_for_input(*step) {
-        return false;
-    }
-    *step = step
-        .checked_add(1)
-        .expect("intro story auto-step counter overflowed");
-    *transition = None;
-    true
-}
-
-/// `cleak/u5-spec#53`: the step-1 dissolve is issued as one blocking call, so
-/// it is complete by the time the frame that carries it has been presented and
-/// the loop moves straight on to step 2. It is deliberately not paced by the
-/// title tick - the withdrawn contract's per-column tick schedule was the only
-/// thing that ever paced it.
-///
-/// This dissolve runs after the driver's sound/abort gate has been cleared, so
-/// `timing.md §5.1`'s ungated row applies to it: "Self-paced inside one driver
-/// call ... It is not a per-column, per-tick loop". No wall-clock duration is
-/// published for an *ungated* rectangle, so there is no rate to spread this one
-/// over frames with. That is a statement about the ungated case alone: §5.1
-/// does publish a per-visit calibrated hold for the one gated dissolve, the
-/// first start/menu logo reveal - see `u5_runtime::GATED_DISSOLVE_CLICK_HOLD_NANOS`.
-fn advance_visual_intro_story_dissolve(panel: &mut VisualIntroPanel) -> bool {
-    let VisualIntroPanel::Story {
-        step, transition, ..
-    } = panel
-    else {
-        return false;
-    };
-    if *step != 1 || transition.is_none() {
-        return false;
-    }
-    *step = step
-        .checked_add(1)
-        .expect("intro story dissolve step counter overflowed");
-    *transition = None;
-    true
+    advance_visual_intro_return_to_view(panel, title_tick_frame)
 }
 
 fn advance_visual_intro_return_to_view(
@@ -13260,9 +13210,6 @@ fn step_visual_intro_panel(intro: &mut VisualIntroState, ch: char) -> bool {
             step,
             transition,
         } => {
-            if !intro_story_step_waits_for_input(*step) {
-                return false;
-            }
             let _ = records;
             step_visual_intro_story_panel(step, transition)
         }
@@ -14938,6 +14885,33 @@ fn render_story_intro_frame(intro: &mut VisualIntroState) -> Vec<u8> {
         // exactly once in the driver's pseudo-random order. Outside the
         // rectangle the visible page already holds the same composition.
         Some(mut dissolve) => {
+            // `systems/intro.md §10` steps 9-10: step 1 is first presented
+            // as a whole page without its extra art, then the dissolve
+            // transfers the rectangle holding it (playtest P17-01). It is
+            // ungated, so `timing.md §5.1` makes it self-paced inside one
+            // call with no per-tick schedule.
+            let mut presented = new_intro_display_buffer();
+            presented.clear(0);
+            draw_visual_intro_story_art_to_buffer(
+                &mut presented,
+                &intro.game_dir,
+                intro.raster_depth,
+                step,
+                false,
+            );
+            for y in 0..hidden.height {
+                for x in 0..hidden.width {
+                    let (x0, y0, x1, y1) = INTRO_STEP_1_RECT_TRANSITION;
+                    let inside = (usize::from(x0)..=usize::from(x1)).contains(&x)
+                        && (usize::from(y0)..=usize::from(y1)).contains(&y);
+                    let index = y * hidden.width + x;
+                    intro.surface.pixels[index] = if inside {
+                        presented.pixels[index]
+                    } else {
+                        hidden.pixels[index]
+                    };
+                }
+            }
             dissolve.run_to_completion(|x, y| {
                 let (x, y) = (usize::from(x), usize::from(y));
                 intro.surface.pixels[y * intro.surface.width + x] =
@@ -21541,173 +21515,89 @@ mod tests {
         assert!(RectangleDissolve::new(INTRO_STEP_1_RECT_TRANSITION).is_ok());
     }
 
-    #[test]
-    fn intro_story_step_one_key_starts_wipe_before_advancing_step() {
-        let mut intro = VisualIntroState {
-            game_dir: debug_game_dir(),
-            raster_depth: TileGraphicsDepth::Ega16,
-            dispatch: UnifiedMenuDispatch::new(),
-            title_flourish_step: intro_title_flourish_total_steps(),
-            title_flourish_complete: true,
-            title_signature_progress: 0,
-            title_signature_complete: true,
-            title_presents_hold_ticks: 0,
-            title_card_hold_ticks: 0,
-            title_sequence_skipped: false,
-            pending_auto_return_to_view: false,
-            title_tick_frame: 0,
-            title_tick_visible_frame: 0,
-            surface: new_intro_display_buffer(),
-            modal_backing: None,
-            menu_idle_ticks: 0,
-            menu_idle_bios_ticks: 0,
-            menu_cursor_pass: 0,
-            menu_cursor_blanked: false,
-            message_waiting_for_key: false,
-            message: String::new(),
-            panel: VisualIntroPanel::Story {
-                records: StoryRecords {
-                    records: (0..20).map(|i| format!("Story record {i}")).collect(),
-                },
-                step: 1,
-                transition: None,
-            },
-            launch_result: Arc::new(Mutex::new(None)),
-            image_handle: None,
-            font_slots: None,
-            text_windows: TextWindowSystem::new(),
-            pending_pre_flourish_outcome: None,
-            title_tick_frames: None,
-            pending_reveal_clicks: Vec::new(),
-            pending_speaker_cancels: Vec::new(),
-        };
-
-        assert!(step_visual_intro_panel(&mut intro, ' '));
-
-        // `systems/intro.md` section 10 with `cleak/u5-spec#53`: the key that
-        // leaves step 1 issues the published rectangle dissolve; the step only
-        // advances once the transfer has been made.
-        let VisualIntroPanel::Story {
-            step, transition, ..
-        } = &intro.panel
-        else {
-            panic!("story panel must stay active while the step-1 dissolve runs");
-        };
-        assert_eq!(*step, 1);
-        assert_eq!(
-            *transition,
-            Some(RectangleDissolve::new(INTRO_STEP_1_RECT_TRANSITION).unwrap())
-        );
-        let _ = fs::remove_dir_all(&intro.game_dir);
-    }
-
-    #[test]
-    fn intro_story_step_zero_auto_advances_without_keypress() {
-        let mut panel = VisualIntroPanel::Story {
+    fn story_panel_at(step: usize) -> VisualIntroPanel {
+        VisualIntroPanel::Story {
             records: StoryRecords {
                 records: (0..20).map(|i| format!("Story record {i}")).collect(),
             },
-            step: 0,
+            step,
             transition: None,
-        };
-
-        assert!(advance_visual_intro_story_auto_step(&mut panel));
-        match panel {
-            VisualIntroPanel::Story {
-                step, transition, ..
-            } => {
-                assert_eq!(step, 1);
-                assert_eq!(transition, None);
-            }
-            _ => panic!("story panel should remain active"),
         }
     }
 
-    #[test]
-    fn intro_story_step_zero_ignores_keypress_before_auto_advance() {
-        let mut intro = VisualIntroState {
-            game_dir: debug_game_dir(),
-            raster_depth: TileGraphicsDepth::Ega16,
-            dispatch: UnifiedMenuDispatch::new(),
-            title_flourish_step: intro_title_flourish_total_steps(),
-            title_flourish_complete: true,
-            title_signature_progress: 0,
-            title_signature_complete: true,
-            title_presents_hold_ticks: 0,
-            title_card_hold_ticks: 0,
-            title_sequence_skipped: false,
-            pending_auto_return_to_view: false,
-            title_tick_frame: 0,
-            title_tick_visible_frame: 0,
-            surface: new_intro_display_buffer(),
-            modal_backing: None,
-            menu_idle_ticks: 0,
-            menu_idle_bios_ticks: 0,
-            menu_cursor_pass: 0,
-            menu_cursor_blanked: false,
-            message_waiting_for_key: false,
-            message: String::new(),
-            panel: VisualIntroPanel::Story {
-                records: StoryRecords {
-                    records: (0..20).map(|i| format!("Story record {i}")).collect(),
-                },
-                step: 0,
-                transition: None,
-            },
-            launch_result: Arc::new(Mutex::new(None)),
-            image_handle: None,
-            font_slots: None,
-            text_windows: TextWindowSystem::new(),
-            pending_pre_flourish_outcome: None,
-            title_tick_frames: None,
-            pending_reveal_clicks: Vec::new(),
-            pending_speaker_cancels: Vec::new(),
-        };
-
-        assert!(!step_visual_intro_panel(&mut intro, ' '));
-
+    fn story_step_and_transition(intro: &VisualIntroState) -> (usize, Option<RectangleDissolve>) {
         match &intro.panel {
             VisualIntroPanel::Story {
                 step, transition, ..
-            } => {
-                assert_eq!(*step, 0);
-                assert_eq!(*transition, None);
-            }
+            } => (*step, transition.clone()),
             _ => panic!("story panel should remain active"),
         }
-        let _ = fs::remove_dir_all(&intro.game_dir);
     }
 
+    /// Playtest P17-01: `systems/intro.md §10` - step 0 "is revealed
+    /// immediately, without waiting for input", and every later step is
+    /// revealed only after its key. Step 0 must stay on screen until the
+    /// first key; no animation tick may move it on.
     #[test]
-    fn intro_story_step_one_dissolve_completes_then_enters_step_two() {
-        // `cleak/u5-spec#53`: the dissolve is one blocking call, so the step
-        // advances as soon as the frame carrying it has been presented. There
-        // is no per-column tick schedule any more.
-        //
-        // `timing.md §5.1` publishes no duration for this one because it is
-        // *ungated* - "Self-paced inside one driver call". The gated
-        // start/menu reveal is the exception the same section corrects, and it
-        // is not this call.
-        let mut panel = VisualIntroPanel::Story {
-            records: StoryRecords {
-                records: (0..20).map(|i| format!("Story record {i}")).collect(),
-            },
-            step: 1,
-            transition: Some(RectangleDissolve::new(INTRO_STEP_1_RECT_TRANSITION).unwrap()),
-        };
+    fn playtest_p17_01_story_step_zero_stays_up_until_the_first_key() {
+        let dir = std::env::temp_dir().join("u5-p17-01-step0");
+        let mut intro = read_only_intro_state_for_local_assets(&dir, story_panel_at(0));
+        intro.dispatch.submit_menu_key(b'U');
+        let mut tick = 0u8;
 
-        assert!(advance_visual_intro_story_dissolve(&mut panel));
-        match &panel {
-            VisualIntroPanel::Story {
-                step, transition, ..
-            } => {
-                assert_eq!(*step, 2);
-                assert_eq!(*transition, None);
-            }
-            _ => panic!("story panel should remain active"),
+        for _ in 0..50 {
+            assert!(!advance_visual_intro_panel_animation(
+                &mut intro.panel,
+                &mut tick
+            ));
         }
-        // Nothing left to advance once the dissolve has been consumed.
-        assert!(!advance_visual_intro_story_dissolve(&mut panel));
+        assert_eq!(story_step_and_transition(&intro), (0, None));
+
+        // The first key presents step 1 together with its post-reveal
+        // dissolve, which is one blocking call.
+        assert!(step_visual_intro_panel(&mut intro, ' '));
+        assert_eq!(
+            story_step_and_transition(&intro),
+            (
+                1,
+                Some(RectangleDissolve::new(INTRO_STEP_1_RECT_TRANSITION).unwrap())
+            )
+        );
+        // Step 1 then stays up, dissolve and all, until the next key.
+        for _ in 0..50 {
+            assert!(!advance_visual_intro_panel_animation(
+                &mut intro.panel,
+                &mut tick
+            ));
+        }
+        assert_eq!(story_step_and_transition(&intro).0, 1);
+        assert!(step_visual_intro_panel(&mut intro, ' '));
+        assert_eq!(story_step_and_transition(&intro), (2, None));
+    }
+
+    /// Playtest P17-01: "the key that dismisses step n - 1 is the key that
+    /// presents step n; after step 20 is presented, one further keypress ends
+    /// the sequence" - twenty-one keys in all.
+    #[test]
+    fn playtest_p17_01_story_takes_twenty_one_keys() {
+        let dir = std::env::temp_dir().join("u5-p17-01-keys");
+        let mut intro = read_only_intro_state_for_local_assets(&dir, story_panel_at(0));
+        intro.dispatch.submit_menu_key(b'U');
+
+        for key in 1..INTRO_STORY_STEP_COUNT {
+            step_visual_intro_panel(&mut intro, 'x');
+            assert_eq!(
+                story_step_and_transition(&intro).0,
+                key,
+                "key {key} presents step {key}"
+            );
+        }
+        step_visual_intro_panel(&mut intro, 'x');
+        assert!(
+            matches!(intro.panel, VisualIntroPanel::Menu),
+            "the twenty-first key ends the sequence"
+        );
+        assert!(intro.message.is_empty());
     }
 
     #[test]
