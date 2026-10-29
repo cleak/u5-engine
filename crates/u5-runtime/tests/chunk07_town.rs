@@ -183,16 +183,12 @@ fn blackthorn_first_wrong_answer_threatens_and_re_asks_instead_of_ending() {
         "the first wrong answer threatens; it does not kill",
     );
     // Measured 2026-09-08 (`qa/paired/bt-escalate.tsv`): the first wrong
-    // answer draws the mocking line and a threat naming the companion.
+    // answer draws the rebuke (record `7`) and a threat (record `8`) naming
+    // the companion. This fixture has no `MISCMSG.DAT`, so only the resident
+    // name-and-`die!` suffix prints; the engine carries no copy of either
+    // record's wording (playtest P18-06).
     assert!(
-        state
-            .message
-            .contains("Make not the mistake of laughing at me"),
-        "the first wrong answer mocks the party: {}",
-        state.message,
-    );
-    assert!(
-        state.message.contains("die!"),
+        state.message.ends_with(" die!\" "),
         "the first wrong answer names the companion at risk: {}",
         state.message,
     );
@@ -582,7 +578,7 @@ fn blackthorn_answer_prompt_ignores_escape_and_submits_an_empty_return() {
         state.active_blackthorn.as_ref().map(|c| c.wrong_count),
         Some(0)
     );
-    assert!(!state.message.contains("laughing at me"), "{}", state.message);
+    assert!(!state.message.contains("die!"), "{}", state.message);
 
     handle_play_key_input(&mut state, '\r', "", &dir).unwrap();
     assert_eq!(
@@ -590,7 +586,7 @@ fn blackthorn_answer_prompt_ignores_escape_and_submits_an_empty_return() {
         Some(1)
     );
     assert!(
-        state.message.contains("Make not the mistake of laughing at me"),
+        state.message.ends_with(" die!\" "),
         "the empty answer is a wrong answer: {}",
         state.message
     );
@@ -632,5 +628,30 @@ fn blackthorn_second_ask_sits_under_one_blank_row_after_the_threat() {
         rows[threat + 2].starts_with("\"Now tell me,"),
         "rows: {rows:?}"
     );
+    let _ = fs::remove_dir_all(dir);
+}
+
+/// Playtest P18-06. `blackthorn.md §4.1`'s first wrong answer prints "Record
+/// `7`, the quoted laughing-at-me rebuke; after its scene beat, record `8`
+/// ... append the second roster entry's name and ` die!" `". Both records are
+/// `MISCMSG.DAT` text the spec names but does not publish, so the engine reads
+/// them from the file and carries no compiled-in copy: without the file only
+/// the resident suffix is printed.
+#[test]
+fn playtest_p18_06_blackthorn_rebuke_and_threat_have_no_compiled_in_wording() {
+    let dir = debug_game_dir();
+    assert!(!dir.join(MISCMSG_DAT_FILE).exists());
+    let mut state = test_state(open_grid(), 5, 5);
+    push_companions(&mut state, 2);
+    let scene = Scene::new(BLACKTHORN_CAPTIVE_CELL_SCENE).unwrap();
+    state.area = Area::Town { scene, floor: 0 };
+    state.begin_blackthorn_audience_capture(&dir).unwrap();
+    state.submit_blackthorn_audience_answer("", &dir).unwrap();
+    state.submit_blackthorn_audience_answer("", &dir).unwrap();
+
+    state
+        .submit_blackthorn_audience_answer("nonsense", &dir)
+        .unwrap();
+    assert_eq!(state.message, "C1 die!\" ");
     let _ = fs::remove_dir_all(dir);
 }

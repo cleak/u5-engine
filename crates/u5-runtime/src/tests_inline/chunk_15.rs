@@ -2551,14 +2551,11 @@
 
         // `blackthorn.md §4.1`: the correct answer prints the reward speech,
         // and the captive-cell relocation is a diagnostic rather than a
-        // printed line. This party has three members, so it is record `5`.
-        assert!(
-            state
-                .message
-                .contains("I will grant thy companion a merciful death!"),
-            "{}",
-            state.message
-        );
+        // printed line. This party has three members, so it is record `5`,
+        // which comes from `MISCMSG.DAT` only (playtest P18-06); this fixture
+        // has none, so no speech prints and no diagnostic stands in for it.
+        assert!(!state.message.contains("Survived"), "{}", state.message);
+        assert!(!state.message.contains("captive cell"), "{}", state.message);
         // `blackthorn.md §5` step 5: "Wait for player acknowledgement before
         // returning to the caller branch."
         assert!(

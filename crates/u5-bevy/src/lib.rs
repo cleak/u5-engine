@@ -28466,16 +28466,12 @@ mod tests {
         // §8 both state there is no such flag.
         assert_ne!(state.shrine_ruin_flags[0], 0);
         // `blackthorn.md §4.1`: a correct answer with at least two nondead
-        // members prints record `5`, the merciful-death speech. This fixture
-        // has no `MISCMSG.DAT`, so the measured fallback stands in; the
-        // captive-cell relocation is a diagnostic, not a printed line.
-        assert!(
-            state
-                .message
-                .contains("I will grant thy companion a merciful death!"),
-            "{}",
-            state.message
-        );
+        // members prints record `5`, the merciful-death speech. That record
+        // comes from `MISCMSG.DAT` only (playtest P18-06) and this fixture has
+        // none; the captive-cell relocation is a diagnostic, not a printed
+        // line.
+        assert!(!state.message.contains("Survived"), "{}", state.message);
+        assert!(!state.message.contains("captive cell"), "{}", state.message);
         state.submit_blackthorn_audience_answer("", &dir).unwrap();
         assert!(state.active_blackthorn.is_none());
         let _ = fs::remove_dir_all(dir);
