@@ -5348,17 +5348,29 @@ fn tavern_accepted_menu_letter(
     key_byte: u8,
 ) -> Option<char> {
     use crate::shop_runtime::TavernState;
-    let tavern = match state {
-        TavernState::Menu { tavern, .. } | TavernState::PostListWait { tavern, .. } => tavern,
+    let (tavern, continuation_ready) = match state {
+        TavernState::Menu {
+            tavern,
+            continuation_ready,
+        }
+        | TavernState::PostListWait {
+            tavern,
+            continuation_ready,
+        } => (tavern, continuation_ready),
         _ => return None,
     };
     let letters = tavern_menu_letters(tavern);
     let upper = key_byte.to_ascii_uppercase() as char;
+    // `shops.md §6`: "if it is pressed before a prior accepted menu branch
+    // has established continuation, it is ignored and the menu waits for
+    // another post-list key" - ignored like an invalid letter, so the gated
+    // sage/lore letter echoes nothing until the gate is raised (playtest
+    // P18-07).
     let accepted = [
         Some(letters.round),
         Some(letters.secondary),
         letters.provisions,
-        Some(letters.lore),
+        continuation_ready.then_some(letters.lore),
     ];
     accepted
         .into_iter()

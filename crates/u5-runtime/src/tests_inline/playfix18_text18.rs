@@ -101,3 +101,51 @@ fn playtest_p18_04_row_filling_trailing_space_puts_the_cursor_on_the_next_row() 
     let row = layout.rows.last().unwrap();
     assert_eq!(layout.inline_cursor, Some((MESSAGE_WINDOW_LEFT + 10, row.row)));
 }
+
+/// P18-07: `shops.md §6` - a sage/lore letter "pressed before a prior
+/// accepted menu branch has established continuation ... is ignored and the
+/// menu waits for another post-list key", and the §8.A table puts it with the
+/// invalid letters. It echoes nothing onto the open question row, however
+/// often it is pressed.
+#[test]
+fn playtest_p18_07_gated_tavern_lore_letter_echoes_nothing() {
+    use crate::shop_runtime::TavernState;
+    use crate::shop_session::ActiveShopSession;
+
+    let mut state = test_state(open_grid(), 1, 1);
+    state.area = Area::Town {
+        scene: Scene::new(22).unwrap(),
+        floor: 0,
+    };
+    state.gold = 100;
+    let menu = TavernState::Menu {
+        tavern: Tavern::TheCatsLair,
+        continuation_ready: false,
+    };
+    state.active_shop = Some(ActiveShopSession::Tavern(menu));
+    state.emit_message_line("thy travels?\" ");
+    let rows_before: Vec<String> = state
+        .message_entries()
+        .iter()
+        .map(|entry| entry.text.clone())
+        .collect();
+    let lore = crate::shops::tavern_menu_letters(Tavern::TheCatsLair).lore;
+
+    for _ in 0..2 {
+        handle_play_key_input(&mut state, lore, "", Path::new("")).unwrap();
+    }
+
+    let rows_after: Vec<String> = state
+        .message_entries()
+        .iter()
+        .map(|entry| entry.text.clone())
+        .collect();
+    assert_eq!(rows_after, rows_before);
+    assert!(matches!(
+        state.active_shop,
+        Some(ActiveShopSession::Tavern(TavernState::Menu {
+            continuation_ready: false,
+            ..
+        }))
+    ));
+}
