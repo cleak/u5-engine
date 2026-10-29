@@ -1580,7 +1580,10 @@ pub fn paint_z_stats_page_text_window(system: &mut TextWindowSystem, state: &Pla
         } else {
             row + first_row
         };
-        if framed && row > PANEL_PICKER_ROWS {
+        // `inventory.md §4.4`: a wrapping entry that begins on window row 7
+        // "puts its label on row 8, so a page can show eight rows of text
+        // and no bottom border" (playtest P17-09).
+        if framed && row > PANEL_PICKER_ROWS + 1 {
             break;
         }
         // Advance past a centred row's leading spaces before emitting, so

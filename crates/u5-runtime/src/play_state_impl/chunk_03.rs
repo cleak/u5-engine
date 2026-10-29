@@ -8225,8 +8225,12 @@ fn z_stats_split_counted_prefix(row: &str) -> (&str, &str) {
 
 /// [`append_inventory_rows`] for the four shared inventory pages, whose
 /// entries can take two display lines. `inventory.md §4.4`: the page is filled
-/// by line, "a page with one wrapped entry shows six entries", and an entry
-/// whose second line would not fit is not started.
+/// by line, "a page with one wrapped entry shows six entries". The loop
+/// "terminates on the cursor's row, not on an entry count": an entry is
+/// started while the cursor is on a list row, so "a wrapping entry that
+/// begins on window row 7 puts its label on row 8", over the bottom border
+/// (§4.7/§5.1: the Z-stats pages share the picker's row renderer; playtest
+/// P17-09).
 fn append_wrapped_inventory_rows(lines: &mut Vec<String>, rows: Vec<String>, cursor: usize) {
     if rows.is_empty() {
         lines.push(Z_STATS_NONE_OWNED_PLACEHOLDER.to_string());
@@ -8235,11 +8239,10 @@ fn append_wrapped_inventory_rows(lines: &mut Vec<String>, rows: Vec<String>, cur
     let start = cursor.min(z_stats_wrapped_inventory_last_cursor(&rows));
     let mut placed = Vec::new();
     for row in rows.iter().skip(start) {
-        let entry = z_stats_entry_lines(row);
-        if placed.len() + entry.len() > crate::stats_panel::PANEL_PICKER_ROWS {
+        if placed.len() >= crate::stats_panel::PANEL_PICKER_ROWS {
             break;
         }
-        placed.extend(entry);
+        placed.extend(z_stats_entry_lines(row));
     }
     lines.extend(placed);
 }

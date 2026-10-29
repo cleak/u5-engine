@@ -76,4 +76,39 @@ mod playfix17_zstats17 {
         assert_eq!(rows[1].trim(), "", "rows: {rows:?}");
         assert!(!rows.iter().any(|row| row.contains("Ashes")), "rows: {rows:?}");
     }
+
+    /// `inventory.md §4.4`: the loop "terminates on the cursor's row, not on
+    /// an entry count", and "a wrapping entry that begins on window row 7
+    /// puts its label on row 8, so a page can show eight rows of text and no
+    /// bottom border"; §5.1 has the Z-stats carried-items page overflow
+    /// exactly as U-Use does. The page left row 7 blank instead (P17-09).
+    #[test]
+    fn playtest_p17_09_a_wrapping_entry_starts_on_row_seven_and_overruns_the_border() {
+        let mut state = test_state(open_grid(), 1, 1);
+        state.potion_stock = [0; POTION_COUNT];
+        for shard in [
+            SPECIAL_ITEM_SHARD_FALSEHOOD_INDEX,
+            SPECIAL_ITEM_SHARD_HATRED_INDEX,
+            SPECIAL_ITEM_SHARD_COWARDICE_INDEX,
+        ] {
+            state.special_items[shard] = 1;
+        }
+        open_z_stats_page_for_test(&mut state, ZStatsPage::SpecialUse);
+        state.active_z_stats.as_mut().unwrap().inventory_cursor = 2;
+        let rows = z_stats_page_rows_for_test(&state);
+        assert!(rows[5].starts_with(Z_STATS_MOONSTONE_LABEL), "rows: {rows:?}");
+        assert_eq!(rows[6], " 1-", "rows: {rows:?}");
+        assert_eq!(
+            rows[7],
+            format!("{Z_STATS_WRAPPED_LINE_MARKER}Shard/Falsehd"),
+            "rows: {rows:?}"
+        );
+
+        // Window row 8 is screen row 9, the frame's bottom border: the label
+        // opens at window column 0 over it.
+        let system = painted_panel(&state);
+        assert_eq!(cell_byte(&system, 26, 8), Some(b'1'));
+        assert_eq!(cell_byte(&system, 24, 9), Some(b'S'));
+        assert_eq!(cell_byte(&system, 36, 9), Some(b'd'));
+    }
 }
