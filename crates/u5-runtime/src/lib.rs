@@ -1244,4 +1244,5 @@ mod tests {
     include!("tests_inline/playfix16_ui16.rs");
     include!("tests_inline/playfix17_zstats17.rs");
     include!("tests_inline/playfix17_combat17.rs");
+    include!("tests_inline/spec309.rs");
 }

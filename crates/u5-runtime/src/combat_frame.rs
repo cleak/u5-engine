@@ -1885,9 +1885,11 @@ impl PlayState {
     /// `combat.md §11`, "Field markers dissolve at random" (u5-spec#308 Q3,
     /// `RETRACTIONS.md` R650): the shared combat maintenance endpoint "runs
     /// three steps in this order: 1. The worn-ring hook. 2. The field pass.
-    /// ... 3. The timed-magic counter ageing." It is reached "After a
-    /// committed command-prompted action" and "On every skipped turn while an
-    /// active player is selected".
+    /// ... 3. The timed-magic counter ageing." It is reached on three routes
+    /// (u5-spec#309, R651): "After a committed command-prompted action", "On
+    /// every asleep, dragged-under or Sword of Chaos dispatch of a
+    /// command-group actor" and "On every skipped turn while an active player
+    /// is selected".
     pub(crate) fn apply_combat_maintenance_endpoint(
         &mut self,
         actor_slot: usize,
@@ -7760,8 +7762,13 @@ impl PlayState {
         slot: usize,
     ) -> Option<CombatMagicRingPassOutcome> {
         let acting_actor = self.combat_actors.get(slot).copied()?;
+        // `combat.md §8` (added 2026-10-28, u5-spec#309): "Eligible means
+        // party-side and neither asleep nor removed, so an asleep member's
+        // maintenance pass makes no regeneration roll, while a dragged-under
+        // wearer's does."
         if acting_actor.flags & COMBAT_ACTOR_FLAG_SELECTABLE_80 == 0
             || acting_actor.is_marked_dead()
+            || acting_actor.is_status_disabled()
         {
             return None;
         }
@@ -8887,6 +8894,7 @@ impl PlayState {
         // not have the bit stamped on it this dispatch.
         let player_driven_branch = self.active_player.is_none()
             || self.active_player == Some(usize::from(actor.owner_target_class));
+        let mut sword_of_chaos_arm = false;
         if slot < COMBAT_PARTY_ACTOR_SLOTS
             && player_driven_branch
             && self.combat_target_group_for_slot(slot) == COMBAT_TARGET_GROUP_PARTY
@@ -8902,6 +8910,7 @@ impl PlayState {
         {
             self.combat_actors[slot].flags |= COMBAT_ACTOR_FLAG_CONTROLLED;
             self.active_player = None;
+            sword_of_chaos_arm = true;
             // `stats-panel.md §2.2.1` row 14: the Sword of Chaos
             // compulsion's active-player clear is deferred.
             self.stats_panel_command_refresh = crate::stats_panel::PanelRefreshMode::Deferred;
@@ -9078,7 +9087,30 @@ impl PlayState {
         // active-player gate (Section 8.1), and that denial enters the same
         // endpoint directly." `§12` names the same "early active-player
         // denial route".
-        if matches!(action, CombatActorDispatchAction::ActivePlayerSentinelSkipped) {
+        //
+        // `§11`, "The three keyless arms enter the endpoint" (u5-spec#309,
+        // `RETRACTIONS.md` R651): "Three further command-handler arms enter
+        // the endpoint on every dispatch, even though none of them reads a
+        // key: the asleep no-command arm (`Zzzzz...`), the dragged-under arm
+        // (`ARGH!`), and the party-side Sword of Chaos arm that hands the
+        // turn to the automatic driver and then continues into the
+        // committed-action tail." The step comes after each arm's own draws
+        // (the wake draw, the `1..30` release draw, the automatic driver's
+        // draws) and "before the contact hook; a wake on the dispatch in
+        // which the field dissolves therefore sticks". "A charmed monster
+        // asleep on its keyboard turn takes the asleep arm and so also gets
+        // maintenance." The Chaos arm enters it whatever the driver did
+        // (its head gates included), since the tail follows the hand-off.
+        let keyless_command_arm = sword_of_chaos_arm
+            || (prompted
+                && matches!(
+                    action,
+                    CombatActorDispatchAction::DraggedUnderTurn
+                        | CombatActorDispatchAction::StatusDisabledWake { .. }
+                ));
+        if matches!(action, CombatActorDispatchAction::ActivePlayerSentinelSkipped)
+            || keyless_command_arm
+        {
             let _ = self.apply_combat_maintenance_endpoint(slot);
         }
 

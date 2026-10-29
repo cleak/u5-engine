@@ -279,8 +279,10 @@ pub const PLAY_SCRIPT_MAX_IDLE_TICKS: usize = 1024;
 /// gate passes a play script lets combat drive its automatic turns without
 /// reaching a keyboard turn. One pass already runs the round walker to its
 /// own non-termination guard, so a second stalled pass means no prompted
-/// combatant can be reached - a lone party member asleep on a Sleep Field
-/// that no maintenance pass ever dissolves - and the script stops with an
+/// combatant can be reached - for example a lone party member dragged under
+/// with a base step of 1, whose release draw can never pass (the original
+/// P17-14 sleeper is no longer one: u5-spec#309 runs maintenance on her
+/// asleep turns, so the field dissolves) - and the script stops with an
 /// error instead of spinning through [`PLAY_SCRIPT_MAX_IDLE_TICKS`] such
 /// passes with no output.
 pub const PLAY_SCRIPT_MAX_COMBAT_STALL_PASSES: usize = 2;

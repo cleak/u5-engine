@@ -2008,18 +2008,12 @@ fn play_script_frame_after_a_heal_shows_the_repainted_panel() {
     assert_eq!(observed, vec![(200, true, false)]);
 }
 
-/// Playtest P17-14: a fight whose only seated party member sleeps on a Sleep
-/// Field reaches no keyboard turn - the field re-sleeps her after every own
-/// dispatch (`combat.md §11`), and whether her asleep arm runs the
-/// maintenance pass that could dissolve it is open (`OPEN-QUESTIONS.md` §3,
-/// u5-spec#308 Q3). The play-script runner re-drove the round walker up to
-/// 1024 times with nothing on screen; it now stops on the second stalled
-/// pass with an error.
-#[test]
-fn play_script_stops_when_combat_reaches_no_keyboard_turn() {
+fn lone_member_combat_state(flags: u8, base_step: u8, sleep_field: bool) -> PlayState {
     let mut state = world_state(open_world_grid(), 10, 20);
     state.party.truncate(1);
-    state.party[0].status = b'S';
+    if flags & COMBAT_ACTOR_FLAG_STATUS_DISABLED != 0 {
+        state.party[0].status = b'S';
+    }
     state.party_combat_defense = vec![0; state.party.len()];
     state.combat_active = true;
     state.combat_round_loop_prologue_ran = true;
@@ -2032,17 +2026,19 @@ fn play_script_stops_when_combat_reaches_no_keyboard_turn() {
         y: 5,
         ..ActiveObject::empty()
     };
-    state.active_objects[1] = ActiveObject {
-        type_byte: COMBAT_FIELD_KIND_SLEEP,
-        tile: COMBAT_FIELD_KIND_SLEEP,
-        x: 5,
-        y: 5,
-        ..ActiveObject::empty()
-    };
+    if sleep_field {
+        state.active_objects[1] = ActiveObject {
+            type_byte: COMBAT_FIELD_KIND_SLEEP,
+            tile: COMBAT_FIELD_KIND_SLEEP,
+            x: 5,
+            y: 5,
+            ..ActiveObject::empty()
+        };
+    }
     state.combat_actors[0] = CombatActorDescriptor::from_row([
         20,
-        1,
-        COMBAT_ACTOR_FLAG_SELECTABLE_80 | COMBAT_ACTOR_FLAG_STATUS_DISABLED,
+        base_step,
+        COMBAT_ACTOR_FLAG_SELECTABLE_80 | flags,
         0,
         0,
         0,
@@ -2051,6 +2047,41 @@ fn play_script_stops_when_combat_reaches_no_keyboard_turn() {
     ]);
     state.pending_combat_actor_slot = None;
     state.next_combat_actor_slot = 0;
+    state
+}
+
+/// Playtest P17-14: a fight whose only seated party member sleeps on a Sleep
+/// Field. u5-spec#309 (`combat.md §11`, "The three keyless arms enter the
+/// endpoint"): her asleep turns run the maintenance pass, so "An actor alone
+/// and asleep on a Sleep Field is not stuck" - the field dissolves, a later
+/// wake draw succeeds and she gets a keyboard turn. The script's `pass`
+/// returns normally with her prompt open.
+#[test]
+fn play_script_lone_sleeper_on_a_sleep_field_reaches_a_keyboard_turn() {
+    for seed in 0..32u16 {
+        let mut state = lone_member_combat_state(COMBAT_ACTOR_FLAG_STATUS_DISABLED, 20, true);
+        state.prng_state = seed.wrapping_mul(40_503).wrapping_add(7);
+        assert!(combat_awaits_automatic_turns(&state));
+
+        handle_play_script_command(&mut state, "pass", Path::new(""))
+            .unwrap_or_else(|error| panic!("seed {seed}: {error}"));
+
+        assert!(state.combat_active, "seed {seed}");
+        assert_eq!(state.pending_combat_actor_slot, Some(0), "seed {seed}");
+        assert_eq!(state.party[0].status, b'G', "seed {seed}: awake");
+        assert!(state.active_objects[1].is_empty(), "seed {seed}: field gone");
+    }
+}
+
+/// The P17-14 harness guard stays as a safety net: a fight that can still
+/// reach no keyboard turn - here the lone member is dragged under with base
+/// step 1, which `combat.md §8.1`'s release test (the `1..30` draw below the
+/// base step) never passes - stops the script on its second stalled pass
+/// instead of re-driving the round walker up to 1024 times with nothing on
+/// screen.
+#[test]
+fn play_script_stops_when_combat_reaches_no_keyboard_turn() {
+    let mut state = lone_member_combat_state(COMBAT_ACTOR_FLAG_DRAGGED_UNDER, 1, false);
     assert!(combat_awaits_automatic_turns(&state));
 
     let error = handle_play_script_command(&mut state, "pass", Path::new(""))
@@ -2061,5 +2092,5 @@ fn play_script_stops_when_combat_reaches_no_keyboard_turn() {
         "{error}"
     );
     assert!(state.combat_active);
-    assert_eq!(state.party[0].status, b'S', "the field still holds her asleep");
+    assert!(state.combat_actors[0].is_dragged_under(), "still held");
 }
