@@ -165,8 +165,10 @@ fn drive_intro_subflow(
         IntroSubflow::UltimaIvTransfer => {
             let result = match refuse_unsupported_subflow(run_manual_u4_transfer(game_dir))? {
                 Some(true) => IntroSubflowResult::SaveReady,
-                Some(false) => IntroSubflowResult::Cancelled,
-                None => {
+                // `u4-transfer.md §6.4`: absent media has no feedback of
+                // its own on this screen, so the menu simply stays up, as
+                // in the graphical shell (playtest P17-15).
+                Some(false) | None => {
                     dispatch.complete_subflow(subflow, IntroSubflowResult::Cancelled);
                     return Ok(IntroLoopControl::Continue);
                 }
@@ -302,13 +304,19 @@ fn require_terminal_u4_transfer_renderer_contract() -> io::Result<bool> {
     ))
 }
 
+/// `Ok(false)` when the Ultima IV source will not read at all. `u4-transfer.md
+/// §6.4`: "The player-visible feedback for a wrong or absent disk comes from
+/// the resident media-error handler, not from this screen", and `§3` lets a
+/// one-directory install collapse that handler into a file-existence check,
+/// so nothing is printed (playtest P17-15). A source that reads but fails
+/// `§5.2`'s gate lands on `§6.3`'s graphical bad-data page instead.
 fn run_manual_u4_transfer(game_dir: &Path) -> io::Result<bool> {
     match read_u4_transfer_source_from_party_sav(game_dir) {
         Ok(_) => require_terminal_u4_transfer_renderer_contract(),
-        Err(err) => {
-            println!("Transfer source rejected: {err}");
-            Ok(false)
+        Err(err) if err.kind() == io::ErrorKind::InvalidData => {
+            require_terminal_u4_transfer_renderer_contract()
         }
+        Err(_) => Ok(false),
     }
 }
 
@@ -383,6 +391,28 @@ mod tests {
             .unwrap()
             .as_nanos();
         std::env::temp_dir().join(format!("u5-tui-intro-{name}-{nonce}"))
+    }
+
+    /// Playtest P17-15: `u4-transfer.md §6.4` - absent media gets no
+    /// feedback from the transfer screen, so the terminal neither prints an
+    /// invented rejection with the host path and OS error nor waits for a
+    /// key; a source that reads but fails `§5.2` still needs `§6.3`'s
+    /// graphical page.
+    #[test]
+    fn playtest_p17_15_absent_party_sav_returns_to_the_menu_silently() {
+        let dir = temp_intro_dir("absent-party-sav");
+        fs::create_dir_all(&dir).unwrap();
+
+        assert!(!run_manual_u4_transfer(&dir).expect("absent media is not an error"));
+
+        fs::write(
+            dir.join(u5_runtime::U4_TRANSFER_U4_SOURCE_FILENAME),
+            [0u8; 4],
+        )
+        .unwrap();
+        let err = run_manual_u4_transfer(&dir).expect_err("bad data needs the graphical page");
+        assert_eq!(err.kind(), io::ErrorKind::Unsupported);
+        let _ = fs::remove_dir_all(dir);
     }
 
     #[test]
