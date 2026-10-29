@@ -2466,6 +2466,10 @@
     #[test]
     fn blackthorn_captive_arrest_enters_audience_and_handoffs_after_answer() {
         let dir = debug_game_dir();
+        // Record `5` is read from `MISCMSG.DAT` only (playtest P18-06); every
+        // other record of this placeholder file is empty, so the demands keep
+        // their fallback wording.
+        lit18_write_merciful_death_record(&dir);
         let mut state = test_state(open_grid(), 5, 5);
         // blackthorn.md §4: "If more than one companion is still alive,
         // Blackthorn thanks the player for their honesty and **kills**
@@ -2529,8 +2533,8 @@
         // `blackthorn.md §4.1`: the audience prints the demand and "Do not
         // append an answer, prompt ordinal, roster slot number, cutscene
         // timing value or other diagnostic information to the original text."
-        // This fixture has no `MISCMSG.DAT`, so the demand is the measured
-        // fallback wording.
+        // This fixture's `MISCMSG.DAT` leaves the demand records empty, so
+        // the demand is the measured fallback wording.
         assert!(
             state
                 .message
@@ -2552,8 +2556,14 @@
         // `blackthorn.md §4.1`: the correct answer prints the reward speech,
         // and the captive-cell relocation is a diagnostic rather than a
         // printed line. This party has three members, so it is record `5`,
-        // which comes from `MISCMSG.DAT` only (playtest P18-06); this fixture
-        // has none, so no speech prints and no diagnostic stands in for it.
+        // which comes from `MISCMSG.DAT` only (playtest P18-06).
+        assert!(
+            state
+                .message
+                .contains("\"Placeholder record five merciful death!\""),
+            "{}",
+            state.message
+        );
         assert!(!state.message.contains("Survived"), "{}", state.message);
         assert!(!state.message.contains("captive cell"), "{}", state.message);
         // `blackthorn.md §5` step 5: "Wait for player acknowledgement before
