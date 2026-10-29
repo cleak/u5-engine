@@ -949,7 +949,7 @@ pub fn codex_reader_key_wait(state: &crate::PlayState) -> bool {
 ///
 /// Measured 2026-09-18 (`qa/paired/stonegate-rescue-pacing.tsv`, beats `t48`
 /// through `t64`, all reading `offset+2`): the original holds the cursor in
-/// the cell immediately after `my reach!"` and this engine spent a blank row
+/// the cell immediately after the record's closing quote and this engine spent a blank row
 /// and a fresh command row beneath it, with the end-cap drawn.
 pub fn blackthorn_rescue_row_is_open(state: &crate::PlayState) -> bool {
     state.blackthorn_rescue_awaiting_acknowledgement()

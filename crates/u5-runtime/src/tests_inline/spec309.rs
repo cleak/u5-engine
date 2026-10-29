@@ -182,6 +182,9 @@ fn spec309_the_dragged_under_arm_runs_the_maintenance_endpoint() {
     // `1..30` draw is below the base step).
     state.combat_actors[0].base_step = 1;
     state.party_equipment[0][EQUIP_SLOT_RING] = EQUIPMENT_ID_RING_REGENERATION as u8;
+    // Freeze the per-dispatch world ticks (u5-spec#310 Q2) so the stream
+    // holds only the draws counted here.
+    state.time_stop_counter = u8::MAX;
     let seed = state.prng_state;
 
     let action = spec309_dispatch(&mut state, 0);

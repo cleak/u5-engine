@@ -1371,7 +1371,7 @@ fn cli_interactive_chargen_follows_the_published_prompts() {
     let mut bytes = Vec::new();
     for index in 0..QUESTION_DAT_RECORDS {
         if index == 0 {
-            bytes.extend_from_slice(b"{Far from your mind while strol_ling");
+            bytes.extend_from_slice(b"{Fixture prompt with a soft_hyphen");
         } else {
             bytes.extend_from_slice(format!("Record {index}").as_bytes());
         }
@@ -1389,7 +1389,7 @@ fn cli_interactive_chargen_follows_the_published_prompts() {
         "{stdout}"
     );
     assert!(
-        stdout.contains("Far from your mind while strolling"),
+        stdout.contains("Fixture prompt with a softhyphen"),
         "{stdout}"
     );
     assert!(!stdout.contains('{') && !stdout.contains('_'), "{stdout}");

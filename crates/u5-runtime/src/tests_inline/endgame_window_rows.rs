@@ -120,15 +120,16 @@ fn endgame_greeting_page_keeps_the_blank_row_under_the_absorption_line() {
     let mut state = endgame_window_walked_in_state();
     endgame_window_settle(&mut state);
     let settled = endgame_window_shell_rows(&state);
-    let absorbed = settled.iter().position(|row| row == "absorbed!").unwrap();
-    assert_eq!(settled[absorbed + 1..absorbed + 3], ["", "Lord British"], "{settled:?}");
+    // The absorption line's literal is unpublished and prints nothing
+    // (`COMBAT_ABSORBED_MESSAGE`), so the greeting is anchored on its own
+    // first row: the greeting's leading feed still leaves one blank above it.
+    let greeting = settled.iter().position(|row| row == "Lord British").unwrap();
+    assert_eq!(settled[greeting - 1], "", "{settled:?}");
     handle_play_key_input(&mut state, 'y', "", &dir).unwrap();
     let rows = endgame_window_shell_rows(&state);
     assert_eq!(
-        rows,
+        endgame_window_tail(&rows, 11),
         [
-            "Avatar is",
-            "absorbed!",
             "",
             "Lord British",
             "says:",
@@ -250,7 +251,7 @@ fn endgame_waiting_branch_draws_no_cursor_after_record_ten() {
     // record, through the tableau walk and in the terminal jitter.
     // Measured 2026-10-16 on rc1
     // (`doom-final-room/answered`, `doom-final-room-waiting/waiting` and
-    // `tableau1`): stock leaves the cell after `here a while."` empty.
+    // `tableau1`): stock leaves the cell after the closing `ENDMSG.DAT` row empty.
     let dir = debug_game_dir();
     for answers in [&['y'][..], &['n', 'n'][..]] {
         let mut state = endgame_window_at_first_question(&dir);

@@ -313,7 +313,7 @@ impl ShoppeTextRenderer {
     /// then `\n\nFair 'nuff?" `; Y/N only".
     ///
     /// The suffix is resident text, not part of the record, and the engine
-    /// returned the record alone - so the quote ended on `troubled mind.` and
+    /// returned the record alone - so the quote ended on the record's last sentence and
     /// the question the shop was waiting on never printed. It is appended here
     /// rather than at the call site so both callers get it.
     pub fn render_sage_fee_quote_record(

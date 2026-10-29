@@ -1277,7 +1277,6 @@ fn y_yell_word_of_power_opens_matching_surface_seal_only_at_target() {
         SAVE_QUEST_TILE_FLAG_HIGH_BIT
     );
     assert!(world.visibility_dirty);
-    assert!(world.message.contains("A word of power is uttered"));
     // `commands.md` §11.1: the recognised word prints the uttered-word result;
     // the seal-toggle outcome's own text is unpublished, so the engine adds
     // none and records the toggle as a diagnostic.
@@ -1312,14 +1311,18 @@ fn y_yell_word_of_power_opens_matching_surface_seal_only_at_target() {
 
     assert_eq!(wrong_place.grid[wrong_idx], open_tile);
     assert_eq!(wrong_place.word_of_power_seal_flags[0], 0);
-    assert!(wrong_place.message.contains("A word of power is uttered"));
     // Measured 2026-09-11 (`word-of-power-audio/dosbox-word`): a recognised
-    // word with no qualifying neighbour reads `A word of power is uttered`, a
-    // blank row, then `No effect!`.
-    assert!(wrong_place
-        .message
-        .contains(crate::commands::WORD_OF_POWER_UTTERED_MESSAGE));
-    assert!(wrong_place.message.ends_with("\n\nNo effect!"));
+    // word with no qualifying neighbour reads the uttered-word line, a blank
+    // row, then `No effect!`. The uttered-word literal is unpublished, so the
+    // engine prints only its placeholder ahead of the published tail.
+    assert_eq!(
+        wrong_place.message,
+        format!(
+            "{}{}",
+            crate::commands::WORD_OF_POWER_UTTERED_MESSAGE,
+            crate::commands::WORD_OF_POWER_NO_EFFECT_TAIL
+        )
+    );
 }
 
 #[test]
@@ -1411,9 +1414,10 @@ fn y_yell_ruined_shrine_four_response_success_restores_only_shrine_state() {
     // `karma.md §7.1`: the banner ends the printed text; the second
     // flash/rumble adds none.
     assert_eq!(world.message, SHRINE_RESTORATION_SUCCESS_BANNER);
-    // The uttered-word line opens the restoration transcript, once; the
-    // rumble and flash are presentation, recorded as diagnostics rather than
-    // narrated.
+    // The uttered-word line (an empty placeholder until its literal is
+    // published) and the virtue question open the restoration transcript,
+    // once; the rumble and flash are presentation, recorded as diagnostics
+    // rather than narrated.
     let rows: Vec<String> = world
         .message_transcript
         .iter()
@@ -1421,7 +1425,7 @@ fn y_yell_ruined_shrine_four_response_success_restores_only_shrine_state() {
         .collect();
     assert_eq!(
         rows.iter()
-            .filter(|row| crate::commands::WORD_OF_POWER_UTTERED_MESSAGE.trim() == row.as_str())
+            .filter(|row| row.as_str() == "Upon what virtue")
             .count(),
         1,
         "{rows:?}"

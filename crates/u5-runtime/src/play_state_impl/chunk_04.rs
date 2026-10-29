@@ -3340,7 +3340,10 @@ impl PlayState {
             };
         }
 
-        self.message = format!("{DUNGEON_LOOK_PREAMBLE}{description}.");
+        self.message = format!(
+            "{DUNGEON_LOOK_PREAMBLE}{}",
+            crate::tile_helpers::dungeon_look_sentence(description)
+        );
         // `dungeon-mode.md §12`: each class line ends "in one line feed", so
         // the Look closes its row. The slot is taken verbatim and its text
         // carries no feed, so the row state is stated here: a multi-member
@@ -8331,12 +8334,12 @@ mod conversation_opening_hold_tests {
     #[test]
     fn an_ask_who_after_the_head_quote_continues_it() {
         let rendered = conversation_opening_rendered(
-            &TlkRenderedText::plain("a grave wizard.\n\n\""),
+            &TlkRenderedText::plain("a fixture wizard.\n\n\""),
             crate::TLK_ASK_WHO_PROMPT,
         );
         assert_eq!(
             rendered.text,
-            "\nYou see a grave wizard.\n\n\"What is thy name?\"\n\nYou respond-\n:"
+            "\nYou see a fixture wizard.\n\n\"What is thy name?\"\n\nYou respond-\n:"
         );
         assert_eq!(rendered.glyphs.len(), rendered.text.len());
         let fed = conversation_opening_rendered(

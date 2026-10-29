@@ -55,15 +55,15 @@ pub const DUNGEON_ROOM_ABSORBABLE_FIELD_SOURCE: u8 = 0x3c;
 /// The line the original prints when a party member walks onto an
 /// absorbable field.
 ///
-/// Measured against the stock game in Doom's final room
-/// (`cleak/u5-engine#10`), where it is immediately followed by the
-/// endgame's Lord British greeting. The engine's own `Absorbed!` was an
-/// invention; `combat.md` describes the absorption effect and publishes
-/// no literal for it.
-///
-/// Whether `Avatar` here is the fixed word or the party leader's name is
-/// not yet settled - the character in the capture is named Avatar.
-pub const COMBAT_ABSORBED_MESSAGE: &str = "Avatar is absorbed!";
+/// `combat.md` Section 11 says the path "narrates the absorption" but
+/// publishes no literal for it, nor the record that holds it; a capture of
+/// the stock game in Doom's final room (`cleak/u5-engine#10`) shows a line
+/// immediately followed by the endgame's Lord British greeting. The engine's
+/// own `Absorbed!` was an invention, and the measured line is unpublished
+/// text, so the clean engine prints no narration (`None`) until the spec
+/// publishes it or its record (a spec question asks; it also has to say
+/// whether the line names the party leader).
+pub const COMBAT_ABSORBED_MESSAGE: Option<&str> = None;
 
 /// `audio.md §6.1`'s label for a cast an absorbing scene swallows -
 /// Stonegate always, Blackthorn's Castle while the Crown is absent.

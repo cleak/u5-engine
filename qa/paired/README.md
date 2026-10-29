@@ -158,7 +158,7 @@ a paired run at all.
 | `shop-arms-sell-keys` | which key selects a row in the Sell browser: digits, letters and the arrows do nothing, **Return** takes the highlighted row and prints the offer with `Deal?"` |
 | `shop-arms-navigation` | what Space does at the Buy listing: it ends the visit on `"Be off with ye, then..." says Gwenneth`, so it is not a way back to the greeting |
 | `shop-arms-sell` | the Sell side of the same shop. **Retry until the `talk` shot shows the greeting**: the walk is thirty steps and the weaponsmith wanders, so a run that ends on `Nobody's here!` proves nothing (three of four attempts on 2026-09-07) |
-| `doom-final-room` | Doom's final room: the fall onto the room trigger, the arena, the absorption, and Lord British's dialogue. **Compared 2026-09-07**: both sides print `Entering room`, the arena banner, `Avatar is absorbed!`, `Lord British says: "Well met, Avatar!"`, the box question, and the seated reply, differing only by one capture's timing |
+| `doom-final-room` | Doom's final room: the fall onto the room trigger, the arena, the absorption, and Lord British's dialogue. **Compared 2026-09-07**: both sides print `Entering room`, the arena banner, the absorption line, Lord British's greeting, the box question, and the seated reply, differing only by one capture's timing |
 | `doom-final-room-waiting` | the same room answering `No` twice, which reaches `endgame.md` §5's waiting branch: the `"I see...` lead-in, record 10, and §6's tableau rearrangement |
 | `doom-final-room-refusal` | the same room answering `No` to the first box question. **Compared 2026-09-07**: both sides reach the refusal's `ENDMSG.DAT` record `2` and `You reply:` |
 

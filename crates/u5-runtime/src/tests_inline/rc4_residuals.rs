@@ -400,7 +400,7 @@ fn rc4_the_record_five_exit_beat_key_wait_draws_its_cursor_two_rows_down() {
 /// (see `conversation_opening_rendered`).
 #[test]
 fn rc4_a_description_goto_into_ask_who_ends_the_opening_on_the_head_quote() {
-    let mut description = rc4_enc("a grave wizard.\r\r");
+    let mut description = rc4_enc("a fixture wizard.\r\r");
     description.extend([TLK_CODE_IF_ELSE, 0x94, 0x91]);
     let mut head = vec![TLK_CODE_ASK_WHO];
     head.extend(rc4_enc("\"\r\r"));
@@ -416,6 +416,6 @@ fn rc4_a_description_goto_into_ask_who_ends_the_opening_on_the_head_quote() {
     session.set_npc_slot(Some(1));
     state.active_conversation = Some(Box::new(session));
     let opening = state.active_conversation_greeting_rendered_with_host_seed(0x0456);
-    assert_eq!(opening.text, "a grave wizard.\n\n\"");
+    assert_eq!(opening.text, "a fixture wizard.\n\n\"");
     assert!(state.active_conversation.as_ref().unwrap().awaiting_ask_who());
 }

@@ -622,16 +622,13 @@ pub const READY_BOTH_HANDS_REFUSAL: &str = "Both hands must be free before thou 
 /// `inventory.md` §5.2: "The ring vanish instead prints `\n\nRing
 /// vanishes!\n` and closes without `Done`."
 /// `commands.md` §11.1: a recognised Word of Power "immediately prints the
-/// uttered-word result". Measured 2026-09-11
-/// (`word-of-power-audio/dosbox-word`): the original's rows read a blank
-/// row, `A word of power`, `is uttered`.
-///
-/// The leading blank row belongs to this result, exactly as §5.2's
-/// no-effect result owns the blank row above its own text (`Yell what?` /
-/// `:WORD` / `[blank]` / `No effect!`). Without it the engine ran the
-/// uttered line straight onto the typed-word row and sat one row high for
-/// the rest of the capture.
-pub const WORD_OF_POWER_UTTERED_MESSAGE: &str = "\nA word of power is uttered";
+/// uttered-word result". The specification describes that result but does
+/// not publish its literal, nor the `DATA.OVL` record that holds it, so this
+/// clean engine prints nothing in its place rather than carrying the text in
+/// source. A spec question asks for the literal or its record; once it is
+/// published, the line (with the blank row above it that a capture showed it
+/// owns) goes here or is read from the asset.
+pub const WORD_OF_POWER_UTTERED_MESSAGE: &str = "";
 /// The tail a recognised Word adds when no adjacent cell qualifies
 /// (`commands.md §11.1` step 1; a wrong coordinate adds nothing). Measured in the same capture: a blank row and
 /// `No effect!`.

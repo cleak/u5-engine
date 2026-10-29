@@ -5513,8 +5513,13 @@ fn seed_combat_spell_route(state: &mut PlayState, code: &str) -> io::Result<()> 
     state.prng_state = match code {
         "GP" => first_nonzero_prng_roll_seed(15),
         "FV" => COMBAT_FIREBALL_ROUTE_SEED,
-        "IPVY" => first_nonzero_prng_roll_seed(19),
-        "ACX" => 0x1234,
+        // Both seeds re-chosen after `combat.md §11`'s per-dispatch world
+        // ticks (u5-spec#310 Q2) moved the shared stream after the cast:
+        // route observation, not a published rule. The cases' own checks
+        // still confirm that Tremor landed on both sides and that Repel
+        // drove both undead to one HP and fleeing before the checkpoint.
+        "IPVY" => 1,
+        "ACX" => 0x1235,
         "CIQ" => COMBAT_CAUSE_FEAR_ROUTE_SEED,
         _ => 0,
     };
@@ -7498,16 +7503,35 @@ fn validate_route_smoke_case_state(
             }
         }
         "codex-urn-honesty-read" => {
+            // `karma.md`: "Every Codex presentation begins with `MISCMSG.DAT`
+            // record `46`". Its lead-in is read from the profile's asset
+            // rather than carried in source.
+            let lead_in = u5_runtime::miscmsg_io::load_misc_messages(game_dir)?
+                .and_then(|messages| {
+                    messages
+                        .record(u5_runtime::miscmsg_io::MISCMSG_CODEX_ENTRY_NARRATION)
+                        .and_then(|record| {
+                            record
+                                .lines()
+                                .map(str::trim)
+                                .find(|line| !line.is_empty())
+                                .map(str::to_string)
+                        })
+                })
+                .ok_or_else(|| {
+                    io::Error::other(format!(
+                        "route smoke `{case_name}` needs MISCMSG.DAT record 46"
+                    ))
+                })?;
             if state.shrine_codex_mask & ShrineVirtue::Honesty.bit() == 0
                 // `Read Codex page for Honesty` was engine prose. The read
                 // renders the published Codex presentation, whose lead-in
                 // names the book; the reader has run to its end, so the
                 // lead-in is read from the transcript.
-                || !state.message_entries().iter().any(|entry| {
-                    entry
-                        .text
-                        .contains("The Codex of Ultimate Wisdom lies before thee")
-                })
+                || !state
+                    .message_entries()
+                    .iter()
+                    .any(|entry| entry.text.contains(lead_in.as_str()))
             {
                 return Err(io::Error::other(format!(
                     "route smoke `{case_name}` did not stamp the Codex-read bit; \
@@ -7633,15 +7657,13 @@ fn validate_route_smoke_case_state(
                 || state.player.y != seal.y
                 || state.word_of_power_seal_flags[word_index] & SAVE_QUEST_TILE_FLAG_HIGH_BIT == 0
                 // `The seal opens.` was engine prose. What the utterance
-                // prints is `WORD_OF_POWER_UTTERED_MESSAGE`, and an accepted
-                // word is distinguished from a rejected one by the absence of
-                // the no-effect tail, not by a bespoke success sentence.
-                || !state
-                    .message
-                    .contains("A word of power is uttered")
+                // prints is `WORD_OF_POWER_UTTERED_MESSAGE` (empty until its
+                // literal is published), and an accepted word is distinguished
+                // from a rejected one by the absence of the no-effect tail,
+                // not by a bespoke success sentence.
                 || state
                     .message
-                    .contains("No effect!")
+                    .contains(u5_runtime::commands::WORD_OF_POWER_NO_EFFECT_TAIL.trim())
             {
                 return Err(io::Error::other(format!(
                     "route smoke `{case_name}` did not open the public Word-of-Power seal; message {:?}",

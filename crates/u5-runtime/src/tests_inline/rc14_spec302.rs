@@ -68,7 +68,8 @@ fn spec302_q2_attribute_page_rows_match_the_executed_example() {
     state.party_intelligence = vec![12];
     state.party_experience = vec![123];
     let rows = state.z_stats_panel_rows(&ZStatsSession::new(0));
-    assert_eq!(rows[1], "  Good Health");
+    // The status-name table is unpublished: the row prints no name.
+    assert_eq!(rows[1].trim(), "");
     assert!(!rows.iter().any(|row| row.contains("Status")));
     assert_eq!(rows[2], "");
     assert_eq!(rows[3], "Str=16  HP: 240");

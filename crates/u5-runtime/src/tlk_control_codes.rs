@@ -760,7 +760,12 @@ pub const TLK_GOLD_PAYMENT_REFUSAL_MESSAGE: &str = "\"Thou hast not enough gold!
 /// `conversation.md §7.6`: the `0x84` RECRUIT-SPEAKER refusal printed
 /// when the active party is already at the six-member cap. The code
 /// recruits nobody in that case.
-pub const TLK_RECRUIT_SPEAKER_FULL_PARTY_REFUSAL: &str = "\"There is no room for me in thy party.\nSeek me again if one of thy members doth leave thee.\"\n\n";
+///
+/// The specification paraphrases this refusal but does not publish its
+/// exact literal or the asset record that holds it, so the clean engine
+/// prints nothing here (the refusal still recruits nobody and the stream
+/// still runs on). A spec question asks for the literal or its record.
+pub const TLK_RECRUIT_SPEAKER_FULL_PARTY_REFUSAL: &str = "";
 
 /// `conversation.md §7.6`: number of leading characters of a party
 /// member's name that `0x88` ASK-WHO searches the typed line for.

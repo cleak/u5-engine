@@ -14,15 +14,17 @@
 # shows each narration beat on each side; the gap between the two columns is
 # the unmodelled time.
 #
-# Result, measured 2026-09-18. Each cell is the window's last non-blank row.
+# Result, measured 2026-09-18. Each cell names the narration beat whose row
+# was the window's last non-blank row (the beats' text is asset-read and not
+# quoted here): trapdoor, refuge, slumber, verdict lead-in, verdict.
 #
 #   sample   stock                 engine
-#   t04-t24  A TRAPDOOR!           A TRAPDOOR!
-#   t28      refuge.               is disturbed!
-#   t32-t36  is disturbed!         is disturbed!
-#   t40      is disturbed!         my reach!"
-#   t44      AVENTARI"             my reach!"
-#   t48-t64  my reach!"            my reach!"
+#   t04-t24  trapdoor              trapdoor
+#   t28      refuge                slumber
+#   t32-t36  slumber               slumber
+#   t40      slumber               verdict
+#   t44      verdict lead-in       verdict
+#   t48-t64  verdict               verdict
 #
 # Two gaps, one sample each, and both sides agree either side of them:
 #

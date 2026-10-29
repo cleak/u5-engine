@@ -691,11 +691,13 @@ fn a_defeated_party_awaiting_the_rescue_draws_no_cursor() {
 #[test]
 fn dungeon_search_on_a_field_reuses_the_look_wording() {
     for (tile, line) in [
+        // Only the Sleep Field's text is published (as its top-down Look
+        // text); the other field lines are unpublished and print nothing.
         (0x80u8, "a sleep field"),
-        (0x81, "a poison gas field"),
-        (0x82, "a wall of fire"),
-        (0x83, "an electric field"),
-        (0x8B, "an energy field"),
+        (0x81, ""),
+        (0x82, ""),
+        (0x83, ""),
+        (0x8B, ""),
     ] {
         assert_eq!(dungeon_search_description(tile), line, "{tile:#04x}");
         assert_eq!(

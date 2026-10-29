@@ -1449,25 +1449,20 @@ pub const Z_STATS_ATTRIBUTE_LEFT_DIGITS: usize = 2;
 
 /// The condition line beneath the name on the attribute page.
 ///
-/// Runtime observation, spec silent: `inventory.md §4.7` does not list a
-/// health literal, and the only status a capture covers is Good, which
-/// renders as the centred `Good Health`. The other four letters reuse
-/// the engine's existing status wording rather than inventing new
-/// published-looking text; they need a spec answer.
-///
 /// `inventory.md §4.7` keys the name off "the five-entry status table keyed
 /// by the status letter", and §4.2 publishes that alphabet as `G P D S C`,
 /// looked up so that "an out-of-range byte yields no letter rather than a
 /// wrong one". A byte outside it - `A` included - therefore prints nothing
-/// (playtest P17-08). `C` is in the alphabet but its name is unpublished.
+/// (playtest P17-08).
+///
+/// The specification does not publish the five table entries or the
+/// `DATA.OVL` record that holds them, so the clean engine prints no status
+/// name for any letter until it does (a spec question asks for the table or
+/// its record). The row itself, and the centring a status name would get,
+/// are unchanged.
 pub fn z_stats_health_line(status: u8) -> &'static str {
-    match status {
-        b'G' => "Good Health",
-        b'P' => "Poisoned",
-        b'S' => "Asleep",
-        b'D' => "Dead",
-        _ => "",
-    }
+    let _ = status;
+    ""
 }
 
 /// Rows of the stats panel a Z-stats page body owns: screen rows 1..=9

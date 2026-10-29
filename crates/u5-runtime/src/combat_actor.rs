@@ -671,7 +671,9 @@ impl CombatRoundLoopControl {
 pub struct CombatRoundCounterTick {
     pub counter: u8,
     pub wrapped: bool,
-    pub redraw_tiles: bool,
+    /// `combat.md §7` step 5 (u5-spec#310 Q2, `RETRACTIONS.md` R654): the
+    /// wrap runs the one-minute clock cleanup and "runs no world tick"; the
+    /// withdrawn "tile-render pass" has no field here.
     pub advance_time_minutes: u8,
 }
 
@@ -2773,7 +2775,6 @@ pub const fn resolve_combat_round_counter_tick(counter: u8) -> CombatRoundCounte
     CombatRoundCounterTick {
         counter: (next % COMBAT_ROUND_COUNTER_WRAP as u16) as u8,
         wrapped,
-        redraw_tiles: wrapped,
         advance_time_minutes: if wrapped {
             COMBAT_ROUND_WRAP_TIME_ADVANCE_MINUTES
         } else {

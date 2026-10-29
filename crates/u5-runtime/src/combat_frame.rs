@@ -1049,6 +1049,28 @@ pub struct CombatPlayerCommandApplication {
     pub control_after: CombatRoundLoopControl,
 }
 
+/// `combat.md §9`/`§11` (u5-spec#310 Q2): whether the automatic driver's
+/// movement step "reports that the actor moved", which is what earns the
+/// driver its one world tick. An accepted step and the self-acting arena
+/// exit move; the random-cardinal fallback whose four attempts all fail
+/// "commits a zero-length step, reports the actor as having moved" unless
+/// its last draw was the first direction code (`action_consumed`). The
+/// teleport arm is a separate arm whose report the spec does not give, so it
+/// takes no tick here.
+pub const fn combat_ai_step_reports_moved(movement: Option<CombatAiMovementOutcome>) -> bool {
+    matches!(
+        movement,
+        Some(
+            CombatAiMovementOutcome::Step { .. }
+                | CombatAiMovementOutcome::ArenaExit { .. }
+                | CombatAiMovementOutcome::Blocked {
+                    action_consumed: true,
+                    ..
+                }
+        )
+    )
+}
+
 pub const fn combat_player_command_action_defers_maintenance(
     action: &CombatPlayerCommandAction,
 ) -> bool {
@@ -1868,18 +1890,54 @@ impl PlayState {
         .then_some(source_slot)
     }
 
-    /// `combat.md §8`: the committed non-digit action tail — the absorbable
-    /// field check, the common terrain/marker contact hook, the visible-ring
-    /// maintenance and the active timed-effect age. Multi-stage commands run
-    /// it when their continuation finally commits.
+    /// `combat.md §8`: the committed non-digit action tail. Multi-stage
+    /// commands run it when their continuation finally commits.
+    ///
+    /// `§11`, "Which combat dispatches run a world tick" (u5-spec#310 Q2):
+    /// the tail "runs maintenance, then exactly one world tick, then the
+    /// post-action step", the post-action step being the Doom-map
+    /// absorption check, which runs "before that handler returns to the
+    /// round walker and before the common terrain/field hook". The contact
+    /// hook therefore comes last, after the ring hook has already run
+    /// ("the contact hook re-sleeps it after the sweep has already run").
     pub fn apply_combat_committed_action_tail(
         &mut self,
         actor_slot: usize,
     ) -> Option<CombatMagicRingPassOutcome> {
+        self.apply_combat_committed_action_tail_with_world_tick(actor_slot, true)
+    }
+
+    /// [`Self::apply_combat_committed_action_tail`] with the tail's world
+    /// tick made optional. `§11`'s table leaves one path open: "In-arena
+    /// Klimb that accepts an Up/Down departure | **Not established.**"
+    /// (`OPEN-QUESTIONS.md` section 3), so that departure keeps the
+    /// maintenance and hooks it already ran and adds no tick until the spec
+    /// settles it.
+    pub fn apply_combat_committed_action_tail_with_world_tick(
+        &mut self,
+        actor_slot: usize,
+        run_world_tick: bool,
+    ) -> Option<CombatMagicRingPassOutcome> {
+        let ring_pass = self.apply_combat_maintenance_endpoint(actor_slot).0;
+        if run_world_tick {
+            self.run_combat_command_tail_world_tick();
+        }
         let _ = self.apply_combat_absorbable_field_contact_for_actor_position(actor_slot);
         let _ = self.apply_combat_post_dispatch_contact_for_actor_position(actor_slot);
         self.clear_combat_interference_for_completed_action(actor_slot);
-        self.apply_combat_maintenance_endpoint(actor_slot).0
+        ring_pass
+    }
+
+    /// `combat.md §11`, "Which combat dispatches run a world tick"
+    /// (u5-spec#310 Q2, `RETRACTIONS.md` R653): the command handler's tail
+    /// runs "exactly one world tick" between maintenance and the post-action
+    /// step on every completed dispatch except the active-player denial
+    /// route and the `0`..`6` digits. The tick is the ordinary world tick
+    /// ([`Self::advance_visual_tick`]): in an arena it runs the active-object
+    /// animator and the wind check, keeps its own Negate Time gate, and
+    /// skips only the moongate and beacon steps.
+    pub(crate) fn run_combat_command_tail_world_tick(&mut self) {
+        let _ = self.advance_visual_tick();
     }
 
     /// `combat.md §11`, "Field markers dissolve at random" (u5-spec#308 Q3,
@@ -2551,7 +2609,9 @@ impl PlayState {
         // it twice would print it twice. An unarmed absorption keeps it
         // here, where it is the whole of the effect's narration.
         if !armed_endgame_result {
-            self.emit_message_line(COMBAT_ABSORBED_MESSAGE);
+            if let Some(line) = COMBAT_ABSORBED_MESSAGE {
+                self.emit_message_line(line);
+            }
         }
         self.mark_visibility_dirty();
         if armed_endgame_result {
@@ -7762,10 +7822,16 @@ impl PlayState {
         slot: usize,
     ) -> Option<CombatMagicRingPassOutcome> {
         let acting_actor = self.combat_actors.get(slot).copied()?;
-        // `combat.md §8` (added 2026-10-28, u5-spec#309): "Eligible means
-        // party-side and neither asleep nor removed, so an asleep member's
-        // maintenance pass makes no regeneration roll, while a dragged-under
-        // wearer's does."
+        // `combat.md §8` (u5-spec#309, corrected by u5-spec#310 Q1,
+        // `RETRACTIONS.md` R652): "Eligible means party-side and neither
+        // asleep nor removed, so a member still asleep at the hook makes no
+        // regeneration roll, while a dragged-under wearer's does."
+        // "Eligibility is read from the acting slot's live combat state each
+        // time the hook runs, not from anything recorded when the dispatch
+        // began." The asleep arm's wake has already cleared the disabled bit
+        // on a successful wake draw, so on that dispatch this read sees an
+        // awake member and the member's own ring acts; on a failed wake it
+        // sees the sleeper and does nothing.
         if acting_actor.flags & COMBAT_ACTOR_FLAG_SELECTABLE_80 == 0
             || acting_actor.is_marked_dead()
             || acting_actor.is_status_disabled()
@@ -8024,16 +8090,25 @@ impl PlayState {
         let digit_selection = matches!(action, CombatPlayerCommandAction::ActivePlayerSelection(_));
         let maintenance_deferred = combat_player_command_action_defers_maintenance(&action);
         let dispatched_action = !(reprompt || digit_selection || maintenance_deferred);
+        // `combat.md §11`, "Which combat dispatches run a world tick"
+        // (u5-spec#310 Q2): "Committed command-prompted action, including
+        // Space `Pass` | One tail tick, after maintenance", and accepted
+        // Escape likewise "falls through to the tail ... so maintenance and
+        // the tick run". The tail runs maintenance, one world tick, then the
+        // post-action (Doom absorption) step, and the round walker's contact
+        // hook follows. Only Klimb's accepted Up/Down departure is left "Not
+        // established", and it does not come through here.
         let (absorbable_contact, post_dispatch_contact, ring_pass, active_effect_age) =
             if !dispatched_action {
                 (None, None, None, None)
             } else {
+                let (ring_pass, age_outcome) = self.apply_combat_maintenance_endpoint(actor_slot);
+                self.run_combat_command_tail_world_tick();
                 let absorbable_contact =
                     self.apply_combat_absorbable_field_contact_for_actor_position(actor_slot);
                 let post_dispatch_contact =
                     self.apply_combat_post_dispatch_contact_for_actor_position(actor_slot);
                 self.clear_combat_interference_for_completed_action(actor_slot);
-                let (ring_pass, age_outcome) = self.apply_combat_maintenance_endpoint(actor_slot);
                 (
                     absorbable_contact,
                     post_dispatch_contact,
@@ -9061,6 +9136,19 @@ impl PlayState {
                     monster_attack_inputs,
                 )
             };
+            // `combat.md §11`, "Which combat dispatches run a world tick"
+            // (u5-spec#310 Q2): a self-acting turn has no tail; "The
+            // automatic driver runs one world tick only when its step reports
+            // that the actor moved. An attack turn, a sleeping monster's turn
+            // (its `0..16` wake draw), a held actor's turn and the driver's
+            // other early outs run no driver tick." The step that leaves the
+            // arena is included as the spec infers it.
+            if ai_turn
+                .as_ref()
+                .is_some_and(|turn| combat_ai_step_reports_moved(turn.movement))
+            {
+                let _ = self.advance_visual_tick();
+            }
             // `combat.md §14`, "The departure counts toward the side recount
             // immediately": "the round loop runs the census as soon as the
             // dispatch returns, before advancing to the next slot ... An
@@ -9112,6 +9200,18 @@ impl PlayState {
             || keyless_command_arm
         {
             let _ = self.apply_combat_maintenance_endpoint(slot);
+        }
+        // `§11`, "Which combat dispatches run a world tick" (u5-spec#310 Q2):
+        // "The **active-player denial route** enters the maintenance endpoint
+        // and returns at once, with no stats refresh, no world tick and no
+        // post-action step." The three keyless arms instead leave through
+        // the tail, which "runs maintenance, then exactly one world tick,
+        // then the post-action step" - the asleep arm "failed or successful
+        // wake", the dragged-under and Sword of Chaos arms alike - before the
+        // round walker's contact hook below.
+        if keyless_command_arm {
+            self.run_combat_command_tail_world_tick();
+            let _ = self.apply_combat_absorbable_field_contact_for_actor_position(slot);
         }
 
         // A monster attack's result line is narrated after the walk returns
@@ -9840,9 +9940,6 @@ impl PlayState {
     pub fn advance_combat_round_counter(&mut self) -> CombatRoundCounterTick {
         let tick = resolve_combat_round_counter_tick(self.combat_round_counter);
         self.combat_round_counter = tick.counter;
-        if tick.redraw_tiles {
-            self.mark_visibility_dirty();
-        }
         if tick.advance_time_minutes != 0 {
             // `time.md §5`: the party status/provision pass "does **not** run
             // in combat mode", and its caller census: "Combat mode and the
@@ -10701,6 +10798,239 @@ mod combat_death_batch_tests {
         let mut expected = without.prng_state;
         let _ = u5_prng_range_u16(&mut expected, 0, 255);
         assert_eq!(with_marker.prng_state, expected);
+    }
+
+    /// Two living party members, each in a party-side descriptor, with the
+    /// round loop's entry prologue already run so a dispatch's own world
+    /// ticks can be counted on the animation clock.
+    fn two_member_tail_tick_state() -> PlayState {
+        let mut state = sword_of_chaos_dispatch_state();
+        let mut second = state.party[0];
+        second.slot = 1;
+        state.party = vec![state.party[0], second];
+        state.party[0].hp = 10;
+        state.party[1].hp = 10;
+        state.party[0].max_hp = 20;
+        state.party[1].max_hp = 20;
+        state
+            .party_equipment
+            .resize(2, [EQUIPMENT_EMPTY; EQUIPMENT_SLOT_COUNT]);
+        state.combat_round_loop_prologue_ran = true;
+        state
+    }
+
+    fn put_slot_zero_to_sleep(state: &mut PlayState) {
+        state.combat_actors[0].set_status_disabled();
+        state.party[0].status = b'S';
+    }
+
+    #[test]
+    fn the_committed_tail_runs_maintenance_then_one_world_tick_then_the_hooks() {
+        // `combat.md §11`, "Which combat dispatches run a world tick"
+        // (u5-spec#310 Q2): "Committed command-prompted action, including
+        // Space `Pass` | One tail tick, after maintenance".
+        let mut state = two_member_tail_tick_state();
+        let frame = state.animation.frame;
+        let _ = state.apply_combat_committed_action_tail(0);
+        assert_eq!(state.animation.frame, frame.wrapping_add(1), "one tail tick");
+
+        // Klimb's accepted Up/Down departure is "Not established" and keeps
+        // no tick until the spec settles it.
+        let mut departure = two_member_tail_tick_state();
+        let frame = departure.animation.frame;
+        let _ = departure.apply_combat_committed_action_tail_with_world_tick(0, false);
+        assert_eq!(departure.animation.frame, frame);
+    }
+
+    /// A committed tail for party slot 0 standing on a Sleep Field, with the
+    /// tail tick's draws frozen so the stream holds only the hooks' draws.
+    fn committed_tail_on_a_sleep_field(regeneration: bool) -> PlayState {
+        let mut state = two_member_tail_tick_state();
+        if regeneration {
+            state.party_equipment[0][EQUIP_SLOT_RING] = EQUIPMENT_ID_RING_REGENERATION as u8;
+        }
+        // Plain ground, so the placed marker is what the contact hook finds.
+        state.combat_terrain = [[0x05; COMBAT_ARENA_SIDE]; COMBAT_ARENA_SIDE];
+        state.active_objects[12] = ActiveObject {
+            type_byte: 0xe9,
+            tile: 0xe9,
+            x: 5,
+            y: 5,
+            ..ActiveObject::empty()
+        };
+        // Pin the field pass's draw so the marker survives it.
+        let mut probe = state.clone();
+        loop {
+            let position = probe.prng_state;
+            if probe.random_range_u8(0, u8::MAX) >= COMBAT_FIELD_DISSOLVE_DRAW_BELOW {
+                state.prng_state = position;
+                break;
+            }
+        }
+        state.time_stop_counter = u8::MAX;
+        let _ = state.apply_combat_committed_action_tail(0);
+        state
+    }
+
+    #[test]
+    fn the_committed_tail_runs_the_ring_hook_before_the_contact_hook_re_sleeps() {
+        // `combat.md §11` (u5-spec#310 Q1/Q2): maintenance comes first and
+        // the post-dispatch contact hook last, so on a live Sleep Field "the
+        // contact hook re-sleeps it after the sweep has already run". The
+        // awake wearer's sweep costs its one `0..7` draw before the contact
+        // puts it to sleep; with the hooks the other way round the hook
+        // would have seen a sleeper and drawn nothing.
+        let with_ring = committed_tail_on_a_sleep_field(true);
+        let mut without_ring = committed_tail_on_a_sleep_field(false);
+        assert!(with_ring.combat_actors[0].is_status_disabled());
+        assert!(without_ring.combat_actors[0].is_status_disabled());
+        let _ = without_ring.random_mod_u8(8);
+        assert_eq!(with_ring.prng_state, without_ring.prng_state);
+    }
+
+    /// One asleep-arm dispatch of party slot 0, with the wake draw forced to
+    /// succeed or fail by choosing the PRNG position.
+    fn asleep_arm_dispatch(regeneration_on_sleeper: bool, wake: bool) -> PlayState {
+        let mut state = two_member_tail_tick_state();
+        put_slot_zero_to_sleep(&mut state);
+        state.party_equipment[1][EQUIP_SLOT_RING] = EQUIPMENT_ID_RING_REGENERATION as u8;
+        if regeneration_on_sleeper {
+            state.party_equipment[0][EQUIP_SLOT_RING] = EQUIPMENT_ID_RING_REGENERATION as u8;
+        }
+        // Negate Time freezes the tail tick's animator and wind draws, so
+        // the stream holds only the wake draw and the ring hook's draws.
+        state.active_effect_tag = Some(NEGATE_TIME_ACTIVE_EFFECT_TAG);
+        state.active_effect_counter = 50;
+        let mut probe = state.clone();
+        loop {
+            let position = probe.prng_state;
+            if (probe.random_range_u8(0, u8::MAX) < COMBAT_COMMAND_ASLEEP_WAKE_BELOW) == wake {
+                state.prng_state = position;
+                break;
+            }
+        }
+        let action = dispatch_party_slot_zero(&mut state);
+        assert!(
+            matches!(
+                action,
+                CombatActorDispatchAction::StatusDisabledWake { wake: application }
+                    if application.woke == wake
+            ),
+            "{action:?}"
+        );
+        state
+    }
+
+    #[test]
+    fn a_sleeper_waking_on_its_dispatch_gets_its_own_rings_sweep() {
+        // `combat.md §8` and §11 (u5-spec#310 Q1, `RETRACTIONS.md` R652):
+        // "On the dispatch whose wake draw succeeded ... the hook acts for
+        // the member's own ring as for any awake member: if the waking member
+        // wears a Ring of Regeneration, it triggers the party-wide sweep, one
+        // inclusive `0..7` draw per wearer who is not Dead". Two wearers here,
+        // so the waking dispatch takes two draws more than the same dispatch
+        // with no ring on the sleeper.
+        let with_ring = asleep_arm_dispatch(true, true);
+        let mut without_ring = asleep_arm_dispatch(false, true);
+        assert!(!with_ring.combat_actors[0].is_status_disabled());
+        let _ = without_ring.random_mod_u8(8);
+        let _ = without_ring.random_mod_u8(8);
+        assert_eq!(with_ring.prng_state, without_ring.prng_state);
+    }
+
+    #[test]
+    fn a_sleeper_whose_wake_fails_triggers_no_sweep() {
+        // R652: "On a failed-wake dispatch the hook still does nothing", and
+        // "A waking member who wears no ring triggers no sweep, even if other
+        // members wear one" (covered by the no-ring arm above).
+        let with_ring = asleep_arm_dispatch(true, false);
+        let without_ring = asleep_arm_dispatch(false, false);
+        assert!(with_ring.combat_actors[0].is_status_disabled());
+        assert_eq!(with_ring.prng_state, without_ring.prng_state);
+    }
+
+    #[test]
+    fn keyless_arms_run_one_tail_tick_and_the_denial_route_runs_none() {
+        // `combat.md §11` (u5-spec#310 Q2): "Asleep arm (`Zzzzz...`), failed
+        // or successful wake | One tail tick"; "Active-player denial | None;
+        // maintenance only".
+        for wake in [false, true] {
+            let mut state = two_member_tail_tick_state();
+            put_slot_zero_to_sleep(&mut state);
+            let mut probe = state.clone();
+            loop {
+                let position = probe.prng_state;
+                if (probe.random_range_u8(0, u8::MAX) < COMBAT_COMMAND_ASLEEP_WAKE_BELOW) == wake
+                {
+                    state.prng_state = position;
+                    break;
+                }
+            }
+            let frame = state.animation.frame;
+            let action = dispatch_party_slot_zero(&mut state);
+            assert!(matches!(
+                action,
+                CombatActorDispatchAction::StatusDisabledWake { .. }
+            ));
+            assert_eq!(state.animation.frame, frame.wrapping_add(1), "wake {wake}");
+        }
+
+        let mut denied = two_member_tail_tick_state();
+        denied.active_player = Some(3);
+        let frame = denied.animation.frame;
+        assert_eq!(
+            dispatch_party_slot_zero(&mut denied),
+            CombatActorDispatchAction::ActivePlayerSentinelSkipped
+        );
+        assert_eq!(denied.animation.frame, frame, "no tick on the denial route");
+    }
+
+    #[test]
+    fn the_automatic_driver_ticks_only_on_a_step_that_reports_a_move() {
+        // `combat.md §11` (u5-spec#310 Q2): "The automatic driver runs one
+        // world tick only when its step reports that the actor moved. An
+        // attack turn ... and the driver's other early outs run no driver
+        // tick", and §9's exhausted fallback "commits a zero-length step,
+        // reports the actor as having moved" unless the last draw was the
+        // first direction code.
+        assert!(combat_ai_step_reports_moved(Some(
+            CombatAiMovementOutcome::Step {
+                direction_code: 1,
+                x: 4,
+                y: 4,
+            }
+        )));
+        assert!(combat_ai_step_reports_moved(Some(
+            CombatAiMovementOutcome::ArenaExit { direction_code: 1 }
+        )));
+        assert!(combat_ai_step_reports_moved(Some(
+            CombatAiMovementOutcome::Blocked {
+                random_cardinal_attempts: 4,
+                action_consumed: true,
+            }
+        )));
+        assert!(!combat_ai_step_reports_moved(Some(
+            CombatAiMovementOutcome::Blocked {
+                random_cardinal_attempts: 4,
+                action_consumed: false,
+            }
+        )));
+        assert!(!combat_ai_step_reports_moved(None));
+    }
+
+    #[test]
+    fn the_round_counter_wrap_requests_no_redraw() {
+        // `combat.md §7` step 5 (u5-spec#310 Q2, `RETRACTIONS.md` R654): the
+        // wrap "runs the ordinary one-minute clock cleanup ... and this call
+        // runs no world tick", and the withdrawn tile-render pass is gone.
+        let mut state = two_member_tail_tick_state();
+        state.combat_round_counter = COMBAT_ROUND_COUNTER_WRAP - 1;
+        let prng = state.prng_state;
+        let tick = state.advance_combat_round_counter();
+        assert!(tick.wrapped);
+        assert_eq!(tick.advance_time_minutes, COMBAT_ROUND_WRAP_TIME_ADVANCE_MINUTES);
+        // No world tick: no animator coin and no wind draw.
+        assert_eq!(state.prng_state, prng);
     }
 
     #[test]

@@ -324,7 +324,7 @@ pub const PLAYER_TILE: u8 = crate::TRANSPORT_MARKER_FOOT_FIRST;
 /// compatibility name for callers/tests that need the resolved tile id.
 pub const PLAYER_SPRITE_TILE: usize = crate::ACTOR_TILE_BANK_BASE + PLAYER_TILE as usize;
 
-// Moongate artwork lives at tile id 0xDC per LOOK2.DAT ("a moon gate!").
+// Moongate artwork lives at tile id 0xDC per its LOOK2.DAT Look text.
 // Earlier guesses at 0x80 and 0xD4 picked the wrong tiles (food/banquet
 // and a waterfall animation respectively).
 //

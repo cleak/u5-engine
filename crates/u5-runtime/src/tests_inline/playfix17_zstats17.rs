@@ -53,7 +53,8 @@ mod playfix17_zstats17 {
     #[test]
     fn playtest_p17_08_out_of_alphabet_status_and_class_print_nothing() {
         assert_eq!(z_stats_health_line(b'A'), "");
-        assert_eq!(z_stats_health_line(b'G'), "Good Health");
+        // The table's entries are unpublished, so no letter prints a name.
+        assert_eq!(z_stats_health_line(b'G'), "");
 
         let mut state = test_state(open_grid(), 5, 5);
         state.party = vec![PartyMember {

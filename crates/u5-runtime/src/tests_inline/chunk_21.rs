@@ -3606,7 +3606,7 @@ fn active_conversation_recruit_speaker_runs_inline_without_a_name_prompt() {
 fn scoped_join_talk_state() -> PlayState {
     let enc = |s: &str| s.bytes().map(|b| b ^ 0x80).collect::<Vec<u8>>();
     let mut head = vec![TLK_CODE_LABEL_RECORD, 0x91];
-    head.extend(enc("Shall I join thee now?"));
+    head.extend(enc("Fixture join question now?"));
     let mut yes = enc("At last!\"");
     yes.push(TLK_CODE_RECRUIT_SPEAKER);
     let raw_fields = vec![
@@ -3668,7 +3668,7 @@ fn scoped_join_talk_state() -> PlayState {
 fn a_scoped_prompt_reads_you_respond_and_an_empty_line_only_re_asks() {
     let mut state = scoped_join_talk_state();
     handle_play_key_input(&mut state, 'J', "OIN", Path::new("")).unwrap();
-    assert!(transcript_has(&state, "Shall I join thee now?"));
+    assert!(transcript_has(&state, "Fixture join question now?"));
     assert_eq!(state.message, "You respond-\n:");
 
     handle_play_key_input(&mut state, '\r', "", Path::new("")).unwrap();
@@ -5134,7 +5134,7 @@ fn conversation_opening_drops_a_quote_that_follows_the_entry_closing_quote() {
 #[test]
 fn a_description_that_stops_ends_the_conversation_at_the_opener() {
     let enc = |s: &str| s.bytes().map(|b| b ^ 0x80).collect::<Vec<u8>>();
-    let mut description = enc("a grave wizard.");
+    let mut description = enc("a fixture wizard.");
     description.extend([TLK_CODE_LITERAL_NEWLINE, TLK_CODE_END_STREAM]);
     let raw = vec![
         enc("Annon"),
@@ -5155,7 +5155,7 @@ fn a_description_that_stops_ends_the_conversation_at_the_opener() {
     state.prng_state = 0x0aaa;
 
     let opening = state.advance_active_conversation_greeting_with_seed(Some(0x0456));
-    assert!(opening.ends_with("a grave wizard.\n"), "{opening:?}");
+    assert!(opening.ends_with("a fixture wizard.\n"), "{opening:?}");
     assert!(!opening.contains(TLK_KEYWORD_PROMPT), "{opening:?}");
     assert!(!opening.contains("Well met") && !opening.contains("I am called"));
     assert!(state.active_conversation.is_none(), "the conversation is over");
@@ -5706,7 +5706,7 @@ fn end_to_end_innkeeper_decline_ends_the_visit_without_charge() {
     assert_eq!(state.gold, 100);
     // `shops.md §8.C` "Declined Rest offer": the visit ends through the
     // ordinary farewell - one of the no-sale records `178..181` (measured
-    // 2026-09-08 at Hotel Brittany as `Perhaps another time...`), which this
+    // 2026-09-08 at Hotel Brittany), which this
     // asset-free fixture cannot render.
     assert!(state.active_shop.is_none());
 }
@@ -7355,7 +7355,8 @@ fn end_to_end_shipwright_pending_frigate_dock_space_always_refuses() {
     handle_play_key_input(&mut state, 'Y', "", Path::new("")).unwrap();
     assert!(state.active_shop.is_none());
     assert_eq!(state.gold, 9999);
-    assert!(!state.message.contains("dock space"), "{:?}", state.message);
+    // No dock-space question (a `SHOPPE.DAT` record) is left on screen.
+    assert!(!state.message.contains("dock"), "{:?}", state.message);
     assert_eq!(
         state.return_world.as_ref().and_then(|world| world.pending_vehicle),
         Some(pending)

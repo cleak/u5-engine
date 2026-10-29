@@ -341,6 +341,9 @@ mod tests {
     #[test]
     fn pass_input_records_round_walker_defeat_exit() {
         let mut state = adjacent_skeleton_combat_state();
+        // Freeze the per-dispatch world ticks (u5-spec#310 Q2) so the fixed
+        // stream still drives the skeleton's lethal reply.
+        state.time_stop_counter = u8::MAX;
 
         let result = run_combat_scenario(&mut state, &[CombatScenarioInput::Pass]);
 

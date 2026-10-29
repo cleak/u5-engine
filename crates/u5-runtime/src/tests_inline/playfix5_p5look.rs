@@ -88,7 +88,7 @@ fn playtest_j05_sign_look_prints_the_preamble_and_keeps_authored_rows() {
             0,
             1,
             2,
-            b"g LAW OF VALOR ggDEATH OR THOU  g",
+            b"g FIXTURE ROWA ggSECOND ROW TXT g",
         )]),
     )
     .unwrap();
@@ -100,7 +100,7 @@ fn playtest_j05_sign_look_prints_the_preamble_and_keeps_authored_rows() {
 
     assert_eq!(
         state.message,
-        format!("{LOOK_RESULT_PREFIX}\n\ng LAW OF VALOR g\ngDEATH OR THOU  \ng")
+        format!("{LOOK_RESULT_PREFIX}\n\ng FIXTURE ROWA g\ngSECOND ROW TXT \ng")
     );
     let _ = fs::remove_dir_all(dir);
 }

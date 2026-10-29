@@ -1402,6 +1402,9 @@
             state.repaint_stats_panel();
             state.message_transcript.clear();
             state.prng_state = seed;
+            // Freeze the asleep arm's tail world tick (u5-spec#310 Q2) so the
+            // stream holds only the wake draw.
+            state.time_stop_counter = u8::MAX;
             let mut expected_prng = seed;
             let _ = u5_prng_range_u16(&mut expected_prng, 0, 255);
 

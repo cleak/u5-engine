@@ -3583,7 +3583,7 @@ impl PlayState {
             // Section 8, pit-family table: "Other `0x6?` values | No extra
             // Search-specific handling beyond the preamble."
             None if tile >> 4 == 0x6 => String::new(),
-            None => format!("{}.", dungeon_search_description(tile)),
+            None => crate::tile_helpers::dungeon_look_sentence(dungeon_search_description(tile)),
         };
         MoveOutcome::Searched
     }

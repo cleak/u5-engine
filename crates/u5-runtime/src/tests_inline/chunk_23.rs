@@ -5902,7 +5902,6 @@ fn combat_round_counter_wraps_at_ten_and_only_then_advances_time() {
         CombatRoundCounterTick {
             counter: 1,
             wrapped: false,
-            redraw_tiles: false,
             advance_time_minutes: 0,
         }
     );
@@ -5911,7 +5910,6 @@ fn combat_round_counter_wraps_at_ten_and_only_then_advances_time() {
         CombatRoundCounterTick {
             counter: 9,
             wrapped: false,
-            redraw_tiles: false,
             advance_time_minutes: 0,
         }
     );
@@ -5920,7 +5918,6 @@ fn combat_round_counter_wraps_at_ten_and_only_then_advances_time() {
         CombatRoundCounterTick {
             counter: 0,
             wrapped: true,
-            redraw_tiles: true,
             advance_time_minutes: 1,
         }
     );
@@ -12291,6 +12288,10 @@ fn combat_targeting_cursor_kill_clears_the_last_foe_for_the_victory_line() {
 #[test]
 fn combat_player_command_runs_visible_magic_ring_pass() {
     let mut state = combat_player_command_state(8, 5);
+    // Freeze the per-dispatch world ticks (u5-spec#310 Q2: the committed
+    // tail's tick and the automatic driver's step tick) so this stream holds
+    // only the draws the test counts.
+    state.time_stop_counter = u8::MAX;
     state.party_equipment = default_party_equipment(1);
     state.party_equipment[0][EQUIP_SLOT_RING] = EQUIPMENT_ID_RING_REGENERATION as u8;
     state.party[0].hp = state.party[0].hp.saturating_sub(3);
@@ -12323,6 +12324,10 @@ fn combat_player_command_runs_visible_magic_ring_pass() {
 #[test]
 fn combat_player_command_regeneration_tail_checks_every_living_wearer() {
     let mut state = combat_player_command_state(8, 5);
+    // Freeze the per-dispatch world ticks (u5-spec#310 Q2: the committed
+    // tail's tick and the automatic driver's step tick) so this stream holds
+    // only the draws the test counts.
+    state.time_stop_counter = u8::MAX;
     state.party.push(PartyMember {
         slot: 1,
         class_byte: 1,
@@ -12528,6 +12533,10 @@ fn combat_input_dispatch_routes_play_keys_to_combat_parser() {
     );
 
     let mut attack_state = combat_player_command_state(6, 5);
+    // Freeze the per-dispatch world ticks (u5-spec#310 Q2: the committed
+    // tail's tick and the automatic driver's step tick) so this stream holds
+    // only the draws the test counts.
+    attack_state.time_stop_counter = u8::MAX;
     attack_state.active_player = Some(0);
     // `combat.md §8.2`: `A` opens the targeting cursor; the cursor is then
     // steered by internal direction codes and confirmed with Enter. The
@@ -12648,6 +12657,10 @@ Avatar, armed with bare hands:
 fn combat_input_dispatch_reports_weapon_hit_damage_and_xp() {
     let game_dir = std::path::Path::new(".");
     let mut state = combat_player_command_state(6, 5);
+    // Freeze the per-dispatch world ticks (u5-spec#310 Q2: the committed
+    // tail's tick and the automatic driver's step tick) so this stream holds
+    // only the draws the test counts.
+    state.time_stop_counter = u8::MAX;
     state.party_equipment = default_party_equipment(1);
     state.party_equipment[0][EQUIP_SLOT_WEAPON] = 16;
     state.party_strengths = vec![255];
@@ -12855,6 +12868,10 @@ fn combat_input_dispatch_use_without_items_ends_action_after_refusal() {
 fn combat_input_dispatch_applies_round_walker_defeat_exit() {
     let game_dir = std::path::Path::new(".");
     let mut state = combat_player_command_state(6, 5);
+    // Freeze the per-dispatch world ticks (u5-spec#310 Q2: the committed
+    // tail's tick and the automatic driver's step tick) so this stream holds
+    // only the draws the test counts.
+    state.time_stop_counter = u8::MAX;
     state.combat_actors[8].owner_target_class = 33;
     state.party[0].status = b'G';
     state.party[0].hp = 1;
@@ -13448,6 +13465,10 @@ fn combat_input_dispatch_quickness_never_consumes_the_ready_player() {
 fn combat_input_dispatch_action_tail_does_not_run_encounter_ring_vanishal() {
     let game_dir = std::path::Path::new(".");
     let mut state = combat_player_command_state(8, 5);
+    // Freeze the per-dispatch world ticks (u5-spec#310 Q2: the committed
+    // tail's tick and the automatic driver's step tick) so this stream holds
+    // only the draws the test counts.
+    state.time_stop_counter = u8::MAX;
     // Keep the next round walk focused on the action-tail contract. Once the
     // ring hides the party member, a live monster correctly has no eligible
     // target and enters its separately tested no-target AI path.
@@ -19286,11 +19307,16 @@ fn combat_step_defers_field_contact_until_completed_dispatch_without_consuming_m
     assert_eq!(state.prng_state, prng_before_step);
     assert_eq!(state.party[0].status, b'G');
 
+    // Freeze the committed tail's world tick (u5-spec#310 Q2) so this
+    // stream holds only the field pass and the contact.
+    state.time_stop_counter = u8::MAX;
     let mut expected_prng = state.prng_state;
-    let expected_raw = u5_prng_range_u16(&mut expected_prng, 0, 10) as u8;
-    // `combat.md §11` (u5-spec#308 Q3, R650): the committed action's
-    // maintenance endpoint then gives the marker its field-pass draw.
+    // `combat.md §11` (u5-spec#308 Q3, R650; u5-spec#310 Q2): the committed
+    // tail runs maintenance - the marker's field-pass draw - first, then its
+    // world tick and post-action step, and the contact hook comes last.
     let dissolve_draw = u5_prng_range_u16(&mut expected_prng, 0, 255);
+    assert!(dissolve_draw >= 16, "this fixture's stream keeps the marker");
+    let expected_raw = u5_prng_range_u16(&mut expected_prng, 0, 10) as u8;
     let application = state
         .apply_combat_player_command_with_inputs(0, CombatPlayerCommandInput::Key(' '))
         .expect("pass should complete the actor dispatch");

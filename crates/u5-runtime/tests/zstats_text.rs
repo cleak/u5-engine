@@ -329,7 +329,8 @@ fn the_attribute_page_draws_the_published_sheet_over_the_panel() {
     assert!(rows[0].contains(" Lv-2 "));
     assert!(rows[0].ends_with(&name));
     assert!(rows[0].contains(char::from(SAVE_GENDER_MALE_BYTE)));
-    assert_eq!(rows[1].trim(), "Good Health");
+    // The status-name table is unpublished: the row stays empty.
+    assert_eq!(rows[1].trim(), "");
     assert_eq!(rows[2], "");
     assert_eq!(rows[3], "Str=15  HP:  60");
     // Runtime observation over `§4.7`'s label table: the capture pairs

@@ -2888,7 +2888,7 @@ mod tests {
     /// blob's final `0x90 0x9F` record.
     fn scoped_yes_no_session() -> ConversationSession {
         let mut head = vec![TLK_CODE_LABEL_RECORD, 0x91];
-        head.extend(enc("Shall I join thee?"));
+        head.extend(enc("Fixture join question?"));
         let mut yes = enc("Lead on!\"");
         yes.push(TLK_CODE_RECRUIT_SPEAKER);
         let mut no = vec![TLK_CODE_STANDING_DOWN];
@@ -2929,7 +2929,7 @@ mod tests {
         let context = party_ctx(&names);
         let mut s = scoped_yes_no_session();
         let first = s.submit_keyword("ask", &context);
-        assert_eq!(first.text, framed_response("Shall I join thee?"));
+        assert_eq!(first.text, framed_response("Fixture join question?"));
         assert_eq!(
             s.phase,
             ConversationSessionPhase::AwaitingScopedKeyword { label: 0x91 }
@@ -3113,7 +3113,7 @@ mod tests {
         assert_eq!(
             out.text,
             format!(
-                "\n\"With language like that, how did you become an Avatar?\"\n\n{pause}\"Shall I join thee?\"\n\n"
+                "\n\"With language like that, how did you become an Avatar?\"\n\n{pause}\"Fixture join question?\"\n\n"
             )
         );
         assert!(!out.ended);
@@ -3345,7 +3345,7 @@ mod tests {
         let empty = s.submit_keyword("", &ctx());
         assert_eq!(empty.text, "\n\"What didst thou say?\n\n");
         assert!(!empty.text.contains("BYE"));
-        assert!(!empty.text.contains("Shall I join thee?"));
+        assert!(!empty.text.contains("Fixture join question?"));
         assert!(!empty.ended);
         assert_eq!(s.prompt_message(), "You respond-\n:");
         assert_eq!(
@@ -3554,7 +3554,7 @@ mod tests {
     /// conversation open. Shape of `town-talk-speaker`'s Britain wizard and
     /// `dwelling-talk-after-entry`'s rat respectively.
     fn opening_ask_who_session(head_tail: Vec<u8>) -> ConversationSession {
-        let mut description = enc("a grave wizard.");
+        let mut description = enc("a fixture wizard.");
         description.push(0x91);
         let mut head = vec![TLK_CODE_LABEL_RECORD, 0x91, TLK_CODE_ASK_WHO];
         head.extend(head_tail);

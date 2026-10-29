@@ -1815,18 +1815,32 @@ pub fn dungeon_cell_class(tile: u8) -> &'static str {
     }
 }
 
+/// A dungeon description as a sentence: the description and its period, or
+/// nothing at all for a description the specification has not published.
+pub fn dungeon_look_sentence(description: &str) -> String {
+    if description.is_empty() {
+        String::new()
+    } else {
+        format!("{description}.")
+    }
+}
+
 /// `dungeon-mode.md` Section 12 step 5 (u5-spec#298 Q6): the per-class
 /// L-Look line after `You see:\n`; the caller appends the period. `0xC?`
-/// is the flavour class of [`dungeon_look_description_with_flavour`];
-/// `0x84..0x8F` keep the generic energy-field description, whose literal
-/// the table does not spell out.
+/// is the flavour class of [`dungeon_look_description_with_flavour`].
+///
+/// The field bytes: §12 says `0x80..0x83` "have distinct sleep, poison-gas,
+/// fire, and electric descriptions, while other `0x8?` values share a
+/// generic energy-field description", and publishes none of those five
+/// literals or the record that holds them. `0x80` reuses the top-down Sleep
+/// Field Look text that `formats/tiles.md` does publish; the other four
+/// print nothing until the spec publishes them (a spec question asks), and
+/// callers then print no period either ([`dungeon_look_sentence`]).
 pub fn dungeon_look_description(tile: u8) -> &'static str {
     let tile = if tile == 0x61 { 0x00 } else { tile };
     match tile {
         0x80 => "a sleep field",
-        0x81 => "a poison gas field",
-        0x82 => "a wall of fire",
-        0x83 => "an electric field",
+        0x81..=0x83 => "",
         _ => match tile >> 4 {
             0x0 => "a passage",
             0x1 => "an up ladder",
@@ -1836,7 +1850,7 @@ pub fn dungeon_look_description(tile: u8) -> &'static str {
             0x5 => "a fountain",
             0x6 => "a pit",
             0x7 => "an open chest",
-            0x8 => "an energy field",
+            0x8 => "",
             0x9 => "nothing of note",
             0xA | 0xE | 0xF => "a heavy door",
             0xB..=0xD => "a wall",

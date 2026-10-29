@@ -1623,8 +1623,9 @@ impl PlayState {
                     // rumble and flash in prose - which is presentation the
                     // player hears and sees, not text the original prints.
                     // Measured 2026-09-11 (`word-of-power-audio/dosbox-word`):
-                    // the original's rows read `A word of power` / `is
-                    // uttered`, a blank row, then `No effect!`.
+                    // the original's rows read the uttered-word line, a blank
+                    // row, then `No effect!`. The uttered-word literal is not
+                    // published, so [`WORD_OF_POWER_UTTERED_MESSAGE`] is empty.
                     self.diagnostics.push(format!(
                         "Yelled {word}, the Word of Power for {}; {}",
                         seal.dungeon,
@@ -6789,8 +6790,9 @@ impl PlayState {
                     .trim()
                     .to_string()
             })
-            .filter(|name| !name.is_empty())
-            .unwrap_or_else(|| "thy companion".to_string())
+            // An empty roster name has no published stand-in, so the threat
+            // names nobody rather than an invented phrase.
+            .unwrap_or_default()
     }
 
     pub fn blackthorn_current_prompt_message(&self, game_dir: &Path) -> io::Result<String> {

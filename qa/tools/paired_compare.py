@@ -485,7 +485,7 @@ def _record_present(signature: tuple[str, ...], text: str) -> bool:
 
     The window is a scrolling stream, so a record printed a beat ago can be
     half off the top: `bd-shipwright`'s stock side shows the tail of greeting
-    record 108 with its opening `do welcome` already gone. Demanding every run
+    record 108 with its opening words already gone. Demanding every run
     therefore fails exactly when the record is oldest, which is when the other
     side has usually scrolled it away entirely - and the beat then reads as a
     divergence between two sides printing the same thing.

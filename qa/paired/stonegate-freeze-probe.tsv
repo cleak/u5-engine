@@ -16,8 +16,7 @@
 # twenty seconds after the death with no keys sent, and it now carries the
 # rescue narration on its own:
 #
-#     "Thou hast strayed far from the path of the Avatar. Seek now to renew
-#     a life of Virtue, lest thy soul pass finally beyond my reach!"
+#     (the KARMA.DAT rescue record, read from the asset; not quoted here)
 #
 # `poke` then advances to `Strange words are intoned.` and `Vertigo...`,
 # because that keystroke is `blackthorn.md` Section 7 step 19's

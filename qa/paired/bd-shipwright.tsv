@@ -18,9 +18,8 @@
 # records 105..108, and Section 8.A's shared closing envelope takes "one of
 # four `SHOPPE.DAT` records from the current shop-kind" row - 109..112 here.
 # `prng.md` Section 3 seeds the two sides from the host clock, so they never
-# draw alike. Measured 2026-09-12: the original declined with `"Thou wouldst
-# probably get seasick, anyway."` and this engine with another member of the
-# same pool.
+# draw alike. Measured 2026-09-12: the original declined with one record of that
+# pool and this engine with another member of the same pool.
 #
 # A different greeting length also moves the entry prompt's colon (`shops.md`
 # Section 8.B makes it conditional on the finished greeting's column), so

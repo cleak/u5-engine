@@ -372,7 +372,7 @@ impl PlayState {
             // `endgame.md §6`: the waiting branch is terminal and reads no
             // command, so no command row opens under record 10. Measured
             // 2026-10-16 (`doom-final-room`, beat `answered`, reading
-            // `offset+1`): the original's last row is `here a while."` and
+            // `offset+1`): the original's last row is the closing `ENDMSG.DAT` row and
             // this engine drew a blank and an end-capped cursor row under it.
             || self.endgame.as_ref().is_some_and(|endgame| {
                 endgame.outcome == Some(crate::EndgameOutcome::MissingBoxOrRefused)
@@ -881,7 +881,7 @@ impl PlayState {
         // the cell after record 10's last row. Measured 2026-10-16 on rc1
         // (`doom-final-room`, beat `answered`; `doom-final-room-waiting`,
         // beats `waiting` and `tableau1`, all reading `cursor`): the stock
-        // window ends `here a while."` with the cell after it empty in every
+        // window ends the closing `ENDMSG.DAT` row with the cell after it empty in every
         // capture since 2026-09-05, and this engine drew the cursor there.
         // Checked before the open-row arm below, which would otherwise keep
         // a cursor on a row left open mid-line.
@@ -8089,8 +8089,8 @@ fn rune_echo_for_buffer(buffer: &str) -> String {
 ///
 /// Measured against the fifteen content cells `§4.1` gives the roster
 /// rows, which is what a capture of the original shows: the thirteen-cell
-/// name line takes one leading space, the eleven-cell `Good Health` line
-/// takes two, and the four-cell `Arms` heading takes five.
+/// name line takes one leading space, an eleven-cell status line takes
+/// two, and the four-cell `Arms` heading takes five.
 fn z_stats_centred_panel_row(text: &str) -> String {
     let width = crate::STATS_PANEL_WIDTH;
     let length = text.chars().count();

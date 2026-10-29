@@ -151,7 +151,8 @@ fn playtest_p12_17_shrine_handler_waits_open_no_command_row() {
     let mut session = ShrineSession::new(ShrineVirtue::Honor);
     session.phase = ShrinePhase::Offering;
     offering.active_shrine = Some(session);
-    offering.emit_message_line("\n\nOffer how many\ngold? ");
+    // A fixture question that ends mid-row, as the offering chooser's does.
+    offering.emit_message_line("\n\nFixture offer\nquestion? ");
     assert!(open_row_owns_the_cursor(&offering));
 
     // The Codex reader: inline after a record that ends mid-row...

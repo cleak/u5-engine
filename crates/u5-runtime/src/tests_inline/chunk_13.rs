@@ -19332,7 +19332,7 @@ fn doom_final_room_successful_dungeon_cbt_combat_enters_endgame_from_absorbable_
     assert!(absorption.armed_endgame_result);
     // `cleak/u5-engine#10`: the contact itself enters the endgame, so
     // there is no combat frame left to win. The original does the same -
-    // `Avatar is absorbed!` runs straight into Lord British - and Doom's
+    // the absorption line runs straight into Lord British - and Doom's
     // final arena ships with no combatants for a victory census to find.
     assert!(state.combat_frame_snapshot.is_none());
     assert!(!state.combat_active);
@@ -19345,13 +19345,10 @@ fn doom_final_room_successful_dungeon_cbt_combat_enters_endgame_from_absorbable_
         ENDGAME_TABLEAU_WALKABLE_TILE
     );
     state.finish_endgame_entry_presentation();
-    // The absorption line belongs to the transcript, not the live slot:
-    // §4's announcements and §5's greeting compose onto that slot.
-    assert!(state
-        .message_transcript
-        .iter()
-        .any(|entry| entry.text.contains("Avatar is absorbed!")));
-    assert!(!state.message.contains("Avatar is absorbed!"));
+    // The absorption line (unpublished, so `None` here) would belong to
+    // the transcript, not the live slot: §4's announcements and §5's
+    // greeting compose onto that slot.
+    assert_eq!(crate::COMBAT_ABSORBED_MESSAGE, None);
     assert!(state.message.contains("Welcome back"));
     // §5.1's blocking key read: the greeting is its own page and the
     // question follows on the next one.

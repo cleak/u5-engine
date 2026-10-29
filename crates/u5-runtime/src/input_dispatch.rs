@@ -5650,7 +5650,7 @@ fn format_tavern_outcome_with_shoppe(
         // token-expanded `says $.\n`. The record owns its closing quote."
         // The engine printed the record bare under the `No` row. Measured
         // 2026-10-16 (`paws-tavern`, beat `no`): the original reads
-        // `for thee?" No`, a blank row, then `"What's wrong / with ye? ...`.
+        // the question row with `No`, a blank row, then the no-sale record.
         DeclinedContinuation | NoSaleExit => no_sale_record_id.and_then(|record_id| {
             renderer
                 .render_record(record_id, &crate::shoppe_bark::ShoppeBarkContext::default())
@@ -7250,7 +7250,7 @@ fn handle_combat_multistage_command(
                     state.pending_combat_actor_slot = Some(actor_slot);
                     state.combat_prompt_row_opened_by_banner = false;
                 } else if state.combat_active {
-                    let _ = apply_combat_committed_action_maintenance(state, actor_slot);
+                    let _ = apply_combat_accepted_klimb_departure_maintenance(state, actor_slot);
                     advance_combat_round_after_actor_and_append_message(state, actor_slot);
                 }
             } else if let Some(intent) = suffix.chars().find_map(combat_klimb_vertical_intent) {
@@ -7258,7 +7258,7 @@ fn handle_combat_multistage_command(
                 if matches!(outcome, MoveOutcome::Blocked) {
                     state.pending_combat_actor_slot = Some(actor_slot);
                 } else if state.combat_active {
-                    let _ = apply_combat_committed_action_maintenance(state, actor_slot);
+                    let _ = apply_combat_accepted_klimb_departure_maintenance(state, actor_slot);
                     advance_combat_round_after_actor_and_append_message(state, actor_slot);
                 }
             } else if let Some(direction) = suffix
@@ -7420,15 +7420,27 @@ fn combat_magic_ring_pass_message(pass: Option<CombatMagicRingPassOutcome>) -> O
         .map(|ring| format!("{} vanished.", equipment_name(ring as usize)))
 }
 
-/// `combat.md §8`: every committed non-digit player action checks the Doom
-/// companion band, runs common terrain/marker contact, performs visible-ring
-/// maintenance, and then ages the active timed effect. Multi-stage commands
-/// call this only when their final input commits the action.
+/// `combat.md §8`/`§11`: every committed non-digit player action runs the
+/// maintenance endpoint (visible-ring hook, field pass, timed-effect age),
+/// one world tick (u5-spec#310 Q2), the Doom companion-band absorption check
+/// and then the common terrain/marker contact. Multi-stage commands call this
+/// only when their final input commits the action.
 fn apply_combat_committed_action_maintenance(
     state: &mut PlayState,
     actor_slot: usize,
 ) -> Option<CombatMagicRingPassOutcome> {
     state.apply_combat_committed_action_tail(actor_slot)
+}
+
+/// The committed tail for Klimb's accepted Up/Down departure. `combat.md
+/// §11` (u5-spec#310 Q2) leaves whether that departure runs the handler's
+/// tail world tick "Not established" (`OPEN-QUESTIONS.md` section 3), so it
+/// keeps maintenance and the hooks and adds no tick.
+fn apply_combat_accepted_klimb_departure_maintenance(
+    state: &mut PlayState,
+    actor_slot: usize,
+) -> Option<CombatMagicRingPassOutcome> {
+    state.apply_combat_committed_action_tail_with_world_tick(actor_slot, false)
 }
 
 fn combat_cast_suffix_for_actor(suffix: &str, actor_slot: usize) -> String {

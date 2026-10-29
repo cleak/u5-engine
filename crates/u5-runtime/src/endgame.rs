@@ -1725,7 +1725,7 @@ impl PlayState {
     pub fn advance_endgame_entry_presentation(&mut self) -> bool {
         // `endgame.md §3` step 2's redraw rebuilds the *screen*, not the
         // message window: a paired capture of a walked-in absorption
-        // keeps the step's own `>North` echo above `Avatar is absorbed!`
+        // keeps the step's own `>North` echo above the absorption line
         // and runs on into Lord British from there. The line is still
         // deferred to this first pumped frame, because the step commits
         // that echo after the contact handler returns and emitting at
@@ -1736,7 +1736,9 @@ impl PlayState {
             // completed its own command row, so this print's leading line
             // feed lands on a fresh row and leaves one blank row between
             // the echo and the absorption. `cleak/u5-engine#11`.
-            self.emit_message_line(format!("\n{}", crate::COMBAT_ABSORBED_MESSAGE));
+            if let Some(line) = crate::COMBAT_ABSORBED_MESSAGE {
+                self.emit_message_line(format!("\n{line}"));
+            }
             // `audio.md §8.7` step 2: "The accepted absorption effect prints
             // its actor/narration, **then** plays the action snap: forty
             // frequency updates from 1200 through 1980 Hz in 20 Hz
@@ -2483,7 +2485,7 @@ impl PlayState {
                 // the window scrolled up to show, and no command row opens
                 // there (the branch reads no command). Measured 2026-10-16
                 // (`doom-final-room`, beat `answered`): the original's
-                // `here a while."` is the window's second-to-last row with
+                // closing ENDMSG.DAT row is the window's second-to-last row with
                 // an empty row under it.
                 if self.message.ends_with('\n') {
                     self.push_explicit_blank_message_entry();

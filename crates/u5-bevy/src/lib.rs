@@ -17731,7 +17731,7 @@ fn render_endgame_framebuffer(
     // room - Avatar gone, floor not yet remapped - until the tableau setup
     // draws. Measured (`doom-final-room-waiting`, 2026-10-16): the stock
     // keeps the red-floored arena for three to four timelapse frames after
-    // `Avatar is absorbed!`, where this engine already showed the tableau.
+    // the absorption line, where this engine already showed the tableau.
     let viewport = endgame_tableau_phase_viewport(state);
     render_visual_play_frame_over_viewport(
         state,
