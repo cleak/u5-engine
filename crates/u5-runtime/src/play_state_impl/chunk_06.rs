@@ -2889,18 +2889,8 @@ impl PlayState {
         x: usize,
         y: usize,
     ) -> Option<MoveOutcome> {
-        // `hidden-treasures.md §2.1`: "Twelve of the 113 records (`0`
-        // through `11`) carry the filler coordinate `(233, 233)` at an
-        // impossible floor and cannot be reached by an ordinary Search", and
-        // §3 repeats "Records 0 to 11 stay unreachable filler". The table
-        // keeps them so record numbering stays aligned, but the scan never
-        // stages them.
         let mut matching_entries = FIXED_HIDDEN_TREASURES.iter().copied().filter(|entry| {
-            !fixed_hidden_treasure_record_is_unreachable_filler(entry.record)
-                && entry.target == target
-                && entry.floor == floor
-                && entry.x == x
-                && entry.y == y
+            entry.target == target && entry.floor == floor && entry.x == x && entry.y == y
         });
         // `hidden-treasures.md §3` "Shared cells" (added 2026-10-25,
         // u5-spec#300 Q1): "One Search stages at most one record: the first
@@ -5266,27 +5256,6 @@ mod hidden_treasure_record_15_spec_tests {
         // Even a stale bit (e.g. from an older save) does not close it.
         state.set_fixed_hidden_treasure_found(entry.record);
         assert!(state.fixed_hidden_treasure_rule_allows(entry, entry.x, entry.y));
-    }
-
-    /// `hidden-treasures.md §2.1`: records 0..=11 sit at the filler
-    /// coordinate and "cannot be reached by an ordinary Search" (§3:
-    /// "Records 0 to 11 stay unreachable filler"). Playtest P22-06 found
-    /// twelve Mystic Armours/Swords by searching Underworld (233, 233).
-    #[test]
-    fn filler_records_0_to_11_are_never_staged_by_search() {
-        let entry = FIXED_HIDDEN_TREASURES[0];
-        let mut state = world_state(open_world_grid(), entry.x, entry.y.saturating_sub(1));
-        for _ in 0..13 {
-            assert_eq!(
-                state.search_fixed_hidden_treasure_at(entry.target, entry.floor, entry.x, entry.y),
-                None
-            );
-        }
-        for record in 0..=HIDDEN_TREASURE_UNDERWORLD_STACK_LAST {
-            assert!(!state.fixed_hidden_treasure_pickup_exists(record));
-            assert!(!state.fixed_hidden_treasure_found(record));
-        }
-        assert!(!fixed_hidden_treasure_record_is_unreachable_filler(12));
     }
 
     /// `hidden-treasures.md §3` "Shared cells" and "Body cells with an item"

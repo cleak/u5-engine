@@ -97,13 +97,6 @@ pub const fn underworld_stack_record(
     }
 }
 
-/// `hidden-treasures.md §2.1`: records `0..=11` carry the filler
-/// coordinate "at an impossible floor and cannot be reached by an
-/// ordinary Search"; §3: "Records 0 to 11 stay unreachable filler".
-pub const fn fixed_hidden_treasure_record_is_unreachable_filler(record_index: usize) -> bool {
-    record_index <= HIDDEN_TREASURE_UNDERWORLD_STACK_LAST
-}
-
 /// `hidden-treasures.md §2` per-record special-rule classification.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum HiddenTreasureRule {

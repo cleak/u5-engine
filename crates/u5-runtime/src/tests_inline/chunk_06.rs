@@ -1983,31 +1983,54 @@
         );
     }
 
-    /// `hidden-treasures.md §2.1`: records 0..=11 share the filler cell
-    /// `(233, 233)` and "cannot be reached by an ordinary Search" (§3:
-    /// "Records 0 to 11 stay unreachable filler"). This test used to drain
-    /// them as a stack of Mystic Armours and Swords (playtest P22-06); the
-    /// shared-cell rule itself is pinned on Yew records 43/45.
+    /// `hidden-treasures.md §2.1` (u5-spec#314 Q2, `RETRACTIONS.md` R659):
+    /// records 0..=11 sit on the Underworld at `(233, 233)` and "a Search of
+    /// that cell therefore stages the twelve records one per Search in table
+    /// order". Executed on the original: the Searches printed `some
+    /// armour!`, `a weapon!` and `some armour!`, and Get gave one Mystic
+    /// Armour. Playtest P22-06 had made them unfindable; that is withdrawn.
     #[test]
-    fn search_fixed_hidden_treasure_filler_cell_stages_nothing() {
+    fn search_fixed_hidden_treasure_skips_found_duplicate_coordinates() {
         let dir = debug_game_dir();
         let mut state = world_state(open_world_grid(), 232, 233);
         state.player.facing = Direction::East;
 
-        for _ in 0..2 {
-            let _ = state.search_facing_with_game_dir(&dir).unwrap();
-            assert!(!state.fixed_hidden_treasure_found(0));
-            assert!(!state.fixed_hidden_treasure_found(1));
-            assert!(
-                state
-                    .active_objects
-                    .iter()
-                    .all(|object| object.fixed_hidden_treasure_record().is_none())
-            );
-            assert!(!state.message.contains("some armour!"));
-            assert!(!state.message.contains("a weapon!"));
-        }
-        assert_eq!(state.equipment_stock[15], 0);
+        assert_eq!(
+            state.search_facing_with_game_dir(&dir).unwrap(),
+            MoveOutcome::Searched
+        );
+        assert!(state.fixed_hidden_treasure_found(0));
+        assert_eq!(state.active_objects[1].fixed_hidden_treasure_record(), Some(0));
+
+        assert_eq!(
+            state.get_facing_with_game_dir(&dir).unwrap(),
+            MoveOutcome::Got
+        );
+        assert_eq!(state.equipment_stock[15], 1);
+
+        assert_eq!(
+            state.search_facing_with_game_dir(&dir).unwrap(),
+            MoveOutcome::Searched
+        );
+        assert!(state.fixed_hidden_treasure_found(1));
+        assert_eq!(state.active_objects[1].fixed_hidden_treasure_record(), Some(1));
+        assert_eq!(state.message, format!("{SEARCH_PREAMBLE}a weapon!"));
+
+        // §3 "Shared cells": "the third stages record 2 (`some armour!`)".
+        // Record 1's Weapon still lies on the cell, so the record-2 Armour
+        // takes the next empty slot.
+        assert_eq!(
+            state.search_facing_with_game_dir(&dir).unwrap(),
+            MoveOutcome::Searched
+        );
+        assert!(state.fixed_hidden_treasure_found(2));
+        assert!(
+            state
+                .active_objects
+                .iter()
+                .any(|object| object.fixed_hidden_treasure_record() == Some(2))
+        );
+        assert_eq!(state.message, format!("{SEARCH_PREAMBLE}some armour!"));
         let _ = fs::remove_dir_all(dir);
     }
 
