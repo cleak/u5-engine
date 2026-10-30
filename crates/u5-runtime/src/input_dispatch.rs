@@ -6963,6 +6963,21 @@ fn handle_combat_key_input(state: &mut PlayState, key: char, suffix: &str) -> Pl
         emit_held_combat_faint_lines(state, held_faint_lines);
         return PlayInputDisposition::Continue;
     }
+    // R's empty-pack answer (`inventory.md §5` step 2) is already on the
+    // transcript, printed by the delegate itself; the slot keeps it so the
+    // turn banner that follows lands under it rather than replacing it
+    // (playtest P23-10: the text frame showed only the banner).
+    let delegate_answer = (matches!(
+        application.action,
+        CombatPlayerCommandAction::Branch {
+            branch: CombatCommandBranch::Ready,
+            ..
+        }
+    ) && state.active_ready.is_none()
+        && !state.message.is_empty()
+        && state.message != echo
+        && state.message == state.message_flushed)
+        .then(|| state.message.clone());
     // The key was read on the marker row, so what it echoes is written
     // there. `text-output.md §10.2` states that rule for the loops it
     // lists, and combat is not one of them, so the arena's end-cap
@@ -6974,6 +6989,10 @@ fn handle_combat_key_input(state: &mut PlayState, key: char, suffix: &str) -> Pl
     state.message.clear();
     if !echo.is_empty() {
         state.emit_combat_command_echo_line(&echo);
+    }
+    if let Some(answer) = delegate_answer {
+        state.message = answer.clone();
+        state.message_flushed = answer;
     }
     emit_held_combat_faint_lines(state, held_faint_lines);
     if let Some(shape) = combat_player_command_action_reprompt_shape(&application.action) {

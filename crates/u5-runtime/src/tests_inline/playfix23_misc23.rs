@@ -82,7 +82,9 @@ fn playtest_p23_08_unready_leaves_a_counter_at_or_above_99_unchanged() {
         });
 
         assert!(
-            state.party_equipment[0].iter().all(|slot| *slot == EQUIPMENT_EMPTY),
+            state.party_equipment[0]
+                .iter()
+                .all(|slot| *slot == EQUIPMENT_EMPTY),
             "the coif is unreadied from {before}"
         );
         assert_eq!(state.equipment_stock[coif], after, "counter from {before}");
@@ -115,7 +117,11 @@ fn playtest_p23_04_a_mounted_party_on_an_inn_bed_gets_the_hours_prompt() {
 
         handle_play_key_input(&mut state, 'H', "", &dir).unwrap();
 
-        assert!(state.active_rest.is_some(), "{transport:?}: {:?}", state.message);
+        assert!(
+            state.active_rest.is_some(),
+            "{transport:?}: {:?}",
+            state.message
+        );
         assert_eq!(
             state.message,
             crate::commands::TOWN_BED_HOURS_PROMPT,
@@ -123,4 +129,69 @@ fn playtest_p23_04_a_mounted_party_on_an_inn_bed_gets_the_hours_prompt() {
         );
     }
     let _ = std::fs::remove_dir_all(dir);
+}
+
+/// Playtest P23-10, the row-gluing half. `combat.md §11.1`: the standing
+/// hazard "reuses the same result narrator with **no newline before it at
+/// all**", so `Avatar hit!` starts a row of its own only because the previous
+/// result (`commands.md §8`'s `Won't budge!\n`, Jimmy's `No lock!`) closed its
+/// row. The transcript had it right; the message slot the text frame repaints
+/// read `No lock!Avatar hit!`.
+#[test]
+fn playtest_p23_10_a_combat_print_on_a_fresh_row_is_not_glued_in_the_slot() {
+    let mut state = combat_ai_turn_state(8, 5);
+    state.emit_message_line("No lock!");
+    state.combat_transcript_row_open = false;
+
+    state.emit_combat_print("Avatar hit!\n");
+
+    assert_eq!(state.message, "No lock!\nAvatar hit!\n");
+    let rows = p4combat_rows_text(&state);
+    assert_eq!(
+        rows[rows.len() - 2..],
+        ["No lock!", "Avatar hit!"],
+        "rows: {rows:?}"
+    );
+
+    // A print that continues an open row still joins it, in both views.
+    let mut open = combat_ai_turn_state(8, 5);
+    open.emit_combat_print("Aim! ");
+    open.emit_combat_print("Nothing!\n");
+    assert!(
+        open.message.ends_with("Aim! Nothing!\n"),
+        "{:?}",
+        open.message
+    );
+}
+
+/// Playtest P23-10, the Ready half. `inventory.md §5` step 2: with nothing to
+/// ready, R "prints the normal \"nothing to ready\" refusal and exits", and
+/// the turn banner is reprinted under it. The transcript had both; the slot
+/// the text frame repaints held only the banner.
+#[test]
+fn playtest_p23_10_combat_ready_with_an_empty_pack_keeps_its_refusal_in_the_slot() {
+    let game_dir = std::path::Path::new(".");
+    let mut state = combat2b_two_member_state();
+    state.equipment_stock = [0; EQUIPMENT_COUNT];
+    state.party_equipment = default_party_equipment(state.party.len());
+
+    handle_play_key_input(&mut state, 'R', "", game_dir).unwrap();
+
+    assert!(state.active_ready.is_none());
+    assert!(
+        state.message.starts_with(READY_EMPTY_HANDED_REFUSAL),
+        "slot: {:?}",
+        state.message
+    );
+    let rows = p4combat_rows_text(&state);
+    let refusal = rows
+        .iter()
+        .position(|row| row == "Thou art empty-")
+        .unwrap_or_else(|| panic!("rows: {rows:?}"));
+    assert_eq!(rows[refusal + 1], "handed!", "rows: {rows:?}");
+    assert_eq!(
+        rows.iter().filter(|row| *row == "Thou art empty-").count(),
+        1,
+        "printed once: {rows:?}"
+    );
 }
