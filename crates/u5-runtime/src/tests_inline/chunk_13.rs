@@ -24551,7 +24551,11 @@ fn parse_sign_records_decodes_directory_and_payload() {
     assert_eq!(lookup_17.body, "Hello");
 
     let lookup_18 = find_sign(&records, 18, 1, 8, 7).expect("scene 18 record present");
-    assert_eq!(lookup_18.body, "A-B*C");
+    // A raw macro is a sixteen-cell fragment (`formats/signs-dat.md §4`).
+    assert_eq!(
+        lookup_18.body,
+        format!("A-B{}C", " ".repeat(SIGN_MACRO_FRAGMENT_CELLS))
+    );
 
     // No matching record returns None.
     assert!(find_sign(&records, 17, 1, 1, 1).is_none());

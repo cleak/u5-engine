@@ -460,7 +460,8 @@ pub use hidden_treasures::{
     HIDDEN_TREASURE_UNDERWORLD_STACK_LAST, HIDDEN_TREASURE_UNDERWORLD_STACK_LEN,
     HIDDEN_TREASURE_UNDERWORLD_STACK_WEAPON_STATE, HIDDEN_TREASURE_UNDERWORLD_STACK_X,
     HIDDEN_TREASURE_UNDERWORLD_STACK_Y, HiddenTreasurePickupClass, HiddenTreasureRule,
-    hidden_treasure_can_stage, hidden_treasure_record_13_accepts, hidden_treasure_record_14_ready,
+    fixed_hidden_treasure_record_is_unreachable_filler, hidden_treasure_can_stage,
+    hidden_treasure_record_13_accepts, hidden_treasure_record_14_ready,
     hidden_treasure_record_15_accepts, hidden_treasure_rule, underworld_stack_record,
 };
 pub use inline_parsers::*;
@@ -851,7 +852,8 @@ pub use shrine_virtue::{
 pub use signs_io::{
     SIGN_BODY_CHARACTER_MASK, SIGN_BODY_END_OF_RECORD, SIGN_BODY_MACRO_FIRST, SIGN_BODY_MACRO_LAST,
     SIGN_BODY_PAUSE_FOR_KEY, SIGN_BODY_ROMAN_FONT_BIT, SIGN_BODY_SEPARATOR_GLYPH_A,
-    SIGN_BODY_SEPARATOR_GLYPH_B, SIGN_NO_RECORD_PLACARD_ROWS, SIGN_SEPARATOR_RUNIC_CODE_POINT,
+    SIGN_BODY_SEPARATOR_GLYPH_B, SIGN_MACRO_FRAGMENT_CELLS, SIGN_MACRO_FRAGMENT_PLACEHOLDER,
+    SIGN_NO_RECORD_PLACARD_ROWS, SIGN_SEPARATOR_RUNIC_CODE_POINT,
     SIGNS_DAT_ALIAS_BRIDGE_LEN, SIGNS_DAT_FILE, SIGNS_DAT_RECORD_HEADER_LEN,
     SIGNS_DAT_READ_WINDOW_BYTES, SIGNS_DAT_SCENE_DIRECTORY_BYTES, SIGNS_DAT_SCENE_DIRECTORY_SLOTS,
     SIGNS_DAT_WINDOW_FILL_BYTE, SignBodyByteKind, SignRecord, decode_sign_payload, find_sign,
@@ -1257,4 +1259,5 @@ mod tests {
     include!("tests_inline/spec312.rs");
     include!("tests_inline/playfix21_misc21.rs");
     include!("tests_inline/playfix22_rest22.rs");
+    include!("tests_inline/playfix22_misc22.rs");
 }

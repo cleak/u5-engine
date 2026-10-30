@@ -10,10 +10,10 @@
 //! - `0x00` ends the record;
 //! - raw `0x0D` becomes a [`crate::text_hold`] wait-key marker: it "switches
 //!   to the Roman font and waits for a key";
-//! - raw `0x29..=0x31` decoration-fragment bytes are emitted as a single ASCII
-//!   sentinel character because the resident macro pool is not in the public
-//!   spec; consumers that need the original glyph must resolve fragments at
-//!   render time;
+//! - raw `0x29..=0x31` decoration-fragment bytes print one fragment; "all
+//!   nine fragments are sixteen cells wide", but their glyphs are not in the
+//!   public spec (§9), so each is emitted as sixteen blank runic cells
+//!   ([`SIGN_MACRO_FRAGMENT_CELLS`]) that keep the rows after it aligned;
 //! - raw `0x26` and `0x27` divider bytes both print the runic `l` bar (`'-'`
 //!   in the plain-text view);
 //! - every other byte prints its low seven bits, in the runic font when its
@@ -93,6 +93,15 @@ pub const SIGN_BODY_LINE_FEED: u8 = 0x0A;
 pub const SIGN_BODY_MACRO_FIRST: u8 = 0x29;
 /// `formats/signs-dat.md §4` last byte in the macro range.
 pub const SIGN_BODY_MACRO_LAST: u8 = 0x31;
+/// `formats/signs-dat.md §4` step 2: each macro "prints one NUL-terminated
+/// decoration fragment from a small resident pool; all nine fragments are
+/// sixteen cells wide". A single-cell stand-in shifted every following row
+/// of a framed sign by one cell per macro (playtest P22-07).
+pub const SIGN_MACRO_FRAGMENT_CELLS: usize = 16;
+/// The cell drawn for each of a fragment's sixteen cells. §9 leaves "the
+/// exact resident decoration fragments" a visual-parity boundary, so the
+/// cells are blank rather than guessed glyphs.
+pub const SIGN_MACRO_FRAGMENT_PLACEHOLDER: u8 = b' ';
 /// `formats/signs-dat.md §4` first separator-glyph byte (`0x26`).
 /// Shipped records pair this with `SIGN_BODY_SEPARATOR_GLYPH_B` as
 /// a decorative divider; both render the same separator glyph.
@@ -345,7 +354,11 @@ pub fn decode_sign_payload(bytes: &[u8]) -> String {
                 out.push(char::from(crate::text_hold::TEXT_HOLD_WAIT_KEY_MARKER))
             }
             SIGN_BODY_SEPARATOR_GLYPH_A | SIGN_BODY_SEPARATOR_GLYPH_B => out.push('-'),
-            SIGN_BODY_MACRO_FIRST..=SIGN_BODY_MACRO_LAST => out.push('*'),
+            SIGN_BODY_MACRO_FIRST..=SIGN_BODY_MACRO_LAST => {
+                for _ in 0..SIGN_MACRO_FRAGMENT_CELLS {
+                    out.push(char::from(SIGN_MACRO_FRAGMENT_PLACEHOLDER));
+                }
+            }
             // Every other byte prints its low seven bits; `0x8D` is a
             // carriage return, not a pause (see [`sign_payload_rendered`]).
             _ => match byte & SIGN_BODY_CHARACTER_MASK {
@@ -384,7 +397,14 @@ pub fn sign_payload_rendered(bytes: &[u8]) -> crate::tlk_runner::TlkRenderedText
             SIGN_BODY_SEPARATOR_GLYPH_A | SIGN_BODY_SEPARATOR_GLYPH_B => {
                 push(SIGN_SEPARATOR_RUNIC_CODE_POINT, TlkGlyphFont::Runic)
             }
-            SIGN_BODY_MACRO_FIRST..=SIGN_BODY_MACRO_LAST => push(b'*', TlkGlyphFont::Ordinary),
+            // §4 step 2: a macro "switches to the runic font and prints one
+            // NUL-terminated decoration fragment"; every fragment is sixteen
+            // cells wide.
+            SIGN_BODY_MACRO_FIRST..=SIGN_BODY_MACRO_LAST => {
+                for _ in 0..SIGN_MACRO_FRAGMENT_CELLS {
+                    push(SIGN_MACRO_FRAGMENT_PLACEHOLDER, TlkGlyphFont::Runic);
+                }
+            }
             _ => {
                 let font = if byte & SIGN_BODY_ROMAN_FONT_BIT != 0 {
                     TlkGlyphFont::Ordinary
