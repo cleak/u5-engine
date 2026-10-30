@@ -569,11 +569,17 @@ impl PanelPickerRow {
         } else {
             self.selector as char
         };
+        // `inventory.md §4.5` quantity-case table: at the "No quantity"
+        // marker (255) "Neither the quantity nor the selector cell is
+        // emitted; the row prints only its name". R-Ready passes the raw
+        // equipment counter, so the marker reaches this renderer as
+        // `Some(255)` (playtest P22-01).
         let content = match self.quantity {
             None => self.name.clone(),
             Some(count) if self.zero_padded => {
                 format!("{count:02}{selector}{}", self.name)
             }
+            Some(crate::commands::USE_PICKER_NO_QUANTITY) => self.name.clone(),
             Some(0) => format!("--{selector}{}", self.name),
             Some(count) => format!("{count:>2}{selector}{}", self.name),
         };
@@ -617,6 +623,7 @@ impl PanelPickerRow {
         let prefix = match self.quantity {
             None => String::new(),
             Some(count) if self.zero_padded => format!("{count:02}{selector}"),
+            Some(crate::commands::USE_PICKER_NO_QUANTITY) => String::new(),
             Some(0) => format!("--{selector}"),
             Some(count) => format!("{count:>2}{selector}"),
         };

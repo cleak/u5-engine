@@ -8170,7 +8170,14 @@ fn append_inventory_rows(lines: &mut Vec<String>, rows: Vec<String>, cursor: usi
 /// The Z-stats pages' selector cell is the hyphen of the measured reagent row
 /// `4-Sulfur Ash` (`cleak/u5-spec#202`); §4.7 has all four pages share one
 /// row renderer, so the same cell serves the other three.
+///
+/// At the "No quantity" marker (255) §4.5 emits "Neither the quantity nor the
+/// selector cell ... the row prints only its name", and §4.7 names that
+/// "no-quantity form" as part of this shared renderer (playtest P22-01).
 fn z_stats_counted_row(count: u8, name: &str) -> String {
+    if count == crate::commands::USE_PICKER_NO_QUANTITY {
+        return name.to_string();
+    }
     format!("{count:>2}-{name}")
 }
 

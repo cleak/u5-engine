@@ -1257,4 +1257,5 @@ mod tests {
     include!("tests_inline/playfix21_upkeep21.rs");
     include!("tests_inline/spec312.rs");
     include!("tests_inline/playfix21_misc21.rs");
+    include!("tests_inline/playfix22_misc22.rs");
 }
