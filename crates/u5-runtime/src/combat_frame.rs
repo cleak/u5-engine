@@ -1977,8 +1977,9 @@ impl PlayState {
     /// nothing."
     ///
     /// A field record is recognised through
-    /// [`CombatArenaFieldKind::from_kind_byte`], which accepts both the raw
-    /// room-placed ids and this engine's cast-marker kind bytes. Returns
+    /// [`CombatArenaFieldKind::from_kind_byte`], which accepts the
+    /// `0xE8..0xEB` ids that room-placed and cast markers both carry
+    /// (playtest P20-01), and still the `0x33..0x36` dispatch bytes. Returns
     /// how many markers were removed.
     pub fn apply_combat_field_dissolution_pass(&mut self) -> usize {
         let mut removed = 0;

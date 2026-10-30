@@ -20285,6 +20285,12 @@ mod tests {
                 );
             }
         }
+        // The noise may still be all black before the first pass, so pin
+        // the sprite the cell is drawn from: the field tile itself.
+        assert_eq!(
+            state.combat_render_sprite_at(7, 3),
+            Some(0x100 + usize::from(CombatArenaFieldKind::Poison.marker_id()))
+        );
         assert_eq!(
             rgba_pixel(
                 &rgba,
