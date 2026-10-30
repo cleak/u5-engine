@@ -39,3 +39,51 @@ fn spec304_q8_shrine_entry_holds_follow_the_lattice_pacing_rule() {
     assert_eq!(SHRINE_KNEEL_WORLD_STEPS, 46);
     assert_eq!(SHRINE_VIRTUE_QUESTION_WORLD_STEPS, 10);
 }
+
+/// The shrine entry's beat times through the frontend's own pump, in ms after
+/// the `E` key: when the Approach, Kneel and virtue-question records first
+/// reach the message transcript. `karma.md §7` "Pacing rule": the Kneel at
+/// the lattice's 48.7-tick mark rounded to 49 whole ticks, the question on the
+/// sixtieth edge. Pinned to the values the engine had at `2f81f198`, where
+/// `qa/paired/shrine-enter-pacing.tsv` matched stock on every run.
+#[test]
+fn shrine_entry_beat_times_through_the_narration_pump() {
+    let dir = debug_game_dir();
+    fs::write(dir.join(SHRINE_TABLE_FILE), "BRITANNIA 10 20 HONESTY 25\n").unwrap();
+    let mut miscmsg = Vec::new();
+    for index in 0..MISCMSG_DAT_RECORDS {
+        let record = match index {
+            MISCMSG_SHRINE_ENTRY_NARRATION => "\nApproach placeholder.\n\n".to_string(),
+            MISCMSG_SHRINE_KNEEL_NARRATION => "Kneel placeholder.\n\n".to_string(),
+            MISCMSG_SHRINE_VIRTUE_QUESTION => "Question placeholder?\n\n:".to_string(),
+            _ => format!("rec{index}"),
+        };
+        miscmsg.extend_from_slice(record.as_bytes());
+        miscmsg.push(0);
+    }
+    fs::write(dir.join(MISCMSG_DAT_FILE), miscmsg).unwrap();
+    let mut grid = open_world_grid();
+    grid[world_cell_index(10, 20)] = SHRINE_MARKER_TILE;
+    let mut state = britannia_state(grid, 10, 20);
+
+    handle_play_key_input(&mut state, 'E', "", &dir).unwrap();
+    let shown = |state: &PlayState, text: &str| {
+        state.message_transcript.iter().any(|entry| entry.text == text)
+            || state.message.contains(text)
+    };
+    let mut beats: [Option<u32>; 3] = [None; 3];
+    let texts = ["Approach placeholder.", "Kneel placeholder.", "Question placeholder?"];
+    for ms in 0..10_000u32 {
+        state.advance_staged_narration_to(f64::from(ms) / 1000.0);
+        for (slot, text) in beats.iter_mut().zip(texts) {
+            if slot.is_none() && shown(&state, text) {
+                *slot = Some(ms);
+            }
+        }
+    }
+    eprintln!("shrine beat ms after E: {beats:?}");
+    // 49 ticks = 2691.0 ms, 60 ticks = 3295.6 ms; the pump releases on the
+    // first whole-ms reading at or past each due time.
+    assert_eq!(beats, [Some(0), Some(2692), Some(3296)]);
+    let _ = fs::remove_dir_all(dir);
+}
