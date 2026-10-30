@@ -6973,6 +6973,14 @@ fn handle_combat_key_input(state: &mut PlayState, key: char, suffix: &str) -> Pl
             ) && !state.combat_active
             {
                 state.leave_last_transcript_row_open();
+                // The world prompt that follows closes that row, so the
+                // arena's own column flag must not keep describing it. The
+                // dungeon room setup prints no banner to reset it, and the
+                // next fight's first turn banner spent its leading newline
+                // closing this long-gone row, losing `dungeon-mode.md §8.1`'s
+                // blank row under `Entering room...` (playtest P20-02, the
+                // Escape twin of P16-09 above).
+                state.combat_transcript_row_open = false;
             }
         }
     } else if matches!(

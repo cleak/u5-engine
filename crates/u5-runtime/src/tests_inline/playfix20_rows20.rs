@@ -149,3 +149,48 @@ fn p20_07_the_starving_warning_is_not_joined_to_the_pending_result_with_a_space(
     );
     let _ = fs::remove_dir_all(dir);
 }
+
+/// Playtest P20-02. `combat.md §14`: the accepted Escape prints `Escape!`
+/// and "appends no newline after it", so the world prompt that follows
+/// closes that row. `dungeon-mode.md §8.1` then gives a later room fight
+/// "`Entering room...`, combat's blank row, a word-wrapped banner", and
+/// `text-output.md §6` makes that later feed unconditional. The arena's
+/// column flag outlived the Escape row, and the dungeon room setup prints no
+/// banner to reset it, so the next fight's first banner lost its blank row.
+#[test]
+fn p20_02_an_accepted_escape_leaves_no_open_arena_row_for_the_next_fight() {
+    let game_dir = std::path::Path::new(".");
+    let mut state = world_state(open_world_grid(), 10, 20);
+    state
+        .active_objects
+        .resize(OOL_SLOTS, ActiveObject::empty());
+    let mut combat_objects = vec![ActiveObject::empty(); OOL_SLOTS];
+    combat_objects[0] = ActiveObject {
+        type_byte: 0x80,
+        tile: 0x80,
+        x: 5,
+        y: 5,
+        ..ActiveObject::empty()
+    };
+    let mut combat_actors = [CombatActorDescriptor::empty(); COMBAT_ACTOR_SLOTS];
+    combat_actors[0] =
+        CombatActorDescriptor::from_row([20, 1, COMBAT_ACTOR_FLAG_SELECTABLE_80, 0, 0, 0, 5, 5]);
+    state
+        .enter_combat_frame(combat_objects, combat_actors)
+        .unwrap();
+    state.combat_frame_snapshot.as_mut().unwrap().exit_announced = true;
+    state.pending_combat_actor_slot = Some(0);
+
+    handle_play_key_input(&mut state, '\u{1b}', "", game_dir).unwrap();
+    state.flush_message_slot();
+    assert!(!state.combat_active, "the Escape was accepted");
+    assert!(
+        p20_rows(&state).iter().any(|row| row.ends_with("Escape!")),
+        "{:?}",
+        p20_rows(&state)
+    );
+    assert!(
+        !state.combat_transcript_row_open,
+        "the world prompt closes the Escape row, not the next fight's banner"
+    );
+}
