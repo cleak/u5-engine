@@ -706,8 +706,11 @@ impl EndgameState {
                 .and_then(|messages| messages.rite_messages().get(index as usize))
                 .map(|message| {
                     if index == 1 && self.cinematic.rite_lead_in_visible {
+                        // `§5.1`: "exactly one blank row before it and one
+                        // after". Record 3 leaves its row open, so the first
+                        // feed closes that row and the second is the blank.
                         format!(
-                            "\n{}\n\n{}",
+                            "\n\n{}\n\n{}",
                             crate::endgame_cinematic::ENDGAME_RITE_LEAD_IN,
                             message
                         )
@@ -1698,17 +1701,26 @@ impl PlayState {
             self.advance_endgame_terminal_tableau_jitter_call();
             return true;
         }
+        let lead_in_was_visible = self
+            .endgame
+            .as_ref()
+            .is_some_and(|endgame| endgame.cinematic.rite_lead_in_visible);
         let advanced_rite_pause = self
             .endgame
             .as_mut()
             .is_some_and(|endgame| endgame.cinematic.advance_rite_pause_tick(true));
         if advanced_rite_pause {
             self.animation.tick_static_tiles();
-            self.message = self
-                .endgame
-                .as_ref()
-                .map(|endgame| endgame.current_cinematic_text())
-                .unwrap_or_default();
+            // Only the pause's last tick prints (`He says:` and the second
+            // page); the ticks before it leave record 3 where it is.
+            if !lead_in_was_visible
+                && self
+                    .endgame
+                    .as_ref()
+                    .is_some_and(|endgame| endgame.cinematic.rite_lead_in_visible)
+            {
+                self.publish_endgame_cinematic_beat();
+            }
             return true;
         }
         let advanced = self
@@ -1716,11 +1728,7 @@ impl PlayState {
             .as_mut()
             .is_some_and(|endgame| endgame.advance_cinematic_frame_operation());
         if advanced {
-            self.message = self
-                .endgame
-                .as_ref()
-                .map(|endgame| endgame.current_cinematic_text())
-                .unwrap_or_default();
+            self.publish_endgame_cinematic_beat();
         }
         advanced
     }
@@ -2665,14 +2673,46 @@ impl PlayState {
                     // ([`crate::endgame_cinematic::EndgameCinematic`]). A
                     // file without rite records opens on the throne tableau,
                     // which has no prose of its own.
-                    self.message = self
-                        .endgame
-                        .as_ref()
-                        .map(EndgameState::current_cinematic_text)
-                        .unwrap_or_default();
+                    self.publish_endgame_cinematic_beat();
                     return true;
                 }
             }
+        }
+    }
+
+    /// Put the current cinematic beat's text in the message slot. A victory
+    /// rite page is a print into the ordinary scrolling message window
+    /// (`endgame.md §3.1`, `§5.1`), so it goes onto the transcript beneath
+    /// the page before it; overwriting the unflushed slot dropped record 3
+    /// and then the `He says:` page from the history (playtest P21-04).
+    /// Other beats keep their plain slot write.
+    fn publish_endgame_cinematic_beat(&mut self) {
+        let Some(endgame) = self.endgame.as_ref() else {
+            self.message.clear();
+            return;
+        };
+        let text = endgame.current_cinematic_text();
+        if !matches!(
+            endgame.cinematic.step,
+            crate::endgame_cinematic::EndgameCinematicStep::RiteMessage(_)
+        ) || text.is_empty()
+        {
+            self.message = text;
+            return;
+        }
+        // The waiting branch's record-10 pattern: commit what the slot
+        // holds, then print the page as a new emission.
+        self.flush_message_slot();
+        self.message = text.clone();
+        self.message_flushed.clear();
+        self.flush_message_slot();
+        // The page is one whole print, so its own last byte is where it
+        // leaves the cursor: record 3 stops mid-row (the lead-in's first
+        // feed closes that row), and records 4..9 close theirs.
+        if text.ends_with('\n') {
+            self.close_message_row();
+        } else {
+            self.leave_last_transcript_row_open();
         }
     }
 
@@ -3150,7 +3190,7 @@ impl PlayState {
                         self.message = state.current_cinematic_text();
                     } else {
                         state.advance_cinematic();
-                        self.message = state.current_cinematic_text();
+                        self.publish_endgame_cinematic_beat();
                     }
                     return MoveOutcome::Observed;
                 }

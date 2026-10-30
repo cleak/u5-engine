@@ -167,15 +167,13 @@ pub const fn is_provision_decrement_hour(hour: u8) -> bool {
     matches!(hour, 6 | 12 | 18)
 }
 
-/// `catalogs/quest-graph.md §5`: returns `true` when every
-/// Shadowlord slot holds the vanquished sentinel, which is the
-/// Doom-entrance gate. Caller supplies the three save-backed
-/// slot bytes in slot order: Falsehood, Hatred, Cowardice.
+/// `catalogs/quest-graph.md §5`: the Doom-entrance gate. "The entrance
+/// check ANDs the three slot bytes together and admits the party only when
+/// the result still has the high bit set", so any high-bit value reads as
+/// vanquished (`saved-gam.md` `0x0322..0x0324`). Caller supplies the three
+/// save-backed slot bytes in slot order: Falsehood, Hatred, Cowardice.
 pub const fn all_shadowlords_vanquished(slots: [u8; 3]) -> bool {
-    let s0 = slots[0] == SHADOWLORD_HIDEOUT_VANQUISHED;
-    let s1 = slots[1] == SHADOWLORD_HIDEOUT_VANQUISHED;
-    let s2 = slots[2] == SHADOWLORD_HIDEOUT_VANQUISHED;
-    s0 && s1 && s2
+    (slots[0] & slots[1] & slots[2]) & 0x80 != 0
 }
 
 /// `catalogs/quest-graph.md §5` Shadowlord-name vocabulary in slot

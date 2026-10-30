@@ -1789,6 +1789,19 @@ fn shadowlord_helpers_track_living_vanquished_and_all_done() {
 }
 
 #[test]
+fn doom_gate_reads_any_high_bit_slot_as_vanquished() {
+    // quest-graph.md §5: the entrance check ANDs the three slot bytes and
+    // admits the party when the result keeps the high bit (playtest P21-01).
+    let mut state = test_state(open_grid(), 5, 5);
+    state.shadowlord_hideouts = [0x80, 0x80, 0x80];
+    assert!(state.all_shadowlords_vanquished());
+    state.shadowlord_hideouts = [0xFE, 0x81, 0xC0];
+    assert!(state.all_shadowlords_vanquished());
+    state.shadowlord_hideouts = [0xFE, 0x01, 0xC0];
+    assert!(!state.all_shadowlords_vanquished());
+}
+
+#[test]
 fn stonegate_entry_presentation_uses_sceptre_and_living_shadowlord_slots() {
     let mut state = test_state(open_grid(), 5, 5);
     state.area = Area::Town {

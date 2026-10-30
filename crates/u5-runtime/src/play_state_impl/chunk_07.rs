@@ -2343,11 +2343,16 @@ impl PlayState {
             .is_some_and(Self::shadowlord_slot_is_vanquished)
     }
 
+    /// `quest-graph.md §5`: the Doom entrance check "ANDs the three slot
+    /// bytes together and admits the party only when the result still has
+    /// the high bit set" (`saved-gam.md` `0x0322..0x0324`: "Doom entry ...
+    /// treat[s] high-bit-set values as vanquished"), playtest P21-01.
     pub fn all_shadowlords_vanquished(&self) -> bool {
-        self.shadowlord_hideouts
-            .iter()
-            .copied()
-            .all(Self::shadowlord_slot_is_vanquished)
+        let mut slots = [0u8; 3];
+        for (slot, value) in slots.iter_mut().zip(self.shadowlord_hideouts.iter()) {
+            *slot = *value;
+        }
+        all_shadowlords_vanquished(slots)
     }
 
     pub fn vanquish_shadowlord(&mut self, index: usize) -> bool {
@@ -3209,31 +3214,37 @@ impl PlayState {
         scene: Scene,
         floor: i8,
     ) -> Option<TownFireSourceEntry> {
-        for dy in -1isize..=1 {
-            for dx in -1isize..=1 {
-                if dx == 0 && dy == 0 {
-                    continue;
-                }
-                let x = self.player.x as isize + dx;
-                let y = self.player.y as isize + dy;
-                if !(0..32).contains(&x) || !(0..32).contains(&y) {
-                    continue;
-                }
-                let x = x as usize;
-                let y = y as usize;
-                let tile = self.grid[y * 32 + x];
-                let Some(direction) = town_cannon_tile_fire_direction(tile) else {
-                    continue;
-                };
-                return Some(TownFireSourceEntry {
-                    scene,
-                    floor,
-                    x,
-                    y,
-                    direction,
-                    expected_tile: Some(tile),
-                });
+        // `town-mode.md §13`: Fire's source test is "the same four-neighbour
+        // probe the Fire and Yell commands use", and Yell's probe inspects
+        // "the four cells cardinally adjacent to the party ... in the order
+        // west, south, east, north" (`commands.md §11`). A diagonal cannon is
+        // not a source (playtest P21-06).
+        for probe in [
+            Direction::West,
+            Direction::South,
+            Direction::East,
+            Direction::North,
+        ] {
+            let (dx, dy) = probe.delta();
+            let x = self.player.x as isize + dx;
+            let y = self.player.y as isize + dy;
+            if !(0..32).contains(&x) || !(0..32).contains(&y) {
+                continue;
             }
+            let x = x as usize;
+            let y = y as usize;
+            let tile = self.grid[y * 32 + x];
+            let Some(direction) = town_cannon_tile_fire_direction(tile) else {
+                continue;
+            };
+            return Some(TownFireSourceEntry {
+                scene,
+                floor,
+                x,
+                y,
+                direction,
+                expected_tile: Some(tile),
+            });
         }
         None
     }

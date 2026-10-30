@@ -4454,31 +4454,21 @@ impl PlayState {
             return MoveOutcome::Observed;
         }
         let _ = wish;
+        // `view.md §3`: a matching wish in a granting scene prints `Poof!`
+        // and then creates the horse "one cell east of the well caller's X
+        // coordinate at the caller's Y and floor". The spec has no occupancy
+        // refusal, and the allocator evicts rather than fails
+        // (`active-objects.md §4`), so an occupied cell no longer turns the
+        // grant into `No effect...` (playtest P21-05). A cell off the map's
+        // east edge, which no shipped well reaches, creates nothing but keeps
+        // the `Poof!` line.
         let grant_x = self.player.x.saturating_add(1);
         let grant_y = self.player.y;
-        if grant_x >= 32 || self.object_at_current_floor(grant_x, grant_y).is_some() {
-            self.message = format!(
-                "{}\n{WISHING_WELL_NO_EFFECT_LINE}",
-                typed_wish.to_ascii_uppercase()
-            );
-            return MoveOutcome::Observed;
-        }
-        let Some(z) = self.current_floor() else {
-            self.message = format!(
-                "{}\n{WISHING_WELL_NO_EFFECT_LINE}",
-                typed_wish.to_ascii_uppercase()
-            );
-            return MoveOutcome::Observed;
-        };
-        if self
-            .allocate_active_object_slot(horse_purchase_active_object(grant_x, grant_y, z))
-            .is_none()
+        if grant_x < 32
+            && let Some(z) = self.current_floor()
         {
-            self.message = format!(
-                "{}\n{WISHING_WELL_NO_EFFECT_LINE}",
-                typed_wish.to_ascii_uppercase()
-            );
-            return MoveOutcome::Observed;
+            let _ = self
+                .allocate_active_object_slot(horse_purchase_active_object(grant_x, grant_y, z));
         }
 
         self.mark_visibility_dirty();
