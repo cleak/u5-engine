@@ -4034,7 +4034,7 @@ impl PlayState {
             });
         }
 
-        let legal_cells = self.combat_legal_cell_mask();
+        let legal_cells = self.combat_legal_cell_mask_for_mover_class(class);
         // `combat.md §9` "The two classes refused outright": the Reaper and
         // the Mimic leave the movement/teleport arm "before the party-side
         // test, before the class flag, before the suppression tests", so the
@@ -4561,11 +4561,39 @@ impl PlayState {
         &self,
         actors: &[CombatActorDescriptor],
     ) -> [[bool; COMBAT_ARENA_SIDE]; COMBAT_ARENA_SIDE] {
-        let mut legal_cells = build_combat_ai_legal_cell_mask(
-            &self.combat_terrain,
-            actors,
-            is_combat_arena_tile_walkable,
-        );
+        self.combat_legal_cell_mask_over_terrain(actors, is_combat_arena_tile_walkable)
+    }
+
+    /// `combat.md §8.1`/`§12`: the arena-cell acceptance test asks whether
+    /// "this mover may stand there" - "its arena terrain must be passable
+    /// for the parent's own tile". `movement.md §4` gives the Sea Horse,
+    /// Squid, Sea Serpent and Shark run (`0x80..0x8F`) the glyph-restricted
+    /// predicate, and `combat.md §5.4` places them on arena 11's water, so
+    /// those movers take that predicate instead of the foot-style arena test
+    /// (playtest P23-09: with the foot test no water cell was ever legal and
+    /// a melee-only party aboard ship could never end the fight). Every other
+    /// class keeps the shared arena test.
+    pub fn combat_legal_cell_mask_for_mover_class(
+        &self,
+        class: u8,
+    ) -> [[bool; COMBAT_ARENA_SIDE]; COMBAT_ARENA_SIDE] {
+        if combat_class_moves_on_water_glyphs(class) {
+            self.combat_legal_cell_mask_over_terrain(
+                &self.combat_actors,
+                combat_water_glyph_terrain_accepts,
+            )
+        } else {
+            self.combat_legal_cell_mask()
+        }
+    }
+
+    fn combat_legal_cell_mask_over_terrain(
+        &self,
+        actors: &[CombatActorDescriptor],
+        terrain_walkable: fn(u8) -> bool,
+    ) -> [[bool; COMBAT_ARENA_SIDE]; COMBAT_ARENA_SIDE] {
+        let mut legal_cells =
+            build_combat_ai_legal_cell_mask(&self.combat_terrain, actors, terrain_walkable);
         // `combat.md §11` (R649): `0xEB` is "the movement validator's
         // single blocking id", cast or room-placed alike.
         for object in self.active_objects.iter().take(OOL_SLOTS) {
@@ -7739,9 +7767,15 @@ impl PlayState {
         }) {
             return Some(false);
         }
-        Some(is_combat_arena_tile_walkable(
-            self.combat_terrain[destination.y as usize][destination.x as usize],
-        ))
+        let tile = self.combat_terrain[destination.y as usize][destination.x as usize];
+        // `combat.md §8.1`: "whether this mover may stand there" - a
+        // controlled sea creature keeps its own water predicate.
+        if actor_slot >= COMBAT_PARTY_ACTOR_SLOTS
+            && combat_class_moves_on_water_glyphs(actor.owner_target_class)
+        {
+            return Some(combat_water_glyph_terrain_accepts(tile));
+        }
+        Some(is_combat_arena_tile_walkable(tile))
     }
 
     /// `combat.md §8`: the player's command handler reads only the Negate
@@ -9720,7 +9754,7 @@ impl PlayState {
     /// legal-cell mask and the actor's cell itself.
     pub fn combat_ai_teleport_candidate(&mut self, actor_slot: usize) -> Option<(u8, u8)> {
         let actor = *self.combat_actors.get(actor_slot)?;
-        let legal_cells = self.combat_legal_cell_mask();
+        let legal_cells = self.combat_legal_cell_mask_for_mover_class(actor.owner_target_class);
         self.combat_ai_teleport_arm(&legal_cells, actor.x, actor.y, actor.is_fleeing())
     }
 

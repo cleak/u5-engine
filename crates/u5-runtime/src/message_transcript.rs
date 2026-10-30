@@ -441,7 +441,8 @@ impl PlayState {
             }
             self.push_message_entry(*line, false);
         }
-        self.record_combat_print(text);
+        // The echo's first segment always lands on the marker row.
+        self.record_combat_print(text, true);
     }
 
     /// Emit one arena print exactly as the original's per-cell emitter would
@@ -489,7 +490,7 @@ impl PlayState {
             }
             self.push_message_entry(line, false);
         }
-        self.record_combat_print(text);
+        self.record_combat_print(text, row_open);
     }
 
     /// Close a verb echo the combat command handler opened before the round
@@ -519,8 +520,21 @@ impl PlayState {
     /// print beneath" the first rather than instead of it; keeping
     /// `message_flushed` level with it stops the safety-net flush from
     /// recording the same bytes twice.
-    fn record_combat_print(&mut self, text: &str) {
+    fn record_combat_print(&mut self, text: &str, row_open_before: bool) {
         self.combat_transcript_row_open = !text.ends_with('\n');
+        // The slot mirrors the transcript rows above. A print that starts a
+        // fresh row there (the row it would continue was already closed)
+        // must not be glued onto the slot's last line: `combat.md §11.1`'s
+        // standing hazard has "no newline before it at all", and lands on a
+        // row of its own only because the previous result closed its row,
+        // which in the slot read `No lock!Avatar hit!` (playtest P23-10).
+        if !row_open_before
+            && !text.starts_with('\n')
+            && !self.message.is_empty()
+            && !self.message.ends_with('\n')
+        {
+            self.message.push('\n');
+        }
         self.message.push_str(text);
         self.message_flushed = self.message.clone();
     }

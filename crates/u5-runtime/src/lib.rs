@@ -1264,4 +1264,5 @@ mod tests {
     include!("tests_inline/playfix22_misc22.rs");
     include!("tests_inline/playfix23_gate23.rs");
     include!("tests_inline/playfix23_dun23.rs");
+    include!("tests_inline/playfix23_misc23.rs");
 }
