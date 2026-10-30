@@ -37,3 +37,36 @@ fn p20_cast_field_marker_carries_the_e8_field_id() {
         );
     }
 }
+
+/// P20-04: `vehicles.md §5`: a carpet's "X-it requires either a passable tile
+/// under the party or at least one nearby landing-support cell", a support
+/// cell being one whose "visible terrain byte ... is passable for an on-foot
+/// avatar". Molten lava `0x8F` is foot-passable (`tile-catalog.md §5/§6`);
+/// its burning is an underfoot reaction, not a passability rule.
+#[test]
+fn p20_carpet_xit_lands_on_foot_passable_lava() {
+    let mut state = world_state(vec![0x8F; WORLD_CELLS], 5, 5);
+    let carpet = TransportState::Carpet {
+        type_byte: 184,
+        tile: 184,
+    };
+    state.player.transport = carpet;
+    state.sync_player_object();
+    let game_dir = Path::new("");
+
+    assert!(state
+        .vehicle_exit_foot_passable_at(Some(game_dir), 5, 5)
+        .unwrap());
+    assert!(state
+        .vehicle_exit_has_nearby_support(Some(game_dir))
+        .unwrap());
+
+    crate::input_dispatch::handle_play_key_input(&mut state, 'X', "", game_dir).unwrap();
+
+    assert_eq!(state.player.transport, TransportState::Foot);
+    assert!(
+        !state.message.contains("No land nearby!"),
+        "{:?}",
+        state.message
+    );
+}

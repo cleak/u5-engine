@@ -217,7 +217,8 @@ impl PlayState {
         let accepted = match self.player.transport {
             TransportState::Horse { .. } => true,
             TransportState::Carpet { .. } => {
-                nearby_support || self.player_can_land_on_foot(game_dir, current.0, current.1)?
+                nearby_support
+                    || self.vehicle_exit_foot_passable_at(game_dir, current.0, current.1)?
             }
             // `vehicles.md`: the skiff's extra X-Xit rejection is the bridge
             // tile pair underfoot, not deep water. No water tile is rejected -
@@ -261,7 +262,22 @@ impl PlayState {
         if self.vehicle_exit_object_support_at(x, y) {
             return Ok(true);
         }
-        self.player_can_land_on_foot(game_dir, x, y)
+        self.vehicle_exit_foot_passable_at(game_dir, x, y)
+    }
+
+    /// `vehicles.md §5`: a carpet lands on "a passable tile under the party",
+    /// and a support cell is one whose "visible terrain byte ... is passable
+    /// for an on-foot avatar". Passability alone decides it: a cell that
+    /// burns a party on foot (Underworld lava, `tile-catalog.md §5/§6`) is
+    /// still a legal landing, unlike the encounter-placement probe that
+    /// shares [`Self::player_can_land_on_foot`] (playtest P20-04).
+    pub fn vehicle_exit_foot_passable_at(
+        &self,
+        game_dir: Option<&Path>,
+        x: usize,
+        y: usize,
+    ) -> io::Result<bool> {
+        self.player_foot_cell_accepts(game_dir, x, y, false)
     }
 
     pub fn vehicle_exit_object_support_at(&self, x: usize, y: usize) -> bool {
@@ -301,6 +317,16 @@ impl PlayState {
         game_dir: Option<&Path>,
         x: usize,
         y: usize,
+    ) -> io::Result<bool> {
+        self.player_foot_cell_accepts(game_dir, x, y, true)
+    }
+
+    fn player_foot_cell_accepts(
+        &self,
+        game_dir: Option<&Path>,
+        x: usize,
+        y: usize,
+        reject_damaging: bool,
     ) -> io::Result<bool> {
         if self.object_at_current_floor(x, y).is_some() {
             return Ok(false);
@@ -342,7 +368,8 @@ impl PlayState {
                     }
                     if let Some(entry) = self.world_damage_tile_at(game_dir, plane, x, y, tile)? {
                         if !entry.effect.allows_transport(TransportState::Foot)
-                            || entry.effect.damages_transport(TransportState::Foot)
+                            || (reject_damaging
+                                && entry.effect.damages_transport(TransportState::Foot))
                         {
                             return Ok(false);
                         }
