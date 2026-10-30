@@ -91,7 +91,7 @@ fn p21_window_history(state: &PlayState) -> Vec<String> {
     rows
 }
 
-fn p21_row_index(rows: &[String], text: &str) -> usize {
+fn p21_misc_row_index(rows: &[String], text: &str) -> usize {
     rows.iter()
         .rposition(|row| row.contains(text))
         .unwrap_or_else(|| panic!("{text:?} missing from {rows:?}"))
@@ -124,9 +124,9 @@ fn playtest_p21_04_rite_pages_scroll_instead_of_replacing_each_other() {
     state.flush_staged_narration();
     // State B: record 3 scrolled up above the lead-in.
     let rows = p21_window_history(&state);
-    let rite1 = p21_row_index(&rows, "Rite 1");
-    let he_says = p21_row_index(&rows, "He says:");
-    let rite2 = p21_row_index(&rows, "Rite 2");
+    let rite1 = p21_misc_row_index(&rows, "Rite 1");
+    let he_says = p21_misc_row_index(&rows, "He says:");
+    let rite2 = p21_misc_row_index(&rows, "Rite 2");
     assert!(rite1 < he_says && he_says < rite2, "{rows:?}");
     assert_eq!(&rows[rite1 + 1..he_says], [""], "one blank row before `He says:`");
     assert_eq!(&rows[he_says + 1..rite2], [""], "one blank row after it");
@@ -138,10 +138,10 @@ fn playtest_p21_04_rite_pages_scroll_instead_of_replacing_each_other() {
         state.flush_staged_narration();
     }
     let rows = p21_window_history(&state);
-    let rite1 = p21_row_index(&rows, "Rite 1");
-    let he_says = p21_row_index(&rows, "He says:");
-    let rite2 = p21_row_index(&rows, "Rite 2");
-    let rite3 = p21_row_index(&rows, "Rite 3");
+    let rite1 = p21_misc_row_index(&rows, "Rite 1");
+    let he_says = p21_misc_row_index(&rows, "He says:");
+    let rite2 = p21_misc_row_index(&rows, "Rite 2");
+    let rite3 = p21_misc_row_index(&rows, "Rite 3");
     assert!(rite1 < he_says && he_says < rite2 && rite2 < rite3, "{rows:?}");
     let _ = fs::remove_dir_all(dir);
 }
