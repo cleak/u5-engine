@@ -411,24 +411,27 @@ impl PlayState {
 
         let phase = slot_index + 1;
         let slot = self.moonstone_slots[slot_index];
-        // A warp out of a dungeon leaves its loop at the scene-byte check,
-        // before the post-action pass (playtest P21-10).
-        if matches!(self.area, Area::Dungeon { .. })
-            && matches!(
-                gate_travel_destination(slot),
-                GateTravelDestination::Ready { .. }
-            )
-        {
-            self.advance_turn_leaving_dungeon();
-        } else {
-            self.advance_turn();
-        }
         match gate_travel_destination(slot) {
             GateTravelDestination::Ready {
                 target,
                 floor,
                 start,
             } => {
+                // `magic.md`, the Gate travel row (issue #313 Q2, R658): "A
+                // successful Gate Travel reports "no action" to the mode
+                // loop, so the cast turn runs no mode epilogue at all: no
+                // minute, no poison point, no hourly food or starvation
+                // branch, no dawn/dusk pass, no underfoot pass, no door
+                // auto-close tick and no NPC movement". The town and
+                // overworld casts therefore charge nothing here; the first
+                // time-consuming turn at the destination runs its own
+                // epilogue. A dungeon iteration charged its minute at the
+                // loop head, and the warp leaves that loop at its scene-byte
+                // check before the post-action pass (`dungeon-mode.md §4`
+                // step 4), so only the action counter is spent there.
+                if matches!(self.area, Area::Dungeon { .. }) {
+                    self.advance_turn_leaving_dungeon();
+                }
                 self.apply_gate_travel(game_dir, phase, target, floor, start)?;
                 Ok(MoveOutcome::Transition(AreaTransition::GateTraveled {
                     target,
@@ -440,8 +443,12 @@ impl PlayState {
             // Neither the empty slot nor the invalid one has a line of its
             // own; the two sentences that used to stand here named an
             // internal slot number the original never shows.
+            // `magic.md`, the Gate travel row: "Every failure reports
+            // "acted" and runs the full epilogue of the mode it was cast
+            // in", a recovered stone's slot included.
             GateTravelDestination::Empty | GateTravelDestination::Invalid(_) => {
                 let _ = phase;
+                self.advance_turn();
                 self.message = "Failed!".to_string();
                 self.emit_sound_effect(SoundEffect::CastFailure);
                 Ok(MoveOutcome::Blocked)
@@ -3070,12 +3077,6 @@ impl PlayState {
         start: (usize, usize),
     ) -> io::Result<()> {
         let prior_sound_serial = self.sound_effect_serial;
-        // `magic.md §5`: the cast "costs one turn regardless of the spell's
-        // power", and a town turn is one minute plus the upkeep pass that
-        // ends the underfoot handler (`town-mode.md §7` step 4). The clock
-        // half was charged before the warp; the pass is spent here, before
-        // the rebuild discards the town state that owed it (playtest P21-10).
-        self.apply_pending_town_status_provision_pass();
         self.cache_current_world_overlay();
         // `overworld.md §9.2`: from the overworld "the warp writes the outdoor
         // object table to the plane's canonical `.OOL` while Stage B still

@@ -1103,7 +1103,10 @@ pub fn route_smoke_cases() -> Vec<RouteSmokeCase> {
             options: gate_travel_to_underworld.clone(),
             script: &["C1PRV1"],
             expected: RouteSmokeExpectation::World(WorldPlane::Underworld),
-            min_turn: 1,
+            // `magic.md`, the Gate travel row (u5-spec#313 Q2): a
+            // successful Gate Travel reports "no action", so the cast turn
+            // spends no minute and no turn.
+            min_turn: 0,
             expected_frame_kind: "tile viewport",
         },
         RouteSmokeCase {
@@ -1119,7 +1122,10 @@ pub fn route_smoke_cases() -> Vec<RouteSmokeCase> {
             options: gate_travel_to_castle,
             script: &["C1PRV2"],
             expected: RouteSmokeExpectation::Town(castle),
-            min_turn: 1,
+            // `magic.md`, the Gate travel row (u5-spec#313 Q2): a
+            // successful Gate Travel reports "no action", so the cast turn
+            // spends no minute and no turn.
+            min_turn: 0,
             expected_frame_kind: "tile viewport",
         },
         RouteSmokeCase {

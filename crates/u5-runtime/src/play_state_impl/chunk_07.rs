@@ -3989,7 +3989,9 @@ impl PlayState {
     /// `Starving!` waited for the next command, which then ticked twice
     /// (playtest P21-09). `time.md §5`: the starvation warning is printed by
     /// the same branch that applies the damage, so a warning the turn
-    /// produced lands on that turn (playtest P21-10).
+    /// produced lands on that turn. A successful Gate Travel spends no turn
+    /// outside a dungeon (`magic.md`, the Gate travel row; issue #313 Q2), so
+    /// it never reaches this with a pass owed.
     fn finish_transition_turn_upkeep(&mut self, turn_before: u64, outcome: MoveOutcome) {
         if self.turn == turn_before || self.combat_active {
             return;

@@ -2405,8 +2405,8 @@
         assert_eq!((state.player.x, state.player.y), (4, 5));
         assert_eq!(state.spell_charges[GATE_TRAVEL_SPELL_INDEX], 0);
         assert_eq!(state.party[0].mana, 1);
-        assert_eq!(state.turn, 2);
-        assert_eq!(state.clock, GameClock::new(12, 4).unwrap());
+        assert_eq!(state.turn, 1, "issue #313 Q2: the cast itself spends no turn");
+        assert_eq!(state.clock, GameClock::new(12, 2).unwrap());
         // `commands.md §8.1`: the scene key and the cell are a diagnostic.
         assert!(
             state

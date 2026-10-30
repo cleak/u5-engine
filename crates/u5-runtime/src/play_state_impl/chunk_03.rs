@@ -5977,10 +5977,6 @@ impl PlayState {
         // A location entry copies the marker byte, so a preserved raw value
         // rides along while the transport is unchanged (playtest N25).
         self.preserved_transport_marker = previous.preserved_transport_marker;
-        // `time.md §5`: the status pass's warning and its damage are one
-        // branch, so a `Starving!` the outgoing scene's turn owes is printed
-        // for that turn, not dropped with the old state (playtest P21-10).
-        self.pending_hourly_status_message = previous.pending_hourly_status_message.clone();
     }
 
     /// The raw loaded `0x02D6` marker, while the party's transport is still

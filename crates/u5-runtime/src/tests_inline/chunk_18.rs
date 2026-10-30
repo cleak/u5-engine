@@ -1099,8 +1099,8 @@
         assert_eq!(state.spell_charges[GATE_TRAVEL_SPELL_INDEX], 0);
         assert_eq!(state.spell_charges[TIME_STOP_SPELL_INDEX], 9);
         assert_eq!(state.party[0].mana, 1);
-        assert_eq!(state.turn, 1);
-        assert_eq!(state.clock, GameClock::new(12, 2).unwrap());
+        assert_eq!(state.turn, 0, "issue #313 Q2: a successful Gate Travel reports no action");
+        assert_eq!(state.clock, GameClock::new(12, 0).unwrap());
         // `commands.md §8.1` keeps the scene key and the cell out of the
         // message window; they are a diagnostic now.
         assert!(
@@ -1185,7 +1185,7 @@
             }
         );
         assert_eq!((state.player.x, state.player.y), (6, 7));
-        assert_eq!(state.turn, 1);
+        assert_eq!(state.turn, 0);
         // `commands.md §8.1` keeps the scene key and the cell out of the
         // message window; they are a diagnostic now.
         assert!(
@@ -1246,8 +1246,8 @@
         assert_eq!(state.player.transport, TransportState::Foot);
         assert_eq!(state.spell_charges[GATE_TRAVEL_SPELL_INDEX], 0);
         assert_eq!(state.party[0].mana, 1);
-        assert_eq!(state.turn, 1);
-        assert_eq!(state.clock, GameClock::new(12, 1).unwrap());
+        assert_eq!(state.turn, 0, "issue #313 Q2: no town epilogue on the cast turn");
+        assert_eq!(state.clock, GameClock::new(12, 0).unwrap());
         // `commands.md §8.1` keeps the scene key and the cell out of the
         // message window; they are a diagnostic now.
         assert!(

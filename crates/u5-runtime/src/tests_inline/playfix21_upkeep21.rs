@@ -261,18 +261,9 @@ fn playtest_p21_09_town_floor_change_runs_its_turns_upkeep_pass() {
     let _ = fs::remove_dir_all(dir);
 }
 
-/// Playtest P21-10, from a town. `magic.md §5`: a cast "costs one turn
-/// regardless of the spell's power", and the town turn is one minute plus
-/// its upkeep pass. Gate Travel charged the minute and then dropped the pass
-/// with the town state - no poison point, no starvation for that hour.
-#[test]
-fn playtest_p21_10_gate_travel_from_town_spends_its_upkeep_pass() {
-    let dir = debug_game_dir();
-    let mut state = test_state(open_grid(), 5, 5);
-    p21_starving(&mut state, 12, 59);
-    state.party[0].status = b'P';
-    state.spell_charges[GATE_TRAVEL_SPELL_INDEX] = 1;
-    state.party[0].mana = 9;
+fn p21_gate_caster(state: &mut PlayState, charges: u8) {
+    state.spell_charges[GATE_TRAVEL_SPELL_INDEX] = charges;
+    state.party[0].mana = 30;
     state.party[0].level = 8;
     state.moonstone_slots[1] = MoonstoneGateSlot {
         scene: 0,
@@ -280,19 +271,89 @@ fn playtest_p21_10_gate_travel_from_town_spends_its_upkeep_pass() {
         y: 7,
         z: 0,
     };
+}
+
+/// Issue #313 Q2, from a town. `magic.md`, the Gate travel row: "A
+/// successful Gate Travel reports "no action" to the mode loop, so the
+/// cast turn runs no mode epilogue at all: no minute, no poison point, no
+/// hourly food or starvation branch". "Observed on the original, cast from a
+/// town at 12:59 with no food and a poisoned member: phasing to an overworld
+/// slot printed no `Starving!` and cost no hit points on the cast turn, and
+/// the first overworld Pass printed `Starving!` and applied the poison
+/// point". This replaces the P21-10 reading that charged the town upkeep
+/// before the rebuild.
+#[test]
+fn issue_313_gate_travel_from_town_runs_no_upkeep_on_the_cast_turn() {
+    let dir = debug_game_dir();
+    let mut state = test_state(open_grid(), 5, 5);
+    p21_starving(&mut state, 12, 59);
+    state.party[0].status = b'P';
+    p21_gate_caster(&mut state, 1);
 
     handle_play_key_input(&mut state, 'C', "1PRV2", &dir).unwrap();
     assert!(matches!(state.area, Area::World { .. }));
-    assert_eq!(state.clock, GameClock::new(13, 0).unwrap());
+    assert_eq!(state.turn, 0, "no action reported");
+    assert_eq!(state.clock, GameClock::new(12, 59).unwrap(), "no minute");
+    assert_eq!(state.party[0].hp, 60, "no poison point, no starvation");
+    assert!(state.pending_hourly_status_message.is_none());
+    assert!(!state.pending_town_status_provision_pass);
+    assert!(!p21_rows(&state).iter().any(|row| row == STARVATION_WARNING));
+
+    handle_play_key_input(&mut state, ' ', "", &dir).unwrap();
+    assert_eq!(state.clock, GameClock::new(13, 1).unwrap());
     assert!(
         state.party[0].hp <= 60 - 1 - 1,
-        "poison point plus starvation"
+        "the first overworld Pass charges poison and starvation"
     );
-    assert!(state.pending_hourly_status_message.is_none());
     assert!(
         p21_rows(&state).iter().any(|row| row == STARVATION_WARNING),
         "{:?}",
         p21_rows(&state)
+    );
+    let _ = fs::remove_dir_all(dir);
+}
+
+/// Issue #313 Q2, from the overworld. The same no-action result: the cast
+/// turn printed `Starving!` from the overworld's immediate upkeep pass.
+#[test]
+fn issue_313_gate_travel_from_the_overworld_runs_no_upkeep_on_the_cast_turn() {
+    let dir = debug_game_dir();
+    let mut state = britannia_state(open_world_grid(), 5, 5);
+    p21_starving(&mut state, 12, 59);
+    state.party[0].status = b'P';
+    p21_gate_caster(&mut state, 1);
+
+    handle_play_key_input(&mut state, 'C', "1PRV2", &dir).unwrap();
+    assert!(matches!(state.area, Area::World { .. }));
+    assert_eq!((state.player.x, state.player.y), (6, 7), "the warp ran");
+    assert_eq!(state.turn, 0);
+    assert_eq!(state.clock, GameClock::new(12, 59).unwrap());
+    assert_eq!(state.party[0].hp, 60);
+    assert!(!p21_rows(&state).iter().any(|row| row == STARVATION_WARNING));
+    let _ = fs::remove_dir_all(dir);
+}
+
+/// Issue #313 Q2, a failure. `magic.md`, the Gate travel row: "Every failure
+/// reports "acted" and runs the full epilogue of the mode it was cast in";
+/// an empty slot is the ordinary `Failed!` and spends the town turn.
+#[test]
+fn issue_313_failed_gate_travel_from_town_runs_the_full_epilogue() {
+    let dir = debug_game_dir();
+    let mut state = test_state(open_grid(), 5, 5);
+    p21_starving(&mut state, 12, 59);
+    state.party[0].status = b'P';
+    p21_gate_caster(&mut state, 1);
+    state.moonstone_slots[1].scene = MOONSTONE_INVALID_SCENE;
+
+    handle_play_key_input(&mut state, 'C', "1PRV2", &dir).unwrap();
+    assert!(matches!(state.area, Area::Town { .. }));
+    assert_eq!(state.turn, 1);
+    assert_eq!(state.clock, GameClock::new(13, 0).unwrap());
+    assert!(state.party[0].hp <= 60 - 1 - 1);
+    let rows = p21_rows(&state);
+    assert!(
+        p21_row_index(&rows, "Failed!") < p21_row_index(&rows, STARVATION_WARNING),
+        "{rows:?}"
     );
     let _ = fs::remove_dir_all(dir);
 }
