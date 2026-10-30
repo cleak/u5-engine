@@ -7191,8 +7191,10 @@ impl PlayState {
         // pre-effect after the spell's own gate and before the effect.
         self.emit_sound_effect(SoundEffect::SharedVariant { variant: 7 });
 
-        self.advance_turn();
         let _ = self.activate_peer_view_overlay();
+        // `view.md §4`: the overlay's modal wait is inside the cast, so above
+        // ground the turn is owed to its dismissing key (playtest P21-12).
+        self.advance_turn();
         self.message.clear();
         // `magic.md §5.1`: "submitting the name advances to the next row", and
         // Peer prints no completion line, so the overlay's modal wait reads

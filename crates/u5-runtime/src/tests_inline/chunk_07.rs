@@ -198,7 +198,10 @@ fn use_command_routes_inline_spyglass_request_to_night_sky() {
         PlayInputDisposition::Continue
     );
 
-    assert_eq!(world.turn, 1);
+    // `view.md §4.2.2`: the sky's key wait is inside the Use, so the turn is
+    // owed to the dismissing key (playtest P21-03).
+    assert_eq!(world.turn, 0);
+    assert_eq!(world.pending_modal_wait_turn, Some(true));
     assert_eq!(world.gems, 3);
     assert_eq!(
         world.special_items[SPECIAL_ITEM_SPYGLASS_INDEX],
@@ -420,7 +423,8 @@ fn use_command_routes_scrolls_to_item_effects_without_spell_resources() {
         PlayInputDisposition::Continue
     );
     assert_eq!(town.scroll_stock[SCROLL_VIEW_INDEX], 0);
-    assert_eq!(town.turn, 4);
+    // `view.md §4`: owed to the overlay's dismissing key (playtest P21-03).
+    assert_eq!(town.turn, 3);
     assert_eq!(town.message, "View!");
     let overlay = town.active_view_overlay.as_ref().unwrap();
     assert!(overlay.title.starts_with("Peer view of CASTLE:0"));

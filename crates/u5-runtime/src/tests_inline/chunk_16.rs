@@ -1076,8 +1076,11 @@ BRITANNIA 11 21
         assert_eq!(state.gems, 0);
         assert_eq!(state.spell_charges[PEER_SPELL_INDEX], 0);
         assert_eq!(state.party[0].mana, 1);
-        assert_eq!(state.turn, 1);
-        assert_eq!(state.clock, GameClock::new(12, 1).unwrap());
+        // `view.md §4`: the overlay's key wait is inside the cast, so the
+        // turn is owed to its dismissal (playtest P21-12).
+        assert_eq!(state.turn, 0);
+        assert_eq!(state.clock, GameClock::new(12, 0).unwrap());
+        assert_eq!(state.pending_modal_wait_turn, Some(true));
         assert!(state.message.is_empty());
         let overlay = state.active_view_overlay.as_ref().unwrap();
         assert_eq!(
@@ -1092,6 +1095,14 @@ BRITANNIA 11 21
             .unwrap();
         assert_eq!(viewport.cells_wide, LOCAL_VIEW_OVERLAY_SIDE);
         assert_eq!(viewport.cells_high, LOCAL_VIEW_OVERLAY_SIDE);
+
+        // The cast's whole-view flash is a hold that owns the keyboard.
+        state.flush_staged_narration();
+        handle_play_key_input(&mut state, ' ', "", Path::new("")).unwrap();
+        assert!(state.active_view_overlay.is_none());
+        assert_eq!(state.turn, 1);
+        assert_eq!(state.clock, GameClock::new(12, 1).unwrap());
+        assert_eq!(state.pending_modal_wait_turn, None);
     }
 
     #[test]

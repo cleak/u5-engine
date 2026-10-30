@@ -3205,11 +3205,67 @@ impl PlayState {
     /// call, so inside a fight it charges nothing; a cast or a U-Use used
     /// to cost the overworld's two minutes and a turn (playtest G08).
     pub fn advance_turn(&mut self) {
-        if self.combat_active {
+        if self.combat_active || !self.top_down_turn_charge_proceeds(true) {
             return;
         }
         let minutes = self.turn_minute_increment();
         self.advance_turn_with_minutes(minutes);
+    }
+
+    /// The gate in front of an overworld or town command's ordinary turn
+    /// charge. Returns whether the charge runs now.
+    ///
+    /// * **A modal wait still open.** `view.md §4`: the local View overlay
+    ///   "waits for a keypress" inside LOOKOBJ, and `§4.2.2` has the sky
+    ///   renderer "busy-wait until any key is available" inside its handler;
+    ///   `karma.md §7.1` asks the restoration's four questions inline inside
+    ///   the Yell handler. The mode loop's per-turn block - the clock, the
+    ///   status pass with its `Starving!`, Rough seas, the walkers and any
+    ///   contact - runs "When the dispatcher returns" (`town-mode.md §7`
+    ///   step 4; `overworld.md §5` step 6), so a charge made while one of
+    ///   those waits is open is owed to its close
+    ///   ([`Self::settle_modal_wait_turn`]) (playtest P21-03, P21-07,
+    ///   P21-12).
+    fn top_down_turn_charge_proceeds(&mut self, tick_doors: bool) -> bool {
+        if self.combat_active {
+            return true;
+        }
+        match self.area {
+            Area::World { .. } | Area::Town { .. } => {}
+            Area::Dungeon { .. } => return true,
+        }
+        if self.top_down_modal_wait_open() {
+            self.pending_modal_wait_turn = Some(tick_doors);
+            return false;
+        }
+        true
+    }
+
+    /// Whether an overworld or town command is still inside one of the
+    /// modal waits [`Self::top_down_turn_charge_proceeds`] defers to.
+    pub fn top_down_modal_wait_open(&self) -> bool {
+        matches!(self.area, Area::World { .. } | Area::Town { .. })
+            && self.active_view_overlay.is_some()
+    }
+
+    /// Spend the turn a modal wait left owed, once that wait has ended:
+    /// the clock and then the mode's post-action pass, exactly as the
+    /// command's own charge would have run them. Returns whether it ran.
+    pub fn settle_modal_wait_turn(&mut self, game_dir: &Path) -> io::Result<bool> {
+        if self.top_down_modal_wait_open() {
+            return Ok(false);
+        }
+        let Some(tick_doors) = self.pending_modal_wait_turn.take() else {
+            return Ok(false);
+        };
+        let turn_before = self.turn;
+        if tick_doors {
+            self.advance_turn();
+        } else {
+            self.advance_turn_without_door_tick();
+        }
+        self.apply_top_down_post_turn_effects_after_turn(turn_before, game_dir)?;
+        Ok(true)
     }
 
     pub fn advance_turn_with_minutes(&mut self, minutes: u8) {
@@ -3229,6 +3285,9 @@ impl PlayState {
     }
 
     pub fn advance_turn_without_door_tick(&mut self) {
+        if !self.top_down_turn_charge_proceeds(false) {
+            return;
+        }
         let minutes = self.turn_minute_increment();
         self.advance_turn_with_minutes_and_door_tick(minutes, false);
     }

@@ -665,6 +665,20 @@ fn handle_play_key_input_inner(
         if sky_row_open {
             state.leave_last_transcript_row_open();
         }
+        // `view.md §4`: the dismissing key ends the command's modal wait, and
+        // only then does the mode loop run the turn the command charged
+        // (playtest P21-03, P21-12).
+        let transcript_rows_before = state.message_transcript.len();
+        let settled = state.settle_modal_wait_turn(game_dir)?;
+        // Whatever that turn printed (`Starving!`, `Rough seas!`) is a
+        // feed-terminated line of its own, so it closes the sky's open row
+        // and leaves the cursor at column 0 of a fresh one. Stated here
+        // rather than inferred from the text.
+        let epilogue_printed = state.message_transcript.len() != transcript_rows_before
+            || (!state.message.is_empty() && state.message != state.message_flushed);
+        if sky_row_open && settled && epilogue_printed {
+            state.close_message_row();
+        }
         return Ok(PlayInputDisposition::Continue);
     }
     if state.active_ready.is_some() {

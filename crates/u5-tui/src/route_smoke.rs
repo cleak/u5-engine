@@ -1515,7 +1515,9 @@ pub fn route_smoke_cases() -> Vec<RouteSmokeCase> {
             options: peer_view,
             script: &["C1QWI"],
             expected: RouteSmokeExpectation::Town(castle),
-            min_turn: 1,
+            // `view.md §4`: the overlay is still waiting for its key, and the
+            // cast's turn is owed to that dismissal (playtest P21-12).
+            min_turn: 0,
             expected_frame_kind: "view overlay",
         },
         // `systems/magic.md §8`: X-Ray (*Wis An Ylem*) is the second caller of

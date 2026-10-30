@@ -2281,8 +2281,10 @@ impl PlayState {
                 // "Both look helpers are silent", so the variant is all this
                 // scroll plays.
                 self.emit_scroll_shared_variant(SCROLL_VIEW_INDEX);
-                self.advance_turn();
                 let _ = self.activate_peer_view_overlay();
+                // `view.md §4`: owed to the overlay's dismissing key above
+                // ground (playtest P21-03).
+                self.advance_turn();
                 self.message = "View!".to_string();
                 MoveOutcome::Observed
             }

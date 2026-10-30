@@ -1027,6 +1027,13 @@ pub struct PlayState {
     /// status pass, walkers - to the moment that handler returns, not to the
     /// moment its prompt opens (playtest P19-03).
     pub pending_look_prompt_turn: bool,
+    /// `view.md §4`/§4.2.2, `karma.md §7.1`: an overworld or town command
+    /// that is still inside a modal wait - a View, Peer or sky overlay
+    /// waiting for its dismissing key, the ruined-shrine restoration's four
+    /// answers - has not returned to the mode loop, so the turn it charges
+    /// is owed until that wait ends (playtest P21-03, P21-07, P21-12).
+    /// `Some(tick_doors)` while owed.
+    pub pending_modal_wait_turn: Option<bool>,
     /// `town-mode.md §7` step 4 / `conversation.md §2`: the same deferral
     /// for an explicit Talk that opened an ordinary conversation. The Talk
     /// dispatcher runs the whole conversation, so the turn epilogue - clock

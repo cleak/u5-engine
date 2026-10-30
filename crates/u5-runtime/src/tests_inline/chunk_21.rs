@@ -1046,8 +1046,10 @@ fn world_look_telescope_routes_to_night_sky() {
     assert_eq!(viewport.cells_wide, SKY_VIEW_COLUMNS);
     assert_eq!(viewport.cells_high, SKY_VIEW_ROWS);
     assert!(viewport.pixels.iter().any(|pixel| *pixel != 0));
-    assert_eq!(state.turn, 1);
-    assert_eq!(state.clock, GameClock::new(20, 2).unwrap());
+    // `view.md §4.2.2`: the sky's key wait is inside the Look, so its turn is
+    // owed to the dismissing key (playtest P21-03).
+    assert_eq!(state.turn, 0);
+    assert_eq!(state.clock, GameClock::new(20, 0).unwrap());
 
     assert_eq!(
         handle_play_key_input(&mut state, ' ', "", &dir).unwrap(),
@@ -1055,6 +1057,7 @@ fn world_look_telescope_routes_to_night_sky() {
     );
     assert!(state.active_view_overlay.is_none());
     assert_eq!(state.turn, 1);
+    assert_eq!(state.clock, GameClock::new(20, 2).unwrap());
     assert!(state.message.is_empty());
     let _ = fs::remove_dir_all(dir);
 }
@@ -1121,7 +1124,9 @@ fn town_look_telescope_enters_the_sky_renderer_instead_of_a_description() {
             .as_ref()
             .is_some_and(|overlay| matches!(overlay.kind, ViewOverlayKind::Sky(_)))
     );
-    assert_eq!(state.turn, 1);
+    // Owed to the sky's dismissing key (playtest P21-03).
+    assert_eq!(state.turn, 0);
+    assert_eq!(state.pending_modal_wait_turn, Some(true));
     let _ = fs::remove_dir_all(dir);
 }
 
