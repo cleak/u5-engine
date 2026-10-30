@@ -6218,9 +6218,13 @@ impl PlayState {
             .position(|item| *item as usize == item_id)
         {
             self.party_equipment[request.party_index][slot] = EQUIPMENT_EMPTY;
-            self.equipment_stock[item_id] = self.equipment_stock[item_id]
-                .saturating_add(1)
-                .min(EQUIPMENT_STOCK_CAP);
+            // `inventory.md §6`: unequip "returns one copy to the shared
+            // equipment counter if that counter is below `99`" - a counter at
+            // or above the cap keeps its value (playtest P23-08: a count of
+            // 149 was clamped down to 99).
+            if r_ready_unequip_returns_stock(self.equipment_stock[item_id]) {
+                self.equipment_stock[item_id] += 1;
+            }
             // `inventory.md` §5.2: "Ordinary successful equip and unequip
             // print **no result message**, no item name echo and no fresh
             // `Item:_` prompt. The picker remains active." The sentence this

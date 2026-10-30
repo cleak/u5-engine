@@ -58,3 +58,33 @@ fn playtest_p23_09_a_shark_swims_toward_the_party_across_arena_water() {
     // A land class keeps the shared arena test, which refuses water.
     assert!(!state.combat_legal_cell_mask_for_mover_class(COMBAT_CLASS_GIANT_RAT)[8][5]);
 }
+
+/// Playtest P23-08. `inventory.md §6`, "Already readied by this character":
+/// R-Ready "clears the first matching readied slot, then returns one copy to
+/// the shared equipment counter if that counter is below `99`". Unreadying a
+/// Chain Coif from a counter of 149 cut it to 99, destroying fifty coifs.
+#[test]
+fn playtest_p23_08_unready_leaves_a_counter_at_or_above_99_unchanged() {
+    let coif = crate::EQUIPMENT_SHORT_LABELS
+        .iter()
+        .position(|label| *label == "Chain Coif")
+        .expect("published short label");
+    for (before, after) in [(149u8, 149u8), (99, 99), (254, 254), (98, 99), (0, 1)] {
+        let mut state = test_state(open_grid(), 1, 1);
+        state.party_strengths = vec![99];
+        state.party_equipment = default_party_equipment(state.party.len());
+        state.party_equipment[0][0] = coif as u8;
+        state.equipment_stock[coif] = before;
+
+        state.ready_equipment(InlineReadyRequest {
+            party_index: 0,
+            item_id: coif,
+        });
+
+        assert!(
+            state.party_equipment[0].iter().all(|slot| *slot == EQUIPMENT_EMPTY),
+            "the coif is unreadied from {before}"
+        );
+        assert_eq!(state.equipment_stock[coif], after, "counter from {before}");
+    }
+}
