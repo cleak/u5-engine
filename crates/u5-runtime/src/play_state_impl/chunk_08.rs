@@ -197,7 +197,13 @@ impl PlayState {
                             self.commit_prompt_reply(&logged_prompt, "");
                             self.leave_last_transcript_row_open();
                             self.charge_tile_command_acted_exit(self.turn);
-                            return Ok(None);
+                            // The cancel's minute owes its epilogue on this
+                            // turn: `town-mode.md §7` step 4 ends the
+                            // underfoot handler with the shared status pass,
+                            // so the poison point and an hour's `Starving!`
+                            // (`time.md §5`) belong here, not to the next
+                            // command (playtest P22-02).
+                            return Ok(Some(MoveOutcome::Blocked));
                         }
                         // `commands.md §3` (issue #300 Q14): `H` is not a
                         // forwarded route, so it "spends the turn on every
