@@ -3208,6 +3208,13 @@ impl PlayState {
                 // `again`): the original reads ` Search-Pass` / `Burning!`
                 // on two rows, and this engine read the echo twice.
                 self.emit_message_line(line);
+                // `town-mode.md`/`overworld.md §5`: the stored notice is
+                // `Burning!\n`, one trailing feed, so its row is closed.
+                // Set for this caller rather than inferred from the bare
+                // literal, or the next command's own leading feed is spent
+                // closing it and its inner blank row is lost (playtest
+                // P20-03).
+                self.message_row_open_mid_line = false;
                 self.diagnostics.push(report);
             }
             // No published line for this effect - and an engineering
@@ -3271,6 +3278,9 @@ impl PlayState {
             // sentence. Multiple failures produce multiple lines in party
             // order."
             self.emit_message_line(OUTDOOR_SWAMP_POISONED_LINE);
+            // `Poisoned!\n`: its trailing feed closes the row (playtest
+            // P20-03, as for `Burning!` above).
+            self.message_row_open_mid_line = false;
             // §8.2: "The ordinary party-upkeep pass follows and charges one
             // HP to each member now Poisoned on that same action. A sleeper
             // who failed is now Poisoned and takes that hit too." `time.md
