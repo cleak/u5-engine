@@ -2407,8 +2407,8 @@ fn dungeon_search_field_reports_feature_without_applying_effect() {
     // `dungeon-mode.md §8.1`: "The field classes reuse the L-Look wording of
     // this section", and L-Look (§12 step 5) names only the exact bytes
     // `0x80..0x83`: the marked `0x89` takes the generic energy-field line,
-    // whose literal is unpublished, so nothing is printed for it.
-    assert_eq!(state.message, "");
+    // `An energy field.` (u5-spec#311 Q4).
+    assert_eq!(state.message, "An energy field.");
     let _ = fs::remove_dir_all(dir);
 }
 

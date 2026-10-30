@@ -1829,18 +1829,21 @@ pub fn dungeon_look_sentence(description: &str) -> String {
 /// L-Look line after `You see:\n`; the caller appends the period. `0xC?`
 /// is the flavour class of [`dungeon_look_description_with_flavour`].
 ///
-/// The field bytes: §12 says `0x80..0x83` "have distinct sleep, poison-gas,
-/// fire, and electric descriptions, while other `0x8?` values share a
-/// generic energy-field description", and publishes none of those five
-/// literals or the record that holds them. `0x80` reuses the top-down Sleep
-/// Field Look text that `formats/tiles.md` does publish; the other four
-/// print nothing until the spec publishes them (a spec question asks), and
-/// callers then print no period either ([`dungeon_look_sentence`]).
+/// The field bytes (u5-spec#311 Q4, 94d228f): "the handler matches the
+/// whole cell byte ...: after `You see:\n` it prints exactly `A sleep
+/// field.\n` for `0x80`, `A poison gas field.\n` for `0x81`, `A wall of
+/// fire.\n` for `0x82` and `An electric field.\n` for `0x83`, and `An energy
+/// field.\n` for every other `0x8?` byte, including the visit-marked
+/// `0x88..0x8B`". These are the dungeon's own capitalised strings, not the
+/// top-down Look name of `formats/tiles.md`. As for every class, the caller
+/// appends the period ([`dungeon_look_sentence`]).
 pub fn dungeon_look_description(tile: u8) -> &'static str {
     let tile = if tile == 0x61 { 0x00 } else { tile };
     match tile {
-        0x80 => "a sleep field",
-        0x81..=0x83 => "",
+        0x80 => "A sleep field",
+        0x81 => "A poison gas field",
+        0x82 => "A wall of fire",
+        0x83 => "An electric field",
         _ => match tile >> 4 {
             0x0 => "a passage",
             0x1 => "an up ladder",
@@ -1850,7 +1853,7 @@ pub fn dungeon_look_description(tile: u8) -> &'static str {
             0x5 => "a fountain",
             0x6 => "a pit",
             0x7 => "an open chest",
-            0x8 => "",
+            0x8 => "An energy field",
             0x9 => "nothing of note",
             0xA | 0xE | 0xF => "a heavy door",
             0xB..=0xD => "a wall",
@@ -1957,7 +1960,7 @@ pub const fn dungeon_search_outcome_line(
 
 pub fn dungeon_search_description(tile: u8) -> &'static str {
     // `dungeon-mode.md §8.1` "Search outcomes": "The field classes reuse the
-    // L-Look wording of this section" - `a sleep field`, not the bare effect
+    // L-Look wording of this section" - `A sleep field`, not the bare effect
     // label (playtest K22).
     if dungeon_field_effect(tile).is_some() {
         return dungeon_look_description(tile);

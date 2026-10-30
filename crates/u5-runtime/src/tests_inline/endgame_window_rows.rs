@@ -86,6 +86,9 @@ fn endgame_window_walked_in_state() -> PlayState {
     state.emit_message_line("Avatar, armed\nwith bare hands:");
     state.emit_command_echo_line("North");
     state.enter_endgame_with_messages(Some(endgame_window_synthetic_messages()));
+    // What the walked-in contact owes the first entry frame (u5-spec#311 Q5).
+    state.endgame.as_mut().unwrap().entry_absorption_line =
+        Some(crate::combat_absorbed_message("Avatar"));
     state.endgame_entry_redraw_pending = true;
     state
 }
@@ -120,11 +123,14 @@ fn endgame_greeting_page_keeps_the_blank_row_under_the_absorption_line() {
     let mut state = endgame_window_walked_in_state();
     endgame_window_settle(&mut state);
     let settled = endgame_window_shell_rows(&state);
-    // The absorption line's literal is unpublished and prints nothing
-    // (`COMBAT_ABSORBED_MESSAGE`), so the greeting is anchored on its own
-    // first row: the greeting's leading feed still leaves one blank above it.
+    // u5-spec#311 Q5: `\nAvatar is absorbed!\n` (wrapped in the sixteen
+    // columns), a blank row, then the greeting.
     let greeting = settled.iter().position(|row| row == "Lord British").unwrap();
-    assert_eq!(settled[greeting - 1], "", "{settled:?}");
+    assert_eq!(
+        &settled[greeting - 3..greeting],
+        ["Avatar is", "absorbed!", ""],
+        "{settled:?}"
+    );
     handle_play_key_input(&mut state, 'y', "", &dir).unwrap();
     let rows = endgame_window_shell_rows(&state);
     assert_eq!(

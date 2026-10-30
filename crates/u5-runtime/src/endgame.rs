@@ -235,6 +235,11 @@ pub struct EndgameState {
     /// `endgame.md §5.2`'s hold between the absorption line and the
     /// tableau, still owed. See [`ENDGAME_ABSORPTION_HOLD_BIOS_TICKS`].
     pub entry_absorption_hold_owed: bool,
+    /// `combat.md` Section 11 (u5-spec#311 Q5): the Doom absorption
+    /// narration the walked-in contact owes the first pumped entry frame -
+    /// `\n`, the dispatched slot's name and ` is absorbed!\n`. `None` for the
+    /// direct entries, which have no absorption.
+    pub entry_absorption_line: Option<String>,
     /// `endgame.md §5.2`'s hold between the last party member settling and
     /// Lord British's greeting, still owed. See
     /// [`ENDGAME_GREETING_HOLD_BIOS_TICKS`].
@@ -475,6 +480,7 @@ impl EndgameState {
             victory_tableau_phase: EndgameVictoryTableauPhase::Inactive,
             greeting_page_pending: false,
             entry_absorption_hold_owed: false,
+            entry_absorption_line: None,
             entry_greeting_hold_owed: false,
             refusal_phase: EndgameRefusalPhase::Inactive,
             victory_staging: EndgameVictoryStagingPhase::Inactive,
@@ -507,6 +513,7 @@ impl EndgameState {
             victory_tableau_phase: EndgameVictoryTableauPhase::Inactive,
             greeting_page_pending: false,
             entry_absorption_hold_owed: false,
+            entry_absorption_line: None,
             entry_greeting_hold_owed: false,
             refusal_phase: EndgameRefusalPhase::Inactive,
             victory_staging: EndgameVictoryStagingPhase::Inactive,
@@ -552,6 +559,7 @@ impl EndgameState {
             victory_tableau_phase: EndgameVictoryTableauPhase::Inactive,
             greeting_page_pending: false,
             entry_absorption_hold_owed: false,
+            entry_absorption_line: None,
             entry_greeting_hold_owed: false,
             refusal_phase: EndgameRefusalPhase::Inactive,
             victory_staging: EndgameVictoryStagingPhase::Inactive,
@@ -1736,8 +1744,14 @@ impl PlayState {
             // completed its own command row, so this print's leading line
             // feed lands on a fresh row and leaves one blank row between
             // the echo and the absorption. `cleak/u5-engine#11`.
-            if let Some(line) = crate::COMBAT_ABSORBED_MESSAGE {
-                self.emit_message_line(format!("\n{line}"));
+            // u5-spec#311 Q5: the line carries its own leading and
+            // trailing feeds (`combat_absorbed_message`).
+            if let Some(line) = self
+                .endgame
+                .as_mut()
+                .and_then(|endgame| endgame.entry_absorption_line.take())
+            {
+                self.emit_message_line(line);
             }
             // `audio.md §8.7` step 2: "The accepted absorption effect prints
             // its actor/narration, **then** plays the action snap: forty
@@ -1755,8 +1769,8 @@ impl PlayState {
             self.emit_sound_effect(SoundEffect::ActionSnap);
             // `endgame.md §5.1`: "The absorption line printed by the
             // final-room effect ends with its own line feed, which closes its
-            // row." The slot's text does not carry that feed, so say so here:
-            // otherwise the greeting's leading feed is spent closing this row
+            // row." The line carries that feed, and the row state is stated
+            // here as well, so it holds whatever the slot printed: otherwise the greeting's leading feed is spent closing this row
             // once the slot is flushed, and the blank row between the two
             // prints vanishes on the greeting's page key - measured
             // 2026-10-16 (`doom-final-room-refusal`, beat `greeting-page`,

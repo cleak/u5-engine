@@ -53,8 +53,8 @@ mod playfix17_zstats17 {
     #[test]
     fn playtest_p17_08_out_of_alphabet_status_and_class_print_nothing() {
         assert_eq!(z_stats_health_line(b'A'), "");
-        // The table's entries are unpublished, so no letter prints a name.
-        assert_eq!(z_stats_health_line(b'G'), "");
+        // u5-spec#311 Q3 publishes the five entries; `A` is not one of them.
+        assert_eq!(z_stats_health_line(b'G'), "Good Health");
 
         let mut state = test_state(open_grid(), 5, 5);
         state.party = vec![PartyMember {
@@ -111,5 +111,36 @@ mod playfix17_zstats17 {
         assert_eq!(cell_byte(&system, 26, 8), Some(b'1'));
         assert_eq!(cell_byte(&system, 24, 9), Some(b'S'));
         assert_eq!(cell_byte(&system, 36, 9), Some(b'd'));
+    }
+
+    /// u5-spec#311 Q3 (`inventory.md §4.7`): the status table is `G` `Good
+    /// Health`, `P` `Poisoned`, `D` `Dead`, `S` `Asleep`, `C` `Charmed`, each
+    /// "printed with centring on, at cursor column 0 of the window spanning
+    /// screen columns 24 to 38 on screen row 2", starting at columns 26, 27,
+    /// 29, 28 and 28.
+    #[test]
+    fn spec311_q3_status_names_sit_centred_on_screen_row_two() {
+        for (letter, name, column) in [
+            (b'G', "Good Health", 26u8),
+            (b'P', "Poisoned", 27),
+            (b'D', "Dead", 29),
+            (b'S', "Asleep", 28),
+            (b'C', "Charmed", 28),
+        ] {
+            assert_eq!(z_stats_health_line(letter), name);
+            let mut state = test_state(open_grid(), 5, 5);
+            state.party[0].status = letter;
+            open_z_stats_page_for_test(&mut state, ZStatsPage::Stats);
+            let system = painted_panel(&state);
+            let painted: Vec<u8> = (24u8..=38)
+                .map(|x| cell_byte(&system, x, 2).unwrap_or(b' '))
+                .collect();
+            let expected = format!(
+                "{}{name}{}",
+                " ".repeat(usize::from(column - 24)),
+                " ".repeat(15 - usize::from(column - 24) - name.len())
+            );
+            assert_eq!(String::from_utf8_lossy(&painted), expected, "status {}", char::from(letter));
+        }
     }
 }

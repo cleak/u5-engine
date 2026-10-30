@@ -1624,8 +1624,9 @@ impl PlayState {
                     // player hears and sees, not text the original prints.
                     // Measured 2026-09-11 (`word-of-power-audio/dosbox-word`):
                     // the original's rows read the uttered-word line, a blank
-                    // row, then `No effect!`. The uttered-word literal is not
-                    // published, so [`WORD_OF_POWER_UTTERED_MESSAGE`] is empty.
+                    // row, then `No effect!`. u5-spec#311 Q1 publishes the
+                    // line as `\nA_word_of_power_is_uttered\n`
+                    // ([`WORD_OF_POWER_UTTERED_MESSAGE`]).
                     self.diagnostics.push(format!(
                         "Yelled {word}, the Word of Power for {}; {}",
                         seal.dungeon,
@@ -6787,8 +6788,11 @@ impl PlayState {
         self.party_roster.first().map_or(0, |record| record.gender)
     }
 
-    /// The name Blackthorn's threat uses for the companion at risk, read
-    /// from the roster the panel draws from.
+    /// The name Blackthorn's threat and execution print, read from the
+    /// roster the panel draws from. `blackthorn.md §5` (u5-spec#311 Q6): "No
+    /// fallback or substitute name exists. Both name sites print the stored
+    /// roster name with no test" - record `1`'s name for the threat, even
+    /// when that member is Dead, and the parked record's for the execution.
     fn blackthorn_victim_display_name(&self, victim: usize) -> String {
         self.party_names
             .get(victim)
@@ -6798,8 +6802,9 @@ impl PlayState {
                     .trim()
                     .to_string()
             })
-            // An empty roster name has no published stand-in, so the threat
-            // names nobody rather than an invented phrase.
+            // The two-member guard means stock play always has the record;
+            // a broken guard "is not part of the contract", so a missing one
+            // prints no name rather than an invented stand-in.
             .unwrap_or_default()
     }
 

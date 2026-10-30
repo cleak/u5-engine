@@ -7657,10 +7657,13 @@ fn validate_route_smoke_case_state(
                 || state.player.y != seal.y
                 || state.word_of_power_seal_flags[word_index] & SAVE_QUEST_TILE_FLAG_HIGH_BIT == 0
                 // `The seal opens.` was engine prose. What the utterance
-                // prints is `WORD_OF_POWER_UTTERED_MESSAGE` (empty until its
-                // literal is published), and an accepted word is distinguished
-                // from a rejected one by the absence of the no-effect tail,
-                // not by a bespoke success sentence.
+                // prints is `WORD_OF_POWER_UTTERED_MESSAGE` (u5-spec#311 Q1),
+                // and an accepted word is distinguished from a rejected one
+                // by the absence of the no-effect tail, not by a bespoke
+                // success sentence.
+                || !state
+                    .message
+                    .contains(u5_runtime::commands::WORD_OF_POWER_UTTERED_MESSAGE.trim())
                 || state
                     .message
                     .contains(u5_runtime::commands::WORD_OF_POWER_NO_EFFECT_TAIL.trim())

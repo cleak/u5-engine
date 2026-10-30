@@ -151,6 +151,43 @@ fn audit_a033_first_threat_names_the_fixed_second_roster_entry() {
     let _ = fs::remove_dir_all(dir);
 }
 
+/// u5-spec#311 Q6 (`blackthorn.md §5`): "No fallback or substitute name
+/// exists. Both name sites print the stored roster name with no test: the
+/// first-wrong-answer threat always prints roster record `1`'s name ...,
+/// even when that member is Dead ..., and the fourth-wrong-answer execution
+/// prints the name of the record it has just parked. The victim is the
+/// second record, counting from record `0`, whose status is not Dead."
+#[test]
+fn spec311_q6_both_blackthorn_name_sites_print_the_stored_roster_name() {
+    let dir = debug_game_dir();
+    let mut state = test_state(open_grid(), 5, 5);
+    state.party.push(audit_g5_companion(1));
+    state.party.push(audit_g5_companion(2));
+    state.party.push(audit_g5_companion(3));
+    state.party[1].status = b'D';
+    state.party[1].hp = 0;
+    audit_g5_named(&mut state, &["Avatar", "Deadman", "Iolo", "Shamino"]);
+    state.begin_blackthorn_audience_capture(&dir).unwrap();
+    while state.active_blackthorn.as_ref().is_some_and(|c| c.current_prompt().is_none()) {
+        state.submit_blackthorn_audience_answer("", &dir).unwrap();
+    }
+    state.submit_blackthorn_audience_answer("wrong", &dir).unwrap();
+    assert!(state.message.ends_with("Deadman die!\" "), "{:?}", state.message);
+    for _ in 0..3 {
+        if state.active_blackthorn.as_ref().is_some_and(|c| c.awaiting_acknowledgement()) {
+            state.submit_blackthorn_audience_answer("", &dir).unwrap();
+        }
+        state.submit_blackthorn_audience_answer("wrong", &dir).unwrap();
+    }
+    state.flush_staged_narration();
+    assert!(
+        state.message.contains("\n\nIolo is sliced in half! "),
+        "{:?}",
+        state.message
+    );
+    let _ = fs::remove_dir_all(dir);
+}
+
 fn audit_g5_audience_tile(state: &PlayState, x: usize, y: usize) -> Option<u8> {
     state
         .blackthorn_audience_map

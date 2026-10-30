@@ -317,7 +317,7 @@
         assert!(view.contains("First-person dungeon view"));
         assert!(view.contains("0: here a passage"));
         assert!(view.contains("1: ahead a wooden chest; left a wall; right a fountain"));
-        assert!(view.contains("2: ahead a sleep field"));
+        assert!(view.contains("2: ahead A sleep field"));
         assert!(!view.contains('$'));
     }
 

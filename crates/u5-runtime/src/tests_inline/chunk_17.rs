@@ -91,8 +91,8 @@
             panel[0],
             format!("  {} Lv-2 Bard", char::from(SAVE_GENDER_MALE_BYTE))
         );
-        // The status-name table is unpublished: the row prints no name.
-        assert_eq!(panel[1].trim(), "");
+        // u5-spec#311 Q3: `Good Health`, starting at screen column 26.
+        assert_eq!(panel[1], "  Good Health");
         assert_eq!(panel[2], "");
         // `Str=`/`__HP:`, `Int=`/`__HM:`, `Dex=`/`__Ex:`, values
         // right-justified in four cells so the last digit lands in the

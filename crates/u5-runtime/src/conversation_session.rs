@@ -1443,13 +1443,17 @@ impl ConversationSession {
     }
 
     /// `conversation.md §7.6`: a `0x84` RECRUIT-SPEAKER in the stream
-    /// recruits the speaking NPC. The code takes no argument, prompts for
-    /// nothing, and reads no input, so all this layer does is decide the
-    /// cap and hand the caller the signal; the reserve-roster scan and
-    /// the record swap belong to the party-state owner.
+    /// recruits the speaking NPC. The code takes no argument and has no
+    /// free-text prompt, so all this layer does is decide the cap and hand
+    /// the caller the signal; the reserve-roster scan and the record swap
+    /// belong to the party-state owner.
     ///
-    /// "If the party is already at the six-member cap the engine prints
-    /// the ... refusal and recruits nobody."
+    /// u5-spec#311 Q2 (R655): "If the party is already at the six-member cap
+    /// the engine prints nothing, first waits for one keystroke through the
+    /// same single-keystroke wait `0x8F` WAIT-KEY uses (any key, value
+    /// discarded, world ticks as for WAIT-KEY), then prints the two-part
+    /// refusal and recruits nobody." The wait is the same hold marker the
+    /// runner leaves for `0x8F`.
     fn absorb_recruit_speaker(
         &mut self,
         run: &TlkRunOutput,
@@ -1464,6 +1468,7 @@ impl ConversationSession {
             return;
         }
         if ctx.party_member_names.len() >= SAVE_PARTY_SIZE_MAX as usize {
+            out.push_plain_text(crate::text_hold::TextHoldKind::WaitKey.marker_str());
             out.push_plain_text(TLK_RECRUIT_SPEAKER_FULL_PARTY_REFUSAL);
             return;
         }
@@ -1991,6 +1996,67 @@ mod tests {
             out.text
                 .contains(TLK_RECRUIT_SPEAKER_FULL_PARTY_REFUSAL.trim_end_matches('\n'))
         );
+    }
+
+    /// u5-spec#311 Q2 (`conversation.md §7.6`, R655): at the six-member cap
+    /// `0x84` prints nothing, waits for one key through the `0x8F` WAIT-KEY
+    /// wait, then prints `"Thou hast no room for me in thy party! ` and
+    /// `Seek me again if one of thy members doth leave`, a hard line feed,
+    /// `thee.`. "Because the shipped response text before `0x84` ends in a
+    /// closing quote and two line feeds ..., the refusal appears as its own
+    /// quoted paragraph ending `thee."` and a blank line."
+    #[test]
+    fn spec311_q2_full_party_refusal_waits_a_key_then_prints_its_own_paragraph() {
+        assert_eq!(
+            TLK_RECRUIT_SPEAKER_FULL_PARTY_REFUSAL,
+            "\"Thou hast no room for me in thy party! Seek me again if one of thy members doth leave\nthee."
+        );
+        let mut answer = enc("Fixture answer.\"");
+        answer.extend([
+            TLK_CODE_LITERAL_NEWLINE,
+            TLK_CODE_LITERAL_NEWLINE,
+            TLK_CODE_RECRUIT_SPEAKER,
+        ]);
+        let raw = vec![
+            enc("Ada"),
+            enc("a quiet smith"),
+            enc("Greetings."),
+            enc("I mend gear."),
+            enc("Farewell."),
+            enc("JOIN"),
+            answer,
+        ];
+        let decoded = [
+            "Ada",
+            "a quiet smith",
+            "Greetings.",
+            "I mend gear.",
+            "Farewell.",
+            "JOIN",
+            "Fixture answer.",
+        ]
+        .map(str::to_string)
+        .to_vec();
+        let party_names: [&[u8]; 6] = [b"AVATAR", b"IOLO", b"SHAMINO", b"DUPRE", b"MARIAH", b"GEOFFREY"];
+        let context = ConversationContext {
+            party_member_names: &party_names,
+            ..ctx()
+        };
+        let mut s = ConversationSession::new(raw, decoded);
+        s.present_greeting(&context);
+
+        let out = s.submit_keyword("join", &context);
+        assert!(!out.recruit_speaker);
+        assert!(!out.ended);
+        let hold = crate::text_hold::TextHoldKind::WaitKey.marker_str();
+        assert_eq!(
+            out.text,
+            format!(
+                "\n\"Fixture answer.\"\n\n{hold}\"Thou hast no room for me in thy party! Seek me again if one of thy members doth leave\nthee.\"\n\n"
+            )
+        );
+        assert_eq!(out.rendered_glyphs.len(), out.text.len());
+        assert_eq!(s.phase, ConversationSessionPhase::AwaitingKeyword);
     }
 
     #[test]

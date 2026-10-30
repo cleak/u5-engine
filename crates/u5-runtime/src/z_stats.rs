@@ -1447,22 +1447,43 @@ pub const Z_STATS_ATTRIBUTE_VALUE_CELLS: usize = 4;
 /// prints `Int=05`, not `Int=5`.
 pub const Z_STATS_ATTRIBUTE_LEFT_DIGITS: usize = 2;
 
-/// The condition line beneath the name on the attribute page.
+/// `inventory.md §4.7` (u5-spec#311 Q3, 94d228f): the status table, in its
+/// stored order - `G` `Good Health`, `P` `Poisoned`, `D` `Dead`, `S`
+/// `Asleep`, `C` `Charmed`. "The names carry no padding and no line feed."
+pub const Z_STATS_STATUS_NAMES: [(u8, &str); 5] = [
+    (b'G', "Good Health"),
+    (b'P', "Poisoned"),
+    (b'D', "Dead"),
+    (b'S', "Asleep"),
+    (b'C', "Charmed"),
+];
+
+/// The condition line beneath the name on the attribute page: the status
+/// table's name for the record's status letter ([`Z_STATS_STATUS_NAMES`]).
 ///
-/// `inventory.md §4.7` keys the name off "the five-entry status table keyed
-/// by the status letter", and §4.2 publishes that alphabet as `G P D S C`,
-/// looked up so that "an out-of-range byte yields no letter rather than a
-/// wrong one". A byte outside it - `A` included - therefore prints nothing
+/// §4.2 publishes the alphabet as `G P D S C`, looked up so that "an
+/// out-of-range byte yields no letter rather than a wrong one", and §4.7
+/// says "What the page shows for a status letter outside these five is not
+/// established", so any other byte - `A` included - prints nothing
 /// (playtest P17-08).
-///
-/// The specification does not publish the five table entries or the
-/// `DATA.OVL` record that holds them, so the clean engine prints no status
-/// name for any letter until it does (a spec question asks for the table or
-/// its record). The row itself, and the centring a status name would get,
-/// are unchanged.
 pub fn z_stats_health_line(status: u8) -> &'static str {
-    let _ = status;
-    ""
+    Z_STATS_STATUS_NAMES
+        .iter()
+        .find(|(letter, _)| *letter == status)
+        .map_or("", |(_, name)| name)
+}
+
+/// `inventory.md §4.7` (u5-spec#311 Q3): "The name is printed with centring
+/// on, at cursor column 0 of the window spanning screen columns 24 to 38 on
+/// screen row 2", by `text-output.md §5`'s rule - `(columns_in_window -
+/// characters_in_line) / 2`, truncating - which puts the five names at
+/// screen columns 26, 27, 29, 28 and 28. Returns the panel row, whose cell
+/// 0 is screen column 24.
+pub fn z_stats_status_name_row(status: u8) -> String {
+    let name = z_stats_health_line(status);
+    let columns = crate::STATS_PANEL_WIDTH;
+    let length = name.chars().count().min(columns);
+    format!("{}{name}", " ".repeat((columns - length) / 2))
 }
 
 /// Rows of the stats panel a Z-stats page body owns: screen rows 1..=9

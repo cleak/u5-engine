@@ -19313,6 +19313,7 @@ fn doom_final_room_successful_dungeon_cbt_combat_enters_endgame_from_absorbable_
     state.active_objects[renderer_slot].x = 5;
     state.active_objects[renderer_slot].y = 2;
     state.emit_message_line("Earlier arena turn");
+    let absorbed_name = crate::input_dispatch::combat_actor_display_name(&state, 0);
     let application = state
         .apply_combat_player_command_with_inputs(0, CombatPlayerCommandInput::Key(' '))
         .expect("committed action beneath Doom marker should dispatch");
@@ -19345,10 +19346,20 @@ fn doom_final_room_successful_dungeon_cbt_combat_enters_endgame_from_absorbable_
         ENDGAME_TABLEAU_WALKABLE_TILE
     );
     state.finish_endgame_entry_presentation();
-    // The absorption line (unpublished, so `None` here) would belong to
-    // the transcript, not the live slot: §4's announcements and §5's
-    // greeting compose onto that slot.
-    assert_eq!(crate::COMBAT_ABSORBED_MESSAGE, None);
+    // u5-spec#311 Q5: the absorption line is `\n`, the dispatched slot's
+    // name and ` is absorbed!\n`. It belongs to the transcript, not the live
+    // slot: §4's announcements and §5's greeting compose onto that slot.
+    assert_eq!(
+        crate::combat_absorbed_message(&absorbed_name),
+        format!("\n{absorbed_name} is absorbed!\n")
+    );
+    assert!(
+        state
+            .message_transcript
+            .iter()
+            .any(|entry| entry.text == format!("{absorbed_name} is absorbed!")),
+        "the absorption names the dispatched slot"
+    );
     assert!(state.message.contains("Welcome back"));
     // §5.1's blocking key read: the greeting is its own page and the
     // question follows on the next one.
@@ -27779,6 +27790,40 @@ fn dungeon_look_prints_the_published_per_class_line() {
         (0xf1, "a heavy door."),
         (0xb0, "a wall."),
         (0xd0, "a wall."),
+    ] {
+        let mut grid = open_dungeon_record();
+        grid[dungeon_cell_index(0, 2, 1)] = tile;
+        let mut state = dungeon_state(grid, 0, 1, 1);
+        state.player.facing = Direction::East;
+        state.torch_counter = 5;
+
+        assert_eq!(state.look_dungeon(), MoveOutcome::Observed);
+        assert_eq!(
+            state.message,
+            format!("{DUNGEON_LOOK_PREAMBLE}{line}"),
+            "{tile:#04x}"
+        );
+    }
+}
+
+/// u5-spec#311 Q4 (`dungeon-mode.md` Section 12 step 5): "after `You
+/// see:\n` it prints exactly `A sleep field.\n` for `0x80`, `A poison gas
+/// field.\n` for `0x81`, `A wall of fire.\n` for `0x82` and `An electric
+/// field.\n` for `0x83`, and `An energy field.\n` for every other `0x8?`
+/// byte, including the visit-marked `0x88..0x8B`".
+#[test]
+fn spec311_q4_dungeon_look_prints_the_field_lines() {
+    for (tile, line) in [
+        (0x80u8, "A sleep field."),
+        (0x81, "A poison gas field."),
+        (0x82, "A wall of fire."),
+        (0x83, "An electric field."),
+        (0x84, "An energy field."),
+        (0x88, "An energy field."),
+        (0x89, "An energy field."),
+        (0x8a, "An energy field."),
+        (0x8b, "An energy field."),
+        (0x8f, "An energy field."),
     ] {
         let mut grid = open_dungeon_record();
         grid[dungeon_cell_index(0, 2, 1)] = tile;

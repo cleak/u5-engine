@@ -2608,10 +2608,14 @@ impl PlayState {
         // is the only way it survives into the dialogue phase; emitting
         // it twice would print it twice. An unarmed absorption keeps it
         // here, where it is the whole of the effect's narration.
+        // u5-spec#311 Q5: the narration names the slot being dispatched,
+        // through the shared actor-name printer, read while it is still in
+        // the arena.
+        let absorbed_line = combat_absorbed_message(
+            &crate::input_dispatch::combat_actor_display_name(self, actor_slot),
+        );
         if !armed_endgame_result {
-            if let Some(line) = COMBAT_ABSORBED_MESSAGE {
-                self.emit_message_line(line);
-            }
+            self.emit_message_line(absorbed_line.clone());
         }
         self.mark_visibility_dirty();
         if armed_endgame_result {
@@ -2650,6 +2654,9 @@ impl PlayState {
                 let tableau_map = snapshot.endgame_tableau_map.clone();
                 self.restore_combat_frame_with_trigger_reconcile(snapshot, true);
                 self.enter_endgame_with_resources(messages, tableau_map);
+                if let Some(endgame) = self.endgame.as_mut() {
+                    endgame.entry_absorption_line = Some(absorbed_line);
+                }
                 self.endgame_absorption_arena = Some(Box::new(arena));
                 // Owe §3 step 2's redraw to the first pumped entry
                 // frame. Only this route has an absorption line to put

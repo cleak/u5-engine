@@ -4709,8 +4709,9 @@ impl PlayState {
             None => z_stats_centred_panel_row(&level_line),
         };
         // Row 2: "Status name alone, centred in columns 24 to 38" - the
-        // panel's fifteen cells; no `Status:` label on the page (R622).
-        rows[1] = z_stats_centred_panel_row(z_stats_health_line(member.status));
+        // panel's fifteen cells; no `Status:` label on the page (R622). The
+        // names and their truncating centring are u5-spec#311 Q3's.
+        rows[1] = crate::z_stats::z_stats_status_name_row(member.status);
         rows[3] = z_stats_attribute_row(
             Z_STATS_STRENGTH_LABEL,
             strength.into(),

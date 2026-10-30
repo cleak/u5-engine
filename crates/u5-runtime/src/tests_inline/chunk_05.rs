@@ -1256,6 +1256,38 @@ fn y_yell_wrong_scene_words_and_names_consume_turn_with_generic_no_effect() {
     assert!(world.message.ends_with(YELL_NO_EFFECT_MESSAGE));
 }
 
+/// u5-spec#311 Q1 (`commands.md` §11.1): "The uttered-word result is the
+/// literal `\nA_word_of_power_is_uttered\n`"; with no qualifying neighbour
+/// "`\nNo_effect!\n` is printed after it ..., so a blank line then separates
+/// the two messages".
+#[test]
+fn spec311_q1_word_of_power_prints_the_uttered_line_then_no_effect() {
+    assert_eq!(
+        crate::commands::WORD_OF_POWER_UTTERED_MESSAGE,
+        "\nA word of power is uttered\n"
+    );
+    assert_eq!(crate::commands::WORD_OF_POWER_NO_EFFECT_TAIL, "\nNo effect!\n");
+    let mut world = world_state(open_world_grid(), 5, 5);
+    world.area = Area::World {
+        plane: WorldPlane::Britannia,
+    };
+    assert_eq!(
+        handle_play_key_input(&mut world, 'Y', "fallax", Path::new("")).unwrap(),
+        PlayInputDisposition::Continue
+    );
+    assert_eq!(world.message, "\nA word of power is uttered\n\nNo effect!\n");
+    let texts: Vec<&str> = world
+        .message_transcript
+        .iter()
+        .map(|entry| entry.text.as_str())
+        .collect();
+    let uttered = texts
+        .iter()
+        .position(|text| *text == "A word of power is uttered")
+        .unwrap_or_else(|| panic!("{texts:?}"));
+    assert_eq!(&texts[uttered + 1..uttered + 3], ["", "No effect!"], "{texts:?}");
+}
+
 #[test]
 fn y_yell_word_of_power_opens_matching_surface_seal_only_at_target() {
     let seal = word_of_power_seal_for_word("FALLAX").unwrap();

@@ -757,15 +757,18 @@ pub const TLK_EMPTY_INPUT_BYE_ECHO: &str = "BYE";
 /// `0x85` demand. Quotes and both trailing line feeds are visible.
 pub const TLK_GOLD_PAYMENT_REFUSAL_MESSAGE: &str = "\"Thou hast not enough gold!\"\n\n";
 
-/// `conversation.md §7.6`: the `0x84` RECRUIT-SPEAKER refusal printed
-/// when the active party is already at the six-member cap. The code
-/// recruits nobody in that case.
-///
-/// The specification paraphrases this refusal but does not publish its
-/// exact literal or the asset record that holds it, so the clean engine
-/// prints nothing here (the refusal still recruits nobody and the stream
-/// still runs on). A spec question asks for the literal or its record.
-pub const TLK_RECRUIT_SPEAKER_FULL_PARTY_REFUSAL: &str = "";
+/// `conversation.md §7.6`, the `0x84` row (u5-spec#311 Q2, 94d228f): the
+/// two-part refusal printed when the active party is already at the
+/// six-member cap; the code recruits nobody. "The first part is `"Thou hast
+/// no room for me in thy party! ` (an opening double quote, the sentence and
+/// one trailing space, no line feed), and the second follows at once as
+/// `Seek me again if one of thy members doth leave`, a hard line feed, then
+/// `thee.` (no closing quote and no trailing line feed)." The closing quote
+/// and two line feeds come from the ordinary record-end framing.
+pub const TLK_RECRUIT_SPEAKER_FULL_PARTY_REFUSAL: &str = concat!(
+    "\"Thou hast no room for me in thy party! ",
+    "Seek me again if one of thy members doth leave\nthee."
+);
 
 /// `conversation.md §7.6`: number of leading characters of a party
 /// member's name that `0x88` ASK-WHO searches the typed line for.

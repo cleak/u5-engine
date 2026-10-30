@@ -622,17 +622,19 @@ pub const READY_BOTH_HANDS_REFUSAL: &str = "Both hands must be free before thou 
 /// `inventory.md` §5.2: "The ring vanish instead prints `\n\nRing
 /// vanishes!\n` and closes without `Done`."
 /// `commands.md` §11.1: a recognised Word of Power "immediately prints the
-/// uttered-word result". The specification describes that result but does
-/// not publish its literal, nor the `DATA.OVL` record that holds it, so this
-/// clean engine prints nothing in its place rather than carrying the text in
-/// source. A spec question asks for the literal or its record; once it is
-/// published, the line (with the blank row above it that a capture showed it
-/// owns) goes here or is read from the asset.
-pub const WORD_OF_POWER_UTTERED_MESSAGE: &str = "";
+/// uttered-word result". Published by u5-spec#311 Q1 (94d228f): "The
+/// uttered-word result is the literal `\nA_word_of_power_is_uttered\n`" -
+/// a line feed, the sentence with no closing punctuation, and a line feed.
+/// It does not repeat the word. After a nonempty input line Yell has already
+/// emitted its own line feed, so the leading feed here is the blank row
+/// between `:WORD` and this line.
+pub const WORD_OF_POWER_UTTERED_MESSAGE: &str = "\nA word of power is uttered\n";
 /// The tail a recognised Word adds when no adjacent cell qualifies
-/// (`commands.md §11.1` step 1; a wrong coordinate adds nothing). Measured in the same capture: a blank row and
-/// `No effect!`.
-pub const WORD_OF_POWER_NO_EFFECT_TAIL: &str = "\n\nNo effect!";
+/// (`commands.md §11.1` step 1; a wrong coordinate adds nothing):
+/// "additionally prints the no-effect result (`\nNo_effect!\n`, after a
+/// blank line; issue #311 Q1 above)". The uttered line's own closing feed
+/// and this literal's leading one make that blank line.
+pub const WORD_OF_POWER_NO_EFFECT_TAIL: &str = "\nNo effect!\n";
 
 /// `commands.md §11.3`, the shared text matcher (u5-spec#298 Q34). Yell's
 /// Shadowlord branch, the Word-of-Power scan (§11.1), the shrine meditation
