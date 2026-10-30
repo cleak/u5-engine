@@ -3989,6 +3989,19 @@ fn apply_paid_inn_rest(state: &mut PlayState, inn: crate::shops::Inn, cost: u16)
     state.sync_player_object();
     state.mark_town_rest_sleepers();
     let hours = state.advance_inn_rest_clock_to_morning();
+    // `time.md §5`: each hour's starvation branch "receives the starvation
+    // warning, and then" takes its damage, and the night's hours pass
+    // between `Zzzzzz....\n\n` and the morning line (`shops.md §8.C`). So
+    // the warnings belong to the night, under the sleep line: left to the
+    // turn's epilogue they printed after `Morning!`, and after a wipe only
+    // under the rescue (playtest P22-04). A final one-minute step leaves its
+    // pass deferred; it is still part of the night.
+    state.apply_pending_town_status_provision_pass();
+    let night_warnings = state
+        .pending_hourly_status_message
+        .take()
+        .map(|warnings| format!("{warnings}\n"))
+        .unwrap_or_default();
     let woke = state.wake_town_rest_sleepers();
     let (recovered_hp, recovered_mana, cured) = state.apply_inn_rest_night_recovery();
     state.clear_and_replace_scheduled_npcs();
@@ -4013,7 +4026,7 @@ fn apply_paid_inn_rest(state: &mut PlayState, inn: crate::shops::Inn, cost: u16)
          {recovered_mana} MP; cured {cured} poisoned member(s); woke {woke} asleep member(s)"
     ));
     format!(
-        "{}\n\n{}",
+        "{}\n\n{night_warnings}{}",
         crate::commands::PAID_INN_REST_SLEEP_LINE,
         crate::commands::PAID_INN_REST_MORNING_LINE
     )

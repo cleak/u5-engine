@@ -164,3 +164,33 @@ fn playtest_p22_03_apparition_turn_starvation_prints_after_the_event() {
     );
     let _ = fs::remove_dir_all(dir);
 }
+
+/// Playtest P22-04. `shops.md §8.C`: `Zzzzzz....\n\n` "followed at morning
+/// by `Morning!\n`", with the clock run forward between them (§8 R), and
+/// `time.md §5`: each hour's branch "receives the starvation warning, and
+/// then" takes its damage. The night's warnings used to print after
+/// `Morning!` - and, after a wipe, only under the rescue.
+#[test]
+fn playtest_p22_04_inn_night_starvation_warnings_precede_morning() {
+    let mut state = pf2_inn_state();
+    state.food = 0;
+    state.clock = GameClock::new(22, 59).unwrap();
+    state.cleanup_previous_hour = 22;
+    pf2_keys(&mut state, &['R', 'Y']);
+    state.flush_message_slot();
+    assert!(state.pending_hourly_status_message.is_none());
+    let rows = pf2_rows(&state);
+    let sleep = pf2_row_index(&rows, crate::commands::PAID_INN_REST_SLEEP_LINE);
+    let morning = pf2_row_index(&rows, crate::commands::PAID_INN_REST_MORNING_LINE);
+    assert_eq!(rows[sleep + 1], "", "{rows:#?}");
+    // 23:00 through 06:00: eight crossings, each warned during the night.
+    assert_eq!(
+        rows[sleep + 2..morning],
+        vec![STARVATION_WARNING.to_string(); 8],
+        "{rows:#?}"
+    );
+    assert!(
+        !rows[morning + 1..].iter().any(|row| row == STARVATION_WARNING),
+        "{rows:#?}"
+    );
+}
