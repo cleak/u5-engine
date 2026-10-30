@@ -1,6 +1,8 @@
 //! PlayOptions + small action enums + moonstone gate helpers + initial overlay cache.
 
 use std::collections::HashMap;
+use std::io;
+use std::path::Path;
 
 use crate::*;
 
@@ -321,6 +323,37 @@ pub fn gate_travel_destination(slot: MoonstoneGateSlot) -> GateTravelDestination
         }
         scene => GateTravelDestination::Invalid(format!("unsupported scene {scene}")),
     }
+}
+
+/// [`gate_travel_destination`] with the location floor checked against the
+/// game directory's floor-page table.
+///
+/// `magic.md`, the Gate travel row: the cast "teleports only if that slot
+/// has a valid saved scene/X/Y/Z destination", and `overworld.md §9.2`
+/// leaves the party on the gate cell when the warp cannot use a slot. Load
+/// does not validate the slot bytes (`formats/saved-gam.md`), so a floor
+/// outside the location's published run reached the scene loader and ended
+/// the program (playtest P23-03). It is now an invalid destination.
+pub fn gate_travel_destination_in(
+    game_dir: &Path,
+    slot: MoonstoneGateSlot,
+) -> io::Result<GateTravelDestination> {
+    let destination = gate_travel_destination(slot);
+    if let GateTravelDestination::Ready {
+        target: PlayTarget::Town(scene),
+        floor,
+        ..
+    } = destination
+    {
+        match resolve_location_floor_page(game_dir, scene, floor) {
+            Ok(_) => {}
+            Err(err) if err.kind() == io::ErrorKind::InvalidInput => {
+                return Ok(GateTravelDestination::Invalid(err.to_string()));
+            }
+            Err(err) => return Err(err),
+        }
+    }
+    Ok(destination)
 }
 
 pub fn moonstone_slot_matches_world(

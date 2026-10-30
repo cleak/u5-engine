@@ -411,7 +411,7 @@ impl PlayState {
 
         let phase = slot_index + 1;
         let slot = self.moonstone_slots[slot_index];
-        match gate_travel_destination(slot) {
+        match gate_travel_destination_in(game_dir, slot)? {
             GateTravelDestination::Ready {
                 target,
                 floor,
