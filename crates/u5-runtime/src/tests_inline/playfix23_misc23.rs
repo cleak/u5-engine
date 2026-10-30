@@ -88,3 +88,39 @@ fn playtest_p23_08_unready_leaves_a_counter_at_or_above_99_unchanged() {
         assert_eq!(state.equipment_stock[coif], after, "counter from {before}");
     }
 }
+
+/// Playtest P23-04. `commands.md §10`, town-family locations: "The dispatcher
+/// first requires the party to be on a bed/inn-style tile ... If it succeeds,
+/// control enters the hours-prompt rest path." `On land or ship!` belongs to
+/// the outdoor/dungeon rest handler; a mounted party on an inn bed got it.
+#[test]
+fn playtest_p23_04_a_mounted_party_on_an_inn_bed_gets_the_hours_prompt() {
+    let dir = crate::test_fixtures::debug_game_dir();
+    std::fs::write(dir.join(TOWN_REST_BED_TABLE_FILE), "CASTLE:0 0 1 1 55\n").unwrap();
+    for transport in [
+        TransportState::Horse {
+            type_byte: 0x12,
+            tile: 0x12,
+        },
+        TransportState::Carpet {
+            type_byte: 0x14,
+            tile: 0x14,
+        },
+    ] {
+        let mut grid = open_grid();
+        grid[32 + 1] = 55;
+        let mut state = test_state(grid, 1, 1);
+        state.clock = GameClock::new(8, 0).unwrap();
+        state.player.transport = transport;
+
+        handle_play_key_input(&mut state, 'H', "", &dir).unwrap();
+
+        assert!(state.active_rest.is_some(), "{transport:?}: {:?}", state.message);
+        assert_eq!(
+            state.message,
+            crate::commands::TOWN_BED_HOURS_PROMPT,
+            "{transport:?}"
+        );
+    }
+    let _ = std::fs::remove_dir_all(dir);
+}

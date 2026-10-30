@@ -70,7 +70,12 @@ impl PlayState {
         // `commands.md §5.5`'s other Hole-up refusal. Camping wants the
         // party on land or aboard a ship; a horse, carpet or skiff is
         // neither, and this engine offered all three the hours prompt.
-        if !self.player.transport.is_foot() {
+        // `commands.md §10`: the town-family dispatcher's only gate is the
+        // bed tile; on a bed "control enters the hours-prompt rest path"
+        // whatever the transport, so this outdoor refusal is not a town one
+        // (playtest P23-04: a mounted party on an inn bed got it).
+        let town_bed = matches!(self.area, Area::Town { .. });
+        if !town_bed && !self.player.transport.is_foot() {
             // `On_land_or_ship!\n\n`: the refusal completes the open
             // `Hole up- ` echo row, and its second feed is the literal's own
             // blank row (playtest N13). Emitted directly, as `lowered!\n\n`
@@ -83,7 +88,7 @@ impl PlayState {
             self.charge_tile_command_acted_exit(self.turn);
             return MoveOutcome::Blocked;
         }
-        let land_camp = !matches!(self.area, Area::Town { .. });
+        let land_camp = !town_bed;
         if land_camp {
             self.replace_command_echo(HOLE_UP_CAMP_ECHO);
         }
