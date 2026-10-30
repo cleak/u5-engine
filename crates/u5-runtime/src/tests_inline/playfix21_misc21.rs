@@ -42,3 +42,37 @@ fn playtest_p21_05_matching_wish_on_an_occupied_cell_still_poofs() {
         .count();
     assert_eq!(horses, 1, "the grant creates its horse east of the caller");
 }
+
+/// Playtest P21-06. `town-mode.md §13`: the town Fire source test is "the
+/// same four-neighbour probe the Fire and Yell commands use", the four cells
+/// cardinally adjacent to the party (`commands.md §11`). A cannon standing
+/// only diagonally next to the party is no source, so F-Fire answers `What?`
+/// (`vehicles.md §8`).
+#[test]
+fn playtest_p21_06_town_fire_ignores_a_diagonal_cannon() {
+    let dir = debug_game_dir();
+    let mut grid = open_grid();
+    // The tower-roof layout: cannons at (3,1) and (1,3), party at (2,2).
+    grid[32 + 3] = TOWN_CANNON_TILE_FIRST + 1;
+    grid[3 * 32 + 1] = TOWN_CANNON_TILE_FIRST + 1;
+    let mut state = test_state(grid, 2, 2);
+
+    assert_eq!(
+        state.fire_command(None, &dir).unwrap(),
+        MoveOutcome::Blocked
+    );
+    assert_eq!(state.message, "What?");
+    assert_eq!(state.turn, 0);
+
+    let fire_source = TownFireSourceEntry {
+        scene: Scene::new(17).unwrap(),
+        floor: 0,
+        x: 3,
+        y: 1,
+        direction: Direction::East,
+        expected_tile: None,
+    };
+    assert!(!town_fire_source_is_adjacent(fire_source, 2, 2));
+    assert!(town_fire_source_is_adjacent(fire_source, 3, 2));
+    let _ = fs::remove_dir_all(dir);
+}

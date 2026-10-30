@@ -3199,31 +3199,37 @@ impl PlayState {
         scene: Scene,
         floor: i8,
     ) -> Option<TownFireSourceEntry> {
-        for dy in -1isize..=1 {
-            for dx in -1isize..=1 {
-                if dx == 0 && dy == 0 {
-                    continue;
-                }
-                let x = self.player.x as isize + dx;
-                let y = self.player.y as isize + dy;
-                if !(0..32).contains(&x) || !(0..32).contains(&y) {
-                    continue;
-                }
-                let x = x as usize;
-                let y = y as usize;
-                let tile = self.grid[y * 32 + x];
-                let Some(direction) = town_cannon_tile_fire_direction(tile) else {
-                    continue;
-                };
-                return Some(TownFireSourceEntry {
-                    scene,
-                    floor,
-                    x,
-                    y,
-                    direction,
-                    expected_tile: Some(tile),
-                });
+        // `town-mode.md §13`: Fire's source test is "the same four-neighbour
+        // probe the Fire and Yell commands use", and Yell's probe inspects
+        // "the four cells cardinally adjacent to the party ... in the order
+        // west, south, east, north" (`commands.md §11`). A diagonal cannon is
+        // not a source (playtest P21-06).
+        for probe in [
+            Direction::West,
+            Direction::South,
+            Direction::East,
+            Direction::North,
+        ] {
+            let (dx, dy) = probe.delta();
+            let x = self.player.x as isize + dx;
+            let y = self.player.y as isize + dy;
+            if !(0..32).contains(&x) || !(0..32).contains(&y) {
+                continue;
             }
+            let x = x as usize;
+            let y = y as usize;
+            let tile = self.grid[y * 32 + x];
+            let Some(direction) = town_cannon_tile_fire_direction(tile) else {
+                continue;
+            };
+            return Some(TownFireSourceEntry {
+                scene,
+                floor,
+                x,
+                y,
+                direction,
+                expected_tile: Some(tile),
+            });
         }
         None
     }
