@@ -221,5 +221,40 @@ fn p20_06_a_combat_use_result_row_is_closed_before_the_hazard_line() {
     handle_play_key_input(&mut state, char::from(INPUT_CODE_EAST), "", game_dir).unwrap();
     let rows = p20_rows_from_last(&state, "Direction-");
     assert_eq!(rows[0], "Direction-East", "{rows:?}");
-    assert_eq!(rows[1], "Shamino hit!", "{rows:?}");
+    // u5-spec#312 Q3 (R656): in combat the scroll's gate fails and the U-Use
+    // tail prints `Failed!` plus one line feed on the next row, so that row
+    // is the closed one the hazard line must not join.
+    assert_eq!(rows[1], "Failed!", "{rows:?}");
+    assert_eq!(rows[2], "Shamino hit!", "{rows:?}");
+}
+
+/// u5-spec#312 Q1 (`catalogs/item-list.md §7.1`): "Every scroll effect label
+/// - all eight banners, and `No effect!` - is the literal followed by one
+/// line feed, with no leading feed", identically for world and combat `U`,
+/// so "A later line that carries no leading feed of its own, such as a
+/// combat hazard line, therefore starts on its own row and never joins a
+/// banner."
+#[test]
+fn spec312_q1_combat_scroll_banners_close_their_row_before_a_hazard_line() {
+    let game_dir = std::path::Path::new(".");
+    for (index, banner) in [
+        (SCROLL_LIGHT_INDEX, "Light!"),
+        (SCROLL_PROTECTION_INDEX, "Protection!"),
+        (SCROLL_NEGATE_MAGIC_INDEX, "Negate magic!"),
+    ] {
+        let mut state = combat2b_two_member_state();
+        state.scroll_stock[index] = 1;
+        state.combat_transcript_row_open = true;
+        state
+            .combat_pending_hazard_lines
+            .push((1, "Shamino hit!".to_string()));
+        combat2b_use_row(
+            &mut state,
+            |request| matches!(request, UseItemRequest::Scroll { index: i, .. } if i == index),
+            game_dir,
+        );
+        let rows = p20_rows_from_last(&state, banner);
+        assert_eq!(rows[0], banner, "{banner}: {rows:?}");
+        assert_eq!(rows[1], "Shamino hit!", "{banner}: {rows:?}");
+    }
 }

@@ -541,14 +541,20 @@ impl WorldDamageEffect {
         }
     }
 
+    /// Whether the per-turn underfoot arm hurts a party on `transport`.
+    ///
+    /// `overworld.md §5` step 6g: the lava arm "tests only the tile, never
+    /// the transport; who can stand there is decided by passability alone".
+    /// `vehicles.md §6` "Underfoot Effects By Transport" (issue #312 Q2):
+    /// lava applies to the carpet and on foot, and to a horse, skiff or
+    /// frigate "if placed" - executed on the original with a horse placed on
+    /// Underworld lava, which burned on each Pass. Passability stays with
+    /// [`Self::allows_transport`].
     pub fn damages_transport(self, transport: TransportState) -> bool {
         match self {
-            Self::Lava => matches!(transport, TransportState::Carpet { .. }),
-            Self::NativeLava => {
-                matches!(
-                    transport,
-                    TransportState::Foot | TransportState::Carpet { .. }
-                )
+            Self::Lava | Self::NativeLava => {
+                let _ = transport;
+                true
             }
             Self::Drowning => matches!(transport, TransportState::Foot),
         }
