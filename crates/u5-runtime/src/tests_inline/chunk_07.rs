@@ -463,14 +463,21 @@ fn scroll_wind_and_resurrection_debit_before_branch_gates() {
 
     let mut dungeon = dungeon_state(open_dungeon_record(), 0, 1, 1);
     dungeon.scroll_stock[SCROLL_WIND_CHANGE_INDEX] = 1;
+    let serial = dungeon.sound_effect_serial;
     assert_eq!(
         handle_play_key_input(&mut dungeon, 'U', "HR8", Path::new("")).unwrap(),
         PlayInputDisposition::Continue
     );
     assert_eq!(dungeon.scroll_stock[SCROLL_WIND_CHANGE_INDEX], 0);
     assert_eq!(dungeon.turn, 1);
-    // `item-list.md §7.1` scroll 1: a silent return (playtest P12-11).
-    assert_eq!(dungeon.message, "");
+    // `item-list.md §7.1` scroll 1 (u5-spec#312 Q3, R656): the gate fails
+    // and the U-Use failure tail prints `Failed!` with the cast-failure
+    // glissando; the silent return of playtest P12-11 is withdrawn.
+    assert_eq!(dungeon.message, "Failed!");
+    assert_eq!(
+        dungeon.sound_effects_after(serial),
+        vec![SoundEffect::CastFailure]
+    );
 
     let mut town = test_state(open_grid(), 1, 1);
     town.party[0].status = b'D';

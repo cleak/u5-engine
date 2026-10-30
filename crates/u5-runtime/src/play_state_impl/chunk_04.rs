@@ -883,8 +883,19 @@ impl PlayState {
         if key == ' ' && direction_prompt {
             let turn_before = self.turn;
             self.commit_prompt_reply(SPELL_DIRECTION_PROMPT_PREFIX, DIRECTION_PROMPT_LABEL_PASS);
+            // `catalogs/item-list.md §7.1`, scroll 1 (u5-spec#312 Q3):
+            // "`Pass` ends the same way there" - the gate still fails in a
+            // dungeon or combat scene and the failure tail follows.
+            let outcome = if matches!(pending, UsePendingAction::ScrollWindDirection { .. })
+                && self.wind_change_scroll_gate_fails()
+            {
+                self.wind_change_scroll_failure_tail();
+                MoveOutcome::Blocked
+            } else {
+                MoveOutcome::Used
+            };
             self.ensure_use_action_turn(turn_before);
-            self.apply_post_turn_effects_after_outcome(turn_before, game_dir, MoveOutcome::Used)?;
+            self.apply_post_turn_effects_after_outcome(turn_before, game_dir, outcome)?;
             return Ok(true);
         }
 
@@ -2338,13 +2349,14 @@ impl PlayState {
             return MoveOutcome::Blocked;
         };
         // `catalogs/item-list.md §7.1`, scroll 1: the wind applies "only
-        // when the active scene byte is below 33"; "Dungeon-class scenes
-        // return without changing wind after the prompt" - silently, with
-        // no refusal line (playtest P12-11). Combat is scene byte 0xFF
+        // when the active scene byte is below 33". Combat is scene byte 0xFF
         // (`spell-list.md §4`), so a combat read is gated the same way
-        // (`moons.md §3`; playtest P12-10).
-        if self.combat_active || matches!(self.area, Area::Dungeon { .. }) {
-            self.message.clear();
+        // (`moons.md §3`; playtest P12-10). In every scene at 33 or above
+        // the branch skips the wind setter and reports failure, so the U-Use
+        // tail prints `Failed!` (u5-spec#312 Q3, `RETRACTIONS.md` R656: the
+        // earlier silent return of playtest P12-11 is withdrawn).
+        if self.wind_change_scroll_gate_fails() {
+            self.wind_change_scroll_failure_tail();
             return MoveOutcome::Blocked;
         }
 
@@ -2360,6 +2372,26 @@ impl PlayState {
         let _ = previous;
         self.message.clear();
         MoveOutcome::Used
+    }
+
+    /// `catalogs/item-list.md §7.1`, scroll 1 (corrected for u5-spec#312
+    /// Q3, R656): the Wind Change scroll's scene test, made only after the
+    /// `Direction-` prompt. Every dungeon-class and combat-class scene - the
+    /// scene byte at 33 or above - fails it.
+    pub(crate) fn wind_change_scroll_gate_fails(&self) -> bool {
+        self.combat_active || matches!(self.area, Area::Dungeon { .. })
+    }
+
+    /// `catalogs/item-list.md §7.1`, scroll 1, and `inventory.md §7.1`
+    /// (u5-spec#312 Q3): where the gate fails "the wind is unchanged, the
+    /// wind banner is not repainted and no wind sound plays", and "the
+    /// generic U-Use failure tail then prints `Failed!` plus one line feed
+    /// (no leading feed) at column zero on the row after the direction word
+    /// and plays the common cast-failure glissando". `Pass` ends the same
+    /// way. The scroll was spent when its row was accepted.
+    pub(crate) fn wind_change_scroll_failure_tail(&mut self) {
+        self.message = "Failed!".to_string();
+        self.emit_sound_effect(SoundEffect::CastFailure);
     }
 
     pub fn use_resurrection_scroll(&mut self, target: Option<usize>) -> MoveOutcome {
