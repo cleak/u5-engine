@@ -467,34 +467,38 @@ fn spent_heavy_work_budget_re_enters_the_ai_dispatch_on_a_boundary_hour() {
 }
 
 #[test]
-fn inn_rest_runs_the_clock_to_six_whatever_hour_it_began_at() {
-    // `shops.md §8.4`: "The clock is then run forward in paced steps until
-    // the hour byte reads **six** - the rest always ends at 06:00, whatever
-    // hour it began at, so a party that rents a room at 21:00 sleeps nine
-    // hours and one that rents at 04:00 sleeps two."
-    for (start, expected) in [(21u8, 9u8), (4, 2), (6, 0)] {
+fn inn_rest_ends_on_the_first_step_landing_in_hour_six() {
+    // `shops.md §8.4` (u5-spec#314 Q3, `RETRACTIONS.md` R660): "first
+    // sixty minutes, unconditionally, then nine-minute steps until the hour
+    // reads six ... (from 22:30 it ends at 06:06, from 04:10 at 06:04); a
+    // rental during hour five ends exactly sixty minutes later ... (05:59
+    // ends at 06:59); a rental during hour six runs on to the next day's
+    // hour six ... (06:30 ends at the next day's 06:00)". `time.md §5`: the
+    // snapshot then "holds the hour before its last step: 5 when the rest
+    // ends at 06:00 to 06:08, and 6 when the room was rented during hour
+    // five". 21:38 is playtest P16-14's rental, which the withdrawn rule
+    // woke at 06:00 sharp.
+    for (start, end, next_day, snapshot) in [
+        ((22u8, 30u8), (6u8, 6u8), true, 5u8),
+        ((4, 10), (6, 4), false, 5),
+        ((5, 59), (6, 59), false, 6),
+        ((6, 30), (6, 0), true, 5),
+        ((21, 38), (6, 8), true, 5),
+    ] {
         let mut state = test_state(open_grid(), 5, 5);
-        state.clock.hour = start;
-        state.clock.minute = 0;
-        let hours = state.advance_inn_rest_clock_to_morning();
-        assert_eq!(hours, expected, "starting at {start}");
-        assert_eq!(state.clock.hour, INN_REST_WAKE_HOUR);
+        state.clock.hour = start.0;
+        state.clock.minute = start.1;
+        state.cleanup_previous_hour = start.0;
+        let day = state.clock.day;
+        state.advance_inn_rest_clock_to_morning();
+        assert_eq!(
+            (state.clock.hour, state.clock.minute),
+            end,
+            "starting at {start:?}"
+        );
+        assert_eq!(state.clock.day != day, next_day, "starting at {start:?}");
+        assert_eq!(state.cleanup_previous_hour, snapshot, "starting at {start:?}");
     }
-}
-
-#[test]
-fn inn_rest_begun_mid_hour_still_wakes_at_six_sharp() {
-    // `shops.md §8.4`: "the rest always ends at 06:00, whatever hour it
-    // began at" (playtest P16-14: a 21:37 rental woke at 06:38).
-    let mut state = test_state(open_grid(), 5, 5);
-    state.clock.hour = 21;
-    state.clock.minute = 38;
-    let hours = state.advance_inn_rest_clock_to_morning();
-    assert_eq!(hours, 9);
-    assert_eq!(
-        (state.clock.hour, state.clock.minute),
-        (INN_REST_WAKE_HOUR, 0)
-    );
 }
 
 #[test]

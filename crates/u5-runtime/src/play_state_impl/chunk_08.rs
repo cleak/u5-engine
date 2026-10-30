@@ -1063,27 +1063,70 @@ impl PlayState {
     // the cells are authored data and that "there is no rule to derive
     // these from the map or from the shop cell".
 
-    /// `shops.md §8.4`: "The clock is then run forward in paced steps until
-    /// the hour byte reads **six** - the rest always ends at 06:00, whatever
-    /// hour it began at, so a party that rents a room at 21:00 sleeps nine
-    /// hours and one that rents at 04:00 sleeps two." Returns the number of
-    /// paced hour steps the run took, which is what the result line reports.
+    /// `shops.md §8.4` (u5-spec#314 Q3, `RETRACTIONS.md` R660): "The clock
+    /// is then run forward in paced steps until the hour byte reads **six**:
+    /// first sixty minutes, unconditionally, then nine-minute steps until the
+    /// hour reads six. The rest therefore ends on the first step that lands
+    /// in hour six, not at minute zero" - 22:30 ends at 06:06, 04:10 at
+    /// 06:04, 05:59 at 06:59, and 06:30 at the next day's 06:00. Entering the
+    /// inn menu clears the timed-effect slot, "so Quickness and Negate Time
+    /// can never alter these step lengths". Returns the number of clock
+    /// steps taken.
     ///
-    /// "The shared hourly provision cadence may apply as the clock advances",
-    /// so the steps go through the ordinary per-turn clock rather than
-    /// writing the hour byte directly.
+    /// "The rest runs **no** party status/provision pass (`systems/time.md`
+    /// Section 5), neither once per crossed hour nor once at the end": no
+    /// provisions, no `Starving!`, no starvation damage and no poison point.
+    /// So each step is the clock half of a turn ([`Self::advance_clock_half`],
+    /// as the Blackthorn rescue spin uses for its nine-minute steps), not a
+    /// whole turn. `time.md §5`: "Each of its clock steps rewrites the
+    /// snapshot, so when it returns the snapshot holds the hour before its
+    /// last step"; the Talk turn's own one-minute advance then rewrites it
+    /// to the current hour before that turn's upkeep pass, so no crossed
+    /// hour - 06:00 included - is ever charged.
     ///
-    /// Each step runs to the next hour boundary, so a rest that began
-    /// mid-hour still ends at 06:00 rather than at six and the rental minute
-    /// (`npc-schedules.md §12`: "which ends at 06:00"; playtest P16-14).
-    pub fn advance_inn_rest_clock_to_morning(&mut self) -> u8 {
-        let mut hours = 0u8;
-        while self.clock.hour != INN_REST_WAKE_HOUR && hours < HOURS_PER_DAY {
-            let to_boundary = MINUTES_PER_HOUR.saturating_sub(self.clock.minute).max(1);
-            self.advance_turn_with_minutes(to_boundary);
-            hours += 1;
+    /// "The one per-step effect is the Ring of Regeneration roll, which the
+    /// rest loop makes directly once per nine-minute step and not during the
+    /// first sixty minutes" (`rest-and-camp.md §5`, `time.md §5`).
+    ///
+    /// The town's dawn/dusk tile pass runs once per crossing into hour 5 or
+    /// 20, as the ordinary town turn runs it, so the town wakes in its day
+    /// form. `OPEN-QUESTIONS.md` section 2 notes the original's rest loop
+    /// may call that pass on every step in those hours; that is unpublished
+    /// in the owning documents, so it is not reproduced. The steps run no
+    /// walker, schedule or object work: nothing in the contract names any,
+    /// and the completed rest re-places every scheduled NPC anyway.
+    ///
+    /// The first sixty minutes are taken as one-minute clock calls. The
+    /// published step lengths do not say how that span is cut, but `time.md
+    /// §5` gives its snapshot: a rest rented during hour five (05:59 to
+    /// 06:59) returns with the snapshot at 6, which a single sixty-minute
+    /// call - starting in hour five - could not leave. Minute-granular light
+    /// decay and the per-crossing hour bundle make the cut otherwise
+    /// unobservable.
+    pub fn advance_inn_rest_clock_to_morning(&mut self) -> u16 {
+        let mut steps = 0u16;
+        for _ in 0..INN_REST_FIRST_STEP_MINUTES {
+            self.advance_inn_rest_clock_step(1);
+            steps += 1;
         }
-        hours
+        while self.clock.hour != INN_REST_WAKE_HOUR {
+            self.advance_inn_rest_clock_step(INN_REST_STEP_MINUTES);
+            self.apply_hourly_ring_regeneration_tick();
+            steps += 1;
+        }
+        steps
+    }
+
+    fn advance_inn_rest_clock_step(&mut self, minutes: u8) {
+        let previous_hour = self.clock.hour;
+        self.advance_clock_half(minutes);
+        if matches!(self.area, Area::Town { .. })
+            && self.clock.hour != previous_hour
+            && matches!(self.clock.hour, 5 | 20)
+        {
+            apply_dawn_dusk_substitution(&mut self.grid);
+            self.mark_visibility_dirty();
+        }
     }
 
     pub fn apply_inn_rest_night_recovery(&mut self) -> (u16, u16, usize) {

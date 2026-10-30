@@ -2,6 +2,8 @@
 //
 // All of them concern where a Hole-up or an inn rest runs the party
 // status/provision pass (`time.md §5`) and where its `Starving!` prints.
+// The P22-04 inn-night warnings were withdrawn by u5-spec#314 Q3 (paid inn
+// rest runs no pass); the spec314 tests at the end pin that answer.
 // Each test names the published sentence it pins and the playtest id whose
 // reproduction it captures.
 
@@ -165,32 +167,103 @@ fn playtest_p22_03_apparition_turn_starvation_prints_after_the_event() {
     let _ = fs::remove_dir_all(dir);
 }
 
-/// Playtest P22-04. `shops.md §8.C`: `Zzzzzz....\n\n` "followed at morning
-/// by `Morning!\n`", with the clock run forward between them (§8 R), and
-/// `time.md §5`: each hour's branch "receives the starvation warning, and
-/// then" takes its damage. The night's warnings used to print after
-/// `Morning!` - and, after a wipe, only under the rescue.
+/// u5-spec#314 Q3. `shops.md §8.4`: "The rest runs **no** party
+/// status/provision pass ... no provisions are spent, no `Starving!` warning
+/// prints, no starvation damage is rolled and no per-turn poison point is
+/// taken. After the innkeeper's farewell the message window shows only
+/// `Zzzzzz....`, nothing at all while the clock runs, then `Morning!`".
+/// Playtest P22-04's night warnings are withdrawn.
 #[test]
-fn playtest_p22_04_inn_night_starvation_warnings_precede_morning() {
+fn spec314_inn_rest_prints_nothing_between_sleep_and_morning() {
     let mut state = pf2_inn_state();
     state.food = 0;
-    state.clock = GameClock::new(22, 59).unwrap();
+    state.clock = GameClock::new(22, 30).unwrap();
     state.cleanup_previous_hour = 22;
     pf2_keys(&mut state, &['R', 'Y']);
     state.flush_message_slot();
-    assert!(state.pending_hourly_status_message.is_none());
     let rows = pf2_rows(&state);
     let sleep = pf2_row_index(&rows, crate::commands::PAID_INN_REST_SLEEP_LINE);
     let morning = pf2_row_index(&rows, crate::commands::PAID_INN_REST_MORNING_LINE);
+    assert_eq!(morning, sleep + 2, "{rows:#?}");
     assert_eq!(rows[sleep + 1], "", "{rows:#?}");
-    // 23:00 through 06:00: eight crossings, each warned during the night.
-    assert_eq!(
-        rows[sleep + 2..morning],
-        vec![STARVATION_WARNING.to_string(); 8],
-        "{rows:#?}"
-    );
     assert!(
-        !rows[morning + 1..].iter().any(|row| row == STARVATION_WARNING),
+        !rows.iter().any(|row| row == STARVATION_WARNING),
         "{rows:#?}"
     );
+    assert!(state.pending_hourly_status_message.is_none());
+    assert_eq!(state.food, 0);
+    assert!(state.party.iter().all(|member| member.status != b'D'));
+}
+
+/// u5-spec#314 Q3. `shops.md §8.4`: "with provisions on hand the 06:00 meal
+/// is skipped ... the first hour charged is 07:00", and `time.md §5`: the
+/// Talk turn's "ordinary one-minute advance then rewrites the snapshot to 6
+/// before that turn's upkeep pass runs, so the pass sees no hour change".
+#[test]
+fn spec314_inn_rest_charges_no_hour_it_crossed() {
+    let mut state = pf2_inn_state();
+    state.food = 50;
+    state.clock = GameClock::new(22, 30).unwrap();
+    state.cleanup_previous_hour = 22;
+    pf2_keys(&mut state, &['R', 'Y']);
+    state.flush_message_slot();
+    assert_eq!(state.food, 50);
+    // Whatever turn the conversation's close spends, 06:00 stays uncharged.
+    state.advance_turn();
+    state.apply_pending_town_status_provision_pass();
+    assert_eq!(state.clock.hour, 6);
+    assert_eq!(state.food, 50);
+}
+
+/// u5-spec#314 Q3. `shops.md §8.4`: "a party resting from 22:30 with no
+/// food and a Poisoned member printed no `Starving!`, the member was still
+/// Poisoned when the clock stopped and died only in the recovery pass".
+#[test]
+fn spec314_inn_rest_takes_no_poison_point_while_the_clock_runs() {
+    let mut state = test_state(open_grid(), 5, 5);
+    state.food = 0;
+    state.clock = GameClock::new(22, 30).unwrap();
+    state.cleanup_previous_hour = 22;
+    state.party[0].status = b'P';
+    state.party[0].hp = 3;
+    state.advance_inn_rest_clock_to_morning();
+    assert_eq!(state.party[0].status, b'P');
+    assert_eq!(state.party[0].hp, 3);
+    assert!(state.pending_hourly_status_message.is_none());
+}
+
+/// u5-spec#314 Q3. `time.md §5`: "Paid inn rest likewise issues the roll
+/// directly, once per nine-minute step after its first sixty minutes, and
+/// never through this pass". From 01:00 the rest takes sixty minutes to
+/// 02:00, then 27 nine-minute steps to 06:03, crossing no midnight (whose
+/// hideout reroll draws too).
+#[test]
+fn spec314_inn_rest_rolls_the_ring_once_per_nine_minute_step() {
+    let start = |ring: bool| {
+        let mut state = test_state(open_grid(), 5, 5);
+        state.clock = GameClock::new(1, 0).unwrap();
+        state.cleanup_previous_hour = 1;
+        state.prng_state = 0x1234;
+        state.party[0].hp = 1;
+        if ring {
+            state.party_equipment[0][EQUIP_SLOT_RING] = EQUIPMENT_ID_RING_REGENERATION as u8;
+        }
+        state
+    };
+    let mut plain = start(false);
+    plain.advance_inn_rest_clock_to_morning();
+    assert_eq!((plain.clock.hour, plain.clock.minute), (6, 3));
+    assert_eq!(plain.prng_state, 0x1234, "no ring, no draws");
+
+    let mut worn = start(true);
+    worn.advance_inn_rest_clock_to_morning();
+    let mut expected = 0x1234;
+    let mut gains = 0;
+    for _ in 0..27 {
+        if u5_prng_range_u16(&mut expected, 0, 7) == 0 {
+            gains += 1;
+        }
+    }
+    assert_eq!(worn.prng_state, expected);
+    assert_eq!(worn.party[0].hp, (1 + gains).min(worn.party[0].max_hp));
 }
