@@ -392,6 +392,7 @@ impl PlayState {
         self.emit_message_line(CAMP_BODY_SLEEP_LINE);
         let mut interrupted = false;
         let mut ambush_monster = None;
+        let loop_head_minute_charged = self.dungeon_loop_minute_charged;
         // `dungeon-mode.md §11` step 2: the dungeon H path elapses the rest
         // "in five-minute steps, twelve steps per simulated hour", with one
         // Ring of Regeneration roll per step - the same shared hole-up loop
@@ -597,9 +598,21 @@ impl PlayState {
             // still reaches the ordinary outdoor turn (`overworld.md §5`
             // step 6: two minutes, the upkeep pass and the object
             // epilogue). The five-minute elapse loop above is the
-            // handler's own time, not that tail (playtest P12-08). The
-            // dungeon's acted pass is its own (no charge here).
+            // handler's own time, not that tail (playtest P12-08).
             self.charge_tile_command_acted_exit(self.turn);
+            // `dungeon-mode.md §4` step 6: an acted dungeon command owes the
+            // post-action helper, whose last act is the upkeep pass
+            // (`time.md §5`), and `§11` exempts only the camp's own
+            // five-minute loop from it. The camp's steps moved the turn
+            // counter, so the dispatcher's acted settle no longer fires;
+            // charge the turn here. The loop-head minute was already paid at
+            // the head of this iteration, and the camp's direct clock calls
+            // must not consume that flag, so it is restored first and the
+            // charge adds no minute (playtest P22-05).
+            if matches!(self.area, Area::Dungeon { .. }) {
+                self.dungeon_loop_minute_charged = loop_head_minute_charged;
+                self.advance_turn();
+            }
         }
         Ok(MoveOutcome::Rested)
     }

@@ -8196,11 +8196,15 @@ fn validate_route_smoke_case_state(
                 // applied, regardless of how many hours the camp covers. Only
                 // the town-bed loop runs that pass." An earlier form of this
                 // assertion subtracted one point per camped hour, which is the
-                // per-hour poison reading `time.md §5` withdraws.
+                // per-hour poison reading `time.md §5` withdraws. The camp
+                // turn itself still acted, though, so the dungeon post-action
+                // helper's upkeep pass (`dungeon-mode.md §4` step 6) takes
+                // its one ordinary poison point after the camp returns
+                // (playtest P22-05): 20 at entry, 19 after.
                 || state
                     .party
                     .get(4)
-                    .is_none_or(|member| member.status != b'P' || member.hp != 20 || member.mana != 4)
+                    .is_none_or(|member| member.status != b'P' || member.hp != 19 || member.mana != 4)
                 || state.party.get(5).is_none_or(|member| {
                     member.status != b'D' || member.hp != 0 || member.mana != 5
                 })

@@ -67,3 +67,28 @@ fn playtest_p22_02_town_bed_cancel_starves_on_its_own_turn() {
     );
     let _ = fs::remove_dir_all(dir);
 }
+
+/// Playtest P22-05. `dungeon-mode.md §4` step 6: after a command that acted
+/// the post-action helper runs, and "The helper's last act is the party
+/// upkeep pass of `systems/time.md` Section 5". `§11` exempts only the camp's
+/// own five-minute loop. An accepted dungeon camp skipped the pass; the
+/// loop-head minute stays the turn's only minute.
+#[test]
+fn playtest_p22_05_dungeon_camp_turn_runs_the_upkeep_pass() {
+    let dir = debug_game_dir();
+    let mut state = dungeon_state(open_dungeon_record(), 0, 1, 1);
+    state.party[0].hp = 60;
+    state.party[0].max_hp = 60;
+    state.party[0].status = b'P';
+    state.clock = GameClock::new(10, 20).unwrap();
+    state.cleanup_previous_hour = 10;
+
+    handle_play_key_input(&mut state, 'H', "", &dir).unwrap();
+    assert_eq!(state.clock, GameClock::new(10, 21).unwrap(), "loop-head minute");
+    handle_play_key_input(&mut state, '2', "", &dir).unwrap();
+    assert!(state.active_rest.is_none());
+    assert!(!state.combat_active);
+    assert_eq!(state.clock, GameClock::new(12, 21).unwrap(), "no second minute");
+    assert_eq!(state.party[0].hp, 59, "the camp turn's poison point");
+    let _ = fs::remove_dir_all(dir);
+}
