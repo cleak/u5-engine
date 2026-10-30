@@ -122,3 +122,37 @@ fn playtest_p21_03_night_sky_turn_waits_for_the_dismissing_key() {
     );
     let _ = fs::remove_dir_all(dir);
 }
+
+/// Playtest P21-07. `karma.md §7.1`: the ruined-shrine restoration "always
+/// asks four questions" inline inside the Yell command, which reports
+/// acted once they are answered. The outdoor epilogue used to run as the
+/// virtue question opened, so `Starving!` split it from its `:` row.
+#[test]
+fn playtest_p21_07_restoration_turn_waits_for_the_last_answer() {
+    let dir = debug_game_dir();
+    let (shrine_x, shrine_y) = WORLD_SHRINE_COORDINATES[0];
+    let mut grid = open_world_grid();
+    grid[world_cell_index(shrine_x, shrine_y)] = WORLD_RUINED_SHRINE_TILE;
+    let mut state = britannia_state(grid, shrine_x, shrine_y - 1);
+    state.shrine_ruin_flags[0] = 0x80;
+    p21_starving(&mut state, 12, 59);
+
+    handle_play_key_input(&mut state, 'Y', "", &dir).unwrap();
+    handle_play_key_input(&mut state, 'F', "ALLAX", &dir).unwrap();
+    assert!(state.active_shrine_restoration.is_some());
+    assert_eq!(state.turn, 0, "no epilogue under the open question");
+    assert_eq!(state.party[0].hp, 60);
+    assert!(!p21_rows(&state).iter().any(|row| row == STARVATION_WARNING));
+
+    for (key, rest) in [('H', "ONESTY"), ('A', "HM"), ('A', "HM")] {
+        handle_play_key_input(&mut state, key, rest, &dir).unwrap();
+        assert_eq!(state.turn, 0);
+    }
+    handle_play_key_input(&mut state, 'A', "HM", &dir).unwrap();
+    assert!(state.active_shrine_restoration.is_none());
+    assert_eq!(state.turn, 1, "the Yell's turn is spent once answered");
+    assert!(state.party[0].hp < 60);
+    let rows = p21_rows(&state);
+    assert!(p21_row_index(&rows, "restored!") < p21_row_index(&rows, STARVATION_WARNING));
+    let _ = fs::remove_dir_all(dir);
+}

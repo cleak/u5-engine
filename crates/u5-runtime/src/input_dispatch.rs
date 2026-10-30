@@ -1343,7 +1343,12 @@ fn handle_active_shrine_restoration_key_input(
 ) -> io::Result<PlayInputDisposition> {
     let turn_before = state.turn;
     if let Some(outcome) = state.step_active_shrine_restoration(key, suffix) {
-        state.apply_post_turn_effects_after_outcome(turn_before, game_dir, outcome)?;
+        // `karma.md §7.1`: the four answers are asked inside the Yell
+        // command, which spends its turn once the last one is in (playtest
+        // P21-07).
+        if !state.settle_modal_wait_turn(game_dir)? {
+            state.apply_post_turn_effects_after_outcome(turn_before, game_dir, outcome)?;
+        }
     }
     Ok(PlayInputDisposition::Continue)
 }

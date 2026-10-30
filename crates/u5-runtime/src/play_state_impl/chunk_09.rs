@@ -3245,7 +3245,7 @@ impl PlayState {
     /// modal waits [`Self::top_down_turn_charge_proceeds`] defers to.
     pub fn top_down_modal_wait_open(&self) -> bool {
         matches!(self.area, Area::World { .. } | Area::Town { .. })
-            && self.active_view_overlay.is_some()
+            && (self.active_view_overlay.is_some() || self.active_shrine_restoration.is_some())
     }
 
     /// Spend the turn a modal wait left owed, once that wait has ended:

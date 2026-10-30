@@ -1422,7 +1422,10 @@ fn y_yell_ruined_shrine_four_response_success_restores_only_shrine_state() {
     world.visibility_dirty = false;
 
     assert_eq!(world.yell_command(Some("FALLAX")), MoveOutcome::Used);
-    assert_eq!(world.turn, 1);
+    // `karma.md §7.1`: the four answers are inline in the Yell, so its turn
+    // is owed to the last one (playtest P21-07).
+    assert_eq!(world.turn, 0);
+    assert_eq!(world.pending_modal_wait_turn, Some(true));
     assert!(world.active_shrine_restoration.is_some());
     assert!(world.message.ends_with(SHRINE_RESTORATION_VIRTUE_QUESTION));
     assert_eq!(world.typed_prompt_echo().as_deref(), Some(":"));

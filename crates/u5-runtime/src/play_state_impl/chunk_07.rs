@@ -1605,7 +1605,17 @@ impl PlayState {
             return MoveOutcome::Used;
         }
 
-        self.advance_turn();
+        // A recognised Word of Power charges its turn once the seal test
+        // has run: at a ruined shrine that test opens `karma.md §7.1`'s four
+        // inline questions, and the turn waits for the last answer
+        // ([`Self::settle_modal_wait_turn`], playtest P21-07).
+        let word_of_power = matches!(
+            yell_input_context(scene_byte),
+            YellInputContext::WordOfPower
+        ) && word_of_power_seal_prefix_match(&word).is_some();
+        if !word_of_power {
+            self.advance_turn();
+        }
         match yell_input_context(scene_byte) {
             YellInputContext::WordOfPower => {
                 if let Some((word_index, seal)) = word_of_power_seal_prefix_match(&word) {
@@ -1614,6 +1624,9 @@ impl PlayState {
                     // spoken at the wrong place is still audible and visible.
                     self.emit_major_flash();
                     let outcome = self.open_word_of_power_seal(word_index, seal);
+                    if !matches!(outcome, WordOfPowerTargetOutcome::RuinedShrine { .. }) {
+                        self.advance_turn();
+                    }
                     // `commands.md` §11.1: "A recognised word immediately
                     // prints the uttered-word result and plays the shared
                     // low-rumble / full-viewport flash presentation effect,
@@ -1650,6 +1663,8 @@ impl PlayState {
                         self.message_row_open_mid_line = false;
                         self.active_shrine_restoration =
                             Some(ShrineRestorationSession::new(word_index, x, y));
+                        // Owed to the restoration's close.
+                        self.advance_turn();
                         return MoveOutcome::Used;
                     }
                     // The seal-toggle outcomes' text is not published and no
