@@ -76,3 +76,72 @@ fn playtest_p21_06_town_fire_ignores_a_diagonal_cannon() {
     assert!(town_fire_source_is_adjacent(fire_source, 3, 2));
     let _ = fs::remove_dir_all(dir);
 }
+
+/// The transcript plus the unflushed slot, one string per row, as the shell
+/// composes the message window.
+fn p21_window_history(state: &PlayState) -> Vec<String> {
+    let mut rows: Vec<String> = state
+        .message_entries()
+        .iter()
+        .map(|entry| entry.text.clone())
+        .collect();
+    if state.message_slot_needs_flush() {
+        rows.extend(state.message.split('\n').map(str::to_string));
+    }
+    rows
+}
+
+fn p21_row_index(rows: &[String], text: &str) -> usize {
+    rows.iter()
+        .rposition(|row| row.contains(text))
+        .unwrap_or_else(|| panic!("{text:?} missing from {rows:?}"))
+}
+
+/// Playtest P21-04. `endgame.md §3.1`/`§5.1`: the rite pages print into the
+/// ordinary message window, which scrolls; `He says:` follows record 3 with
+/// one blank row before it. The forty-tick pause overwrote record 3 in the
+/// unflushed slot with the `He says:` page, and the next page key then lost
+/// that page too, so the window jumped back to the box question.
+#[test]
+fn playtest_p21_04_rite_pages_scroll_instead_of_replacing_each_other() {
+    let dir = debug_game_dir();
+    let mut state = test_state(endgame_tableau_test_grid(), 5, 5);
+    state.party_names = vec![*b"Avatar\0\0\0"];
+    state.special_items[SPECIAL_ITEM_WOODEN_BOX_INDEX] = SPECIAL_ITEM_OWNED_VALUE;
+    state.enter_endgame_with_messages(Some(endgame_window_synthetic_messages()));
+    state.finish_endgame_entry_presentation();
+    state.flush_staged_narration();
+    state.resolve_endgame_confirmation(true);
+    let mut frames = 0;
+    while state.endgame.as_ref().unwrap().cinematic.step
+        == crate::endgame_cinematic::EndgameCinematicStep::RiteMessage(0)
+    {
+        state.flush_staged_narration();
+        frames += 1;
+        assert!(frames < 500);
+        assert!(state.advance_endgame_display_frame());
+    }
+    state.flush_staged_narration();
+    // State B: record 3 scrolled up above the lead-in.
+    let rows = p21_window_history(&state);
+    let rite1 = p21_row_index(&rows, "Rite 1");
+    let he_says = p21_row_index(&rows, "He says:");
+    let rite2 = p21_row_index(&rows, "Rite 2");
+    assert!(rite1 < he_says && he_says < rite2, "{rows:?}");
+    assert_eq!(&rows[rite1 + 1..he_says], [""], "one blank row before `He says:`");
+    assert_eq!(&rows[he_says + 1..rite2], [""], "one blank row after it");
+
+    // State C: the page key keeps the `He says:` page above record 5.
+    handle_play_key_input(&mut state, 'x', "", &dir).unwrap();
+    state.flush_staged_narration();
+    while state.advance_endgame_display_frame() {
+        state.flush_staged_narration();
+    }
+    let rows = p21_window_history(&state);
+    let rite1 = p21_row_index(&rows, "Rite 1");
+    let he_says = p21_row_index(&rows, "He says:");
+    let rite2 = p21_row_index(&rows, "Rite 2");
+    let rite3 = p21_row_index(&rows, "Rite 3");
+    assert!(rite1 < he_says && he_says < rite2 && rite2 < rite3, "{rows:?}");
+    let _ = fs::remove_dir_all(dir);
+}

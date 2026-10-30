@@ -19564,7 +19564,7 @@ fn endgame_flow_uses_loaded_endmsg_records_for_prompts_rite_and_refusal() {
     for _ in 0..crate::endgame_cinematic::ENDGAME_RITE_LEAD_IN_PAUSE_TICKS {
         assert!(victory.advance_endgame_display_frame());
     }
-    assert_eq!(victory.message, "\nHe says:\n\nRite 2");
+    assert_eq!(victory.message, "\n\nHe says:\n\nRite 2");
     for expected in ["Rite 3", "Rite 4", "Rite 5", "Rite 6", "Rite 7"] {
         victory.resolve_endgame_confirmation(true);
         assert_eq!(victory.message, expected);
