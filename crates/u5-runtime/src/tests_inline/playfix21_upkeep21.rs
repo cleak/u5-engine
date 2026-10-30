@@ -331,3 +331,40 @@ fn playtest_p21_11_dungeon_exit_turn_runs_no_upkeep() {
     assert!(state.pending_hourly_status_message.is_none());
     let _ = fs::remove_dir_all(dir);
 }
+
+/// Playtest P21-10, from a dungeon. `dungeon-mode.md §4` step 4: a warp that
+/// drops the scene byte leaves the loop before step 6's post-action hook,
+/// so the cast turn spends no poison point and takes no starvation, and no
+/// `Starving!` is held for the first overworld command. A failed warp (an
+/// empty slot) stays in the dungeon and runs the ordinary pass.
+#[test]
+fn playtest_p21_10_gate_travel_out_of_a_dungeon_runs_no_upkeep() {
+    let dir = debug_game_dir();
+    let mut state = dungeon_state(open_dungeon_record(), 0, 1, 1);
+    p21_starving(&mut state, 12, 59);
+    state.party[0].status = b'P';
+    state.spell_charges[GATE_TRAVEL_SPELL_INDEX] = 2;
+    state.party[0].mana = 30;
+    state.party[0].level = 8;
+    state.moonstone_slots[1] = MoonstoneGateSlot {
+        scene: 0,
+        x: 6,
+        y: 7,
+        z: 0,
+    };
+
+    state.advance_dungeon_loop_minute();
+    assert_eq!(state.clock, GameClock::new(13, 0).unwrap());
+    let turn_before = state.turn;
+    handle_play_key_input(&mut state, 'C', "1PRV2", &dir).unwrap();
+    assert!(matches!(state.area, Area::World { .. }), "{:?}", state.area);
+    assert_eq!(state.turn, turn_before + 1);
+    assert_eq!(state.party[0].hp, 60, "no poison point, no starvation");
+    assert!(state.pending_hourly_status_message.is_none());
+    assert!(
+        !p21_rows(&state).iter().any(|row| row == STARVATION_WARNING),
+        "{:?}",
+        p21_rows(&state)
+    );
+    let _ = fs::remove_dir_all(dir);
+}
