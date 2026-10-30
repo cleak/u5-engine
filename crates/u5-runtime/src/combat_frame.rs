@@ -1977,8 +1977,9 @@ impl PlayState {
     /// nothing."
     ///
     /// A field record is recognised through
-    /// [`CombatArenaFieldKind::from_kind_byte`], which accepts both the raw
-    /// room-placed ids and this engine's cast-marker kind bytes. Returns
+    /// [`CombatArenaFieldKind::from_kind_byte`], which accepts the
+    /// `0xE8..0xEB` ids that room-placed and cast markers both carry
+    /// (playtest P20-01), and still the `0x33..0x36` dispatch bytes. Returns
     /// how many markers were removed.
     pub fn apply_combat_field_dissolution_pass(&mut self) -> usize {
         let mut removed = 0;
@@ -2332,10 +2333,13 @@ impl PlayState {
             .active_objects
             .iter()
             .position(|object| object.is_empty())?;
-        let kind_byte = field.kind_byte();
+        // `combat.md §11` (u5-spec#308 Q3): the placed marker carries the
+        // `0xE8..0xEB` field id, not the `0x33..0x36` dispatch byte, which
+        // would draw as a seated-figure actor tile (playtest P20-01).
+        let marker_id = field.marker_id();
         self.active_objects[active_object_slot] = ActiveObject {
-            type_byte: kind_byte,
-            tile: kind_byte,
+            type_byte: marker_id,
+            tile: marker_id,
             x: usize::from(target_x),
             y: usize::from(target_y),
             z: target_slot

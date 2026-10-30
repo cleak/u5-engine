@@ -19,6 +19,9 @@ use image::{ImageBuffer, Rgba};
 
 use u5_runtime::SubtitleIgnitionPublish;
 use u5_runtime::TITLE_TICK_FRAME_Y;
+// `combat.md §11` (u5-spec#308 Q3): a placed field marker carries its
+// `0xE8..0xEB` field id (playtest P20-01).
+use u5_runtime::CombatArenaFieldKind;
 use u5_runtime::audio::{InterruptibleSound, RumbleJitter, SoundEffect, SpeakerProgram};
 use u5_runtime::audio_render::{RenderedSpeaker, render_program};
 #[cfg(test)]
@@ -30,8 +33,7 @@ use u5_runtime::{
     CHARGEN_GYPSY_PARAGRAPH_BOX, CHARGEN_QUESTION_PARAGRAPH_BOX, CHARGEN_RESULT_PARAGRAPH_BOX,
     COMBAT_ACTOR_FLAG_PHASE_BLINK_FILTER, COMBAT_ACTOR_FLAG_SELECTABLE_80,
     COMBAT_ACTOR_SLOTS, COMBAT_ARENA_SIDE, COMBAT_CLASS_GIANT_RAT, COMBAT_DEFAULT_DEATH_DROP_TILE,
-    COMBAT_FIELD_KIND_ENERGY, COMBAT_FIELD_KIND_FIRE, COMBAT_FIELD_KIND_POISON,
-    COMBAT_FIELD_KIND_SLEEP, COMBAT_GARGOYLE_DEATH_TERRAIN_TILE, COMBAT_GAZER_DEATH_MARKER_TILE,
+    COMBAT_GARGOYLE_DEATH_TERRAIN_TILE, COMBAT_GAZER_DEATH_MARKER_TILE,
     COMBAT_PARTY_ACTOR_SLOTS, COMBAT_PARTY_CORPSE_TILE, COMBAT_PLACEMENT_SPEED_ADJUST_ROLL_NEUTRAL,
     COMBAT_VANISH_DEATH_MARKER_TILE, CREATE_FOOD_COST, CREATE_FOOD_SPELL_INDEX, CURE_COST,
     CURE_SPELL_INDEX, ChargenSession, ChargenSessionResult, ChargenSessionStep,
@@ -3799,10 +3801,14 @@ fn seed_visual_combat_marker_gallery(state: &mut PlayState) -> io::Result<()> {
     active_objects[3] = visual_route_combat_active_object(COMBAT_VANISH_DEATH_MARKER_TILE, 3, 2, 0);
     active_objects[4] = visual_route_combat_active_object(COMBAT_GAZER_DEATH_MARKER_TILE, 4, 2, 0);
     active_objects[5] = visual_route_combat_active_object(COMBAT_DEFAULT_DEATH_DROP_TILE, 6, 6, 0);
-    active_objects[6] = visual_route_combat_active_object(COMBAT_FIELD_KIND_POISON, 7, 3, 0);
-    active_objects[7] = visual_route_combat_active_object(COMBAT_FIELD_KIND_SLEEP, 8, 3, 0);
-    active_objects[8] = visual_route_combat_active_object(COMBAT_FIELD_KIND_FIRE, 7, 4, 0);
-    active_objects[9] = visual_route_combat_active_object(COMBAT_FIELD_KIND_ENERGY, 8, 4, 0);
+    active_objects[6] =
+        visual_route_combat_active_object(CombatArenaFieldKind::Poison.marker_id(), 7, 3, 0);
+    active_objects[7] =
+        visual_route_combat_active_object(CombatArenaFieldKind::Sleep.marker_id(), 8, 3, 0);
+    active_objects[8] =
+        visual_route_combat_active_object(CombatArenaFieldKind::Fire.marker_id(), 7, 4, 0);
+    active_objects[9] =
+        visual_route_combat_active_object(CombatArenaFieldKind::Energy.marker_id(), 8, 4, 0);
 
     state.enter_combat_frame_with_terrain(active_objects, actors, terrain)?;
     // `combat.md §16.1`: the active-player sentinel is unset on combat entry,
@@ -3872,28 +3878,28 @@ const COMBAT_MARKER_GALLERY_CELLS: [CombatMarkerGalleryCell; 10] = [
     },
     CombatMarkerGalleryCell {
         slot: 6,
-        tile: COMBAT_FIELD_KIND_POISON,
+        tile: CombatArenaFieldKind::Poison.marker_id(),
         x: 7,
         y: 3,
         label: "poison-field",
     },
     CombatMarkerGalleryCell {
         slot: 7,
-        tile: COMBAT_FIELD_KIND_SLEEP,
+        tile: CombatArenaFieldKind::Sleep.marker_id(),
         x: 8,
         y: 3,
         label: "sleep-field",
     },
     CombatMarkerGalleryCell {
         slot: 8,
-        tile: COMBAT_FIELD_KIND_FIRE,
+        tile: CombatArenaFieldKind::Fire.marker_id(),
         x: 7,
         y: 4,
         label: "fire-field",
     },
     CombatMarkerGalleryCell {
         slot: 9,
-        tile: COMBAT_FIELD_KIND_ENERGY,
+        tile: CombatArenaFieldKind::Energy.marker_id(),
         x: 8,
         y: 4,
         label: "energy-field",
@@ -8519,7 +8525,8 @@ fn seed_visual_route_combat_dispel_route(state: &mut PlayState, place_field: boo
     let mut active_objects = vec![ActiveObject::empty(); COMBAT_ACTOR_SLOTS];
     active_objects[0] = visual_route_combat_active_object(0x4c, 5, 5, 0);
     if place_field {
-        active_objects[6] = visual_route_combat_active_object(COMBAT_FIELD_KIND_FIRE, 6, 5, 0);
+        active_objects[6] =
+            visual_route_combat_active_object(CombatArenaFieldKind::Fire.marker_id(), 6, 5, 0);
     }
     state
         .enter_combat_frame(active_objects, actors)
@@ -20258,10 +20265,31 @@ mod tests {
             rgba_pixel(&rgba, width, x, y),
             ega_rgba(usize::from(COMBAT_PARTY_CORPSE_TILE) % 16)
         );
-        let (x, y) = cell_center(7, 3);
+        // `combat.md §11`: the poison marker is field id `0xE8`, drawn from
+        // actor-half atlas tile `0x1E8`, whose pixels the `§12.4` field noise
+        // re-rolls each pass - so the cell holds only that tile's colour or
+        // the cleared black, never the `0x133` seated-figure colour the
+        // dispatch byte drew (playtest P20-01).
+        let field_colour =
+            ega_rgba((0x100 + usize::from(CombatArenaFieldKind::Poison.marker_id())) % 16);
+        let (x0, y0) = (
+            VIEWPORT_ORIGIN_X + 7 * TILE_ATLAS_SIDE,
+            VIEWPORT_ORIGIN_Y + 3 * TILE_ATLAS_SIDE,
+        );
+        for dy in 0..TILE_ATLAS_SIDE {
+            for dx in 0..TILE_ATLAS_SIDE {
+                let pixel = rgba_pixel(&rgba, width, x0 + dx, y0 + dy);
+                assert!(
+                    pixel == field_colour || pixel == ega_rgba(0),
+                    "poison field cell pixel ({dx},{dy}) = {pixel:?}"
+                );
+            }
+        }
+        // The noise may still be all black before the first pass, so pin
+        // the sprite the cell is drawn from: the field tile itself.
         assert_eq!(
-            rgba_pixel(&rgba, width, x, y),
-            ega_rgba(usize::from(COMBAT_FIELD_KIND_POISON) % 16)
+            state.combat_render_sprite_at(7, 3),
+            Some(0x100 + usize::from(CombatArenaFieldKind::Poison.marker_id()))
         );
         assert_eq!(
             rgba_pixel(

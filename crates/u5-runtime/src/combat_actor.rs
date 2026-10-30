@@ -1102,14 +1102,29 @@ impl CombatArenaFieldKind {
             // and `0xEB` Energy", and "A dungeon-room special source byte
             // `0xE9` or `0xEA` ... produces a marker that behaves exactly
             // like a cast one". A room-placed record carries the raw id
-            // (`formats/cbt.md §5`); this engine's cast markers carry the
-            // field-kind byte, so both spellings name the same field. The
-            // room-placed `0xE8` Poison arm is playtest P16-06.
+            // (`formats/cbt.md §5`), and so does a cast one (see
+            // [`Self::marker_id`], playtest P20-01). The field-kind dispatch
+            // byte is still accepted so both spellings name the same field.
+            // The room-placed `0xE8` Poison arm is playtest P16-06.
             COMBAT_FIELD_KIND_POISON | DUNGEON_ROOM_SPECIAL_SOURCE_E8 => Some(Self::Poison),
             COMBAT_FIELD_KIND_SLEEP | DUNGEON_ROOM_SPECIAL_SOURCE_E9 => Some(Self::Sleep),
             COMBAT_FIELD_KIND_FIRE | DUNGEON_ROOM_SPECIAL_SOURCE_EA => Some(Self::Fire),
             COMBAT_FIELD_KIND_ENERGY | DUNGEON_ROOM_SPECIAL_SOURCE_EB => Some(Self::Energy),
             _ => None,
+        }
+    }
+
+    /// `combat.md §11` (u5-spec#308 Q3): "The combat field-spell placement
+    /// maps Poison Field to `0xE8`, Sleep Field to `0xE9`, Energy Field to
+    /// `0xEB`, and Fire Field ... to `0xEA`". This is the id a placed marker
+    /// carries (and draws as, `tile-catalog.md` rows 488-491); the
+    /// [`Self::kind_byte`] `0x33..0x36` is only the dispatch argument.
+    pub const fn marker_id(self) -> u8 {
+        match self {
+            Self::Poison => DUNGEON_ROOM_SPECIAL_SOURCE_E8,
+            Self::Sleep => DUNGEON_ROOM_SPECIAL_SOURCE_E9,
+            Self::Fire => DUNGEON_ROOM_SPECIAL_SOURCE_EA,
+            Self::Energy => DUNGEON_ROOM_SPECIAL_SOURCE_EB,
         }
     }
 
