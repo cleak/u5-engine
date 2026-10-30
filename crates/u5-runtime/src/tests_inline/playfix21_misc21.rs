@@ -43,11 +43,10 @@ fn playtest_p21_05_matching_wish_on_an_occupied_cell_still_poofs() {
     assert_eq!(horses, 1, "the grant creates its horse east of the caller");
 }
 
-/// Playtest P21-06. `town-mode.md §13`: the town Fire source test is "the
-/// same four-neighbour probe the Fire and Yell commands use", the four cells
-/// cardinally adjacent to the party (`commands.md §11`). A cannon standing
-/// only diagonally next to the party is no source, so F-Fire answers `What?`
-/// (`vehicles.md §8`).
+/// Playtest P21-06. `vehicles.md §8` (issue #313 Q3): the probe examines
+/// "exactly the four cells cardinally adjacent to the party ... Diagonal
+/// cells and the party's own cell are never examined". A cannon standing
+/// only diagonally next to the party is no source, so F-Fire answers `What?`.
 #[test]
 fn playtest_p21_06_town_fire_ignores_a_diagonal_cannon() {
     let dir = debug_game_dir();
@@ -79,6 +78,67 @@ fn playtest_p21_06_town_fire_ignores_a_diagonal_cannon() {
 
 /// The transcript plus the unflushed slot, one string per row, as the shell
 /// composes the message window.
+/// Issue #313 Q3. `vehicles.md §8`: the probe examines the four cardinal
+/// cells "in the order **north, east, south, west**", "This is not the Yell
+/// command's order", and "The first qualifying cell in that order is the
+/// source". The shot "runs in the cannon's facing, whichever side of the
+/// party the cannon stands on". The probe used Yell's west, south, east,
+/// north order (playtest P21-06).
+#[test]
+fn issue_313_town_fire_probe_order_is_north_east_south_west() {
+    let scene = Scene::new(17).unwrap();
+    // Cannons on all four sides of the party at (5,5), each facing a
+    // different way: north cell faces west, east cell faces south, south
+    // cell faces east, west cell faces north.
+    let mut grid = open_grid();
+    grid[4 * 32 + 5] = TOWN_CANNON_TILE_FIRST + 3;
+    grid[5 * 32 + 6] = TOWN_CANNON_TILE_FIRST + 2;
+    grid[6 * 32 + 5] = TOWN_CANNON_TILE_FIRST + 1;
+    grid[5 * 32 + 4] = TOWN_CANNON_TILE_FIRST;
+    let mut state = test_state(grid, 5, 5);
+
+    let mut expected = vec![
+        ((5, 4), Direction::West),
+        ((6, 5), Direction::South),
+        ((5, 6), Direction::East),
+        ((4, 5), Direction::North),
+    ];
+    for ((x, y), direction) in expected.drain(..) {
+        let source = state
+            .adjacent_town_cannon_fire_source(scene, 0)
+            .expect("a cardinal cannon");
+        assert_eq!((source.x, source.y), (x, y));
+        assert_eq!(source.direction, direction, "the cannon's own facing");
+        // Clear this source so the next one in the order is found.
+        state.grid[y * 32 + x] = open_grid()[y * 32 + x];
+    }
+    assert!(state.adjacent_town_cannon_fire_source(scene, 0).is_none());
+}
+
+/// Issue #313 Q3. `vehicles.md §8`: the shot "steps along the line before
+/// each test, so the cannon's own cell is never tested and at most four
+/// cells beyond it are". A door four cells beyond the cannon is reached; one
+/// five cells beyond is not.
+#[test]
+fn issue_313_town_fire_shot_reaches_four_cells_beyond_the_cannon() {
+    let dir = debug_game_dir();
+    let mut grid = open_grid();
+    // Party at (0,1), an east-facing cannon at (1,1), a door at (5,1).
+    grid[32 + 1] = TOWN_CANNON_TILE_FIRST + 1;
+    grid[32 + 5] = TOWN_DOOR_PLAIN_UNLOCKED_TILE;
+    let mut state = test_state(grid.clone(), 0, 1);
+    assert_eq!(state.fire_command(None, &dir).unwrap(), MoveOutcome::Fired);
+    assert_eq!(state.grid[32 + 5], TOWN_DOOR_CLEARED_TILE);
+
+    grid[32 + 5] = open_grid()[32 + 5];
+    grid[32 + 6] = TOWN_DOOR_PLAIN_UNLOCKED_TILE;
+    let mut state = test_state(grid, 0, 1);
+    assert_eq!(state.fire_command(None, &dir).unwrap(), MoveOutcome::Fired);
+    assert_eq!(state.grid[32 + 6], TOWN_DOOR_PLAIN_UNLOCKED_TILE);
+    assert_eq!(state.message, crate::commands::CANNON_BOOOM_LINE);
+    let _ = fs::remove_dir_all(dir);
+}
+
 fn p21_window_history(state: &PlayState) -> Vec<String> {
     let mut rows: Vec<String> = state
         .message_entries()

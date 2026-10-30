@@ -24,8 +24,11 @@ pub const SECRET_DOOR_TABLE_FILE: &str = "secret_doors.tsv";
 pub const TOWN_FIRE_SOURCE_TABLE_FILE: &str = "town_fire_sources.tsv";
 /// `vehicles.md §8`: town F-Fire scans a short fixed line for the
 /// first blocking target. This is the maximum distance, in cells,
-/// from the fire-source tile that the cannon-line tracer probes.
-pub const TOWN_CANNON_RANGE_CELLS: i32 = 3;
+/// from the fire-source tile that the cannon-line tracer probes:
+/// the shot "steps along the line before each test, so the cannon's
+/// own cell is never tested and at most four cells beyond it are"
+/// (issue #313 Q3).
+pub const TOWN_CANNON_RANGE_CELLS: i32 = 4;
 /// `vehicles.md §8`: on a successful town F-Fire hit against an
 /// active object, the shared moral-standing selector is reduced by
 /// this many units (floored at zero by the karma helper). The

@@ -1415,8 +1415,9 @@ pub const fn town_fire_active_object_hit_standing(standing: u8) -> u8 {
     standing.saturating_sub(TOWN_FIRE_ACTIVE_OBJECT_HIT_KARMA_DEBIT)
 }
 
-/// `town-mode.md §13`: Fire uses "the same four-neighbour probe" as Yell,
-/// so only a cardinally adjacent source qualifies (playtest P21-06).
+/// `vehicles.md §8` (issue #313 Q3): the F-Fire probe examines "exactly the
+/// four cells cardinally adjacent to the party", so only a cardinally
+/// adjacent source qualifies (playtest P21-06).
 pub fn town_fire_source_is_adjacent(entry: TownFireSourceEntry, x: usize, y: usize) -> bool {
     entry.x.abs_diff(x) + entry.y.abs_diff(y) == 1
 }

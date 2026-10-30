@@ -3214,16 +3214,17 @@ impl PlayState {
         scene: Scene,
         floor: i8,
     ) -> Option<TownFireSourceEntry> {
-        // `town-mode.md §13`: Fire's source test is "the same four-neighbour
-        // probe the Fire and Yell commands use", and Yell's probe inspects
-        // "the four cells cardinally adjacent to the party ... in the order
-        // west, south, east, north" (`commands.md §11`). A diagonal cannon is
-        // not a source (playtest P21-06).
+        // `vehicles.md §8` (issue #313 Q3): "the handler examines exactly
+        // the four cells cardinally adjacent to the party in the currently
+        // visible view, in the order **north, east, south, west**. Diagonal
+        // cells and the party's own cell are never examined. This is not the
+        // Yell command's order". "The first qualifying cell in that order is
+        // the source and the probe stops there" (playtest P21-06).
         for probe in [
-            Direction::West,
-            Direction::South,
-            Direction::East,
             Direction::North,
+            Direction::East,
+            Direction::South,
+            Direction::West,
         ] {
             let (dx, dy) = probe.delta();
             let x = self.player.x as isize + dx;

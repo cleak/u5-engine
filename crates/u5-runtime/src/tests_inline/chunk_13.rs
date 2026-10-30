@@ -167,18 +167,14 @@ fn chargen_name_field_and_input_max_anchor_to_save_name_len() {
 }
 
 #[test]
-fn ship_broadside_range_anchors_to_town_cannon_range() {
-    // vehicles.md §7: the ship broadside projectile and the
-    // town cannon projectile both scan 3 cells from the firer
-    // (both fire the same cannonball). ship_broadside.rs
-    // declared SHIP_BROADSIDE_RANGE_CELLS = 3 as a bare
-    // literal in parallel with constants::TOWN_CANNON_RANGE_CELLS
-    // = 3. Anchor the ship-broadside range through to the
-    // town-cannon range so the two cannon-range constants
-    // share one source of truth.
-    assert_eq!(SHIP_BROADSIDE_RANGE_CELLS, TOWN_CANNON_RANGE_CELLS as u8,);
+fn ship_broadside_and_town_cannon_ranges_are_separate_contracts() {
+    // vehicles.md §7: "A legal broadside traces a short line, up to three
+    // cells, from the ship". vehicles.md §8 (issue #313 Q3): the town cannon
+    // shot "steps along the line before each test, so the cannon's own cell
+    // is never tested and at most four cells beyond it are". The two ranges
+    // used to share one constant; they are published separately.
     assert_eq!(SHIP_BROADSIDE_RANGE_CELLS, 3);
-    assert_eq!(TOWN_CANNON_RANGE_CELLS, 3);
+    assert_eq!(TOWN_CANNON_RANGE_CELLS, 4);
 }
 
 #[test]
@@ -6739,17 +6735,9 @@ fn town_cannon_named_constants_match_spec() {
     // units (floored at zero by the karma helper). Promote both
     // numbers to named constants so the F-Fire handler does not
     // bake `3` and `5` as bare literals.
-    assert_eq!(TOWN_CANNON_RANGE_CELLS, 3);
+    // Issue #313 Q3: at most four cells beyond the cannon are tested.
+    assert_eq!(TOWN_CANNON_RANGE_CELLS, 4);
     assert_eq!(TOWN_CANNON_HIT_KARMA_DEBIT, 5);
-    // The town cannon range is the same magnitude as the ship
-    // broadside range, but the spec keeps them as independent
-    // contracts (one ship-only, one town-only). Both being 3 is
-    // a coincidence of the published data, not a shared constant.
-    assert_eq!(
-        TOWN_CANNON_RANGE_CELLS as u8, SHIP_BROADSIDE_RANGE_CELLS,
-        "spec keeps these contracts independent even though the v1 \
-             values both happen to be three"
-    );
 }
 
 #[test]
