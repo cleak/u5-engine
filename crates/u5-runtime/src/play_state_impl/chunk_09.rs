@@ -3212,8 +3212,8 @@ impl PlayState {
         self.advance_turn_with_minutes(minutes);
     }
 
-    /// The gate in front of an overworld or town command's ordinary turn
-    /// charge. Returns whether the charge runs now.
+    /// The two gates in front of an overworld or town command's ordinary
+    /// turn charge. Returns whether the charge runs now.
     ///
     /// * **A modal wait still open.** `view.md §4`: the local View overlay
     ///   "waits for a keypress" inside LOOKOBJ, and `§4.2.2` has the sky
@@ -3226,6 +3226,13 @@ impl PlayState {
     ///   those waits is open is owed to its close
     ///   ([`Self::settle_modal_wait_turn`]) (playtest P21-03, P21-07,
     ///   P21-12).
+    /// * **The town capability recheck.** `town-mode.md §7` step 4: between
+    ///   an acted command and the clock advance the town loop runs the
+    ///   party-capability check again, and "If nobody can act and nobody is
+    ///   asleep, the **whole** epilogue is skipped: no minute ... The next
+    ///   iteration's opening check then enters the total-party-defeat
+    ///   rescue". A Look whose telescope sun or death vision killed the last
+    ///   member spends no minute (playtest P21-02).
     fn top_down_turn_charge_proceeds(&mut self, tick_doors: bool) -> bool {
         if self.combat_active {
             return true;
@@ -3238,7 +3245,9 @@ impl PlayState {
             self.pending_modal_wait_turn = Some(tick_doors);
             return false;
         }
-        true
+        !(matches!(self.area, Area::Town { .. })
+            && !self.party.is_empty()
+            && matches!(self.party_capability(), PartyCapability::Defeated))
     }
 
     /// Whether an overworld or town command is still inside one of the
@@ -7380,7 +7389,9 @@ mod time_cascade_and_daylight_spec_tests {
     /// no-selection sentinel."
     #[test]
     fn the_status_pass_clears_the_selector_when_it_names_a_dead_member() {
-        let mut state = test_state(open_grid(), 10, 10);
+        // Outdoors: in town a wholly dead party skips the whole epilogue
+        // (`town-mode.md §7` step 4, the capability recheck), pass included.
+        let mut state = world_state(open_world_grid(), 10, 10);
         state.party[0].status = b'D';
         state.party[0].hp = 0;
         state.active_player = Some(0);

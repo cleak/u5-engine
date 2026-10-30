@@ -156,3 +156,26 @@ fn playtest_p21_07_restoration_turn_waits_for_the_last_answer() {
     assert!(p21_row_index(&rows, "restored!") < p21_row_index(&rows, STARVATION_WARNING));
     let _ = fs::remove_dir_all(dir);
 }
+
+/// Playtest P21-02. `town-mode.md §7` step 4, the capability recheck in
+/// front of the epilogue: "If nobody can act and nobody is asleep, the
+/// **whole** epilogue is skipped: no minute". The daylight telescope's sun
+/// applies its point "with the ordinary ... death handling" (`view.md
+/// §4.2.1`), so a Look that kills the last member spends no minute.
+#[test]
+fn playtest_p21_02_town_look_that_wipes_the_party_spends_no_minute() {
+    let dir = debug_game_dir();
+    fs::write(dir.join(LOOK2_DAT_FILE), look2_bytes(&[])).unwrap();
+    let mut grid = open_grid();
+    grid[32 + 2] = TELESCOPE_LOOK_TRIGGER_TILE;
+    let mut state = test_state(grid, 1, 1);
+    state.clock = GameClock::new(12, 0).unwrap();
+    state.party[0].hp = 1;
+
+    handle_play_key_input(&mut state, 'L', "", &dir).unwrap();
+    handle_play_key_input(&mut state, char::from(INPUT_CODE_EAST), "", &dir).unwrap();
+    assert_eq!(state.party[0].status, b'D');
+    assert_eq!(state.turn, 0, "the whole epilogue is skipped");
+    assert_eq!(state.clock, GameClock::new(12, 0).unwrap());
+    let _ = fs::remove_dir_all(dir);
+}
