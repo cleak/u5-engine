@@ -1906,7 +1906,12 @@ pub fn route_smoke_cases() -> Vec<RouteSmokeCase> {
             // service letter.
             script: &["Y", "R", "Y"],
             expected: RouteSmokeExpectation::Town(castle),
-            min_turn: 1,
+            // `shops.md §8.4` / `time.md §5` (u5-spec#314 Q3): the rest's
+            // sixty-minute and nine-minute steps are clock calls, not turns,
+            // and run no upkeep pass. The only turn an inn rest spends is the
+            // Talk command that opened the inn, and this route opens the
+            // session directly, so it ends at turn 0.
+            min_turn: 0,
             expected_frame_kind: "tile viewport",
         },
         RouteSmokeCase {
