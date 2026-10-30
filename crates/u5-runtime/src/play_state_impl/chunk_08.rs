@@ -3098,6 +3098,15 @@ impl PlayState {
         self.natural_moongate_live_cells.clear();
         self.npcs.clear();
         self.replace_world_active_objects(game_dir, plane, x, y)?;
+        // `shops.md §8.7`: "The next overworld entry consumes that state and
+        // places the watercraft". A dungeon exit is an overworld entry like
+        // the town return below, so a purchase still pending here is
+        // delivered now (playtest P23-02).
+        if let Some(pending) = self.pending_vehicle_save.acquisition() {
+            place_pending_vehicle_acquisition(&mut self.active_objects, plane, pending)?;
+            self.pending_vehicle_save = self.pending_vehicle_save.clear_class();
+            self.cache_current_world_overlay();
+        }
         self.clear_town_visit_state();
         self.return_world = None;
         self.pending_town_arrest = None;

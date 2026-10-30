@@ -21,6 +21,47 @@ fn gate23_britannia_night_state() -> PlayState {
     state
 }
 
+/// Playtest P23-02. `shops.md §8.7`: "The next overworld entry consumes that
+/// state and places the watercraft", and "The delivery pass runs once before
+/// the first overworld turn after the purchase". The Gate Travel warp to an
+/// overworld slot is an overworld entry (`magic.md`, Gate travel row), but it
+/// rebuilt the scene with no pending vehicle, so the frigate stayed queued
+/// until a later load or town-edge exit. A dungeon exit through
+/// `restore_world_at` skipped the delivery the same way.
+#[test]
+fn playtest_p23_02_gate_travel_and_dungeon_exit_deliver_a_pending_vessel() {
+    let dir = debug_game_dir();
+    let frigate = PendingVehicleAcquisition::Frigate {
+        x: 79,
+        y: 109,
+        skiffs: 2,
+    };
+    let delivered = |state: &PlayState| {
+        state
+            .active_objects
+            .iter()
+            .skip(1)
+            .any(|object| (object.type_byte, object.x, object.y) == (0x25, 79, 109))
+    };
+
+    let mut state = britannia_state(open_world_grid(), 5, 5);
+    state.pending_vehicle_save = PendingVehicleSaveState::from_acquisition(frigate);
+    state
+        .apply_gate_travel(&dir, 2, PlayTarget::World(WorldPlane::Britannia), 0, (100, 100))
+        .unwrap();
+    assert!(delivered(&state), "{:?}", state.active_objects);
+    assert_eq!(state.pending_vehicle_save.acquisition(), None);
+
+    let mut state = britannia_state(open_world_grid(), 5, 5);
+    state.pending_vehicle_save = PendingVehicleSaveState::from_acquisition(frigate);
+    state
+        .restore_world_at(&dir, WorldPlane::Britannia, 10, 10)
+        .unwrap();
+    assert!(delivered(&state), "{:?}", state.active_objects);
+    assert_eq!(state.pending_vehicle_save.acquisition(), None);
+    let _ = fs::remove_dir_all(dir);
+}
+
 /// Playtest P23-03. `magic.md`, Gate travel row: the cast "teleports only if
 /// that slot has a valid saved scene/X/Y/Z destination", otherwise the
 /// ordinary `Failed!`. A slot naming CASTLE:0 floor 5 - outside its published

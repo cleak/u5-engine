@@ -3185,7 +3185,15 @@ impl PlayState {
             // The rebuilt state takes the preserved raw marker from
             // `carry_session_settings_from` instead.
             loaded_transport_marker: None,
-            pending_vehicle: None,
+            // `shops.md §8.7`: "The next overworld entry consumes that state
+            // and places the watercraft", once "before the first overworld
+            // turn after the purchase". A warp to an overworld slot is such an
+            // entry (`magic.md`, Gate travel row), so it delivers a frigate or
+            // skiff bought before the cast (playtest P23-02).
+            pending_vehicle: match target {
+                PlayTarget::World(_) => self.pending_vehicle_save.acquisition(),
+                _ => None,
+            },
             pending_vehicle_save: self.pending_vehicle_save,
             inn_registry: self.inn_registry.clone(),
             initial_britannia_overlay: self.world_overlays.get(WorldPlane::Britannia),
