@@ -194,3 +194,32 @@ fn p20_02_an_accepted_escape_leaves_no_open_arena_row_for_the_next_fight() {
         "the world prompt closes the Escape row, not the next fight's banner"
     );
 }
+
+/// Playtest P20-06. `inventory.md §7.1`: "Accepted directions append
+/// `North\n`, `East\n`, `South\n` or `West\n`", so the Wind Change scroll's
+/// `Direction-East` row is closed. `combat.md §11.1`: the standing hazard's
+/// result line has "no newline before it at all", so it starts on the next
+/// row. The modal's output went through the world message path and the
+/// arena's own column flag still described the banner row, so the hazard
+/// line was joined on as `Direction-EastAvatar hit!`.
+#[test]
+fn p20_06_a_combat_use_result_row_is_closed_before_the_hazard_line() {
+    let game_dir = std::path::Path::new(".");
+    let mut state = combat2b_two_member_state();
+    state.scroll_stock[SCROLL_WIND_CHANGE_INDEX] = 1;
+    combat2b_use_row(
+        &mut state,
+        |request| {
+            matches!(request, UseItemRequest::Scroll { index, .. } if index == SCROLL_WIND_CHANGE_INDEX)
+        },
+        game_dir,
+    );
+    state.combat_transcript_row_open = true;
+    state
+        .combat_pending_hazard_lines
+        .push((1, "Shamino hit!".to_string()));
+    handle_play_key_input(&mut state, char::from(INPUT_CODE_EAST), "", game_dir).unwrap();
+    let rows = p20_rows_from_last(&state, "Direction-");
+    assert_eq!(rows[0], "Direction-East", "{rows:?}");
+    assert_eq!(rows[1], "Shamino hit!", "{rows:?}");
+}

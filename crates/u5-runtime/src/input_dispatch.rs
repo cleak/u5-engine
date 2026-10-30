@@ -1526,6 +1526,19 @@ fn finish_combat_modal_actor_action(state: &mut PlayState, actor_slot: Option<us
     }
     state.pending_combat_actor_slot = None;
     if state.combat_active {
+        // The modal printed through the world message path - its verb echo
+        // opened a fresh row under the arena prompt, and its result
+        // (`Direction-East\n`, `inventory.md §7.1`; a scroll banner; a
+        // potion's `§7.2` line) went through the slot - so
+        // `combat_transcript_row_open` still describes the arena row the
+        // turn banner left, which the arena prompt's feed already closed.
+        // The world flag is the one these callers set for the rows they
+        // printed. Without this the standing hazard's result line, which
+        // has "no newline before it at all" (`combat.md §11.1`), joined the
+        // closed result row as `Direction-EastAvatar hit!` (playtest
+        // P20-06).
+        state.flush_message_slot();
+        state.combat_transcript_row_open = state.message_row_open_mid_line;
         let _ = apply_combat_committed_action_maintenance(state, actor_slot);
         advance_combat_round_after_actor_and_append_message(state, actor_slot);
     }
