@@ -17,6 +17,36 @@ fn p22_rows(state: &PlayState) -> Vec<String> {
     rows
 }
 
+fn p22_karma_dat(dir: &std::path::Path) {
+    let mut bytes = Vec::new();
+    for record in ["low", "twenty", "forty", "sixty", "blackthorn-top", "camp-top"] {
+        bytes.extend_from_slice(record.as_bytes());
+        bytes.push(0);
+    }
+    fs::write(dir.join(KARMA_DAT_FILE), bytes).unwrap();
+}
+
+/// A one-member overworld party whose six-hour camp reaches the apparition
+/// (prng seed 4 reaches the event), starting at `hour:minute`
+/// with no food.
+fn p22_apparition_camp(hour: u8, minute: u8) -> (PlayState, std::path::PathBuf) {
+    let dir = debug_game_dir();
+    p22_karma_dat(&dir);
+    let mut state = britannia_state(open_world_grid(), 2, 0);
+    state.clock = GameClock::new(hour, minute).unwrap();
+    state.cleanup_previous_hour = hour;
+    state.food = 0;
+    state.prng_state = 4;
+    state.party[0].hp = 10;
+    state.party[0].max_hp = 30;
+    state.party[0].climb_stat = 20;
+    state.party_experience = vec![200];
+    state.party_strengths = vec![20];
+    state.party_intelligence = vec![18];
+    state.moral_standing = 80;
+    (state, dir)
+}
+
 /// Playtest P22-02. `rest-and-camp.md §4`: at the town bed "Space or `0`
 /// cancels ... The command still reports acted, so a cancel costs the
 /// ordinary one-minute town turn and its epilogue", and `town-mode.md §7`
@@ -90,5 +120,47 @@ fn playtest_p22_05_dungeon_camp_turn_runs_the_upkeep_pass() {
     assert!(!state.combat_active);
     assert_eq!(state.clock, GameClock::new(12, 21).unwrap(), "no second minute");
     assert_eq!(state.party[0].hp, 59, "the camp turn's poison point");
+    let _ = fs::remove_dir_all(dir);
+}
+
+/// Playtest P22-03. `time.md §12`: the status pass "is invoked from exactly
+/// four places", and the camp apparition's closing turn-clock advance
+/// (`rest-and-camp.md §7.1` step 7) is not one. Its hour crossing is then
+/// erased by the outdoor turn's own advance (`time.md §5`, "Two
+/// time-advancing calls between an hour crossing and the next upkeep pass
+/// therefore erase the mismatch"). It used to run the pass, applying a
+/// starvation roll after the event's heal with no `Starving!`.
+#[test]
+fn playtest_p22_03_apparition_clock_advance_runs_no_upkeep_pass() {
+    let (mut state, dir) = p22_apparition_camp(12, 58);
+    handle_play_key_input(&mut state, 'H', "", &dir).unwrap();
+    handle_play_key_input(&mut state, '6', "", &dir).unwrap();
+    state.flush_text_hold();
+    let rows = p22_rows(&state);
+    assert!(rows.iter().any(|row| row == "An apparition!"), "{rows:?}");
+    assert_eq!(state.clock, GameClock::new(19, 2).unwrap());
+    assert_eq!(state.party[0].hp, state.party[0].max_hp, "no starvation after the heal");
+    assert!(!rows.iter().any(|row| row == STARVATION_WARNING), "{rows:?}");
+    let _ = fs::remove_dir_all(dir);
+}
+
+/// Playtest P22-03, the turn's own crossing. When the outdoor turn's advance
+/// after the event crosses the hour, the pass starves the party - and the
+/// warning prints after the event's last held page, never between its pages.
+#[test]
+fn playtest_p22_03_apparition_turn_starvation_prints_after_the_event() {
+    let (mut state, dir) = p22_apparition_camp(12, 56);
+    handle_play_key_input(&mut state, 'H', "", &dir).unwrap();
+    handle_play_key_input(&mut state, '6', "", &dir).unwrap();
+    assert!(state.text_hold_active());
+    state.flush_text_hold();
+    let rows = p22_rows(&state);
+    assert_eq!(state.clock, GameClock::new(19, 0).unwrap());
+    assert!(state.party[0].hp < state.party[0].max_hp);
+    assert_eq!(
+        rows.iter().rev().take(2).cloned().collect::<Vec<_>>(),
+        [STARVATION_WARNING, "The strangely familiar old man vanishes..."],
+        "{rows:?}"
+    );
     let _ = fs::remove_dir_all(dir);
 }

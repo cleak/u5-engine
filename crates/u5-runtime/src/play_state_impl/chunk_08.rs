@@ -553,8 +553,18 @@ impl PlayState {
             self.attach_sounds_to_held_pages(event_sounds);
             // `rest-and-camp.md §7`: the event "removes the temporary
             // old-man presentation state and advances the turn clock before
-            // normal play resumes".
-            self.advance_turn();
+            // normal play resumes". That advance is a bare clock call, not
+            // the upkeep pass: `time.md §12` lists the pass's only four call
+            // sites, and the camp event is none of them. Under the shared
+            // `0x02DA` snapshot (`time.md §5`) an hour this advance crosses
+            // is then erased by the outdoor turn's own advance below, so it
+            // takes no starvation; running the pass here applied the roll
+            // after the event's heal, and its `Starving!` never printed
+            // (playtest P22-03).
+            if !self.combat_active {
+                let minutes = self.turn_minute_increment();
+                self.advance_turn_with_minutes_policy(minutes, true, true, false, false);
+            }
         }
         if let Some(monster) = ambush_monster {
             let z = match self.area {

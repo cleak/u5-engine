@@ -3963,6 +3963,26 @@ impl PlayState {
         let Some(report) = self.pending_hourly_status_message.take() else {
             return;
         };
+        // The pass runs after the command returns (`overworld.md §5` step
+        // 6, `town-mode.md §7` step 4), so a command whose text is still
+        // waiting on a key - the camp apparition's level lines and verdict
+        // (`rest-and-camp.md §7.1`) - prints all of it first. Writing the
+        // warning into the slot put `Starving!` between the event's pages
+        // (playtest P22-03); it queues behind the last held page instead,
+        // on a row of its own.
+        if let Some(hold) = self.pending_text_hold.as_ref() {
+            let last_row_open = hold
+                .pages
+                .back()
+                .is_some_and(|page| !page.text.text.is_empty() && !page.text.text.ends_with('\n'));
+            let text = if last_row_open {
+                format!("\n{report}")
+            } else {
+                report
+            };
+            self.emit_tlk_message(crate::tlk_runner::TlkRenderedText::plain(text));
+            return;
+        }
         // A slot the transcript already carries (the command's own result,
         // flushed or committed onto its echo row while the turn advanced)
         // is spent: appending to it made the next flush log the whole slot
