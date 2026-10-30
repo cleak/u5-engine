@@ -145,7 +145,10 @@ fn playtest_e33_spell_cursors_never_confirm_on_the_casters_own_cell() {
             state
                 .active_objects
                 .iter()
-                .all(|object| object.type_byte != COMBAT_FIELD_KIND_SLEEP),
+                .all(|object| {
+                    CombatArenaFieldKind::from_kind_byte(object.type_byte)
+                        != Some(CombatArenaFieldKind::Sleep)
+                }),
             "{first}{rest}"
         );
     }

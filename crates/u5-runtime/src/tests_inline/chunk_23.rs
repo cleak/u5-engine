@@ -3208,7 +3208,10 @@ fn active_combat_field_followup_cancels_after_spending_without_marker() {
         state
             .active_objects
             .iter()
-            .all(|object| object.type_byte != COMBAT_FIELD_KIND_FIRE)
+            .all(|object| {
+                CombatArenaFieldKind::from_kind_byte(object.type_byte)
+                    != Some(CombatArenaFieldKind::Fire)
+            })
     );
 }
 
@@ -3273,7 +3276,7 @@ fn active_combat_field_followup_ignores_out_of_bounds_cursor_move() {
     let marker = state
         .active_objects
         .iter()
-        .find(|object| object.type_byte == COMBAT_FIELD_KIND_POISON)
+        .find(|object| object.type_byte == CombatArenaFieldKind::Poison.marker_id())
         .expect("poison field marker should be placed");
     assert_eq!((marker.x, marker.y), (1, 0));
 }
@@ -13699,7 +13702,10 @@ fn combat_input_dispatch_cancelled_field_cursor_commits_spent_cast_action() {
         state
             .active_objects
             .iter()
-            .all(|object| object.type_byte != COMBAT_FIELD_KIND_FIRE)
+            .all(|object| {
+                CombatArenaFieldKind::from_kind_byte(object.type_byte)
+                    != Some(CombatArenaFieldKind::Fire)
+            })
     );
     // `combat.md §8.2`: the shared cursor's ranged-arm cancel "returns
     // silently" - no `None!` (playtest E34).
@@ -17753,8 +17759,8 @@ fn combat_cast_field_spell_places_arena_marker_after_coordinate_lookup() {
     assert_eq!(
         state.active_objects[1],
         ActiveObject {
-            type_byte: COMBAT_FIELD_KIND_POISON,
-            tile: COMBAT_FIELD_KIND_POISON,
+            type_byte: CombatArenaFieldKind::Poison.marker_id(),
+            tile: CombatArenaFieldKind::Poison.marker_id(),
             x: 4,
             y: 3,
             z: 0,
@@ -17837,8 +17843,8 @@ fn combat_cast_field_spell_places_marker_without_immediate_contact() {
     assert_eq!(
         state.active_objects[1],
         ActiveObject {
-            type_byte: COMBAT_FIELD_KIND_FIRE,
-            tile: COMBAT_FIELD_KIND_FIRE,
+            type_byte: CombatArenaFieldKind::Fire.marker_id(),
+            tile: CombatArenaFieldKind::Fire.marker_id(),
             x: 4,
             y: 3,
             z: 0,
@@ -17915,7 +17921,10 @@ fn combat_cast_fire_field_places_marker_without_random_gate() {
     assert!(!state.combat_actors[target_slot].is_marked_dead());
     assert_eq!(state.combat_actors[target_slot].hp_or_wound, stats.max_hp);
     assert_eq!(state.active_objects[target_slot].tile, 0x70);
-    assert_eq!(state.active_objects[1].type_byte, COMBAT_FIELD_KIND_FIRE);
+    assert_eq!(
+        state.active_objects[1].type_byte,
+        CombatArenaFieldKind::Fire.marker_id()
+    );
     assert_eq!(
         (state.active_objects[1].x, state.active_objects[1].y),
         (4, 3)
@@ -17965,7 +17974,10 @@ fn combat_cast_field_spell_places_marker_without_actor_contact_target() {
     assert_eq!(state.party[0].mana, 0);
     assert_eq!(state.turn, 0); // combat.md §15: no per-command turn in a fight (playtest G08)
     assert_eq!(state.message, "");
-    assert_eq!(state.active_objects[1].type_byte, COMBAT_FIELD_KIND_POISON);
+    assert_eq!(
+        state.active_objects[1].type_byte,
+        CombatArenaFieldKind::Poison.marker_id()
+    );
     assert_eq!(
         (state.active_objects[1].x, state.active_objects[1].y),
         (4, 3)

@@ -2332,10 +2332,13 @@ impl PlayState {
             .active_objects
             .iter()
             .position(|object| object.is_empty())?;
-        let kind_byte = field.kind_byte();
+        // `combat.md §11` (u5-spec#308 Q3): the placed marker carries the
+        // `0xE8..0xEB` field id, not the `0x33..0x36` dispatch byte, which
+        // would draw as a seated-figure actor tile (playtest P20-01).
+        let marker_id = field.marker_id();
         self.active_objects[active_object_slot] = ActiveObject {
-            type_byte: kind_byte,
-            tile: kind_byte,
+            type_byte: marker_id,
+            tile: marker_id,
             x: usize::from(target_x),
             y: usize::from(target_y),
             z: target_slot

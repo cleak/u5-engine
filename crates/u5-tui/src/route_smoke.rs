@@ -5366,7 +5366,7 @@ fn seed_combat_field_dispel_route(
     let mut active_objects = vec![ActiveObject::empty(); COMBAT_ACTOR_SLOTS];
     active_objects[0] = route_combat_active_object(0x4c, 5, 5, 0);
     if let Some(field) = field {
-        active_objects[6] = route_combat_active_object(field.kind_byte(), 6, 5, 0);
+        active_objects[6] = route_combat_active_object(field.marker_id(), 6, 5, 0);
     }
     state.enter_combat_frame(active_objects, actors)?;
     Ok(())
