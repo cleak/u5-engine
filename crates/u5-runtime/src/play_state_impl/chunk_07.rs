@@ -7926,6 +7926,37 @@ impl PlayState {
         if self.combat_active {
             return Ok(None);
         }
+        self.run_dungeon_post_action_helper(game_dir)
+    }
+
+    /// The helper an ambushed dungeon camp left owed
+    /// ([`PlayState::pending_dungeon_post_action_helper`]), run once the
+    /// ambush fight has returned. `dungeon-mode.md §11` step 4 nests the
+    /// arena inside `H`, which `commands.md §3` has spend a turn "Always",
+    /// so `§4` step 6's whole pass follows the fight; the upkeep pass the
+    /// camp's charge left owed is its last act and is settled by the caller
+    /// (playtest P23-07).
+    pub fn resume_dungeon_post_action_helper_after_combat(
+        &mut self,
+        game_dir: &Path,
+    ) -> io::Result<Option<MoveOutcome>> {
+        if self.combat_active || !std::mem::take(&mut self.pending_dungeon_post_action_helper) {
+            return Ok(None);
+        }
+        if !matches!(self.area, Area::Dungeon { .. }) {
+            return Ok(None);
+        }
+        let outcome = self.run_dungeon_post_action_helper(game_dir)?;
+        // `stats-panel.md §2.2.1`: the dungeon's post-action redraw is an
+        // immediate whole-panel site.
+        self.repaint_stats_panel();
+        Ok(outcome)
+    }
+
+    fn run_dungeon_post_action_helper(
+        &mut self,
+        game_dir: &Path,
+    ) -> io::Result<Option<MoveOutcome>> {
         let Area::Dungeon { scene, level } = self.area else {
             return Ok(None);
         };
@@ -7988,6 +8019,28 @@ impl PlayState {
         let x = self.player.x;
         let y = self.player.y;
         let tile = self.dungeon_cell(level, x, y);
+        if is_dungeon_room_trigger(tile) || is_dungeon_room_helper_state(tile) {
+            // `dungeon-mode.md §8.1`'s first post-action row: the room-entry
+            // helper prints `Entering room...\n` "as its first act", and
+            // `§5` nests the room fight inside it. The command that led onto
+            // the cell already spent the turn, so the helper charges none
+            // (playtest P23-05, P23-06); the upkeep pass stays owed until
+            // the fight returns.
+            self.flush_message_slot();
+            let outcome = self.resolve_dungeon_room_trigger_charging(
+                Some(game_dir),
+                scene,
+                level,
+                x,
+                y,
+                tile,
+                false,
+            )?;
+            // The helper's line is one complete row; set explicitly - the
+            // helper writes the slot directly and sets no row state.
+            self.message_row_open_mid_line = false;
+            return Ok(Some(outcome));
+        }
         if let Some(entry) = self.dungeon_teleport_at(Some(game_dir), scene, level, x, y, tile)? {
             // `doors-and-z-transitions.md` (dungeon level <-> dungeon
             // level): the scripted teleport is a post-action level change,

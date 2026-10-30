@@ -122,7 +122,20 @@ impl PlayState {
             self.player.y = ny;
             self.sync_player_object();
             self.mark_visibility_dirty();
-            return self.resolve_dungeon_room_trigger(game_dir, scene, level, nx, ny, tile);
+            // `dungeon-mode.md §8.1` lists room entry among the "Post-action
+            // underfoot consequences", and `§4` step 6 / `§10` run that pass
+            // as "the wake roll, the active-monster step, the encounter
+            // auto-face, the underfoot reaction". So the step only spends
+            // its turn; the post-action pass enters the room after the wake
+            // roll and the monster step (playtest P23-06). A caller with no
+            // game directory has no post-action pass to reach, and keeps the
+            // immediate entry.
+            if game_dir.is_none() {
+                return self.resolve_dungeon_room_trigger(game_dir, scene, level, nx, ny, tile);
+            }
+            self.advance_turn();
+            self.message = String::new();
+            return Ok(MoveOutcome::Moved);
         }
         if let Some(entry) = self.dungeon_teleport_at(game_dir, scene, level, nx, ny, tile)? {
             return Ok(self.apply_dungeon_teleport(scene, entry, direction));
@@ -154,7 +167,9 @@ impl PlayState {
         // well printed `Poison!`/`Fire!!` twice and rolled twice, exactly as
         // the bomb did (audit A088). The step leaves the party on the cell;
         // the post-action pass prints the line and makes the rolls.
-        if is_dungeon_room_helper_state(tile) {
+        // A `0xA?` room-helper cell is entered by the same post-action
+        // underfoot reaction as a `0xF?` trigger (above).
+        if game_dir.is_none() && is_dungeon_room_helper_state(tile) {
             return self.resolve_dungeon_room_trigger(game_dir, scene, level, nx, ny, tile);
         }
         self.advance_turn();
@@ -466,19 +481,31 @@ impl PlayState {
         &mut self,
         game_dir: Option<&Path>,
     ) -> io::Result<Option<MoveOutcome>> {
+        self.resolve_current_dungeon_room_trigger_charging(game_dir, true)
+    }
+
+    /// [`Self::resolve_current_dungeon_room_trigger`], with `charge_turn`
+    /// false for a room entered from inside a command's post-action pass,
+    /// whose turn the command already spent.
+    pub(crate) fn resolve_current_dungeon_room_trigger_charging(
+        &mut self,
+        game_dir: Option<&Path>,
+        charge_turn: bool,
+    ) -> io::Result<Option<MoveOutcome>> {
         let Area::Dungeon { scene, level } = self.area else {
             return Ok(None);
         };
         let tile = self.dungeon_cell(level, self.player.x, self.player.y);
         Ok(
             if is_dungeon_room_trigger(tile) || is_dungeon_room_helper_state(tile) {
-                Some(self.resolve_dungeon_room_trigger(
+                Some(self.resolve_dungeon_room_trigger_charging(
                     game_dir,
                     scene,
                     level,
                     self.player.x,
                     self.player.y,
                     tile,
+                    charge_turn,
                 )?)
             } else {
                 None
@@ -494,6 +521,25 @@ impl PlayState {
         x: usize,
         y: usize,
         tile: u8,
+    ) -> io::Result<MoveOutcome> {
+        self.resolve_dungeon_room_trigger_charging(game_dir, scene, level, x, y, tile, true)
+    }
+
+    /// The room-entry helper (`dungeon-mode.md §5`). `charge_turn` spends
+    /// the turn before the hand-off to combat; the post-action underfoot
+    /// reaction (`§8.1`) passes false, because `§4` gives an iteration one
+    /// loop-head minute and one post-action pass, and the command that led
+    /// onto the cell has already charged both (playtest P23-05).
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn resolve_dungeon_room_trigger_charging(
+        &mut self,
+        game_dir: Option<&Path>,
+        scene: DungeonScene,
+        level: u8,
+        x: usize,
+        y: usize,
+        tile: u8,
+        charge_turn: bool,
     ) -> io::Result<MoveOutcome> {
         let slot = dungeon_room_slot(tile);
         let helper_state = is_dungeon_room_helper_state(tile);
@@ -520,7 +566,9 @@ impl PlayState {
             self.grid[cell] = 0xa0 | slot;
         }
         self.mark_visibility_dirty();
-        self.advance_turn();
+        if charge_turn {
+            self.advance_turn();
+        }
         if dungeon_cbt_available {
             let game_dir = game_dir.expect("availability checked from game_dir");
             let entry_seed = dungeon_room_entry_seed_for_direction(self.player.facing);
@@ -806,7 +854,10 @@ impl PlayState {
         // and has to press a key before the room opens. The transition outcome
         // is still what this returns, because the level change is what the
         // caller reinitialises the view from.
-        let _ = self.resolve_current_dungeon_room_trigger(game_dir)?;
+        // A chain run from the post-action underfoot reaction
+        // (`advance_turn` false) belongs to a command that already spent its
+        // turn, so its room entry charges none (playtest P23-05).
+        let _ = self.resolve_current_dungeon_room_trigger_charging(game_dir, advance_turn)?;
         // `dungeon-mode.md §4.1`/`§14`: the wandering monster is "rolled by
         // dungeon view initialisation", and §8.1 has the chain run the room
         // helper first and only "then reinitialise[] the first-person view".

@@ -598,6 +598,19 @@ impl PlayState {
             // flush commit the slot and then print it again, so the
             // transcript carried the line twice (playtest E29).
             self.emit_message_line(CAMP_AMBUSHED_LINE);
+            // `commands.md §3`: H spends a turn "Always", and
+            // `dungeon-mode.md §11` step 4 nests the ambush arena inside the
+            // command, so an ambushed dungeon camp still owes `§4` step 6's
+            // post-action helper and its trailing upkeep pass - after the
+            // fight, which runs inside H. The turn is charged now, while no
+            // fight is active, exactly as the un-ambushed camp charges it
+            // below (no further minute: the loop-head flag is restored), and
+            // the helper is carried to the fight's return (playtest P23-07).
+            if matches!(self.area, Area::Dungeon { .. }) {
+                self.dungeon_loop_minute_charged = loop_head_minute_charged;
+                self.advance_turn();
+                self.pending_dungeon_post_action_helper = true;
+            }
             // Setup's own return value is an engine diagnostic, not a
             // published line; the slot is left holding the conflict banner,
             // which is what the original's pane shows on entry.

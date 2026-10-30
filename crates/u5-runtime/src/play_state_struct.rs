@@ -213,6 +213,13 @@ pub struct PlayState {
     /// underfoot reaction. Transient within one dungeon action and never
     /// serialized.
     pub pending_dungeon_status_provision_pass: bool,
+    /// `dungeon-mode.md §11` step 4 nests a camp ambush's arena inside the
+    /// `H` command, and `§4` step 6 runs the post-action helper after any
+    /// acted command. An ambushed camp is still inside its fight when the
+    /// command returns, so this flag carries the whole helper - wake roll,
+    /// monster step, underfoot reaction, then the upkeep pass - to the
+    /// fight's return (playtest P23-07). Never serialized.
+    pub pending_dungeon_post_action_helper: bool,
     /// `town-mode.md §7`: the NPC scheduler follows the underfoot/status pass
     /// and the slot-zero coordinate copy. This flag carries that scheduler
     /// call across the I/O-bearing underfoot handler. Stonegate uses the same
