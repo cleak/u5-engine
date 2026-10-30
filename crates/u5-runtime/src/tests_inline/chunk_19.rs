@@ -1938,8 +1938,10 @@
         );
 
         assert_eq!(state.clock, GameClock::new(2, 46).unwrap());
-        // `dungeon-mode.md §11`: twelve five-minute steps per hour.
-        assert_eq!(state.turn, 12);
+        // `dungeon-mode.md §11`: twelve five-minute steps per hour, plus
+        // the acted camp turn's own post-action charge (`§4` step 6), which
+        // adds no minute (playtest P22-05).
+        assert_eq!(state.turn, 13);
         // `dungeon-mode.md §7`: "A dungeon turn spends one counter unit" and
         // the decay "is part of the world-clock advance call", so the
         // counters age by the same sixty-one minutes the clock did.
