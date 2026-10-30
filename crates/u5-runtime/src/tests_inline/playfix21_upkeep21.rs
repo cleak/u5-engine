@@ -393,6 +393,63 @@ fn playtest_p21_11_dungeon_exit_turn_runs_no_upkeep() {
     let _ = fs::remove_dir_all(dir);
 }
 
+fn p21_climb_out_after_loop_minute(state_minute: u8) -> (PlayState, std::path::PathBuf) {
+    let dir = debug_game_dir();
+    fs::write(
+        dir.join(WORLD_LOCATION_TABLE_FILE),
+        "BRITANNIA 10 20 DUNGEON:0\n",
+    )
+    .unwrap();
+    let mut grid = open_dungeon_record();
+    grid[dungeon_cell_index(0, 1, 1)] = 0x10;
+    let mut state = dungeon_state(grid, 0, 1, 1);
+    p21_starving(&mut state, 12, state_minute);
+    state.party[0].status = b'P';
+    state.advance_dungeon_loop_minute();
+    state.climb(&dir, ClimbIntent::Up).unwrap();
+    assert!(matches!(state.area, Area::World { .. }));
+    assert_eq!(state.party[0].hp, 60, "the exit turn runs no upkeep");
+    (state, dir)
+}
+
+/// Issue #313 Q1, the first overworld turn. `dungeon-mode.md §13.1`: if the
+/// exit turn's minute "crossed an hour, the hour is never charged, because
+/// the first time-consuming overworld turn's clock advance refreshes the
+/// shared hour snapshot before its upkeep pass looks at it". "Observed on
+/// the original: with no food and the clock at 12:59, a K out of the dungeon
+/// printed no `Starving!` until 14:00." The poison point is not hour-gated,
+/// so that Pass still applies it (`time.md §5`).
+#[test]
+fn issue_313_dungeon_exit_hour_crossing_is_never_charged() {
+    let (mut state, dir) = p21_climb_out_after_loop_minute(59);
+    assert_eq!(state.clock, GameClock::new(13, 0).unwrap());
+
+    handle_play_key_input(&mut state, ' ', "", &dir).unwrap();
+    assert_eq!(state.clock, GameClock::new(13, 2).unwrap());
+    assert_eq!(state.party[0].hp, 59, "the poison point only");
+    assert!(!p21_rows(&state).iter().any(|row| row == STARVATION_WARNING));
+    let _ = fs::remove_dir_all(dir);
+}
+
+/// Issue #313 Q1: "When the exit turn's minute stays inside the hour (12:58
+/// to 12:59), the first overworld turn crosses the hour itself and charges
+/// it on that turn" (`time.md §5`).
+#[test]
+fn issue_313_first_overworld_turn_charges_an_hour_it_crosses_itself() {
+    let (mut state, dir) = p21_climb_out_after_loop_minute(58);
+    assert_eq!(state.clock, GameClock::new(12, 59).unwrap());
+
+    handle_play_key_input(&mut state, ' ', "", &dir).unwrap();
+    assert_eq!(state.clock, GameClock::new(13, 1).unwrap());
+    assert!(state.party[0].hp <= 60 - 1 - 1, "poison and starvation");
+    assert!(
+        p21_rows(&state).iter().any(|row| row == STARVATION_WARNING),
+        "{:?}",
+        p21_rows(&state)
+    );
+    let _ = fs::remove_dir_all(dir);
+}
+
 /// Playtest P21-10, from a dungeon. `dungeon-mode.md §4` step 4: a warp that
 /// drops the scene byte leaves the loop before step 6's post-action hook,
 /// so the cast turn spends no poison point and takes no starvation, and no

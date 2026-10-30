@@ -3261,7 +3261,10 @@ impl PlayState {
     /// handler". So a K-Klimb, Uus Por or Des Por off the level stack, or a
     /// Gate Travel out, spends no poison point and takes no starvation on
     /// that turn; the next mode's own pass decides the hour from the shared
-    /// snapshot (playtest P21-10, P21-11).
+    /// snapshot (playtest P21-10, P21-11). Issue #313 Q1 confirms it: "the
+    /// exit turn runs no post-action helper", and an hour its loop-head
+    /// minute crossed is never charged, because the first time-consuming
+    /// overworld turn's clock advance refreshes the snapshot first.
     pub(crate) fn advance_turn_leaving_dungeon(&mut self) {
         if self.combat_active {
             return;
