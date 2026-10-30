@@ -312,5 +312,9 @@ fn p6town_sign_high_bit_punctuation_prints_its_low_seven_bit_character() {
     let high = |text: &[u8]| text.iter().map(|byte| byte | 0x80).collect::<Vec<u8>>();
     assert_eq!(decode_sign_payload(&high(b"DEATH, 3/02/1.")), "DEATH, 3/02/1.");
     assert_eq!(decode_sign_payload(&high(b"BRITISH'S")), "BRITISH'S");
-    assert_eq!(decode_sign_payload(&[0x29, b'A', 0x31, 0x26, 0x27]), "*A*--");
+    // Each raw macro is a sixteen-cell fragment (playtest P22-07).
+    assert_eq!(
+        decode_sign_payload(&[0x29, b'A', 0x31, 0x26, 0x27]),
+        format!("{0}A{0}--", " ".repeat(SIGN_MACRO_FRAGMENT_CELLS))
+    );
 }
