@@ -1262,4 +1262,5 @@ mod tests {
     include!("tests_inline/playfix22_rest22.rs");
     include!("tests_inline/dungeon_turn_order.rs");
     include!("tests_inline/playfix22_misc22.rs");
+    include!("tests_inline/playfix23_misc23.rs");
 }

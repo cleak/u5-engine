@@ -3318,6 +3318,19 @@ pub fn resolve_summon_daemon_spell_descriptor(
     )
 }
 
+/// `movement.md §4`: the `0x80..0x8F` Sea Horse, Squid, Sea Serpent and
+/// Shark sprite runs (combat classes 16..19, `combat_class_sprite_base`)
+/// use the glyph-restricted terrain predicate.
+pub const fn combat_class_moves_on_water_glyphs(class: u8) -> bool {
+    matches!(class, 16..=19)
+}
+
+/// `movement.md §4` glyph-restricted predicate: "only the very-low ids and
+/// `0x60..0x6F` glyph/river family".
+pub const fn combat_water_glyph_terrain_accepts(tile: u8) -> bool {
+    tile <= 0x03 || matches!(tile, 0x60..=0x6f)
+}
+
 pub fn combat_class_sprite_base(class: u8) -> Option<u8> {
     match class {
         12..=15 => Some(0x70 + (class - 12) * 4),
