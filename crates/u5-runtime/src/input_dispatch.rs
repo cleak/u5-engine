@@ -218,6 +218,14 @@ fn run_with_command_epilogue(
             result = Err(error);
         }
     }
+    // `dungeon-mode.md §4` step 6: the helper's last act, the upkeep pass,
+    // follows a contact fight and the underfoot reaction it deferred; any
+    // other dungeon charge that reached no post-action helper settles it
+    // here, before the next key is read.
+    if result.is_ok() && !state.combat_active && state.apply_pending_dungeon_status_provision_pass()
+    {
+        state.append_pending_hourly_status_message();
+    }
     // `weather.md §5.1`, clear four: "After **every** outdoor command handler
     // returns, and before the next input is read, the loop clears the cache
     // unless the transport marker is still a hoisted frigate." This is that
@@ -287,7 +295,8 @@ fn run_with_command_epilogue(
 /// `commands.md §3` / `dungeon-mode.md §4` step 6: once a dungeon letter
 /// that reports the default "acted" has closed its last prompt, charge the
 /// turn its handler did not take and run the dungeon post-action pass - the
-/// 1-in-16 wake roll and the active monster's step - before the next key is
+/// 1-in-16 wake roll, the active monster's step, the underfoot reaction and
+/// last the upkeep pass the charge leaves owed - before the next key is
 /// read (playtest J08). The dungeon loop advanced the minute at its head
 /// ([`PlayState::advance_dungeon_loop_minute`]), so the charge adds no
 /// second minute. A fight or a scene change ends the obligation.

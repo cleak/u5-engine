@@ -845,12 +845,16 @@ fn dungeon_zero_minute_turn_keeps_the_shared_snapshot_for_the_upkeep_pass() {
     assert_eq!(state.cleanup_previous_hour, 11);
     let repeats = state.twelve_hour_audio_repeats;
     state.advance_turn();
+    // `dungeon-mode.md §4` step 6: the pass is the post-action helper's
+    // last act, owed by the turn's charge.
+    assert!(state.apply_pending_dungeon_status_provision_pass());
     assert!(state.food < 100, "the 12:00 meal is spent in the dungeon");
     assert_eq!(state.cleanup_previous_hour, 12);
     assert_eq!(state.twelve_hour_audio_repeats, repeats, "no second bundle");
     let food = state.food;
     state.advance_dungeon_loop_minute();
     state.advance_turn();
+    state.apply_pending_dungeon_status_provision_pass();
     assert_eq!(state.food, food, "one meal per crossing");
 }
 

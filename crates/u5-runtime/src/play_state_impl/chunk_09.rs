@@ -3532,6 +3532,12 @@ impl PlayState {
         if std::mem::take(&mut self.pending_town_status_provision_pass) {
             self.apply_hourly_status_provision_pass();
         }
+        // The same net for the dungeon helper's trailing pass. A contact
+        // fight nested inside the helper keeps it owed across the fight's
+        // own round-wrap minutes (`combat.md §4`), which run no pass.
+        if !self.combat_active {
+            self.apply_pending_dungeon_status_provision_pass();
+        }
         self.apply_pending_town_object_epilogue();
         // Same safety net for the outdoor epilogue's deferred walker.
         self.apply_pending_world_object_walker_pass();
@@ -3615,6 +3621,16 @@ impl PlayState {
                 matches!(self.area, Area::Town { .. }) && minutes == MINUTES_PER_INDOOR_TURN;
             if ordinary_town_turn || defer_stonegate_epilogue {
                 self.pending_town_status_provision_pass = true;
+            } else if matches!(self.area, Area::Dungeon { .. }) && !self.combat_active {
+                // `dungeon-mode.md §4` step 6: the dungeon's pass is the
+                // post-action helper's *last* act, after the wake roll and
+                // the active-monster step; `time.md §12` puts the pass in
+                // "the dungeon post-action handler". Running it here, inside
+                // the turn's charge, put its draws (the starvation roll, the
+                // Ring of Regeneration roll) ahead of the wake and monster
+                // draws on every dungeon command. It is owed to the end of
+                // [`Self::apply_dungeon_post_turn_effects_after_turn`].
+                self.pending_dungeon_status_provision_pass = true;
             } else {
                 self.apply_hourly_status_provision_pass();
             }

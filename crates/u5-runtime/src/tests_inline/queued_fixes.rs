@@ -39,6 +39,9 @@ fn fc1_fall_chain_runs_the_status_tick_after_the_monster_setup() {
             outcome,
             MoveOutcome::Transition(AreaTransition::ChangedDungeonLevel { scene, level: 1 })
         );
+        // `dungeon-mode.md §4` step 6: the turn's charge leaves the upkeep
+        // pass to the end of the post-action helper; run it as that end.
+        state.apply_pending_dungeon_status_provision_pass();
 
         let replay = |setup_first: bool| {
             let mut expected = fc1_fall_fixture(seed, 0x00);
@@ -48,8 +51,10 @@ fn fc1_fall_chain_runs_the_status_tick_after_the_monster_setup() {
             if setup_first {
                 expected.setup_dungeon_active_monster_fresh();
                 expected.advance_turn();
+                expected.apply_pending_dungeon_status_provision_pass();
             } else {
                 expected.advance_turn();
+                expected.apply_pending_dungeon_status_provision_pass();
                 expected.setup_dungeon_active_monster_fresh();
             }
             expected

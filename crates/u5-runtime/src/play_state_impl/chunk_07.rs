@@ -3930,6 +3930,7 @@ impl PlayState {
             // Test-only/sidecar-free callers have no town post-action I/O
             // path to enter. They still finish the deferred town tail.
             self.apply_pending_town_status_provision_pass();
+            self.apply_pending_dungeon_status_provision_pass();
             self.apply_pending_town_object_epilogue();
             self.append_pending_hourly_status_message();
         }
@@ -4005,6 +4006,7 @@ impl PlayState {
         {
             self.apply_pending_town_status_provision_pass();
         }
+        self.apply_pending_dungeon_status_provision_pass();
         self.append_pending_hourly_status_message();
     }
 
@@ -4600,6 +4602,18 @@ impl PlayState {
     pub(crate) fn apply_pending_town_status_provision_pass(&mut self) {
         if std::mem::take(&mut self.pending_town_status_provision_pass) {
             self.apply_hourly_status_provision_pass();
+        }
+    }
+
+    /// Run the dungeon turn's owed upkeep pass, the post-action helper's
+    /// last act (`dungeon-mode.md §4` step 6; `time.md §12`). Returns
+    /// whether it ran.
+    pub(crate) fn apply_pending_dungeon_status_provision_pass(&mut self) -> bool {
+        if std::mem::take(&mut self.pending_dungeon_status_provision_pass) {
+            self.apply_hourly_status_provision_pass();
+            true
+        } else {
+            false
         }
     }
 
@@ -7876,7 +7890,25 @@ impl PlayState {
         Ok(records.get(record_index).cloned().unwrap_or_default())
     }
 
+    /// `dungeon-mode.md §4` step 6: the post-action helper, in order - the
+    /// wake roll, the active-monster step (with any contact fight), the
+    /// underfoot reaction - and then its "last act", the party upkeep pass
+    /// the turn's charge left owed (`time.md §5`, §12). A contact fight
+    /// still running keeps the pass owed until the fight and the underfoot
+    /// reaction after it have returned.
     pub fn apply_dungeon_post_turn_effects_after_turn(
+        &mut self,
+        turn_before: u64,
+        game_dir: &Path,
+    ) -> io::Result<Option<MoveOutcome>> {
+        let outcome = self.apply_dungeon_post_action_helper(turn_before, game_dir)?;
+        if !self.combat_active {
+            self.apply_pending_dungeon_status_provision_pass();
+        }
+        Ok(outcome)
+    }
+
+    fn apply_dungeon_post_action_helper(
         &mut self,
         turn_before: u64,
         game_dir: &Path,

@@ -205,6 +205,14 @@ pub struct PlayState {
     /// clock routine to the trailing edge of the town underfoot handler.
     /// Transient within one town action and never serialized.
     pub pending_town_status_provision_pass: bool,
+    /// `dungeon-mode.md §4` step 6: the dungeon post-action helper's "first
+    /// act is the dungeon wake roll" and its "last act is the party upkeep
+    /// pass of `systems/time.md` Section 5". This flag carries that pass from
+    /// the dungeon turn's charge to the end of the helper, after the wake
+    /// roll, the active-monster step (and any contact fight it opens) and the
+    /// underfoot reaction. Transient within one dungeon action and never
+    /// serialized.
+    pub pending_dungeon_status_provision_pass: bool,
     /// `town-mode.md §7`: the NPC scheduler follows the underfoot/status pass
     /// and the slot-zero coordinate copy. This flag carries that scheduler
     /// call across the I/O-bearing underfoot handler. Stonegate uses the same
