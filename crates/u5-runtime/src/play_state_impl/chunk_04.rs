@@ -4275,7 +4275,14 @@ impl PlayState {
     /// the text.
     fn present_look_terrain_description(&mut self, tile: u8, description: &str) {
         self.message = format!("{LOOK_RESULT_PREFIX}\n{description}");
-        if look_terrain_tile_takes_appender_row(tile) {
+        // `text-output.md §6`: "a row-filling string still ends at column
+        // zero of the following row, so the next command prompt still
+        // spends one blank row" - an appender result whose last row is
+        // exactly full (`dungeon Covetous`) is closed by the emitter's own
+        // wrap, not left open (playtest P20-05).
+        if look_terrain_tile_takes_appender_row(tile)
+            && crate::wrapped_final_row_columns(description) < crate::MESSAGE_WINDOW_WIDTH
+        {
             self.flush_message_slot();
             self.leave_last_transcript_row_open();
         }

@@ -66,3 +66,33 @@ fn p20_03_underfoot_notice_keeps_the_next_commands_inner_blank_row() {
     );
     let _ = fs::remove_dir_all(dir);
 }
+
+/// Playtest P20-05. `view.md §3` row 5c: an appender row returns without the
+/// line-spacing cleanup, so a short final row stays open. But
+/// `text-output.md §6`: "When a chunk exactly fills the row, the per-cell
+/// emitter has already wrapped by the time the chunk ends", and "a
+/// row-filling string still ends at column zero of the following row, so the
+/// next command prompt still spends one blank row". `dungeon Covetous` is
+/// sixteen cells; `dungeon Destard` is fifteen and stays open.
+#[test]
+fn p20_05_a_row_filling_appender_look_result_is_not_left_open() {
+    let table = parse_look2_dat(&look2_bytes(&[(
+        WORD_OF_POWER_SEALED_TILE as usize,
+        "the collapsed entrance to the dungeon ",
+    )]))
+    .unwrap();
+    for (x, tail, full) in [(156, "dungeon Covetous", true), (72, "dungeon Destard", false)] {
+        let mut grid = open_world_grid();
+        grid[world_cell_index(x, 27)] = WORD_OF_POWER_SEALED_TILE;
+        let mut state = world_state(grid, x, 28);
+        state.look_direction_with_table(Direction::North, Some(&table));
+        state.flush_message_slot();
+        let last = state.message_transcript.last().expect("a look result");
+        assert!(last.text.ends_with(tail), "{x}: {:?}", p20_rows(&state));
+        assert_eq!(
+            last.leaves_row_open, !full,
+            "{x}: only a row the emitter did not wrap stays open"
+        );
+        assert_eq!(state.message_row_open_mid_line, !full, "{x}");
+    }
+}
