@@ -851,13 +851,15 @@ pub use shrine_virtue::{
 pub use signs_io::{
     SIGN_BODY_CHARACTER_MASK, SIGN_BODY_END_OF_RECORD, SIGN_BODY_MACRO_FIRST, SIGN_BODY_MACRO_LAST,
     SIGN_BODY_PAUSE_FOR_KEY, SIGN_BODY_ROMAN_FONT_BIT, SIGN_BODY_SEPARATOR_GLYPH_A,
-    SIGN_BODY_SEPARATOR_GLYPH_B, SIGN_MACRO_FRAGMENT_CELLS, SIGN_MACRO_FRAGMENT_PLACEHOLDER,
+    SIGN_BODY_SEPARATOR_GLYPH_B, SIGN_MACRO_FRAGMENT_CELLS, SIGN_MACRO_FRAGMENT_COUNT,
+    SIGN_MACRO_FRAGMENT_PLACEHOLDER,
     SIGN_NO_RECORD_PLACARD_ROWS, SIGN_SEPARATOR_RUNIC_CODE_POINT,
     SIGNS_DAT_ALIAS_BRIDGE_LEN, SIGNS_DAT_FILE, SIGNS_DAT_RECORD_HEADER_LEN,
     SIGNS_DAT_READ_WINDOW_BYTES, SIGNS_DAT_SCENE_DIRECTORY_BYTES, SIGNS_DAT_SCENE_DIRECTORY_SLOTS,
-    SIGNS_DAT_WINDOW_FILL_BYTE, SignBodyByteKind, SignRecord, decode_sign_payload, find_sign,
-    find_sign_in_window, load_sign_records, parse_sign_records, sign_body_byte_kind,
-    sign_payload_rendered,
+    SIGNS_DAT_WINDOW_FILL_BYTE, SignBodyByteKind, SignMacroFragments, SignRecord,
+    decode_sign_payload, find_sign, find_sign_in_window, load_sign_macro_fragments,
+    load_sign_records, locate_sign_macro_fragments, parse_sign_records, sign_body_byte_kind,
+    sign_payload_rendered, sign_payload_rendered_with_fragments,
 };
 pub use sky_view::*;
 pub use start_validation::*;

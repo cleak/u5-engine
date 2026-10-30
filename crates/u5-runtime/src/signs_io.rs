@@ -11,9 +11,13 @@
 //! - raw `0x0D` becomes a [`crate::text_hold`] wait-key marker: it "switches
 //!   to the Roman font and waits for a key";
 //! - raw `0x29..=0x31` decoration-fragment bytes print one fragment; "all
-//!   nine fragments are sixteen cells wide", but their glyphs are not in the
-//!   public spec (§9), so each is emitted as sixteen blank runic cells
-//!   ([`SIGN_MACRO_FRAGMENT_CELLS`]) that keep the rows after it aligned;
+//!   nine fragments are sixteen cells wide". Their cells are not in the
+//!   public spec, but §4/§9 (u5-spec#314 Q1) say where they live: the user's
+//!   own `DATA.OVL`, "stored in selector order ... directly before the
+//!   no-record placard's first row" ([`locate_sign_macro_fragments`]). When
+//!   no fragment pool is available each is emitted as sixteen blank runic
+//!   cells ([`SIGN_MACRO_FRAGMENT_CELLS`]) that keep the rows after it
+//!   aligned;
 //! - raw `0x26` and `0x27` divider bytes both print the runic `l` bar (`'-'`
 //!   in the plain-text view);
 //! - every other byte prints its low seven bits, in the runic font when its
@@ -98,10 +102,88 @@ pub const SIGN_BODY_MACRO_LAST: u8 = 0x31;
 /// sixteen cells wide". A single-cell stand-in shifted every following row
 /// of a framed sign by one cell per macro (playtest P22-07).
 pub const SIGN_MACRO_FRAGMENT_CELLS: usize = 16;
-/// The cell drawn for each of a fragment's sixteen cells. §9 leaves "the
-/// exact resident decoration fragments" a visual-parity boundary, so the
-/// cells are blank rather than guessed glyphs.
+/// The cell drawn for each of a fragment's sixteen cells when the fragment
+/// pool could not be located. §9 withholds the cell contents (an open owner
+/// decision), so the fallback is blank rather than guessed glyphs.
 pub const SIGN_MACRO_FRAGMENT_PLACEHOLDER: u8 = b' ';
+/// `formats/signs-dat.md §4` step 2: the macro range holds nine selectors.
+pub const SIGN_MACRO_FRAGMENT_COUNT: usize =
+    (SIGN_BODY_MACRO_LAST - SIGN_BODY_MACRO_FIRST) as usize + 1;
+
+/// The nine resident sign decoration fragments, in selector order
+/// (`0x29` first), read at runtime from the user's own `DATA.OVL`.
+///
+/// `formats/signs-dat.md §9` (u5-spec#314 Q1): "an implementation can read
+/// the nine fragments from the user's own shared data overlay. They are the
+/// nine sixteen-cell strings stored in selector order (`0x29` first, `0x31`
+/// last) directly before the no-record placard's first row, and each holds
+/// runic-font code points printed one glyph per cell." The contents are
+/// never compiled in.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct SignMacroFragments([[u8; SIGN_MACRO_FRAGMENT_CELLS]; SIGN_MACRO_FRAGMENT_COUNT]);
+
+impl SignMacroFragments {
+    /// The sixteen runic code points the macro byte `selector` prints, or
+    /// `None` outside `0x29..=0x31`.
+    pub fn fragment(&self, selector: u8) -> Option<&[u8; SIGN_MACRO_FRAGMENT_CELLS]> {
+        if !(SIGN_BODY_MACRO_FIRST..=SIGN_BODY_MACRO_LAST).contains(&selector) {
+            return None;
+        }
+        self.0.get(usize::from(selector - SIGN_BODY_MACRO_FIRST))
+    }
+}
+
+/// Locate the nine macro fragments in a `DATA.OVL` image
+/// (`formats/signs-dat.md §4` step 2 and §9, u5-spec#314 Q1).
+///
+/// The anchor is the published first row of the §6 no-record placard,
+/// which must occur exactly once, as the start of a NUL-delimited string.
+/// Walking back from it, the nine NUL-delimited strings before it (any run
+/// of NULs separates them) are the fragments, last selector nearest the
+/// placard. Each must be exactly sixteen high-bit-clear printable code
+/// points ("all nine fragments are sixteen cells wide"); anything else
+/// rejects the image, and the caller falls back to blank cells.
+pub fn locate_sign_macro_fragments(data_ovl: &[u8]) -> Option<SignMacroFragments> {
+    let anchor = SIGN_NO_RECORD_PLACARD_ROWS[0].as_bytes();
+    let mut hits = data_ovl
+        .windows(anchor.len())
+        .enumerate()
+        .filter(|&(at, window)| window == anchor && at > 0 && data_ovl[at - 1] == 0)
+        .map(|(at, _)| at);
+    let placard = hits.next()?;
+    if hits.next().is_some() {
+        return None;
+    }
+    let mut fragments = [[0u8; SIGN_MACRO_FRAGMENT_CELLS]; SIGN_MACRO_FRAGMENT_COUNT];
+    let mut end = placard;
+    for slot in (0..SIGN_MACRO_FRAGMENT_COUNT).rev() {
+        while end > 0 && data_ovl[end - 1] == 0 {
+            end -= 1;
+        }
+        let start = data_ovl[..end]
+            .iter()
+            .rposition(|&byte| byte == 0)
+            .map_or(0, |at| at + 1);
+        let text = &data_ovl[start..end];
+        if text.len() != SIGN_MACRO_FRAGMENT_CELLS
+            || !text.iter().all(|byte| (0x20..=0x7e).contains(byte))
+        {
+            return None;
+        }
+        fragments[slot].copy_from_slice(text);
+        end = start;
+    }
+    Some(SignMacroFragments(fragments))
+}
+
+/// Read the macro fragments from `game_dir`'s `DATA.OVL`. A missing file
+/// or an image the locator rejects yields `None` (blank fallback cells).
+pub fn load_sign_macro_fragments(game_dir: &Path) -> io::Result<Option<SignMacroFragments>> {
+    let Some(bytes) = read_optional_disk_file(&game_dir.join(crate::DATA_OVL_FILENAME))? else {
+        return Ok(None);
+    };
+    Ok(locate_sign_macro_fragments(&bytes))
+}
 /// `formats/signs-dat.md §4` first separator-glyph byte (`0x26`).
 /// Shipped records pair this with `SIGN_BODY_SEPARATOR_GLYPH_B` as
 /// a decorative divider; both render the same separator glyph.
@@ -381,6 +463,15 @@ pub fn decode_sign_payload(bytes: &[u8]) -> String {
 /// carriage return (column reset, no glyph), not a pause"; no shipped record
 /// carries one, and this string model has no overwrite, so it emits nothing.
 pub fn sign_payload_rendered(bytes: &[u8]) -> crate::tlk_runner::TlkRenderedText {
+    sign_payload_rendered_with_fragments(bytes, None)
+}
+
+/// [`sign_payload_rendered`] with the resident macro fragments located by
+/// [`locate_sign_macro_fragments`]; `None` prints blank fragment cells.
+pub fn sign_payload_rendered_with_fragments(
+    bytes: &[u8],
+    fragments: Option<&SignMacroFragments>,
+) -> crate::tlk_runner::TlkRenderedText {
     use crate::tlk_runner::{TlkGlyphFont, TlkRenderedGlyph, TlkRenderedText};
     let mut out = TlkRenderedText::default();
     let mut push = |byte: u8, font: TlkGlyphFont| {
@@ -401,8 +492,17 @@ pub fn sign_payload_rendered(bytes: &[u8]) -> crate::tlk_runner::TlkRenderedText
             // NUL-terminated decoration fragment"; every fragment is sixteen
             // cells wide.
             SIGN_BODY_MACRO_FIRST..=SIGN_BODY_MACRO_LAST => {
-                for _ in 0..SIGN_MACRO_FRAGMENT_CELLS {
-                    push(SIGN_MACRO_FRAGMENT_PLACEHOLDER, TlkGlyphFont::Runic);
+                match fragments.and_then(|pool| pool.fragment(byte)) {
+                    Some(cells) => {
+                        for &cell in cells {
+                            push(cell, TlkGlyphFont::Runic);
+                        }
+                    }
+                    None => {
+                        for _ in 0..SIGN_MACRO_FRAGMENT_CELLS {
+                            push(SIGN_MACRO_FRAGMENT_PLACEHOLDER, TlkGlyphFont::Runic);
+                        }
+                    }
                 }
             }
             _ => {

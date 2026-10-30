@@ -4727,9 +4727,13 @@ impl PlayState {
         // (`text-output.md §5`); the word-wrap printer broke them mid-row
         // (playtest J05). Each cell keeps the font its byte's high bit
         // selects (§4, R600).
-        Ok(Some(sign_stream_rows_rendered(&sign_payload_rendered(
-            &record.payload,
-        ))))
+        //
+        // §4 step 2 / §9 (u5-spec#314 Q1): each macro byte prints its
+        // resident fragment, read from the user's own `DATA.OVL`.
+        let fragments = load_sign_macro_fragments(game_dir)?;
+        Ok(Some(sign_stream_rows_rendered(
+            &sign_payload_rendered_with_fragments(&record.payload, fragments.as_ref()),
+        )))
     }
 
     /// Put a sign into the message window. `formats/signs-dat.md §6`: "Pause
