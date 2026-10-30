@@ -154,9 +154,7 @@ fn stale_dungeon_door_sidecar_file_does_not_block_f_room_trigger() {
     let mut state = dungeon_state(grid, 0, 1, 1);
 
     assert_eq!(
-        state
-            .step_with_game_dir(Direction::East, Some(&dir))
-            .unwrap(),
+        dungeon_step_with_post_action(&mut state, Direction::East, &dir),
         MoveOutcome::Moved
     );
 
@@ -239,9 +237,7 @@ fn stale_sidecar_open_f_cell_still_enters_room_trigger() {
     let mut state = dungeon_state(grid, 0, 1, 1);
 
     assert_eq!(
-        state
-            .step_with_game_dir(Direction::East, Some(&dir))
-            .unwrap(),
+        dungeon_step_with_post_action(&mut state, Direction::East, &dir),
         MoveOutcome::Moved
     );
 

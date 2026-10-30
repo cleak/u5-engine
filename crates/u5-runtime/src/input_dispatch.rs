@@ -209,6 +209,13 @@ fn run_with_command_epilogue(
             result = Err(error);
         }
     }
+    // `dungeon-mode.md §11` step 4 / `§4` step 6: an ambushed dungeon camp's
+    // post-action helper follows the ambush fight (playtest P23-07).
+    if result.is_ok() && !state.combat_active && state.pending_dungeon_post_action_helper {
+        if let Err(error) = state.resume_dungeon_post_action_helper_after_combat(game_dir) {
+            result = Err(error);
+        }
+    }
     // `dungeon-mode.md §4.1` (issue #304 Q1): a contact fight launched by the
     // post-action monster step comes before the turn's underfoot reaction,
     // which "then runs" once the fight has returned (playtest P19-04).

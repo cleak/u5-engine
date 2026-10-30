@@ -18787,6 +18787,23 @@ fn dungeon_energy_field_marker_variants_keep_subtype_reaction() {
     assert_eq!(dungeon_field_effect(0x70), None);
 }
 
+/// A dungeon step followed by the post-action pass the dispatcher runs after
+/// it (`dungeon-mode.md §4` step 6). Room entry is a post-action underfoot
+/// consequence (`§8.1`), so a step onto a room cell enters the room only
+/// here (playtest P23-06).
+fn dungeon_step_with_post_action(
+    state: &mut PlayState,
+    direction: Direction,
+    game_dir: &Path,
+) -> MoveOutcome {
+    let turn_before = state.turn;
+    let outcome = state.step_with_game_dir(direction, Some(game_dir)).unwrap();
+    state
+        .apply_dungeon_post_turn_effects_after_turn(turn_before, game_dir)
+        .unwrap()
+        .unwrap_or(outcome)
+}
+
 #[test]
 fn dungeon_room_trigger_marks_visit_local_helper_state_and_uses_stock_narration() {
     let scene = DungeonScene::new(35).unwrap();
@@ -18895,9 +18912,7 @@ fn dungeon_room_trigger_loads_selected_dungeon_cbt_record_when_available() {
     state.area = Area::Dungeon { scene, level: 0 };
 
     assert_eq!(
-        state
-            .step_with_game_dir(Direction::East, Some(&dir))
-            .unwrap(),
+        dungeon_step_with_post_action(&mut state, Direction::East, &dir),
         MoveOutcome::Moved
     );
 
@@ -18967,9 +18982,7 @@ fn dungeon_room_helper_state_loads_dungeon_cbt_record_when_available() {
     state.area = Area::Dungeon { scene, level: 0 };
 
     assert_eq!(
-        state
-            .step_with_game_dir(Direction::East, Some(&dir))
-            .unwrap(),
+        dungeon_step_with_post_action(&mut state, Direction::East, &dir),
         MoveOutcome::Moved
     );
 
@@ -19196,9 +19209,7 @@ fn doom_final_room_trigger_loads_dungeon_cbt_before_endgame_when_available() {
     };
 
     assert_eq!(
-        state
-            .step_with_game_dir(Direction::East, Some(&dir))
-            .unwrap(),
+        dungeon_step_with_post_action(&mut state, Direction::East, &dir),
         MoveOutcome::Moved
     );
 
@@ -19263,9 +19274,7 @@ fn doom_final_room_successful_dungeon_cbt_combat_enters_endgame_from_absorbable_
     };
 
     assert_eq!(
-        state
-            .step_with_game_dir(Direction::East, Some(&dir))
-            .unwrap(),
+        dungeon_step_with_post_action(&mut state, Direction::East, &dir),
         MoveOutcome::Moved
     );
     assert_eq!(
@@ -19388,9 +19397,7 @@ fn doom_final_room_defeated_dungeon_cbt_combat_does_not_enter_endgame() {
         scene,
         level: DOOM_FINAL_ROOM_LEVEL,
     };
-    state
-        .step_with_game_dir(Direction::East, Some(&dir))
-        .unwrap();
+    dungeon_step_with_post_action(&mut state, Direction::East, &dir);
 
     let application = state.apply_combat_round_loop_exit(CombatRoundLoopExit::Defeat);
 
@@ -27910,7 +27917,7 @@ fn dungeon_fight_charges_one_loop_head_minute_per_origin() {
                 1
             }
             Origin::Room => {
-                state.step_with_game_dir(Direction::East, Some(&dir)).unwrap();
+                dungeon_step_with_post_action(&mut state, Direction::East, &dir);
                 1
             }
             Origin::Attack => {
