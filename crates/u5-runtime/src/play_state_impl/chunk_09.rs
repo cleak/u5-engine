@@ -3250,6 +3250,28 @@ impl PlayState {
             && matches!(self.party_capability(), PartyCapability::Defeated))
     }
 
+    /// The turn charge of a dungeon command that takes the party out of the
+    /// dungeon: the turn counter and the clock call, but not the dungeon's
+    /// post-action status/provision pass.
+    ///
+    /// `dungeon-mode.md §4`: the inner loop's step 4 "Scene-byte exit check"
+    /// breaks the loop "If the scene byte has dropped to thirty-two or
+    /// below", ahead of step 6's post-action hook, and `time.md §12`'s
+    /// caller census puts the status pass in that "dungeon post-action
+    /// handler". So a K-Klimb, Uus Por or Des Por off the level stack, or a
+    /// Gate Travel out, spends no poison point and takes no starvation on
+    /// that turn; the next mode's own pass decides the hour from the shared
+    /// snapshot (playtest P21-10, P21-11).
+    pub(crate) fn advance_turn_leaving_dungeon(&mut self) {
+        if self.combat_active {
+            return;
+        }
+        let minutes = self.turn_minute_increment();
+        // The step counter and the payment cooldown belong to the same pass
+        // (see [`Self::advance_wilderness_camp_tick`]).
+        self.advance_turn_with_minutes_policy(minutes, true, true, false, false);
+    }
+
     /// Whether an overworld or town command is still inside one of the
     /// modal waits [`Self::top_down_turn_charge_proceeds`] defers to.
     pub fn top_down_modal_wait_open(&self) -> bool {

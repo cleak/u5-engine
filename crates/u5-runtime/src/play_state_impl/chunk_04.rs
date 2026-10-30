@@ -411,7 +411,18 @@ impl PlayState {
 
         let phase = slot_index + 1;
         let slot = self.moonstone_slots[slot_index];
-        self.advance_turn();
+        // A warp out of a dungeon leaves its loop at the scene-byte check,
+        // before the post-action pass (playtest P21-10).
+        if matches!(self.area, Area::Dungeon { .. })
+            && matches!(
+                gate_travel_destination(slot),
+                GateTravelDestination::Ready { .. }
+            )
+        {
+            self.advance_turn_leaving_dungeon();
+        } else {
+            self.advance_turn();
+        }
         match gate_travel_destination(slot) {
             GateTravelDestination::Ready {
                 target,

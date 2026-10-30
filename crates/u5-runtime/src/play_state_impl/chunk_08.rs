@@ -1774,7 +1774,9 @@ impl PlayState {
         // The committed command belongs to dungeon mode, whose ordinary
         // minute increment is one. Advance before replacing the active area
         // so the world-mode two-minute cadence is not applied retroactively.
-        self.advance_turn();
+        // The loop leaves at its scene-byte check, before the post-action
+        // pass, so the exit turn runs no upkeep (playtest P21-11).
+        self.advance_turn_leaving_dungeon();
         self.restore_world_at(game_dir, plane, entry.x, entry.y)?;
         // `cleak/u5-spec#270`: "The stored exit line is `Britannia!` followed
         // by **two** line feeds (and `Underworld!` likewise). The first feed

@@ -296,3 +296,38 @@ fn playtest_p21_10_gate_travel_from_town_spends_its_upkeep_pass() {
     );
     let _ = fs::remove_dir_all(dir);
 }
+
+/// Playtest P21-11 (and the dungeon arm of P21-10). `dungeon-mode.md §4`:
+/// the inner loop's scene-byte exit check (step 4) breaks out "If the scene
+/// byte has dropped to thirty-two or below", before step 6's post-action
+/// hook, and `time.md §12` puts the status pass in that "dungeon post-action
+/// handler". So the climb out runs no upkeep: no damage and no warning. The
+/// damage used to land on the exit turn with its `Starving!` held for the
+/// first overworld command.
+#[test]
+fn playtest_p21_11_dungeon_exit_turn_runs_no_upkeep() {
+    let dir = debug_game_dir();
+    fs::write(
+        dir.join(WORLD_LOCATION_TABLE_FILE),
+        "BRITANNIA 10 20 DUNGEON:0\n",
+    )
+    .unwrap();
+    let mut grid = open_dungeon_record();
+    grid[dungeon_cell_index(0, 1, 1)] = 0x10;
+    let mut state = dungeon_state(grid, 0, 1, 1);
+    p21_starving(&mut state, 12, 59);
+    state.party[0].status = b'P';
+
+    // The loop head's minute crosses the hour, then the K climbs out.
+    state.advance_dungeon_loop_minute();
+    assert_eq!(state.clock, GameClock::new(13, 0).unwrap());
+    let outcome = state.climb(&dir, ClimbIntent::Up).unwrap();
+    assert!(matches!(
+        outcome,
+        MoveOutcome::Transition(AreaTransition::ExitedDungeonToWorldPlane { .. })
+    ));
+    assert_eq!(state.turn, 1);
+    assert_eq!(state.party[0].hp, 60, "no poison point, no starvation");
+    assert!(state.pending_hourly_status_message.is_none());
+    let _ = fs::remove_dir_all(dir);
+}
