@@ -409,6 +409,7 @@ pub fn run_overworld_loop_head_hooks(state: &mut PlayState, game_dir: &Path) -> 
     if !matches!(state.area, Area::World { .. })
         || state.combat_active
         || !next_key_is_a_command(state)
+        || state.natural_moongate_hook_held_for_warp_arrival
     {
         return Ok(());
     }
@@ -420,7 +421,10 @@ pub fn run_overworld_loop_head_hooks(state: &mut PlayState, game_dir: &Path) -> 
         if state.resolve_natural_moongate_entry(game_dir)?.is_none() {
             break;
         }
-        if !matches!(state.area, Area::World { .. }) || !next_key_is_a_command(state) {
+        if !matches!(state.area, Area::World { .. })
+            || !next_key_is_a_command(state)
+            || state.natural_moongate_hook_held_for_warp_arrival
+        {
             break;
         }
     }
@@ -805,7 +809,13 @@ fn handle_play_key_input_inner(
     // dispatched from the top as the next iteration's command (playtest E25).
     // Swallowing that key also broke `North` and `Q`/`Y` after a Gate Travel
     // onto a live gate cell (playtest E42).
-    if state.resolve_natural_moongate_entry(game_dir)?.is_some() {
+    //
+    // A saved-slot warp's arrival holds the hook back for exactly this one
+    // command (`overworld.md §5`: draw-order item 4 runs before item 5's
+    // gate-stamping entry tick; playtest P23-01). Dispatching the command
+    // releases it, so the loop-head hook after the command sees the gate.
+    let hook_held = std::mem::take(&mut state.natural_moongate_hook_held_for_warp_arrival);
+    if !hook_held && state.resolve_natural_moongate_entry(game_dir)?.is_some() {
         // The key that brought this loop iteration here is still the turn's
         // command, so it is dispatched from the post-transit state - into the
         // meditation prompt when the hook opened one. Returning here instead

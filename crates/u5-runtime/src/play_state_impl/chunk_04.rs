@@ -3077,6 +3077,19 @@ impl PlayState {
         start: (usize, usize),
     ) -> io::Result<()> {
         let prior_sound_serial = self.sound_effect_serial;
+        // `overworld.md §4`/§5 step 1: a warp within one plane keeps the
+        // chunks the old and new windows share, so a gate the refresh had
+        // already stamped on the destination cell is still live there; any
+        // other arrival cell was read fresh from disk and is grass until the
+        // next world tick (playtest P23-01).
+        let arrival_gate_carried = match (self.area, target) {
+            (Area::World { plane }, PlayTarget::World(target_plane)) if plane == target_plane => {
+                let idx = world_cell_index(start.0, start.1);
+                self.natural_moongate_live_cells.contains(&idx)
+                    && self.grid.get(idx).copied() == Some(NATURAL_MOONGATE_TERRAIN_TILE)
+            }
+            _ => false,
+        };
         self.cache_current_world_overlay();
         // `overworld.md §9.2`: from the overworld "the warp writes the outdoor
         // object table to the plane's canonical `.OOL` while Stage B still
@@ -3286,6 +3299,15 @@ impl PlayState {
         next.message_window_top_offset = self.message_window_top_offset;
         next.message_row_open_mid_line = self.message_row_open_mid_line;
         next.pending_command_echo = None;
+        // `overworld.md §5` (draw order items 4 and 5) and §9: the entry
+        // pass stamps no gate, so a warp that lands on a gate cell it did
+        // not carry across gives the player one command before the §9.2
+        // hook can fire. This engine's entry refresh has already stamped
+        // it, so hold the hook back for that command (playtest P23-01).
+        next.natural_moongate_hook_held_for_warp_arrival = !arrival_gate_carried
+            && next.current_live_natural_moongate_cell_index().is_some_and(|idx| {
+                next.grid.get(idx).copied() == Some(NATURAL_MOONGATE_TERRAIN_TILE)
+            });
         *self = next;
         Ok(())
     }

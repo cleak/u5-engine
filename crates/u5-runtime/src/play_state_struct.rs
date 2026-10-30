@@ -155,6 +155,20 @@ pub struct PlayState {
     /// and unskippable, so this is only ever a record of a sequence that
     /// already finished, never a resumable position in one.
     pub last_natural_moongate_transit: Option<MoongateTransitPlayback>,
+    /// Set by a saved-slot warp ([`Self::apply_gate_travel`]) that lands on
+    /// an overworld cell whose live gate terrain the destination's entry
+    /// stamped rather than carried across; cleared when the next command is
+    /// dispatched.
+    ///
+    /// `overworld.md §5` step 1: overworld entry makes only zero-minute
+    /// clock calls and chunk reloads, none of them a world tick, and §9 puts
+    /// gate placement in the world tick's refresh. A freshly loaded cell is
+    /// therefore still grass when the `§9.2` hook (draw-order item 4) looks
+    /// at it; only the input helper's entry tick (item 5) stamps the gate,
+    /// so the player gets one command at the destination before the hook can
+    /// fire. This engine's entry refresh stamps at once, and the flag holds
+    /// the hook back for that one command (playtest P23-01).
+    pub natural_moongate_hook_held_for_warp_arrival: bool,
     /// Completed blocking map-viewport dissolves waiting for a frontend to
     /// present them. This is transient presentation state, never save data.
     pub pending_map_viewport_dissolves: Vec<MapViewportDissolvePlayback>,

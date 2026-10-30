@@ -21,6 +21,51 @@ fn gate23_britannia_night_state() -> PlayState {
     state
 }
 
+/// Playtest P23-01. `overworld.md §5` step 1: overworld entry makes
+/// zero-minute clock calls and chunk reloads, and "none of it is a world
+/// tick"; §9 places gates in "the once-per-turn refresh" of the world tick.
+/// The draw-order list runs the moongate hook (item 4) before the input
+/// helper's entry tick (item 5), so a Gate Travel at night onto a slot cell in
+/// a freshly loaded window finds grass, and the player gets one command there
+/// before the §9.2 hook transits. The engine stamped the gate during the
+/// arrival and transited at once, before any key was read.
+#[test]
+fn playtest_p23_01_night_gate_travel_arrival_gets_one_command_before_the_hook() {
+    let dir = debug_game_dir();
+    let mut state = gate23_britannia_night_state();
+    // Phase 2 lands on a slot cell far outside the starting window.
+    state.moonstone_slots[1] = MoonstoneGateSlot {
+        scene: 0,
+        x: 100,
+        y: 100,
+        z: 0,
+    };
+    // The natural gate would lead to an empty slot: the transit plays and
+    // warps nowhere, so its effect is visible on the cell alone.
+    state.set_cached_moon_glyph_slots(2, 2);
+    let idx = world_cell_index(100, 100);
+
+    handle_play_key_input(&mut state, 'C', "1PRV2", &dir).unwrap();
+
+    assert_eq!((state.player.x, state.player.y), (100, 100));
+    assert!(
+        state.last_natural_moongate_transit.is_none(),
+        "no transit before the first command at the destination"
+    );
+    assert_eq!(state.turn, 0, "the successful cast reports no action");
+
+    // The first command is read and dispatched; the hook then sees the gate.
+    handle_play_key_input(&mut state, ' ', "", &dir).unwrap();
+    assert_eq!(state.turn, 1, "the Pass was dispatched as a command");
+    assert!(
+        state.last_natural_moongate_transit.is_some(),
+        "the hook fires on the loop pass after that command"
+    );
+    assert_eq!(state.grid[idx], NATURAL_MOONGATE_RESTORED_TERRAIN_TILE);
+    assert!(!state.natural_moongate_hook_held_for_warp_arrival);
+    let _ = fs::remove_dir_all(dir);
+}
+
 /// Playtest P23-02. `shops.md §8.7`: "The next overworld entry consumes that
 /// state and places the watercraft", and "The delivery pass runs once before
 /// the first overworld turn after the purchase". The Gate Travel warp to an
