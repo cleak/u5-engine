@@ -96,3 +96,56 @@ fn p20_05_a_row_filling_appender_look_result_is_not_left_open() {
         assert_eq!(state.message_row_open_mid_line, !full, "{x}");
     }
 }
+
+/// Playtest P20-07. `inventory.md §4` publishes the hourly warning as
+/// `Starving!\n` - no leading space - and `§7.2` closes every potion result
+/// with its own line feed, so the warning starts at column 0 of a row of its
+/// own. It used to be joined to the pending result with a space
+/// (`Light! Starving!`, `Healed!\n Starving!`).
+#[test]
+fn p20_07_the_starving_warning_is_not_joined_to_the_pending_result_with_a_space() {
+    let dir = debug_game_dir();
+    fs::write(dir.join(LOOK2_DAT_FILE), look2_bytes(&[])).unwrap();
+    let use_item = |wanted: &dyn Fn(UseItemRequest) -> bool, result: &str| {
+        let mut state = p19_03_starving_town_state(0x05);
+        state.scroll_stock[SCROLL_LIGHT_INDEX] = 1;
+        state.potion_stock[POTION_YELLOW_INDEX] = 1;
+        combat2b_use_row(&mut state, wanted, &dir);
+        // A non-combat potion asks `On who:`; the Avatar answers.
+        for _ in 0..3 {
+            if state.turn != 0 {
+                break;
+            }
+            handle_play_key_input(&mut state, '\r', "", &dir).unwrap();
+        }
+        state.flush_message_slot();
+        let rows = p20_rows(&state);
+        assert!(
+            rows.iter().any(|row| row == STARVATION_WARNING),
+            "{result}: Starving! on a row of its own: {rows:?}"
+        );
+        assert!(
+            rows.iter().any(|row| row.ends_with(result)),
+            "{result}: {rows:?}"
+        );
+        assert!(
+            !rows.iter().any(|row| row.contains(" Starving!")),
+            "{result}: no space joins the warning: {rows:?}"
+        );
+    };
+    use_item(
+        &|request| {
+            matches!(request, UseItemRequest::Scroll { index, .. } if index == SCROLL_LIGHT_INDEX)
+        },
+        "Light!",
+    );
+    use_item(
+        &|request| {
+            matches!(request, UseItemRequest::Potion { index, .. } if index == POTION_YELLOW_INDEX)
+        },
+        // The bottle's variation roll picks the result; any of them is a
+        // closed `§7.2` row.
+        "",
+    );
+    let _ = fs::remove_dir_all(dir);
+}

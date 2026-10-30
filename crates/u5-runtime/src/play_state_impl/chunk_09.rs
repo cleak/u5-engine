@@ -3879,8 +3879,13 @@ impl PlayState {
         if self.message.is_empty() || self.message == self.message_flushed {
             self.message = report;
         } else {
-            self.message.push(' ');
-            self.message.push_str(&report);
+            // `inventory.md §4` publishes the warning as `Starving!\n` with
+            // no leading space, and it is a print of its own after the
+            // command's result - never a sentence joined to it. Appending
+            // with a space printed `Light! Starving!` and, after a potion's
+            // `Healed!\n`, a stray space at column 0 (playtest P20-07).
+            self.flush_message_slot();
+            self.message = report;
         }
     }
 
