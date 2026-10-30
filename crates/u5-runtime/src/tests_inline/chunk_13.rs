@@ -11763,7 +11763,11 @@ fn doom_entrance_unlocks_only_when_all_three_slots_vanquished() {
     assert!(!all_shadowlords_vanquished([v, 0, v]));
     assert!(!all_shadowlords_vanquished([v, v, 0]));
     assert!(!all_shadowlords_vanquished([1, 2, 3]));
-    assert!(!all_shadowlords_vanquished([0xFE, v, v]));
+    // The gate ANDs the three bytes and tests the high bit (playtest P21-01).
+    assert!(all_shadowlords_vanquished([0xFE, v, v]));
+    assert!(all_shadowlords_vanquished([0x80, 0x80, 0x80]));
+    assert!(all_shadowlords_vanquished([0xFE, 0x81, 0xC0]));
+    assert!(!all_shadowlords_vanquished([0x80, 0x7F, v]));
 }
 
 #[test]

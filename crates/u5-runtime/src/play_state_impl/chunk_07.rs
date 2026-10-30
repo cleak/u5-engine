@@ -2328,11 +2328,16 @@ impl PlayState {
             .is_some_and(Self::shadowlord_slot_is_vanquished)
     }
 
+    /// `quest-graph.md §5`: the Doom entrance check "ANDs the three slot
+    /// bytes together and admits the party only when the result still has
+    /// the high bit set" (`saved-gam.md` `0x0322..0x0324`: "Doom entry ...
+    /// treat[s] high-bit-set values as vanquished"), playtest P21-01.
     pub fn all_shadowlords_vanquished(&self) -> bool {
-        self.shadowlord_hideouts
-            .iter()
-            .copied()
-            .all(Self::shadowlord_slot_is_vanquished)
+        let mut slots = [0u8; 3];
+        for (slot, value) in slots.iter_mut().zip(self.shadowlord_hideouts.iter()) {
+            *slot = *value;
+        }
+        all_shadowlords_vanquished(slots)
     }
 
     pub fn vanquish_shadowlord(&mut self, index: usize) -> bool {
