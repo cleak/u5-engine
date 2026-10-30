@@ -3059,6 +3059,12 @@ impl PlayState {
         start: (usize, usize),
     ) -> io::Result<()> {
         let prior_sound_serial = self.sound_effect_serial;
+        // `magic.md §5`: the cast "costs one turn regardless of the spell's
+        // power", and a town turn is one minute plus the upkeep pass that
+        // ends the underfoot handler (`town-mode.md §7` step 4). The clock
+        // half was charged before the warp; the pass is spent here, before
+        // the rebuild discards the town state that owed it (playtest P21-10).
+        self.apply_pending_town_status_provision_pass();
         self.cache_current_world_overlay();
         // `overworld.md §9.2`: from the overworld "the warp writes the outdoor
         // object table to the plane's canonical `.OOL` while Stage B still

@@ -3961,10 +3961,37 @@ impl PlayState {
         outcome: MoveOutcome,
     ) -> io::Result<Option<MoveOutcome>> {
         if outcome.is_transition() {
+            self.finish_transition_turn_upkeep(turn_before, outcome);
             Ok(None)
         } else {
             self.apply_top_down_post_turn_effects_after_turn(turn_before, game_dir)
         }
+    }
+
+    /// The upkeep a turn-consuming command still owes when it ended in a
+    /// scene or floor change, which skips the rest of the post-action pass.
+    ///
+    /// `town-mode.md §3`/§7 step 4: a town floor change - ladder, grate or
+    /// stair - is a reload inside the command, and the epilogue's underfoot
+    /// handler, whose "last act is to run the shared party status/provision
+    /// pass", follows on that same turn. Left pending, the poison point and
+    /// `Starving!` waited for the next command, which then ticked twice
+    /// (playtest P21-09). `time.md §5`: the starvation warning is printed by
+    /// the same branch that applies the damage, so a warning the turn
+    /// produced lands on that turn (playtest P21-10).
+    fn finish_transition_turn_upkeep(&mut self, turn_before: u64, outcome: MoveOutcome) {
+        if self.turn == turn_before || self.combat_active {
+            return;
+        }
+        if matches!(self.area, Area::Town { .. })
+            && matches!(
+                outcome,
+                MoveOutcome::Transition(AreaTransition::ChangedFloor { .. })
+            )
+        {
+            self.apply_pending_town_status_provision_pass();
+        }
+        self.append_pending_hourly_status_message();
     }
 
     /// The post-action pass after a dungeon K-Klimb, or after an Uus Por /

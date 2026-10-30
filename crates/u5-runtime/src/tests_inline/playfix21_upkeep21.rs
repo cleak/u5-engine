@@ -227,3 +227,72 @@ fn playtest_p21_08_new_order_runs_its_turns_upkeep_pass() {
     assert_eq!(state.party[0].hp, 58);
     let _ = fs::remove_dir_all(dir);
 }
+
+/// Playtest P21-09. `town-mode.md §7` step 4: the underfoot handler runs on
+/// every consumed turn and "its last act is to run the shared party
+/// status/provision pass"; a floor change is a reload inside the command
+/// (`§3`). The ladder, grate and stair turns used to leave the pass pending,
+/// so the poison point and `Starving!` came a command late.
+#[test]
+fn playtest_p21_09_town_floor_change_runs_its_turns_upkeep_pass() {
+    let dir = debug_game_dir();
+    let mut state = test_state(open_grid(), 5, 5);
+    p21_starving(&mut state, 12, 59);
+    state.party[0].status = b'P';
+    let Area::Town { scene, .. } = state.area else {
+        unreachable!("test_state is a town")
+    };
+    state.advance_turn();
+    assert!(state.pending_town_status_provision_pass);
+    state
+        .apply_post_turn_effects_after_outcome(
+            0,
+            &dir,
+            MoveOutcome::Transition(AreaTransition::ChangedFloor { scene, floor: 1 }),
+        )
+        .unwrap();
+    assert!(!state.pending_town_status_provision_pass);
+    assert!(
+        state.party[0].hp <= 60 - 1 - 1,
+        "poison point plus starvation"
+    );
+    assert!(state.pending_hourly_status_message.is_none());
+    assert!(p21_rows(&state).iter().any(|row| row == STARVATION_WARNING));
+    let _ = fs::remove_dir_all(dir);
+}
+
+/// Playtest P21-10, from a town. `magic.md §5`: a cast "costs one turn
+/// regardless of the spell's power", and the town turn is one minute plus
+/// its upkeep pass. Gate Travel charged the minute and then dropped the pass
+/// with the town state - no poison point, no starvation for that hour.
+#[test]
+fn playtest_p21_10_gate_travel_from_town_spends_its_upkeep_pass() {
+    let dir = debug_game_dir();
+    let mut state = test_state(open_grid(), 5, 5);
+    p21_starving(&mut state, 12, 59);
+    state.party[0].status = b'P';
+    state.spell_charges[GATE_TRAVEL_SPELL_INDEX] = 1;
+    state.party[0].mana = 9;
+    state.party[0].level = 8;
+    state.moonstone_slots[1] = MoonstoneGateSlot {
+        scene: 0,
+        x: 6,
+        y: 7,
+        z: 0,
+    };
+
+    handle_play_key_input(&mut state, 'C', "1PRV2", &dir).unwrap();
+    assert!(matches!(state.area, Area::World { .. }));
+    assert_eq!(state.clock, GameClock::new(13, 0).unwrap());
+    assert!(
+        state.party[0].hp <= 60 - 1 - 1,
+        "poison point plus starvation"
+    );
+    assert!(state.pending_hourly_status_message.is_none());
+    assert!(
+        p21_rows(&state).iter().any(|row| row == STARVATION_WARNING),
+        "{:?}",
+        p21_rows(&state)
+    );
+    let _ = fs::remove_dir_all(dir);
+}
