@@ -638,7 +638,12 @@ fn handle_play_key_input_inner(
         return handle_active_mix_key_input(state, key, suffix, game_dir);
     }
     if state.active_new_order.is_some() {
-        return Ok(handle_active_new_order_key_input(state, key, suffix));
+        let turn_before = state.turn;
+        let disposition = handle_active_new_order_key_input(state, key, suffix);
+        if state.active_new_order.is_none() {
+            settle_top_down_new_order_turn(state, turn_before, game_dir)?;
+        }
+        return Ok(disposition);
     }
     if state.active_wishing_well.is_some() {
         return handle_active_wishing_well_key_input(state, key, suffix, game_dir);
@@ -698,7 +703,22 @@ fn handle_play_key_input_inner(
             .active_party_selector
             .is_some_and(|session| matches!(session.target, PartySelectorTarget::Cast))
             .then_some(state.turn);
+        let new_order_turn_before = state
+            .active_party_selector
+            .is_some_and(|session| matches!(session.target, PartySelectorTarget::NewOrder { .. }))
+            .then_some(state.turn);
         state.step_active_party_selector_with_game_dir(key, suffix, game_dir);
+        // `commands.md §6`: every New Order outcome "reports acted and spends
+        // the ordinary turn ... In town that turn is one minute plus the
+        // upkeep pass; on the overworld it is the ordinary outdoor turn". The
+        // swap and both refusals charged the clock but never reached the
+        // mode's post-action pass, so the poison point, `Starving!` and the
+        // walkers waited for the next command (playtest P21-08).
+        if let Some(turn_before) = new_order_turn_before
+            && state.active_party_selector.is_none()
+        {
+            settle_top_down_new_order_turn(state, turn_before, game_dir)?;
+        }
         // `commands.md §3`/§7: a Search that reached the acting-member
         // picker reports "acted" whether the pick searched or cancelled.
         if let Some(turn_before) = search_turn_before {
@@ -956,7 +976,9 @@ fn handle_play_key_input_inner(
     }
     if key == 'N' && !suffix.is_empty() {
         state.begin_command_echo_for(Command::NewOrder);
+        let turn_before = state.turn;
         state.new_order_from_suffix(suffix);
+        settle_top_down_new_order_turn(state, turn_before, game_dir)?;
         return Ok(PlayInputDisposition::Continue);
     }
     if key == 'R' && !suffix.is_empty() {
@@ -1351,6 +1373,21 @@ fn handle_active_shrine_restoration_key_input(
         }
     }
     Ok(PlayInputDisposition::Continue)
+}
+
+/// Run the overworld or town post-action pass for the turn a finished New
+/// Order charged (`commands.md §6`, playtest P21-08). The dungeon settles
+/// its own acted letters ([`settle_dungeon_acted_charge`]).
+fn settle_top_down_new_order_turn(
+    state: &mut PlayState,
+    turn_before: u64,
+    game_dir: &Path,
+) -> io::Result<()> {
+    if matches!(state.area, Area::Dungeon { .. }) || state.combat_active {
+        return Ok(());
+    }
+    state.apply_top_down_post_turn_effects_after_turn(turn_before, game_dir)?;
+    Ok(())
 }
 
 fn handle_active_new_order_key_input(

@@ -179,3 +179,51 @@ fn playtest_p21_02_town_look_that_wipes_the_party_spends_no_minute() {
     assert_eq!(state.clock, GameClock::new(12, 0).unwrap());
     let _ = fs::remove_dir_all(dir);
 }
+
+/// Playtest P21-08. `commands.md §6`: every New Order outcome "reports acted
+/// and spends the ordinary turn ... In town that turn is one minute plus the
+/// upkeep pass; on the overworld it is the ordinary outdoor turn". The
+/// leader refusal charged the clock but left the pass and its `Starving!`
+/// for the next command.
+#[test]
+fn playtest_p21_08_new_order_runs_its_turns_upkeep_pass() {
+    for outdoors in [false, true] {
+        let dir = debug_game_dir();
+        let mut state = if outdoors {
+            britannia_state(open_world_grid(), 5, 5)
+        } else {
+            test_state(open_grid(), 5, 5)
+        };
+        p21_starving(&mut state, 12, 59);
+
+        handle_play_key_input(&mut state, 'N', "", &dir).unwrap();
+        assert!(state.active_party_selector.is_some());
+        handle_play_key_input(&mut state, '\r', "", &dir).unwrap();
+        assert!(state.active_party_selector.is_none());
+        assert_eq!(state.turn, 1, "outdoors={outdoors}");
+        assert!(state.party[0].hp < 60, "outdoors={outdoors}");
+        assert!(!state.pending_town_status_provision_pass);
+        assert!(state.pending_hourly_status_message.is_none());
+        assert!(
+            p21_rows(&state).iter().any(|row| row == STARVATION_WARNING),
+            "outdoors={outdoors}: {:?}",
+            p21_rows(&state)
+        );
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    // `time.md §5`: the poison point is taken on every invocation, so the
+    // New Order turn ticks once and the next turn does not tick twice.
+    let dir = debug_game_dir();
+    let mut state = test_state(open_grid(), 5, 5);
+    state.party[0].hp = 60;
+    state.party[0].status = b'P';
+    state.clock = GameClock::new(10, 20).unwrap();
+    state.cleanup_previous_hour = 10;
+    handle_play_key_input(&mut state, 'N', "", &dir).unwrap();
+    handle_play_key_input(&mut state, '\r', "", &dir).unwrap();
+    assert_eq!(state.party[0].hp, 59);
+    handle_play_key_input(&mut state, ' ', "", &dir).unwrap();
+    assert_eq!(state.party[0].hp, 58);
+    let _ = fs::remove_dir_all(dir);
+}
