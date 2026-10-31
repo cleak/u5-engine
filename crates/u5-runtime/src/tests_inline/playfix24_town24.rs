@@ -112,3 +112,28 @@ fn playtest_p24_09_quickness_lets_the_explicit_talk_arrest_begin_only_on_a_run_t
     }
     assert_eq!(arrested.iter().filter(|&&arrest| arrest).count(), 1);
 }
+
+/// Playtest P24-10. `town-mode.md §14`'s ordered surrender writes no
+/// transport marker, and §15.1's entry does not "separate the party from a
+/// vehicle". A mounted party woke in the Yew jail on foot.
+/// Skipped when `U5_TEST_ASSET_DIR` is unset.
+#[test]
+fn playtest_p24_10_surrender_keeps_the_party_mounted() {
+    let Some(dir) = crate::test_fixtures::configured_original_asset_dir() else {
+        return;
+    };
+    let mut state = test_state(open_grid(), 1, 1);
+    let horse = TransportState::Horse {
+        type_byte: 0xA0,
+        tile: 0xA0,
+    };
+    state.player.transport = horse;
+
+    state.apply_town_arrest_surrender(&dir).expect("surrender");
+
+    assert_eq!(
+        (state.player.x, state.player.y),
+        (TOWN_ARREST_JAIL_X as usize, TOWN_ARREST_JAIL_Y as usize)
+    );
+    assert_eq!(state.player.transport, horse);
+}
