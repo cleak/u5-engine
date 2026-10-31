@@ -53,3 +53,35 @@ fn playtest_p25_01_protection_is_not_aged_by_the_jail_wait() {
     assert_eq!(state.active_effect_tag, Some(PROTECTION_ACTIVE_EFFECT_TAG));
     assert_eq!(state.active_effect_counter, 0xFE);
 }
+
+/// Playtest P25-02. `blackthorn.md §3`: "The handoff writes the scene byte,
+/// the floor ..., the local position, and zeroes the carried-key counter" -
+/// no transport marker - and `town-mode.md §15.1`'s entry setup does not
+/// "separate the party from a vehicle". A party captured on a horse woke in
+/// the palace cell on foot and the horse was gone.
+#[test]
+fn playtest_p25_02_captive_cell_handoff_keeps_the_party_mounted() {
+    let dir = debug_game_dir();
+    let mut state = test_state(open_grid(), 5, 5);
+    let scene = Scene::new(BLACKTHORN_CAPTIVE_CELL_SCENE).unwrap();
+    state.area = Area::Town { scene, floor: 0 };
+    let horse = TransportState::Horse {
+        type_byte: 0xA0,
+        tile: 0xA0,
+    };
+    state.player.transport = horse;
+
+    state
+        .apply_blackthorn_captive_cell_handoff(&dir, "test")
+        .unwrap();
+
+    assert_eq!(
+        (state.player.x, state.player.y),
+        (
+            BLACKTHORN_CAPTIVE_CELL_X as usize,
+            BLACKTHORN_CAPTIVE_CELL_Y as usize
+        )
+    );
+    assert_eq!(state.player.transport, horse);
+    let _ = fs::remove_dir_all(dir);
+}

@@ -7208,7 +7208,12 @@ impl PlayState {
         self.area = Area::Town { scene, floor };
         self.player.x = BLACKTHORN_CAPTIVE_CELL_X as usize;
         self.player.y = BLACKTHORN_CAPTIVE_CELL_Y as usize;
-        self.player.transport = TransportState::Foot;
+        // `blackthorn.md §3`: "The handoff writes the scene byte, the floor
+        // ..., the local position, and zeroes the carried-key counter" - no
+        // transport marker - and `town-mode.md §15.1`'s entry setup does not
+        // "separate the party from a vehicle". A party captured on a horse or
+        // carpet wakes in the cell still mounted, as the Yew jail does
+        // (P24-10); the engine used to dismount it here (playtest P25-02).
         self.pending_town_arrest = None;
         self.active_blackthorn = None;
         self.blackthorn_audience_map = None;
