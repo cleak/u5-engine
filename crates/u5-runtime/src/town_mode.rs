@@ -294,10 +294,19 @@ pub const fn town_npc_removal_recorded(type_byte: u8) -> bool {
 /// nothing and that slot is placed again on the next entry." The
 /// recorded-class test runs first so a guard inside the ordinary band
 /// still lands on the alarm arm rather than the death mask.
+///
+/// `town-mode.md §10` ("Which targets are refused"): the refused set is
+/// checked first, so the sandalwood box (`0x0E`) and the regalia band -
+/// whose removal-mask bypass belongs to `G` Get, not to `A` - are
+/// refused rather than destroyed. The lich/death-mage family `0xD8`
+/// "raises the alarm only". Every other unrefused type (creatures) only
+/// fights in the arena; this resolution is the no-arena fallback.
 pub const fn town_npc_attack_resolution(type_byte: u8) -> TownNpcAttackResolution {
-    if town_npc_removal_recorded(type_byte) {
+    if town_attack_target_refused(type_byte) {
+        TownNpcAttackResolution::Refused
+    } else if town_npc_removal_recorded(type_byte) {
         TownNpcAttackResolution::DeathMask
-    } else if town_npc_type_guard_like(type_byte) {
+    } else if town_npc_type_guard_like(type_byte) || type_byte == TOWN_NPC_ALARM_LICH_TYPE {
         TownNpcAttackResolution::AlarmOnly
     } else {
         TownNpcAttackResolution::Refused
@@ -319,9 +328,33 @@ pub const fn town_npc_attack_resolution(type_byte: u8) -> TownNpcAttackResolutio
 /// band and the guard group. The §4 royal-regalia tags and the
 /// sandalwood box are story objects rather than combatants, so they keep
 /// the in-town removal path.
+///
+/// `town-mode.md §10` ("Which targets are refused", u5-spec#300 Q18):
+/// "the only targets refused with `Nothing to attack!` are: a cell with
+/// no active object; an object whose type is below `0x40`; a type in the
+/// field band `0xE8..0xEF`; and a type in the regalia band `0xB4..0xB7`.
+/// Everything else is a valid target" - creatures and the resident
+/// Shadowlord included.
 pub const fn town_npc_attack_enters_conflict(type_byte: u8) -> bool {
-    (TOWN_NPC_ORDINARY_TYPE_FIRST <= type_byte && type_byte <= TOWN_NPC_ORDINARY_TYPE_LAST)
-        || town_npc_type_guard_like(type_byte)
+    !town_attack_target_refused(type_byte)
+}
+
+/// `town-mode.md §10`: the type half of the A-Attack refusal set.
+pub const fn town_attack_target_refused(type_byte: u8) -> bool {
+    type_byte < TOWN_NPC_ORDINARY_TYPE_FIRST
+        || (TOWN_NPC_REGALIA_TYPE_FIRST <= type_byte && type_byte <= TOWN_NPC_REGALIA_TYPE_LAST)
+        || (TOWN_ATTACK_FIELD_TYPE_FIRST <= type_byte && type_byte <= TOWN_ATTACK_FIELD_TYPE_LAST)
+}
+
+/// `town-mode.md §10`: the field band refused by town A-Attack.
+pub const TOWN_ATTACK_FIELD_TYPE_FIRST: u8 = 0xE8;
+pub const TOWN_ATTACK_FIELD_TYPE_LAST: u8 = 0xEF;
+
+/// `town-mode.md §10`: "The karma penalty and the town alarm apply only
+/// to actor types below `0x80`; the lich/death-mage family `0xD8` raises
+/// the alarm only; the Shadow Lord actor `0xFC` triggers neither."
+pub const fn town_attack_raises_alarm(type_byte: u8) -> bool {
+    type_byte < 0x80 || type_byte == TOWN_NPC_ALARM_LICH_TYPE
 }
 
 /// `town-mode.md §14` town NPC-conflict chain, carried across the arena

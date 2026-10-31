@@ -1009,6 +1009,7 @@ pub use town_mode::{
     TOWN_ARREST_JAIL_FLOOR, TOWN_ARREST_JAIL_SCENE, TOWN_ARREST_JAIL_X, TOWN_ARREST_JAIL_Y,
     TOWN_DAWN_DUSK_GATE_CLOSED_TILE, TOWN_DAWN_DUSK_GATE_MARKER_TILE,
     TOWN_DAWN_DUSK_GATE_OPEN_TILE, TOWN_DAWN_DUSK_GATE_TOGGLE_XOR, TOWN_EXIT_UNDERWORLD_SCENE,
+    TOWN_ATTACK_FIELD_TYPE_FIRST, TOWN_ATTACK_FIELD_TYPE_LAST,
     TOWN_ATTACK_WATER_TILE_LIMIT, TOWN_GRID_BYTES, TOWN_GRID_SIDE, TOWN_NIGHT_BAND_DAWN_HOUR,
     TOWN_NIGHT_BAND_DUSK_HOUR,
     TOWN_NPC_ALARM_GUARD_TYPE, TOWN_NPC_ALARM_LICH_TYPE, TOWN_NPC_BLOCK_BYTES,
@@ -1026,6 +1027,7 @@ pub use town_mode::{
     location_dat_filename, npc_dialog_index_offset, npc_roster_filename,
     npc_schedule_hour_at_boundary, npc_schedule_record_offset, npc_schedule_waypoint_for_hour,
     npc_sub_map_offset, npc_tlk_filename, npc_type_byte_offset, shadowlord_town_install_row,
+    town_attack_raises_alarm, town_attack_target_refused,
     town_dawn_dusk_gate_pass_fires_at_hour, town_dawn_dusk_gate_toggle,
     town_dawn_dusk_substitution_active, town_entry_is_jail_wakeup, town_exit_lands_underworld,
     town_floor_offset, town_location_class, town_npc_activation_mask_eligible,
@@ -1236,6 +1238,7 @@ mod tests {
     include!("tests_inline/input_helper_entry.rs");
     include!("tests_inline/ready_picker_highlight_pad.rs");
     include!("tests_inline/spec305.rs");
+    include!("tests_inline/auditfix1_aud_town.rs");
     include!("tests_inline/playfix13_move13.rs");
     include!("tests_inline/playfix13_text13.rs");
     include!("tests_inline/spec307.rs");

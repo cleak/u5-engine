@@ -2795,14 +2795,10 @@ impl PlayState {
                     // target**: the attack reaches the NPC-conflict chain
                     // ... which forces arena 10", with no karma loss, no
                     // alarm and no removal mark.
-                    let resident_shadowlord = type_byte == SHADOWLORD_ACTOR_TILE;
-                    if resident_shadowlord
-                        || (town_npc_attack_enters_conflict(type_byte)
-                            && !matches!(
-                                town_npc_attack_resolution(type_byte),
-                                TownNpcAttackResolution::Refused
-                            ))
-                    {
+                    // `town-mode.md §10` ("Which targets are refused"):
+                    // every type outside the refused set - creatures and
+                    // the lich family included - reaches the chain.
+                    if town_npc_attack_enters_conflict(type_byte) {
                         // `combat.md §5`: the encounter's base combat
                         // class "is derived from the creature's own
                         // sprite byte". A town actor's renderer record
@@ -2831,12 +2827,14 @@ impl PlayState {
                                 // slot clear, floor reload and
                                 // Shadowlord re-install move to the
                                 // arena exit.
-                                // `0xFC` "triggers neither" karma nor
-                                // the alarm (u5-spec#300 Q18).
-                                let (pursued, fled) = if resident_shadowlord {
-                                    (0, 0)
-                                } else {
+                                // `town-mode.md §10`: the alarm applies
+                                // only to types below `0x80` and the
+                                // `0xD8` family; `0xFC` and creatures
+                                // trigger none (u5-spec#300 Q18).
+                                let (pursued, fled) = if town_attack_raises_alarm(type_byte) {
                                     self.town_alarm_sweep(scene, floor, Some(npc_slot))
+                                } else {
+                                    (0, 0)
                                 };
                                 self.pending_town_conflict = Some(PendingTownConflict {
                                     scene_byte: scene.byte,
@@ -3041,9 +3039,10 @@ impl PlayState {
         x: usize,
         y: usize,
     ) -> Option<(usize, usize, usize, u8)> {
-        if floor < 0 {
-            return None;
-        }
+        // `npc-schedules.md §3`: the floor test is "a byte-for-byte
+        // equality", so a basement (`0xFF`) NPC is matched exactly like
+        // one on any other floor; `town-mode.md §10`'s refusal set is
+        // type-based only.
         let floor = floor as u8;
         self.npcs.iter().enumerate().find_map(|(index, npc)| {
             if npc.x != x || npc.y != y || npc.z != floor {
@@ -4963,12 +4962,11 @@ impl PlayState {
         // recorded at the start of its producer's engagement invocation -
         // "the last producer visited supplies the event that town mode
         // handles". A turn whose pass did not run has none to handle.
+        // §9.2 places no floor restriction on the handled event: a
+        // basement (`0xFF`) contact is handled like any other.
         let Some(event) = self.pending_town_npc_contact.take() else {
             return Ok(None);
         };
-        if floor < 0 {
-            return Ok(None);
-        }
         // `npc-schedules.md §9.2` / `commands.md §3`: contact is handled in
         // the epilogue *after* the command, so it adds to that command's
         // output and never replaces it. Push, Open, Jimmy and Attack leave

@@ -18194,9 +18194,11 @@ fn town_npc_attack_resolution_gates_death_mask_by_type() {
     assert!(!town_npc_removal_recorded(0x94));
     assert!(!town_npc_removal_recorded(0xD8));
     assert!(!town_npc_removal_recorded(0xFC));
+    // town-mode.md §10: types below 0x40 and the regalia band are refused
+    // by A-Attack; their removal-mask bypass belongs to G-Get.
     assert_eq!(
         town_npc_attack_resolution(0x0E),
-        TownNpcAttackResolution::DeathMask
+        TownNpcAttackResolution::Refused
     );
     assert_eq!(
         town_npc_attack_resolution(0x70),
@@ -18208,7 +18210,11 @@ fn town_npc_attack_resolution_gates_death_mask_by_type() {
     );
     assert_eq!(
         town_npc_attack_resolution(0xB5),
-        TownNpcAttackResolution::DeathMask
+        TownNpcAttackResolution::Refused
+    );
+    assert_eq!(
+        town_npc_attack_resolution(0xD8),
+        TownNpcAttackResolution::AlarmOnly
     );
     assert_eq!(
         town_npc_attack_resolution(0x94),
