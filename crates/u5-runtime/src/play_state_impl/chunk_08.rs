@@ -218,6 +218,16 @@ impl PlayState {
                         RestDurationInput::Cancel => {
                             let logged_prompt = self.rest_hours_logged_prompt();
                             self.commit_prompt_reply(&logged_prompt, &ch.to_string());
+                            if ch == ' ' {
+                                // `dungeon-mode.md §11`: Space is "echoed as
+                                // a blank" and then gets the same line feed
+                                // as `0`, so the row is closed. Its blank
+                                // cells are not drawn, and leaving them on
+                                // the logged row read as a prompt still open
+                                // there: the next command lost the blank row
+                                // a `0` cancel leaves (playtest S25 P25-08).
+                                self.close_logged_prompt_row_after_blank_echo(&logged_prompt);
+                            }
                             self.message_row_open_mid_line = false;
                             self.charge_tile_command_acted_exit(self.turn);
                             return Ok(Some(MoveOutcome::Blocked));

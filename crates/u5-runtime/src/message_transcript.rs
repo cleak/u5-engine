@@ -656,6 +656,28 @@ impl PlayState {
         self.message_flushed = line;
     }
 
+    /// Close the logged prompt row `prompt` after a reply echoed as a blank
+    /// cell and a line feed (`dungeon-mode.md §11`'s Space at the camp hours
+    /// prompt). The blank cells are not drawn, so the row keeps only its
+    /// visible text; left with its trailing spaces, the window would read the
+    /// row as one still waiting at the prompt and derive no blank under it.
+    pub(crate) fn close_logged_prompt_row_after_blank_echo(&mut self, prompt: &str) {
+        let Some(entry) = self
+            .message_transcript
+            .last_mut()
+            .filter(|entry| !entry.explicit_blank && entry.text == prompt)
+        else {
+            return;
+        };
+        let trimmed = entry.text.trim_end_matches(' ').len();
+        entry.text.truncate(trimmed);
+        while entry.glyphs.last().is_some_and(|glyph| glyph.byte == b' ') {
+            entry.glyphs.pop();
+        }
+        entry.leaves_row_open = false;
+        self.message_transcript_revision = self.message_transcript_revision.wrapping_add(1);
+    }
+
     /// [`Self::commit_prompt_reply`] for a prompt that may only be a *live*
     /// row - one the shell draws from the open session (`Item: ` while the
     /// R-Ready picker waits) rather than a transcript entry. When the
