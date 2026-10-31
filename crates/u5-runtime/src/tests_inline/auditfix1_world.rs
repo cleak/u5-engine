@@ -119,3 +119,39 @@ fn auditfix1_world_camp_cooldown_is_written_after_the_apparition_event() {
     assert!(found > 0, "no seed reached the apparition event");
     let _ = fs::remove_dir_all(dir);
 }
+
+/// `shops.md §8.5` / `shoppe-dat.md §7` (R433): with no pack affordable and
+/// food below three, "The shopkeeper adds either `1` or `2` servings, from a
+/// separate uniform `0..1` draw plus one" - food 2 becomes 3 or 4.
+#[test]
+fn auditfix1_world_table_scraps_gift_draws_one_or_two_servings() {
+    use crate::shop_runtime::TavernState;
+    use crate::shop_session::ActiveShopSession;
+
+    let mut seen = std::collections::BTreeSet::new();
+    for seed in 1u16..40 {
+        let mut state = test_state(open_grid(), 1, 1);
+        state.gold = 0;
+        state.food = 2;
+        state.prng_state = seed;
+        state.active_shop = Some(ActiveShopSession::Tavern(
+            TavernState::PickProvisionQuantity {
+                tavern: Tavern::TheHonestMeal,
+                unit_price: 10,
+                continuation_ready: false,
+                entry: Default::default(),
+            },
+        ));
+        let mut reference = test_state(open_grid(), 1, 1);
+        reference.prng_state = seed;
+        let gift = 1 + u16::from(reference.random_range_u8(0, 1));
+
+        handle_play_key_input(&mut state, '1', "\r", Path::new("")).unwrap();
+
+        assert!(state.message.contains("table scraps"), "seed {seed}");
+        assert_eq!(state.food, 2 + gift, "seed {seed}");
+        assert_eq!(state.prng_state, reference.prng_state, "seed {seed}");
+        seen.insert(state.food);
+    }
+    assert_eq!(seen.into_iter().collect::<Vec<_>>(), vec![3, 4]);
+}

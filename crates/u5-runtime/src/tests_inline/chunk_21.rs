@@ -6716,7 +6716,13 @@ fn end_to_end_unaffordable_provisions_grant_only_the_published_charity_case() {
         handle_play_key_input(&mut state, '1', "\r", Path::new("")).unwrap();
 
         assert_eq!(state.gold, 0);
-        assert_eq!(state.food, expected_food);
+        // `shops.md §8.5` (R433): the gift is a `0..1` draw plus one, so
+        // food 2 becomes 3 or 4.
+        if expects_charity {
+            assert!(matches!(state.food, 3 | 4), "{}", state.food);
+        } else {
+            assert_eq!(state.food, expected_food);
+        }
         assert_eq!(state.message.contains("table scraps"), expects_charity);
         assert!(state.active_shop.is_none());
     }

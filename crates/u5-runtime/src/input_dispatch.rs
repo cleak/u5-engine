@@ -2632,7 +2632,7 @@ fn handle_active_shop_key_input(
             // proceeds with the purchase". Set by that arm so the echo can
             // land on the question's open row before the purchase text.
             let mut enough_drink_refused = false;
-            let outcome = match (*s, yes, no, inline_digit) {
+            let mut outcome = match (*s, yes, no, inline_digit) {
                 (TavernState::Greeting { .. }, _, _, _) => step_tavern(
                     s,
                     TavernInput::Key(key_byte),
@@ -2733,6 +2733,18 @@ fn handle_active_shop_key_input(
                 }
                 _ => TavernOutcome::InvalidInput,
             };
+            // `shops.md §8.5` / `shoppe-dat.md §7` (R433): the table-scraps
+            // gift is "either `1` or `2` servings, from a separate uniform
+            // `0..1` draw plus one", taken before record 90 renders. The
+            // pay loop credits the "plus one"; the draw adds the rest.
+            if let TavernOutcome::CharityProvisions { food_added, .. } = &mut outcome {
+                let extra = u16::from(state.random_range_u8(0, 1));
+                let before = food;
+                food = food
+                    .saturating_add(extra)
+                    .min(crate::shops::SHOP_FOOD_STOCK_CAP);
+                *food_added += food - before;
+            }
             state.food = food;
             if matches!(outcome, TavernOutcome::RoundDrinkServed { .. }) {
                 state.rewrite_tavern_round_table_setting();
