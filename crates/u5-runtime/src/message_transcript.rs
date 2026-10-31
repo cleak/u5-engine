@@ -546,9 +546,24 @@ impl PlayState {
     /// lines carry it and pure output lines do not". A refusal the
     /// dispatcher prints in place of a verb echo - the `What?` of
     /// `commands.md §5.2` - is written onto that already-marked line.
+    ///
+    /// That prompt is the overworld helper's too, so it tests the
+    /// `text-output.md §10.2` gate exactly as a verb echo does
+    /// ([`Self::begin_command_echo`]): "When the helper was entered with the
+    /// gate clear (after an accepted step or a calm-wind silent consume), a
+    /// non-sailing key ... comes back from the helper with no fresh pair; its
+    /// echo is written on the pending marker row ... and the prompt after
+    /// that command gets an ordinary pair". Untested, an Escape, `!` or
+    /// `Buffer On` after a hoisted step drew a pair of its own and left the
+    /// suppression to the next command's echo (playtest S25 P25-04).
     pub fn emit_command_echo_line(&mut self, text: impl Into<String>) {
         let text = text.into();
         self.push_message_entry(text.clone(), true);
+        if self.take_overworld_prompt_pair_suppression()
+            && let Some(entry) = self.message_transcript.last_mut()
+        {
+            entry.prompt_pair_suppressed = true;
+        }
         self.message = text.clone();
         self.message_flushed = text;
     }

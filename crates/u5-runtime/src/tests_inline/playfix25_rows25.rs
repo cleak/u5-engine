@@ -62,3 +62,50 @@ fn playfix25_p25_05_combat_empty_handed_refusal_closes_its_row() {
     assert_eq!(rows[handed], "handed!", "rows: {rows:?}");
     assert_eq!(rows[handed + 1], "Wisp teleports!", "rows: {rows:?}");
 }
+
+/// P25-04: `text-output.md §10.2` ("Held passes and where the next line
+/// lands"): after an accepted step or a calm-wind silent consume, "a
+/// non-sailing key ... comes back from the helper with no fresh pair; its
+/// echo is written on the pending marker row ... and the prompt after that
+/// command gets an ordinary pair". An unmapped key's `What?` and the
+/// Buffer/Sound toggles are such echoes, laid out like the `D-What?` sibling.
+#[test]
+fn playfix25_p25_04_unmapped_key_after_a_hoisted_step_takes_the_marker_row() {
+    let dir = Path::new("");
+    let mut layouts = Vec::new();
+    for key in ['D', '\u{1b}', '!'] {
+        let mut state = bare_marker_frigate(WindState::Calm, 99, "Yell HOIST!");
+        handle_play_key_input(&mut state, 'w', "", dir).unwrap();
+        assert!(overworld_prompt_pair_is_suppressed(&state), "{key:?}");
+        handle_play_key_input(&mut state, key, "", dir).unwrap();
+        assert!(
+            !overworld_prompt_pair_is_suppressed(&state),
+            "{key:?}: the prompt after the refusal gets an ordinary pair"
+        );
+        let rows = bare_marker_layout(&state);
+        let yell = rows
+            .iter()
+            .rposition(|row| row.1 == "Yell HOIST!")
+            .unwrap_or_else(|| panic!("{rows:?}"));
+        layouts.push(rows[yell..].to_vec());
+    }
+    let expected = vec![
+        (true, "Yell HOIST!".to_string()),
+        (false, String::new()),
+        (true, "D-What?".to_string()),
+        (false, String::new()),
+        (true, String::new()),
+    ];
+    assert_eq!(layouts[0], expected, "the D-What? control");
+    for layout in &layouts[1..] {
+        let mut expected = expected.clone();
+        expected[2].1 = "What?".to_string();
+        assert_eq!(layout, &expected);
+    }
+
+    // The typeahead toggle echoes through the same prompt.
+    let mut state = bare_marker_frigate(WindState::Calm, 99, "Yell HOIST!");
+    handle_play_key_input(&mut state, 'w', "", dir).unwrap();
+    state.toggle_typeahead_buffer();
+    assert!(!overworld_prompt_pair_is_suppressed(&state));
+}
