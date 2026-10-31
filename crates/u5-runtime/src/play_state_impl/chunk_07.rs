@@ -5401,17 +5401,30 @@ impl PlayState {
     /// every NPC where the jail load placed it. Running the scheduler here
     /// walked Yew's guards off their posts overnight (playtest K05).
     pub(crate) fn advance_town_arrest_wait_to_morning(&mut self) -> u16 {
+        // `town-mode.md §14` "Surrender, in order": steps run "only while
+        // the hour is not 8 ... until a step lands in the 08:00 hour", with
+        // no step cap (ten-minute steps under Quickness need up to 144 of
+        // them), and "the jail loop does not age the effect" (playtest
+        // P25-01: a 96-step cap woke a Quickness party at 04:32 after
+        // ageing the effect once per step). Negate Time cannot be active
+        // here (the arrest's host is skipped while it is), but a step that
+        // moves no clock would never reach 08:00, so it ends the loop.
         let mut cleanup_ticks = 0;
-        while !town_arrest_release_loop_done(self.clock.hour) && cleanup_ticks < 96 {
-            self.advance_turn_with_minutes_policy_and_schedules(
+        while !town_arrest_release_loop_done(self.clock.hour) {
+            let before = (self.clock.day, self.clock.hour, self.clock.minute);
+            self.advance_turn_with_minutes_policy_schedules_and_effect_aging(
                 TOWN_ARREST_CLEANUP_INCREMENT_MINUTES,
                 false,
                 true,
                 false,
                 false,
                 false,
+                false,
             );
             cleanup_ticks += 1;
+            if (self.clock.day, self.clock.hour, self.clock.minute) == before {
+                break;
+            }
         }
         cleanup_ticks
     }

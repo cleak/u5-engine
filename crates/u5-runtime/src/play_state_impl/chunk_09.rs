@@ -3488,6 +3488,34 @@ impl PlayState {
         age_payment_cooldown: bool,
         run_town_schedules: bool,
     ) {
+        self.advance_turn_with_minutes_policy_schedules_and_effect_aging(
+            minutes,
+            tick_doors,
+            advance_active_objects,
+            apply_hourly_party_status,
+            age_payment_cooldown,
+            run_town_schedules,
+            true,
+        );
+    }
+
+    /// [`Self::advance_turn_with_minutes_policy_and_schedules`] with the
+    /// active-effect ageing optional. `town-mode.md §14` "Surrender, in
+    /// order": "the jail loop does not age the effect", and `magic.md`
+    /// "Aging" excludes the clock/light cleanup from the ageing endpoints,
+    /// so the arrest wait-to-morning loop is the one caller passing
+    /// `age_active_effect = false` (playtest P25-01).
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn advance_turn_with_minutes_policy_schedules_and_effect_aging(
+        &mut self,
+        minutes: u8,
+        tick_doors: bool,
+        advance_active_objects: bool,
+        apply_hourly_party_status: bool,
+        age_payment_cooldown: bool,
+        run_town_schedules: bool,
+        age_active_effect: bool,
+    ) {
         // `combat.md §7`, "The middle tier's flag is a stats-panel refresh
         // request" (`RETRACTIONS.md` R358): the outdoor, town and dungeon
         // mode loops share this per-turn entry point, and each "reads it
@@ -3753,7 +3781,7 @@ impl PlayState {
         // counter". Combat reaches this per-turn tail through the round
         // counter's ten-dispatch wrap, so ageing here as well would spend a
         // Quickness or Mass Charm tag on both the wrap and the action tail.
-        if !self.combat_active {
+        if age_active_effect && !self.combat_active {
             self.age_active_effect();
         }
         if tick_doors && !self.combat_active {
