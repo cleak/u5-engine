@@ -2048,8 +2048,13 @@ fn a_attack_adjacent_non_npc_object_reports_no_town_target() {
     assert!(!state.diagnostics_contain("out of scope"));
 }
 
+/// `town-mode.md §10` ("Which targets are refused"): "an object whose type
+/// is below `0x40`" is refused with `Nothing to attack!`. The sandalwood-box
+/// story object (`0x0E`) keeps its removal-mask bypass for G-Get only; A
+/// neither removes it nor records it (audit town-mode:10:4b). This test used
+/// to assert that A destroyed it.
 #[test]
-fn a_attack_adjacent_activation_mask_npc_removes_linked_runtime_actor() {
+fn a_attack_adjacent_activation_mask_npc_is_refused_and_kept() {
     let mut state = test_state(open_grid(), 1, 1);
     state.player.facing = Direction::East;
     let slots = [
@@ -2078,25 +2083,12 @@ fn a_attack_adjacent_activation_mask_npc_removes_linked_runtime_actor() {
 
     assert_eq!((state.player.x, state.player.y), (1, 1));
     assert_eq!(state.turn, 1);
-    assert!(state.npcs.is_empty());
-    assert!(state.active_objects[object_slot].is_empty());
-    assert_eq!(state.removed_town_npc_flags.get(&17), Some(&0b10));
-    assert!(state.visibility_dirty);
-    assert!(state.diagnostics_contain("Attacked NPC slot 1"));
-    assert!(state.diagnostics_contain("type 0x0E"));
-    assert!(state.diagnostics_contain("target removed"));
-    // town-mode.md §14's NPC-conflict chain covers the location's
-    // actors - the ordinary townsperson band and the guard group. Tag
-    // 0x0E is the §4 story-object slot, not a combatant, so A-Attack on
-    // it stays inside town mode and never frames an arena.
+    assert_eq!(state.npcs.len(), 1);
+    assert!(!state.active_objects[object_slot].is_empty());
+    assert!(state.removed_town_npc_flags.values().all(|mask| *mask == 0));
+    assert_eq!(state.message, ATTACK_NOTHING_TO_ATTACK_REFUSAL);
+    assert!(!state.diagnostics_contain("target removed"));
     assert!(!state.diagnostics_contain("combat"));
-    assert!(!state.diagnostics_contain("pending"));
-
-    state.load_scheduled_npcs(&slots);
-    assert!(
-        state.npcs.is_empty(),
-        "removed NPC slot must not relink during the current scene visit"
-    );
 }
 
 #[test]

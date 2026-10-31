@@ -101,6 +101,59 @@ fn surface_container_trap_stamps_corpse_into_the_linked_world_object_in_combat()
     assert_eq!(state.active_player, None);
 }
 
+/// Audit traps:§4:21. `traps.md §4`: the cleanup "finds that member's live
+/// combatant record". `combat.md §5` skips Dead members at seating, so with
+/// roster 0 Dead the descriptors pack: descriptor 0 seats roster 1 and
+/// descriptor 1 seats roster 2. Roster 1 dying to the chest must mark
+/// descriptor 0 and stamp *its* object, leaving roster 2's record alone.
+#[test]
+fn surface_container_trap_cleanup_finds_the_packed_descriptor_of_the_dying_member() {
+    let mut state = trapped_chest_combat_state();
+    let z = WorldPlane::Underworld.save_floor();
+    // Slot 3: roster 2's world object.
+    state.active_objects.push(ActiveObject {
+        type_byte: 0x40,
+        tile: 0x40,
+        x: 4,
+        y: 5,
+        z,
+        phase: STEADY_PHASE,
+        aux1: 0,
+        aux3: 0,
+    });
+    let template = state.party[0].clone();
+    state.party.truncate(1);
+    state.party.push(PartyMember {
+        slot: 1,
+        ..template.clone()
+    });
+    state.party.push(PartyMember {
+        slot: 2,
+        ..template
+    });
+    state.party[0].hp = 0;
+    state.party[0].status = b'D';
+    state.party[1].hp = 0;
+    state.party[2].hp = 30;
+    // flags nonzero: the owner byte names the roster slot.
+    state.combat_actors[0] = CombatActorDescriptor::from_row([9, 1, 1, 1, 2, STEADY_PHASE, 5, 5]);
+    state.combat_actors[1] = CombatActorDescriptor::from_row([9, 1, 1, 2, 3, STEADY_PHASE, 4, 5]);
+    state.active_player = Some(1);
+    state.combat_active = true;
+
+    assert_eq!(
+        state.consume_surface_object_chest_at(6, 5, 1, "Opened"),
+        Some(MoveOutcome::ContainerOpened)
+    );
+
+    assert!(state.combat_actors[0].is_marked_dead());
+    assert!(!state.combat_actors[1].is_marked_dead());
+    assert_eq!(state.active_objects[2].type_byte, COMBAT_PARTY_CORPSE_TILE);
+    assert_eq!(state.active_objects[3].type_byte, 0x40);
+    assert_eq!(state.active_objects[3].tile, 0x40);
+    assert_eq!(state.active_player, None);
+}
+
 #[test]
 fn surface_container_trap_outside_combat_leaves_the_world_object_alone() {
     // `traps.md §4` fourth difference: the `O` Open dispatcher "routes every

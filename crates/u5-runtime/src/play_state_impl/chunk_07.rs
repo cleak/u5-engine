@@ -2155,12 +2155,9 @@ impl PlayState {
         }
 
         let active_slot = self.insert_resident_shadowlord_npc(scene, floor)?;
-        // `town-mode.md §13` (u5-spec#300 Q4): the sweep runs after the
-        // party-capability check, and a party with nobody able to act and
-        // nobody asleep stops entry there, "no resident-entry sweep".
-        if self.shadowlord_notice_capability_gate_passes() {
-            let _ = self.apply_resident_shadowlord_npc_sweep(shadowlord_index);
-        }
+        // The resident-entry sweep is not part of the install: `town-mode.md
+        // §13` runs it "last", after the notice, and for a rejected install
+        // too ([`Self::run_resident_shadowlord_entry_sweep`]).
         self.mark_visibility_dirty();
         Some((active_slot, shadowlord_index))
     }
@@ -2214,6 +2211,21 @@ impl PlayState {
         );
         self.mark_visibility_dirty();
         Some(rewritten)
+    }
+
+    /// `town-mode.md §13` entry order: "the notice prints and its tone
+    /// plays; and, in a hideout town, the resident-entry sweep described
+    /// next runs last. If the capability check finds nobody in the party
+    /// able to act and nobody asleep, entry stops at that check: no notice,
+    /// no tone and no resident-entry sweep." The sweep is selected by the
+    /// recorded host, so it runs whether the install placed an actor or was
+    /// rejected by the one-at-a-time check; only "a town hosting no
+    /// Shadowlord" and "a town whose install was skipped by the row-`4`
+    /// guard" skip it, and both record no host.
+    pub fn run_resident_shadowlord_entry_sweep(&mut self, shadowlord_index: usize) {
+        if self.shadowlord_notice_capability_gate_passes() {
+            let _ = self.apply_resident_shadowlord_npc_sweep(shadowlord_index);
+        }
     }
 
     /// `town-mode.md §13`: consume one coin draw for every roster index,
@@ -2795,14 +2807,10 @@ impl PlayState {
                     // target**: the attack reaches the NPC-conflict chain
                     // ... which forces arena 10", with no karma loss, no
                     // alarm and no removal mark.
-                    let resident_shadowlord = type_byte == SHADOWLORD_ACTOR_TILE;
-                    if resident_shadowlord
-                        || (town_npc_attack_enters_conflict(type_byte)
-                            && !matches!(
-                                town_npc_attack_resolution(type_byte),
-                                TownNpcAttackResolution::Refused
-                            ))
-                    {
+                    // `town-mode.md §10` ("Which targets are refused"):
+                    // every type outside the refused set - creatures and
+                    // the lich family included - reaches the chain.
+                    if town_npc_attack_enters_conflict(type_byte) {
                         // `combat.md §5`: the encounter's base combat
                         // class "is derived from the creature's own
                         // sprite byte". A town actor's renderer record
@@ -2831,12 +2839,14 @@ impl PlayState {
                                 // slot clear, floor reload and
                                 // Shadowlord re-install move to the
                                 // arena exit.
-                                // `0xFC` "triggers neither" karma nor
-                                // the alarm (u5-spec#300 Q18).
-                                let (pursued, fled) = if resident_shadowlord {
-                                    (0, 0)
-                                } else {
+                                // `town-mode.md §10`: the alarm applies
+                                // only to types below `0x80` and the
+                                // `0xD8` family; `0xFC` and creatures
+                                // trigger none (u5-spec#300 Q18).
+                                let (pursued, fled) = if town_attack_raises_alarm(type_byte) {
                                     self.town_alarm_sweep(scene, floor, Some(npc_slot))
+                                } else {
+                                    (0, 0)
                                 };
                                 self.pending_town_conflict = Some(PendingTownConflict {
                                     scene_byte: scene.byte,
@@ -3031,7 +3041,11 @@ impl PlayState {
         // `encounters.md §7`: the chain "does not re-place the player:
         // the player's position comes from the world-state globals
         // throughout."
-        self.install_shadowlord_entry_encounter();
+        // The post-fight re-run keeps the sweep it has always run after a
+        // fresh install; the entry-pass ordering fix does not reach it.
+        if let Some((Some(_), index)) = self.install_shadowlord_entry_encounter() {
+            self.run_resident_shadowlord_entry_sweep(index);
+        }
         Ok(true)
     }
 
@@ -3041,9 +3055,10 @@ impl PlayState {
         x: usize,
         y: usize,
     ) -> Option<(usize, usize, usize, u8)> {
-        if floor < 0 {
-            return None;
-        }
+        // `npc-schedules.md §3`: the floor test is "a byte-for-byte
+        // equality", so a basement (`0xFF`) NPC is matched exactly like
+        // one on any other floor; `town-mode.md §10`'s refusal set is
+        // type-based only.
         let floor = floor as u8;
         self.npcs.iter().enumerate().find_map(|(index, npc)| {
             if npc.x != x || npc.y != y || npc.z != floor {
@@ -4963,12 +4978,11 @@ impl PlayState {
         // recorded at the start of its producer's engagement invocation -
         // "the last producer visited supplies the event that town mode
         // handles". A turn whose pass did not run has none to handle.
+        // §9.2 places no floor restriction on the handled event: a
+        // basement (`0xFF`) contact is handled like any other.
         let Some(event) = self.pending_town_npc_contact.take() else {
             return Ok(None);
         };
-        if floor < 0 {
-            return Ok(None);
-        }
         // `npc-schedules.md §9.2` / `commands.md §3`: contact is handled in
         // the epilogue *after* the command, so it adds to that command's
         // output and never replaces it. Push, Open, Jimmy and Attack leave

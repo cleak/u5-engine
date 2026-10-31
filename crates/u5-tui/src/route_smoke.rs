@@ -7302,13 +7302,20 @@ fn validate_route_smoke_case_state(
             }
         }
         "castle-town-attack-death-mask-npc" => {
-            if state.removed_town_npc_flags.get(&17).copied().unwrap_or(0) & 0b10 == 0
+            // `town-mode.md §10` ("Which targets are refused"): the route's
+            // `0x0E` sandalwood-box slot is "an object whose type is below
+            // `0x40`", refused with `Nothing to attack!`. The removal-mask
+            // bypass belongs to G-Get, so A leaves the slot standing and
+            // unrecorded (audit town-mode:10:4b). The case keeps its name
+            // because the visual manifests key on it.
+            if state.removed_town_npc_flags.get(&17).copied().unwrap_or(0) & 0b10 != 0
                 || state.combat_active
-                || !state.diagnostics_contain("target removed")
-                || !state.npcs.is_empty()
+                || state.diagnostics_contain("target removed")
+                || !state.npcs.iter().any(|npc| npc.slot == 1)
+                || !state.message.contains("Nothing to")
             {
                 return Err(io::Error::other(format!(
-                    "route smoke `{case_name}` did not remove the attackable town NPC through the death-mask path"
+                    "route smoke `{case_name}` did not refuse the A-Attack on the type-0x0E story object"
                 )));
             }
         }

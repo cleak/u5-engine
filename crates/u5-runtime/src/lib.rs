@@ -398,7 +398,8 @@ pub use containers::{
     chest_secondary_pool_threshold, chest_secondary_pool_transcript_line,
     dungeon_bomb_search_outcome, dungeon_chest_gold_is_zero_width, dungeon_chest_gold_upper,
     dungeon_chest_row_awarded, dungeon_chest_row_gate_max, dungeon_chest_search_outcome,
-    dungeon_chest_trap_tier, equipment_grant_quantity, gettable_object_visual, inventory_add_class,
+    dungeon_chest_trap_tier, equipment_grant_quantity, get_object_scan_accepts,
+    gettable_object_visual, inventory_add_class,
     inventory_add_class_cap, inventory_add_equipment_units, rare_reagent_harvest_hour_accepted,
     rare_reagent_harvest_quantity, search_location_prefix, search_trap_detection_threshold,
     search_trap_visibility, table_food_get_resulting_tile, town_chest_open_standing,
@@ -1009,6 +1010,7 @@ pub use town_mode::{
     TOWN_ARREST_JAIL_FLOOR, TOWN_ARREST_JAIL_SCENE, TOWN_ARREST_JAIL_X, TOWN_ARREST_JAIL_Y,
     TOWN_DAWN_DUSK_GATE_CLOSED_TILE, TOWN_DAWN_DUSK_GATE_MARKER_TILE,
     TOWN_DAWN_DUSK_GATE_OPEN_TILE, TOWN_DAWN_DUSK_GATE_TOGGLE_XOR, TOWN_EXIT_UNDERWORLD_SCENE,
+    TOWN_ATTACK_FIELD_TYPE_FIRST, TOWN_ATTACK_FIELD_TYPE_LAST,
     TOWN_ATTACK_WATER_TILE_LIMIT, TOWN_GRID_BYTES, TOWN_GRID_SIDE, TOWN_NIGHT_BAND_DAWN_HOUR,
     TOWN_NIGHT_BAND_DUSK_HOUR,
     TOWN_NPC_ALARM_GUARD_TYPE, TOWN_NPC_ALARM_LICH_TYPE, TOWN_NPC_BLOCK_BYTES,
@@ -1026,6 +1028,7 @@ pub use town_mode::{
     location_dat_filename, npc_dialog_index_offset, npc_roster_filename,
     npc_schedule_hour_at_boundary, npc_schedule_record_offset, npc_schedule_waypoint_for_hour,
     npc_sub_map_offset, npc_tlk_filename, npc_type_byte_offset, shadowlord_town_install_row,
+    town_attack_raises_alarm, town_attack_target_refused,
     town_dawn_dusk_gate_pass_fires_at_hour, town_dawn_dusk_gate_toggle,
     town_dawn_dusk_substitution_active, town_entry_is_jail_wakeup, town_exit_lands_underworld,
     town_floor_offset, town_location_class, town_npc_activation_mask_eligible,
@@ -1236,6 +1239,7 @@ mod tests {
     include!("tests_inline/input_helper_entry.rs");
     include!("tests_inline/ready_picker_highlight_pad.rs");
     include!("tests_inline/spec305.rs");
+    include!("tests_inline/auditfix1_aud_town.rs");
     include!("tests_inline/playfix13_move13.rs");
     include!("tests_inline/playfix13_text13.rs");
     include!("tests_inline/spec307.rs");

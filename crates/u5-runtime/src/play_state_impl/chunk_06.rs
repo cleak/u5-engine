@@ -1454,7 +1454,12 @@ impl PlayState {
         {
             return;
         }
-        if let Some(actor) = self.combat_actors.get_mut(member_index) {
+        // (a) "finds that member's live combatant record": `member_index`
+        // is a roster slot, and `combat.md §5` packs party descriptors past
+        // Dead members, so the record is the descriptor seated for that
+        // roster slot, not the descriptor at the same index.
+        let descriptor = self.combat_party_descriptor_slot_for_roster_slot(member_index);
+        if let Some(actor) = descriptor.and_then(|slot| self.combat_actors.get_mut(slot)) {
             // (a) marker bit only; the record keeps its slot and contents.
             actor.mark_dead();
             let object_slot = actor.active_object_slot as usize;
@@ -1949,8 +1954,12 @@ impl PlayState {
                 // this used to apply first is withdrawn, so the handler takes
                 // the record at the cell and lets its class decide - including
                 // deciding to refuse. A staged body is skipped before that
-                // (`containers.md §3`, u5-spec#300 Q2).
-                self.object_occupies(*object, x, y) && !staged_hidden_treasure_body(*object)
+                // (`containers.md §3`, u5-spec#300 Q2). Step 3's class
+                // filter skips actors, blockers and unrelated rows too, and
+                // the scan keeps going past them.
+                self.object_occupies(*object, x, y)
+                    && !staged_hidden_treasure_body(*object)
+                    && get_object_scan_accepts(object.type_byte)
             })?;
 
         let Some(grant) = native_object_pickup_grant(object) else {
@@ -2160,12 +2169,11 @@ impl PlayState {
         if self.surface_get_chest_slot_at(tx, ty).is_some() {
             return Ok(self.begin_surface_object_chest_interaction(tx, ty, SurfaceChestVerb::Get));
         }
+        // `containers.md §3` step 5: "If no object matches, the handler
+        // classifies the live map tile" - an actor or other unaccepted
+        // record at the cell does not stop the cascade.
         if let Some(outcome) = self.get_native_object_pickup_at(tx, ty) {
             return Ok(outcome);
-        }
-        if self.world_object_at(tx, ty).is_some() {
-            self.message = GET_NOTHING_REFUSAL.to_string();
-            return Ok(MoveOutcome::Blocked);
         }
 
         let idx = world_cell_index(tx, ty);
@@ -2346,15 +2354,8 @@ impl PlayState {
             return Ok(outcome);
         }
         // `containers.md §3` (u5-spec#300 Q2): a staged rotting body or
-        // moldy corpse is skipped like an actor, so it does not stop Get
-        // from reaching the live-tile cascade below.
-        if self
-            .blocking_object_at(tx, ty)
-            .is_some_and(|object| !staged_hidden_treasure_body(*object))
-        {
-            self.message = GET_NOTHING_REFUSAL.to_string();
-            return Ok(MoveOutcome::Blocked);
-        }
+        // moldy corpse "is skipped exactly as it skips an actor", so neither
+        // an actor nor a body stops Get from reaching the live-tile cascade.
 
         let idx = ty * 32 + tx;
         let tile = self.grid[idx];
