@@ -2787,9 +2787,49 @@ impl PlayState {
                 self.advance_turn();
             }
             if let Area::Town { scene, floor } = self.area {
-                if let Some((npc_index, npc_slot, object_slot, type_byte)) =
-                    self.town_attack_target_at(floor, x, y)
-                {
+                let linked_target = self.town_attack_target_at(floor, x, y);
+                // `town-mode.md §10`, "Karma cost of A-Attack" (u5-spec#316
+                // Q1): both debits and the alarm belong to an **accepted**
+                // target - one past the `Nothing to attack!` filter - and the
+                // acceptance debit "comes before the terrain test, the
+                // conflict chain, its group banner and any arena, so the
+                // outcome of a fight cannot change it. It is also taken when
+                // the accepted target has no linked NPC".
+                let accepted_type = linked_target
+                    .map(|(_, _, _, type_byte)| type_byte)
+                    .unwrap_or(object.type_byte);
+                let mut acceptance_alarm = None;
+                if !town_attack_target_refused(accepted_type) {
+                    acceptance_alarm = Some(self.apply_town_attack_acceptance(
+                        scene,
+                        floor,
+                        accepted_type,
+                        linked_target.map(|(_, npc_slot, _, _)| npc_slot),
+                    ));
+                    let terrain = self.grid[y * TOWN_GRID_SIDE + x];
+                    if town_attack_kill_arm_tile(terrain) {
+                        return Ok(self.apply_town_attack_kill_arm(
+                            scene,
+                            accepted_type,
+                            linked_target
+                                .map(|(npc_index, npc_slot, slot, _)| (npc_index, npc_slot, slot)),
+                            object_slot,
+                        ));
+                    }
+                    if linked_target.is_none() {
+                        // "nothing is printed after the `Attack-<dir>` echo
+                        // in that case"; town A is "Acted" (`commands.md §3`).
+                        self.advance_turn();
+                        self.message.clear();
+                        self.push_diagnostic(format!(
+                            "Attacked unlinked object type 0x{accepted_type:02X} at ({x}, {y}) to the {}; no linked NPC.",
+                            direction.name()
+                        ));
+                        return Ok(MoveOutcome::Used);
+                    }
+                }
+                let (pursued, fled) = acceptance_alarm.unwrap_or((0, 0));
+                if let Some((npc_index, npc_slot, object_slot, type_byte)) = linked_target {
                     // `town-mode.md §14`: "The town overlay has a live
                     // NPC-conflict chain, entered both from A-Attack and
                     // from post-action cleanup, that hands the target
@@ -2835,19 +2875,11 @@ impl PlayState {
                                 && terrain_combat_base_class(trigger).is_some()
                             {
                                 // §14 keeps the alarm sweep on the
-                                // A-Attack routing; the death flow's
+                                // A-Attack routing - it ran at target
+                                // acceptance above; the death flow's
                                 // slot clear, floor reload and
                                 // Shadowlord re-install move to the
                                 // arena exit.
-                                // `town-mode.md §10`: the alarm applies
-                                // only to types below `0x80` and the
-                                // `0xD8` family; `0xFC` and creatures
-                                // trigger none (u5-spec#300 Q18).
-                                let (pursued, fled) = if town_attack_raises_alarm(type_byte) {
-                                    self.town_alarm_sweep(scene, floor, Some(npc_slot))
-                                } else {
-                                    (0, 0)
-                                };
                                 self.pending_town_conflict = Some(PendingTownConflict {
                                     scene_byte: scene.byte,
                                     floor,
@@ -2866,7 +2898,6 @@ impl PlayState {
                                         scene.byte,
                                         hostile_terrain,
                                     )?;
-                                let _ = (pursued, fled);
                                 return Ok(MoveOutcome::Used);
                             }
                         }
@@ -2877,8 +2908,6 @@ impl PlayState {
                             self.free_active_object_slot(object_slot);
                             self.npcs.remove(npc_index);
                             self.mark_removed_town_npc_once(scene, npc_slot);
-                            let (pursued, fled) =
-                                self.town_alarm_sweep(scene, floor, Some(npc_slot));
                             self.mark_visibility_dirty();
                             self.push_diagnostic(format!(
                                 "Attacked NPC slot {npc_slot} type 0x{type_byte:02X} at ({x}, {y}) to the {}; target removed from {} floor {floor}; alarm raised ({pursued} pursuing, {fled} fleeing).",
@@ -2888,8 +2917,6 @@ impl PlayState {
                             return Ok(MoveOutcome::Used);
                         }
                         TownNpcAttackResolution::AlarmOnly => {
-                            let (pursued, fled) =
-                                self.town_alarm_sweep(scene, floor, Some(npc_slot));
                             self.push_diagnostic(format!(
                                 "Attacked NPC slot {npc_slot} type 0x{type_byte:02X} at ({x}, {y}) to the {}; alarm raised ({pursued} pursuing, {fled} fleeing).",
                                 direction.name()
@@ -2935,6 +2962,66 @@ impl PlayState {
         // and then this refusal - not a composed line naming the cell.
         self.message = ATTACK_NOTHING_TO_ATTACK_REFUSAL.to_string();
         Ok(MoveOutcome::Blocked)
+    }
+
+    /// `town-mode.md §10`, "Acceptance debit" (u5-spec#316 Q1): an actor
+    /// type below `0x80` "costs 5 points and raises the town alarm. The
+    /// `0xD8` family raises the alarm only; `0xFC` and every other type at or
+    /// above `0x80` do neither." The debit is floored at zero (`karma.md §4`).
+    /// Returns the alarm sweep's (pursued, fled) counts.
+    pub fn apply_town_attack_acceptance(
+        &mut self,
+        scene: Scene,
+        floor: i8,
+        type_byte: u8,
+        npc_slot: Option<usize>,
+    ) -> (usize, usize) {
+        if town_attack_acceptance_debits(type_byte) {
+            self.decrease_moral_standing(TOWN_ATTACK_KARMA_DEBIT);
+        }
+        if town_attack_raises_alarm(type_byte) {
+            self.town_alarm_sweep(scene, floor, npc_slot)
+        } else {
+            (0, 0)
+        }
+    }
+
+    /// `town-mode.md §10`, "Kill-arm debit" (u5-spec#316 Q1): on a stocks,
+    /// manacles, `0x9F` or bed cell "every type except exactly `0x78` prints
+    /// `Murdered!` and then costs a further 5 points, whatever its type. The
+    /// kill and corpse placement follow; when an NPC is linked, the removal
+    /// mark is subject to the removal-mask rule ... and the NPC's slot is
+    /// cleared. A `0x78` target on such a cell prints `Missed!` and takes no
+    /// second debit." No arena opens, so the town turn is spent here.
+    ///
+    /// The corpse placement is not published (which tile, which cell layer),
+    /// so none is drawn; the kill frees the target's active-object record.
+    fn apply_town_attack_kill_arm(
+        &mut self,
+        scene: Scene,
+        type_byte: u8,
+        linked: Option<(usize, usize, usize)>,
+        object_slot: usize,
+    ) -> MoveOutcome {
+        self.advance_turn();
+        if type_byte == TOWN_ATTACK_KILL_ARM_MISS_TYPE {
+            self.message = TOWN_ATTACK_KILL_ARM_MISSED_MESSAGE.to_string();
+            return MoveOutcome::Used;
+        }
+        self.message = TOWN_ATTACK_KILL_ARM_MURDERED_MESSAGE.to_string();
+        self.decrease_moral_standing(TOWN_ATTACK_KARMA_DEBIT);
+        match linked {
+            Some((npc_index, npc_slot, linked_object_slot)) => {
+                self.free_active_object_slot(linked_object_slot);
+                self.npcs.remove(npc_index);
+                if town_npc_removal_recorded(type_byte) {
+                    self.mark_removed_town_npc_once(scene, npc_slot);
+                }
+            }
+            None => self.free_active_object_slot(object_slot),
+        }
+        self.mark_visibility_dirty();
+        MoveOutcome::Used
     }
 
     /// `commands.md §3`, the forwarded-route table: "`A` overworld | Always

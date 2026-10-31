@@ -357,6 +357,36 @@ pub const fn town_attack_raises_alarm(type_byte: u8) -> bool {
     type_byte < 0x80 || type_byte == TOWN_NPC_ALARM_LICH_TYPE
 }
 
+/// `town-mode.md §10`, "Karma cost of A-Attack" (u5-spec#316 Q1,
+/// `RETRACTIONS.md` R664/R665): "The command debits the shared
+/// moral-standing selector ... at two points, 5 points each, each floored at
+/// zero with no other clamp."
+pub const TOWN_ATTACK_KARMA_DEBIT: u8 = 5;
+
+/// `town-mode.md §10`, "Acceptance debit": "Once a target has passed the
+/// `Nothing to attack!` filter, an actor type below `0x80` (townsfolk, named
+/// characters and guards alike) costs 5 points and raises the town alarm.
+/// The `0xD8` family raises the alarm only; `0xFC` and every other type at
+/// or above `0x80` do neither."
+pub const fn town_attack_acceptance_debits(type_byte: u8) -> bool {
+    type_byte < 0x80
+}
+
+/// `town-mode.md §10`, "Kill-arm debit": "the terrain kill arm (tiles `0x84`,
+/// `0x85`, `0x9F` and `0xAB`: the stocks, the manacles, `0x9F` and the bed
+/// cells)".
+pub const TOWN_ATTACK_KILL_ARM_TILES: [u8; 4] = [0x84, 0x85, 0x9F, 0xAB];
+
+pub const fn town_attack_kill_arm_tile(tile: u8) -> bool {
+    matches!(tile, 0x84 | 0x85 | 0x9F | 0xAB)
+}
+
+/// `town-mode.md §10`: "A `0x78` target on such a cell prints `Missed!` and
+/// takes no second debit."
+pub const TOWN_ATTACK_KILL_ARM_MISS_TYPE: u8 = 0x78;
+pub const TOWN_ATTACK_KILL_ARM_MURDERED_MESSAGE: &str = "Murdered!";
+pub const TOWN_ATTACK_KILL_ARM_MISSED_MESSAGE: &str = "Missed!";
+
 /// `town-mode.md §14` town NPC-conflict chain, carried across the arena
 /// fight: "On exit the town chain clears the NPC slot, reloads the town
 /// map, and re-runs the Shadowlord install pass of Section 13 (which, in

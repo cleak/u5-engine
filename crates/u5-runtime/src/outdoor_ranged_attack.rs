@@ -422,14 +422,81 @@ pub fn outdoor_ranged_attack_samples(
     from_cell: (i32, i32),
     to_cell: (i32, i32),
 ) -> Vec<OutdoorRangedAttackSample> {
+    projectile_walker_samples(from_cell, to_cell, 0, OUTDOOR_SAMPLE_INTERVAL)
+}
+
+/// `combat.md §11.1`, "The projectile pass" (u5-spec#315 Q4): "every
+/// **thirteenth** emitted position, but every **eighth** when the effect
+/// code is 7". `overworld.md §6.2.2` (R663) scopes this rule to "every scene
+/// outside the interior band".
+pub const PROJECTILE_WALKER_SLING_EFFECT_CODE: u8 = 7;
+pub const PROJECTILE_WALKER_SLING_SAMPLE_INTERVAL: usize = 8;
+/// `combat.md §11.1`: "when the effect code is 0 ... sampling starts at the
+/// **fifth** emitted position instead of the first".
+pub const PROJECTILE_WALKER_LATE_START_EFFECT_CODE: u8 = 0;
+pub const PROJECTILE_WALKER_LATE_START_INDEX: usize = 4;
+
+/// The shared walker's sampling start and interval for one caller's effect
+/// code, outside the interior band (`combat.md §11.1`; `overworld.md §6.2.2`
+/// as amended by u5-spec#315 Q4). The overworld callers keep
+/// [`outdoor_ranged_attack_samples`]: which effect codes they pass "was not
+/// checked", so the overworld "every thirteenth, starting with the first" is
+/// left as published.
+pub const fn projectile_walker_sampling_for_effect(effect_code: u8) -> (usize, usize) {
+    let interval = if effect_code == PROJECTILE_WALKER_SLING_EFFECT_CODE {
+        PROJECTILE_WALKER_SLING_SAMPLE_INTERVAL
+    } else {
+        OUTDOOR_SAMPLE_INTERVAL
+    };
+    let start = if effect_code == PROJECTILE_WALKER_LATE_START_EFFECT_CODE {
+        PROJECTILE_WALKER_LATE_START_INDEX
+    } else {
+        0
+    };
+    (start, interval)
+}
+
+/// [`outdoor_ranged_attack_samples`] with the effect-code sampling of
+/// [`projectile_walker_sampling_for_effect`].
+pub fn projectile_walker_samples_for_effect(
+    from_cell: (i32, i32),
+    to_cell: (i32, i32),
+    effect_code: u8,
+) -> Vec<OutdoorRangedAttackSample> {
+    let (start, interval) = projectile_walker_sampling_for_effect(effect_code);
+    projectile_walker_samples(from_cell, to_cell, start, interval)
+}
+
+/// [`trace_outdoor_ranged_attack`] with the effect-code sampling of
+/// [`projectile_walker_sampling_for_effect`]: the combat projectile pass of
+/// `combat.md §11.1`.
+pub fn trace_projectile_walk_for_effect(
+    from_cell: (i32, i32),
+    to_cell: (i32, i32),
+    effect_code: u8,
+    blocks: impl FnMut(i32, i32) -> bool,
+) -> OutdoorRangedAttackOutcome {
+    trace_samples(
+        from_cell,
+        projectile_walker_samples_for_effect(from_cell, to_cell, effect_code),
+        blocks,
+    )
+}
+
+fn projectile_walker_samples(
+    from_cell: (i32, i32),
+    to_cell: (i32, i32),
+    start: usize,
+    interval: usize,
+) -> Vec<OutdoorRangedAttackSample> {
     let run = generate_outdoor_ranged_attack_run(from_cell, to_cell);
     let mut samples = Vec::new();
-    let mut index = 0usize;
+    let mut index = start;
     while let Some(&(column, row)) = run.get(index) {
         if !subtile_in_band(column) || !subtile_in_band(row) {
             break;
         }
-        index += OUTDOOR_SAMPLE_INTERVAL;
+        index += interval;
         let ended = index >= run.len();
         samples.push(OutdoorRangedAttackSample {
             column: subtile_to_cell(column),
@@ -479,9 +546,21 @@ pub enum OutdoorRangedAttackOutcome {
 pub fn trace_outdoor_ranged_attack(
     from_cell: (i32, i32),
     to_cell: (i32, i32),
+    blocks: impl FnMut(i32, i32) -> bool,
+) -> OutdoorRangedAttackOutcome {
+    trace_samples(
+        from_cell,
+        outdoor_ranged_attack_samples(from_cell, to_cell),
+        blocks,
+    )
+}
+
+fn trace_samples(
+    from_cell: (i32, i32),
+    samples: Vec<OutdoorRangedAttackSample>,
     mut blocks: impl FnMut(i32, i32) -> bool,
 ) -> OutdoorRangedAttackOutcome {
-    for sample in outdoor_ranged_attack_samples(from_cell, to_cell) {
+    for sample in samples {
         if !sample.tested || (sample.column, sample.row) == from_cell {
             continue;
         }

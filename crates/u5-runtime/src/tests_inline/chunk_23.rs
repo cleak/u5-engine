@@ -4936,6 +4936,7 @@ fn weapon_attack_resolver_tracks_miss_forced_hit_and_non_damage_routes() {
             damage_roll: 0,
             defence_roll: 0,
             forced_hit,
+            party_dispatch: false,
         })
     };
     // Score `(30 - 10 + 30) / 2 = 25`; the skewed roll of a raw 48 is 24,
@@ -10762,14 +10763,19 @@ fn combat_round_walk_production_path_applies_amulet_turning_scatter() {
             _ => None,
         })
         .expect("turnable ranged attack should still resolve through monster attack");
-    assert_eq!(
-        monster_attack.resolution,
-        Some(CombatWeaponAttackResolution::Miss {
-            route: CombatWeaponAttackRangeRoute::Ranged { effect_code: 6 },
-            hit_score: 0,
-        })
-    );
-    assert_eq!(state.party[0].hp, 20);
+    // `combat.md §11` (u5-spec#315 Q1, `RETRACTIONS.md` R662): "Because the
+    // block includes its centre, the forced scatter can land back on the
+    // **wearer's own cell**, and then the full hit chain runs against the
+    // wearer." This fixture's stream lands the forced scatter there.
+    assert_eq!(monster_attack.target_slot, 0);
+    let Some(CombatWeaponAttackResolution::Hit {
+        route: CombatWeaponAttackRangeRoute::Ranged { effect_code: 6 },
+        raw_damage,
+    }) = monster_attack.resolution
+    else {
+        panic!("expected the scatter to strike the wearer, got {:?}", monster_attack.resolution);
+    };
+    assert_eq!(state.party[0].hp, 20 - raw_damage as u16);
 }
 
 fn combat_amulet_turning_scatter_state(seed: u16) -> PlayState {
@@ -10883,7 +10889,12 @@ const AMULET_TURNING_SCATTER_IMPACT_HP: u16 = 13;
 /// outcome - the turning amulet scatters the blow onto the second seated
 /// member for the same flat attack value less the same inclusive `1..7`
 /// defence draw.
-const AMULET_TURNING_SCATTER_SEED: u16 = 0x19B8;
+///
+/// Re-chosen once more for u5-spec#315 Q1 (`RETRACTIONS.md` R662): the
+/// forced scatter now takes the ordinary failed-roll landing draw of
+/// `combat.md §11.1` - two `1..3` draws, column then row, over the block
+/// centred on the target - instead of one eight-way draw.
+const AMULET_TURNING_SCATTER_SEED: u16 = 0x00B9;
 
 fn combat_player_command_state(monster_x: u8, monster_y: u8) -> PlayState {
     let mut state = combat_ai_turn_state(monster_x, monster_y);
@@ -11705,8 +11716,11 @@ fn combat_targeting_cursor_confirmation_applies_readied_weapon_damage() {
     assert!(matches!(
         attack,
         CombatWeaponAttackApplication {
+            // `combat.md §11` (u5-spec#315 Q3, R661): the Dagger's non-zero
+            // range cap takes the ranged/effect arm against an adjacent
+            // target too.
             resolution: CombatWeaponAttackResolution::Hit {
-                route: CombatWeaponAttackRangeRoute::Melee,
+                route: CombatWeaponAttackRangeRoute::Ranged { effect_code: 0 },
                 raw_damage: 1,
             },
             damage_application: Some(CombatWeaponDamageApplication::Monster { target_slot: 8, .. }),
@@ -16274,8 +16288,10 @@ fn combat_weapon_attack_application_leaves_state_unchanged_for_no_hit_routes() {
             false,
         ),
         Some(CombatWeaponAttackApplication {
+            // The adjacent Dagger takes the ranged/effect arm (`combat.md
+            // §11`, u5-spec#315 Q3, R661).
             resolution: CombatWeaponAttackResolution::Miss {
-                route: CombatWeaponAttackRangeRoute::Melee,
+                route: CombatWeaponAttackRangeRoute::Ranged { effect_code: 0 },
                 hit_score: 5,
             },
             damage_application: None,
@@ -22244,3 +22260,4 @@ fn spec300_q24_door_cell_ambush_writes_the_interior_wall_stubs() {
         }
     }
 }
+

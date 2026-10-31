@@ -847,21 +847,24 @@
         }
 
         // The party side of the same primitive, routed by
-        // `resolve_combat_weapon_attack_range_route`. Item 16 is the one
-        // catalogue row that reaches both arms: its published range cap is 3,
-        // so distance 1 is the melee route, distance 3 the ranged route, and
-        // distance 4 no route at all.
+        // `resolve_combat_party_weapon_range_route`. `combat.md §11`
+        // (u5-spec#315 Q3, R661): "A party attack is routed by the readied
+        // item's range cap alone", so the Dagger (cap 3) takes the ranged arm
+        // at distance 1 and 3 and no route at 4, while the Club (cap 0) takes
+        // the melee arm.
         assert_eq!(equipment_weapon_range_cap(16), Some(3));
-        for (monster_x, expected) in [
-            (6u8, Some(SoundEffect::PartyMeleeAttackSwing)),
-            (8, Some(SoundEffect::PartyRangedAttackSwing)),
-            (9, None),
+        assert_eq!(equipment_weapon_range_cap(18), Some(0));
+        for (item_id, monster_x, expected) in [
+            (18usize, 6u8, Some(SoundEffect::PartyMeleeAttackSwing)),
+            (16, 6u8, Some(SoundEffect::PartyRangedAttackSwing)),
+            (16, 8, Some(SoundEffect::PartyRangedAttackSwing)),
+            (16, 9, None),
         ] {
             let mut state = combat_ai_turn_state(monster_x, 5);
             let serial = state.sound_effect_serial;
             let application = state
                 .resolve_and_apply_combat_equipment_weapon_attack(
-                    16,
+                    item_id,
                     0,
                     8,
                     30,
@@ -897,9 +900,9 @@
         // when the scatter lands on nobody." `§11.1`'s swing row covers
         // "monster, melee and ranged" with the one downward sweep.
         //
-        // The intended target sits at (5,5) and the attacker at (6,5), so a
-        // scatter roll of `0` selects offset `(-1,-1)` - cell (4,4) - and a
-        // roll of `1` selects `(0,-1)`, cell (5,4).
+        // The intended target sits at (5,5) and the attacker at (6,5); the
+        // landing cells (4,4) and (5,4) are supplied directly (the shared
+        // two-axis draw of `§11.1`, R662, is covered on its own).
         let scatter_state = || {
             let mut state = combat_ai_turn_state(6, 5);
             state.party[0].status = b'G';
@@ -922,7 +925,7 @@
         ]);
         let serial = occupied.sound_effect_serial;
         let application = occupied
-            .resolve_and_apply_combat_monster_scattered_attack(8, 0, 0, 0)
+            .resolve_and_apply_combat_monster_scattered_attack_at(8, 0, 0, (4, 4))
             .expect("the scatter arm resolves");
         assert_eq!(
             application.target_slot, 9,
@@ -938,7 +941,7 @@
         let mut empty = scatter_state();
         let serial = empty.sound_effect_serial;
         let application = empty
-            .resolve_and_apply_combat_monster_scattered_attack(8, 0, 0, 1)
+            .resolve_and_apply_combat_monster_scattered_attack_at(8, 0, 0, (5, 4))
             .expect("the scatter arm resolves");
         assert_eq!(application.damage_application, None);
         assert!(

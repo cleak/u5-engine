@@ -1963,6 +1963,11 @@ pub fn resolve_combat_equipment_weapon_raw_damage(
     ))
 }
 
+/// `combat.md §11`: the **automatic driver's** routing - "adjacent targets
+/// use the melee damage path and in-range non-adjacent targets use the
+/// ranged/projectile/effect path". u5-spec#315 Q3 (R661) scopes this rule to
+/// that driver; a party readied-item attack routes through
+/// [`resolve_combat_party_weapon_range_route`] instead.
 pub const fn resolve_combat_weapon_attack_range_route(
     target_range: u8,
     range_cap: u8,
@@ -1974,6 +1979,52 @@ pub const fn resolve_combat_weapon_attack_range_route(
         Some(CombatWeaponAttackRangeRoute::Ranged { effect_code })
     } else {
         None
+    }
+}
+
+/// `combat.md §11` as corrected by u5-spec#315 Q3 (`RETRACTIONS.md` R661):
+/// "The spell/weapon dispatcher has **no distance test**. A party attack is
+/// routed by the readied item's range cap alone: a cap of zero, and bare
+/// hands, take the melee arm; any non-zero cap takes the ranged/effect arm
+/// at **every** distance, including an adjacent target. The targeting
+/// cursor refuses only distances above the cap". A zero cap keeps the melee
+/// arm's own range of one.
+pub const fn resolve_combat_party_weapon_range_route(
+    target_range: u8,
+    range_cap: u8,
+    effect_code: u8,
+) -> Option<CombatWeaponAttackRangeRoute> {
+    if range_cap == 0 {
+        if target_range <= 1 {
+            Some(CombatWeaponAttackRangeRoute::Melee)
+        } else {
+            None
+        }
+    } else if target_range <= range_cap {
+        Some(CombatWeaponAttackRangeRoute::Ranged { effect_code })
+    } else {
+        None
+    }
+}
+
+/// The route one [`CombatWeaponAttackInput`] takes: the party dispatcher's
+/// range-cap routing when [`CombatWeaponAttackInput::party_dispatch`] is
+/// set, the automatic driver's distance routing otherwise.
+pub const fn combat_weapon_attack_input_route(
+    input: CombatWeaponAttackInput,
+) -> Option<CombatWeaponAttackRangeRoute> {
+    if input.party_dispatch {
+        resolve_combat_party_weapon_range_route(
+            input.target_range,
+            input.range_cap,
+            input.effect_code,
+        )
+    } else {
+        resolve_combat_weapon_attack_range_route(
+            input.target_range,
+            input.range_cap,
+            input.effect_code,
+        )
     }
 }
 
@@ -2002,6 +2053,10 @@ pub struct CombatWeaponAttackInput {
     pub damage_roll: u8,
     pub defence_roll: u8,
     pub forced_hit: Option<bool>,
+    /// Routed by the party spell/weapon dispatcher (the readied item's range
+    /// cap alone, u5-spec#315 Q3) rather than by the automatic driver's
+    /// adjacency test.
+    pub party_dispatch: bool,
 }
 
 /// `combat.md §11.1` "Order, stated once": the to-hit decides first, and
@@ -2017,11 +2072,7 @@ pub struct CombatWeaponAttackInput {
 pub fn resolve_combat_weapon_attack(
     input: CombatWeaponAttackInput,
 ) -> CombatWeaponAttackResolution {
-    let Some(route) = resolve_combat_weapon_attack_range_route(
-        input.target_range,
-        input.range_cap,
-        input.effect_code,
-    ) else {
+    let Some(route) = combat_weapon_attack_input_route(input) else {
         return CombatWeaponAttackResolution::OutOfRange {
             target_range: input.target_range,
             range_cap: input.range_cap,
@@ -2171,6 +2222,9 @@ pub fn combat_equipment_weapon_attack_input(
         // forces a raw *value* of `0` and still enters the roller, so on
         // that id the flag is live.
         forced_hit: forced_hit.or_else(|| equipment_attack_is_always_hit(item_id).then_some(true)),
+        // The readied-item attempt is the party spell/weapon dispatcher's
+        // (`combat.md §11`, u5-spec#315 Q3).
+        party_dispatch: true,
     })
 }
 
@@ -4846,9 +4900,7 @@ pub fn resolve_combat_wound_morale(
     let fleeing = match bucket {
         CombatWoundScoreBucket::UnderOneQuarter => true,
         // R483/R519, as above: five of 257 over `0..=256`.
-        CombatWoundScoreBucket::OneQuarterToUnderHalf => {
-            morale_roll >= WOUND_MORALE_FLEE_THRESHOLD
-        }
+        CombatWoundScoreBucket::OneQuarterToUnderHalf => morale_roll >= WOUND_MORALE_FLEE_THRESHOLD,
         CombatWoundScoreBucket::HalfToUnderThreeQuarters
         | CombatWoundScoreBucket::ThreeQuartersOrMore => false,
     };

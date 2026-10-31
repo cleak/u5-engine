@@ -2911,7 +2911,12 @@
         let mut missing_state = worked_bat_arena(&[(6, 5)], 0);
         missing_state.party_equipment = default_party_equipment(1);
         missing_state.party_equipment[0][EQUIP_SLOT_WEAPON] = 34;
-        let prng_before = missing_state.prng_state;
+        // The Halberd's cap of 2 sends the adjacent swing down the
+        // ranged/effect arm (`combat.md §11`, u5-spec#315 Q3, R661), so a
+        // failed roll spends the `§11.1` scatter draws - and nothing else.
+        let mut scatter_only = missing_state.clone();
+        let _ = scatter_only.draw_combat_ranged_miss_scatter_cell((6, 5), (5, 5));
+        let prng_before = scatter_only.prng_state;
         assert!(missing_state.begin_combat_attack_walk(0, true).cursor_open);
         missing_state
             .apply_combat_targeting_cursor_key_with_inputs(char::from(INPUT_CODE_EAST), None)
@@ -2933,7 +2938,7 @@
         ));
         assert_eq!(
             missing_state.prng_state, prng_before,
-            "a missed party swing spends no damage-roller draw"
+            "a missed party swing spends no damage-roller draw, only the scatter"
         );
     }
 

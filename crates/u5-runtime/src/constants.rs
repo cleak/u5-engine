@@ -1277,10 +1277,14 @@ pub const EQUIPMENT_TAG_ONE_HAND: u8 = 0x20;
 pub const EQUIPMENT_TAG_TWO_HAND: u8 = 0x30;
 pub const EQUIPMENT_TAG_ARMOUR: u8 = 0x40;
 pub const EQUIPMENT_TAG_HELM: u8 = 0x80;
+/// `catalogs/item-list.md §5.3`: item 25, range cap 2.
+pub const EQUIPMENT_ID_MORNING_STAR: usize = 25;
 pub const EQUIPMENT_ID_BOW: usize = 26;
 pub const EQUIPMENT_ID_ARROWS: usize = 27;
 pub const EQUIPMENT_ID_CROSSBOW: usize = 28;
 pub const EQUIPMENT_ID_QUARRELS: usize = 29;
+/// `catalogs/item-list.md §5.3`: item 34, range cap 2.
+pub const EQUIPMENT_ID_HALBERD: usize = 34;
 pub const EQUIPMENT_ID_MAGIC_BOW: usize = 36;
 /// `hidden-treasures.md §2`: "Record 15's granted item is the Glass
 /// Sword (equipment item id `39` in `catalogs/item-list.md`), and its gate

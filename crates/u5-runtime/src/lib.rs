@@ -740,6 +740,10 @@ pub use outdoor_ranged_attack::{
     OUTDOOR_SERPENT_DRAGON_BREATH_SALT, OutdoorImpactAbsorption, OutdoorImpactHullOutcome,
     OutdoorImpactMemberDamage, OutdoorRangedAttackFigure, OutdoorRangedAttackOutcome,
     OutdoorRangedAttackReport, OutdoorRangedAttackSample, PARTY_STATUS_DEAD, PARTY_STATUS_POISONED,
+    PROJECTILE_WALKER_LATE_START_EFFECT_CODE, PROJECTILE_WALKER_LATE_START_INDEX,
+    PROJECTILE_WALKER_SLING_EFFECT_CODE, PROJECTILE_WALKER_SLING_SAMPLE_INTERVAL,
+    projectile_walker_samples_for_effect, projectile_walker_sampling_for_effect,
+    trace_projectile_walk_for_effect,
     SUBTILE_BAND_HIGH, SUBTILE_BAND_LOW, SUBTILE_CELL_SPAN_BASE, SUBTILE_ENDPOINT_OFFSET,
     SUBTILE_RUN_BUDGET, SUBTILE_SLOPE_SCALE, SUBTILE_UNITS_PER_CELL, SUBTILE_VERTICAL_SLOPE,
     bestiary_sprite_run_first_frame, generate_outdoor_ranged_attack_run,
@@ -1028,7 +1032,10 @@ pub use town_mode::{
     location_dat_filename, npc_dialog_index_offset, npc_roster_filename,
     npc_schedule_hour_at_boundary, npc_schedule_record_offset, npc_schedule_waypoint_for_hour,
     npc_sub_map_offset, npc_tlk_filename, npc_type_byte_offset, shadowlord_town_install_row,
-    town_attack_raises_alarm, town_attack_target_refused,
+    TOWN_ATTACK_KARMA_DEBIT, TOWN_ATTACK_KILL_ARM_MISS_TYPE, TOWN_ATTACK_KILL_ARM_MISSED_MESSAGE,
+    TOWN_ATTACK_KILL_ARM_MURDERED_MESSAGE, TOWN_ATTACK_KILL_ARM_TILES,
+    town_attack_acceptance_debits, town_attack_kill_arm_tile, town_attack_raises_alarm,
+    town_attack_target_refused,
     town_dawn_dusk_gate_pass_fires_at_hour, town_dawn_dusk_gate_toggle,
     town_dawn_dusk_substitution_active, town_entry_is_jail_wakeup, town_exit_lands_underworld,
     town_floor_offset, town_location_class, town_npc_activation_mask_eligible,
@@ -1266,6 +1273,7 @@ mod tests {
     include!("tests_inline/playfix21_misc21.rs");
     include!("tests_inline/playfix22_rest22.rs");
     include!("tests_inline/dungeon_turn_order.rs");
+    include!("tests_inline/spec316.rs");
     include!("tests_inline/playfix22_misc22.rs");
     include!("tests_inline/playfix23_gate23.rs");
     include!("tests_inline/playfix23_dun23.rs");
