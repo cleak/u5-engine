@@ -546,7 +546,38 @@ impl PlayState {
     /// lines carry it and pure output lines do not". A refusal the
     /// dispatcher prints in place of a verb echo - the `What?` of
     /// `commands.md §5.2` - is written onto that already-marked line.
+    ///
+    /// That prompt is the overworld helper's too, so it tests the
+    /// `text-output.md §10.2` gate exactly as a verb echo does
+    /// ([`Self::begin_command_echo`]): "When the helper was entered with the
+    /// gate clear (after an accepted step or a calm-wind silent consume), a
+    /// non-sailing key ... comes back from the helper with no fresh pair; its
+    /// echo is written on the pending marker row ... and the prompt after
+    /// that command gets an ordinary pair". Untested, an Escape, `!` or
+    /// `Buffer On` after a hoisted step drew a pair of its own and left the
+    /// suppression to the next command's echo (playtest S25 P25-04).
     pub fn emit_command_echo_line(&mut self, text: impl Into<String>) {
+        let text = text.into();
+        self.push_message_entry(text.clone(), true);
+        if self.take_overworld_prompt_pair_suppression()
+            && let Some(entry) = self.message_transcript.last_mut()
+        {
+            entry.prompt_pair_suppressed = true;
+        }
+        self.message = text.clone();
+        self.message_flushed = text;
+    }
+
+    /// [`Self::emit_command_echo_line`] for a marker row the loop draws
+    /// without entering the overworld helper, so the `text-output.md §10.2`
+    /// gate is neither tested nor re-armed.
+    ///
+    /// `main-loop.md` (party-capability check): the asleep arm "emits the
+    /// command prompt's line-feed-and-marker pair **itself**, before the
+    /// sleep line, and then skips the shared input helper and the key read
+    /// entirely". A sleep pass after a hoisted step therefore keeps its pair,
+    /// and the gate is still pending for the first helper call after waking.
+    pub(crate) fn emit_command_echo_line_outside_helper(&mut self, text: impl Into<String>) {
         let text = text.into();
         self.push_message_entry(text.clone(), true);
         self.message = text.clone();
@@ -654,6 +685,28 @@ impl PlayState {
         let line = format!("{prompt}{reply}");
         self.message = line.clone();
         self.message_flushed = line;
+    }
+
+    /// Close the logged prompt row `prompt` after a reply echoed as a blank
+    /// cell and a line feed (`dungeon-mode.md §11`'s Space at the camp hours
+    /// prompt). The blank cells are not drawn, so the row keeps only its
+    /// visible text; left with its trailing spaces, the window would read the
+    /// row as one still waiting at the prompt and derive no blank under it.
+    pub(crate) fn close_logged_prompt_row_after_blank_echo(&mut self, prompt: &str) {
+        let Some(entry) = self
+            .message_transcript
+            .last_mut()
+            .filter(|entry| !entry.explicit_blank && entry.text == prompt)
+        else {
+            return;
+        };
+        let trimmed = entry.text.trim_end_matches(' ').len();
+        entry.text.truncate(trimmed);
+        while entry.glyphs.last().is_some_and(|glyph| glyph.byte == b' ') {
+            entry.glyphs.pop();
+        }
+        entry.leaves_row_open = false;
+        self.message_transcript_revision = self.message_transcript_revision.wrapping_add(1);
     }
 
     /// [`Self::commit_prompt_reply`] for a prompt that may only be a *live*

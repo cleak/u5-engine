@@ -4968,6 +4968,13 @@ impl PlayState {
             let refusal = std::mem::take(&mut self.message);
             self.push_explicit_blank_message_entry();
             self.emit_message_line(refusal);
+            // `inventory.md §5.1` publishes the refusal as
+            // `Thou_art_empty-\nhanded!\n`: it closes its own row, so a
+            // monster's narration on the next turn (`combat.md §11.1`'s
+            // `<monster> teleports!\n`, "no leading newline of its own")
+            // starts on a fresh row instead of reading `handed!Wisp`
+            // (playtest S25 P25-05).
+            self.close_message_row();
             // The refusal *is* the command's answer, so the picker never
             // opens and `combat.md §8.1`'s turn loop reprints the banner
             // under it. Measured 2026-09-12

@@ -227,7 +227,9 @@ impl PlayState {
     fn emit_party_sleep_echo_row(&mut self) {
         // Anything the previous turn left in the slot prints above this row.
         self.flush_message_slot();
-        self.emit_command_echo_line(PARTY_SLEEP_LINE);
+        // The asleep arm draws its own pair and never enters the overworld
+        // helper, so the sail gate is left for the next helper call.
+        self.emit_command_echo_line_outside_helper(PARTY_SLEEP_LINE);
     }
 
     /// The end of one sleep pass's rows; see [`Self::emit_party_sleep_echo_row`].
