@@ -1454,7 +1454,12 @@ impl PlayState {
         {
             return;
         }
-        if let Some(actor) = self.combat_actors.get_mut(member_index) {
+        // (a) "finds that member's live combatant record": `member_index`
+        // is a roster slot, and `combat.md §5` packs party descriptors past
+        // Dead members, so the record is the descriptor seated for that
+        // roster slot, not the descriptor at the same index.
+        let descriptor = self.combat_party_descriptor_slot_for_roster_slot(member_index);
+        if let Some(actor) = descriptor.and_then(|slot| self.combat_actors.get_mut(slot)) {
             // (a) marker bit only; the record keeps its slot and contents.
             actor.mark_dead();
             let object_slot = actor.active_object_slot as usize;
