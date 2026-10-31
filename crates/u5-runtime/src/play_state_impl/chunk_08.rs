@@ -580,6 +580,11 @@ impl PlayState {
                 let minutes = self.turn_minute_increment();
                 self.advance_turn_with_minutes_policy(minutes, true, true, false, false);
             }
+            // `rest-and-camp.md §5`: "either a miss or a completed event is
+            // then followed by the same cooldown write" - after the event's
+            // clock advance, so an hour that advance crosses does not age
+            // the fresh 14.
+            self.camp_cooldown = COMPLETED_LONG_CAMP_COOLDOWN_HOURS;
         }
         if let Some(monster) = ambush_monster {
             let z = match self.area {
@@ -762,6 +767,11 @@ impl PlayState {
             // agrees with experience and no reward follows.
             self.party[index].hp = self.party[index].max_hp;
             self.party[index].status = b'G';
+            // §7.1 step 4: "then one world-tick pause, the envelope ...".
+            // Each pause runs a full world tick with its `0..63` wind check
+            // (`overworld.md §5`), so the draws land here in the gameplay
+            // stream ahead of this member's level roll.
+            let _ = self.advance_visual_tick();
             // §7.1 step 4: "the envelope `(13, 200, 5000, 1, 5500)`, one
             // inversion of the whole gameplay viewport ..., the envelope
             // `(1, 2500, 60000, 1, 5500)`", for every living member. The
@@ -780,6 +790,11 @@ impl PlayState {
                     crate::lord_british_camp::LORD_BRITISH_CAMP_STING_LONG,
                 ),
             ));
+            // §7.1 step 4: "... the envelope `(1, 2500, 60000, 1, 5500)`, and
+            // three one-tick world pauses", before step 5's level line.
+            for _ in 0..3 {
+                let _ = self.advance_visual_tick();
+            }
             let experience = self.party_experience[index];
             let level = level_for_experience(u32::from(experience));
             if self.party[index].level != level {
@@ -836,6 +851,9 @@ impl PlayState {
         text.push_str(&format!("\n\"{verdict}\"{wait_key}{LORD_BRITISH_CAMP_VANISH_LINE}"));
         self.push_diagnostic(notes.join(" "));
         self.mark_visibility_dirty();
+        // §7.1 step 7: "the record is cleared to actor byte 0, then one world
+        // tick, then the turn-clock advance" (the advance is the caller's).
+        let _ = self.advance_visual_tick();
         Ok((text, sounds))
     }
 

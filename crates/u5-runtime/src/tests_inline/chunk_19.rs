@@ -1735,6 +1735,7 @@
         let _ = fs::remove_dir_all(dir);
     }
 
+
     #[test]
     fn lord_british_camp_event_recomputes_level_and_prints_karma_verdict() {
         let dir = debug_game_dir();
@@ -1753,8 +1754,9 @@
         let mut state = britannia_state(open_world_grid(), 2, 0);
         state.clock = GameClock::new(0, 0).unwrap();
         // With six hourly wilderness interruption probes, this stream reaches
-        // the apparition gate and then selects Intelligence and Dexterity.
-        state.prng_state = 0x0010;
+        // the apparition gate and then, past each member's four world ticks,
+        // selects Intelligence and Dexterity.
+        state.prng_state = 0x0013;
         state.avatar_stats = AvatarStats {
             strength: 20,
             dexterity: 20,
@@ -1781,8 +1783,10 @@
         state.moral_standing = 80;
         let mut expected_prng_state = state.prng_state;
         // Six hourly danger checks, two long-camp recovery draws, one
-        // apparition draw, and two stat-reward draws.
-        for _ in 0..11 {
+        // apparition draw, two stat-reward draws, and the event's nine
+        // world-tick wind checks (`rest-and-camp.md §7.1` steps 4 and 7:
+        // four per living member plus one before the clock advance).
+        for _ in 0..20 {
             expected_prng_state = u5_prng_advance_state(expected_prng_state);
         }
 

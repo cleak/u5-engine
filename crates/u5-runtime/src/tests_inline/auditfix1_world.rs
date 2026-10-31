@@ -88,3 +88,34 @@ fn auditfix1_world_underfoot_ff_first_frame_runs_one_world_tick() {
     assert!(state.refresh_world_underfoot_blackout_latch());
     assert_eq!(state.prng_state, latched, "a latched frame takes no tick");
 }
+
+/// `rest-and-camp.md §5`: "either a miss or a completed event is then followed
+/// by the same cooldown write" of 14, so the event's own turn-clock advance
+/// (§7.1 step 7) cannot age it.
+#[test]
+fn auditfix1_world_camp_cooldown_is_written_after_the_apparition_event() {
+    let dir = debug_game_dir();
+    let mut found = 0;
+    for seed in 1u16..600 {
+        let mut state = britannia_state(open_world_grid(), 0, 0);
+        state.camp_cooldown = 0;
+        state.clock = GameClock::new(12, 58).unwrap();
+        state.prng_state = seed;
+        let outcome = state.hole_up_command(&dir, Some(6)).unwrap();
+        if outcome != MoveOutcome::Rested
+            || state.combat_active
+            || !state.message.contains("An apparition!")
+        {
+            continue;
+        }
+        // The event's advance crossed into hour 19.
+        assert_eq!(state.clock.hour, 19, "seed {seed:#06x}");
+        assert_eq!(
+            state.camp_cooldown, COMPLETED_LONG_CAMP_COOLDOWN_HOURS,
+            "seed {seed:#06x}"
+        );
+        found += 1;
+    }
+    assert!(found > 0, "no seed reached the apparition event");
+    let _ = fs::remove_dir_all(dir);
+}
