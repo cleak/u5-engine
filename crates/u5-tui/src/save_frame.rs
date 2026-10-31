@@ -641,6 +641,54 @@ fn write_rgba_png(out: &Path, width: u32, height: u32, rgba: Vec<u8>) -> io::Res
     Ok(())
 }
 
+/// The message-window rows `--save-screen` composes, in the order the Bevy
+/// shell assembles them: the displayed transcript, the unflushed slot, the
+/// open prompt and the live row. The play-script text frames read the same
+/// layout, so a frame shows the step's own echo and reply rather than the
+/// last slot text alone (playtest P24-11, P24-12).
+pub(crate) fn save_screen_message_window_layout(
+    state: &PlayState,
+) -> u5_runtime::MessageWindowLayout {
+    // Keep this in step with the Bevy shell's own message-window
+    // assembly: this path exists so `--save-screen` is a native-resolution
+    // oracle for the same screen, and it is only an oracle while the two
+    // agree. Both drop blank slot text, both append the slot only when
+    // the transcript has not recorded it yet, and both suppress the live
+    // row for a prompt that is waiting on a key.
+    fn keep(text: &str) -> Option<String> {
+        (!text.trim().is_empty()).then(|| text.to_string())
+    }
+    // `magic.md §8`: a spell flash freezes the window on its pre-flash rows.
+    let mut log = message_log_from_entries(state.displayed_message_entries(), keep);
+    log.set_top_offset(usize::from(state.message_window_top_offset()));
+    if let Some(text) = state.displayed_unflushed_message().and_then(keep) {
+        log.push_output(&text);
+    }
+    let flash_hold = state.message_window_flash_hold_active();
+    // `text-output.md §10.6`: a prompt awaiting a key keeps its own line
+    // open and carries the input cursor inline, so the headless
+    // composition places it exactly where the Bevy renderer does.
+    let open_prompt = save_screen_open_prompt(state, &log, flash_hold);
+    // The spell-name colon line is a live row served from the cast/mix
+    // session rather than from the log, so the oracle has to ask for it
+    // the same way the shell does. There is no typed-input buffer here,
+    // which is the one live-row source this path cannot mirror.
+    let spell_echo = state.typed_prompt_echo().filter(|_| !flash_hold);
+    let live_row = if state.message_window_live_row_suppressed() {
+        None
+    } else {
+        Some(spell_echo.as_deref().unwrap_or(""))
+    };
+    let live_row_kind = save_screen_live_row_kind(state, spell_echo.is_some());
+    u5_runtime::layout_message_window_with_continuation(
+        &log,
+        live_row,
+        open_prompt.as_deref(),
+        u5_runtime::combat_prompt_row_follows_history(state),
+        live_row_kind,
+    )
+}
+
 /// The open prompt row `--save-screen` hands the layout: the state's own
 /// prompt literal, or - as the Bevy shell does - the log's last row when that
 /// row already owns the cursor, as the tavern's provision quantity question
@@ -1288,44 +1336,7 @@ pub fn compose_gameplay_screen(
     let text = u5_runtime::render_text_window_rgba_with_runes(&system, ibm, Some(runes))?;
     overlay_panel_text_window_rgba(&mut rgba, &text, width, height, state);
 
-    // Keep this in step with the Bevy shell's own message-window
-    // assembly: this path exists so `--save-screen` is a native-resolution
-    // oracle for the same screen, and it is only an oracle while the two
-    // agree. Both drop blank slot text, both append the slot only when
-    // the transcript has not recorded it yet, and both suppress the live
-    // row for a prompt that is waiting on a key.
-    fn keep(text: &str) -> Option<String> {
-        (!text.trim().is_empty()).then(|| text.to_string())
-    }
-    // `magic.md §8`: a spell flash freezes the window on its pre-flash rows.
-    let mut log = message_log_from_entries(state.displayed_message_entries(), keep);
-    log.set_top_offset(usize::from(state.message_window_top_offset()));
-    if let Some(text) = state.displayed_unflushed_message().and_then(keep) {
-        log.push_output(&text);
-    }
-    let flash_hold = state.message_window_flash_hold_active();
-    // `text-output.md §10.6`: a prompt awaiting a key keeps its own line
-    // open and carries the input cursor inline, so the headless
-    // composition places it exactly where the Bevy renderer does.
-    let open_prompt = save_screen_open_prompt(state, &log, flash_hold);
-    // The spell-name colon line is a live row served from the cast/mix
-    // session rather than from the log, so the oracle has to ask for it
-    // the same way the shell does. There is no typed-input buffer here,
-    // which is the one live-row source this path cannot mirror.
-    let spell_echo = state.typed_prompt_echo().filter(|_| !flash_hold);
-    let live_row = if state.message_window_live_row_suppressed() {
-        None
-    } else {
-        Some(spell_echo.as_deref().unwrap_or(""))
-    };
-    let live_row_kind = save_screen_live_row_kind(state, spell_echo.is_some());
-    let layout = u5_runtime::layout_message_window_with_continuation(
-        &log,
-        live_row,
-        open_prompt.as_deref(),
-        u5_runtime::combat_prompt_row_follows_history(state),
-        live_row_kind,
-    );
+    let layout = save_screen_message_window_layout(state);
     let cursor_cell = save_screen_cursor_cell(state, &layout);
     for row in layout.rows {
         if row.prefixed {

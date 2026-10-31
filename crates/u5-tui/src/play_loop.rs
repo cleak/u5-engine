@@ -362,7 +362,7 @@ pub fn write_play_frame<W: Write>(
     writeln!(
         out,
         "{}",
-        transcribe_cell_frame_for_plain_text(&state.render_text_window_frame(None))
+        transcribe_cell_frame_for_plain_text(&render_play_text_frame(state))
     )?;
     if let Some(atlas) = tile_atlas {
         writeln!(out, "{}", raster_diagnostic_line(state, 5, atlas)?)?;
@@ -374,6 +374,68 @@ pub fn write_play_frame<W: Write>(
     let _ = state.take_pending_blackthorn_rescue_playbacks();
     let _ = state.take_pending_stonegate_trapdoor_playback();
     Ok(())
+}
+
+/// The text frame a terminal or play-script step prints.
+///
+/// `render_text_window_frame` paints the message window from the message
+/// slot alone, so a frame showed only whichever text last landed there: a
+/// conversation step lost its keyword echo and the reply before the next
+/// `Your interest?` (`conversation.md §6`, playtest P24-11), and a Pass
+/// repeated the previous command's `Blocked!` instead of its own `Pass`
+/// echo (`commands.md §8.1`, playtest P24-12). The message window rows are
+/// replaced here with the layout `--save-screen` composes from the
+/// transcript, the open prompt and the live row. A full-screen endgame page
+/// owns every cell and keeps its own rows.
+pub fn render_play_text_frame(state: &mut PlayState) -> String {
+    let frame = state.render_text_window_frame(None);
+    if u5_runtime::endgame_narrative_frame::endgame_narrative_full_screen_text_rows(state).is_some()
+        || u5_runtime::endgame_certificate_frame::endgame_certificate_full_screen_text_rows(state)
+            .is_some()
+    {
+        return frame;
+    }
+    let layout = crate::save_frame::save_screen_message_window_layout(state);
+    overlay_message_window_rows(&frame, &layout)
+}
+
+/// Clear the message window's cells in a 40-column text frame and write the
+/// layout's rows into them. A prefixed row's column-24 ribbon end cap is a
+/// sprite with no text cell, so it stays blank here.
+pub fn overlay_message_window_rows(
+    frame: &str,
+    layout: &u5_runtime::MessageWindowLayout,
+) -> String {
+    use u5_runtime::{
+        MESSAGE_WINDOW_BOTTOM, MESSAGE_WINDOW_LEFT, MESSAGE_WINDOW_RIGHT, MESSAGE_WINDOW_TOP,
+    };
+    let mut rows: Vec<Vec<char>> = frame.split('\n').map(|row| row.chars().collect()).collect();
+    let left = usize::from(MESSAGE_WINDOW_LEFT);
+    let right = usize::from(MESSAGE_WINDOW_RIGHT);
+    for y in usize::from(MESSAGE_WINDOW_TOP)..=usize::from(MESSAGE_WINDOW_BOTTOM) {
+        let Some(row) = rows.get_mut(y) else { continue };
+        for cell in row.iter_mut().take(right + 1).skip(left) {
+            *cell = ' ';
+        }
+    }
+    for placed in &layout.rows {
+        let Some(row) = rows.get_mut(usize::from(placed.row)) else {
+            continue;
+        };
+        for (offset, glyph) in placed.glyphs.iter().enumerate() {
+            let x = usize::from(placed.column) + offset;
+            if x > right {
+                break;
+            }
+            if let Some(cell) = row.get_mut(x) {
+                *cell = char::from(glyph.byte);
+            }
+        }
+    }
+    rows.into_iter()
+        .map(|row| row.into_iter().collect::<String>())
+        .collect::<Vec<_>>()
+        .join("\n")
 }
 
 pub fn print_play_script_snapshot(
@@ -395,7 +457,7 @@ pub fn write_play_script_snapshot<W: Write>(
     writeln!(
         out,
         "{}",
-        transcribe_cell_frame_for_plain_text(&state.render_text_window_frame(None))
+        transcribe_cell_frame_for_plain_text(&render_play_text_frame(state))
     )?;
     if let Some(atlas) = tile_atlas {
         writeln!(out, "{}", raster_diagnostic_line(state, 5, atlas)?)?;

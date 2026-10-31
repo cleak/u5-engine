@@ -2167,3 +2167,54 @@ fn playfix19_p19_05_a_dungeon_contact_discards_the_queued_keys() {
     );
     let _ = fs::remove_dir_all(dir);
 }
+
+/// Playtest P24-12: a script frame paints the message window from the
+/// transcript layout, so a Pass step shows its own `Pass` echo
+/// (`commands.md §8.1`) rather than the previous command's slot text.
+#[test]
+fn play_script_frame_shows_each_steps_own_message_rows() {
+    let mut state = test_state(open_grid(), 5, 6);
+    state.emit_message_line("South\nBlocked!\n");
+    state.message = "Blocked!".to_string(); // audit: not a player-facing line
+    handle_play_script_command(&mut state, "pass", Path::new("")).unwrap();
+    state.flush_staged_narration();
+    state.flush_text_hold();
+
+    let mut out = Vec::new();
+    u5_tui::play_loop::write_play_script_snapshot(&mut state, None, &mut out).unwrap();
+    let text = String::from_utf8(out).unwrap();
+    let rows: Vec<&str> = text.lines().skip(1).collect();
+    let message_rows: Vec<String> = rows[11..=23]
+        .iter()
+        .map(|row| row.get(24..).unwrap_or("").trim().to_string())
+        .filter(|row| !row.is_empty())
+        .collect();
+    assert_eq!(message_rows, vec!["South", "Blocked!", "Pass"], "{text}");
+}
+
+/// Playtest P24-11: a conversation step's frame keeps the keyword echo and
+/// the reply above the next `Your interest?` (`conversation.md §6`), not the
+/// prompt the slot was last left holding.
+#[test]
+fn play_script_frame_keeps_the_keyword_echo_and_reply() {
+    let mut state = test_state(open_grid(), 5, 6);
+    state
+        .emit_message_line(":JOB\n\n\"My sister and I care for this temple.\"\n\nYour interest?\n");
+    state.message = "Your interest?\n".to_string(); // audit: not a player-facing line
+
+    let mut out = Vec::new();
+    u5_tui::play_loop::write_play_script_snapshot(&mut state, None, &mut out).unwrap();
+    let text = String::from_utf8(out).unwrap();
+    let rows: Vec<&str> = text.lines().skip(1).collect();
+    let message_rows: Vec<String> = rows[11..=23]
+        .iter()
+        .map(|row| row.get(24..).unwrap_or("").trim().to_string())
+        .filter(|row| !row.is_empty())
+        .collect();
+    assert!(message_rows.iter().any(|row| row == ":JOB"), "{text}");
+    assert!(message_rows.iter().any(|row| row == "temple.\""), "{text}");
+    assert!(
+        message_rows.iter().any(|row| row == "Your interest?"),
+        "{text}"
+    );
+}
