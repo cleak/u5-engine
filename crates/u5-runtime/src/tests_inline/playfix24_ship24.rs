@@ -130,3 +130,25 @@ fn playtest_s24_p24_13_an_open_prompt_does_not_sail_the_ship() {
     assert!(state.active_yes_no_prompt.is_some(), "the prompt is still open");
     let _ = fs::remove_dir_all(dir);
 }
+
+/// P24-14: `stats-panel.md §2.2.1` - the ship-damage survive arm repaints
+/// the panel immediately. A collision reached on the idle auto-advance pass
+/// has no command epilogue, and the hull figure stayed stale.
+#[test]
+fn playtest_s24_p24_14_a_wait_pass_collision_repaints_the_hull() {
+    let mut state = ship24_hoisted_frigate(WindState::East, 77);
+    state.grid[world_cell_index(100, 99)] = 0x03;
+    state.sail_cached_direction = Some(Direction::North);
+    state.sail_cadence = 0;
+    state.repaint_stats_panel();
+    assert!(state.displayed_stats_panel().counter_row.contains("Ship:77"));
+    for _ in 0..2 {
+        state.idle_wait_pass(None).unwrap();
+    }
+    let TransportState::Ship { hull, .. } = state.player.transport else {
+        panic!("still aboard");
+    };
+    assert!(hull < 77, "the shoal took {hull}");
+    let counter = &state.displayed_stats_panel().counter_row;
+    assert!(counter.contains(&format!("Ship:{hull}")), "{counter:?}");
+}

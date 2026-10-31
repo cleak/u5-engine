@@ -6132,6 +6132,12 @@ impl PlayState {
                     }
                     self.sync_player_object();
                     self.mark_visibility_dirty();
+                    // `stats-panel.md §2.2.1`: the ship-damage survive arm is
+                    // an immediate site. Left to the command epilogue, a
+                    // collision reached on the input helper's idle wait pass
+                    // - which has no epilogue - never repainted the hull
+                    // (playtest S24 P24-14).
+                    self.repaint_stats_panel();
                     OutdoorImpactAbsorption::HullAbsorbed { roll, hull_after }
                 }
                 // "Roll **greater than or equal to** the hull: the ship is
