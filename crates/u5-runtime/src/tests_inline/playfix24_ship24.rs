@@ -40,3 +40,31 @@ fn playtest_s24_p24_04_a_sailing_collision_does_not_reframe_later_results() {
     assert_eq!(&tail[..3], &[">Get-North", "", "Nothing to get!"], "{tail:?}");
     let _ = fs::remove_dir_all(dir);
 }
+
+/// P24-05: `vehicles.md §6` - docking "prints the exact line `Docked!`
+/// followed by a line break", and `text-output.md §10.2` writes it on the
+/// marker row of a released hoisted step. A dock reached by the input
+/// helper's wind-released wait pass left the line in the slot, and the next
+/// command dropped it.
+#[test]
+fn playtest_s24_p24_05_a_wait_pass_dock_keeps_its_line() {
+    let dir = debug_game_dir();
+    // East wind: sailing north is a crosswind and releases on the first pass.
+    let mut state = ship24_hoisted_frigate(WindState::East, 99);
+    state.grid[world_cell_index(100, 99)] = OVERWORLD_PIER_TILE;
+    state.push_message_entry("Yell HOIST!", true);
+    state.sail_cached_direction = Some(Direction::North);
+    state.sail_cadence = 0;
+    for _ in 0..2 {
+        state.idle_wait_pass(None).unwrap();
+    }
+    assert!(!state.player.transport.is_ship_under_sail(), "the dock furled");
+    assert!(!state.message_row_open_mid_line);
+
+    let tail = p13text_get_north_rows(&mut state, &dir);
+    assert_eq!(&tail[..3], &[">Get-North", "", "Nothing to get!"], "{tail:?}");
+    let rows = p4window_rows(&state);
+    let get = rows.iter().rposition(|row| row == ">Get-North").unwrap();
+    assert_eq!(&rows[get - 2..get], &[">Docked!", ""], "{rows:?}");
+    let _ = fs::remove_dir_all(dir);
+}

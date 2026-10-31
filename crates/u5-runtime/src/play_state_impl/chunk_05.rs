@@ -1042,7 +1042,14 @@ impl PlayState {
             self.rearm_overworld_prompt_pair_in_command();
             self.sync_player_object();
             self.mark_visibility_dirty();
-            self.message = "Docked!".to_string();
+            // `vehicles.md §6`: docking "prints the exact line `Docked!`
+            // followed by a line break". Emitted rather than left in the
+            // slot: a dock reached on a wind-released wait pass has no
+            // command of its own to flush the slot, and the next command
+            // dropped the line, leaving a bare marker row (playtest S24
+            // P24-05; the collision arm's F19 fix).
+            self.emit_message_line("Docked!");
+            self.close_message_row();
             return Ok(MoveOutcome::Blocked);
         }
         let transition = if let Some(game_dir) = game_dir {
