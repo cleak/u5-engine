@@ -1696,7 +1696,16 @@ impl PlayState {
         if !matches!(self.area, Area::Dungeon { scene: current, .. } if current == scene) {
             return Ok(false);
         }
-        self.resolve_dungeon_surface_reset(game_dir, scene, level)?;
+        // `dungeon-mode.md §14.1`: neither post-combat handler "advances the
+        // world clock itself", and `combat.md §4`'s framer exit makes a
+        // zero-increment clock call. The turn that opened the fight is the
+        // only one charged. An A-Attack fight runs inside its own dispatch,
+        // so that turn is still owed here (the loop-head minute flag is
+        // still set and the charge adds no minute); a room walk-in or a
+        // contact step already spent it before the fight began, and the
+        // surface exit charged it a second time (playtest P24-01).
+        let turn_owed = self.dungeon_loop_minute_charged;
+        self.resolve_dungeon_surface_reset_charging(game_dir, scene, level, turn_owed)?;
         Ok(true)
     }
 
@@ -1823,6 +1832,18 @@ impl PlayState {
         scene: DungeonScene,
         level: u8,
     ) -> io::Result<MoveOutcome> {
+        self.resolve_dungeon_surface_reset_charging(game_dir, scene, level, true)
+    }
+
+    /// [`Self::resolve_dungeon_surface_reset`], with `charge_turn` false for
+    /// an exit whose turn was already spent before a post-action fight.
+    pub(crate) fn resolve_dungeon_surface_reset_charging(
+        &mut self,
+        game_dir: &Path,
+        scene: DungeonScene,
+        level: u8,
+        charge_turn: bool,
+    ) -> io::Result<MoveOutcome> {
         let entries = effective_world_location_entries(game_dir)?;
         let matches: Vec<_> = entries
             .iter()
@@ -1866,7 +1887,9 @@ impl PlayState {
         // so the world-mode two-minute cadence is not applied retroactively.
         // The loop leaves at its scene-byte check, before the post-action
         // pass, so the exit turn runs no upkeep (playtest P21-11).
-        self.advance_turn_leaving_dungeon();
+        if charge_turn {
+            self.advance_turn_leaving_dungeon();
+        }
         self.restore_world_at(game_dir, plane, entry.x, entry.y)?;
         // `cleak/u5-spec#270`: "The stored exit line is `Britannia!` followed
         // by **two** line feeds (and `Underworld!` likewise). The first feed
