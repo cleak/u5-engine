@@ -1277,6 +1277,9 @@ impl PlayState {
                 }
                 None => format!("{title} resident; actor rejected by the one-at-a-time gate"),
             });
+            // `town-mode.md §13`: the resident-entry sweep runs last, after
+            // the notice, and also when the install was rejected.
+            state.run_resident_shadowlord_entry_sweep(index);
         }
         // `moons.md §3`, caller census: the town-family floor loader
         // repaints on "Every town-family scene entry **and every in-place

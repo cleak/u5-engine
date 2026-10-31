@@ -2155,12 +2155,9 @@ impl PlayState {
         }
 
         let active_slot = self.insert_resident_shadowlord_npc(scene, floor)?;
-        // `town-mode.md §13` (u5-spec#300 Q4): the sweep runs after the
-        // party-capability check, and a party with nobody able to act and
-        // nobody asleep stops entry there, "no resident-entry sweep".
-        if self.shadowlord_notice_capability_gate_passes() {
-            let _ = self.apply_resident_shadowlord_npc_sweep(shadowlord_index);
-        }
+        // The resident-entry sweep is not part of the install: `town-mode.md
+        // §13` runs it "last", after the notice, and for a rejected install
+        // too ([`Self::run_resident_shadowlord_entry_sweep`]).
         self.mark_visibility_dirty();
         Some((active_slot, shadowlord_index))
     }
@@ -2214,6 +2211,21 @@ impl PlayState {
         );
         self.mark_visibility_dirty();
         Some(rewritten)
+    }
+
+    /// `town-mode.md §13` entry order: "the notice prints and its tone
+    /// plays; and, in a hideout town, the resident-entry sweep described
+    /// next runs last. If the capability check finds nobody in the party
+    /// able to act and nobody asleep, entry stops at that check: no notice,
+    /// no tone and no resident-entry sweep." The sweep is selected by the
+    /// recorded host, so it runs whether the install placed an actor or was
+    /// rejected by the one-at-a-time check; only "a town hosting no
+    /// Shadowlord" and "a town whose install was skipped by the row-`4`
+    /// guard" skip it, and both record no host.
+    pub fn run_resident_shadowlord_entry_sweep(&mut self, shadowlord_index: usize) {
+        if self.shadowlord_notice_capability_gate_passes() {
+            let _ = self.apply_resident_shadowlord_npc_sweep(shadowlord_index);
+        }
     }
 
     /// `town-mode.md §13`: consume one coin draw for every roster index,
@@ -3029,7 +3041,11 @@ impl PlayState {
         // `encounters.md §7`: the chain "does not re-place the player:
         // the player's position comes from the world-state globals
         // throughout."
-        self.install_shadowlord_entry_encounter();
+        // The post-fight re-run keeps the sweep it has always run after a
+        // fresh install; the entry-pass ordering fix does not reach it.
+        if let Some((Some(_), index)) = self.install_shadowlord_entry_encounter() {
+            self.run_resident_shadowlord_entry_sweep(index);
+        }
         Ok(true)
     }
 

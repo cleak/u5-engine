@@ -163,3 +163,63 @@ fn aud_town_14_10_basement_contact_event_is_handled() {
     assert!(state.diagnostics_contain("opens conversation contact"));
     let _ = fs::remove_dir_all(dir);
 }
+
+/// Audit town-mode:13:9. `town-mode.md §13` entry order: the install records
+/// the host "before its one-at-a-time reject (so a town whose install is
+/// rejected still announces its host)", and "in a hideout town, the
+/// resident-entry sweep described next runs last". Only no host, the row-`4`
+/// guard and the failed capability check skip it - a rejected install (a
+/// save loaded with the resident Shadowlord already standing) still sweeps.
+#[test]
+fn aud_town_13_9_rejected_install_still_runs_the_resident_entry_sweep() {
+    let dir = debug_game_dir();
+    let scene = Scene::new(6).unwrap();
+    fs::write(dir.join("TOWNE.DAT"), open_grid().repeat(16)).unwrap();
+    let mut npc = vec![0u8; (scene.block + 1) * 576];
+    let base = scene.block * 576;
+    for slot in 1..32 {
+        let schedule = &mut npc[base + slot * 16..base + slot * 16 + 16];
+        schedule[0..3].copy_from_slice(&[0, 0, 0]);
+        schedule[3..6].fill(20);
+        schedule[6..9].fill(20);
+        schedule[9..12].fill(0);
+        schedule[12..16].copy_from_slice(&[0, 8, 16, 20]);
+        npc[base + 512 + slot] = 0x50;
+        npc[base + 544 + slot] = 0x81;
+    }
+    fs::write(dir.join("TOWNE.NPC"), npc).unwrap();
+    fs::write(dir.join("TOWNE.TLK"), [0, 0]).unwrap();
+    for rejected in [false, true] {
+        let mut options = PlayOptions::default();
+        options.target = PlayTarget::Town(scene);
+        options.start = Some((5, 5));
+        // Hatred hosted in Trinsic.
+        options.shadowlord_hideouts = [SHADOWLORD_VANQUISHED, 6, SHADOWLORD_VANQUISHED];
+        let mut state = if rejected {
+            // Seed a Shadowlord actor so the one-at-a-time check rejects.
+            let mut probe = PlayState::load_town_scene(&dir, scene, options.clone()).unwrap();
+            assert!(probe.shadowlord_actor_present());
+            probe.npcs.iter_mut().for_each(|npc| npc.dialog_id = 0x81);
+            let mut objects = probe.active_objects.clone();
+            objects.resize(OOL_SLOTS, ActiveObject::empty());
+            options.saved_active_objects = Some(objects);
+            PlayState::load_town_scene(&dir, scene, options).unwrap()
+        } else {
+            PlayState::load_town_scene(&dir, scene, options).unwrap()
+        };
+        assert_eq!(state.resident_shadowlord, Some(SHADOWLORD_HATRED_INDEX));
+        assert!(state.message.contains("hatred doth"), "rejected={rejected}");
+        assert!(
+            state
+                .npcs
+                .iter()
+                .any(|npc| npc.dialog_id == TOWN_NPC_BRUSHOFF_DIALOG_ID),
+            "rejected={rejected}: the Hatred sweep wrote no 0xFE"
+        );
+        if rejected {
+            assert!(state.diagnostics_contain("rejected by the one-at-a-time gate"));
+        }
+        state.flush_message_slot();
+    }
+    let _ = fs::remove_dir_all(dir);
+}
