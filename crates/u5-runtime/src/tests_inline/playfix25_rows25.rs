@@ -32,3 +32,33 @@ fn playfix25_p25_08_space_cancel_at_camp_hours_closes_the_row_like_zero() {
     assert_eq!(gaps, vec![1, 1], "blank rows under the prompt row for 0 and Space");
     let _ = fs::remove_dir_all(dir);
 }
+
+/// P25-05: `inventory.md §5.1` publishes the empty-handed refusal as
+/// `Thou_art_empty-\nhanded!\n`, and `combat.md §11.1` has a monster's
+/// `<monster> teleports!\n` print with "no leading newline of its own". In
+/// the arena the refusal left its row open, so the teleport read
+/// `handed!Wisp`.
+#[test]
+fn playfix25_p25_05_combat_empty_handed_refusal_closes_its_row() {
+    let mut state = combat2b_two_member_state();
+    state.equipment_stock = [0; EQUIPMENT_COUNT];
+    state.party_equipment = default_party_equipment(state.party.len());
+
+    assert_eq!(state.start_combat_ready_equipment(0), MoveOutcome::Blocked);
+    assert!(
+        !state.message_row_open_mid_line,
+        "the refusal ends in its own line feed"
+    );
+    // What `finish_combat_modal_actor_action` hands the arena before the
+    // round walker runs the monsters.
+    state.flush_message_slot();
+    state.combat_transcript_row_open = state.message_row_open_mid_line;
+    state.emit_combat_print("Wisp teleports!\n");
+    let rows = p4combat_rows_text(&state);
+    let handed = rows
+        .iter()
+        .rposition(|row| row.starts_with("handed!"))
+        .unwrap_or_else(|| panic!("rows: {rows:?}"));
+    assert_eq!(rows[handed], "handed!", "rows: {rows:?}");
+    assert_eq!(rows[handed + 1], "Wisp teleports!", "rows: {rows:?}");
+}
