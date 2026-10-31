@@ -123,17 +123,21 @@ fn surface_container_trap_cleanup_finds_the_packed_descriptor_of_the_dying_membe
     });
     let template = state.party[0].clone();
     state.party.truncate(1);
-    state.party.push(PartyMember { slot: 1, ..template.clone() });
-    state.party.push(PartyMember { slot: 2, ..template });
+    state.party.push(PartyMember {
+        slot: 1,
+        ..template.clone()
+    });
+    state.party.push(PartyMember {
+        slot: 2,
+        ..template
+    });
     state.party[0].hp = 0;
     state.party[0].status = b'D';
     state.party[1].hp = 0;
     state.party[2].hp = 30;
     // flags nonzero: the owner byte names the roster slot.
-    state.combat_actors[0] =
-        CombatActorDescriptor::from_row([9, 1, 1, 1, 2, STEADY_PHASE, 5, 5]);
-    state.combat_actors[1] =
-        CombatActorDescriptor::from_row([9, 1, 1, 2, 3, STEADY_PHASE, 4, 5]);
+    state.combat_actors[0] = CombatActorDescriptor::from_row([9, 1, 1, 1, 2, STEADY_PHASE, 5, 5]);
+    state.combat_actors[1] = CombatActorDescriptor::from_row([9, 1, 1, 2, 3, STEADY_PHASE, 4, 5]);
     state.active_player = Some(1);
     state.combat_active = true;
 
