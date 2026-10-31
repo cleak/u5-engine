@@ -6730,8 +6730,11 @@ fn validate_route_smoke_case_state(
             }
         }
         "castle-hourly-provision-poison-pass" => {
+            // `time.md` §5: every member that is neither Dead nor Sleeping
+            // consumes a provision, so the Ashes member (slot 4) eats too:
+            // Good, Poisoned and Ashes take 10 down to 7.
             if state.clock.hour != 6
-                || state.food != 8
+                || state.food != 7
                 || state.party.get(0).is_none_or(|member| member.hp != 12)
                 || state
                     .party
