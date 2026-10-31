@@ -6304,6 +6304,11 @@ impl PlayState {
                 // stays the Immediate default.
                 self.stats_panel_command_refresh = crate::stats_panel::PanelRefreshMode::Deferred;
                 self.push_impact_line(ABANDON_SHIP_MESSAGE);
+                // `overworld.md §8.1` step 6 / `vehicles.md §6`: the line is
+                // `Abandon ship!\n`, so its own feed closes the row. Left
+                // open, every later result lost the blank row under its echo
+                // (playtest S25 P25-03).
+                self.close_message_row();
                 let marker = TRANSPORT_MARKER_SKIFF_FIRST + facing;
                 self.player.transport = TransportState::Skiff {
                     type_byte: marker,
@@ -6319,6 +6324,8 @@ impl PlayState {
                 // `stats-panel.md §2.2.1` row 18: see the Skiff arm above.
                 self.stats_panel_command_refresh = crate::stats_panel::PanelRefreshMode::Deferred;
                 self.push_impact_line(ABANDON_SHIP_MESSAGE);
+                // `Abandon ship!\n` closes its own row: see the Skiff arm.
+                self.close_message_row();
                 self.special_items[SPECIAL_ITEM_MAGIC_CARPET_INDEX] =
                     self.special_items[SPECIAL_ITEM_MAGIC_CARPET_INDEX].saturating_sub(1);
                 let pick = self.random_mod_u8(CARPET_MARKER_FRAMES.len() as u8) as usize;

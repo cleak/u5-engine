@@ -4287,6 +4287,32 @@
     }
 
     #[test]
+    fn outdoor_impact_abandon_ship_closes_its_own_row() {
+        // `overworld.md §8.1` step 6 and `vehicles.md §6`: `Abandon ship!\n`
+        // is a feed-terminated line on both the skiff and the carpet rung,
+        // so it leaves no open row for later results to lose their blank
+        // row to (playtest S25 P25-03).
+        for (skiffs, carpets) in [(1u8, 0u8), (0, 1)] {
+            let mut state = world_state(open_world_grid(), 5, 5);
+            state.party = six_member_party(40);
+            state.special_items[SPECIAL_ITEM_MAGIC_CARPET_INDEX] = carpets;
+            aboard_frigate(&mut state, 1, skiffs);
+            assert!(matches!(
+                state.apply_outdoor_impact(),
+                OutdoorImpactAbsorption::ShipDestroyed { .. }
+            ));
+            assert_eq!(
+                state.message_entries().last().map(|e| e.text.as_str()),
+                Some(ABANDON_SHIP_MESSAGE)
+            );
+            assert!(
+                !state.message_row_open_mid_line,
+                "skiffs {skiffs} carpets {carpets}: Abandon ship! left its row open"
+            );
+        }
+    }
+
+    #[test]
     fn outdoor_impact_ship_loss_ladder_drowns_the_party_last() {
         // "**Otherwise, the party drowns.** The marker is set to the
         // sprite-suppressed value and the drowning outcome runs." The loop
