@@ -2693,21 +2693,45 @@ impl PlayState {
         overworld_underfoot_forces_dark(tile, self.active_effect_tag.unwrap_or(0))
     }
 
+    /// `overworld.md §5` step 2, the pre-loop tile probe (R641).
     pub fn refresh_world_underfoot_blackout_latch(&mut self) -> bool {
         if self.world_underfoot_blackout_active() {
-            if !self.world_underfoot_blackout_latched || self.ambient_light != 0 {
+            let first_frame = !self.world_underfoot_blackout_latched;
+            if first_frame || self.ambient_light != 0 {
                 self.mark_visibility_dirty();
             }
             self.world_underfoot_blackout_latched = true;
             self.ambient_light = 0;
+            // `overworld.md §5` step 2 (issue #305 Q5, R641): "On the first
+            // frame entering that state, run one world tick (a full world
+            // step with its draws). On later frames while the latch stays
+            // set on that tile the probe runs neither a world tick nor a
+            // clock call."
+            if first_frame {
+                let _ = self.advance_visual_tick();
+                self.ambient_light = 0;
+            }
             return true;
         }
 
-        if self.world_underfoot_blackout_latched {
-            self.world_underfoot_blackout_latched = false;
-            self.mode_zero_cleanup();
-        }
+        // "On every frame on which the probe does not take the `0xFF` arm,
+        // it runs a zero-minute cleanup call so daylight is recomputed
+        // without advancing time" - not only on the frame the latch clears.
+        self.world_underfoot_blackout_latched = false;
+        self.mode_zero_cleanup();
         false
+    }
+
+    /// Run this loop iteration's `overworld.md §5` step 2 probe if it has not
+    /// run yet. Only the overworld loop has the probe; the owed mark is
+    /// dropped in every other scene.
+    pub fn run_world_underfoot_probe_if_owed(&mut self) {
+        if !std::mem::take(&mut self.world_underfoot_probe_owed) {
+            return;
+        }
+        if matches!(self.area, Area::World { .. }) {
+            let _ = self.refresh_world_underfoot_blackout_latch();
+        }
     }
 
     /// Convenience wrapper: carve the whole `visible_radius` disc, i.e.

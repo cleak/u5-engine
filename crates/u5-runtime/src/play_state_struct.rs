@@ -378,6 +378,12 @@ pub struct PlayState {
     pub terrain_band: [u8; TERRAIN_BAND_LEN],
     pub visibility_buffers_ready: bool,
     pub world_underfoot_blackout_latched: bool,
+    /// `overworld.md §5` step 2: the pre-loop underfoot probe runs once per
+    /// overworld loop iteration. Set when an iteration ends (a command
+    /// returns, or the all-asleep pass runs) and cleared when the probe runs,
+    /// so a frontend that calls the exploration gate on every pump firing
+    /// still probes once per iteration.
+    pub world_underfoot_probe_owed: bool,
     pub wind: WindState,
     pub wind_save_byte: u8,
     pub time_stop_counter: u8,

@@ -89,6 +89,11 @@ impl PlayState {
         if self.pending_blackthorn_rescue.is_some() {
             return Ok(ExplorationTurnGateOutcome::Rescued { transition: None });
         }
+        // `overworld.md §5`: step 2, the pre-loop tile probe, comes before
+        // the party-capability scan on every iteration, the all-asleep pass
+        // included. It runs once per iteration however often a frontend
+        // polls this gate.
+        self.run_world_underfoot_probe_if_owed();
         match self.party_capability() {
             PartyCapability::CanAct { member_index } => {
                 // `dungeon-mode.md §4` Initialisation: a dungeon entered by
@@ -165,6 +170,9 @@ impl PlayState {
                     self.message_flushed = PARTY_SLEEP_LINE.to_string();
                 }
                 self.finish_party_sleep_row();
+                // `overworld.md §5`: the asleep pass ends this iteration, so
+                // the next one owes its own step 2 probe.
+                self.world_underfoot_probe_owed = true;
                 Ok(ExplorationTurnGateOutcome::Slept { transition })
             }
             PartyCapability::Defeated => {

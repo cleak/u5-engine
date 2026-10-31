@@ -845,6 +845,7 @@ pub fn handle_play_script_command(
         // the helper takes one step per prompt (`overworld.md §5` item 5,
         // `town-mode.md §7` step 1), however long the wait (playtest P16-21).
         let entry_owed = state.overworld_input_helper_entry_owed;
+        let probe_owed = state.world_underfoot_probe_owed;
         for _ in 0..count {
             if handle_play_key_input(state, '.', "", game_dir)? == PlayInputDisposition::Quit {
                 return Ok(PlayInputDisposition::Quit);
@@ -852,6 +853,9 @@ pub fn handle_play_script_command(
         }
         if state.harness_shortcut_keys {
             state.overworld_input_helper_entry_owed = entry_owed;
+            // Nor does it start a new loop iteration, so it owes no new
+            // `overworld.md §5` step 2 probe.
+            state.world_underfoot_probe_owed = probe_owed;
         }
         return Ok(PlayInputDisposition::Continue);
     }

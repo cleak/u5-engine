@@ -41,6 +41,9 @@ pub fn handle_play_key_input(
     // A key that only answered part of a command leaves a prompt open, and
     // `PlayState::run_overworld_input_helper_entry_step` drops the step then.
     state.overworld_input_helper_entry_owed = true;
+    // `overworld.md §5` step 7: the loop goes "back to step 2", so the next
+    // iteration owes its pre-loop underfoot probe.
+    state.world_underfoot_probe_owed = true;
     state.town_input_helper_quick_poll = harpsichord_repoll;
     // The terminal harness's inline direction form (`G8`, `Lw`) is the
     // command key and then the prompt's own key, so the second half runs as
