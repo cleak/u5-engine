@@ -716,7 +716,11 @@ fn script_replay_runs_the_dungeon_load_room_reaction_before_any_command() {
 
     replay_play_script_commands(&mut state, Path::new(""), &[], |_, _, _| Ok(())).unwrap();
 
-    assert_eq!(state.grid[dungeon_cell_index(4, 5, 7)] & 0xf0, 0xa0, "the room resolved");
+    assert_eq!(
+        state.grid[dungeon_cell_index(4, 5, 7)] & 0xf0,
+        0xa0,
+        "the room resolved"
+    );
     assert_eq!(state.turn, turn_before, "no turn before the fight");
 }
 

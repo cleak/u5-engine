@@ -2428,7 +2428,7 @@ pub fn route_smoke_cases() -> Vec<RouteSmokeCase> {
             options: doom_options.clone(),
             script: &["empty"],
             expected: RouteSmokeExpectation::Dungeon(doom),
-            min_turn: 1,
+            min_turn: 0,
             expected_frame_kind: "combat viewport",
         },
         RouteSmokeCase {
@@ -2452,7 +2452,7 @@ pub fn route_smoke_cases() -> Vec<RouteSmokeCase> {
             options: doom_options.clone(),
             script: &["empty", "empty"],
             expected: RouteSmokeExpectation::Dungeon(doom),
-            min_turn: 1,
+            min_turn: 0,
             expected_frame_kind: "combat viewport",
         },
         RouteSmokeCase {
@@ -2460,7 +2460,7 @@ pub fn route_smoke_cases() -> Vec<RouteSmokeCase> {
             options: doom_options.clone(),
             script: &["empty", "0"],
             expected: RouteSmokeExpectation::Dungeon(doom),
-            min_turn: 1,
+            min_turn: 0,
             expected_frame_kind: "combat viewport",
         },
         RouteSmokeCase {
@@ -2468,7 +2468,7 @@ pub fn route_smoke_cases() -> Vec<RouteSmokeCase> {
             options: doom_options.clone(),
             script: &["empty", "1"],
             expected: RouteSmokeExpectation::Dungeon(doom),
-            min_turn: 1,
+            min_turn: 0,
             expected_frame_kind: "combat viewport",
         },
         RouteSmokeCase {
@@ -2476,7 +2476,7 @@ pub fn route_smoke_cases() -> Vec<RouteSmokeCase> {
             options: doom_options.clone(),
             script: &["empty", "6"],
             expected: RouteSmokeExpectation::Dungeon(doom),
-            min_turn: 1,
+            min_turn: 0,
             expected_frame_kind: "combat viewport",
         },
         RouteSmokeCase {
@@ -2484,7 +2484,7 @@ pub fn route_smoke_cases() -> Vec<RouteSmokeCase> {
             options: doom_options.clone(),
             script: &["empty", "\x1b"],
             expected: RouteSmokeExpectation::Dungeon(doom),
-            min_turn: 1,
+            min_turn: 0,
             expected_frame_kind: "combat viewport",
         },
         RouteSmokeCase {
@@ -2492,7 +2492,7 @@ pub fn route_smoke_cases() -> Vec<RouteSmokeCase> {
             options: doom_options.clone(),
             script: &["empty", "ctrl-s"],
             expected: RouteSmokeExpectation::Dungeon(doom),
-            min_turn: 1,
+            min_turn: 0,
             expected_frame_kind: "combat viewport",
         },
         RouteSmokeCase {
@@ -2500,7 +2500,7 @@ pub fn route_smoke_cases() -> Vec<RouteSmokeCase> {
             options: doom_options.clone(),
             script: &["empty", "d"],
             expected: RouteSmokeExpectation::Dungeon(doom),
-            min_turn: 1,
+            min_turn: 0,
             expected_frame_kind: "combat viewport",
         },
         RouteSmokeCase {
@@ -2508,7 +2508,7 @@ pub fn route_smoke_cases() -> Vec<RouteSmokeCase> {
             options: doom_options.clone(),
             script: &["empty", "U"],
             expected: RouteSmokeExpectation::Dungeon(doom),
-            min_turn: 1,
+            min_turn: 0,
             expected_frame_kind: "combat viewport",
         },
         RouteSmokeCase {
@@ -2516,7 +2516,7 @@ pub fn route_smoke_cases() -> Vec<RouteSmokeCase> {
             options: doom_options.clone(),
             script: &["empty", "D"],
             expected: RouteSmokeExpectation::Dungeon(doom),
-            min_turn: 1,
+            min_turn: 0,
             expected_frame_kind: "combat viewport",
         },
         RouteSmokeCase {
@@ -2524,7 +2524,7 @@ pub fn route_smoke_cases() -> Vec<RouteSmokeCase> {
             options: doom_options.clone(),
             script: &["empty", "W"],
             expected: RouteSmokeExpectation::Dungeon(doom),
-            min_turn: 1,
+            min_turn: 0,
             expected_frame_kind: "combat viewport",
         },
         RouteSmokeCase {
@@ -2532,7 +2532,7 @@ pub fn route_smoke_cases() -> Vec<RouteSmokeCase> {
             options: doom_options.clone(),
             script: &["empty", "B"],
             expected: RouteSmokeExpectation::Dungeon(doom),
-            min_turn: 1,
+            min_turn: 0,
             expected_frame_kind: "combat viewport",
         },
         RouteSmokeCase {
@@ -2540,7 +2540,7 @@ pub fn route_smoke_cases() -> Vec<RouteSmokeCase> {
             options: doom_options.clone(),
             script: &["empty", "E"],
             expected: RouteSmokeExpectation::Dungeon(doom),
-            min_turn: 1,
+            min_turn: 0,
             expected_frame_kind: "combat viewport",
         },
         RouteSmokeCase {
@@ -2548,7 +2548,7 @@ pub fn route_smoke_cases() -> Vec<RouteSmokeCase> {
             options: doom_options.clone(),
             script: &["empty", "F"],
             expected: RouteSmokeExpectation::Dungeon(doom),
-            min_turn: 1,
+            min_turn: 0,
             expected_frame_kind: "combat viewport",
         },
         RouteSmokeCase {
@@ -2556,7 +2556,7 @@ pub fn route_smoke_cases() -> Vec<RouteSmokeCase> {
             options: doom_options.clone(),
             script: &["empty", "H"],
             expected: RouteSmokeExpectation::Dungeon(doom),
-            min_turn: 1,
+            min_turn: 0,
             expected_frame_kind: "combat viewport",
         },
         RouteSmokeCase {
@@ -2564,7 +2564,7 @@ pub fn route_smoke_cases() -> Vec<RouteSmokeCase> {
             options: doom_options.clone(),
             script: &["empty", "I"],
             expected: RouteSmokeExpectation::Dungeon(doom),
-            min_turn: 1,
+            min_turn: 0,
             expected_frame_kind: "combat viewport",
         },
         RouteSmokeCase {
@@ -2572,7 +2572,7 @@ pub fn route_smoke_cases() -> Vec<RouteSmokeCase> {
             options: doom_options.clone(),
             script: &["empty", "M"],
             expected: RouteSmokeExpectation::Dungeon(doom),
-            min_turn: 1,
+            min_turn: 0,
             expected_frame_kind: "combat viewport",
         },
         RouteSmokeCase {
@@ -2580,7 +2580,7 @@ pub fn route_smoke_cases() -> Vec<RouteSmokeCase> {
             options: doom_options.clone(),
             script: &["empty", "N"],
             expected: RouteSmokeExpectation::Dungeon(doom),
-            min_turn: 1,
+            min_turn: 0,
             expected_frame_kind: "combat viewport",
         },
         RouteSmokeCase {
@@ -2588,7 +2588,7 @@ pub fn route_smoke_cases() -> Vec<RouteSmokeCase> {
             options: doom_options.clone(),
             script: &["empty", "T"],
             expected: RouteSmokeExpectation::Dungeon(doom),
-            min_turn: 1,
+            min_turn: 0,
             expected_frame_kind: "combat viewport",
         },
         RouteSmokeCase {
@@ -2596,7 +2596,7 @@ pub fn route_smoke_cases() -> Vec<RouteSmokeCase> {
             options: doom_options.clone(),
             script: &["empty", "V"],
             expected: RouteSmokeExpectation::Dungeon(doom),
-            min_turn: 1,
+            min_turn: 0,
             expected_frame_kind: "combat viewport",
         },
         RouteSmokeCase {
@@ -2604,7 +2604,7 @@ pub fn route_smoke_cases() -> Vec<RouteSmokeCase> {
             options: doom_options.clone(),
             script: &["empty", "L"],
             expected: RouteSmokeExpectation::Dungeon(doom),
-            min_turn: 1,
+            min_turn: 0,
             expected_frame_kind: "combat viewport",
         },
         RouteSmokeCase {
@@ -2612,7 +2612,7 @@ pub fn route_smoke_cases() -> Vec<RouteSmokeCase> {
             options: doom_options.clone(),
             script: &["empty", "A6"],
             expected: RouteSmokeExpectation::Dungeon(doom),
-            min_turn: 1,
+            min_turn: 0,
             expected_frame_kind: "combat viewport",
         },
         RouteSmokeCase {
@@ -2620,7 +2620,7 @@ pub fn route_smoke_cases() -> Vec<RouteSmokeCase> {
             options: doom_options.clone(),
             script: &["empty", "C1IL"],
             expected: RouteSmokeExpectation::Dungeon(doom),
-            min_turn: 1,
+            min_turn: 0,
             expected_frame_kind: "combat viewport",
         },
         RouteSmokeCase {
@@ -2846,7 +2846,7 @@ pub fn route_smoke_cases() -> Vec<RouteSmokeCase> {
             options: doom_options.clone(),
             script: &["empty", "G6"],
             expected: RouteSmokeExpectation::Dungeon(doom),
-            min_turn: 1,
+            min_turn: 0,
             expected_frame_kind: "combat viewport",
         },
         RouteSmokeCase {
@@ -2854,7 +2854,7 @@ pub fn route_smoke_cases() -> Vec<RouteSmokeCase> {
             options: doom_options.clone(),
             script: &["empty", "J6"],
             expected: RouteSmokeExpectation::Dungeon(doom),
-            min_turn: 1,
+            min_turn: 0,
             expected_frame_kind: "combat viewport",
         },
         RouteSmokeCase {
@@ -2862,7 +2862,7 @@ pub fn route_smoke_cases() -> Vec<RouteSmokeCase> {
             options: doom_options.clone(),
             script: &["empty", "O6"],
             expected: RouteSmokeExpectation::Dungeon(doom),
-            min_turn: 1,
+            min_turn: 0,
             expected_frame_kind: "combat viewport",
         },
         RouteSmokeCase {
@@ -2870,7 +2870,7 @@ pub fn route_smoke_cases() -> Vec<RouteSmokeCase> {
             options: doom_options.clone(),
             script: &["empty", "P6"],
             expected: RouteSmokeExpectation::Dungeon(doom),
-            min_turn: 1,
+            min_turn: 0,
             expected_frame_kind: "combat viewport",
         },
         RouteSmokeCase {
@@ -2878,7 +2878,7 @@ pub fn route_smoke_cases() -> Vec<RouteSmokeCase> {
             options: doom_options.clone(),
             script: &["empty", "K6"],
             expected: RouteSmokeExpectation::Dungeon(doom),
-            min_turn: 1,
+            min_turn: 0,
             expected_frame_kind: "combat viewport",
         },
         RouteSmokeCase {
@@ -2886,7 +2886,7 @@ pub fn route_smoke_cases() -> Vec<RouteSmokeCase> {
             options: doom_options.clone(),
             script: &["empty", "R"],
             expected: RouteSmokeExpectation::Dungeon(doom),
-            min_turn: 1,
+            min_turn: 0,
             expected_frame_kind: "combat viewport",
         },
         RouteSmokeCase {
@@ -2894,7 +2894,7 @@ pub fn route_smoke_cases() -> Vec<RouteSmokeCase> {
             options: doom_options.clone(),
             script: &["empty", "Z"],
             expected: RouteSmokeExpectation::Dungeon(doom),
-            min_turn: 1,
+            min_turn: 0,
             expected_frame_kind: "combat viewport",
         },
         RouteSmokeCase {
@@ -2902,7 +2902,7 @@ pub fn route_smoke_cases() -> Vec<RouteSmokeCase> {
             options: doom_options.clone(),
             script: &["empty", "YFALLAX"],
             expected: RouteSmokeExpectation::Dungeon(doom),
-            min_turn: 1,
+            min_turn: 0,
             expected_frame_kind: "combat viewport",
         },
         RouteSmokeCase {
@@ -2910,7 +2910,7 @@ pub fn route_smoke_cases() -> Vec<RouteSmokeCase> {
             options: doom_options.clone(),
             script: &["empty", "X"],
             expected: RouteSmokeExpectation::Dungeon(doom),
-            min_turn: 1,
+            min_turn: 0,
             expected_frame_kind: "combat viewport",
         },
         RouteSmokeCase {
@@ -2942,7 +2942,7 @@ pub fn route_smoke_cases() -> Vec<RouteSmokeCase> {
             options: doom_options,
             script: &["empty", "S"],
             expected: RouteSmokeExpectation::Dungeon(doom),
-            min_turn: 1,
+            min_turn: 0,
             expected_frame_kind: "combat viewport",
         },
         RouteSmokeCase {
@@ -2988,10 +2988,11 @@ pub fn route_smoke_cases() -> Vec<RouteSmokeCase> {
             },
             script: &["empty", "empty", "empty", "empty", "empty"],
             expected: RouteSmokeExpectation::Dungeon(doom),
-            // The room entry is the one exploration turn. Inside the fight
+            // The room entry at load charges no turn (`dungeon-mode.md §4`
+            // Initialisation, playtest P24-03). Inside the fight
             // `combat.md §15` adds time only at the round-counter wrap, so
-            // the passes that follow no longer count turns (playtest G08).
-            min_turn: 1,
+            // the passes that follow count no turns either (playtest G08).
+            min_turn: 0,
             expected_frame_kind: "combat viewport",
         },
     ];

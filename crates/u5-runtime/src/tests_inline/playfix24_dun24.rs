@@ -56,7 +56,12 @@ fn playtest_p24_01_post_action_fight_surface_exit_charges_no_second_minute() {
 
         assert!(!state.combat_active, "{applier:?}");
         assert!(
-            matches!(state.area, Area::World { plane: WorldPlane::Britannia }),
+            matches!(
+                state.area,
+                Area::World {
+                    plane: WorldPlane::Britannia
+                }
+            ),
             "{applier:?}: {:?}",
             state.area
         );
@@ -112,8 +117,8 @@ fn playtest_p24_03_room_cell_at_load_enters_the_room_without_a_minute() {
     state.clock = GameClock::new(12, 0).unwrap();
     let turn_before = state.turn;
 
-    let entered = crate::input_dispatch::run_dungeon_entry_underfoot_reaction(&mut state, &dir)
-        .unwrap();
+    let entered =
+        crate::input_dispatch::run_dungeon_entry_underfoot_reaction(&mut state, &dir).unwrap();
 
     assert!(entered, "the room-entry helper ran at load");
     assert_eq!(state.clock, GameClock::new(12, 0).unwrap());

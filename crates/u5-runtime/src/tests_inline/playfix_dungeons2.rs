@@ -44,7 +44,9 @@ fn playfix2_f08_a_party_arriving_on_a_room_cell_enters_it_before_any_key() {
 
     assert!(matches!(gate, ExplorationTurnGateOutcome::Ready { .. }));
     assert_eq!(state.grid[dungeon_cell_index(0, 1, 1)], 0xa0, "the room helper ran");
-    assert_eq!(state.turn, 1);
+    // Initialisation precedes the step-1 clock tick, so the entry charges
+    // no turn (playtest P24-03).
+    assert_eq!(state.turn, 0);
     let rows = playfix2_transcript_rows(&state);
     assert_eq!(
         rows.last().map(String::as_str),
