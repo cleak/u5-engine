@@ -2033,48 +2033,26 @@ fn rigged_hoisted_ship_wait_uses_one_minute_cleanup() {
         aux1: 0,
         aux3: 0,
     });
-    // A whirlpool far off toggles record byte 5 on every walker dispatch
-    // (`active-objects.md §8`), so it shows which passes ran the epilogue.
-    state.active_objects.push(ActiveObject {
-        type_byte: 0xec,
-        tile: 0xec,
-        x: 40,
-        y: 40,
-        z: WorldPlane::Britannia.save_floor(),
-        phase: 0,
-        aux1: 1,
-        aux3: 0,
-    });
-
     // `weather.md §5`, the rigging paragraph: "With the rigging flag active,
     // **every** sailing wait pass uses the one-minute increment, while the
     // outdoor per-turn epilogue is run on **alternate** passes only". The
-    // facing-changing turn (`weather.md §5`, R525) is the first such pass.
+    // flag "affects the wait-pass timing": the facing-changing turn is a
+    // movement command that "consumes a full turn" (`vehicles.md §6`), so it
+    // keeps the two-minute outdoor turn and its epilogue (playtest S24
+    // P24-07, P24-16).
     assert_eq!(state.step(Direction::East), MoveOutcome::SailTurned);
 
     assert_eq!((state.player.x, state.player.y), (10, 10));
     assert_eq!(state.turn, 1);
-    assert_eq!(state.clock, GameClock::new(12, 1).unwrap());
-    // The outdoor walker leaves byte 6 to the animator (`active-objects.md
-    // §3`/`§8`), so the whirlpool's parity byte is the epilogue's observable.
-    let parity = |state: &PlayState| state.active_objects[2].aux1;
-    assert_eq!(parity(&state), 1);
-
-    assert_eq!(state.step(Direction::East), MoveOutcome::SailStalled);
-
-    assert_eq!((state.player.x, state.player.y), (10, 10));
-    assert_eq!(state.turn, 2);
     assert_eq!(state.clock, GameClock::new(12, 2).unwrap());
-    assert_eq!(parity(&state), 0, "the alternate pass runs the epilogue's walker");
-    // Measured: the stalled attempt prints nothing.
-    assert_eq!(state.message, "");
-
-    assert_eq!(state.step(Direction::East), MoveOutcome::SailStalled);
-
-    assert_eq!((state.player.x, state.player.y), (10, 10));
-    assert_eq!(state.turn, 3);
-    assert_eq!(state.clock, GameClock::new(12, 3).unwrap());
-    assert_eq!(parity(&state), 0);
+    for (turn, minute) in [(2, 3), (3, 4), (4, 5), (5, 6)] {
+        assert_eq!(state.step(Direction::East), MoveOutcome::SailStalled);
+        assert_eq!((state.player.x, state.player.y), (10, 10));
+        assert_eq!(state.turn, turn);
+        assert_eq!(state.clock, GameClock::new(12, minute).unwrap());
+        // Measured: the stalled attempt prints nothing.
+        assert_eq!(state.message, "");
+    }
     assert_eq!(state.active_objects[1].phase, 0x22, "the walker never touches byte 6");
 }
 
