@@ -132,3 +132,34 @@ fn audfollow_world_move_without_a_loop_head_runs_the_owed_probe() {
     assert_eq!((state.player.x, state.player.y), (5, 5));
 }
 
+/// `active-objects.md §3`: "The record write used at spawn covers only bytes
+/// 0 through 5 ... while slot allocation writes nothing to the record";
+/// `encounters.md §4`: "the spawn's record write (bytes 0 through 5)". Byte 6
+/// (the phase byte, which "Carries **no facing**") keeps whatever the freed
+/// slot last held, freeze sentinel included.
+#[test]
+fn audfollow_spawn_keeps_the_slots_phase_byte() {
+    for prior in [0x00u8, 0x3A, STEADY_PHASE, 0xFF] {
+        let mut state = britannia_state(vec![0x02; WORLD_CELLS], 0, 40);
+        state.prng_state = 0x0007;
+        // A freed slot 1: byte 0 cleared, the rest as its occupant left it.
+        state.active_objects.push(ActiveObject {
+            type_byte: 0,
+            tile: 0x50,
+            x: 10,
+            y: 10,
+            z: WorldPlane::Britannia.save_floor(),
+            phase: prior,
+            aux1: 0,
+            aux3: 0,
+        });
+
+        let slot = state.spawn_native_world_encounter(WorldPlane::Britannia);
+
+        assert_eq!(slot, Some(1));
+        let object = state.active_objects[1];
+        assert_eq!(object.type_byte, 0x2C, "bytes 0..5 are the spawn's");
+        assert_eq!(object.aux1, SEA_CREATURE_SPAWN_AUX_SEED);
+        assert_eq!(object.phase, prior, "byte 6 must survive the spawn");
+    }
+}

@@ -230,15 +230,22 @@ impl PlayState {
                 continue;
             }
 
-            let dx = wrapped_world_axis_delta(self.player.x, x);
-            let dy = wrapped_world_axis_delta(self.player.y, y);
+            // `active-objects.md §3` ("The record write used at spawn covers
+            // only bytes 0 through 5 ... while slot allocation writes nothing
+            // to the record") and `encounters.md §4` ("the spawn's record
+            // write (bytes 0 through 5)"): byte 6, the phase byte, is not
+            // written either, so the new object keeps the phase its slot last
+            // held. Byte 6 "Carries **no facing**" (R340), so nothing points
+            // it toward the party.
+            let prior_phase: Vec<u8> = self.active_objects.iter().map(|o| o.phase).collect();
             let object = ActiveObject {
                 type_byte,
                 tile: type_byte,
                 x,
                 y,
                 z: plane.save_floor(),
-                phase: active_object_phase_toward_player(dx, dy),
+                // A slot the table has never held is an all-zero record.
+                phase: 0,
                 aux1: if sea_creature_spawn_seeds_aux(type_byte) {
                     SEA_CREATURE_SPAWN_AUX_SEED
                 } else {
@@ -248,6 +255,9 @@ impl PlayState {
             };
             let slot = self.allocate_active_object_slot(object)?;
             self.mark_visibility_dirty();
+            if let Some(&phase) = prior_phase.get(slot) {
+                self.active_objects[slot].phase = phase;
+            }
             return Some(slot);
         }
         None
