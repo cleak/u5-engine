@@ -8136,7 +8136,12 @@ fn z_stats_attribute_row(
     let left = format!("{left_value:0>Z_STATS_ATTRIBUTE_LEFT_DIGITS$}");
     let line =
         format!("{left_label}{left}{right_label}{right_value:>Z_STATS_ATTRIBUTE_VALUE_CELLS$}");
-    crate::stats_panel::truncate_ascii_chars(&line, crate::STATS_PANEL_WIDTH)
+    // `inventory.md §4.7`: the page "re-widens the window's right edge to
+    // column 39", and the padded number printer prints "exactly the requested
+    // width (or wider, if the value's natural width exceeds the field)"
+    // (`text-output.md`), so a five-digit value keeps its last digit in
+    // column 39 (playtest P25-07).
+    crate::stats_panel::truncate_ascii_chars(&line, crate::STATS_PANEL_WIDTH + 1)
 }
 
 /// Drop a page's already-built lines into the panel's nine rows. The
