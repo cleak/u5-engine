@@ -106,3 +106,27 @@ fn playtest_s24_p24_07_rigging_leaves_hoisted_commands_at_two_minutes() {
     assert_eq!(ship24_clock_minutes(&state) - before, 1, "rigged wait pass");
     let _ = fs::remove_dir_all(dir);
 }
+
+/// P24-13: `input.md §2` - a Y/N prompt waits through the shared wait, whose
+/// no-key pass runs the world tick only, and `timing.md §8.2` puts the
+/// under-sail auto-advance at the command-input step alone. A pass taken
+/// while `Save game?` was open sailed the ship on and charged the turn.
+#[test]
+fn playtest_s24_p24_13_an_open_prompt_does_not_sail_the_ship() {
+    let dir = debug_game_dir();
+    let mut state = ship24_hoisted_frigate(WindState::East, 99);
+    state.sail_cached_direction = Some(Direction::North);
+    state.sail_cadence = 0;
+    handle_play_key_input(&mut state, 'Q', "", &dir).unwrap();
+    assert!(state.active_yes_no_prompt.is_some(), "Save game? is open");
+    assert!(state.prompt_waits_in_shared_wait());
+    let (turn, clock) = (state.turn, state.clock);
+    for _ in 0..4 {
+        state.idle_wait_pass(Some(&dir)).unwrap();
+    }
+    assert_eq!((state.player.x, state.player.y), (100, 100));
+    assert_eq!(state.turn, turn);
+    assert_eq!(state.clock, clock);
+    assert!(state.active_yes_no_prompt.is_some(), "the prompt is still open");
+    let _ = fs::remove_dir_all(dir);
+}

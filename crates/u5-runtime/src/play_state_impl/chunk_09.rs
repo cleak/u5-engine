@@ -5004,7 +5004,16 @@ impl PlayState {
         // line with **no key pressed at all**, where this engine waited for
         // a turn to be consumed and printed the chain after the next
         // command's echo.
-        if let (Area::World { plane }, Some(game_dir)) = (self.area, game_dir) {
+        //
+        // Both that arm and the under-sail route below belong to the
+        // *command* wait. `input.md §2`: every Y/N, menu and direction
+        // prompt waits through the shared wait, whose no-key pass runs the
+        // world tick and nothing else, and `timing.md §8.2` / `overworld.md
+        // §5` step 3 put the auto-advance at the command-input step only. A
+        // pass taken while such a prompt is open used to sail the ship on,
+        // charging turns and overwriting `Save game?` (playtest S24 P24-13).
+        let command_wait = !self.prompt_waits_in_shared_wait();
+        if let (true, Area::World { plane }, Some(game_dir)) = (command_wait, self.area, game_dir) {
             if self.world_falls_south_trigger_tile().is_some() {
                 let _ = self.apply_world_falls_chain(game_dir, plane)?;
                 // The chain spends visual ticks of its own - the descending
@@ -5016,7 +5025,7 @@ impl PlayState {
                 return Ok(IdleWaitPass::CommandWait);
             }
         }
-        if !self.under_sail_wait_pass_applies() {
+        if !command_wait || !self.under_sail_wait_pass_applies() {
             self.under_sail_wait_cursor_poll_pending = false;
             self.advance_visual_tick();
             // `audio.md §7.4`: "every idle iteration of the dungeon command
