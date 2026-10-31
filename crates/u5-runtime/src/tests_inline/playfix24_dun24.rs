@@ -96,3 +96,27 @@ fn playtest_p24_02_exit_to_follows_the_loss_line_without_a_blank_row() {
     );
     let _ = fs::remove_dir_all(dir);
 }
+
+/// Playtest P24-03. `dungeon-mode.md §4`: Initialisation reads the underfoot
+/// tile and, for a room-helper (`0xA`) or room-trigger (`0xF`) nibble, runs
+/// the room-entry helper - all ahead of the inner loop's step-1 clock tick.
+/// `§5` counts a resumed dungeon save among the dungeon-mode entries. So a
+/// save resumed on a room cell enters the room with no minute and no turn
+/// charged.
+#[test]
+fn playtest_p24_03_room_cell_at_load_enters_the_room_without_a_minute() {
+    let dir = debug_game_dir();
+    let mut grid = open_dungeon_record();
+    grid[dungeon_cell_index(4, 5, 7)] = 0xf3;
+    let mut state = dungeon_state(grid, 4, 5, 7);
+    state.clock = GameClock::new(12, 0).unwrap();
+    let turn_before = state.turn;
+
+    let entered = crate::input_dispatch::run_dungeon_entry_underfoot_reaction(&mut state, &dir)
+        .unwrap();
+
+    assert!(entered, "the room-entry helper ran at load");
+    assert_eq!(state.clock, GameClock::new(12, 0).unwrap());
+    assert_eq!(state.turn, turn_before);
+    let _ = fs::remove_dir_all(dir);
+}
