@@ -175,3 +175,32 @@ fn playtest_s24_p24_06_a_wait_pass_poison_point_repaints_the_panel() {
         "the panel shows the poisoned member's new HP"
     );
 }
+
+/// P24-15: after a wipe aboard a frigate the rescue hands control to the
+/// castle on foot, and town entry setup redraws the panel (`town-mode.md
+/// §5`, `stats-panel.md §2.2.1`). The counters row showed only the gold form
+/// off the ship family (`stats-panel.md §6`), but it kept `Ship:NN`.
+#[test]
+fn playtest_s24_p24_15_the_rescue_handoff_repaints_the_on_foot_counters() {
+    let dir = debug_game_dir();
+    let mut state = ship24_hoisted_frigate(WindState::Calm, 77);
+    state.party[0].status = b'D';
+    state.party[0].hp = 0;
+    state.repaint_stats_panel();
+    assert!(state.displayed_stats_panel().counter_row.contains("Ship:77"));
+
+    state.apply_blackthorn_rescue_refuge(&dir).unwrap();
+    let outcome = state.run_blackthorn_rescue_to_handoff(&dir).unwrap();
+    assert!(matches!(
+        outcome,
+        Some(MoveOutcome::Transition(AreaTransition::EnteredLocation(_)))
+    ));
+    assert!(state.player.transport.is_foot());
+    let counter = &state.displayed_stats_panel().counter_row;
+    assert!(!counter.contains("Ship:"), "{counter:?}");
+    assert_eq!(
+        state.displayed_stats_panel(),
+        &crate::stats_panel::stats_panel_snapshot_of(&state)
+    );
+    let _ = fs::remove_dir_all(dir);
+}

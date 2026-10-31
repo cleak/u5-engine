@@ -7862,6 +7862,13 @@ impl PlayState {
         let _ = self.restore_resident_shadowlord_after_floor_reload();
         self.sync_player_object();
         self.mark_visibility_dirty();
+        // Control passes to the castle scene, whose town entry setup runs a
+        // status redraw (`town-mode.md §5`; `stats-panel.md §2.2.1`, "town
+        // entry setup | whole panel"). The restoration loop's repaints were
+        // made with the wipe's transport marker still in place, so without
+        // this the counters row kept `Ship:NN` on foot in the castle
+        // (playtest S24 P24-15).
+        self.repaint_stats_panel();
         // Scene, coordinate, standing and restoration details are runtime
         // state, not player-facing prose.
         self.push_diagnostic(format!(
