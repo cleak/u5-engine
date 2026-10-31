@@ -411,6 +411,19 @@ pub const fn combat_restore_active_player_slot(
     }
 }
 
+/// `combat.md §11.1` ranged carve-out: the candidate landing cell for one
+/// pair of `0..=2` axis draws around the aim cell, before the arena test.
+pub const fn combat_ranged_miss_scatter_offset_cell(
+    aim: (u8, u8),
+    dx_draw: u8,
+    dy_draw: u8,
+) -> (i16, i16) {
+    (
+        aim.0 as i16 + dx_draw as i16 - 1,
+        aim.1 as i16 + dy_draw as i16 - 1,
+    )
+}
+
 pub fn resolve_amulet_turning_scatter_cell(
     target_x: u8,
     target_y: u8,
@@ -7482,6 +7495,29 @@ impl PlayState {
             input.defence_roll = self.combat_defence_roll(defence_rating);
         }
         let resolution = resolve_combat_weapon_attack(input);
+        // `combat.md §11.1`, "The ranged carve-out": "A monster's failed
+        // **ranged or thrown** to-hit is not unconditionally silent ... On a
+        // failed roll the shot scatters" and "the **full hit chain runs
+        // against that actor**" on the landing cell. It "stays silent in
+        // exactly three cases", all of them a landing cell that reports no
+        // occupant, and then the attempt is the plain miss below.
+        if let CombatWeaponAttackResolution::Miss {
+            route: CombatWeaponAttackRangeRoute::Ranged { .. },
+            ..
+        } = resolution
+            && let Some(landing) = self.draw_combat_ranged_miss_scatter_cell(
+                (target.x, target.y),
+                (attacker.x, attacker.y),
+            )
+            && let Some(victim_slot) = self.combat_actor_at_scatter_impact(landing.0, landing.1)
+        {
+            return self.apply_combat_monster_scatter_victim_hit_chain(
+                attacker_slot,
+                victim_slot,
+                target_range,
+                hit_raw_roll_0_to_60,
+            );
+        }
         self.emit_combat_hit_presentation(target_slot, &resolution);
         let damage_application = match resolution {
             CombatWeaponAttackResolution::Hit { raw_damage, .. } => {
@@ -7584,7 +7620,6 @@ impl PlayState {
         {
             return None;
         }
-        let attacker_stats = combat_class_stats(attacker.owner_target_class)?;
         let ranged = combat_ranged_effect_stats(attacker.owner_target_class)?;
         let (impact_x, impact_y) = resolve_amulet_turning_scatter_cell(
             intended.x,
@@ -7643,13 +7678,37 @@ impl PlayState {
         // with one downward sweep, so the ranged arm plays the same monster
         // cue the melee arm does.
         self.emit_sound_effect(SoundEffect::MonsterAttackSwing);
+        let impact_range = combat_arena_range(attacker.x, attacker.y, impact_x, impact_y).max(2);
+        self.apply_combat_monster_scatter_victim_hit_chain(
+            attacker_slot,
+            target_slot,
+            impact_range,
+            hit_raw_roll_0_to_60,
+        )
+    }
+
+    /// The hit chain a scattered monster shot runs against whoever stands on
+    /// the landing cell: `combat.md §11.1`, "the **full hit chain runs
+    /// against that actor** - impact presentation, newline, damage, result
+    /// line - whether that actor is a monster or a party member". The shot
+    /// has already been resolved as reaching that cell, so the hit is
+    /// forced; only the victim's own defence draw and damage remain.
+    fn apply_combat_monster_scatter_victim_hit_chain(
+        &mut self,
+        attacker_slot: usize,
+        target_slot: usize,
+        impact_range: u8,
+        hit_raw_roll_0_to_60: u8,
+    ) -> Option<CombatMonsterAttackApplication> {
+        let attacker = *self.combat_actors.get(attacker_slot)?;
+        let attacker_stats = combat_class_stats(attacker.owner_target_class)?;
+        let ranged = combat_ranged_effect_stats(attacker.owner_target_class)?;
         let defender_rating = self.combat_target_weight(target_slot)?;
         let defence_rating = self.combat_actor_defence_rating(target_slot)?;
         let attacker_rating = combat_monster_attacker_rating(
             attacker.owner_target_class,
             self.combat_target_weight(attacker_slot)?,
         )?;
-        let impact_range = combat_arena_range(attacker.x, attacker.y, impact_x, impact_y).max(2);
         let mut input = CombatWeaponAttackInput {
             source: CombatAttackerDamageSource::MonsterFlat {
                 attack_value: attacker_stats.attack_value,
@@ -9796,6 +9855,35 @@ impl PlayState {
         self.random_mod_u8(8)
     }
 
+    /// `combat.md §11.1`, "The ranged carve-out": on a failed ranged or
+    /// thrown to-hit "the impact point is drawn from the three-by-three
+    /// neighbourhood centred on the **aim cell**, redrawn only while the draw
+    /// lands on the **attacker's own** cell. The aim cell is therefore itself
+    /// a legal landing cell."
+    ///
+    /// §11.1 does not publish how one draw is taken. This takes it the way
+    /// `§12`'s clone placement publishes its own draw from "the nine cells of
+    /// the 3x3 block centred on" a cell - "an offset of -1, 0 or +1 on each
+    /// axis, X first, each value equally likely" - as two `0..=2` range draws,
+    /// and redraws both while they name the attacker's cell. A landing cell
+    /// off the arena holds nobody, so it returns `None`: one of §11.1's
+    /// silent cases ("the landing cell is empty").
+    pub fn draw_combat_ranged_miss_scatter_cell(
+        &mut self,
+        aim: (u8, u8),
+        attacker: (u8, u8),
+    ) -> Option<(u8, u8)> {
+        loop {
+            let dx_draw = self.random_range_u8(0, 2);
+            let dy_draw = self.random_range_u8(0, 2);
+            let (x, y) = combat_ranged_miss_scatter_offset_cell(aim, dx_draw, dy_draw);
+            if (x, y) == (i16::from(attacker.0), i16::from(attacker.1)) {
+                continue;
+            }
+            return combat_arena_coordinate_in_bounds(x, y).then_some((x as u8, y as u8));
+        }
+    }
+
     /// `combat.md §12`: "Classes with the poison/status attack flag cluster
     /// get a random gate". Only those classes take the gate draw.
     pub fn combat_monster_poison_gate_roll(&mut self) -> bool {
@@ -10496,10 +10584,29 @@ impl PlayState {
                         ),
                     }
                 });
+                // `combat.md §11.1`, "The ranged carve-out": "The party ranged
+                // and thrown arm has the same gap" - a failed roll scatters,
+                // and "when the roll fails and the scattered shot lands on
+                // somebody, the hit chain runs and the miss line is skipped
+                // entirely". A scatter onto nobody keeps the miss, which then
+                // names "the originally aimed actor".
+                let attack = match (target_slot, attack, item_id) {
+                    (Some(aimed_slot), Some(attack), Some(item_id)) if !session.melee_arm => self
+                        .apply_combat_party_ranged_miss_scatter(
+                            session.actor_slot,
+                            session.attacker,
+                            cell,
+                            item_id,
+                            inputs,
+                            aimed_slot,
+                            attack,
+                        ),
+                    (target_slot, attack, _) => target_slot.zip(attack),
+                };
                 let mut walk = self.close_combat_attack_attempt(&session);
                 walk.monster_attack = monster_attack;
                 match target_slot {
-                    Some(target_slot) => walk.attack = attack.map(|attack| (target_slot, attack)),
+                    Some(_) => walk.attack = attack,
                     // `combat.md §8.2`: "`Nothing!` therefore has three routes
                     // on the melee arm, not one ... and a **confirm** on a cell
                     // that is in range but holds nobody the lookup accepts. The
@@ -10510,6 +10617,126 @@ impl PlayState {
                 Some(walk)
             }
         }
+    }
+
+    /// `combat.md §11.1`, "The ranged carve-out", party arm: a failed ranged
+    /// or thrown roll draws its landing cell from the three-by-three
+    /// neighbourhood of the aim cell (the monster arm's draw), and a landing
+    /// cell that holds somebody runs the full hit chain against that actor -
+    /// impact presentation, damage, result line - instead of the miss.
+    /// The swing cue already played before the roll (`§11.1` "Swing
+    /// begins | party ranged or thrown"), so the victim's chain adds none.
+    /// Returns the actor the narration names with the attack it narrates.
+    #[allow(clippy::too_many_arguments)]
+    fn apply_combat_party_ranged_miss_scatter(
+        &mut self,
+        actor_slot: usize,
+        attacker_cell: (u8, u8),
+        aim_cell: (u8, u8),
+        item_id: usize,
+        inputs: Option<CombatPlayerWeaponAttackInputs>,
+        aimed_slot: usize,
+        attack: CombatWeaponAttackApplication,
+    ) -> Option<(usize, CombatWeaponAttackApplication)> {
+        let missed = (aimed_slot, attack);
+        let CombatWeaponAttackResolution::Miss {
+            route: CombatWeaponAttackRangeRoute::Ranged { .. },
+            ..
+        } = attack.resolution
+        else {
+            return Some(missed);
+        };
+        let Some(landing) = self.draw_combat_ranged_miss_scatter_cell(aim_cell, attacker_cell)
+        else {
+            return Some(missed);
+        };
+        let Some(victim_slot) = self.combat_targeting_occupant_at(landing) else {
+            return Some(missed);
+        };
+        let hit = self
+            .apply_combat_party_scatter_victim_hit_chain(
+                actor_slot,
+                victim_slot,
+                item_id,
+                aim_cell,
+                inputs,
+            )
+            .unwrap_or(attack);
+        Some((victim_slot, hit))
+    }
+
+    /// The party-arm counterpart of
+    /// [`Self::apply_combat_monster_scatter_victim_hit_chain`]: the readied
+    /// item's damage against the actor on the landing cell, with the hit
+    /// forced and the route kept on the ranged arm the aim already selected.
+    fn apply_combat_party_scatter_victim_hit_chain(
+        &mut self,
+        actor_slot: usize,
+        victim_slot: usize,
+        item_id: usize,
+        aim_cell: (u8, u8),
+        inputs: Option<CombatPlayerWeaponAttackInputs>,
+    ) -> Option<CombatWeaponAttackApplication> {
+        let roster_slot = self.combat_roster_slot_for_actor_slot(actor_slot)?;
+        let attacker = *self.combat_actors.get(actor_slot)?;
+        let strength = self
+            .party_strengths
+            .get(roster_slot)
+            .copied()
+            .unwrap_or(AVATAR_STAT_MAX);
+        let attacker_rating = combat_party_attacker_rating(
+            Some(item_id),
+            strength,
+            self.combat_target_weight(actor_slot)?,
+        );
+        let defender_rating = self.combat_target_weight(victim_slot)?;
+        let defence_rating = self.combat_actor_defence_rating(victim_slot)?;
+        let aim_range = combat_arena_range(attacker.x, attacker.y, aim_cell.0, aim_cell.1);
+        let mut input = combat_equipment_weapon_attack_input(
+            item_id,
+            aim_range,
+            attacker_rating,
+            defender_rating,
+            defence_rating,
+            inputs.map(|inputs| inputs.hit_raw_roll_0_to_60).unwrap_or(0),
+            0,
+            0,
+            Some(true),
+        )?;
+        if combat_weapon_attack_takes_damage_draw(input) {
+            input.damage_roll = match inputs.and_then(|inputs| inputs.damage_roll) {
+                Some(roll) => roll,
+                None => self.random_range_u8(0, u8::MAX),
+            };
+        }
+        if combat_weapon_attack_takes_defence_draw(input) {
+            input.defence_roll = self.combat_defence_roll(defence_rating);
+        }
+        let resolution = resolve_combat_weapon_attack(input);
+        self.emit_combat_hit_presentation(victim_slot, &resolution);
+        let damage_application = match resolution {
+            CombatWeaponAttackResolution::Hit { raw_damage, .. } => self
+                .apply_combat_weapon_damage_to_target(
+                    Some(actor_slot),
+                    victim_slot,
+                    raw_damage,
+                    false,
+                ),
+            CombatWeaponAttackResolution::Special { .. } => self
+                .apply_combat_weapon_damage_to_target(
+                    Some(actor_slot),
+                    victim_slot,
+                    COMBAT_INSTANT_KILL_DAMAGE,
+                    false,
+                ),
+            CombatWeaponAttackResolution::OutOfRange { .. }
+            | CombatWeaponAttackResolution::NoOrdinaryDamage { .. }
+            | CombatWeaponAttackResolution::Miss { .. } => None,
+        };
+        Some(CombatWeaponAttackApplication {
+            resolution,
+            damage_application,
+        })
     }
 
     fn close_combat_attack_attempt(

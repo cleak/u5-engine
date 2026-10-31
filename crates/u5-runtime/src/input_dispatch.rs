@@ -8141,8 +8141,9 @@ fn combat_attack_result_narration(
         // The party ranged and thrown arm shares this line, and §11.1
         // makes it conditional there: it prints "only when the resolver
         // reports nobody **and** the originally aimed cell held a real
-        // actor". This engine models no scatter on that arm, so every
-        // failed party ranged roll is that case.
+        // actor". The cursor confirm scatters a failed party ranged roll
+        // first, and a scatter onto somebody arrives here as a `Hit` on
+        // that actor, so a `Miss` that reaches this arm is that case.
         CombatWeaponAttackResolution::Miss { .. } => (None, Some(format!("{target_name} missed!"))),
         CombatWeaponAttackResolution::Hit { .. } => (
             None,
@@ -8436,10 +8437,10 @@ pub(crate) fn combat_monster_attack_result_message(
     // The ranged carve-out is **not** folded in here. 11.1: "A monster's failed
     // **ranged or thrown** to-hit is not unconditionally silent ... the impact
     // point is drawn from the three-by-three neighbourhood centred on the **aim
-    // cell** ... and the **full hit chain runs against that actor**." This
-    // engine does not model that scatter, so the miss arm stays silent on both
-    // routes; the gap is a missing hit chain against a scatter victim, never a
-    // miss line, so nothing here would print on either reading.
+    // cell** ... and the **full hit chain runs against that actor**." The
+    // attack resolver runs that scatter, and a scatter onto somebody arrives
+    // here as a `Hit` on that actor; a `Miss` that reaches this arm is a
+    // scatter onto nobody, which the carve-out keeps silent.
     if matches!(
         attack.resolution,
         Some(CombatWeaponAttackResolution::Miss { .. })
