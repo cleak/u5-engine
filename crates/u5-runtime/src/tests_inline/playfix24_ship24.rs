@@ -152,3 +152,26 @@ fn playtest_s24_p24_14_a_wait_pass_collision_repaints_the_hull() {
     let counter = &state.displayed_stats_panel().counter_row;
     assert!(counter.contains(&format!("Ship:{hull}")), "{counter:?}");
 }
+
+/// P24-06: `time.md §5` - the poison point goes through the shared
+/// party-damage path, which "repaints the stats panel immediately, as its
+/// last act". An under-sail wait pass is "a fully consumed game turn"
+/// (`weather.md §5`) with an upkeep pass but no command epilogue, and the
+/// HP cell stayed stale across it.
+#[test]
+fn playtest_s24_p24_06_a_wait_pass_poison_point_repaints_the_panel() {
+    // North wind: sailing north is upwind, two wait ticks before a move.
+    let mut state = ship24_hoisted_frigate(WindState::North, 99);
+    state.party[0].status = b'P';
+    state.party[0].hp = 40;
+    state.sail_cached_direction = Some(Direction::North);
+    state.sail_cadence = 0;
+    state.repaint_stats_panel();
+    state.run_under_sail_advance_body(None).unwrap();
+    assert_eq!(state.party[0].hp, 39, "the wait pass charged the poison point");
+    assert_eq!(
+        state.displayed_stats_panel(),
+        &crate::stats_panel::stats_panel_snapshot_of(&state),
+        "the panel shows the poisoned member's new HP"
+    );
+}

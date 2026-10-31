@@ -3923,10 +3923,14 @@ impl PlayState {
         if self.party[index].status != b'P' || !self.party[index].living() {
             return false;
         }
-        self.party[index].apply_damage(FIRST_PLAYABLE_HOURLY_POISON_DAMAGE);
-        if self.party[index].hp == 0 && self.active_player == Some(index) {
-            self.active_player = None;
-        }
+        // `time.md §5`, "The shared party-damage path": "Both the poison
+        // point and each starvation roll are applied through one common
+        // routine", which plays the damage feedback, clears the selector on
+        // a death and "then repaints the stats panel immediately, as its
+        // last act". Subtracted here directly, the point waited for a
+        // command epilogue, so the HP cell stayed stale across the under-sail
+        // wait passes that have none (playtest S24 P24-06).
+        self.apply_shared_party_damage(index, FIRST_PLAYABLE_HOURLY_POISON_DAMAGE);
         true
     }
 
