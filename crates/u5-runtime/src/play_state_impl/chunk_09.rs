@@ -6001,6 +6001,11 @@ impl PlayState {
         } else {
             "COLLISION!"
         });
+        // `text-output.md §10.2` / `overworld.md §6.2.5`: the refusal is a
+        // closed line. Left inferred from the text, the row stayed open for
+        // the rest of the session and every later Get, Search and Look
+        // result lost the blank row under its echo (playtest S24 P24-04).
+        self.close_message_row();
         self.sail_cadence = 0;
         // `overworld.md §6.2.5`: "The step remains refused, party
         // coordinates do not change, and the cached sail direction is
