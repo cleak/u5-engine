@@ -3835,10 +3835,14 @@ impl PlayState {
         }
     }
 
+    /// `time.md §5` unconditional part: "Every member that was neither Dead
+    /// nor Sleeping increments the provision-consumer count, Poisoned members
+    /// included." Ashes is not Dead, so an Ashes member from an edited or
+    /// legacy save (`saved-gam.md §3.2`) still counts.
     pub fn hourly_provision_consumer_count(&self) -> u16 {
         self.party
             .iter()
-            .filter(|member| !matches!(member.status, b'D' | b'A' | b'S'))
+            .filter(|member| !matches!(member.status, b'D' | b'S'))
             .count() as u16
     }
 
@@ -3905,8 +3909,10 @@ impl PlayState {
         }
         for index in 0..self.party.len() {
             let member = &mut self.party[index];
+            // `time.md §5` trailing part: every active member "who is not
+            // Dead" and wears the ring rolls, so an Ashes wearer at 0 HP
+            // (`saved-gam.md §3.2`) still draws and can regain a point.
             if member.status == b'D'
-                || !member.living()
                 || self.party_equipment[index][EQUIP_SLOT_RING]
                     != EQUIPMENT_ID_RING_REGENERATION as u8
             {

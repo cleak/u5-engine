@@ -2347,11 +2347,13 @@ fn hourly_status_pass_spends_food_at_public_decrement_hours() {
         },
     ];
 
-    assert_eq!(state.hourly_provision_consumer_count(), 2);
+    // `time.md §5`: only Dead and Sleeping are skipped, so the Ashes
+    // member in slot 4 is a consumer alongside Good and Poisoned.
+    assert_eq!(state.hourly_provision_consumer_count(), 3);
     state.advance_turn_with_minutes(1);
 
     assert_eq!(state.clock.hour, 6);
-    assert_eq!(state.food, 8);
+    assert_eq!(state.food, 7);
     assert_eq!(state.party[0].hp, 12);
     assert_eq!(state.party[1].hp, 11);
     assert_eq!(state.party[1].status, b'P');
@@ -2510,6 +2512,37 @@ fn hourly_ring_regeneration_tick_uses_ring_slot_and_living_hp_cap() {
         state.stats_panel_command_refresh,
         crate::stats_panel::PanelRefreshMode::Deferred
     );
+}
+
+/// `time.md §5` trailing part: the ring roll is gated on "not Dead" only, so
+/// an Ashes wearer at 0 HP (`saved-gam.md §3.2`) still draws and can gain 1 HP.
+#[test]
+fn hourly_ring_regeneration_tick_rolls_for_ashes_wearer() {
+    let mut state = world_state(open_world_grid(), 10, 20);
+    state.party = vec![PartyMember {
+        slot: 0,
+        class_byte: b'A',
+        status: b'A',
+        climb_stat: 30,
+        mana: 8,
+        hp: 0,
+        max_hp: 20,
+        level: 8,
+    }];
+    state.party_equipment = default_party_equipment(1);
+    state.party_equipment[0][EQUIP_SLOT_RING] = EQUIPMENT_ID_RING_REGENERATION as u8;
+
+    let mut healed = 0;
+    let mut draws = 0;
+    while healed == 0 && draws < 200 {
+        let before = state.prng_state;
+        healed = state.apply_hourly_ring_regeneration_tick();
+        assert_ne!(state.prng_state, before, "an Ashes wearer makes the 1-in-8 draw");
+        draws += 1;
+    }
+    assert_eq!(healed, 1);
+    assert_eq!(state.party[0].hp, 1);
+    assert_eq!(state.party[0].status, b'A');
 }
 
 #[test]
