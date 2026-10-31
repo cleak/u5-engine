@@ -246,7 +246,17 @@ impl PlayState {
                 },
                 aux3: 0,
             };
+            // `active-objects.md §3` "Auxiliary bytes 5 and 7" / `encounters.md
+            // §4` (issue #298 Q32, R549/R550): the spawn's record write covers
+            // bytes 0 through 5 and slot allocation writes nothing, "so byte 7
+            // of a new object keeps whatever its slot last held, whether the
+            // slot was freed, pruned, or taken by evicting a live low-priority
+            // occupant" - a pirate ship inherits it as its wind cadence counter.
+            let prior_dep3: Vec<u8> = self.active_objects.iter().map(|o| o.aux3).collect();
             let slot = self.allocate_active_object_slot(object)?;
+            if let Some(&dep3) = prior_dep3.get(slot) {
+                self.active_objects[slot].aux3 = dep3;
+            }
             self.mark_visibility_dirty();
             return Some(slot);
         }
