@@ -2093,7 +2093,15 @@ pub fn stats_panel_repaint_requests_strip_scroll(state: &PlayState) -> bool {
 }
 
 fn render_stats_panel_middle_counter(state: &PlayState) -> String {
-    match stats_panel_middle_counter(state.player.transport.save_marker()) {
+    // `stats-panel.md §6`: the ship variant applies only "When the scene is
+    // not combat-class"; a fight that starts aboard shows the gold ladder
+    // until the post-combat repaint (playtest P25-06).
+    let counter = if state.combat_active {
+        StatsPanelMiddleCounter::PartyGold
+    } else {
+        stats_panel_middle_counter(state.player.transport.save_marker())
+    };
+    match counter {
         StatsPanelMiddleCounter::PartyGold => {
             // `stats-panel.md §6` "Gold, ordinary case": one space each for
             // gold below 1000, 100 and 10, then the literal ` G:`.
