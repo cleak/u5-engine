@@ -246,7 +246,17 @@ impl PlayState {
                 },
                 aux3: 0,
             };
+            // `active-objects.md §3` "Auxiliary bytes 5 and 7" / `encounters.md
+            // §4` (issue #298 Q32, R549/R550): the spawn's record write covers
+            // bytes 0 through 5 and slot allocation writes nothing, "so byte 7
+            // of a new object keeps whatever its slot last held, whether the
+            // slot was freed, pruned, or taken by evicting a live low-priority
+            // occupant" - a pirate ship inherits it as its wind cadence counter.
+            let prior_dep3: Vec<u8> = self.active_objects.iter().map(|o| o.aux3).collect();
             let slot = self.allocate_active_object_slot(object)?;
+            if let Some(&dep3) = prior_dep3.get(slot) {
+                self.active_objects[slot].aux3 = dep3;
+            }
             self.mark_visibility_dirty();
             return Some(slot);
         }
@@ -2695,11 +2705,21 @@ impl PlayState {
 
     pub fn refresh_world_underfoot_blackout_latch(&mut self) -> bool {
         if self.world_underfoot_blackout_active() {
-            if !self.world_underfoot_blackout_latched || self.ambient_light != 0 {
+            let first_frame = !self.world_underfoot_blackout_latched;
+            if first_frame || self.ambient_light != 0 {
                 self.mark_visibility_dirty();
             }
             self.world_underfoot_blackout_latched = true;
             self.ambient_light = 0;
+            // `overworld.md §5` step 2 (issue #305 Q5, R641): "On the first
+            // frame entering that state, run one world tick (a full world
+            // step with its draws). On later frames while the latch stays
+            // set on that tile the probe runs neither a world tick nor a
+            // clock call."
+            if first_frame {
+                let _ = self.advance_visual_tick();
+                self.ambient_light = 0;
+            }
             return true;
         }
 

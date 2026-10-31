@@ -2958,6 +2958,34 @@ fn native_world_encounter_spawner_seeds_sea_creature_auxiliary() {
 }
 
 #[test]
+fn native_world_encounter_spawner_keeps_the_slots_byte_7_per_active_objects_md_3() {
+    // `active-objects.md §3` "Auxiliary bytes 5 and 7" (issue #298 Q32):
+    // the spawn write covers bytes 0..5 and allocation writes nothing, so
+    // "a slot that last held a frigate hands its skiff count to a new pirate
+    // ship as that ship's starting cadence counter".
+    let mut state = britannia_state(vec![0x02; WORLD_CELLS], 0, 40);
+    state.prng_state = 0x0007;
+    state.active_objects.push(ActiveObject {
+        type_byte: 0,
+        tile: 0x20,
+        x: 10,
+        y: 10,
+        z: WorldPlane::Britannia.save_floor(),
+        phase: STEADY_PHASE,
+        aux1: 50,
+        aux3: 3,
+    });
+
+    let slot = state.spawn_native_world_encounter(WorldPlane::Britannia);
+
+    assert_eq!(slot, Some(1));
+    let object = state.active_objects[1];
+    assert_eq!(object.type_byte, 0x2C);
+    assert_eq!(object.aux1, SEA_CREATURE_SPAWN_AUX_SEED);
+    assert_eq!(object.aux3, 3, "byte 7 must survive the spawn");
+}
+
+#[test]
 fn native_world_encounter_spawner_evicts_on_a_full_table_per_encounters_md_9() {
     // `encounters.md §9`: "A full table does **not** make the spawn
     // fail. The spawner asks the shared slot allocator for a record, and
