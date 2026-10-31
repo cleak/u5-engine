@@ -68,3 +68,41 @@ fn playtest_s24_p24_05_a_wait_pass_dock_keeps_its_line() {
     assert_eq!(&rows[get - 2..get], &[">Docked!", ""], "{rows:?}");
     let _ = fs::remove_dir_all(dir);
 }
+
+fn ship24_clock_minutes(state: &PlayState) -> u32 {
+    u32::from(state.clock.hour) * 60 + u32::from(state.clock.minute)
+}
+
+/// P24-07 / P24-16: `weather.md §5` - the HMS Cape rigging flag "affects the
+/// wait-pass timing", and `timing.md §8.2` gives the one-minute increment to
+/// the input helper's auto-advance pass only. A course change (`vehicles.md
+/// §6`: "consumes a full turn, in calm wind too") and the calm-wind silent
+/// consume are commands, so they keep the two-minute outdoor turn.
+#[test]
+fn playtest_s24_p24_07_rigging_leaves_hoisted_commands_at_two_minutes() {
+    let dir = debug_game_dir();
+    let mut state = ship24_hoisted_frigate(WindState::Calm, 99);
+    state.special_items[SPECIAL_ITEM_HMS_CAPE_PLANS_INDEX] = 2;
+    assert!(state.ship_rigging_active());
+    assert_eq!(state.sail_cached_direction, None);
+
+    // Calm, facing unchanged: consumed silently.
+    let before = ship24_clock_minutes(&state);
+    handle_play_key_input(&mut state, 'w', "", &dir).unwrap();
+    assert_eq!(ship24_clock_minutes(&state) - before, 2, "calm silent consume");
+
+    // A course change.
+    let before = ship24_clock_minutes(&state);
+    handle_play_key_input(&mut state, 'd', "", &dir).unwrap();
+    assert_eq!(state.overworld_frigate_facing(), Some(Direction::East));
+    assert_eq!(ship24_clock_minutes(&state) - before, 2, "Head East");
+
+    // The control: a real wait pass still takes the rigged minute.
+    state.wind = WindState::West;
+    state.sail_cached_direction = Some(Direction::East);
+    state.sail_cadence = 0;
+    let before = ship24_clock_minutes(&state);
+    state.run_under_sail_advance_body(None).unwrap();
+    assert_eq!(ship24_clock_minutes(&state) - before, 1, "rigged wait pass");
+    let _ = fs::remove_dir_all(dir);
+}

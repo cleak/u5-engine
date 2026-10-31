@@ -1975,6 +1975,21 @@ impl PlayState {
         self.apply_pending_world_object_walker_pass();
     }
 
+    /// The turn a hoisted-sail *command* consumes without a released step: a
+    /// course change (`vehicles.md §6`: it "consumes a full turn, in calm
+    /// wind too") and the calm-wind silent consume of an unchanged heading.
+    ///
+    /// These are movement commands, not wait passes. `weather.md §5`: the
+    /// HMS Cape rigging flag "affects the wait-pass timing", and `timing.md
+    /// §8.2` gives its one-minute increment to the input helper's
+    /// auto-advance pass only, so the command keeps the ordinary outdoor
+    /// increment and runs the epilogue every time (playtest S24 P24-07,
+    /// P24-16).
+    pub(crate) fn advance_sailing_command_turn(&mut self) {
+        self.advance_turn();
+        self.apply_pending_world_object_walker_pass();
+    }
+
     pub fn use_magic_carpet(&mut self) -> MoveOutcome {
         if self.special_items[SPECIAL_ITEM_MAGIC_CARPET_INDEX] == 0 {
             // The U-Use picker lists only what the party carries, so no

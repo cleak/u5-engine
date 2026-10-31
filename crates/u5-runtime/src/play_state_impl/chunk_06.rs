@@ -206,7 +206,7 @@ impl PlayState {
                 self.sail_cached_direction = Some(direction);
                 self.sail_cadence = 0;
             }
-            self.advance_sailing_wait_turn();
+            self.advance_sailing_command_turn();
         } else {
             self.advance_turn();
         }
@@ -270,7 +270,7 @@ impl PlayState {
             self.sail_cached_direction = Some(direction);
             self.sail_cadence = 0;
             if self.wind.player_sail_wait_ticks(direction).is_none() {
-                self.advance_sailing_wait_turn();
+                self.advance_sailing_command_turn();
                 self.message.clear();
                 return Some(MoveOutcome::SailStalled);
             }
