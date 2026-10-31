@@ -223,3 +223,69 @@ fn aud_town_13_9_rejected_install_still_runs_the_resident_entry_sweep() {
     }
     let _ = fs::remove_dir_all(dir);
 }
+
+/// Audit containers:3:get-skips-actors. `containers.md §3` step 3: the
+/// object scan accepts only class bytes below sixteen or the Moonstone,
+/// carpet and regalia/shard classes, "while actors, blockers, already-handled
+/// entries, and unrelated rows at the same coordinate are ignored", and step
+/// 5: "If no object matches, the handler classifies the live map tile". An
+/// actor standing on crops does not stop `Crops picked!`.
+#[test]
+fn aud_town_containers_3_get_skips_an_actor_standing_on_crops() {
+    assert!(get_object_scan_accepts(0x02));
+    assert!(get_object_scan_accepts(0x0E));
+    assert!(get_object_scan_accepts(0x19));
+    assert!(get_object_scan_accepts(0x1B));
+    assert!(get_object_scan_accepts(0xB6));
+    assert!(!get_object_scan_accepts(0x50));
+    assert!(!get_object_scan_accepts(0x1E));
+
+    let dir = debug_game_dir();
+    let _ = fs::remove_file(dir.join(TOWN_GET_TILE_TABLE_FILE));
+    let mut grid = open_grid();
+    grid[32 + 2] = GET_TILE_CROPS_SOURCE;
+    let mut state = test_state(grid, 1, 1);
+    state.player.facing = Direction::East;
+    let mut actor = ActiveObject::empty();
+    actor.type_byte = 0x50;
+    actor.tile = 0x50;
+    actor.x = 2;
+    actor.y = 1;
+    state.active_objects.push(actor);
+    let food = state.food;
+
+    assert_eq!(state.get_facing_with_game_dir(&dir).unwrap(), MoveOutcome::Got);
+    assert_eq!(state.message, GET_TILE_CROPS_PICKED_LINE);
+    assert_eq!(state.grid[32 + 2], GET_TILE_CROPS_REPLACEMENT);
+    assert_eq!(state.food, food + 1);
+    assert!(state.active_objects.iter().any(|object| *object == actor));
+    let _ = fs::remove_dir_all(dir);
+}
+
+/// Audit containers:3:get-skips-actors, the item half: an actor sharing the
+/// cell with a gettable item is skipped and the scan keeps going to the item.
+#[test]
+fn aud_town_containers_3_get_scans_past_an_actor_to_an_item() {
+    let dir = debug_game_dir();
+    let _ = fs::remove_file(dir.join(TOWN_GET_TILE_TABLE_FILE));
+    let mut state = test_state(open_grid(), 1, 1);
+    state.player.facing = Direction::East;
+    let mut actor = ActiveObject::empty();
+    actor.type_byte = 0x50;
+    actor.tile = 0x50;
+    actor.x = 2;
+    actor.y = 1;
+    let mut gold = ActiveObject::empty();
+    gold.type_byte = 0x02;
+    gold.tile = 0x02;
+    gold.aux1 = 7;
+    gold.x = 2;
+    gold.y = 1;
+    state.active_objects.push(actor);
+    state.active_objects.push(gold);
+    let before = state.gold;
+
+    assert_eq!(state.get_facing_with_game_dir(&dir).unwrap(), MoveOutcome::Got);
+    assert_eq!(state.gold, before + 7);
+    let _ = fs::remove_dir_all(dir);
+}

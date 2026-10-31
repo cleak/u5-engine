@@ -739,12 +739,14 @@
 
     /// `RETRACTIONS.md` R476: "There is one byte. The record's inventory
     /// class byte is both the acceptance test and the grant dispatcher's
-    /// selector." The separate visual filter is withdrawn, so the handler
-    /// takes the record it finds at the cell and lets its class decide -
-    /// it does not look past a record whose class refuses to one underneath.
-    /// This test used to assert the opposite.
+    /// selector." `containers.md §3` step 3 makes that byte a filter: only a
+    /// class below sixteen or the Moonstone, carpet and regalia/shard classes
+    /// is accepted, and other rows at the coordinate "are ignored", so the
+    /// scan looks past class `0xc0` to the gold record (audit
+    /// containers:3:get-skips-actors). This test used to assert that Get
+    /// stopped at the first record.
     #[test]
-    fn town_get_stops_at_the_first_record_whose_class_refuses() {
+    fn town_get_scans_past_a_record_outside_the_accepted_classes() {
         let dir = debug_game_dir();
         let mut state = test_state(open_grid(), 1, 1);
         state.player.facing = Direction::East;
@@ -772,16 +774,12 @@
 
         assert_eq!(
             state.get_facing_with_game_dir(&dir).unwrap(),
-            MoveOutcome::Blocked
+            MoveOutcome::Got
         );
 
-        // Class `0xc0` reaches the dispatcher's default arm, so nothing is
-        // consumed and nothing is credited - the gold under it stays put.
-        assert_eq!(state.message, GET_NOTHING_REFUSAL);
         assert!(!state.active_objects[1].is_empty());
-        assert!(!state.active_objects[2].is_empty());
-        assert_eq!(state.gold, gold_before);
-        assert_eq!(state.turn, 0);
+        assert!(state.active_objects[2].is_empty());
+        assert_eq!(state.gold, gold_before + 7);
         let _ = fs::remove_dir_all(dir);
     }
 

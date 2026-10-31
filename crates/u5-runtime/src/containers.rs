@@ -261,6 +261,15 @@ pub const fn inventory_add_class(class_code: u8) -> InventoryAddClass {
     }
 }
 
+/// `containers.md §3` step 3: G-Get's object scan "filter is the record's
+/// inventory class byte - accepted when it is below sixteen, or is the
+/// Moonstone class, the magic carpet class, or one of the four regalia/shard
+/// classes - while actors, blockers, already-handled entries, and unrelated
+/// rows at the same coordinate are ignored."
+pub const fn get_object_scan_accepts(class_code: u8) -> bool {
+    class_code < 0x10 || matches!(class_code, 0x19 | 0x1B | 0xB4..=0xB7)
+}
+
 /// The loose item-art band, after tile-bank folding, plus the two low-byte
 /// special markers.
 ///
