@@ -109,3 +109,40 @@ fn playfix25_p25_04_unmapped_key_after_a_hoisted_step_takes_the_marker_row() {
     state.toggle_typeahead_buffer();
     assert!(!overworld_prompt_pair_is_suppressed(&state));
 }
+
+/// P25-04 review: `main-loop.md`'s asleep arm "emits the command prompt's
+/// line-feed-and-marker pair **itself** ... and then skips the shared input
+/// helper", so the sleep row after a hoisted step keeps its own pair and does
+/// not spend the `text-output.md §10.2` gate the echo helper now tests.
+#[test]
+fn playfix25_p25_04_sleep_row_after_a_hoisted_step_keeps_its_pair_and_the_gate() {
+    let dir = debug_game_dir();
+    let mut state = bare_marker_frigate(WindState::Calm, 99, "Yell HOIST!");
+    handle_play_key_input(&mut state, 'w', "", &dir).unwrap();
+    assert!(overworld_prompt_pair_is_suppressed(&state));
+    for member in &mut state.party {
+        member.status = b'S';
+    }
+    state.prng_state = (0..=u16::MAX)
+        .find(|seed| {
+            let mut candidate = *seed;
+            u5_prng_range_u16(&mut candidate, 0, u16::from(TOWN_SLEEP_WAKE_ROLL_MAX)) != 0
+        })
+        .expect("a seed that keeps the party asleep");
+    let _ = state.apply_exploration_turn_gate(&dir).unwrap();
+    let sleep = state
+        .message_entries()
+        .iter()
+        .rev()
+        .find(|entry| entry.text == PARTY_SLEEP_LINE)
+        .expect("the sleep pass printed its row");
+    assert!(
+        !sleep.prompt_pair_suppressed,
+        "the asleep arm draws its own pair outside the helper"
+    );
+    assert!(
+        overworld_prompt_pair_is_suppressed(&state),
+        "the gate is left for the first helper call after waking"
+    );
+    let _ = fs::remove_dir_all(dir);
+}

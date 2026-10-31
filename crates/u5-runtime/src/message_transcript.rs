@@ -568,6 +568,22 @@ impl PlayState {
         self.message_flushed = text;
     }
 
+    /// [`Self::emit_command_echo_line`] for a marker row the loop draws
+    /// without entering the overworld helper, so the `text-output.md §10.2`
+    /// gate is neither tested nor re-armed.
+    ///
+    /// `main-loop.md` (party-capability check): the asleep arm "emits the
+    /// command prompt's line-feed-and-marker pair **itself**, before the
+    /// sleep line, and then skips the shared input helper and the key read
+    /// entirely". A sleep pass after a hoisted step therefore keeps its pair,
+    /// and the gate is still pending for the first helper call after waking.
+    pub(crate) fn emit_command_echo_line_outside_helper(&mut self, text: impl Into<String>) {
+        let text = text.into();
+        self.push_message_entry(text.clone(), true);
+        self.message = text.clone();
+        self.message_flushed = text;
+    }
+
     /// [`Self::emit_message_line`] for a line the active window's centre
     /// flag is set for. `text-output.md §3`: "`0xFC` sets centre-output",
     /// and §3's window table has "the next call to the wrap-aware string
