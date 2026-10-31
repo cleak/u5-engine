@@ -5250,7 +5250,11 @@ impl PlayState {
         self.area = Area::Town { scene, floor };
         self.player.x = TOWN_ARREST_JAIL_X as usize;
         self.player.y = TOWN_ARREST_JAIL_Y as usize;
-        self.player.transport = TransportState::Foot;
+        // `town-mode.md §14`'s ordered surrender writes no transport marker,
+        // and §15.1's entry setup does not "separate the party from a
+        // vehicle", so a mounted party wakes in the jail still mounted. The
+        // engine used to dismount it here and the horse was lost (playtest
+        // P24-10).
         self.clear_town_floor_reload_door_state();
         let tlk = parse_tlk(&game_dir.join(format!("{}.TLK", scene.family.stem())))?;
         let npc_slots = parse_npc_block(game_dir, scene, &tlk)?;

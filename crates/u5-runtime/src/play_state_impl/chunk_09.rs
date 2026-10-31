@@ -3656,6 +3656,7 @@ impl PlayState {
         }
         self.sync_player_object();
         self.world_walkers_ran_this_turn = false;
+        self.town_post_action_cleanup_skipped = false;
         if self.time_stop_counter != 0 {
             self.time_stop_counter = self.time_stop_counter.saturating_sub(1);
         } else if !self.combat_active {
@@ -3680,6 +3681,14 @@ impl PlayState {
                 }
             };
             self.world_walkers_ran_this_turn = gate.walkers_run();
+            // `town-mode.md §7` step 4: the transport-marker gate skips only
+            // the walkers; Negate Time and Quickness skip post-action
+            // cleanup with them.
+            self.town_post_action_cleanup_skipped = matches!(self.area, Area::Town { .. })
+                && matches!(
+                    gate,
+                    WalkerEffectGate::SkippedByNegateTime | WalkerEffectGate::SkippedByQuickness
+                );
             let ordinary_town_turn =
                 matches!(self.area, Area::Town { .. }) && minutes == MINUTES_PER_INDOOR_TURN;
             let deferred_town_tail = ordinary_town_turn || defer_stonegate_epilogue;

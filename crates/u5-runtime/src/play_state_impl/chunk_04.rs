@@ -4998,6 +4998,7 @@ impl PlayState {
             &raw_blob,
             keyword,
             shoppe_renderer.as_ref(),
+            Some(game_dir),
         ))
     }
 
@@ -5401,7 +5402,7 @@ impl PlayState {
         keyword: Option<&str>,
     ) -> MoveOutcome {
         self.talk_direction_with_dialogue_and_keyword_raw_inner(
-            direction, dialogue, raw_blob, keyword, None,
+            direction, dialogue, raw_blob, keyword, None, None,
         )
     }
 
@@ -5412,6 +5413,7 @@ impl PlayState {
         raw_blob: &HashMap<u16, Vec<Vec<u8>>>,
         keyword: Option<&str>,
         shoppe_renderer: Option<&crate::shoppe_bark::ShoppeTextRenderer>,
+        game_dir: Option<&Path>,
     ) -> MoveOutcome {
         if !matches!(self.area, Area::Town { .. }) {
             self.message = "Funny, no response!".to_string();
@@ -5528,7 +5530,18 @@ impl PlayState {
         }
         if dialog_id == BLACKTHORN_GUARD_DEMAND_DIALOG_ID {
             let consume_turn = !self.talk_entered_by_contact;
-            return match self.begin_blackthorn_guard_demand(target_x, target_y, consume_turn, None) {
+            // `town-mode.md §14`: explicit `T` is one of the three routings
+            // into the same arrest sequence, which "branches on the current
+            // location before it prints anything" - so a Badge-less palace
+            // refusal here is the audience, not the surrender question. The
+            // asset-backed Talk passed no game directory, so the arrest fell
+            // back to the challenge (playtest P24-08).
+            return match self.begin_blackthorn_guard_demand(
+                target_x,
+                target_y,
+                consume_turn,
+                game_dir,
+            ) {
                 Ok(outcome) => outcome,
                 Err(_) => MoveOutcome::Blocked,
             };
@@ -7032,6 +7045,9 @@ impl PlayState {
                 if game_dir.is_some() {
                     self.emit_message_line(crate::commands::TALK_DISPATCHER_LEADING_FEED);
                 }
+                if self.town_post_action_cleanup_skipped {
+                    return Ok(MoveOutcome::Used);
+                }
                 self.open_town_arrest(arrest, game_dir)
             }
         }
@@ -7114,6 +7130,18 @@ impl PlayState {
                 self.active_blackthorn_guard_demand = None;
                 // Same §7a / §14 hand-off as the immediate refusal above.
                 self.message.clear();
+                // `town-mode.md §14`: explicit `T`'s failure "passes the
+                // arrest discriminator to cleanup", and "No arrest can begin
+                // while Negate Time is active: that gate skips post-action
+                // cleanup, the arrest's only host ... Under Quickness the
+                // same holds on the alternate turns whose gate skips the
+                // walkers and cleanup". This turn's epilogue already ran
+                // its gates, so a skipped cleanup means no arrest at all;
+                // the engine arrested anyway and then ran the jail wait on a
+                // frozen clock (playtest P24-09).
+                if self.town_post_action_cleanup_skipped {
+                    return Some(MoveOutcome::Used);
+                }
                 Some(self.open_town_arrest(active.arrest, game_dir).ok()?)
             }
         }
