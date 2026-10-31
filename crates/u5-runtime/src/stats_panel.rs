@@ -1551,6 +1551,10 @@ pub fn paint_z_stats_page_text_window(system: &mut TextWindowSystem, state: &Pla
         .active_z_stats
         .as_ref()
         .is_some_and(|session| z_stats_page_is_framed(session.page));
+    let attribute_page = state
+        .active_z_stats
+        .as_ref()
+        .is_some_and(|session| session.page == crate::ZStatsPage::Stats);
     // Measured from a capture of the stock game's framed pages: a list
     // starts on the frame's first interior row, indented one column
     // (`4-Sulfur Ash` occupies window columns 2..13), while a page whose
@@ -1619,8 +1623,13 @@ pub fn paint_z_stats_page_text_window(system: &mut TextWindowSystem, state: &Pla
         // is not clipped at the right rule (§4.5: the renderer "does not
         // clip one at run time either"); the entry builder has already
         // wrapped anything longer.
+        // §4.7: the attribute page "re-widens the window's right edge to
+        // column 39", so a five-digit HP, HM or Ex keeps its last digit
+        // there (playtest P25-07).
         let width = if framed {
             (PANEL_PICKER_ROW_CELLS + 1).saturating_sub(usize::from(column))
+        } else if attribute_page {
+            (STATS_PANEL_WIDTH + 1).saturating_sub(usize::from(column))
         } else {
             STATS_PANEL_WIDTH
         };
@@ -1898,10 +1907,14 @@ fn stats_panel_party_row(
         ' '
     };
     let status = overlay.status_override.unwrap_or(member.status);
+    // `stats-panel.md §4`: current HP is "right-justified in a four-column
+    // space-padded field" with no clamp, so an edited five-digit HP prints
+    // at its natural width and pushes the status into column 39, the stats
+    // window's last writable cell (playtest P25-07).
     (
-        fixed_panel_line(&format!(
+        panel_line_through_column_39(&format!(
             "{name:<STATS_PANEL_NAME_CELLS$}{cursor}{:>STATS_PANEL_HP_CELLS$}{}",
-            member.hp.min(9999),
+            member.hp,
             char::from(status)
         )),
         overlay,
@@ -1960,10 +1973,15 @@ fn paint_stats_panel_party_row(
         system.emit_byte(TEXT_CTRL_INVERSE_TOGGLE);
     }
     let active_marker = stats_panel_active_marker_drawn(state, active_cursor, index);
-    for (cell, byte) in fixed_panel_line(&line)
-        .bytes()
-        .take(STATS_PANEL_WIDTH - 1)
-        .enumerate()
+    // Every cell but the trailing status: fourteen, or fifteen when a
+    // five-digit HP has pushed the status into column 39 (§4).
+    let line = panel_line_through_column_39(&line);
+    let body_cells = line
+        .chars()
+        .count()
+        .clamp(STATS_PANEL_WIDTH, STATS_PANEL_WIDTH + 1)
+        - 1;
+    for (cell, byte) in line.bytes().take(body_cells).enumerate()
     {
         if active_marker && cell == STATS_PANEL_ACTIVE_MARKER_CELL {
             system.emit_byte(STATS_PANEL_ACTIVE_MARKER_GLYPH);
@@ -2072,10 +2090,7 @@ fn render_stats_panel_counter_row(state: &PlayState) -> String {
     // `stats-panel.md §6`, "Three-digit hulls run past the field": the row
     // has no clamp, so a hull of 100 or more (or an edited five-digit gold)
     // puts a digit in column 39, the stats window's last writable cell.
-    if line.chars().count() > STATS_PANEL_WIDTH {
-        return truncate_ascii_chars(&line, STATS_PANEL_WIDTH + 1);
-    }
-    fixed_panel_line(&line)
+    panel_line_through_column_39(&line)
 }
 
 /// `stats-panel.md §2.1` "The one arm that does request a scroll": a panel
@@ -2093,7 +2108,15 @@ pub fn stats_panel_repaint_requests_strip_scroll(state: &PlayState) -> bool {
 }
 
 fn render_stats_panel_middle_counter(state: &PlayState) -> String {
-    match stats_panel_middle_counter(state.player.transport.save_marker()) {
+    // `stats-panel.md §6`: the ship variant applies only "When the scene is
+    // not combat-class"; a fight that starts aboard shows the gold ladder
+    // until the post-combat repaint (playtest P25-06).
+    let counter = if state.combat_active {
+        StatsPanelMiddleCounter::PartyGold
+    } else {
+        stats_panel_middle_counter(state.player.transport.save_marker())
+    };
+    match counter {
         StatsPanelMiddleCounter::PartyGold => {
             // `stats-panel.md §6` "Gold, ordinary case": one space each for
             // gold below 1000, 100 and 10, then the literal ` G:`.
@@ -2151,6 +2174,16 @@ fn current_ship_hull(state: &PlayState) -> Option<u8> {
 
 pub(crate) fn truncate_ascii_chars(value: &str, max_chars: usize) -> String {
     value.chars().take(max_chars).collect()
+}
+
+/// A panel row with no clamp: padded out to the fifteen-cell field, but a
+/// value whose natural width overruns column 38 keeps its digit in column
+/// 39, the stats window's last writable cell (`stats-panel.md §3`).
+pub(crate) fn panel_line_through_column_39(value: &str) -> String {
+    if value.chars().count() > STATS_PANEL_WIDTH {
+        return truncate_ascii_chars(value, STATS_PANEL_WIDTH + 1);
+    }
+    fixed_panel_line(value)
 }
 
 fn fixed_panel_line(value: &str) -> String {

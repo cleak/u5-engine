@@ -1270,4 +1270,5 @@ mod tests {
     include!("tests_inline/playfix24_dun24.rs");
     include!("tests_inline/playfix25_arrest25.rs");
     include!("tests_inline/playfix25_rows25.rs");
+    include!("tests_inline/playfix25_panel25.rs");
 }
