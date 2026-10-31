@@ -236,6 +236,7 @@ pub fn run_play_script_commands(
     commands: &[String],
     tile_atlas: Option<&TileAtlas>,
 ) -> io::Result<()> {
+    run_play_script_load_entry_reaction(state, game_dir)?;
     print_play_script_snapshot(state, tile_atlas)?;
     for (index, command) in commands.iter().enumerate() {
         println!(
@@ -268,6 +269,20 @@ pub fn run_play_script_commands(
     Ok(())
 }
 
+/// `dungeon-mode.md §4` Initialisation: a save resumed on a dungeon room
+/// cell runs the room-entry helper before the first command is read, and
+/// `§5` lists resuming a dungeon save among the dungeon-mode entries. The
+/// interactive shells reach it through the exploration gate before they draw
+/// the waiting frame; a script runner records its first frame straight after
+/// the load and met the gate only when a command arrived, so an empty script
+/// showed the corridor prompt instead of the room (playtest P24-03).
+fn run_play_script_load_entry_reaction(state: &mut PlayState, game_dir: &Path) -> io::Result<()> {
+    if play_state_accepts_typeahead(state) {
+        u5_runtime::run_dungeon_entry_underfoot_reaction(state, game_dir)?;
+    }
+    Ok(())
+}
+
 /// `main-loop.md §6` step 1 / `stats-panel.md §2.3`: in the overworld and
 /// town a pending stats-panel refresh request is drained "at the head of a
 /// command prompt ... before the prompt newline and the key read". The
@@ -296,6 +311,7 @@ pub fn replay_play_script_commands<F>(
 where
     F: FnMut(&mut PlayState, usize, &str) -> io::Result<()>,
 {
+    run_play_script_load_entry_reaction(state, game_dir)?;
     for (index, command) in commands.iter().enumerate() {
         let disposition = handle_play_script_command(state, command, game_dir)?;
         state.flush_staged_narration();

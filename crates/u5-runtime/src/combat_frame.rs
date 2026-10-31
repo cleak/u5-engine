@@ -5013,6 +5013,22 @@ impl PlayState {
         let _ = std::mem::take(&mut self.combat_exit_skips_world_turn);
         self.recompute_daylight();
         self.apply_pending_world_object_walker_pass();
+        // A dungeon fight lost as its last actor climbed off the level stack
+        // owes the `dungeon-mode.md §13.2` surface exit, and nothing prints
+        // between this return and that exit (`combat.md §4`: the framer's
+        // exit prints nothing). So no prompt follows the loss line: the exit
+        // line's own leading feed (`doors-and-z-transitions.md §12.1`,
+        // `\nExit to `) closes the row `combat.md §14` leaves open ("no
+        // trailing newline"), and `Exit to` sits directly beneath
+        // `BATTLE IS LOST!` (playtest P24-02). The line is committed here so
+        // that the row state stated after it describes it.
+        if writes_result_line
+            && exit == CombatRoundLoopExit::Defeat
+            && self.pending_dungeon_surface_exit.is_some()
+        {
+            self.flush_message_slot();
+            self.open_message_row();
+        }
         CombatRoundLoopExitApplication {
             exit,
             result_code,

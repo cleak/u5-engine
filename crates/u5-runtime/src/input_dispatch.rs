@@ -473,8 +473,13 @@ pub fn run_dungeon_entry_underfoot_reaction(
     if !matches!(state.party_capability(), PartyCapability::CanAct { .. }) {
         return Ok(false);
     }
+    // `§4` runs this reaction in Initialisation, ahead of the inner loop's
+    // step-1 clock tick, so the room-entry helper hands off to combat with
+    // no minute and no turn charged (playtest P24-03). The engine charged a
+    // turn here, so a save resumed on a room cell started its fight a minute
+    // late.
     if state
-        .resolve_current_dungeon_room_trigger(Some(game_dir))?
+        .resolve_current_dungeon_room_trigger_charging(Some(game_dir), false)?
         .is_none()
     {
         return Ok(false);

@@ -702,6 +702,28 @@ fn shared_script_replay_stops_after_quit_before_later_commands() {
     assert_eq!(state.turn, 0);
 }
 
+/// Playtest P24-03. `dungeon-mode.md §4` Initialisation runs the room-entry
+/// helper for a room cell underfoot before the first command is read, and
+/// `§5` counts a resumed dungeon save among the entries. The script runner
+/// recorded its first frame, and an empty script its only frame, before that
+/// reaction: the corridor prompt instead of the room.
+#[test]
+fn script_replay_runs_the_dungeon_load_room_reaction_before_any_command() {
+    let mut grid = open_dungeon_record();
+    grid[dungeon_cell_index(4, 5, 7)] = 0xf3;
+    let mut state = dungeon_state(grid, 4, 5, 7);
+    let turn_before = state.turn;
+
+    replay_play_script_commands(&mut state, Path::new(""), &[], |_, _, _| Ok(())).unwrap();
+
+    assert_eq!(
+        state.grid[dungeon_cell_index(4, 5, 7)] & 0xf0,
+        0xa0,
+        "the room resolved"
+    );
+    assert_eq!(state.turn, turn_before, "no turn before the fight");
+}
+
 #[test]
 fn every_published_spell_code_reaches_a_modeled_dispatch_branch() {
     for (index, code) in SPELL_CODES.iter().enumerate() {
