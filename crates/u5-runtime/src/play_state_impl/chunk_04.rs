@@ -4983,6 +4983,7 @@ impl PlayState {
             &raw_blob,
             keyword,
             shoppe_renderer.as_ref(),
+            Some(game_dir),
         ))
     }
 
@@ -5386,7 +5387,7 @@ impl PlayState {
         keyword: Option<&str>,
     ) -> MoveOutcome {
         self.talk_direction_with_dialogue_and_keyword_raw_inner(
-            direction, dialogue, raw_blob, keyword, None,
+            direction, dialogue, raw_blob, keyword, None, None,
         )
     }
 
@@ -5397,6 +5398,7 @@ impl PlayState {
         raw_blob: &HashMap<u16, Vec<Vec<u8>>>,
         keyword: Option<&str>,
         shoppe_renderer: Option<&crate::shoppe_bark::ShoppeTextRenderer>,
+        game_dir: Option<&Path>,
     ) -> MoveOutcome {
         if !matches!(self.area, Area::Town { .. }) {
             self.message = "Funny, no response!".to_string();
@@ -5513,7 +5515,18 @@ impl PlayState {
         }
         if dialog_id == BLACKTHORN_GUARD_DEMAND_DIALOG_ID {
             let consume_turn = !self.talk_entered_by_contact;
-            return match self.begin_blackthorn_guard_demand(target_x, target_y, consume_turn, None) {
+            // `town-mode.md §14`: explicit `T` is one of the three routings
+            // into the same arrest sequence, which "branches on the current
+            // location before it prints anything" - so a Badge-less palace
+            // refusal here is the audience, not the surrender question. The
+            // asset-backed Talk passed no game directory, so the arrest fell
+            // back to the challenge (playtest P24-08).
+            return match self.begin_blackthorn_guard_demand(
+                target_x,
+                target_y,
+                consume_turn,
+                game_dir,
+            ) {
                 Ok(outcome) => outcome,
                 Err(_) => MoveOutcome::Blocked,
             };
