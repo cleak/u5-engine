@@ -14025,6 +14025,8 @@ fn drive_visual(
     // through `handle_play_key_input`, so the shell marks it too; a prompt
     // still open drops it again (`run_visual_input_helper_entry`).
     visual.state.overworld_input_helper_entry_owed = true;
+    // `overworld.md §5` step 7: back to step 2, whose probe is owed again.
+    visual.state.world_underfoot_probe_owed = true;
 
     let v: &mut VisualState = visual.as_mut();
     v.prompt_cursor_visible = visual_line_prompt_active(&v.state);

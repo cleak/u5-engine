@@ -1022,7 +1022,13 @@ impl PlayState {
             return Ok(outcome);
         }
         let ship_under_sail = self.player.transport.is_ship_under_sail();
-        let underfoot_blackout_latched = self.refresh_world_underfoot_blackout_latch();
+        // `overworld.md §5`: "The pre-loop underfoot latch is also passed
+        // into the outdoor movement dispatcher." The latch is the step 2
+        // probe's, which runs once per loop iteration at the loop head; a
+        // driver that reaches the move without passing the loop head (a
+        // direct call) runs this iteration's probe here instead.
+        self.run_world_underfoot_probe_if_owed();
+        let underfoot_blackout_latched = self.world_underfoot_blackout_latched;
 
         let nx = nx.rem_euclid(WORLD_SIDE as isize) as usize;
         let ny = ny.rem_euclid(WORLD_SIDE as isize) as usize;

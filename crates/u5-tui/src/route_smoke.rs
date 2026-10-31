@@ -661,6 +661,20 @@ pub fn route_smoke_cases() -> Vec<RouteSmokeCase> {
         ..PlayOptions::default()
     };
     natural_moongate_trammel.moonstone_slots[0] = gate_travel_to_underworld.moonstone_slots[0];
+    // The `overworld.md §5` step 2 zero-minute cleanup runs on every frame
+    // and re-applies the natural gates, so the seeded live gate must be one
+    // the cleanup keeps: a buried Moonstone's cell at full gate presence, with
+    // an hour snapshot that agrees with the directly set clock (a stale one
+    // fires the hour bundle, which re-reads the moon glyphs this route pins
+    // for its destination).
+    natural_moongate_trammel.cleanup_previous_hour = 1;
+    natural_moongate_trammel.natural_moongate_counter = u5_runtime::MOONGATE_PHASE_FULL;
+    natural_moongate_trammel.moonstone_slots[1] = MoonstoneGateSlot {
+        scene: 0,
+        x: 62,
+        y: 124,
+        z: WorldPlane::Britannia.save_floor() as u8,
+    };
 
     let natural_moongate_empty_slot = PlayOptions {
         target: PlayTarget::World(WorldPlane::Britannia),

@@ -232,6 +232,11 @@ fn playfix_gate_state(party_x: usize) -> PlayState {
         y: 7,
         z: WorldPlane::Britannia.save_floor() as u8,
     };
+    // The clock was set directly; the per-frame zero-minute cleanup of
+    // `overworld.md §5` step 2 would otherwise see an hour change it never
+    // ran and fire the hour bundle, re-rolling the gate set this fixture
+    // pins.
+    state.cleanup_previous_hour = state.clock.hour;
     state
 }
 

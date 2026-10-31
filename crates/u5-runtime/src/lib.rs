@@ -1277,4 +1277,5 @@ mod tests {
     include!("tests_inline/playfix25_rows25.rs");
     include!("tests_inline/playfix25_panel25.rs");
     include!("tests_inline/auditfix1_combat_scatter.rs");
+    include!("tests_inline/audfollow.rs");
 }

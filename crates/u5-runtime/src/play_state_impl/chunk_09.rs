@@ -230,15 +230,22 @@ impl PlayState {
                 continue;
             }
 
-            let dx = wrapped_world_axis_delta(self.player.x, x);
-            let dy = wrapped_world_axis_delta(self.player.y, y);
+            // `active-objects.md §3` ("The record write used at spawn covers
+            // only bytes 0 through 5 ... while slot allocation writes nothing
+            // to the record") and `encounters.md §4` ("the spawn's record
+            // write (bytes 0 through 5)"): byte 6, the phase byte, is not
+            // written either, so the new object keeps the phase its slot last
+            // held. Byte 6 "Carries **no facing**" (R340), so nothing points
+            // it toward the party.
+            let prior_phase: Vec<u8> = self.active_objects.iter().map(|o| o.phase).collect();
             let object = ActiveObject {
                 type_byte,
                 tile: type_byte,
                 x,
                 y,
                 z: plane.save_floor(),
-                phase: active_object_phase_toward_player(dx, dy),
+                // A slot the table has never held is an all-zero record.
+                phase: 0,
                 aux1: if sea_creature_spawn_seeds_aux(type_byte) {
                     SEA_CREATURE_SPAWN_AUX_SEED
                 } else {
@@ -258,6 +265,9 @@ impl PlayState {
                 self.active_objects[slot].aux3 = dep3;
             }
             self.mark_visibility_dirty();
+            if let Some(&phase) = prior_phase.get(slot) {
+                self.active_objects[slot].phase = phase;
+            }
             return Some(slot);
         }
         None
@@ -2703,6 +2713,7 @@ impl PlayState {
         overworld_underfoot_forces_dark(tile, self.active_effect_tag.unwrap_or(0))
     }
 
+    /// `overworld.md §5` step 2, the pre-loop tile probe (R641).
     pub fn refresh_world_underfoot_blackout_latch(&mut self) -> bool {
         if self.world_underfoot_blackout_active() {
             let first_frame = !self.world_underfoot_blackout_latched;
@@ -2723,11 +2734,24 @@ impl PlayState {
             return true;
         }
 
-        if self.world_underfoot_blackout_latched {
-            self.world_underfoot_blackout_latched = false;
-            self.mode_zero_cleanup();
-        }
+        // "On every frame on which the probe does not take the `0xFF` arm,
+        // it runs a zero-minute cleanup call so daylight is recomputed
+        // without advancing time" - not only on the frame the latch clears.
+        self.world_underfoot_blackout_latched = false;
+        self.mode_zero_cleanup();
         false
+    }
+
+    /// Run this loop iteration's `overworld.md §5` step 2 probe if it has not
+    /// run yet. Only the overworld loop has the probe; the owed mark is
+    /// dropped in every other scene.
+    pub fn run_world_underfoot_probe_if_owed(&mut self) {
+        if !std::mem::take(&mut self.world_underfoot_probe_owed) {
+            return;
+        }
+        if matches!(self.area, Area::World { .. }) {
+            let _ = self.refresh_world_underfoot_blackout_latch();
+        }
     }
 
     /// Convenience wrapper: carve the whole `visible_radius` disc, i.e.
