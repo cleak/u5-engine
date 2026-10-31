@@ -1258,6 +1258,7 @@ mod tests {
     include!("tests_inline/playfix20_misc20.rs");
     include!("tests_inline/playfix21_upkeep21.rs");
     include!("tests_inline/spec312.rs");
+    include!("tests_inline/auditfix1_world.rs");
     include!("tests_inline/playfix21_misc21.rs");
     include!("tests_inline/playfix22_rest22.rs");
     include!("tests_inline/dungeon_turn_order.rs");

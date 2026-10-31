@@ -2705,11 +2705,21 @@ impl PlayState {
 
     pub fn refresh_world_underfoot_blackout_latch(&mut self) -> bool {
         if self.world_underfoot_blackout_active() {
-            if !self.world_underfoot_blackout_latched || self.ambient_light != 0 {
+            let first_frame = !self.world_underfoot_blackout_latched;
+            if first_frame || self.ambient_light != 0 {
                 self.mark_visibility_dirty();
             }
             self.world_underfoot_blackout_latched = true;
             self.ambient_light = 0;
+            // `overworld.md §5` step 2 (issue #305 Q5, R641): "On the first
+            // frame entering that state, run one world tick (a full world
+            // step with its draws). On later frames while the latch stays
+            // set on that tile the probe runs neither a world tick nor a
+            // clock call."
+            if first_frame {
+                let _ = self.advance_visual_tick();
+                self.ambient_light = 0;
+            }
             return true;
         }
 

@@ -3427,8 +3427,11 @@ impl PlayState {
             self.apply_poison_upkeep_hit(index);
         }
         // "The caller then pauses one world tick even if everyone saved or
-        // was skipped."
-        self.animation.tick_static_tiles();
+        // was skipped." `overworld.md §5` draw order item 7 (issue #305 Q5):
+        // "the on-foot swamp arm runs one paced world tick after its poison
+        // work" - a full world step with its `0..63` wind check, not a bare
+        // tile-frame bump.
+        let _ = self.advance_visual_tick();
     }
 
     /// `movement.md §8.2`: the outdoor save's own draw, "inclusive `1..30`",
@@ -3530,6 +3533,15 @@ impl PlayState {
         };
         let Some(entry) = entry else { return Ok(None) };
         if entry.effect.damages_transport(self.player.transport) {
+            // `overworld.md §5` draw order item 7 (issue #305 Q5): "the lava
+            // arm's view rebuild is one world tick before its burn rolls" -
+            // the arm "rebuild[s] the view, print[s] `Burning!\n`, and
+            // appl[ies] an independently rolled `1..8`". Only the burning
+            // family is that arm; `Drowning` has no published underfoot arm.
+            if entry.effect.published_line().is_some() {
+                self.mark_visibility_dirty();
+                let _ = self.advance_visual_tick();
+            }
             Ok(Some((entry.effect, self.apply_world_damage_tile(entry))))
         } else {
             Ok(None)
