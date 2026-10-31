@@ -274,6 +274,13 @@ pub struct PlayState {
     /// Quickness parity bit, stored for the same reason as
     /// [`Self::transport_walker_gate_parity`]. Never serialized.
     pub quickness_walker_gate_parity: bool,
+    /// `town-mode.md §7` step 4: on this town turn the Negate Time gate, or
+    /// the Quickness gate's skipped parity, also "jumps past post-action
+    /// cleanup, so no contact, conflict or arrest can begin on such a turn".
+    /// Set by the per-turn gate pass; read by the explicit-Talk guard-demand
+    /// refusal, whose arrest §14 hosts in that same cleanup. Never
+    /// serialized.
+    pub town_post_action_cleanup_skipped: bool,
     /// `encounters.md §2.1`: the three effect gates "sit ahead of the
     /// encounter probe *and* ahead of the outdoor creature walker, so a gate
     /// that fires costs the turn its probe as well as its creature movement".

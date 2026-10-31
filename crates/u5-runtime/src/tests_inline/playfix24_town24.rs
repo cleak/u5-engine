@@ -58,3 +58,57 @@ fn playtest_p24_08_explicit_talk_to_a_badgeless_palace_guard_opens_the_audience(
     );
     assert!(state.blackthorn_capture.is_some());
 }
+
+/// Playtest P24-09. `town-mode.md §7` step 4: the Negate Time gate "also
+/// jumps past post-action cleanup, so no contact, conflict or arrest can
+/// begin on such a turn", and §14 hosts the explicit-T refusal's arrest in
+/// that cleanup. A refused tribute under Negate Time opened the arrest.
+#[test]
+fn playtest_p24_09_negate_time_stops_the_explicit_talk_refusal_arrest() {
+    let dialogue = HashMap::new();
+    let raw = HashMap::new();
+    let mut state = playfix24_guard_demand_state();
+    state.active_effect_tag = Some(NEGATE_TIME_ACTIVE_EFFECT_TAG);
+    state.active_effect_counter = 10;
+    state.gold = 150;
+
+    assert_eq!(
+        state.talk_facing_with_dialogue_and_keyword_raw(&dialogue, &raw, None),
+        MoveOutcome::Talked
+    );
+    assert_eq!(
+        state.resolve_blackthorn_guard_demand_input('N', "", None),
+        Some(MoveOutcome::Used)
+    );
+    assert!(state.active_blackthorn_guard_demand.is_none());
+    assert!(state.pending_town_arrest.is_none());
+    assert!(!state.message.contains("Thou art under arrest!"));
+}
+
+/// Playtest P24-09, Quickness arm. `town-mode.md §14`: "Under Quickness the
+/// same holds on the alternate turns whose gate skips the walkers and
+/// cleanup, so an arrest under Quickness can begin only on a non-skipped
+/// turn." The engine arrested on both parities.
+#[test]
+fn playtest_p24_09_quickness_lets_the_explicit_talk_arrest_begin_only_on_a_run_turn() {
+    let dialogue = HashMap::new();
+    let raw = HashMap::new();
+    let mut state = playfix24_guard_demand_state();
+    state.active_effect_tag = Some(QUICKNESS_ACTIVE_EFFECT_TAG);
+    state.active_effect_counter = 10;
+    state.gold = 150;
+
+    let mut arrested = Vec::new();
+    for _ in 0..2 {
+        state.pending_town_arrest = None;
+        assert_eq!(
+            state.talk_facing_with_dialogue_and_keyword_raw(&dialogue, &raw, None),
+            MoveOutcome::Talked
+        );
+        let skipped = state.town_post_action_cleanup_skipped;
+        state.resolve_blackthorn_guard_demand_input('N', "", None);
+        assert_eq!(state.pending_town_arrest.is_some(), !skipped);
+        arrested.push(state.pending_town_arrest.is_some());
+    }
+    assert_eq!(arrested.iter().filter(|&&arrest| arrest).count(), 1);
+}

@@ -7030,6 +7030,9 @@ impl PlayState {
                 if game_dir.is_some() {
                     self.emit_message_line(crate::commands::TALK_DISPATCHER_LEADING_FEED);
                 }
+                if self.town_post_action_cleanup_skipped {
+                    return Ok(MoveOutcome::Used);
+                }
                 self.open_town_arrest(arrest, game_dir)
             }
         }
@@ -7112,6 +7115,18 @@ impl PlayState {
                 self.active_blackthorn_guard_demand = None;
                 // Same §7a / §14 hand-off as the immediate refusal above.
                 self.message.clear();
+                // `town-mode.md §14`: explicit `T`'s failure "passes the
+                // arrest discriminator to cleanup", and "No arrest can begin
+                // while Negate Time is active: that gate skips post-action
+                // cleanup, the arrest's only host ... Under Quickness the
+                // same holds on the alternate turns whose gate skips the
+                // walkers and cleanup". This turn's epilogue already ran
+                // its gates, so a skipped cleanup means no arrest at all;
+                // the engine arrested anyway and then ran the jail wait on a
+                // frozen clock (playtest P24-09).
+                if self.town_post_action_cleanup_skipped {
+                    return Some(MoveOutcome::Used);
+                }
                 Some(self.open_town_arrest(active.arrest, game_dir).ok()?)
             }
         }
