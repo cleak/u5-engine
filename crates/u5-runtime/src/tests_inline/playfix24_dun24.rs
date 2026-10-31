@@ -67,3 +67,32 @@ fn playtest_p24_01_post_action_fight_surface_exit_charges_no_second_minute() {
         let _ = fs::remove_dir_all(dir);
     }
 }
+
+/// Playtest P24-02. `combat.md §14`: `BATTLE IS LOST!` "begins with a
+/// newline and has no trailing newline"; `doors-and-z-transitions.md §12.1`:
+/// the exit's first print is `\nExit to `, whose feed closes that open row.
+/// So `Exit to` sits on the row directly beneath the loss line.
+#[test]
+fn playtest_p24_02_exit_to_follows_the_loss_line_without_a_blank_row() {
+    let (mut state, dir) = p24_dungeon_ladder_fight(DungeonPostCombatApplier::AttackLevelsOnly);
+    state.dungeon_loop_minute_charged = true;
+
+    handle_play_key_input(&mut state, 'K', "", &dir).unwrap();
+
+    assert!(matches!(state.area, Area::World { .. }));
+    let texts: Vec<String> = state
+        .message_entries()
+        .iter()
+        .map(|entry| entry.text.clone())
+        .collect();
+    let lost = texts
+        .iter()
+        .rposition(|text| text == "BATTLE IS LOST!")
+        .unwrap_or_else(|| panic!("the loss line: {texts:?}"));
+    assert_eq!(
+        texts[lost + 1],
+        "Exit to Britannia!",
+        "no blank row between the two: {texts:?}"
+    );
+    let _ = fs::remove_dir_all(dir);
+}
