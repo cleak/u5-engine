@@ -536,7 +536,6 @@ fn g7_text_output_s6_own_trailing_feed_after_a_full_row_is_suppressed() {
 /// short line ending in its own feed therefore leaves the cursor at column 0
 /// of the next row.
 #[test]
-#[ignore = "divergence: G7-TW-TRAILING-LF"]
 fn g7_text_output_s6_trailing_feed_on_a_short_line_reaches_the_emitter() {
     let mut system = TextWindowSystem::new();
     system.set_window_rect(0, 0, 0, 15, 5);
@@ -564,7 +563,6 @@ fn g7_text_output_s10_4_line_feed_never_erases() {
 /// `systems/text-output.md §10.4`: "A string that is only line feeds spends
 /// one row per feed."
 #[test]
-#[ignore = "divergence: G7-TW-TRAILING-LF"]
 fn g7_text_output_s10_4_feed_only_string_spends_one_row_per_feed() {
     let mut system = TextWindowSystem::new();
     system.set_window_rect(0, 0, 0, 15, 8);
