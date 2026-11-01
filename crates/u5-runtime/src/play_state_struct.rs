@@ -888,6 +888,10 @@ pub struct PlayState {
     /// The verb echo opened for the command currently being dispatched,
     /// if any, plus the message text that stood when it was opened.
     pub(crate) pending_command_echo: Option<PendingCommandEcho>,
+    /// `containers.md §6`: dungeon-chest `A scroll: <rune>!` rows the
+    /// generator queued that have not reached the transcript yet. When
+    /// one does, only its rune word is drawn from the runic font.
+    pub(crate) pending_dungeon_scroll_rune_rows: Vec<String>,
     pub pending_hourly_status_message: Option<String>,
     pub debug_enter: Option<PlayTarget>,
     pub return_world: Option<WorldReturn>,

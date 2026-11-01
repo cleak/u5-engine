@@ -278,17 +278,18 @@ fn spec300_q13_sign_bytes_pick_their_font_and_only_raw_controls_act() {
     use crate::tlk_runner::TlkGlyphFont::{Ordinary, Runic};
     let rendered = sign_payload_rendered(&[b'A', b'A' | 0x80, 0x26, 0x27, 0xa6, 0xa7, 0xa9, 0x8d, b'B']);
     let cells: Vec<(u8, _)> = rendered.glyphs.iter().map(|g| (g.byte, g.font)).collect();
+    // `0x8D` "reaches the cell emitter as a carriage return (column reset,
+    // no glyph)", so the `B` after it overwrites the row's first cell.
     assert_eq!(
         cells,
         vec![
-            (b'A', Runic),
+            (b'B', Runic),
             (b'A', Ordinary),
             (SIGN_SEPARATOR_RUNIC_CODE_POINT, Runic),
             (SIGN_SEPARATOR_RUNIC_CODE_POINT, Runic),
             (b'&', Ordinary),
             (b'\'', Ordinary),
             (b')', Ordinary),
-            (b'B', Runic),
         ]
     );
     // Only raw `0x0D` pauses.

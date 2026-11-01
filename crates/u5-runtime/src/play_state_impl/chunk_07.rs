@@ -906,6 +906,7 @@ impl PlayState {
     pub fn generate_dungeon_chest_content(&mut self, level: u8) -> String {
         let gate_upper = dungeon_chest_row_gate_max(level);
         let mut parts = Vec::new();
+        self.pending_dungeon_scroll_rune_rows.clear();
 
         for row in DUNGEON_CHEST_ROWS.iter() {
             let gate_roll = self.random_range_u8(1, gate_upper);
@@ -946,7 +947,12 @@ impl PlayState {
                 DungeonChestReward::Scroll => {
                     let subtype = usize::from(self.random_range_u8(0, DUNGEON_CHEST_SUBTYPE_MAX));
                     self.apply_object_pickup(ObjectPickupKind::Scroll(subtype), 1);
-                    parts.push(ObjectPickupKind::Scroll(subtype).pickup_result_line(1));
+                    let row = ObjectPickupKind::Scroll(subtype).pickup_result_line(1);
+                    // `containers.md §6`: the rune word alone is drawn from
+                    // the second character set; the row is queued so the
+                    // transcript push can switch fonts around that word.
+                    self.pending_dungeon_scroll_rune_rows.push(row.clone());
+                    parts.push(row);
                 }
             }
         }

@@ -163,7 +163,7 @@ pub struct ShoppeTextAudit {
     pub bands: Vec<ShoppeBandAudit>,
 }
 
-/// Parse a SHOPPE.DAT byte buffer into its 196 NUL-terminated records.
+/// Parse a SHOPPE.DAT byte buffer into its 195 NUL-terminated records.
 /// Records that exceed the buffer or read as empty produce empty
 /// vectors at the right index so callers can look them up by id
 /// without bounds-checking.
@@ -551,13 +551,12 @@ mod tests {
 
     fn valid_shoppe_dat_bytes() -> Vec<u8> {
         let mut bytes = Vec::with_capacity(SHOPPE_DAT_LEN);
-        bytes.extend(std::iter::repeat_n(b'a', 9746));
+        bytes.extend(std::iter::repeat_n(b'a', 9747));
         bytes.push(0);
         for _ in 1..SHOPPE_DAT_NONEMPTY_RECORDS {
             bytes.push(b'x');
             bytes.push(0);
         }
-        bytes.push(0);
         bytes.push(0);
         assert_eq!(bytes.len(), SHOPPE_DAT_LEN);
         bytes
@@ -577,7 +576,11 @@ mod tests {
     fn checked_parse_accepts_shipped_shape() {
         let bytes = valid_shoppe_dat_bytes();
         let records = parse_shoppe_records_checked(&bytes).unwrap();
-        assert_eq!(records.slot_count(), SHOPPE_DAT_RECORD_SLOTS);
+        // formats/shoppe-dat.md §2: exactly 195 records, ordinals
+        // 0..=194, with no phantom slot past the last terminator.
+        assert_eq!(records.slot_count(), 195);
+        assert_eq!(records.record(194).unwrap(), b"");
+        assert!(records.record(195).is_none());
         assert_eq!(
             records
                 .records
@@ -589,15 +592,14 @@ mod tests {
     }
 
     #[test]
-    fn checked_parse_accepts_single_empty_trailer_with_padded_final_slot() {
+    fn checked_parse_accepts_missing_empty_trailer_with_padded_final_slot() {
         let mut bytes = Vec::with_capacity(SHOPPE_DAT_LEN);
-        bytes.extend(std::iter::repeat_n(b'a', 9747));
+        bytes.extend(std::iter::repeat_n(b'a', 9748));
         bytes.push(0);
         for _ in 1..SHOPPE_DAT_NONEMPTY_RECORDS {
             bytes.push(b'x');
             bytes.push(0);
         }
-        bytes.push(0);
         assert_eq!(bytes.len(), SHOPPE_DAT_LEN);
 
         let records = parse_shoppe_records_checked(&bytes).unwrap();
@@ -628,7 +630,7 @@ mod tests {
         *bytes.last_mut().unwrap() = b'x';
         assert!(matches!(
             parse_shoppe_records_checked(&bytes),
-            Err(ShoppeDatError::UnterminatedRecord { record_id: 195, .. })
+            Err(ShoppeDatError::UnterminatedRecord { record_id: 194, .. })
         ));
     }
 

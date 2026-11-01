@@ -157,7 +157,16 @@ impl PlayState {
     /// Append one already-classified transcript line.
     pub fn push_message_entry(&mut self, text: impl Into<String>, is_command_echo: bool) {
         let text = text.into();
-        let glyphs = ordinary_glyphs_from_engine_text(&text);
+        let mut glyphs = ordinary_glyphs_from_engine_text(&text);
+        if !is_command_echo
+            && let Some(queued) = self
+                .pending_dungeon_scroll_rune_rows
+                .iter()
+                .position(|row| *row == text)
+        {
+            self.pending_dungeon_scroll_rune_rows.remove(queued);
+            set_dungeon_scroll_rune_word_runic(&mut glyphs);
+        }
         self.append_transcript_entry(text, glyphs, is_command_echo, false, false);
         self.message_transcript_revision = self.message_transcript_revision.wrapping_add(1);
     }
@@ -1652,5 +1661,18 @@ mod diagnostics_serial_tests {
             state.diagnostics_since(seen),
             ["Wandering encounter spawned in slot 2."]
         );
+    }
+}
+
+/// `containers.md §6`: in a dungeon chest's `A scroll: <rune>!` row "the
+/// rune word alone is drawn from the game's second character set ... The
+/// surrounding `A scroll: ` and `!` are ordinary text."
+fn set_dungeon_scroll_rune_word_runic(glyphs: &mut [TlkRenderedGlyph]) {
+    const PREFIX: usize = "A scroll: ".len();
+    let end = glyphs.len().saturating_sub(1);
+    if let Some(word) = glyphs.get_mut(PREFIX..end) {
+        for glyph in word {
+            glyph.font = TlkGlyphFont::Runic;
+        }
     }
 }

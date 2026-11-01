@@ -482,13 +482,33 @@ impl TextWindowSystem {
                 self.set_active_cursor(start, self.active_window().cursor_y);
             }
             let before_y = self.active_window().cursor_y;
+            let space_left = width.saturating_sub(usize::from(self.active_window().cursor_x));
             for byte in chunk.text.bytes() {
                 self.emit_byte(byte);
             }
+            if let Some(break_byte) = chunk.break_byte {
+                // `text-output.md §5`/§6: a line-feed or carriage-return in
+                // the source passes through to the per-cell emitter - also
+                // when it is the string's last byte, and once per feed in a
+                // feed-only run. §6 "Line feeds and full rows": the break is
+                // consumed instead only when the chunk just placed filled
+                // the row ("the flag is armed only when the chunk just
+                // placed was strictly shorter than the space left on the
+                // row"), because the emitter has already wrapped.
+                let placed = chunk
+                    .text
+                    .bytes()
+                    .filter(|byte| (0x20..=0x7e).contains(byte))
+                    .count();
+                if placed < space_left {
+                    self.emit_byte(break_byte);
+                }
+                continue;
+            }
             // A row-filling chunk does **not** end its row: "the following
             // chunk then continues on that same row at the column where the
-            // first one stopped" (§6). Only a chunk that ended on a break
-            // byte or on a soft wrap gets the row advance.
+            // first one stopped" (§6). Only a chunk that ended on a soft wrap
+            // gets the row advance here.
             if index != last && !chunk.row_filling && self.active_window().cursor_y == before_y {
                 self.emit_byte(b'\r');
                 self.emit_byte(b'\n');
@@ -851,6 +871,11 @@ pub struct WrapChunk {
     /// column 0 of the fresh row; the following chunk then continues on that
     /// same row at the column where the first one stopped."
     pub row_filling: bool,
+    /// The line-feed or carriage-return byte that ended this chunk, if a
+    /// hard break did. `text-output.md §5`: such a byte forces the flush
+    /// "and pass[es] through to the per-cell emitter so the cursor moves
+    /// accordingly" - a trailing or feed-only string spends its rows too.
+    pub break_byte: Option<u8>,
 }
 
 /// Wrap `source` into lines that fit `window_width`, treating
@@ -907,6 +932,7 @@ pub fn wrap_text_chunks(
                 lines.push(WrapChunk {
                     text: trimmed,
                     row_filling: false,
+                    break_byte: Some(byte),
                 });
                 emitted_any = true;
                 buffer.clear();
@@ -928,6 +954,7 @@ pub fn wrap_text_chunks(
                             lines.push(WrapChunk {
                                 text: trimmed,
                                 row_filling: false,
+                                break_byte: None,
                             });
                             emitted_any = true;
                             buffer = surplus.trim_start_matches(' ').to_string();
@@ -954,6 +981,7 @@ pub fn wrap_text_chunks(
                             lines.push(WrapChunk {
                                 text: buffer.clone(),
                                 row_filling: true,
+                                break_byte: None,
                             });
                             emitted_any = true;
                             buffer.clear();
@@ -973,6 +1001,7 @@ pub fn wrap_text_chunks(
         lines.push(WrapChunk {
             text: trimmed,
             row_filling: false,
+            break_byte: None,
         });
     }
     lines
