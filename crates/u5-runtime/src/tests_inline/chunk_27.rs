@@ -425,6 +425,43 @@ fn spec300_q35_surface_overworld_gaps_stay_frozen_after_combat_until_their_own_t
     assert_eq!(after.bottom, ChromeGap::Label("South Winds".to_string()));
 }
 
+/// `moons.md §3`, "Overworld camp ambush (`H`)": "As the surface row,
+/// except that the camp wrapper makes no trailing clock call, so the
+/// hour-edge repaint on exit never happens." A camp-ambush fight whose last
+/// minute crossed the hour keeps the pre-combat strip until the next hour
+/// change.
+#[test]
+fn moons3_camp_ambush_exit_makes_no_hour_edge_repaint() {
+    let mut state = britannia_state(open_world_grid(), 10, 20);
+    state.clock.hour = 10;
+    state.clock.minute = 30;
+    let before = gameplay_chrome_content(&state);
+    state
+        .enter_combat_frame(
+            vec![ActiveObject::empty(); OOL_SLOTS],
+            [CombatActorDescriptor::empty(); COMBAT_ACTOR_SLOTS],
+        )
+        .expect("combat frame should enter");
+    // `combat.md §6.3`: the camp entry's alternate mode, as
+    // `enter_sleep_ambush_combat` marks it.
+    state
+        .combat_frame_snapshot
+        .as_mut()
+        .unwrap()
+        .suppress_controlled_faint_sleep_tick = true;
+    state.clock.hour = 11;
+    state.clock.minute = 0;
+    let snapshot = state.combat_frame_snapshot.take().unwrap();
+    state.restore_combat_frame(snapshot);
+    assert_eq!(
+        gameplay_chrome_content(&state).top,
+        before.top,
+        "no trailing clock call, so the pre-combat strip stays"
+    );
+    state.clock.hour = 12;
+    assert_ne!(gameplay_chrome_content(&state).top, before.top);
+}
+
 /// `moons.md §3` (u5-spec#300 Q35): the frozen strip lasts "until the next
 /// hour change", and the frozen banner "until the next drift hit, Wind
 /// Change, scene entry or load". Once its trigger has run, a held gap must

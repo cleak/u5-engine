@@ -4629,10 +4629,11 @@ impl PlayState {
     /// clock now reads minute zero. Otherwise the strip keeps the pre-combat
     /// hour's markers and the banner the pre-combat wind. Town fights reload
     /// the floor and dungeons redraw their labels, and the underworld erases
-    /// both gaps, so only the surface plane holds anything. Whether a camp
-    /// ambush (no trailing clock call) made the fight is not tracked, so it
-    /// takes the same minute-zero test.
-    fn hold_ribbon_gaps_after_surface_combat(&mut self) {
+    /// both gaps, so only the surface plane holds anything. An overworld
+    /// camp ambush (`H`) is "As the surface row, except that the camp
+    /// wrapper makes no trailing clock call, so the hour-edge repaint on exit
+    /// never happens": its top gap is held whatever the minute.
+    fn hold_ribbon_gaps_after_surface_combat(&mut self, camp_ambush: bool) {
         self.post_combat_ribbon_hold = None;
         if !matches!(self.area, Area::World { plane } if plane != WorldPlane::Underworld) {
             return;
@@ -4641,7 +4642,7 @@ impl PlayState {
             return;
         };
         self.post_combat_ribbon_hold = Some(PostCombatRibbonHold {
-            top: (self.clock.minute != 0).then_some((top, self.clock.hour)),
+            top: (camp_ambush || self.clock.minute != 0).then_some((top, self.clock.hour)),
             bottom: Some((bottom, self.wind_save_byte)),
         });
     }
@@ -4805,6 +4806,9 @@ impl PlayState {
         let pending_terrain_trigger = self.pending_combat_terrain_trigger_slot.take();
         let dungeon_post_combat = snapshot.dungeon_post_combat;
         let first_party_exit = snapshot.established_exit_direction_code;
+        // `combat.md §6.3`: only the rest/camp alternate entry sets this bit,
+        // and its sole caller is the camp ambush (`moons.md §3`).
+        let camp_ambush = snapshot.suppress_controlled_faint_sleep_tick;
         self.area = snapshot.area;
         self.player = snapshot.player;
         self.active_objects = snapshot.active_objects;
@@ -4831,7 +4835,7 @@ impl PlayState {
         self.combat_active = false;
         self.combat_action_result = 0;
         self.combat_frame_snapshot = None;
-        self.hold_ribbon_gaps_after_surface_combat();
+        self.hold_ribbon_gaps_after_surface_combat(camp_ambush);
         // `stats-panel.md §2.2.1`: combat exit is an immediate whole-panel
         // site.
         self.repaint_stats_panel();
