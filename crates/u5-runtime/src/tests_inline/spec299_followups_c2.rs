@@ -288,7 +288,7 @@ fn spec301_q5_stonegate_holds_use_the_published_segments() {
         assert_eq!(state.sound_effects_after(serial).len(), 2 + members);
         let hold = state.staged_narration.beats().next().expect("hold").delay_secs;
         assert!(
-            hold >= sound && hold - sound < tick,
+            (hold - sound).abs() < 1e-9,
             "{members}: {hold} vs {sound}"
         );
     }

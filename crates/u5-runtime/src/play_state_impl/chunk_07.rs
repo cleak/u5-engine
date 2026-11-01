@@ -4950,11 +4950,11 @@ impl PlayState {
         // finished. Staged as a pure hold - no text - which the rescue's own
         // beats then queue behind. Pushed once every sound of the step has
         // been queued; nothing else stages between here and the rescue.
-        // [`crate::stonegate_trapdoor_death_hold_bios_ticks`] carries the
+        // [`crate::stonegate_trapdoor_death_hold_secs`] carries the
         // duration and why.
         let step_sounds = self.sound_effects_after(step_sound_serial);
-        self.staged_narration.push_ticks(
-            crate::stonegate_trapdoor_death_hold_bios_ticks(&step_sounds),
+        self.staged_narration.push_secs(
+            crate::stonegate_trapdoor_death_hold_secs(&step_sounds),
             String::new(),
         );
 

@@ -1298,4 +1298,5 @@ mod tests {
     include!("tests_inline/audit_rules_g7.rs");
     include!("tests_inline/audit_rules_g8.rs");
     include!("tests_inline/audit_rules_g9.rs");
+    include!("tests_inline/auditfix3_a3_bt.rs");
 }

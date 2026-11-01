@@ -38,10 +38,7 @@ pub const STONEGATE_TRAPDOOR_RUMBLE_BUDGET_UNITS: u16 = 3_000;
 /// The figure is flagged derived-and-unverified in §10, and
 /// `cleak/u5-spec#274` carries the capture that confirms it.
 ///
-/// Expressed in BIOS ticks so the staged narration can hold on it, which is
-/// the only clock this crate paces presentations against. 26.5 s at
-/// `narration::BIOS_TICK_SECS` is 483 ticks; the per-member rumbles that
-/// follow the sweep add about 66 ms each and are not modelled here.
+/// (An earlier revision expressed it in BIOS ticks; see the last paragraph.)
 ///
 /// Measured 2026-09-18 (`qa/paired/stonegate-trapdoor-audio.tsv`, beat
 /// `dosbox-fallen`): without this hold the rescue narration starts while the
@@ -67,18 +64,20 @@ pub const STONEGATE_TRAPDOOR_RUMBLE_BUDGET_UNITS: u16 = 3_000;
 /// fall end is "the last party member's rumble", so the hold now ends when
 /// this engine's last rumble does: the length of every sound the step queued -
 /// the fall's own damage rumbles, the descent, one member-death rumble per
-/// slot - in ticks, rounded up. The 27.52 s figure is from DOSBox 0.74; which
-/// emulator's sweep is nearer period hardware is the question left for the
-/// spec.
-pub fn stonegate_trapdoor_death_hold_bios_ticks(
-    step_sounds: &[crate::audio::SoundEffect],
-) -> u16 {
+/// slot. The 27.52 s figure is from DOSBox 0.74; which emulator's sweep is
+/// nearer period hardware is the question left for the spec.
+///
+/// `blackthorn.md §7.1` "What paces the fall" (u5-spec#302 re-audit
+/// blackthorn:7.1:5): an implementation "must not express the fall, or a hold
+/// after it, as a BIOS-tick count". The hold is the recipes' own length on
+/// the calibrated-unit clock, in seconds; it used to be rounded up to whole
+/// ticks, which overran the fall by up to one tick period.
+pub fn stonegate_trapdoor_death_hold_secs(step_sounds: &[crate::audio::SoundEffect]) -> f64 {
     let mut jitter = crate::audio::RumbleJitter::new();
-    let secs: f64 = step_sounds
+    step_sounds
         .iter()
         .map(|effect| effect.program(&mut jitter).duration(true).as_secs_f64())
-        .sum();
-    (secs / crate::narration::BIOS_TICK_SECS).ceil() as u16
+        .sum()
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
