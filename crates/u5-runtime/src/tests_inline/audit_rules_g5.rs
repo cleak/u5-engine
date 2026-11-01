@@ -170,7 +170,6 @@ fn g5_shoppe_dat_s3_token_0xff_expands_and_does_not_terminate() {
 /// end of file rather than expecting a fixed slot count." A three-record
 /// buffer is three records.
 #[test]
-#[ignore = "divergence: g5-shoppe-fixed-slot-count"]
 fn g5_shoppe_dat_s2_parser_stops_at_end_of_file_not_a_fixed_slot_count() {
     let records = crate::shoppe_bark::parse_shoppe_records(b"one\0two\0three\0");
     assert_eq!(records.slot_count(), 3);

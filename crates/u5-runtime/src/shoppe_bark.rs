@@ -52,8 +52,8 @@ impl ShoppeRecords {
         Ok(record)
     }
 
-    /// Total record slot count (always [`SHOPPE_DAT_RECORD_SLOTS`]
-    /// when loaded from a well-formed file).
+    /// Total record count: the records the buffer actually held (always
+    /// [`SHOPPE_DAT_RECORD_SLOTS`] for the shipped file).
     pub fn slot_count(&self) -> usize {
         self.records.len()
     }
@@ -163,14 +163,17 @@ pub struct ShoppeTextAudit {
     pub bands: Vec<ShoppeBandAudit>,
 }
 
-/// Parse a SHOPPE.DAT byte buffer into its 195 NUL-terminated records.
-/// Records that exceed the buffer or read as empty produce empty
-/// vectors at the right index so callers can look them up by id
-/// without bounds-checking.
+/// Parse a SHOPPE.DAT byte buffer into its NUL-terminated records.
+///
+/// `formats/shoppe-dat.md §2`: "Parsers should split on the terminator and
+/// stop at end of file rather than expecting a fixed slot count." The
+/// record count is whatever the buffer holds - 195 for the shipped file -
+/// and an id past the last record reads as `None`. An unterminated tail is
+/// kept as a final record.
 pub fn parse_shoppe_records(bytes: &[u8]) -> ShoppeRecords {
     let mut records = Vec::with_capacity(SHOPPE_DAT_RECORD_SLOTS);
     let mut pos = 0usize;
-    while pos < bytes.len() && records.len() < SHOPPE_DAT_RECORD_SLOTS {
+    while pos < bytes.len() {
         let start = pos;
         while pos < bytes.len() && bytes[pos] != 0 {
             pos += 1;
@@ -179,9 +182,6 @@ pub fn parse_shoppe_records(bytes: &[u8]) -> ShoppeRecords {
         if pos < bytes.len() {
             pos += 1; // skip the NUL terminator
         }
-    }
-    while records.len() < SHOPPE_DAT_RECORD_SLOTS {
-        records.push(Vec::new());
     }
     ShoppeRecords { records }
 }
@@ -195,9 +195,18 @@ pub fn parse_shoppe_records_checked(bytes: &[u8]) -> Result<ShoppeRecords, Shopp
         });
     }
 
+    // `formats/shoppe-dat.md §2`: split on the terminator up to end of file,
+    // then check the count against the shipped 195 rather than padding to it.
     let mut records = Vec::with_capacity(SHOPPE_DAT_RECORD_SLOTS);
     let mut pos = 0usize;
-    while records.len() < SHOPPE_DAT_RECORD_SLOTS && pos < bytes.len() {
+    while pos < bytes.len() {
+        if records.len() == SHOPPE_DAT_RECORD_SLOTS {
+            // The last record's terminator is the file's last byte.
+            return Err(ShoppeDatError::TrailingBytes {
+                offset: pos,
+                len: bytes.len(),
+            });
+        }
         let start = pos;
         while pos < bytes.len() && bytes[pos] != 0 {
             pos += 1;
@@ -212,20 +221,10 @@ pub fn parse_shoppe_records_checked(bytes: &[u8]) -> Result<ShoppeRecords, Shopp
         pos += 1;
     }
 
-    if records.len() < SHOPPE_DAT_RECORD_SLOTS {
-        if records.len() < SHOPPE_DAT_NONEMPTY_RECORDS {
-            return Err(ShoppeDatError::WrongRecordCount {
-                actual: records.len(),
-                expected: SHOPPE_DAT_RECORD_SLOTS,
-            });
-        }
-        while records.len() < SHOPPE_DAT_RECORD_SLOTS {
-            records.push(Vec::new());
-        }
-    } else if pos != bytes.len() {
-        return Err(ShoppeDatError::TrailingBytes {
-            offset: pos,
-            len: bytes.len(),
+    if records.len() != SHOPPE_DAT_RECORD_SLOTS {
+        return Err(ShoppeDatError::WrongRecordCount {
+            actual: records.len(),
+            expected: SHOPPE_DAT_RECORD_SLOTS,
         });
     }
 
@@ -568,8 +567,10 @@ mod tests {
         let records = parse_shoppe_records(bytes);
         assert_eq!(records.record(0).unwrap(), b"hi");
         assert_eq!(records.record(1).unwrap(), b"bye");
-        // Remaining slots are padded empty so lookups never panic.
-        assert!(records.record(SHOPPE_DAT_RECORD_SLOTS - 1).is_some());
+        // `formats/shoppe-dat.md §2`: the parser stops at end of file, so
+        // there is no padding past the buffer's own records.
+        assert_eq!(records.slot_count(), 2);
+        assert!(records.record(2).is_none());
     }
 
     #[test]
@@ -592,7 +593,7 @@ mod tests {
     }
 
     #[test]
-    fn checked_parse_accepts_missing_empty_trailer_with_padded_final_slot() {
+    fn checked_parse_rejects_a_missing_final_record_instead_of_padding_it() {
         let mut bytes = Vec::with_capacity(SHOPPE_DAT_LEN);
         bytes.extend(std::iter::repeat_n(b'a', 9748));
         bytes.push(0);
@@ -602,17 +603,13 @@ mod tests {
         }
         assert_eq!(bytes.len(), SHOPPE_DAT_LEN);
 
-        let records = parse_shoppe_records_checked(&bytes).unwrap();
-        assert_eq!(records.slot_count(), SHOPPE_DAT_RECORD_SLOTS);
-        assert_eq!(
-            records
-                .records
-                .iter()
-                .filter(|record| !record.is_empty())
-                .count(),
-            SHOPPE_DAT_NONEMPTY_RECORDS
-        );
-        assert_eq!(records.record(SHOPPE_DAT_RECORD_SLOTS - 1).unwrap(), b"");
+        // 194 terminated records fill the file: `formats/shoppe-dat.md §2`
+        // publishes 195, and the parser no longer pads a phantom slot.
+        assert!(matches!(
+            parse_shoppe_records_checked(&bytes),
+            Err(ShoppeDatError::WrongRecordCount { actual, expected })
+                if actual == SHOPPE_DAT_NONEMPTY_RECORDS && expected == SHOPPE_DAT_RECORD_SLOTS
+        ));
     }
 
     #[test]
@@ -685,7 +682,7 @@ mod tests {
         );
         assert!(matches!(
             render_shoppe_record(&records, 1, &ShoppeBarkContext::default()),
-            Err(ShoppeDatError::EmptyRecord { id: 1 })
+            Err(ShoppeDatError::MissingRecord { id: 1, .. })
         ));
     }
 
