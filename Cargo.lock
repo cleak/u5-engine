@@ -4498,6 +4498,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "u5-bevy-setup"
+version = "1.0.0"
+dependencies = [
+ "bevy",
+ "u5-gamedata",
+]
+
+[[package]]
 name = "u5-gamedata"
 version = "1.0.0"
 

@@ -1,0 +1,9 @@
+[package]
+name = "u5-bevy-setup"
+description = "Bevy first-run setup wizard for choosing and validating the game data."
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+u5-gamedata = { workspace = true }
+bevy = { workspace = true }
