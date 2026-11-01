@@ -1368,13 +1368,11 @@ impl PlayState {
             }
             return Ok(MoveOutcome::Blocked);
         }
-        // Engine guard for a mounted transport value underground, which
-        // shipped play never produces; vehicle landing below is not written
-        // for dungeon cells.
-        if matches!(self.area, Area::Dungeon { .. }) {
-            self.message = "Not here!".to_string();
-            return Ok(MoveOutcome::Blocked);
-        }
+        // `doors-and-z-transitions.md §11` / `active-objects.md §10`: X-it
+        // has no working scene refusal - its dungeon-range test is dead code
+        // and its own `Not here!` never prints. A mounted transport value in
+        // a dungeon scene (only a crafted save reaches it) takes the mounted
+        // arm below, prints its vehicle line and parks the vehicle object.
         if matches!(
             transport,
             TransportState::Ship {

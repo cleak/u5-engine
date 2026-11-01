@@ -26736,10 +26736,14 @@ fn dungeon_mode_refuses_world_vehicle_and_entry_letters_without_turn() {
     // cleared per key: `E` completes its own echo as `Enter what?` and
     // leaves the slot empty, so it used to read the `B` refusal left over
     // from the key before it.
+    // `X` is not refused here: X-it "has no working scene refusal"
+    // (`doors-and-z-transitions.md §11`), so a furled ship with no skiff,
+    // carpet or dungeon landing takes its own ship arm and refuses as no
+    // skiffs being available, keeping the vehicle.
     for (key, expected) in [
-        ('B', BOARD_NOT_HERE_REFUSAL),
-        ('E', ""),
-        ('X', "Not here!"),
+        ('B', BOARD_NOT_HERE_REFUSAL.to_string()),
+        ('E', String::new()),
+        ('X', XIT_NO_SKIFFS_REFUSAL.to_string()),
     ] {
         state.message.clear();
         assert!(state.handle_dungeon_key(key, Path::new("")).unwrap());
@@ -26756,6 +26760,16 @@ fn dungeon_mode_refuses_world_vehicle_and_entry_letters_without_turn() {
         );
         assert_eq!((state.player.x, state.player.y), (1, 1));
         assert_eq!(state.turn, 0);
+        if key == 'X' {
+            // The completed `X-it ship!` echo row sits above the refusal.
+            assert!(
+                state
+                    .message_transcript
+                    .iter()
+                    .any(|entry| entry.text == format!("X-it {XIT_SHIP_ARGUMENT}")),
+                "X takes the ship arm"
+            );
+        }
     }
 
     assert!(state.handle_dungeon_key('F', Path::new("")).unwrap());

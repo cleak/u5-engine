@@ -1205,33 +1205,28 @@ fn exit_vehicle_reports_on_foot_without_turn_when_walking() {
     assert_eq!(state.turn, 0);
 }
 
+/// `doors-and-z-transitions.md §11` / `active-objects.md §10`: X-it has no
+/// working scene refusal. A mounted horse value in a dungeon scene takes the
+/// mounted arm: it prints the vehicle line, parks a riderless horse at the
+/// party's cell on the dungeon level and returns the party to foot.
 #[test]
-fn exit_vehicle_refuses_dungeon_before_vehicle_landing_logic() {
+fn exit_vehicle_takes_mounted_arm_in_dungeon_scene() {
     let mut state = dungeon_state(open_dungeon_record(), 0, 1, 1);
-    state.player.transport = TransportState::Ship {
-        type_byte: 168,
-        tile: 168,
-        sails_hoisted: false,
-        hull: 77,
-        skiffs: 2,
+    state.player.transport = TransportState::Horse {
+        type_byte: HORSE_MOUNTED_FIRST,
+        tile: transport_visual_tile_for_marker(HORSE_MOUNTED_FIRST).unwrap(),
     };
     state.sync_player_object();
 
-    assert_eq!(state.exit_vehicle(), MoveOutcome::Blocked);
+    assert_eq!(state.exit_vehicle(), MoveOutcome::ExitedVehicle);
 
-    assert_eq!(
-        state.player.transport,
-        TransportState::Ship {
-            type_byte: 168,
-            tile: 168,
-            sails_hoisted: false,
-            hull: 77,
-            skiffs: 2,
-        }
-    );
+    assert_eq!(state.player.transport, TransportState::Foot);
     assert_eq!((state.player.x, state.player.y), (1, 1));
-    assert_eq!(state.message, "Not here!");
-    assert_eq!(state.turn, 0);
+    assert_eq!(state.message, "horse!");
+    assert!(state.active_objects.iter().skip(1).any(|object| {
+        !object.is_empty() && object.x == 1 && object.y == 1 && object.z == 0
+    }));
+    assert_eq!(state.turn, 1);
 }
 
 #[test]

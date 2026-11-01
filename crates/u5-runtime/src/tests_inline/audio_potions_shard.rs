@@ -16,11 +16,16 @@ fn accepted_potion_takes_its_shared_variant_from_the_selected_bottle() {
 
         state.use_potion_with_effect(selected, 0, POTION_BLUE_INDEX);
 
+        // The Blue effect rejects the awake recipient, so the generic U-Use
+        // failure tail's glissando follows the variant (`inventory.md §7.2`).
         assert_eq!(
             state.sound_effects_after(serial),
-            vec![SoundEffect::SharedVariant {
-                variant: selected as u8
-            }],
+            vec![
+                SoundEffect::SharedVariant {
+                    variant: selected as u8
+                },
+                SoundEffect::CastFailure,
+            ],
             "bottle {selected} must own its own variant"
         );
     }

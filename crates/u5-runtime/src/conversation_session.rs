@@ -3641,11 +3641,17 @@ mod tests {
 
     #[test]
     fn an_opening_ask_who_whose_stream_ends_on_end_stream_ends_the_conversation() {
-        let mut s = opening_ask_who_session(enc_with_stop("Good day!", TLK_CODE_END_STREAM));
+        // The shipped shape closes its row before the stop (`conversation.md
+        // §7.2`: `0x82` does not flush a pending word, and the census puts a
+        // line break or a hold ahead of every shipped one).
+        let mut tail = enc("Good day!");
+        tail.push(TLK_CODE_LITERAL_NEWLINE);
+        tail.push(TLK_CODE_END_STREAM);
+        let mut s = opening_ask_who_session(tail);
         s.present_description(&ctx());
         assert!(s.opening_suspended(), "{:?}", s.phase);
         let answer = s.submit_keyword("NAME", &ctx());
-        assert!(answer.text.ends_with("Good day!"), "{:?}", answer.text);
+        assert!(answer.text.ends_with("Good day!\n"), "{:?}", answer.text);
         assert!(answer.ended, "the Description entry signalled a stop");
         assert_eq!(s.phase, ConversationSessionPhase::PresentingBye);
         assert!(!answer.text.contains("Good luck!"), "no Bye entry runs");
