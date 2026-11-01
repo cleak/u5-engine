@@ -36,7 +36,7 @@ new crate brings a new system library (see below).
 | Resolve version | `ubuntu-latest` | Works out the tag, the version (the tag without `v`) and whether to publish. For tags it also checks that `[workspace.package] version` in `Cargo.toml` equals the tag. |
 | Linux x86_64 | `ubuntu-22.04` | `u5-engine-<version>-linux-x86_64.tar.gz`. Built on 22.04 so the binary needs only glibc 2.35. |
 | Windows x86_64 | `windows-latest` (MSVC) | `u5-engine-<version>-windows-x86_64.zip`, built with `+crt-static` so no Visual C++ redistributable is needed. |
-| macOS universal | `macos-14` | `u5-engine-<version>-macos-universal.zip`: one `U5 Engine.app` whose binary is `lipo`-merged from the `aarch64-apple-darwin` and `x86_64-apple-darwin` builds (minimum macOS 11). Signed and notarized when the Apple secrets exist. |
+| macOS universal | `macos-15` | `u5-engine-<version>-macos-universal.zip`: one `U5 Engine.app` whose binary is `lipo`-merged from the `aarch64-apple-darwin` and `x86_64-apple-darwin` builds (minimum macOS 11). Signed and notarized when the Apple secrets exist. |
 | Publish release | `ubuntu-latest` | Writes `SHA256SUMS` and attaches it and the three packages to the GitHub release for the tag (`softprops/action-gh-release`), creating the release if needed. |
 
 Each package holds the binary (or app), `README.md`, `LICENSE` when the
