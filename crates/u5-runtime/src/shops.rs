@@ -248,14 +248,15 @@ pub const fn shoppe_time_of_day_word(hour: u8) -> &'static str {
 
 /// `formats/shoppe-dat.md §2`: shipped DOS file size in bytes.
 pub const SHOPPE_DAT_LEN: usize = 10_135;
-/// `formats/shoppe-dat.md §2`: total record slots and non-empty
-/// records in the shipped data set.
-pub const SHOPPE_DAT_RECORD_SLOTS: usize = 196;
-/// `formats/shoppe-dat.md §2`: 194 of the 196 record slots are
-/// non-empty; the remaining 2 are empty-trailer padding.
-/// Anchored to SHOPPE_DAT_RECORD_SLOTS - 2 so the non-empty
-/// record count tracks the slot count.
-pub const SHOPPE_DAT_NONEMPTY_RECORDS: usize = SHOPPE_DAT_RECORD_SLOTS - 2;
+/// `formats/shoppe-dat.md §2`: the shipped file holds exactly 195
+/// NUL-terminated records, ordinals 0..=194; the file's last byte is
+/// the last record's terminator.
+pub const SHOPPE_DAT_RECORD_SLOTS: usize = 195;
+/// `formats/shoppe-dat.md §2`: 194 of the 195 records are non-empty;
+/// the final ordinal (194) is a lone terminator. Anchored to
+/// SHOPPE_DAT_RECORD_SLOTS - 1 so the non-empty record count tracks
+/// the record count.
+pub const SHOPPE_DAT_NONEMPTY_RECORDS: usize = SHOPPE_DAT_RECORD_SLOTS - 1;
 
 /// `formats/shoppe-dat.md §6` per-cluster `SHOPPE.DAT` record-id
 /// ranges. Bands that the spec publishes as one contiguous run get a

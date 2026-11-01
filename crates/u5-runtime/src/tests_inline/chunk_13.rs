@@ -719,14 +719,9 @@ fn brit_dat_len_anchors_to_stored_chunks_times_chunk_bytes() {
 
 #[test]
 fn shoppe_nonempty_records_anchors_to_record_slots() {
-    // formats/shoppe-dat.md §2: 194 of the 196 record slots
-    // are non-empty; the remaining 2 are empty-trailer
-    // padding. shops.rs declared SHOPPE_DAT_NONEMPTY_RECORDS
-    // = 194 as a bare literal alongside SHOPPE_DAT_RECORD_
-    // SLOTS = 196. Anchor the non-empty count to SHOPPE_DAT_
-    // RECORD_SLOTS - 2 so the non-empty record count tracks
-    // the slot count.
-    assert_eq!(SHOPPE_DAT_NONEMPTY_RECORDS, SHOPPE_DAT_RECORD_SLOTS - 2);
+    // formats/shoppe-dat.md §2: 194 of the 195 records are
+    // non-empty; only the final ordinal is a lone terminator.
+    assert_eq!(SHOPPE_DAT_NONEMPTY_RECORDS, SHOPPE_DAT_RECORD_SLOTS - 1);
     assert_eq!(SHOPPE_DAT_NONEMPTY_RECORDS, 194);
 }
 
@@ -21331,7 +21326,7 @@ fn boardable_family_classifier_matches_spec_table() {
 fn shoppe_placeholder_classifier_matches_spec_table() {
     // formats/shoppe-dat.md §2,§4
     assert_eq!(SHOPPE_DAT_LEN, 10_135);
-    assert_eq!(SHOPPE_DAT_RECORD_SLOTS, 196);
+    assert_eq!(SHOPPE_DAT_RECORD_SLOTS, 195);
     assert_eq!(SHOPPE_DAT_NONEMPTY_RECORDS, 194);
     assert_eq!(shoppe_placeholder(b'%'), Some(ShoppePlaceholder::Gold));
     assert_eq!(shoppe_placeholder(b'^'), Some(ShoppePlaceholder::Quantity));
