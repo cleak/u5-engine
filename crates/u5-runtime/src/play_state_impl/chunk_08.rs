@@ -717,9 +717,13 @@ impl PlayState {
         // the vanish line. The per-member summary below is engine
         // bookkeeping for diagnostics.
         //
-        // Not implemented, and not established by §7.1/§7.2: where the class
-        // tile lands ("not fully established"; in an outdoor camp, by static
-        // reading, the party's own map record).
+        // Not implemented: the camp scene. u5-spec#317 Q3 (R668, R669) puts
+        // the event inside the combat-framed outdoor camp scene - the old man
+        // as camp-table record 10 on the campfire cell (5, 5), and each class
+        // tile (§7.2) on that member's own sleeping figure - but the spec
+        // does not publish the scene itself (arena terrain, campfire tile,
+        // member cells and sleeping art, when it opens and closes), so this
+        // engine runs the event over the map view and stamps nothing.
         //
         // The per-member viewport inversion (u5-spec#299 Q5, static reading
         // only; R566 withdraws "each later living member's inversion toggles

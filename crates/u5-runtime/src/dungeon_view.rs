@@ -248,25 +248,25 @@ pub struct DungeonChamberBanner {
 /// nibble. `None` when the dungeon has fewer than `n` banners.
 ///
 /// The rows are the runic font's code points (`formats/miscmsg-dat.md §4`,
-/// `endgame.md`): `[` is `TH`, `_` is `ST`, `]` is `NG` and `@` the word
-/// space; each digraph is one cell. The padding is the spec's - "fixed in the
-/// stored text and is **not** centring" - so every row is exactly the
-/// published block width.
-///
-/// Not drawn: Shame's three banners (DEEP, DEEPER, DEEPEST). Their `EE`
-/// digraph has no published code point (`§6.4` calls the `EE` reading
-/// "probable" and gives no byte), so this engine leaves those walls plain
-/// rather than guess a glyph.
+/// `endgame.md`): `[` is `TH`, `\` is `EE`, `]` is `NG` and `_` is `ST`;
+/// each digraph is one cell (u5-spec#317 Q1). The padding is the spec's -
+/// "fixed in the stored text and is **not** centring" - so every row is
+/// exactly the published block width. "Banner padding and word gaps use the
+/// ordinary space code, never the `@` word divider": `@` is a centred dot in
+/// the runic font and would put dots into the inverse block.
 pub fn dungeon_chamber_banner(record: u8, n: u8) -> Option<DungeonChamberBanner> {
     let (origin, rows): ((u8, u8), &'static [&'static [u8]]) = match (record, n) {
         (0, 1) => ((7, 10), &[b"BOTTOMLESS", b"   PIT    "]),
-        (1, 1) => ((8, 9), &[b"[E@MAZE", b" OF@LO_", b" SOULS "]),
-        (3, 1) => ((8, 10), &[b"[E@PRISON", b"   WRO]  "]),
-        (4, 1) => ((8, 11), &[b"[E@CRYPT"]),
+        (1, 1) => ((8, 9), &[b"[E MAZE", b" OF LO_", b" SOULS "]),
+        (3, 1) => ((8, 10), &[b"[E PRISON", b"   WRO]  "]),
+        (4, 1) => ((8, 11), &[b"[E CRYPT"]),
         (4, 2) => ((9, 10), &[b"UPPER ", b"CRYPTS"]),
         (4, 3) => ((9, 10), &[b"LOWER ", b"CRYPTS"]),
         (4, 4) => ((9, 10), &[b"DEBTERS", b" ALLY  "]),
-        (6, 1) => ((7, 10), &[b"MO[ER@LODE", b"   MAZE   "]),
+        (5, 1) => ((10, 11), &[b"D\\P"]),
+        (5, 2) => ((9, 11), &[b"D\\PER"]),
+        (5, 3) => ((9, 11), &[b"D\\PE_"]),
+        (6, 1) => ((7, 10), &[b"MO[ER LODE", b"   MAZE   "]),
         _ => return None,
     };
     Some(DungeonChamberBanner { origin, rows })
