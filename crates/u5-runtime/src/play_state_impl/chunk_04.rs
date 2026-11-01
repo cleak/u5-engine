@@ -4829,6 +4829,12 @@ impl PlayState {
         // cursor at column 0. Set explicitly for this caller.
         self.message_row_open_mid_line = false;
         self.begin_text_hold(rest, row_open);
+        // The sign's pause byte waits inside Look's print-and-wait loop,
+        // which `input.md §2` lists among the readers that do not use the
+        // shared wait and `timing.md §8.2` says "performs no world step".
+        if let Some(hold) = self.pending_text_hold.as_mut() {
+            hold.freezes_world = true;
+        }
     }
 
     /// Re-apply `rendered`'s per-cell fonts to the transcript rows a plain

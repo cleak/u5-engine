@@ -125,6 +125,18 @@ pub struct PendingTextHold {
     /// first advance after the head became current, so the wait starts from
     /// the frontend's own clock (see [`crate::narration`]).
     pub due_at_secs: Option<f64>,
+    /// Clock reading of the head hold's first pass, and how many of its
+    /// passes have run their world tick. `conversation.md §10` (R626): PAUSE
+    /// "runs one world tick per pass" and WAIT-KEY "uses the shared
+    /// single-keystroke wait ... so the world tick runs on each no-key pass
+    /// exactly as at the command prompt". Pass `i` falls one BIOS tick after
+    /// pass `i - 1`.
+    pub passes_started_at_secs: Option<f64>,
+    pub passes_run: u16,
+    /// The hold's key wait is not the shared wait and runs no world step
+    /// (`input.md §2` "Readers that do not use the shared wait": the Look
+    /// print-and-wait loop, which a sign's pause byte sits inside).
+    pub freezes_world: bool,
     /// The previous page left its row open (it printed text and did not end
     /// with a line feed), so the next page's first segment continues it.
     /// Known exactly: it is the page this hold itself printed.

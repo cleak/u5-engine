@@ -922,6 +922,9 @@ impl PlayState {
                 })
                 .collect(),
             due_at_secs: None,
+            passes_started_at_secs: None,
+            passes_run: 0,
+            freezes_world: false,
             row_open,
             then_message: None,
         });
@@ -988,8 +991,20 @@ impl PlayState {
     /// discarded)". Either way "the keyboard type-ahead buffer is emptied".
     /// Returns whether the key was consumed by a hold.
     pub fn consume_text_hold_key(&mut self) -> bool {
-        if self.pending_text_hold.is_none() {
+        let Some(hold) = self.pending_text_hold.as_ref() else {
             return false;
+        };
+        // `conversation.md §7.3`: each PAUSE pass "redraws the world view and
+        // polls the keyboard", so the pass that finds the key has already run
+        // its world tick (`§10`, R626). A WAIT-KEY pass that finds a key ends
+        // the shared wait with no tick (`input.md §2`, `overworld.md §5` item
+        // 5). A key arriving after the 28th pass is not polled; the pause
+        // ends by itself.
+        if hold.current() == Some(crate::text_hold::TextHoldKind::TimedPause)
+            && !hold.freezes_world
+            && hold.passes_run < crate::text_hold::TEXT_HOLD_TIMED_PAUSE_PASSES
+        {
+            let _ = self.advance_visual_tick();
         }
         self.release_next_held_page();
         self.keys_buffered_during_hold.clear();
@@ -1000,13 +1015,42 @@ impl PlayState {
     /// `conversation.md §7.3`: "after the 28th pass the pause ends by itself,
     /// key or no key", one BIOS tick per pass. A key wait never times out.
     /// Returns whether a hold is still running afterwards.
+    ///
+    /// Every pass due by `now_secs` runs its world tick first: PAUSE "runs one
+    /// world tick per pass" and WAIT-KEY's shared wait "runs on each no-key
+    /// pass exactly as at the command prompt" (`conversation.md §10`, R626),
+    /// one pass per BIOS tick from the hold's first pass.
     pub fn advance_text_hold_to(&mut self, now_secs: f64) -> bool {
         while let Some(hold) = self.pending_text_hold.as_mut() {
-            if hold.current() != Some(crate::text_hold::TextHoldKind::TimedPause) {
+            let Some(kind) = hold.current() else {
+                break;
+            };
+            let started = *hold.passes_started_at_secs.get_or_insert(now_secs);
+            let pass_secs = crate::narration::bios_ticks_secs(1);
+            let due_passes = ((now_secs - started).max(0.0) / pass_secs).floor() as u64 + 1;
+            let cap = match kind {
+                crate::text_hold::TextHoldKind::TimedPause => {
+                    crate::text_hold::TEXT_HOLD_TIMED_PAUSE_PASSES
+                }
+                crate::text_hold::TextHoldKind::WaitKey => u16::MAX,
+            };
+            let target = due_passes.min(u64::from(cap)) as u16;
+            let owed = target.saturating_sub(hold.passes_run);
+            hold.passes_run = hold.passes_run.max(target);
+            let freezes_world = hold.freezes_world;
+            if !freezes_world {
+                for _ in 0..owed {
+                    let _ = self.advance_visual_tick();
+                }
+            }
+            let Some(hold) = self.pending_text_hold.as_mut() else {
+                break;
+            };
+            if kind != crate::text_hold::TextHoldKind::TimedPause {
                 break;
             }
             let due = *hold.due_at_secs.get_or_insert_with(|| {
-                now_secs
+                started
                     + crate::narration::bios_ticks_secs(
                         crate::text_hold::TEXT_HOLD_TIMED_PAUSE_PASSES,
                     )
@@ -1022,8 +1066,22 @@ impl PlayState {
 
     /// End every remaining hold now. For frontends and harnesses with no
     /// clock and no key to give.
+    ///
+    /// No key arrives: a PAUSE runs out all 28 of its passes, each with its
+    /// world tick (`conversation.md §7.3`, `§10`). A WAIT-KEY ends as if its
+    /// key was already waiting, which ends the shared wait with no tick.
     pub fn flush_text_hold(&mut self) {
-        while self.pending_text_hold.is_some() {
+        while let Some(hold) = self.pending_text_hold.as_mut() {
+            if hold.current() == Some(crate::text_hold::TextHoldKind::TimedPause) {
+                let owed = crate::text_hold::TEXT_HOLD_TIMED_PAUSE_PASSES
+                    .saturating_sub(hold.passes_run);
+                hold.passes_run = crate::text_hold::TEXT_HOLD_TIMED_PAUSE_PASSES;
+                if !hold.freezes_world {
+                    for _ in 0..owed {
+                        let _ = self.advance_visual_tick();
+                    }
+                }
+            }
             self.release_next_held_page();
         }
     }
@@ -1037,6 +1095,8 @@ impl PlayState {
             return;
         };
         hold.due_at_secs = None;
+        hold.passes_started_at_secs = None;
+        hold.passes_run = 0;
         let continues_row = hold.row_open;
         let release_sounds = page.release_sounds.clone();
         if !page.text.text.is_empty() {
