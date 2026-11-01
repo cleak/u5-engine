@@ -173,8 +173,9 @@ jobs:
           }
           Copy-Item README.md $stage
           Copy-Item packaging/windows/RUNNING.txt $stage
-          if (Test-Path LICENSE) {
-            Copy-Item LICENSE $stage
+          $licenses = @('LICENSE', 'LICENSE-MIT', 'LICENSE-APACHE') | Where-Object { Test-Path $_ }
+          if ($licenses) {
+            $licenses | ForEach-Object { Copy-Item $_ $stage }
           } else {
             Write-Output "::warning::No LICENSE file in the repository root"
           }

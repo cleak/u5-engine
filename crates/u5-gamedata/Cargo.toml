@@ -2,6 +2,7 @@
 name = "u5-gamedata"
 description = "Platform-neutral game-data manifest, validation, discovery trait and normalising install."
 version.workspace = true
+license.workspace = true
 edition.workspace = true
 
 # Deliberately no dependencies: std only, no UI, no OS-specific code.

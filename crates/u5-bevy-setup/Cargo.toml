@@ -2,6 +2,7 @@
 name = "u5-bevy-setup"
 description = "Bevy first-run setup wizard for choosing and validating the game data."
 version.workspace = true
+license.workspace = true
 edition.workspace = true
 
 [dependencies]

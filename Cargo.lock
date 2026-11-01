@@ -4490,7 +4490,7 @@ checksum = "214ca0b2191785cbc06209b9ca1861e048e39b5ba33574b3cedd58363d5bb5f6"
 
 [[package]]
 name = "u5-bevy"
-version = "1.0.0"
+version = "1.0.1"
 dependencies = [
  "bevy",
  "image",
@@ -4499,7 +4499,7 @@ dependencies = [
 
 [[package]]
 name = "u5-bevy-setup"
-version = "1.0.0"
+version = "1.0.1"
 dependencies = [
  "bevy",
  "u5-gamedata",
@@ -4507,11 +4507,11 @@ dependencies = [
 
 [[package]]
 name = "u5-gamedata"
-version = "1.0.0"
+version = "1.0.1"
 
 [[package]]
 name = "u5-host-desktop"
-version = "1.0.0"
+version = "1.0.1"
 dependencies = [
  "rfd",
  "serde",
@@ -4522,14 +4522,14 @@ dependencies = [
 
 [[package]]
 name = "u5-runtime"
-version = "1.0.0"
+version = "1.0.1"
 dependencies = [
  "chrono",
 ]
 
 [[package]]
 name = "u5-tui"
-version = "1.0.0"
+version = "1.0.1"
 dependencies = [
  "image",
  "u5-bevy",

@@ -2,6 +2,7 @@
 name = "u5-host-desktop"
 description = "Desktop host for game-data setup: config file, install discovery, resolution pipeline, native dialogs."
 version.workspace = true
+license.workspace = true
 edition.workspace = true
 
 [features]

@@ -276,3 +276,17 @@ cargo test --release -p u5-bevy --features original-asset-tests   # needs U5_TES
 cargo run --release -- --route-smoke /path/to/writable/copy        # scripted routes
 python3 qa/tools/paired_suite.py <scenario>                        # needs DOSBox Staging and the capture harness
 ```
+
+## License
+
+The u5-engine source code is licensed under either of
+
+- Apache License, Version 2.0 ([LICENSE-APACHE](LICENSE-APACHE)), or
+- MIT license ([LICENSE-MIT](LICENSE-MIT))
+
+at your option. This covers only this project's code. Ultima V and its game
+data belong to their rights holders, and you need your own copy to play.
+
+Unless you explicitly state otherwise, any contribution you intentionally
+submit for inclusion in this work, as defined in the Apache-2.0 license, is
+dual licensed as above, without any additional terms or conditions.

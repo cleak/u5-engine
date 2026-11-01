@@ -12,8 +12,9 @@
 #       -> OUT_DIR/u5-engine-VERSION-macos-universal.zip
 #
 # BIN_DIR holds the built binaries (u5-engine, plus u5-engine-gui when that
-# binary exists). README.md and LICENSE are copied from the repository root;
-# a missing LICENSE is reported, not fatal.
+# binary exists). README.md and the LICENSE files (LICENSE, LICENSE-MIT,
+# LICENSE-APACHE) are copied from the repository root; none at all is reported,
+# not fatal.
 set -euo pipefail
 
 APP_NAME="U5 Engine"
@@ -25,9 +26,14 @@ copy_docs() {
     local dest=$1 running=$2
     cp README.md "$dest/README.md"
     cp "$running" "$dest/RUNNING.txt"
-    if [[ -f LICENSE ]]; then
-        cp LICENSE "$dest/LICENSE"
-    else
+    local found=0
+    for license in LICENSE LICENSE-MIT LICENSE-APACHE; do
+        if [[ -f $license ]]; then
+            cp "$license" "$dest/$license"
+            found=1
+        fi
+    done
+    if [[ $found -eq 0 ]]; then
         echo "package.sh: warning: no LICENSE file in the repository root" >&2
     fi
 }

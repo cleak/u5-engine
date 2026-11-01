@@ -10,8 +10,10 @@ members = [
 ]
 
 [workspace.package]
-version = "1.0.0"
+version = "1.0.1"
 edition = "2024"
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/cleak/u5-engine"
 
 [workspace.dependencies]
 u5-runtime = { path = "crates/u5-runtime" }
