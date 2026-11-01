@@ -98,7 +98,12 @@ pub const fn dungeon_object_family_slots(cell: u8) -> (Option<usize>, Option<usi
         0x3 => (Some(0), Some(0)),
         0x4 => (None, Some(12)),
         0x5 => (None, Some(4)),
-        0x6 => (if cell & 0x07 == 0 { Some(8) } else { None }, Some(8)),
+        // `dungeon-mode.md §6.6` (`RETRACTIONS.md` R511): "There is no
+        // ordinary class-6 rising paint: the low-three-bits-zero condition
+        // gates the class-6 *floor* pit, and a class-6 cell with any of its
+        // low three bits set ... draws no pit sprite at all." The separate
+        // raw-bit-`0x08` rising overlay is painted elsewhere.
+        0x6 => (None, if cell & 0x07 == 0 { Some(8) } else { None }),
         0x7 => (None, Some(16)),
         _ => (None, None),
     }
@@ -1086,8 +1091,10 @@ mod tests {
         assert_eq!(dungeon_object_family_slots(0x30), (Some(0), Some(0)));
         assert_eq!(dungeon_object_family_slots(0x40), (None, Some(12)));
         assert_eq!(dungeon_object_family_slots(0x50), (None, Some(4)));
-        assert_eq!(dungeon_object_family_slots(0x60), (Some(8), Some(8)));
-        assert_eq!(dungeon_object_family_slots(0x67), (None, Some(8)));
+        // `dungeon-mode.md §6.6` (R511): class 6 is floor-only, and only
+        // with the low three bits clear.
+        assert_eq!(dungeon_object_family_slots(0x60), (None, Some(8)));
+        assert_eq!(dungeon_object_family_slots(0x67), (None, None));
         assert_eq!(dungeon_object_family_slots(0x70), (None, Some(16)));
     }
 

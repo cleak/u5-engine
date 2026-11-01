@@ -991,7 +991,6 @@ fn g1_endgame_s9_4_elapsed_interval_borrows_days_then_months() {
 /// low three bits are zero"; "a class-6 cell with any of its low three bits
 /// set (a bare `0x62`, for instance) draws no pit sprite at all".
 #[test]
-#[ignore = "divergence: dungeon-6.6-class6-pit-sprite"]
 fn g1_dungeon_s6_6_class_six_pit_sprite_is_floor_only_and_needs_low_bits_clear() {
     assert_eq!(dungeon_object_family_slots(0x60), (None, Some(8)));
     for cell in [0x61u8, 0x62, 0x63, 0x67] {
