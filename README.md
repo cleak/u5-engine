@@ -45,16 +45,16 @@ systems:
 - the intro, character creation and Ultima IV transfer;
 - the PC-speaker sound effects.
 
-Current verification:
+Current verification (release 1.0):
 
 | Check | Result |
 |---|---|
-| Unit and integration tests | about 5,200, all passing |
+| Unit and integration tests | about 6,250, all passing |
 | Scripted route checks (terminal) | 521 of 521 |
-| Asset-backed visual route checks | 278 of 278 |
-| Paired comparisons against DOSBox | 145 of 173 scenarios match on every beat; the other 28 are documented as random in the original too (dice, greeting pools, NPC traffic) |
-| Spec conformance audit | 187 of 191 audited gaps fixed; the remaining 4 went to the spec owner as questions |
-| Exploratory playtests | seven passes; every confirmed finding is fixed or waiting on a spec answer |
+| Asset-backed visual tests | 304 of 304 |
+| Paired comparisons against DOSBox | 157 of 179 scenarios match on every beat, with zero real differences. The other 22 are 18 scenarios whose outcome the original randomises (dice, greeting pools, NPC traffic) plus 4 measurement probes |
+| Closed spec conformance audit | every testable rule in the 88 normative spec files checked: 4,937 rules, with no open blocking gap |
+| Exploratory playtests | 25 passes; every confirmed finding is fixed or waiting on a spec answer |
 
 Open work is tracked in this repo's issues. Behaviour the spec doesn't yet pin
 down is listed in [u5-spec issues](https://github.com/cleak/u5-spec/issues).
