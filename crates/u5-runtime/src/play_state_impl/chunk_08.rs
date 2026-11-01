@@ -3020,11 +3020,21 @@ impl PlayState {
         // — the transit envelope among them — while the serial kept counting,
         // so the frontend advanced past serials that had no history entry and
         // the cue was silently lost.
-        let entry_effects = next.sound_effects_after(0);
+        let entry_effects = next.sound_effects_with_serials_after(0);
+        let entry_row_flashes = std::mem::take(&mut next.stats_row_flash_history);
         next.sound_effect_serial = prior_sound_serial;
         next.sound_effect_history = std::mem::take(&mut self.sound_effect_history);
-        for effect in entry_effects {
-            next.emit_sound_effect(effect);
+        // The roster-row flashes are keyed by the same serials, so they
+        // cross with the history they annotate.
+        next.stats_row_flash_history = std::mem::take(&mut self.stats_row_flash_history);
+        for (entry_serial, effect) in entry_effects {
+            match entry_row_flashes
+                .iter()
+                .find(|(serial, _)| *serial == entry_serial)
+            {
+                Some(&(_, slot)) => next.emit_sound_effect_with_stats_row_flash(effect, slot),
+                None => next.emit_sound_effect(effect),
+            }
         }
         // A scene rebuild constructs `next` from scratch, so every frontend
         // presentation flag defaults off. `pace_combat_presentations` is set

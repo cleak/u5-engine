@@ -97,3 +97,41 @@ fn cos_a_a_flashing_roster_row_paints_inverted() {
     assert_eq!(flashing[0], plain[0], "other rows keep their style");
     assert_ne!(flashing[1], plain[1], "the flashing row is inverted");
 }
+
+#[test]
+fn cos_a_a_rumbles_row_flash_survives_a_scene_rebuild() {
+    // A scene rebuild carries the outgoing sound history across so a frontend
+    // that reads after the transition still hears the rumble; the roster row
+    // that rumble highlights (`time.md §5`) is keyed by the same serial and
+    // must cross with it, not be dropped or aliased by the destination's own
+    // freshly numbered history.
+    let dir = debug_game_dir();
+    let scene = Scene::new(17).unwrap();
+    let mut grid = open_world_grid();
+    grid[world_cell_index(10, 20)] = 7;
+    let mut state = world_state(grid, 10, 20);
+    while state.party.len() < 2 {
+        let mut member = state.party[0];
+        member.slot = state.party.len() as u8;
+        state.party.push(member);
+    }
+    state.party[1].hp = 30;
+    let serial = state.sound_effect_serial;
+    let _ = state.apply_shared_party_damage(1, 1);
+
+    state
+        .enter_world_target(&dir, WorldPlane::Underworld, PlayTarget::Town(scene), true)
+        .unwrap();
+
+    let rows: Vec<(SoundEffect, Option<usize>)> = state
+        .sound_effects_with_serials_after(serial)
+        .into_iter()
+        .map(|(serial, effect)| (effect, state.stats_row_flash_for_sound_effect(serial)))
+        .collect();
+    assert_eq!(rows.first(), Some(&(SoundEffect::DamageRumble, Some(1))), "{rows:?}");
+    assert!(
+        rows.iter().skip(1).all(|(_, row)| row.is_none()),
+        "{rows:?}"
+    );
+    let _ = fs::remove_dir_all(dir);
+}
