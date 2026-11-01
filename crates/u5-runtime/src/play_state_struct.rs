@@ -1012,6 +1012,9 @@ pub struct PlayState {
     /// How many of `blackthorn.md §7` step 4's three cell reveals are on
     /// screen: the two Guardians, then the spectral figure.
     pub blackthorn_rescue_reveals_shown: u8,
+    /// The rescue viewport's stage; see
+    /// [`crate::blackthorn::BlackthornRescueViewport`].
+    pub blackthorn_rescue_viewport: crate::blackthorn::BlackthornRescueViewport,
     /// The rescue's crowned spectral figure (`blackthorn.md §7.1` step 5:
     /// actor byte `0x74` at `(5,2)`) as an animated record, live from the
     /// verdict's key wait. `endgame.md §4` (issue #298 Q43): it selects

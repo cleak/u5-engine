@@ -1,5 +1,70 @@
 // u5-spec#302 closed re-audit, `systems/blackthorn.md` (a3-bt).
 
+/// Re-audit blackthorn:7:14 and 7:15, `blackthorn.md §7` "Before step 1:
+/// nothing waits": below the top of the town range the conditional world
+/// tick repaints the viewport from the live grid, and "the field stays up
+/// through step 1's wait and beat 1 until the dissolve of step 3 takes it to
+/// black". The print-and-wait order's step 9 installs the party-on-foot actor
+/// only after beat 4.
+#[test]
+fn auditfix3_bt_7_14_rescue_viewport_runs_live_grid_then_black_then_party() {
+    use crate::blackthorn::BlackthornRescueViewport;
+    let mut state = test_state(open_grid(), 1, 1);
+    state.party[0].status = b'D';
+    state.party[0].hp = 0;
+    state
+        .apply_blackthorn_rescue_refuge(Path::new("/nonexistent-auditfix3-bt"))
+        .unwrap();
+    assert_eq!(state.blackthorn_rescue_viewport, BlackthornRescueViewport::LiveGrid);
+
+    let mut seen_black_before_party = false;
+    let mut now = 0.0;
+    while state.staged_narration_active() && now < 60.0 {
+        let released_third = !state
+            .staged_narration
+            .beats()
+            .any(|beat| beat.text == crate::blackthorn::BLACKTHORN_RESCUE_REFUGE_THIRD);
+        let darkness_pending = state
+            .staged_narration
+            .beats()
+            .any(|beat| beat.text == crate::blackthorn::BLACKTHORN_RESCUE_DARKNESS);
+        let expected = if darkness_pending {
+            BlackthornRescueViewport::LiveGrid
+        } else if released_third {
+            BlackthornRescueViewport::PartyOnBlack
+        } else {
+            seen_black_before_party = true;
+            BlackthornRescueViewport::Black
+        };
+        assert_eq!(state.blackthorn_rescue_viewport, expected, "at {now} s");
+        state.advance_staged_narration_to(now);
+        now += 0.02;
+    }
+    assert!(seen_black_before_party, "the refuge fragments run on pure black");
+    assert_eq!(state.blackthorn_rescue_viewport, BlackthornRescueViewport::PartyOnBlack);
+}
+
+/// The conditional tick does not run outside the town range: a dungeon wipe
+/// starts on black and still gets the party only at step 9.
+#[test]
+fn auditfix3_bt_7_14_dungeon_rescue_skips_the_live_grid_repaint() {
+    use crate::blackthorn::BlackthornRescueViewport;
+    let mut state = dungeon_state(open_dungeon_record(), 3, 1, 1);
+    state
+        .apply_blackthorn_rescue_refuge(Path::new("/nonexistent-auditfix3-bt"))
+        .unwrap();
+    assert_eq!(state.blackthorn_rescue_viewport, BlackthornRescueViewport::Black);
+    state.flush_staged_narration();
+    assert_eq!(state.blackthorn_rescue_viewport, BlackthornRescueViewport::PartyOnBlack);
+    assert!(crate::blackthorn::blackthorn_rescue_repaints_live_grid(0));
+    assert!(crate::blackthorn::blackthorn_rescue_repaints_live_grid(
+        crate::SCENE_TOWN_FAMILY_LAST
+    ));
+    assert!(!crate::blackthorn::blackthorn_rescue_repaints_live_grid(
+        crate::SCENE_TOWN_FAMILY_LAST + 1
+    ));
+}
+
 /// Re-audit blackthorn:7.1:5, `blackthorn.md §7.1` "What paces the fall": an
 /// implementation "must not express the fall, or a hold after it, as a
 /// BIOS-tick count". The hold is the recipe's own length, not that length

@@ -2165,6 +2165,33 @@ pub enum BlackthornRescuePhase {
     Restoration,
 }
 
+/// What the rescue's map viewport shows, by stage of `blackthorn.md §7`.
+///
+/// "When the incoming scene value is below the top of the town range, it
+/// then runs the one conditional world tick of the contract, which is a
+/// single repaint of the map viewport from the live grid ... The field stays
+/// up through step 1's wait and beat 1 until the dissolve of step 3 takes it
+/// to black." Step 9 then installs "the party-on-foot actor at the viewport
+/// centre" after beat 4 (u5-spec#302 re-audit blackthorn:7:14, 7:15).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum BlackthornRescueViewport {
+    /// The conditional world tick's repaint of the live grid, up to beat 1.
+    LiveGrid,
+    /// Step 3's dissolve to black onward (or from the start when the
+    /// incoming scene is above the town range and no repaint ran).
+    #[default]
+    Black,
+    /// Step 9 onward: black with the party-on-foot actor at `(5,5)`.
+    PartyOnBlack,
+}
+
+/// `blackthorn.md §7`: the conditional world tick runs "when that value is
+/// below the top of the town range" - the overworld or a town-family scene
+/// (`main-loop.md` scene values `1..32`), not a dungeon.
+pub const fn blackthorn_rescue_repaints_live_grid(incoming_scene: u8) -> bool {
+    incoming_scene <= crate::SCENE_TOWN_FAMILY_LAST
+}
+
 pub const fn blackthorn_rescue_verdict_record(standing: u8) -> u8 {
     match standing {
         0..=19 => 0,
