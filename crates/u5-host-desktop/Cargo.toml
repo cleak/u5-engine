@@ -1,0 +1,20 @@
+[package]
+name = "u5-host-desktop"
+description = "Desktop host for game-data setup: config file, install discovery, resolution pipeline, native dialogs."
+version.workspace = true
+edition.workspace = true
+
+[features]
+default = []
+# Native folder picker and message boxes (rfd). The windowed frontend
+# enables it; terminal-only builds do not need it.
+native-dialogs = ["dep:rfd"]
+
+[dependencies]
+u5-gamedata = { workspace = true }
+serde = { version = "1", features = ["derive"] }
+toml = "0.8"
+rfd = { version = "0.17", optional = true }
+
+[target.'cfg(windows)'.dependencies]
+winreg = "0.56"
