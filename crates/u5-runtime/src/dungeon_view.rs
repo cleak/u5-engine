@@ -263,6 +263,9 @@ pub fn dungeon_chamber_banner(record: u8, n: u8) -> Option<DungeonChamberBanner>
         (4, 2) => ((9, 10), &[b"UPPER ", b"CRYPTS"]),
         (4, 3) => ((9, 10), &[b"LOWER ", b"CRYPTS"]),
         (4, 4) => ((9, 10), &[b"DEBTERS", b" ALLY  "]),
+        (5, 1) => ((10, 11), &[b"D\\P"]),
+        (5, 2) => ((9, 11), &[b"D\\PER"]),
+        (5, 3) => ((9, 11), &[b"D\\PE_"]),
         (6, 1) => ((7, 10), &[b"MO[ER LODE", b"   MAZE   "]),
         _ => return None,
     };

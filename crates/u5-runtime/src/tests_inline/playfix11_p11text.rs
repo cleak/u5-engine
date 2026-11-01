@@ -409,3 +409,53 @@ fn spec317_dungeon_chamber_banner_gaps_are_blank_spaces_not_word_dividers() {
     }
 }
 
+/// `dungeon-mode.md §6.4` (corrected 2026-11-01, u5-spec#317 Q1): "The
+/// Shame banners are stored as `D\P` (DEEP, 3 cells), `D\PER` (DEEPER, 5
+/// cells) and `D\PE_` (DEEPEST ...)", origins (10, 11), (9, 11), (9, 11),
+/// each "a single row exactly as wide as its word", drawn as the inverse
+/// block when the `0xB?` wall with that low nibble is one cell ahead.
+#[test]
+fn spec317_shame_draws_its_three_chamber_banners() {
+    assert_eq!(
+        dungeon_chamber_banner(5, 1),
+        Some(DungeonChamberBanner { origin: (10, 11), rows: &[b"D\\P"] })
+    );
+    assert_eq!(
+        dungeon_chamber_banner(5, 2),
+        Some(DungeonChamberBanner { origin: (9, 11), rows: &[b"D\\PER"] })
+    );
+    assert_eq!(
+        dungeon_chamber_banner(5, 3),
+        Some(DungeonChamberBanner { origin: (9, 11), rows: &[b"D\\PE_"] })
+    );
+    assert_eq!(dungeon_chamber_banner(5, 4), None);
+    let blank_runes = parse_ch_font(&vec![0; CH_FONT_LEN], RUNES_CH_FILE).unwrap();
+    let mut atlas = synthetic_tile_atlas(TileGraphicsDepth::Ega16);
+    atlas.runic_font = Some(blank_runes);
+    let white = TileGraphicsDepth::Ega16.pixel_limit() - 1;
+    for (n, expected) in [(1u8, (80, 103, 88, 95)), (2, (72, 111, 88, 95)), (3, (72, 111, 88, 95))] {
+        let mut grid = open_dungeon_record();
+        grid[dungeon_cell_index(0, 5, 4)] = 0xb0 | n;
+        let mut state = dungeon_state(grid, 0, 4, 4);
+        state.area = Area::Dungeon {
+            scene: DungeonScene::from_record(5).unwrap(),
+            level: 0,
+        };
+        state.player.facing = Direction::East;
+        state.torch_counter = 10;
+        let viewport = state.render_top_down_frame(VIEWPORT_PLAYER_ROW, &atlas).unwrap().unwrap();
+        let mut bounds: Option<(usize, usize, usize, usize)> = None;
+        for y in 0..viewport.height {
+            for x in 0..viewport.width {
+                if viewport.pixels[y * viewport.width + x] == white {
+                    let (sx, sy) = (x + VIEWPORT_ORIGIN_X, y + VIEWPORT_ORIGIN_Y);
+                    bounds = Some(match bounds {
+                        None => (sx, sx, sy, sy),
+                        Some((x0, x1, y0, y1)) => (x0.min(sx), x1.max(sx), y0.min(sy), y1.max(sy)),
+                    });
+                }
+            }
+        }
+        assert_eq!(bounds, Some(expected), "Shame banner {n}");
+    }
+}
