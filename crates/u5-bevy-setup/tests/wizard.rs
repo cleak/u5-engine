@@ -108,12 +108,20 @@ fn candidate_flow_completes() {
     assert_eq!(primary_action(&model.screen), Some(Action::UseFolder));
     assert!(model.apply(Action::UseFolder, &host));
     assert!(matches!(model.screen, Screen::Done(_)));
+    // Quitting after the choice is saved is not a cancellation.
+    let mut quitter = WizardModel::new("", vec![discovered(&game)]);
+    quitter.apply(Action::Continue, &host);
+    quitter.apply(Action::SelectCandidate(0), &host);
+    quitter.apply(Action::UseFolder, &host);
+    quitter.apply(Action::Quit, &host);
+    assert!(matches!(quitter.outcome, Some(WizardOutcome::SavedOnly(_))));
+
     assert!(model.apply(Action::Start, &host));
     match model.outcome.clone().unwrap() {
         WizardOutcome::Completed(summary) => assert_eq!(summary.data_dir, game.join("managed")),
         other => panic!("{other:?}"),
     }
-    assert_eq!(*host.committed.lock().unwrap(), vec![game]);
+    assert_eq!(host.committed.lock().unwrap().len(), 2);
     // Finished: further actions are ignored.
     assert!(!model.apply(Action::Back, &host));
 }

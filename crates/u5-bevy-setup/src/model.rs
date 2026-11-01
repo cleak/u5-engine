@@ -37,7 +37,11 @@ pub struct CommitSummary {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum WizardOutcome {
+    /// Set up; start the game.
     Completed(CommitSummary),
+    /// Set up and saved, but the player quit instead of starting the game.
+    SavedOnly(CommitSummary),
+    /// Nothing was set up.
     Cancelled,
 }
 
@@ -109,6 +113,9 @@ impl WizardModel {
         }
         let screen = self.screen.clone();
         match (screen, action) {
+            (Screen::Done(summary), Action::Quit) => {
+                self.outcome = Some(WizardOutcome::SavedOnly(summary));
+            }
             (_, Action::Quit) => {
                 self.outcome = Some(WizardOutcome::Cancelled);
             }

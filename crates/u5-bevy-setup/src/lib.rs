@@ -462,29 +462,52 @@ fn spawn_page(commands: &mut Commands, page: Page) {
         .with_children(|root| {
             root.spawn(text_bundle("ULTIMA V  -  SETUP", 16.0, EGA_CYAN));
             root.spawn(text_bundle(&page.title, 30.0, EGA_YELLOW));
-            for (text, style) in &page.lines {
-                root.spawn(text_bundle(text, 18.0, style.color()));
-            }
-            for (label, action) in &page.list {
-                root.spawn((
-                    Button,
-                    WizardButton(action.clone()),
-                    Node {
-                        width: Val::Percent(100.0),
-                        padding: UiRect::axes(Val::Px(12.0), Val::Px(8.0)),
-                        border: UiRect::all(Val::Px(2.0)),
-                        ..default()
-                    },
-                    BorderColor(EGA_LIGHT_GREY),
-                    BackgroundColor(EGA_BLUE),
-                ))
-                .with_children(|button| {
-                    button.spawn(text_bundle(label, 16.0, EGA_WHITE));
-                });
-            }
+            // Long pages (the help text, many candidates) use a smaller
+            // size, and the content area clips rather than pushing the
+            // buttons off the window.
+            let text_chars: usize = page.lines.iter().map(|(text, _)| text.len()).sum();
+            let body_size = if text_chars > 900 || page.list.len() > 4 {
+                15.0
+            } else {
+                18.0
+            };
+            root.spawn(Node {
+                flex_direction: FlexDirection::Column,
+                flex_grow: 0.0,
+                flex_shrink: 1.0,
+                min_height: Val::Px(0.0),
+                row_gap: Val::Px(10.0),
+                overflow: Overflow::clip_y(),
+                ..default()
+            })
+            .with_children(|content| {
+                for (text, style) in &page.lines {
+                    content.spawn(text_bundle(text, body_size, style.color()));
+                }
+                for (label, action) in &page.list {
+                    content
+                        .spawn((
+                            Button,
+                            WizardButton(action.clone()),
+                            Node {
+                                width: Val::Percent(100.0),
+                                flex_shrink: 0.0,
+                                padding: UiRect::axes(Val::Px(12.0), Val::Px(8.0)),
+                                border: UiRect::all(Val::Px(2.0)),
+                                ..default()
+                            },
+                            BorderColor(EGA_LIGHT_GREY),
+                            BackgroundColor(EGA_BLUE),
+                        ))
+                        .with_children(|button| {
+                            button.spawn(text_bundle(label, body_size.min(16.0), EGA_WHITE));
+                        });
+                }
+            });
             root.spawn(Node {
                 flex_direction: FlexDirection::Row,
                 flex_wrap: FlexWrap::Wrap,
+                flex_shrink: 0.0,
                 column_gap: Val::Px(12.0),
                 row_gap: Val::Px(8.0),
                 margin: UiRect::top(Val::Px(12.0)),

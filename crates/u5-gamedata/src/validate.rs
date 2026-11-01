@@ -174,9 +174,8 @@ impl ValidationReport {
         let mut parts = Vec::new();
         if missing > 0 {
             parts.push(format!(
-                "{missing} of {} required file{} missing",
-                self.required_count(),
-                if missing == 1 { "" } else { "s" }
+                "{missing} of {} required files missing",
+                self.required_count()
             ));
         }
         if unreadable > 0 {
