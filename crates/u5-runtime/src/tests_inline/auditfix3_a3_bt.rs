@@ -32,3 +32,38 @@ fn auditfix3_bt_7_1_5_stonegate_hold_is_the_recipe_length_not_ticks() {
     }
     assert!(off_tick > 0, "some recipe length is not a whole tick count");
 }
+
+/// Re-audit blackthorn:5:3, `blackthorn.md §5` execution step 4: "the
+/// impact figure is drawn, the 300-update impact rumble plays, and one world
+/// tick follows." The tick follows the rumble, ahead of step 5's actor clear
+/// and step 6's buffered pendulum write.
+#[test]
+fn auditfix3_bt_5_3_execution_impact_is_followed_by_one_world_tick() {
+    let dir = debug_game_dir();
+    lit18_write_merciful_death_record(&dir);
+    let mut state = test_state(open_grid(), 5, 5);
+    state.party.push(audit_g5_companion(1));
+    state.party.push(audit_g5_companion(2));
+    state.repaint_stats_panel();
+    state.begin_blackthorn_audience_capture(&dir).unwrap();
+    while state.active_blackthorn.as_ref().is_some_and(|c| c.current_prompt().is_none()) {
+        state.submit_blackthorn_audience_answer("", &dir).unwrap();
+    }
+    state.submit_blackthorn_audience_answer("Ahm", &dir).unwrap();
+    state.advance_staged_narration_to(0.0);
+    state.advance_staged_narration_to(crate::narration::bios_ticks_secs(10) + 0.01);
+    assert!(
+        state.sound_effects_after(0).contains(&SoundEffect::RoughSeasImpactRumble),
+        "the impact rumble has played"
+    );
+    let frame_before = state.animation.frame;
+    assert_eq!(state.party.len(), 3, "the blade hold is still running");
+    state.flush_staged_narration();
+    assert_eq!(state.party.len(), 2, "the hold's end lifts the companion");
+    assert_eq!(
+        state.animation.frame,
+        (frame_before + 1) % crate::animation::STATIC_TILE_ANIMATION_PERIOD_TICKS,
+        "exactly one world tick follows the impact rumble"
+    );
+    let _ = fs::remove_dir_all(dir);
+}

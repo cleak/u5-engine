@@ -6896,6 +6896,11 @@ impl PlayState {
         if !merciful && victim.is_none() {
             return;
         }
+        // Step 4 (u5-spec#302 re-audit blackthorn:5:3): after the impact
+        // rumble "one world tick follows", ahead of step 5's actor clear -
+        // so step 6's buffered pendulum write is not yet on it. A
+        // presentation step, like the cutscene's other counted ticks.
+        self.advance_presentation_world_step();
         // Step 4's cell. After a first wrong answer the actor sprite was
         // cleared on the pendulum, where §5 puts it; this engine's script VM
         // drops a cleared actor's coordinates, so that case reads the
