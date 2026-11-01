@@ -4,6 +4,7 @@ members = [
     "crates/u5-runtime",
     "crates/u5-tui",
     "crates/u5-bevy",
+    "crates/u5-gamedata",
 ]
 
 [workspace.package]
@@ -13,6 +14,7 @@ edition = "2024"
 [workspace.dependencies]
 u5-runtime = { path = "crates/u5-runtime" }
 u5-bevy = { path = "crates/u5-bevy" }
+u5-gamedata = { path = "crates/u5-gamedata" }
 bevy = "0.16"
 image = { version = "0.25", default-features = false, features = ["png"] }
 chrono = { version = "0.4", default-features = false, features = ["clock"] }

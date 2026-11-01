@@ -4386,6 +4386,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "u5-gamedata"
+version = "1.0.0"
+
+[[package]]
 name = "u5-runtime"
 version = "1.0.0"
 dependencies = [
