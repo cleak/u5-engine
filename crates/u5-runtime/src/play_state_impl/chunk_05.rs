@@ -378,9 +378,17 @@ impl PlayState {
                     affected += 1;
                     // `§8.1` Sleep/Poison rows: one short status rumble per
                     // failed save (`audio.md §5.3`). Sleep also inverts the
-                    // member's row first; the engine has no row-inversion
-                    // surface, and the repaint request below removes it.
-                    self.emit_sound_effect(SoundEffect::StatusFieldRumble);
+                    // member's row first - held by the frontend while the
+                    // rumble sounds - and the repaint request below removes
+                    // it; poison has "no row highlight".
+                    if field == DungeonFieldEffect::Sleep {
+                        self.emit_sound_effect_with_stats_row_flash(
+                            SoundEffect::StatusFieldRumble,
+                            index,
+                        );
+                    } else {
+                        self.emit_sound_effect(SoundEffect::StatusFieldRumble);
+                    }
                     // `stats-panel.md §2.2.1` row 17: a dungeon sleep
                     // field's status change is deferred, per member that
                     // falls asleep - unlike the non-combat poison field,

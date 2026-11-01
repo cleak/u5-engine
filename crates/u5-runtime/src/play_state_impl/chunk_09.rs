@@ -6321,7 +6321,10 @@ impl PlayState {
         // active-player bookkeeping below. The cue is deliberately not
         // attached to `PartyMember::apply_damage`, which several callers
         // reach without this presentation and which stay silent.
-        self.emit_sound_effect(SoundEffect::DamageRumble);
+        // `time.md §5`: the feedback is "a brief highlight of the affected
+        // member's roster row and a short noise burst"; the frontend holds
+        // the row inverted while the rumble sounds.
+        self.emit_sound_effect_with_stats_row_flash(SoundEffect::DamageRumble, slot);
         let applied = self.party[slot].apply_damage(amount);
         let hp_after = self.party[slot].hp;
         let died = hp_after == 0;

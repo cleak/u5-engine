@@ -899,6 +899,15 @@ pub struct PlayState {
     /// new occurrence from a redraw of the same message or state.
     pub sound_effect_serial: u64,
     pub(crate) sound_effect_history: Vec<(u64, SoundEffect)>,
+    /// The roster row each recorded damage/status rumble highlights, keyed
+    /// by that effect's serial in [`Self::sound_effect_history`] and pruned
+    /// with it. `time.md §5` / `overworld.md §6.2.4`: the shared
+    /// party-damage helper "inverts the member's panel row, plays the shared
+    /// damage rumble, and inverts the row back"; `dungeon-mode.md §8.1`'s
+    /// sleep field inverts a failing member's row ahead of its status
+    /// rumble. The frontend that owns the voice holds the row through it
+    /// ([`Self::presentation_stats_row_flash`]).
+    pub(crate) stats_row_flash_history: Vec<(u64, usize)>,
     /// `town-mode.md §13`: how many leading notes of the thirteen-note
     /// harpsichord tune have been played. Non-saved runtime state; the
     /// section is explicit that leaving the chair does not clear it, so only
@@ -1040,6 +1049,11 @@ pub struct PlayState {
     /// knows when the envelope ends; the world-tick pause after the sting
     /// repaints the viewport, which is when it clears.
     pub presentation_camp_flash_inverted: bool,
+    /// The roster row drawn inverted while its damage or sleep-field rumble
+    /// sounds ([`Self::stats_row_flash_history`]). Set and cleared by the
+    /// frontend that owns the speaker voice, like
+    /// [`Self::presentation_camp_flash_inverted`].
+    pub presentation_stats_row_flash: Option<usize>,
     pub active_shop: Option<crate::shop_session::ActiveShopSession>,
     /// `shops.md §8.1`: the arms post-item prompt closes with `sir?`/`milady?`
     /// once a transaction has completed in this visit and with `then?` before

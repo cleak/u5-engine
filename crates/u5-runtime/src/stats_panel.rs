@@ -1968,7 +1968,11 @@ fn paint_stats_panel_party_row(
     // and "moving the indicator inverts the old row back and inverts
     // the new one". `stats-panel.md §9` adds that member selection
     // "leaves the body alone" apart from that one inverted row.
-    let highlighted = overlay.highlighted || state.selector_highlight() == Some(index);
+    // `time.md §5` / `dungeon-mode.md §8.1`: a damage or sleep-field rumble
+    // holds its member's row inverted while it sounds.
+    let highlighted = overlay.highlighted
+        || state.selector_highlight() == Some(index)
+        || state.presentation_stats_row_flash == Some(index);
     if highlighted {
         system.emit_byte(TEXT_CTRL_INVERSE_TOGGLE);
     }

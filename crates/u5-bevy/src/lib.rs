@@ -322,6 +322,9 @@ struct SpeakerEffect {
     audible: bool,
     /// Set for a program a later [`SpeakerSource::Cancel`] may cut short.
     interruptible: Option<InterruptibleSound>,
+    /// The roster row held inverted while this effect sounds
+    /// ([`PlayState::stats_row_flash_for_sound_effect`]).
+    stats_row_flash: Option<usize>,
 }
 
 /// What the voice should play.
@@ -356,6 +359,7 @@ impl SpeakerEffect {
             source: SpeakerSource::Effect(effect),
             audible: true,
             interruptible: None,
+            stats_row_flash: None,
         }
     }
 
@@ -365,6 +369,7 @@ impl SpeakerEffect {
             source: SpeakerSource::Program(program),
             audible: true,
             interruptible: None,
+            stats_row_flash: None,
         }
     }
 
@@ -381,6 +386,7 @@ impl SpeakerEffect {
             source: SpeakerSource::Cancel(tag),
             audible: true,
             interruptible: None,
+            stats_row_flash: None,
         }
     }
 
@@ -390,6 +396,7 @@ impl SpeakerEffect {
             source: SpeakerSource::Effect(effect),
             audible,
             interruptible: None,
+            stats_row_flash: None,
         }
     }
 }
@@ -502,6 +509,9 @@ struct QueuedSpeakerProgram {
     /// How far into the program the gameplay viewport turns inverted, held
     /// until the program ends; see [`viewport_flash_start`].
     viewport_flash: Option<Duration>,
+    /// The roster row held inverted for the whole program; see
+    /// [`SpeakerVoiceStatsRowFlash`].
+    stats_row_flash: Option<usize>,
 }
 
 /// When a program's whole-viewport inversion begins, if it has one.
@@ -558,6 +568,15 @@ struct SpeakerVoiceAudible;
 #[derive(Component)]
 struct SpeakerVoiceViewportFlash(Duration);
 
+/// Marks a voice whose effect holds one stats-panel roster row inverted for
+/// its whole program: `time.md §5`'s shared party-damage feedback ("a brief
+/// highlight of the affected member's roster row and a short noise burst";
+/// `overworld.md §6.2.4` inverts the row, plays the rumble, and inverts it
+/// back) and `dungeon-mode.md §8.1`'s sleep-field row inversion ahead of its
+/// status rumble.
+#[derive(Component)]
+struct SpeakerVoiceStatsRowFlash(usize);
+
 /// How long the voice owns the channel: exactly [`SpeakerProgram::duration`].
 ///
 /// `audio.md §2` requires the speaker to stop "at every specified effect end",
@@ -586,9 +605,12 @@ fn speaker_effects_after(
     state: &PlayState,
 ) -> Vec<SpeakerEffect> {
     state
-        .sound_effects_after(serial)
+        .sound_effects_with_serials_after(serial)
         .into_iter()
-        .map(|effect| SpeakerEffect::new(effect, sound_enabled))
+        .map(|(serial, effect)| SpeakerEffect {
+            stats_row_flash: state.stats_row_flash_for_sound_effect(serial),
+            ..SpeakerEffect::new(effect, sound_enabled)
+        })
         .collect()
 }
 
@@ -10146,6 +10168,7 @@ fn play_speaker_effects(
             audible: queued_effect.audible,
             interruptible: queued_effect.interruptible,
             viewport_flash,
+            stats_row_flash: queued_effect.stats_row_flash,
         });
     }
     for entity in &cut_voices {
@@ -10164,6 +10187,7 @@ fn play_speaker_effects(
         audible,
         interruptible,
         viewport_flash,
+        stats_row_flash,
     }) = pending.0.pop_front()
     else {
         return;
@@ -10186,6 +10210,9 @@ fn play_speaker_effects(
     }
     if let Some(start) = viewport_flash {
         voice.insert(SpeakerVoiceViewportFlash(start));
+    }
+    if let Some(slot) = stats_row_flash {
+        voice.insert(SpeakerVoiceStatsRowFlash(slot));
     }
     if !audible {
         return;
@@ -14068,9 +14095,13 @@ fn drive_visual(
 ///
 /// `audio.md §6`'s shared variants ride the same flag: inverted once the
 /// voice has played its rumble lead, restored when the voice ends.
+///
+/// A [`SpeakerVoiceStatsRowFlash`] voice likewise holds its roster row
+/// inverted ([`PlayState::presentation_stats_row_flash`]) until it ends.
 fn present_camp_apparition_flash(
     visual: Option<ResMut<VisualState>>,
     flashing: Query<(&SpeakerVoiceViewportFlash, &SpeakerVoiceLifetime)>,
+    row_flashing: Query<&SpeakerVoiceStatsRowFlash>,
     mut images: ResMut<Assets<Image>>,
 ) {
     let Some(mut visual) = visual else {
@@ -14079,11 +14110,15 @@ fn present_camp_apparition_flash(
     let active = flashing
         .iter()
         .any(|(flash, lifetime)| lifetime.0.elapsed() >= flash.0);
-    if visual.state.presentation_camp_flash_inverted == active {
+    let row = row_flashing.iter().next().map(|flash| flash.0);
+    if visual.state.presentation_camp_flash_inverted == active
+        && visual.state.presentation_stats_row_flash == row
+    {
         return;
     }
     let v: &mut VisualState = visual.as_mut();
     v.state.presentation_camp_flash_inverted = active;
+    v.state.presentation_stats_row_flash = row;
     let input_line = v.input_line.clone();
     let ctx = PlayFrameContext {
         ibm: &v.text_font,
@@ -31739,6 +31774,138 @@ mod tests {
         for (x, y) in [(8, 8), (95, 95), (183, 183)] {
             assert_eq!(index_at(&repainted, x, y), index_at(&plain, x, y), "({x}, {y})");
         }
+    }
+
+    /// `time.md §5`: the shared party-damage feedback is "a brief highlight
+    /// of the affected member's roster row and a short noise burst". The
+    /// rumble's voice carries the row the runtime recorded for it.
+    #[test]
+    fn a_shared_damage_rumble_voice_carries_its_members_row_flash() {
+        let mut state = test_state(
+            vec![1; u5_runtime::TOWN_GRID_SIDE * u5_runtime::TOWN_GRID_SIDE],
+            1,
+            1,
+        );
+        state.party[0].hp = 40;
+        let serial = state.sound_effect_serial;
+        let _ = state.apply_shared_party_damage(0, 1);
+        let queued = speaker_effects_after(serial, false, &state);
+        assert_eq!(queued.len(), 1);
+        assert_eq!(queued[0].stats_row_flash, Some(0));
+
+        let mut app = speaker_test_app();
+        app.world_mut()
+            .resource_mut::<Events<SpeakerEffect>>()
+            .send(queued[0].clone());
+        app.update();
+        let rows: Vec<usize> = app
+            .world_mut()
+            .query::<&SpeakerVoiceStatsRowFlash>()
+            .iter(app.world())
+            .map(|flash| flash.0)
+            .collect();
+        assert_eq!(rows, vec![0]);
+
+        // An effect with no recorded row draws none.
+        let mut app = speaker_test_app();
+        queue_speaker_effect(&mut app, SoundEffect::DamageRumble, false);
+        assert_eq!(
+            app.world_mut()
+                .query::<&SpeakerVoiceStatsRowFlash>()
+                .iter(app.world())
+                .count(),
+            0
+        );
+    }
+
+    /// `time.md §5` / `dungeon-mode.md §8.1`: through the shell's own
+    /// systems, the damaged member's roster row stands inverted while its
+    /// rumble sounds and is plain again once the voice ends.
+    #[test]
+    #[cfg(feature = "original-asset-tests")]
+    fn a_damage_rumble_holds_its_roster_row_inverted_while_it_sounds() {
+        let dir = original_asset_dir();
+        let options = PlayOptions {
+            target: PlayTarget::World(WorldPlane::Britannia),
+            start: Some((64, 12)),
+            clock: u5_runtime::GameClock::new(10, 46).unwrap(),
+            ..PlayOptions::default()
+        };
+        let mut state = PlayState::load_scene(&dir, options).unwrap();
+        state.party[0].hp = state.party[0].hp.max(40);
+        let mut images = Assets::<Image>::default();
+        let image_handle = images.add(Image::new(
+            Extent3d {
+                width: VISUAL_PLAY_FRAME_WIDTH,
+                height: VISUAL_PLAY_FRAME_HEIGHT,
+                depth_or_array_layers: 1,
+            },
+            TextureDimension::D2,
+            vec![0; (VISUAL_PLAY_FRAME_WIDTH * VISUAL_PLAY_FRAME_HEIGHT * 4) as usize],
+            TextureFormat::Rgba8UnormSrgb,
+            RenderAssetUsages::default(),
+        ));
+        let mut app = App::new();
+        app.insert_resource(Time::<()>::default())
+            .insert_resource(images)
+            .init_resource::<Assets<VisualSoundWave>>()
+            .init_resource::<SpeakerJitter>()
+            .init_resource::<SpeakerQueue>()
+            .add_event::<SpeakerEffect>()
+            .insert_resource(VisualState {
+                game_dir: dir.to_path_buf(),
+                state,
+                atlas: load_tile_atlas(&dir, TileGraphicsDepth::Ega16).unwrap(),
+                image_handle: image_handle.clone(),
+                text_font: load_ibm_ch_font(&dir).unwrap(),
+                rune_font: load_runes_ch_font(&dir).unwrap(),
+                sound_effect_cursor: 0,
+                prompt_cursor_frame: 0,
+                input_line: String::new(),
+                prompt_cursor_visible: false,
+                sweep_idle_redraw_pending: false,
+                held_direction_repeat: HeldDirectionRepeat::default(),
+                typed_keys: Default::default(),
+                flush_typeahead_when_speaker_idle: false,
+                diagnostic_cursor: 0,
+            })
+            .add_systems(
+                Update,
+                (
+                    play_speaker_effects,
+                    expire_speaker_voice,
+                    present_camp_apparition_flash,
+                )
+                    .chain(),
+            );
+        let queued = {
+            let mut visual = app.world_mut().resource_mut::<VisualState>();
+            let serial = visual.state.sound_effect_serial;
+            let _ = visual.state.apply_shared_party_damage(0, 1);
+            speaker_effects_after(serial, false, &visual.state)
+        };
+        let duration = SoundEffect::DamageRumble
+            .program(&mut u5_runtime::audio::RumbleJitter::default())
+            .duration(false);
+        for effect in queued {
+            app.world_mut()
+                .resource_mut::<Events<SpeakerEffect>>()
+                .send(effect);
+        }
+        app.update();
+        assert_eq!(
+            app.world().resource::<VisualState>().state.presentation_stats_row_flash,
+            Some(0)
+        );
+        app.world_mut()
+            .resource_mut::<Time>()
+            .advance_by(duration + Duration::from_millis(1));
+        app.update();
+        app.update();
+        assert_eq!(
+            app.world().resource::<VisualState>().state.presentation_stats_row_flash,
+            None
+        );
     }
 
     #[test]

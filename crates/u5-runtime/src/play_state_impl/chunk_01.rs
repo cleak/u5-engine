@@ -26,7 +26,33 @@ impl PlayState {
             .push((self.sound_effect_serial, effect));
         if self.sound_effect_history.len() > SOUND_EFFECT_HISTORY_CAPACITY {
             self.sound_effect_history.remove(0);
+            let oldest = self.sound_effect_history[0].0;
+            self.stats_row_flash_history
+                .retain(|(serial, _)| *serial >= oldest);
         }
+    }
+
+    /// Record `effect` as one that highlights roster row `slot` while it
+    /// sounds: `time.md §5`'s shared damage feedback ("a brief highlight of
+    /// the affected member's roster row and a short noise burst") and
+    /// `dungeon-mode.md §8.1`'s sleep-field row inversion.
+    pub(crate) fn emit_sound_effect_with_stats_row_flash(
+        &mut self,
+        effect: SoundEffect,
+        slot: usize,
+    ) {
+        self.emit_sound_effect(effect);
+        self.stats_row_flash_history
+            .push((self.sound_effect_serial, slot));
+    }
+
+    /// The roster row the effect recorded under `serial` highlights while it
+    /// sounds, if any ([`Self::emit_sound_effect_with_stats_row_flash`]).
+    pub fn stats_row_flash_for_sound_effect(&self, serial: u64) -> Option<usize> {
+        self.stats_row_flash_history
+            .iter()
+            .find(|(recorded, _)| *recorded == serial)
+            .map(|(_, slot)| *slot)
     }
 
     /// Freeze the message window for one spell flash of `flash_secs`; see
@@ -163,6 +189,15 @@ impl PlayState {
         let bands = audio::draw_major_flash_bands(&mut prng);
         self.prng_state = prng.state();
         self.emit_sound_effect(SoundEffect::MajorFlash { bands });
+    }
+
+    /// [`Self::sound_effects_after`] with each effect's serial.
+    pub fn sound_effects_with_serials_after(&self, serial: u64) -> Vec<(u64, SoundEffect)> {
+        self.sound_effect_history
+            .iter()
+            .filter(|(event_serial, _)| *event_serial > serial)
+            .cloned()
+            .collect()
     }
 
     pub fn sound_effects_after(&self, serial: u64) -> Vec<SoundEffect> {
@@ -1154,6 +1189,7 @@ impl PlayState {
             music_enabled: true,
             sound_effect_serial: 0,
             sound_effect_history: Vec::new(),
+            stats_row_flash_history: Vec::new(),
             harpsichord_progress: 0,
             active_blackthorn_guard_demand: None,
             pending_town_arrest: None,
@@ -1184,6 +1220,7 @@ impl PlayState {
         shrine_approach_walk: None,
         presentation_viewport_inverted: false,
         presentation_camp_flash_inverted: false,
+        presentation_stats_row_flash: None,
             active_shop: None,
             arms_transaction_completed: false,
             common_word_dictionary: None,
@@ -1666,6 +1703,7 @@ impl PlayState {
             music_enabled: true,
             sound_effect_serial: 0,
             sound_effect_history: Vec::new(),
+            stats_row_flash_history: Vec::new(),
             harpsichord_progress: 0,
             active_blackthorn_guard_demand: None,
             pending_town_arrest: None,
@@ -1696,6 +1734,7 @@ impl PlayState {
         shrine_approach_walk: None,
         presentation_viewport_inverted: false,
         presentation_camp_flash_inverted: false,
+        presentation_stats_row_flash: None,
             active_shop: None,
             arms_transaction_completed: false,
             common_word_dictionary: None,
@@ -2145,6 +2184,7 @@ impl PlayState {
             music_enabled: true,
             sound_effect_serial: 0,
             sound_effect_history: Vec::new(),
+            stats_row_flash_history: Vec::new(),
             harpsichord_progress: 0,
             active_blackthorn_guard_demand: None,
             pending_town_arrest: None,
@@ -2175,6 +2215,7 @@ impl PlayState {
         shrine_approach_walk: None,
         presentation_viewport_inverted: false,
         presentation_camp_flash_inverted: false,
+        presentation_stats_row_flash: None,
             active_shop: None,
             arms_transaction_completed: false,
             common_word_dictionary: None,
