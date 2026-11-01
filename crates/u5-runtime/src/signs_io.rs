@@ -461,7 +461,8 @@ pub fn decode_sign_payload(bytes: &[u8]) -> String {
 /// byte". So `0xA6`/`0xA7` print the Roman `&`/`'`, `0xA9..0xB1` the Roman
 /// characters at `0x29..0x31`, and `0x8D` "reaches the cell emitter as a
 /// carriage return (column reset, no glyph), not a pause"; no shipped record
-/// carries one, and this string model has no overwrite, so it emits nothing.
+/// carries one. The cells after it overwrite the current window row from its
+/// left edge, as the per-cell emitter would.
 pub fn sign_payload_rendered(bytes: &[u8]) -> crate::tlk_runner::TlkRenderedText {
     sign_payload_rendered_with_fragments(bytes, None)
 }
@@ -473,10 +474,44 @@ pub fn sign_payload_rendered_with_fragments(
     fragments: Option<&SignMacroFragments>,
 ) -> crate::tlk_runner::TlkRenderedText {
     use crate::tlk_runner::{TlkGlyphFont, TlkRenderedGlyph, TlkRenderedText};
-    let mut out = TlkRenderedText::default();
+    let mut glyphs: Vec<TlkRenderedGlyph> = Vec::with_capacity(bytes.len());
+    // `text-output.md §5` per-cell emitter state for the sign's window row:
+    // the glyph index of each cell already on the row, and the column the
+    // next cell lands in. A carriage return moves only the column, so the
+    // cells after it overwrite the row from its left edge.
+    let mut row_cells: Vec<usize> = Vec::new();
+    let mut column = 0usize;
     let mut push = |byte: u8, font: TlkGlyphFont| {
-        out.text.push(char::from(byte));
-        out.glyphs.push(TlkRenderedGlyph { byte, font });
+        let glyph = TlkRenderedGlyph { byte, font };
+        match byte {
+            // A line feed resets the column and starts a new row.
+            b'\n' => {
+                glyphs.push(glyph);
+                row_cells.clear();
+                column = 0;
+            }
+            // The pause marker holds for a key; it is not a cell.
+            crate::text_hold::TEXT_HOLD_WAIT_KEY_MARKER => glyphs.push(glyph),
+            // `formats/signs-dat.md §4` step 3: `0x8D` reaches the emitter
+            // as a carriage return - "column reset, no glyph".
+            b'\r' => column = 0,
+            _ => {
+                if let Some(&index) = row_cells.get(column) {
+                    glyphs[index] = glyph;
+                } else {
+                    row_cells.push(glyphs.len());
+                    glyphs.push(glyph);
+                }
+                column += 1;
+                // The emitter wraps a full row on its own (§4: "A
+                // sixteen-cell row wraps on its own in the sixteen-column
+                // message window").
+                if column == crate::message_window::MESSAGE_WINDOW_WIDTH {
+                    row_cells.clear();
+                    column = 0;
+                }
+            }
+        }
     };
     for &byte in bytes {
         match byte {
@@ -515,13 +550,17 @@ pub fn sign_payload_rendered_with_fragments(
                     // `text-output.md §5`: a line feed is a row break with a
                     // column reset, drawn in neither font.
                     SIGN_BODY_LINE_FEED => push(b'\n', TlkGlyphFont::Ordinary),
+                    SIGN_BODY_PAUSE_FOR_KEY => push(b'\r', font),
                     ch if (0x20..=0x7e).contains(&ch) => push(ch, font),
                     _ => {}
                 }
             }
         }
     }
-    out
+    TlkRenderedText {
+        text: glyphs.iter().map(|glyph| char::from(glyph.byte)).collect(),
+        glyphs,
+    }
 }
 
 /// `formats/signs-dat.md §2` and §5 step 4 (issue #302 Q3, `RETRACTIONS.md`
