@@ -826,7 +826,9 @@ OPTIONS:
         --route-smoke-manifest <PATH>
                               With --route-smoke, write a sanitized manifest
                               compatible with --compare-frame-manifests.
-        --raster-depth <D>    ega|tandy (default ega; tandy uses the EGA-equivalent path; CGA/Hercules are outside v1).
+        --raster-depth <D>    ega|tandy (default ega; CGA/Hercules are outside v1).
+                              tandy draws the EGA records: a modern
+                              approximation, not historical Tandy pixel parity.
         --visual              Launch the Bevy visual harness.
                               Requires building with `--features visual`.
                               Combine with --intro for the Bevy intro/menu shell.

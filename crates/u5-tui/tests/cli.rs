@@ -281,10 +281,27 @@ fn cli_parser_rejects_bad_raster_depth() {
 
 // from chunk_02
 #[test]
-fn cli_parser_maps_tandy_raster_depth_to_ega_equivalent_path() {
+fn cli_parser_maps_tandy_raster_depth_to_ega_records() {
     let args = parse_cli_args(["--play", "--raster-depth", "tandy", r"C:\Games\U5-Clean"]).unwrap();
 
     assert_eq!(args.raster_depth, TileGraphicsDepth::Ega16);
+}
+
+#[test]
+fn cli_usage_labels_tandy_as_modern_approximation() {
+    // display-driver-mode.md §6 "Normative scope and labeling": Tandy is not an
+    // EGA equivalent at pixel level; a non-EGA backend must be labelled a modern
+    // approximation and must not claim historical pixel parity.
+    assert!(!CLI_USAGE.contains("EGA-equivalent"));
+    let tandy_help: String = CLI_USAGE
+        .lines()
+        .skip_while(|line| !line.contains("--raster-depth"))
+        .take(3)
+        .collect::<Vec<_>>()
+        .join(" ");
+    assert!(tandy_help.contains("modern"), "{tandy_help}");
+    assert!(tandy_help.contains("approximation"), "{tandy_help}");
+    assert!(tandy_help.contains("not historical Tandy pixel parity"), "{tandy_help}");
 }
 
 // from chunk_02
