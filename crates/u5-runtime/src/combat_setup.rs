@@ -2325,7 +2325,9 @@ impl PlayState {
             return 1;
         }
         let count = match base_count {
-            0 => 0,
+            // `encounters.md §4`: a zero default spawn count places "the
+            // single lead actor and no others", with no roll.
+            0 => 1,
             1 | 8 | 16 => base_count,
             max => {
                 // `encounters.md §5`: the second roll draws over the

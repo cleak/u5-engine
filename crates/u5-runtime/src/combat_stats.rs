@@ -541,7 +541,12 @@ pub fn resolve_combat_spawn_count(
     fortunes_second_roll_seed: Option<u8>,
 ) -> u8 {
     let count = match base_count {
-        0 => 0,
+        // `encounters.md §4` "Spawn count": the identity-gap classes' zero
+        // default would be a `[1, 0]` roll in the original; "A conforming
+        // engine should treat a zero default spawn count as 'place the
+        // single lead actor and no others' rather than reproducing the
+        // fault." No roll is drawn.
+        0 => 1,
         1 | 8 | 16 => base_count,
         max => {
             let first = 1 + (first_roll_seed % max);

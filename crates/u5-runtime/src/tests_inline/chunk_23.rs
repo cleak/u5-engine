@@ -19833,7 +19833,8 @@ fn combat_spawn_count_respects_exact_sentinels_fortunes_reroll_and_cap() {
     assert_eq!(resolve_combat_spawn_count(10, 7, Some(2)), 3);
     assert_eq!(resolve_combat_spawn_count(10, 0, Some(9)), 1);
     assert_eq!(resolve_combat_spawn_count(30, 29, None), 26);
-    assert_eq!(resolve_combat_spawn_count(0, 29, None), 0);
+    // `encounters.md §4`: a zero default places the single lead actor.
+    assert_eq!(resolve_combat_spawn_count(0, 29, None), 1);
     for first_seed in 0..=u8::MAX {
         let undamped = resolve_combat_spawn_count(13, first_seed, None);
         for second_seed in 0..=u8::MAX {

@@ -1176,9 +1176,8 @@ fn g4_blackthorn_s7a_palace_password_compares_four_case_folded_characters() {
 /// default spawn count of zero, which the original would hand to its range
 /// roller as `[1, 0]`; "A conforming engine should treat a zero default spawn
 /// count as 'place the single lead actor and no others' rather than
-/// reproducing the fault." The engine resolves a zero count to no actors.
+/// reproducing the fault."
 #[test]
-#[ignore = "divergence: g4-zero-spawn-count-places-no-lead-actor"]
 fn g4_encounters_s4_zero_default_spawn_count_places_only_the_lead_actor() {
     for (fortunes, first_seed) in [(0u8, 0u8), (0, 29), (1, 7)] {
         assert_eq!(
