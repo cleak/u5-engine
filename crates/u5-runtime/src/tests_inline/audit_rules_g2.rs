@@ -1214,10 +1214,8 @@ fn g2_shops_s8_10_horse_sale_places_the_horse_at_the_first_probe_cell() {
 }
 
 /// `systems/shops.md §8.10`: the sale writes "all three auxiliary/animation
-/// bytes cleared to zero" - record bytes `+5`, `+6` and `+7`. The engine
-/// writes the steady-phase marker into the packed animation byte `+6`.
+/// bytes cleared to zero" - record bytes `+5`, `+6` and `+7`.
 #[test]
-#[ignore = "divergence: g2-shops-horse-sale-animation-byte"]
 fn g2_shops_s8_10_horse_sale_clears_the_animation_byte() {
     let dialogue = HashMap::new();
     let mut state = g2_horse_sale_state();

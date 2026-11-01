@@ -1273,7 +1273,8 @@ fn horse_purchase_debits_gold_and_places_boardable_horse_object() {
             x: 9,
             y: 8,
             z: 0,
-            phase: STEADY_PHASE,
+            // `shops.md §8.10`: all three auxiliary/animation bytes are zero.
+            phase: 0,
             aux1: 0,
             aux3: 0,
         }

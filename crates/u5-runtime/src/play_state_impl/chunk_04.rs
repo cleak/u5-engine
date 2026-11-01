@@ -4523,8 +4523,15 @@ impl PlayState {
         if grant_x < 32
             && let Some(z) = self.current_floor()
         {
-            let _ = self
-                .allocate_active_object_slot(horse_purchase_active_object(grant_x, grant_y, z));
+            // `view.md §3` publishes only "the first auxiliary field
+            // cleared" for the well's horse, so its animation byte keeps the
+            // steady phase; the stable's all-zero `shops.md §8.10` record is
+            // not extended to this path.
+            let horse = ActiveObject {
+                phase: STEADY_PHASE,
+                ..horse_purchase_active_object(grant_x, grant_y, z)
+            };
+            let _ = self.allocate_active_object_slot(horse);
         }
 
         self.mark_visibility_dirty();

@@ -3058,6 +3058,10 @@ pub const fn quote_horse_purchase_for_speaker(
     }
 }
 
+/// `shops.md §8.10`: the sold horse's record carries the base horse tile in
+/// the type and frame bytes, the probe cell and floor, and "all three
+/// auxiliary/animation bytes cleared to zero" - including the packed
+/// animation byte `+6`, which is therefore `0`, not [`STEADY_PHASE`].
 pub const fn horse_purchase_active_object(x: usize, y: usize, z: i8) -> ActiveObject {
     ActiveObject {
         type_byte: HORSE_PARKED_FIRST,
@@ -3065,7 +3069,7 @@ pub const fn horse_purchase_active_object(x: usize, y: usize, z: i8) -> ActiveOb
         x,
         y,
         z,
-        phase: STEADY_PHASE,
+        phase: 0,
         aux1: 0,
         aux3: 0,
     }
