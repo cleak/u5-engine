@@ -2332,8 +2332,13 @@ impl PlayState {
         value & SAVE_QUEST_TILE_FLAG_HIGH_BIT == 0
     }
 
+    /// `quest-graph.md §5`: "Consumers test the high bit, so any value with
+    /// the high bit set reads as vanquished" (`saved-gam.md` `0x0322..0x0324`:
+    /// "Shadowlord spawn/report paths treat high-bit-set values as
+    /// vanquished"). The destruction path still writes exactly
+    /// [`SHADOWLORD_VANQUISHED`]; only the read is the high-bit test.
     pub fn shadowlord_slot_is_vanquished(value: u8) -> bool {
-        value == SHADOWLORD_VANQUISHED
+        value & SAVE_QUEST_TILE_FLAG_HIGH_BIT != 0
     }
 
     /// `quest-graph.md §5`: "Consumers test the high bit, so any value with

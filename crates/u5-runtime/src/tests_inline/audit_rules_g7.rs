@@ -1144,7 +1144,6 @@ fn g7_quest_graph_s5_doom_names_and_yell_keywords() {
 /// with the high bit set reads as vanquished." The Underworld placement pass
 /// places a shard only while "Faulinei's slot is not vanquished".
 #[test]
-#[ignore = "divergence: G7-QG-HIGHBIT"]
 fn g7_quest_graph_s5_any_high_bit_slot_reads_vanquished_for_shard_placement() {
     let mut state = world_state(open_world_grid(), 10, 10);
     state.area = Area::World {
@@ -1167,7 +1166,6 @@ fn g7_quest_graph_s5_any_high_bit_slot_reads_vanquished_for_shard_placement() {
 /// slots are silent" - with "any value with the high bit set" reading as
 /// vanquished.
 #[test]
-#[ignore = "divergence: G7-QG-HIGHBIT"]
 fn g7_quest_graph_s5_any_high_bit_slot_is_silent_at_stonegate() {
     let mut state = test_state(open_grid(), 1, 1);
     state.shadowlord_hideouts = [0xFF, 0x80, 0xFE];
