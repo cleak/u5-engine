@@ -489,6 +489,44 @@ fn playtest_f25_arena_get_refuses_a_drop_chest_and_leaves_it_standing() {
     assert_eq!(state.active_objects[9].aux1, 12);
 }
 
+/// `containers.md §3` step 3: the shared Get scan filters on the class byte,
+/// and a rotting body (`0x1E`) or moldy corpse (`0x1F`) is skipped "exactly as
+/// it skips an actor, and keeps scanning the other objects at the coordinate".
+/// Step 3 names the combat scene and `combat.md §8`'s G row routes the arena
+/// to that handler, so a corpse in a low slot must not hide loot staged in a
+/// higher slot on the same cell (re-audit gap containers:3:10).
+#[test]
+fn arena_get_skips_a_body_record_and_grants_the_loot_behind_it() {
+    for body in [0x1E, 0x1F] {
+        let mut state = combat_player_command_state(8, 5);
+        state.active_objects[9] = ActiveObject {
+            type_byte: body,
+            tile: body,
+            x: 6,
+            y: 5,
+            phase: STEADY_PHASE,
+            ..ActiveObject::empty()
+        };
+        state.active_objects[30] = ActiveObject {
+            type_byte: 0x02,
+            tile: 0x02,
+            x: 6,
+            y: 5,
+            phase: STEADY_PHASE,
+            aux1: 7,
+            ..ActiveObject::empty()
+        };
+        let gold_before = state.gold;
+
+        let outcome = state.get_combat_actor_direction(0, Direction::East);
+
+        assert_eq!(outcome, MoveOutcome::Got, "body class {body:#04x}");
+        assert_eq!(state.gold, gold_before + 7);
+        assert!(state.active_objects[30].is_empty());
+        assert_eq!(state.active_objects[9].type_byte, body, "the body stays");
+    }
+}
+
 /// `combat.md §8`, the `O` row: the shared Open handler "carries no
 /// combat-specific branch of its own, so in an arena it behaves as it does on
 /// the surface", and `containers.md §4.1` publishes that chest helper's
