@@ -707,11 +707,31 @@ fn spec317_endgame_restoration_holds_the_tableau_inverted_once_per_dead_member()
     state.party_names = vec![*b"AVATAR\0\0\0", *b"IOLO\0\0\0\0\0", *b"SHAMINO\0\0"];
     state.enter_endgame();
     let serial = state.sound_effect_serial;
+    // "It is a single blocking flourish per restored member" (`audio.md
+    // §8.7`): the beat that sounds the envelope leaves a pure hold of the
+    // envelope's own length as the last staged beat, so the placement and
+    // walk-in wait it out instead of running under the held inversion.
+    let flourish_secs = SoundEffect::EndgameRestoration
+        .program(&mut crate::audio::RumbleJitter::default())
+        .duration(true)
+        .as_secs_f64();
+    let mut holds = 0;
     for _ in 0..200 {
+        let before = state.sound_effect_serial;
         if !state.advance_endgame_entry_presentation() {
             break;
         }
+        if state
+            .sound_effects_after(before)
+            .contains(&SoundEffect::EndgameRestoration)
+        {
+            let hold = state.staged_narration.beats().last().expect("a restoration hold");
+            assert!(hold.text.is_empty());
+            assert!((hold.delay_secs - flourish_secs).abs() < 1e-9);
+            holds += 1;
+        }
     }
+    assert_eq!(holds, 2);
     let flashes = state
         .sound_effects_after(serial)
         .into_iter()
