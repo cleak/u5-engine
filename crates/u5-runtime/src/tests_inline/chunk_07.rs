@@ -613,6 +613,43 @@ fn use_command_routes_potion_colors_to_party_effects() {
     assert_eq!(town.message, POTION_RESULT_SLEPT);
 }
 
+/// `inventory.md §7.2` / `catalogs/item-list.md §7.1`: a Blue/Yellow/Red/
+/// Green/Orange effect that rejects its recipient ends through the generic
+/// U-Use failure tail - `Failed!` with the common cast-failure glissando
+/// after the selected bottle's shared presentation cue.
+#[test]
+fn rejected_potion_effects_end_with_the_cast_failure_glissando() {
+    for (index, status) in [
+        (POTION_BLUE_INDEX, b'G'),
+        (POTION_YELLOW_INDEX, b'D'),
+        (POTION_RED_INDEX, b'G'),
+        (POTION_GREEN_INDEX, b'P'),
+        (POTION_ORANGE_INDEX, b'P'),
+    ] {
+        let mut town = test_state(open_grid(), 1, 1);
+        town.party[0].status = status;
+        if status == b'D' {
+            town.party[0].hp = 0;
+        }
+        let serial = town.sound_effect_serial;
+        assert_eq!(
+            town.use_potion_with_effect(index, 0, index),
+            MoveOutcome::Blocked
+        );
+        assert_eq!(town.message, POTION_RESULT_FAILED);
+        assert_eq!(
+            town.sound_effects_after(serial),
+            vec![
+                SoundEffect::SharedVariant {
+                    variant: index as u8
+                },
+                SoundEffect::CastFailure,
+            ],
+            "potion {index} rejecting status {status}"
+        );
+    }
+}
+
 #[test]
 fn potions_debit_before_target_and_effect_variation_gates() {
     let mut missing_target = test_state(open_grid(), 1, 1);

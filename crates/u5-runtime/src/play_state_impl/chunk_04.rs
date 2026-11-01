@@ -2530,6 +2530,15 @@ impl PlayState {
         self.use_potion_with_effect(index, target_index, effect_index)
     }
 
+    /// `inventory.md §7.2`: a Blue/Yellow/Red/Green/Orange effect that
+    /// rejects its recipient ends "`Failed!\n`, with the ordinary Use failure
+    /// sound" - `catalogs/item-list.md §7.1`'s generic U-Use failure tail,
+    /// which plays the common cast-failure glissando (`audio.md §8.3`).
+    fn potion_failure_tail(&mut self) {
+        self.message = POTION_RESULT_FAILED.to_string();
+        self.emit_sound_effect(SoundEffect::CastFailure);
+    }
+
     pub fn use_potion_with_effect(
         &mut self,
         selected_index: usize,
@@ -2570,14 +2579,14 @@ impl PlayState {
                     MoveOutcome::Used
                 } else {
                     self.advance_turn();
-                    self.message = POTION_RESULT_FAILED.to_string();
+                    self.potion_failure_tail();
                     MoveOutcome::Blocked
                 }
             }
             POTION_YELLOW_INDEX => {
                 if !self.party[target_index].living() {
                     self.advance_turn();
-                    self.message = POTION_RESULT_FAILED.to_string();
+                    self.potion_failure_tail();
                     return MoveOutcome::Blocked;
                 }
                 let amount = self.potion_heal_amount();
@@ -2594,7 +2603,7 @@ impl PlayState {
                     MoveOutcome::Used
                 } else {
                     self.advance_turn();
-                    self.message = POTION_RESULT_FAILED.to_string();
+                    self.potion_failure_tail();
                     MoveOutcome::Blocked
                 }
             }
@@ -2606,7 +2615,7 @@ impl PlayState {
                     MoveOutcome::Used
                 } else {
                     self.advance_turn();
-                    self.message = POTION_RESULT_FAILED.to_string();
+                    self.potion_failure_tail();
                     MoveOutcome::Blocked
                 }
             }
@@ -2628,7 +2637,7 @@ impl PlayState {
                     MoveOutcome::Used
                 } else {
                     self.advance_turn();
-                    self.message = POTION_RESULT_FAILED.to_string();
+                    self.potion_failure_tail();
                     MoveOutcome::Blocked
                 }
             }
@@ -2681,7 +2690,7 @@ impl PlayState {
             }
             _ => {
                 self.advance_turn();
-                self.message = POTION_RESULT_FAILED.to_string();
+                self.potion_failure_tail();
                 MoveOutcome::Blocked
             }
         }
