@@ -1002,7 +1002,7 @@ impl PlayState {
         // ends by itself.
         if hold.current() == Some(crate::text_hold::TextHoldKind::TimedPause)
             && !hold.freezes_world
-            && hold.passes_run < crate::text_hold::TEXT_HOLD_TIMED_PAUSE_PASSES
+            && hold.passes_run < u64::from(crate::text_hold::TEXT_HOLD_TIMED_PAUSE_PASSES)
         {
             let _ = self.advance_visual_tick();
         }
@@ -1028,13 +1028,14 @@ impl PlayState {
             let started = *hold.passes_started_at_secs.get_or_insert(now_secs);
             let pass_secs = crate::narration::bios_ticks_secs(1);
             let due_passes = ((now_secs - started).max(0.0) / pass_secs).floor() as u64 + 1;
-            let cap = match kind {
+            // A WAIT-KEY never times out, so its pass count is uncapped
+            // (a `u16` count would stop the world after about an hour).
+            let target = match kind {
                 crate::text_hold::TextHoldKind::TimedPause => {
-                    crate::text_hold::TEXT_HOLD_TIMED_PAUSE_PASSES
+                    due_passes.min(u64::from(crate::text_hold::TEXT_HOLD_TIMED_PAUSE_PASSES))
                 }
-                crate::text_hold::TextHoldKind::WaitKey => u16::MAX,
+                crate::text_hold::TextHoldKind::WaitKey => due_passes,
             };
-            let target = due_passes.min(u64::from(cap)) as u16;
             let owed = target.saturating_sub(hold.passes_run);
             hold.passes_run = hold.passes_run.max(target);
             let freezes_world = hold.freezes_world;
@@ -1073,9 +1074,9 @@ impl PlayState {
     pub fn flush_text_hold(&mut self) {
         while let Some(hold) = self.pending_text_hold.as_mut() {
             if hold.current() == Some(crate::text_hold::TextHoldKind::TimedPause) {
-                let owed = crate::text_hold::TEXT_HOLD_TIMED_PAUSE_PASSES
-                    .saturating_sub(hold.passes_run);
-                hold.passes_run = crate::text_hold::TEXT_HOLD_TIMED_PAUSE_PASSES;
+                let passes = u64::from(crate::text_hold::TEXT_HOLD_TIMED_PAUSE_PASSES);
+                let owed = passes.saturating_sub(hold.passes_run);
+                hold.passes_run = passes;
                 if !hold.freezes_world {
                     for _ in 0..owed {
                         let _ = self.advance_visual_tick();

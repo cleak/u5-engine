@@ -140,6 +140,13 @@ fn auditfix3_ticks_conversation_wait_key_ticks_each_no_key_pass() {
     let expected = state.prng_state;
     state.flush_text_hold();
     assert_eq!(state.prng_state, expected);
+
+    // An unanswered WAIT-KEY keeps ticking past 65 535 passes (about an hour
+    // at 18.2 Hz): its pass count does not saturate.
+    let mut state = auditfix3_ticks_held(TextHoldKind::WaitKey);
+    assert!(state.advance_text_hold_to(0.0));
+    assert!(state.advance_text_hold_to(crate::narration::bios_ticks_secs(1) * 70_000.5));
+    assert_eq!(state.pending_text_hold.as_ref().unwrap().passes_run, 70_001);
 }
 
 /// A sign's pause byte waits inside Look's print-and-wait loop, which

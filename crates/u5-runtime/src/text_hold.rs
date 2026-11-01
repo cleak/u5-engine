@@ -132,7 +132,7 @@ pub struct PendingTextHold {
     /// exactly as at the command prompt". Pass `i` falls one BIOS tick after
     /// pass `i - 1`.
     pub passes_started_at_secs: Option<f64>,
-    pub passes_run: u16,
+    pub passes_run: u64,
     /// The hold's key wait is not the shared wait and runs no world step
     /// (`input.md §2` "Readers that do not use the shared wait": the Look
     /// print-and-wait loop, which a sign's pause byte sits inside).
