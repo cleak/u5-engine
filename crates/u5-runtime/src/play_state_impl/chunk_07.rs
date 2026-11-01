@@ -111,9 +111,17 @@ impl PlayState {
             self.message = GET_NOTHING_REFUSAL.to_string();
             return MoveOutcome::Blocked;
         }
-        let Some((object_slot, object)) =
-            self.combat_loose_object_slot_at(x, y, actor.active_object_slot as usize)
-        else {
+        // `containers.md §3` step 3: the shared Get scan accepts a record only
+        // by its class byte, and a rotting body or moldy corpse (classes 30
+        // and 31) is skipped "exactly as it skips an actor, and keeps scanning
+        // the other objects at the coordinate" - in an arena too, since step 3
+        // names the combat scene and `combat.md §8`'s G row routes here.
+        let Some((object_slot, object)) = self.combat_loose_object_slot_at_matching(
+            x,
+            y,
+            actor.active_object_slot as usize,
+            |object| get_object_scan_accepts(object.type_byte),
+        ) else {
             // `containers.md §3` step 5: with no object matched, the shared
             // Get handler classifies the live tile, and its wall-torch arm
             // borrows `0xB0`/`0xB1` "from any approach direction" - the arm
@@ -3733,12 +3741,28 @@ impl PlayState {
         y: usize,
         actor_object_slot: usize,
     ) -> Option<(usize, ActiveObject)> {
+        self.combat_loose_object_slot_at_matching(x, y, actor_object_slot, |_| true)
+    }
+
+    /// [`Self::combat_loose_object_slot_at`] restricted to records `accepts`
+    /// admits; rejected records are skipped and the scan keeps going.
+    pub fn combat_loose_object_slot_at_matching(
+        &self,
+        x: usize,
+        y: usize,
+        actor_object_slot: usize,
+        accepts: impl Fn(ActiveObject) -> bool,
+    ) -> Option<(usize, ActiveObject)> {
         self.active_objects
             .iter()
             .copied()
             .enumerate()
             .find_map(|(slot, object)| {
-                if slot == actor_object_slot || object.is_empty() || object.x != x || object.y != y
+                if slot == actor_object_slot
+                    || object.is_empty()
+                    || object.x != x
+                    || object.y != y
+                    || !accepts(object)
                 {
                     return None;
                 }

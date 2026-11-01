@@ -26262,9 +26262,12 @@ fn top_down_lowercase_vi_and_wasd_movement_still_routes_before_commands() {
 #[test]
 fn top_down_lowercase_x_routes_to_vehicle_exit() {
     let mut state = world_state(open_world_grid(), 5, 5);
+    // A real carpet marker (`0x14`): a parked vehicle stays put because
+    // its type byte is outside the outdoor walker's class predicate, not
+    // because of its phase byte (`active-objects.md §3`, issue #316 Q2).
     state.player.transport = TransportState::Carpet {
-        type_byte: 184,
-        tile: 184,
+        type_byte: 0x14,
+        tile: 0x14,
     };
     state.sync_player_object();
 
@@ -26277,8 +26280,8 @@ fn top_down_lowercase_x_routes_to_vehicle_exit() {
     assert_eq!(state.player.transport, TransportState::Foot);
     assert_eq!((state.player.x, state.player.y), (5, 5));
     assert!(state.active_objects.iter().skip(1).any(|object| {
-        object.type_byte == 184
-            && object.tile == 184
+        object.type_byte == CARPET_PARKED
+            && object.tile == CARPET_PARKED
             && object.x == 5
             && object.y == 5
             && object.z == WorldPlane::Underworld.save_floor()
