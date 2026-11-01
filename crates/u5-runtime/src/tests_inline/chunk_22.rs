@@ -111,11 +111,10 @@
     }
 
     #[test]
-    fn steady_marked_outdoor_slot_is_not_one_of_the_walker_s_slots() {
-        // `active-objects.md §8` phase table: the all-ones nibble is
-        // "Steady; do not animate this slot. The animator skips", and the
-        // outdoor walker "applies only to the outdoor animated/monster
-        // predicate". A parked vehicle carries that marker and stays put.
+    fn steady_marked_outdoor_walker_slot_still_moves() {
+        // `active-objects.md §3` (issue #316 Q2): a slot whose byte 6 carries
+        // the freeze sentinel "never animates ... It still moves and engages
+        // normally, because the outdoor mover does not read byte 6".
         let mut state = world_state(open_world_grid(), 0, 0);
         state.active_objects.push(ActiveObject {
             type_byte: 192,
@@ -129,14 +128,45 @@
         });
 
         state.advance_turn();
+        state.apply_pending_world_object_walker_pass();
 
         let object = state
             .active_objects
             .iter()
             .find(|object| object.type_byte == 192)
             .unwrap();
-        assert_eq!((object.x, object.y), (5, 5));
-        assert_eq!(object.phase, STEADY_PHASE);
+        assert_eq!((object.x, object.y), (4, 5));
+        assert_eq!(object.phase, STEADY_PHASE, "the frozen frame stays frozen");
+    }
+
+    #[test]
+    fn parked_vehicle_stays_put_by_type_class_not_by_phase() {
+        // A parked frigate (`0x20..0x27`) is outside the walker's class
+        // predicate (`formats/tiles.md`), so it stays put whatever byte 6
+        // holds.
+        for phase in [STEADY_PHASE, 0x00] {
+            let mut state = world_state(open_world_grid(), 0, 0);
+            state.active_objects.push(ActiveObject {
+                type_byte: 0x20,
+                tile: 0x20,
+                x: 5,
+                y: 5,
+                z: WorldPlane::Underworld.save_floor(),
+                phase,
+                aux1: 0,
+                aux3: 0,
+            });
+
+            state.advance_turn();
+            state.apply_pending_world_object_walker_pass();
+
+            let object = state
+                .active_objects
+                .iter()
+                .find(|object| object.type_byte == 0x20)
+                .unwrap();
+            assert_eq!((object.x, object.y), (5, 5));
+        }
     }
 
     #[test]
@@ -1375,11 +1405,14 @@
 
         state.apply_pending_world_object_walker_pass();
 
+        // The kept slot is not pruned; it may take its ordinary step toward
+        // the party (`active-objects.md §3`: a steady byte 6 does not stop
+        // the outdoor mover).
         assert_eq!(state.active_objects[1].type_byte, 192);
-        assert_eq!(
+        assert!(matches!(
             (state.active_objects[1].x, state.active_objects[1].y),
-            (15, 0)
-        );
+            (14..=15, 0)
+        ));
         assert!(state.active_objects[2].is_empty());
     }
 

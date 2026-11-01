@@ -2669,6 +2669,11 @@ fn ship_fire_damage_and_removal_save_load_round_trip_overlay_state() {
         MoveOutcome::Fired
     );
     assert!(state.active_objects[2].is_empty());
+    // The struck monster keeps walking between broadsides
+    // (`active-objects.md §3`: a steady byte 6 does not stop the outdoor
+    // mover), so the record the save must carry is the one standing now.
+    let damaged_target = state.active_objects[1];
+    assert!(damaged_target.aux1 < durable_target.aux1);
 
     assert_eq!(
         state.save_game_command(&dir, Some(true)).unwrap(),

@@ -5744,13 +5744,12 @@ impl PlayState {
             }
             // `active-objects.md §3`/`§8`: byte 6 is the animator's - "Advanced
             // by the animator" - and the walker "performs no drawing, no frame
-            // advance and no cleanup at all". It only *reads* the steady
-            // marker, so the countdown nibble is left for the world-tick
-            // animator ([`Self::animate_active_objects`]) to decrement. This
-            // walker used to decrement it on every consumed turn as well,
-            // which ran a slot's frame-delay pauses fast outdoors.
+            // advance and no cleanup at all", and §3 (issue #316 Q2) adds that
+            // a slot carrying the freeze sentinel "still moves and engages
+            // normally, because the outdoor mover does not read byte 6". The
+            // countdown nibble is left for the world-tick animator
+            // ([`Self::animate_active_objects`]) to decrement.
             let phase_before_tick = self.active_objects[slot].phase;
-            let steady = phase_before_tick & 0x0f == STEADY_PHASE;
             // Orthogonal adjacency is consumed before any ranged class test.
             // Its I/O-bearing combat/transition effect is completed by the
             // post-turn handler, but it claims the walker slot here so neither
@@ -5790,17 +5789,15 @@ impl PlayState {
             // handled above and the whirlpool parity bit
             // ([`Self::try_whirlpool_dispatch`], issue #298 Q2).
             //
-            // What survives of the old phase test is only the steady marker.
-            // §8's phase table gives the all-ones nibble as "Steady; do not
-            // animate this slot. The animator skips", and this walker "applies
-            // only to the outdoor animated/monster predicate", so a slot
-            // flagged as not animated is not one of its slots at all. That is
-            // what keeps a parked frigate, skiff or carpet - written with the
-            // steady marker when the party disembarks - sitting where it was
-            // left.
+            // Nothing of the old phase test survives: the steady marker only
+            // stops the animator. §3 (issue #316 Q2): a frozen slot "still
+            // moves and engages normally, because the outdoor mover does not
+            // read byte 6". A parked frigate, skiff or carpet stays where it
+            // was left because its type byte is outside the walker's class
+            // predicate ([`is_outdoor_active_object_walker`]), not because of
+            // its phase byte.
             let wandered = movement_allowed
                 && !ship_wind_changed
-                && !steady
                 && if is_whirlpool_family_type_byte(self.active_objects[slot].type_byte) {
                     self.try_whirlpool_dispatch(slot, &mut last_vacated)
                 } else {
@@ -6564,21 +6561,18 @@ impl PlayState {
     /// `0x2C..0x2F` ([`is_ship_object`]), and "the row is selected by the
     /// type byte (record byte 0), not by the displayed-tile byte".
     ///
-    /// `phase_before_tick` is the slot's phase byte as it stood before the
-    /// walker's countdown read; a steady-marked slot is not walked at all.
+    /// `phase_before_tick` is unused: `active-objects.md §3` (issue #316
+    /// Q2) - "the outdoor mover does not read byte 6", so a steady-marked
+    /// pirate ship keeps its wind cadence. The parameter is kept for callers.
     pub fn slot_is_wind_driven_ship(&self, slot: usize, phase_before_tick: u8) -> bool {
+        let _ = phase_before_tick;
         let Area::World { plane } = self.area else {
             return false;
         };
         let Some(object) = self.active_objects.get(slot).copied() else {
             return false;
         };
-        object.z == plane.save_floor()
-            && is_ship_object(object)
-            // `STEADY_PHASE` is this engine's "slot does not animate"
-            // marker (see `ActiveObject::tick_phase`); the walker skips such
-            // slots for every class.
-            && (phase_before_tick & 0x0f) != STEADY_PHASE
+        object.z == plane.save_floor() && is_ship_object(object)
     }
 
     /// `weather.md §7` Active Ships, with the issue #298 Q32 additions.
