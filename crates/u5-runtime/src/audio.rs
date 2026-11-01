@@ -2219,12 +2219,22 @@ impl SoundEffect {
     /// the viewport, so "Each living member gets one separate flash that
     /// lasts for the long envelope; flashes do not accumulate". The long
     /// sting is only ever sounded there, one per living member.
+    ///
+    /// `endgame.md §4` / `audio.md §8.7` (corrected 2026-11-01, u5-spec#317
+    /// Q2, R667): each Dead member's restoration flash is "a single
+    /// exclusive-or inversion of the whole `(8, 8)..(183, 183)` tableau
+    /// rectangle" in UI colour slot 1, and "The speaker envelope `(1, 5000,
+    /// 40000, 1, 8800)` then plays with the inverted image held"; the next
+    /// world-tick render replaces it. One flash per Dead member, carried by
+    /// that member's restoration envelope.
     pub fn holds_viewport_inversion(&self) -> bool {
-        matches!(
-            self,
-            SoundEffect::LordBritishCampEnvelope(segment)
-                if *segment == crate::lord_british_camp::LORD_BRITISH_CAMP_STING_LONG
-        )
+        match self {
+            SoundEffect::LordBritishCampEnvelope(segment) => {
+                *segment == crate::lord_british_camp::LORD_BRITISH_CAMP_STING_LONG
+            }
+            SoundEffect::EndgameRestoration => true,
+            _ => false,
+        }
     }
 
     /// Lower the effect to serial speaker operations.

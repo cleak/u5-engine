@@ -681,3 +681,41 @@ fn ambient_scenery_scan_centres_on_the_arena_in_combat() {
         Some(crate::audio::AmbientScenerySource::Fountain)
     );
 }
+
+/// `endgame.md §4` / `audio.md §8.7` (corrected 2026-11-01, u5-spec#317 Q2,
+/// R667): each Dead member's restoration flourish is "a single exclusive-or
+/// inversion of the whole `(8, 8)..(183, 183)` tableau rectangle", and "The
+/// speaker envelope `(1, 5000, 40000, 1, 8800)` then plays with the inverted
+/// image held". "It is one flash per Dead member": the restoration envelope
+/// carries the frontend's held viewport inversion, and no other endgame cue
+/// does.
+#[test]
+fn spec317_endgame_restoration_holds_the_tableau_inverted_once_per_dead_member() {
+    assert!(SoundEffect::EndgameRestoration.holds_viewport_inversion());
+    assert!(!SoundEffect::EndgameTableau.holds_viewport_inversion());
+    assert!(!SoundEffect::EndgameTableauMovementSting.holds_viewport_inversion());
+
+    let mut state = test_state(open_grid(), 5, 5);
+    state.party = vec![state.party[0]; 3];
+    for slot in 1..3 {
+        state.party[slot].slot = slot as u8;
+        state.party[slot].class_byte = b'B';
+        state.party[slot].status = CharacterStatus::Dead.save_byte();
+        state.party[slot].hp = 0;
+        state.party[slot].max_hp = 77;
+    }
+    state.party_names = vec![*b"AVATAR\0\0\0", *b"IOLO\0\0\0\0\0", *b"SHAMINO\0\0"];
+    state.enter_endgame();
+    let serial = state.sound_effect_serial;
+    for _ in 0..200 {
+        if !state.advance_endgame_entry_presentation() {
+            break;
+        }
+    }
+    let flashes = state
+        .sound_effects_after(serial)
+        .into_iter()
+        .filter(SoundEffect::holds_viewport_inversion)
+        .collect::<Vec<_>>();
+    assert_eq!(flashes, vec![SoundEffect::EndgameRestoration; 2]);
+}

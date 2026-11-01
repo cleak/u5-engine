@@ -1907,9 +1907,12 @@ impl PlayState {
                         )
                     });
                 self.message.push_str(&format!("\n{name} lives!\n"));
-                // audio.md §8.7: after the restoration announcement and the
-                // one gameplay-rectangle fill, and before the full stats-panel
-                // redraw, run envelope (1, 5000, 40000, 1, 8800). It is a
+                // audio.md §8.7 / endgame.md §4 (u5-spec#317 Q2, R667): after
+                // the restoration announcement, one exclusive-or inversion of
+                // the tableau rectangle in UI colour slot 1, held while
+                // envelope (1, 5000, 40000, 1, 8800) plays, then the full
+                // stats-panel redraw. The inversion rides this envelope's
+                // voice ([`SoundEffect::holds_viewport_inversion`]). It is a
                 // single blocking flourish per restored member, so it belongs
                 // on this one restoration beat and not on the placement or
                 // walk-in beats that follow.
