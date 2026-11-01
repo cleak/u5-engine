@@ -366,3 +366,46 @@ fn playtest_s07_dungeon_chamber_banner_draws_its_inverse_block() {
         assert!(banner.rows.iter().all(|row| row.len() == cells), "{record}/{n}");
     }
 }
+
+/// `dungeon-mode.md §6.4` (corrected 2026-11-01, u5-spec#317 Q1): "Banner
+/// padding and word gaps use the ordinary space code, never the `@` word
+/// divider ... In the runic font the ordinary space is a blank cell, which
+/// paints solid white under inverse video, while `@` is a small centred dot".
+/// A runic font whose `@` cell is fully inked shows any `@` as a black cell
+/// inside the otherwise solid white block.
+#[test]
+fn spec317_dungeon_chamber_banner_gaps_are_blank_spaces_not_word_dividers() {
+    let mut bytes = vec![0; CH_FONT_LEN];
+    for row in 0..CH_CELL_SIDE {
+        bytes[usize::from(b'@') * CH_CELL_SIDE + row] = 0xff;
+    }
+    let runes = parse_ch_font(&bytes, RUNES_CH_FILE).unwrap();
+    let mut atlas = synthetic_tile_atlas(TileGraphicsDepth::Ega16);
+    atlas.runic_font = Some(runes);
+    let white = TileGraphicsDepth::Ega16.pixel_limit() - 1;
+    for (record, n) in [(1, 1), (3, 1), (4, 1), (6, 1)] {
+        let mut grid = open_dungeon_record();
+        grid[dungeon_cell_index(0, 5, 4)] = 0xb0 | n;
+        let mut state = dungeon_state(grid, 0, 4, 4);
+        state.area = Area::Dungeon {
+            scene: DungeonScene::from_record(record).unwrap(),
+            level: 0,
+        };
+        state.player.facing = Direction::East;
+        state.torch_counter = 10;
+        let viewport = state.render_top_down_frame(VIEWPORT_PLAYER_ROW, &atlas).unwrap().unwrap();
+        let banner = dungeon_chamber_banner(record, n).unwrap();
+        assert!(banner.rows.iter().all(|row| !row.contains(&b'@')), "{record}/{n}");
+        let (column, row) = banner.origin;
+        let (x0, y0) = (usize::from(column) * 8, usize::from(row) * 8);
+        let width = banner.rows[0].len() * 8;
+        for y in y0..y0 + banner.rows.len() * 8 {
+            for x in x0..x0 + width {
+                let pixel = viewport.pixels
+                    [(y - VIEWPORT_ORIGIN_Y) * viewport.width + (x - VIEWPORT_ORIGIN_X)];
+                assert_eq!(pixel, white, "{record}/{n} at ({x}, {y})");
+            }
+        }
+    }
+}
+
