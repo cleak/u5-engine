@@ -4974,11 +4974,11 @@ impl PlayState {
         // finished. Staged as a pure hold - no text - which the rescue's own
         // beats then queue behind. Pushed once every sound of the step has
         // been queued; nothing else stages between here and the rescue.
-        // [`crate::stonegate_trapdoor_death_hold_bios_ticks`] carries the
+        // [`crate::stonegate_trapdoor_death_hold_secs`] carries the
         // duration and why.
         let step_sounds = self.sound_effects_after(step_sound_serial);
-        self.staged_narration.push_ticks(
-            crate::stonegate_trapdoor_death_hold_bios_ticks(&step_sounds),
+        self.staged_narration.push_secs(
+            crate::stonegate_trapdoor_death_hold_secs(&step_sounds),
             String::new(),
         );
 
@@ -6920,6 +6920,11 @@ impl PlayState {
         if !merciful && victim.is_none() {
             return;
         }
+        // Step 4 (u5-spec#302 re-audit blackthorn:5:3): after the impact
+        // rumble "one world tick follows", ahead of step 5's actor clear -
+        // so step 6's buffered pendulum write is not yet on it. A
+        // presentation step, like the cutscene's other counted ticks.
+        self.advance_presentation_world_step();
         // Step 4's cell. After a first wrong answer the actor sprite was
         // cleared on the pendulum, where §5 puts it; this engine's script VM
         // drops a cleared actor's coordinates, so that case reads the
@@ -7413,6 +7418,17 @@ impl PlayState {
         let verdict = blackthorn_rescue_verdict_record(self.moral_standing);
         let verdict_message = self.blackthorn_rescue_verdict_message(game_dir, verdict as usize)?;
 
+        // "Before step 1: nothing waits": below the top of the town range
+        // the conditional world tick repaints the viewport from the live
+        // grid - after a Stonegate wipe "a full lava field" - and it stays up
+        // until step 3's dissolve. Otherwise the screen is left as it was.
+        self.blackthorn_rescue_viewport =
+            if crate::blackthorn::blackthorn_rescue_repaints_live_grid(self.current_scene_byte()) {
+                crate::blackthorn::BlackthornRescueViewport::LiveGrid
+            } else {
+                crate::blackthorn::BlackthornRescueViewport::Black
+            };
+
         // Step 1-2: "Wait ten BIOS ticks. Print beat 1." Each hold below
         // also carries the measured untimed work beside its wait; see
         // [`crate::blackthorn::BLACKTHORN_RESCUE_UNTIMED_BEFORE_DARKNESS`].
@@ -7520,7 +7536,15 @@ impl PlayState {
         if self.pending_blackthorn_rescue.is_none() {
             return;
         }
+        // Step 3 follows beat 1: the dissolve takes the viewport to black.
+        if text == crate::blackthorn::BLACKTHORN_RESCUE_DARKNESS {
+            self.blackthorn_rescue_viewport = crate::blackthorn::BlackthornRescueViewport::Black;
+        }
         if text == crate::blackthorn::BLACKTHORN_RESCUE_REFUGE_THIRD {
+            // Step 9: the party-on-foot actor is installed and redrawn only
+            // now, after beat 4 and before the envelopes.
+            self.blackthorn_rescue_viewport =
+                crate::blackthorn::BlackthornRescueViewport::PartyOnBlack;
             self.emit_sound_effect(SoundEffect::BlackthornRescueEnvelopes);
         } else if text == crate::blackthorn::BLACKTHORN_RESCUE_THUNDER {
             self.emit_major_flash();
@@ -7933,6 +7957,7 @@ impl PlayState {
         // The cinematic is over; the handoff's own scene is an ordinary map.
         self.cutscene_black_viewport = false;
         self.blackthorn_rescue_reveals_shown = 0;
+        self.blackthorn_rescue_viewport = crate::blackthorn::BlackthornRescueViewport::Black;
         self.blackthorn_rescue_spectral_actor = ActiveObject::empty();
         self.blackthorn_rescue_animation_tick = None;
         self.moral_standing = blackthorn_rescue_post_print_standing(self.moral_standing);

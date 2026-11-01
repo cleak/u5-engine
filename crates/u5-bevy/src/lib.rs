@@ -18150,6 +18150,17 @@ fn render_pending_blackthorn_rescue_viewport(
     // through the narration, all 121 cells of it, and this engine showed the
     // trapdoor script's `0x8f` grid fill with the party standing on it from
     // the second frame onward.
+    //
+    // `blackthorn.md §7` "Before step 1: nothing waits" (u5-spec#302
+    // re-audit blackthorn:7:14): below the top of the town range the rescue
+    // first repaints the viewport from the live grid, and that field stays
+    // up until step 3's dissolve. The ordinary map renderer draws it.
+    use u5_runtime::blackthorn::BlackthornRescueViewport;
+    if state.blackthorn_rescue_active()
+        && state.blackthorn_rescue_viewport == BlackthornRescueViewport::LiveGrid
+    {
+        return Ok(None);
+    }
     let held = state.cutscene_black_viewport || state.blackthorn_rescue_active();
     let playback = match state.pending_blackthorn_rescue_playbacks.first() {
         Some(playback) => Some(playback.clone()),
@@ -18172,13 +18183,19 @@ fn render_pending_blackthorn_rescue_viewport(
         pixels: vec![0; width * height],
     };
     if let Some(playback) = playback {
-        blit_tile_id_to_viewport(
-            &mut viewport,
-            atlas,
-            usize::from(playback.party_atlas_index),
-            usize::from(playback.party_cell.0),
-            usize::from(playback.party_cell.1),
-        )?;
+        // §7 step 9 (re-audit blackthorn:7:15): the party-on-foot actor is
+        // installed only after beat 4; until then the field is pure black.
+        if !state.blackthorn_rescue_active()
+            || state.blackthorn_rescue_viewport == BlackthornRescueViewport::PartyOnBlack
+        {
+            blit_tile_id_to_viewport(
+                &mut viewport,
+                atlas,
+                usize::from(playback.party_atlas_index),
+                usize::from(playback.party_cell.0),
+                usize::from(playback.party_cell.1),
+            )?;
+        }
         // §7 step 4's three cell reveals, in the order the playback lists
         // them: the two Guardians, then the spectral figure. Each stays on
         // screen once revealed - the playback's own `persistent_terrain` and
@@ -24911,6 +24928,42 @@ mod tests {
                 .enumerate()
                 .any(|(index, value)| index != center && *value == 0)
         );
+    }
+
+    /// u5-spec#302 re-audit blackthorn:7:14 and 7:15 (`blackthorn.md §7`):
+    /// the live-grid repaint stands until beat 1's dissolve, then the field
+    /// is pure black until step 9 installs the party at `(5,5)`.
+    #[test]
+    fn blackthorn_rescue_viewport_follows_live_grid_black_then_party_stages() {
+        use u5_runtime::blackthorn::{BlackthornRescuePhase, BlackthornRescueViewport};
+        let mut state = world_state(open_world_grid(), 10, 20);
+        let atlas = synthetic_tile_atlas(TileGraphicsDepth::Ega16);
+        state.pending_blackthorn_rescue = Some(BlackthornRescuePhase::Narration);
+        state.cutscene_black_viewport = true;
+        state
+            .pending_blackthorn_rescue_playbacks
+            .push(u5_runtime::blackthorn_rescue_playback());
+
+        state.blackthorn_rescue_viewport = BlackthornRescueViewport::LiveGrid;
+        assert!(
+            render_pending_blackthorn_rescue_viewport(&state, &atlas)
+                .unwrap()
+                .is_none(),
+            "the live grid is the ordinary map render"
+        );
+
+        state.blackthorn_rescue_viewport = BlackthornRescueViewport::Black;
+        let black = render_pending_blackthorn_rescue_viewport(&state, &atlas)
+            .unwrap()
+            .unwrap();
+        assert!(black.pixels.iter().all(|value| *value == 0), "pure black");
+
+        state.blackthorn_rescue_viewport = BlackthornRescueViewport::PartyOnBlack;
+        let party = render_pending_blackthorn_rescue_viewport(&state, &atlas)
+            .unwrap()
+            .unwrap();
+        let center = 5 * TILE_ATLAS_SIDE * party.width + 5 * TILE_ATLAS_SIDE;
+        assert_eq!(party.pixels[center], (0x11c_u16 % 16) as u8);
     }
 
     #[test]
