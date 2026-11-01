@@ -8,14 +8,13 @@ use std::io::{self, Write};
 use std::path::{Path, PathBuf};
 
 use u5_runtime::{
-    ChargenAvatar, ChargenSession, ChargenSessionStep, ChargenStats, DEFAULT_GAME_DIR,
-    FIRST_PLAYABLE_FRIGATE_TILE, FIRST_PLAYABLE_FULL_SHIP_HULL, FIRST_PLAYABLE_SKIFF_TILE,
-    GameClock, PendingVehicleAcquisition, PlayOptions, PlayTarget, SAVE_FORTUNES_OF_WAR_OFFSET,
-    SAVE_MORAL_STANDING_OFFSET, ShrineVirtue, TileGraphicsDepth, TransportState, WindState,
-    chargen_stats_from_winners, commit_chargen_save, decode_moonstone_gate_slots,
-    load_play_options_from_init, load_play_options_from_save, load_question_records,
-    load_save_image_template, parse_u8_literal, question_record_display_text,
-    run_chargen_tournament,
+    ChargenAvatar, ChargenSession, ChargenSessionStep, ChargenStats, FIRST_PLAYABLE_FRIGATE_TILE,
+    FIRST_PLAYABLE_FULL_SHIP_HULL, FIRST_PLAYABLE_SKIFF_TILE, GameClock, PendingVehicleAcquisition,
+    PlayOptions, PlayTarget, SAVE_FORTUNES_OF_WAR_OFFSET, SAVE_MORAL_STANDING_OFFSET, ShrineVirtue,
+    TileGraphicsDepth, TransportState, WindState, chargen_stats_from_winners, commit_chargen_save,
+    decode_moonstone_gate_slots, load_play_options_from_init, load_play_options_from_save,
+    load_question_records, load_save_image_template, parse_u8_literal,
+    question_record_display_text, run_chargen_tournament,
 };
 
 use crate::runtime_game_dir::prepare_writable_game_dir;
@@ -76,6 +75,70 @@ pub struct CliArgs {
     /// Place the party beside the NPC carrying this `.NPC` dialog byte before
     /// writing the seed.
     pub seed_beside: Option<u8>,
+    /// `--setup`: run the game-data setup wizard (or, with a folder, set
+    /// that folder up) before anything else.
+    pub setup: bool,
+}
+
+impl CliArgs {
+    /// Whether any mode flag was given (as opposed to a bare launch, which
+    /// starts the game).
+    pub fn has_mode(&self) -> bool {
+        self.intro
+            || self.play
+            || self.visual
+            || self.route_smoke
+            || self.save_frame.is_some()
+            || self.save_frame_suite.is_some()
+            || self.save_screen.is_some()
+            || self.visual_frame_suite.is_some()
+            || self.visual_route_suite.is_some()
+            || self.compare_frame_manifests.is_some()
+            || self.location_audit.is_some()
+            || self.audio_suite.is_some()
+            || self.create_character.is_some()
+            || self.create_character_interactive
+            || self.write_seed
+    }
+
+    /// Whether the mode reads game data at all.
+    pub fn needs_game_data(&self) -> bool {
+        !(self.help || self.audio_suite.is_some() || self.compare_frame_manifests.is_some())
+    }
+}
+
+/// Parsed command line whose game folder is not resolved yet.
+///
+/// Parsing itself touches no files. The few options that read the game
+/// folder (`--from-save`, `--from-init`, `--write-seed` templates) run in
+/// [`CliCommand::finish`], once the frontend has decided which folder to
+/// use: the one given, or the one the setup pipeline resolved.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct CliCommand {
+    /// Everything else, with `game_dir` set to the given folder (or empty).
+    pub args: CliArgs,
+    /// `--game-dir <DIR>` or the positional `GAME_DIR`.
+    pub explicit_game_dir: Option<PathBuf>,
+    from_save: bool,
+    from_init: bool,
+    wind_override: Option<WindState>,
+    climbing_gear_override: Option<u8>,
+    pending_vehicle_override: Option<PendingVehicleAcquisition>,
+    transport_override: Option<TransportState>,
+}
+
+/// Parse the command line and resolve it against the folder it names.
+///
+/// This is the pre-setup behaviour, kept for callers and tests that pass a
+/// folder explicitly. Without one, `game_dir` is left empty.
+pub fn parse_cli_args<I>(args: I) -> io::Result<CliArgs>
+where
+    I: IntoIterator,
+    I::Item: Into<String>,
+{
+    let command = parse_cli_command(args)?;
+    let game_dir = command.explicit_game_dir.clone().unwrap_or_default();
+    command.finish(game_dir)
 }
 
 pub fn split_play_script(script: &str) -> Vec<String> {
@@ -87,11 +150,13 @@ pub fn split_play_script(script: &str) -> Vec<String> {
         .collect()
 }
 
-pub fn parse_cli_args<I>(args: I) -> io::Result<CliArgs>
+/// Parse the command line without touching any file.
+pub fn parse_cli_command<I>(args: I) -> io::Result<CliCommand>
 where
     I: IntoIterator,
     I::Item: Into<String>,
 {
+    let mut setup = false;
     let mut play = false;
     let mut intro = false;
     let mut visual = false;
@@ -128,6 +193,21 @@ where
         match arg.as_str() {
             "--help" | "-h" => help = true,
             "--intro" => intro = true,
+            "--setup" => setup = true,
+            "--game-dir" => {
+                let value = args.next().ok_or_else(|| {
+                    io::Error::new(
+                        io::ErrorKind::InvalidInput,
+                        "--game-dir requires the game folder",
+                    )
+                })?;
+                if game_dir.replace(PathBuf::from(value)).is_some() {
+                    return Err(io::Error::new(
+                        io::ErrorKind::InvalidInput,
+                        "the game folder may only be given once (--game-dir or GAME_DIR)",
+                    ));
+                }
+            }
             // `formats/saved-gam.md` publishes the whole image; the engine
             // already writes it for S-Save. `--write-seed` is that writer with
             // no game attached: build the state `--scene`/`--at`/`--time`
@@ -437,12 +517,20 @@ where
                     format!("unknown option `{arg}`"),
                 ));
             }
-            _ => game_dir = Some(PathBuf::from(arg)),
+            _ => {
+                if game_dir.replace(PathBuf::from(arg)).is_some() {
+                    return Err(io::Error::new(
+                        io::ErrorKind::InvalidInput,
+                        "the game folder may only be given once (--game-dir or GAME_DIR)",
+                    ));
+                }
+            }
         }
     }
-    let mut game_dir = game_dir.unwrap_or_else(|| PathBuf::from(DEFAULT_GAME_DIR));
+    let explicit_game_dir = game_dir;
+    let game_dir = explicit_game_dir.clone().unwrap_or_default();
     if help {
-        return Ok(CliArgs {
+        let args = CliArgs {
             play: false,
             intro: false,
             visual: false,
@@ -466,6 +554,17 @@ where
             create_character_interactive: false,
             write_seed: false,
             seed_beside: None,
+            setup: false,
+        };
+        return Ok(CliCommand {
+            args,
+            explicit_game_dir,
+            from_save: false,
+            from_init: false,
+            wind_override: None,
+            climbing_gear_override: None,
+            pending_vehicle_override: None,
+            transport_override: None,
         });
     }
     if from_save && from_init {
@@ -717,50 +816,7 @@ where
         }
         None
     };
-    if from_save {
-        game_dir = prepare_writable_game_dir(&game_dir)?;
-        options = load_play_options_from_save(&game_dir)?;
-    } else if from_init {
-        options = load_play_options_from_init(&game_dir)?;
-    } else if write_seed {
-        // `overworld.md §9`: natural gates are anchored on the eight saved
-        // Moonstone slots, and `formats/saved-gam.md §7.2` reads scene `0xFF`
-        // as "not a valid Gate Travel target". The seed writer keeps the rest
-        // of its template save, so it keeps the slots too rather than writing
-        // eight recovered sentinels from the default options (playtest
-        // P15-05). A missing template fails at the write itself.
-        //
-        // The same holds for the two world-state bytes the default options
-        // would otherwise zero (playtest P16-11): `formats/saved-gam.md §10`
-        // gives the moral-standing selector (`0x02E2`) a factory value of 75,
-        // and of the early-game encounter-size damper (`0x03B3`) says "A save
-        // tool should preserve whatever value it finds".
-        if let Ok(template) = load_save_image_template(&game_dir, options.save_template_source) {
-            options.moonstone_slots = decode_moonstone_gate_slots(&template);
-            options.moral_standing = template[SAVE_MORAL_STANDING_OFFSET];
-            options.fortunes_of_war = template[SAVE_FORTUNES_OF_WAR_OFFSET];
-        }
-    }
-    if let Some(wind) = wind_override {
-        // `weather.md §2`/§9: the wind is one saved byte, the banner is drawn
-        // from it and save/load copy it verbatim. The override is a request
-        // for that wind, so it stores the byte the in-game setter would; it
-        // used to keep a stale byte for every non-Calm direction, so a
-        // `--write-seed --wind west` seed started Calm (p10 R07).
-        options.wind = wind;
-        options.wind_save_byte = wind.save_byte();
-    }
-    if let Some(climbing_gear) = climbing_gear_override {
-        options.climbing_gear = climbing_gear;
-    }
-    if let Some(pending_vehicle) = pending_vehicle_override {
-        options.pending_vehicle = Some(pending_vehicle);
-    }
-    if let Some(transport) = transport_override {
-        options.transport = transport;
-    }
-
-    Ok(CliArgs {
+    let args = CliArgs {
         intro,
         play,
         visual,
@@ -784,20 +840,112 @@ where
         create_character_interactive,
         write_seed,
         seed_beside,
+        setup,
+    };
+    Ok(CliCommand {
+        args,
+        explicit_game_dir,
+        from_save,
+        from_init,
+        wind_override,
+        climbing_gear_override,
+        pending_vehicle_override,
+        transport_override,
     })
+}
+
+impl CliCommand {
+    /// Resolve the options that read the game folder against `game_dir`
+    /// and return the final arguments.
+    pub fn finish(self, game_dir: PathBuf) -> io::Result<CliArgs> {
+        let CliCommand {
+            mut args,
+            explicit_game_dir: _,
+            from_save,
+            from_init,
+            wind_override,
+            climbing_gear_override,
+            pending_vehicle_override,
+            transport_override,
+        } = self;
+        if args.help {
+            args.game_dir = game_dir;
+            return Ok(args);
+        }
+        let write_seed = args.write_seed;
+        let mut game_dir = game_dir;
+        let mut options = args.play_options;
+        if from_save {
+            game_dir = prepare_writable_game_dir(&game_dir)?;
+            options = load_play_options_from_save(&game_dir)?;
+        } else if from_init {
+            options = load_play_options_from_init(&game_dir)?;
+        } else if write_seed {
+            // `overworld.md §9`: natural gates are anchored on the eight saved
+            // Moonstone slots, and `formats/saved-gam.md §7.2` reads scene `0xFF`
+            // as "not a valid Gate Travel target". The seed writer keeps the rest
+            // of its template save, so it keeps the slots too rather than writing
+            // eight recovered sentinels from the default options (playtest
+            // P15-05). A missing template fails at the write itself.
+            //
+            // The same holds for the two world-state bytes the default options
+            // would otherwise zero (playtest P16-11): `formats/saved-gam.md §10`
+            // gives the moral-standing selector (`0x02E2`) a factory value of 75,
+            // and of the early-game encounter-size damper (`0x03B3`) says "A save
+            // tool should preserve whatever value it finds".
+            if let Ok(template) = load_save_image_template(&game_dir, options.save_template_source)
+            {
+                options.moonstone_slots = decode_moonstone_gate_slots(&template);
+                options.moral_standing = template[SAVE_MORAL_STANDING_OFFSET];
+                options.fortunes_of_war = template[SAVE_FORTUNES_OF_WAR_OFFSET];
+            }
+        }
+        if let Some(wind) = wind_override {
+            // `weather.md §2`/§9: the wind is one saved byte, the banner is drawn
+            // from it and save/load copy it verbatim. The override is a request
+            // for that wind, so it stores the byte the in-game setter would; it
+            // used to keep a stale byte for every non-Calm direction, so a
+            // `--write-seed --wind west` seed started Calm (p10 R07).
+            options.wind = wind;
+            options.wind_save_byte = wind.save_byte();
+        }
+        if let Some(climbing_gear) = climbing_gear_override {
+            options.climbing_gear = climbing_gear;
+        }
+        if let Some(pending_vehicle) = pending_vehicle_override {
+            options.pending_vehicle = Some(pending_vehicle);
+        }
+        if let Some(transport) = transport_override {
+            options.transport = transport;
+        }
+        args.game_dir = game_dir;
+        args.play_options = options;
+        Ok(args)
+    }
 }
 
 pub const CLI_USAGE: &str = "\
 Ultima V clean-room verification and playable harness.
 
 USAGE:
+    u5-engine [OPTIONS] [GAME_DIR]
     cargo run -- [OPTIONS] [GAME_DIR]
 
-GAME_DIR defaults to the local clean asset path. With no flags, runs the
-Lord British throne-room verification report.
+GAME_DIR is the folder holding the Ultima V game files. Without one, the
+folder comes from U5_GAME_DIR, then from the saved settings, then from a
+search of the usual install locations; if none has the files, a setup
+wizard asks (in a window for the visual game, in the terminal otherwise).
+
+With no arguments at all, starts the game: the windowed game in builds with
+`--features visual`, the terminal title/menu flow otherwise. With GAME_DIR
+and no flags, runs the Lord British throne-room verification report.
 
 OPTIONS:
     -h, --help                Print this usage and exit.
+        --game-dir <DIR>      The game folder (same as GAME_DIR).
+        --setup               Run the game-data setup wizard again, then
+                              start the game (or the requested mode). With
+                              a folder, set that folder up without asking.
         --intro               Launch the terminal title/menu flow.
         --play                Launch the terminal playable harness.
         --play-script <CMDS>  Run a semicolon-separated script then exit.
@@ -875,6 +1023,19 @@ SMOKE COMMANDS:
     cargo run --features visual -- --visual-frame-suite target\\visual-frame-suite C:\\Games\\U5-Clean
     cargo run --features visual -- --visual-route-suite target\\visual-route-suite C:\\Games\\U5-Clean
     cargo run --features visual -- --visual --scene CASTLE:0 --floor 0 C:\\Games\\U5-Clean
+
+SETUP:
+    u5-engine                 Start the game, setting the game files up first if needed.
+    u5-engine --setup         Choose the game folder again.
+    u5-engine --setup <DIR>   Set DIR up without the wizard.
+
+ENVIRONMENT:
+    U5_GAME_DIR               Game folder, when none is given on the command line.
+    U5_ENGINE_CONFIG          Settings file (default: config.toml in the per-user
+                              config folder, e.g. ~/.config/u5-engine).
+    U5_ENGINE_DATA_DIR        Folder for the managed copy of the game files and
+                              the log (default: e.g. ~/.local/share/u5-engine).
+    U5_ENGINE_RUNTIME_DIR     Folder for the writable runtime mirrors (saves).
     cargo run --features visual -- --intro --visual C:\\Games\\U5-Clean
 ";
 

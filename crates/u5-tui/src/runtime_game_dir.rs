@@ -6,7 +6,6 @@
 //! persistent writable mirror instead of attempting to modify the pristine
 //! install.
 
-use std::env;
 use std::ffi::OsStr;
 use std::fs;
 use std::io;
@@ -17,7 +16,7 @@ use u5_runtime::{
     TOWN_NPC_MUTATIONS_FILENAME, UNDER_OOL_FILENAME, WORLD_PROGRESS_STATE_FILE,
 };
 
-pub const RUNTIME_DIR_ENV: &str = "U5_ENGINE_RUNTIME_DIR";
+pub const RUNTIME_DIR_ENV: &str = u5_host_desktop::RUNTIME_DIR_ENV;
 
 /// Return a writable game directory suitable for interactive play.
 ///
@@ -54,17 +53,15 @@ fn prepare_writable_game_dir_in(game_dir: &Path, root: &Path) -> io::Result<Path
     Ok(target)
 }
 
+/// The runtime-mirror root. The per-platform rules (and the one-time move
+/// of saves out of the old temp-folder fallback) belong to the desktop
+/// host; see `u5_host_desktop::paths::runtime_root`.
 fn runtime_root() -> PathBuf {
-    if let Some(path) = env::var_os(RUNTIME_DIR_ENV).filter(|value| !value.is_empty()) {
-        return PathBuf::from(path);
+    let (root, migration) = u5_host_desktop::runtime_root_for_process();
+    if let Some(message) = migration {
+        eprintln!("{message}");
     }
-    if let Some(path) = env::var_os("LOCALAPPDATA").filter(|value| !value.is_empty()) {
-        return PathBuf::from(path).join("u5-engine").join("runtime");
-    }
-    if let Some(path) = env::var_os("XDG_DATA_HOME").filter(|value| !value.is_empty()) {
-        return PathBuf::from(path).join("u5-engine").join("runtime");
-    }
-    env::temp_dir().join("u5-engine-runtime")
+    root
 }
 
 fn requires_writable_mirror(game_dir: &Path) -> io::Result<bool> {
@@ -205,7 +202,7 @@ mod tests {
             .unwrap()
             .as_nanos();
         let dir =
-            env::temp_dir().join(format!("u5-engine-{label}-{}-{unique}", std::process::id()));
+            std::env::temp_dir().join(format!("u5-engine-{label}-{}-{unique}", std::process::id()));
         fs::create_dir_all(&dir).unwrap();
         dir
     }

@@ -5,11 +5,14 @@ edition.workspace = true
 
 [features]
 default = []
-visual = ["dep:u5-bevy"]
+visual = ["dep:u5-bevy", "dep:u5-bevy-setup", "u5-host-desktop/native-dialogs"]
 
 [dependencies]
 u5-runtime = { workspace = true }
 u5-bevy = { workspace = true, optional = true }
+u5-gamedata = { workspace = true }
+u5-host-desktop = { workspace = true }
+u5-bevy-setup = { workspace = true, optional = true }
 image = { workspace = true }
 
 [lib]
@@ -19,3 +22,10 @@ path = "src/lib.rs"
 [[bin]]
 name = "u5-engine"
 path = "src/main.rs"
+
+# Windows GUI-subsystem launcher: double-clicking it opens no console. It
+# always does the default launch (windowed game, setup wizard if needed).
+[[bin]]
+name = "u5-engine-gui"
+path = "src/bin/u5-engine-gui.rs"
+required-features = ["visual"]

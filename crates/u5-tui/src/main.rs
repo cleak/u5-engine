@@ -1,25 +1,68 @@
 use std::env;
 use std::fs;
 use std::io;
-use std::path::Path;
+use std::path::{Path, PathBuf};
+use std::process::ExitCode;
 
 use u5_runtime::{
     Direction, DiskPromptSession, PlayOptions, PlayState, audit_location_dat_files,
     location_audit_report_text, run_report,
 };
 use u5_tui::{
-    CLI_USAGE, CliArgs, compare_manifest_files, parse_cli_args, prepare_writable_game_dir,
+    CLI_USAGE, CliArgs, ReadyGameData, SETUP_WINDOW_FLAG, WizardMode, compare_manifest_files,
+    describe_failure, parse_cli_command, prepare_writable_game_dir, resolve_game_data,
     run_audio_suite, run_create_character_command, run_interactive_create_character,
     run_intro_menu_loop, run_play_loop, run_route_smoke, run_save_frame, run_save_frame_suite,
-    run_save_screen,
+    run_save_screen, run_setup_window_child,
 };
 
-fn main() -> io::Result<()> {
-    let mut args = parse_cli_args(env::args().skip(1))?;
-    if args.help {
+fn main() -> ExitCode {
+    let argv: Vec<String> = env::args().skip(1).collect();
+    if argv.first().map(String::as_str) == Some(SETUP_WINDOW_FLAG) {
+        // Internal: the windowed setup wizard's own process.
+        return run_setup_window_child(argv.get(1).cloned());
+    }
+    let mut game_data = None;
+    match run(argv, &mut game_data) {
+        Ok(()) => ExitCode::SUCCESS,
+        Err(error) => {
+            eprintln!("Error: {}", describe_failure(&error, game_data.as_ref()));
+            ExitCode::FAILURE
+        }
+    }
+}
+
+fn run(argv: Vec<String>, game_data: &mut Option<ReadyGameData>) -> io::Result<()> {
+    let command = parse_cli_command(argv)?;
+    if command.args.help {
         print!("{CLI_USAGE}");
         return Ok(());
     }
+    if !command.args.needs_game_data() {
+        return dispatch(command.finish(PathBuf::new())?);
+    }
+    // A bare `u5-engine` (or `u5-engine --setup [DIR]`) starts the game.
+    // A folder with no mode flags keeps running the verification report.
+    let default_launch =
+        !command.args.has_mode() && (command.explicit_game_dir.is_none() || command.args.setup);
+    let visual = command.args.visual || (default_launch && cfg!(feature = "visual"));
+    let ready = resolve_game_data(
+        command.explicit_game_dir.clone(),
+        command.args.setup,
+        WizardMode::for_visual(visual),
+    )
+    .map_err(io::Error::other)?;
+    let data_dir = ready.data_dir.clone();
+    *game_data = Some(ready);
+    let mut args = command.finish(data_dir)?;
+    if default_launch {
+        args.intro = true;
+        args.visual = cfg!(feature = "visual");
+    }
+    dispatch(args)
+}
+
+fn dispatch(mut args: CliArgs) -> io::Result<()> {
     if needs_writable_game_dir(&args) {
         args.game_dir = prepare_writable_game_dir(&args.game_dir)?;
     }

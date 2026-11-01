@@ -4533,6 +4533,9 @@ version = "1.0.0"
 dependencies = [
  "image",
  "u5-bevy",
+ "u5-bevy-setup",
+ "u5-gamedata",
+ "u5-host-desktop",
  "u5-runtime",
 ]
 

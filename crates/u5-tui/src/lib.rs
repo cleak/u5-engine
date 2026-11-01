@@ -10,14 +10,15 @@ pub mod play_loop;
 pub mod route_smoke;
 pub mod runtime_game_dir;
 pub mod save_frame;
+pub mod setup;
 pub mod visual_manifest;
 
 pub use audio_suite::{AudioSuiteCase, audio_suite_cases, run_audio_suite};
 pub use cli::{
-    CLI_USAGE, CliArgs, CreateCharacterCommand, chargen_typed_name, parse_chargen_gender_arg,
-    parse_chargen_winners_arg, parse_cli_args, parse_pending_vehicle_arg, parse_start_arg,
-    parse_time_arg, parse_transport_arg, run_create_character_command,
-    run_interactive_create_character, split_play_script,
+    CLI_USAGE, CliArgs, CliCommand, CreateCharacterCommand, chargen_typed_name,
+    parse_chargen_gender_arg, parse_chargen_winners_arg, parse_cli_args, parse_cli_command,
+    parse_pending_vehicle_arg, parse_start_arg, parse_time_arg, parse_transport_arg,
+    run_create_character_command, run_interactive_create_character, split_play_script,
 };
 pub use intro_loop::run_intro_menu_loop;
 pub use play_loop::{
@@ -25,12 +26,12 @@ pub use play_loop::{
     complete_headless_blocking_presentations, free_text_line_input, handle_empty_play_input,
     handle_play_script_command, is_music_toggle_token, is_simple_typeahead_key,
     is_typeahead_toggle_token, key_flushed_typeahead, play_input_key_and_suffix,
-    play_input_typeahead_chars,
-    play_script_command_label, play_script_idle_tick_count, play_script_state_line,
-    play_state_accepts_typeahead, play_state_runs_input_wait_pass, play_state_whole_line_reader,
-    print_play_frame, print_play_script_snapshot, raster_diagnostic_line, raster_frame_kind,
-    replay_play_script_commands, run_interactive_play_loop, run_play_loop,
-    run_play_script_commands, run_terminal_input_wait_pass, unclassified_escape_sequence,
+    play_input_typeahead_chars, play_script_command_label, play_script_idle_tick_count,
+    play_script_state_line, play_state_accepts_typeahead, play_state_runs_input_wait_pass,
+    play_state_whole_line_reader, print_play_frame, print_play_script_snapshot,
+    raster_diagnostic_line, raster_frame_kind, replay_play_script_commands,
+    run_interactive_play_loop, run_play_loop, run_play_script_commands,
+    run_terminal_input_wait_pass, unclassified_escape_sequence,
 };
 pub use route_smoke::{
     RouteSmokeCase, RouteSmokeExpectation, RouteSmokeFrameReport, RouteSmokeReport,
@@ -41,4 +42,11 @@ pub use save_frame::{
     SavedFrameReport, compose_gameplay_screen, run_save_frame, run_save_frame_suite,
     run_save_screen, save_frame_suite,
 };
+#[cfg(feature = "visual")]
+pub use setup::{DesktopWizardHost, report_gui_error, run_default_launch, run_gui_main};
+pub use setup::{
+    SETUP_WINDOW_FLAG, WizardMode, describe_failure, expand_path, no_data_message,
+    resolve_game_data, run_setup_window_child, run_terminal_wizard,
+};
+pub use u5_host_desktop::{ReadyGameData, WizardNeed};
 pub use visual_manifest::{ManifestCompareReport, compare_manifest_files, compare_manifest_text};

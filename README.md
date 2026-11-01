@@ -62,20 +62,39 @@ Until the spec owner answers, the engine follows captures of the original.
 
 ## Quick start
 
-You need a Rust toolchain (stable) and the original game files.
+You need a Rust toolchain (stable) and the original game files (the GOG.com
+release is the verified one).
 
 ```sh
-# Windowed (Bevy) game: intro, character creation, then play
+# Windowed (Bevy) game. With no game folder it finds your copy (GOG, GOG
+# Galaxy, Heroic, Lutris, Wine, Bottles, ...) or opens a setup wizard.
+cargo run --release --features visual
+
+# The same with an explicit folder
 cargo run --release --features visual -- --visual-playable /path/to/ultima5
 
 # Terminal play loop: same game rules, text rendering
 cargo run --release -- --play /path/to/ultima5
+
+# Choose the game folder again (window in visual builds, terminal otherwise)
+cargo run --release --features visual -- --setup
 ```
 
+Without a folder on the command line, the game folder comes from
+`U5_GAME_DIR`, then the saved settings (`config.toml` under
+`$XDG_CONFIG_HOME/u5-engine`, `%APPDATA%\u5-engine` or
+`~/Library/Application Support/u5-engine`), then a search of the usual install
+locations, then the wizard. Setup checks every file the engine needs,
+identifies the release by SHA-256, and copies the files with their original
+upper-case names into a managed folder (`~/.local/share/u5-engine/game-data`,
+`%LOCALAPPDATA%\u5-engine\game-data`), so lower-case copies and nested
+installer layouts work too.
+
 The engine never writes into the directory you give it. On first launch it
-copies your saves into a writable mirror (`$XDG_DATA_HOME/u5-engine/runtime`, or
-`%LOCALAPPDATA%\u5-engine\runtime` on Windows) and plays from there. Set
-`U5_ENGINE_RUNTIME_DIR` to put the mirror somewhere else.
+copies your saves into a writable mirror (`~/.local/share/u5-engine/runtime`,
+`$XDG_DATA_HOME/u5-engine/runtime` when set, `%LOCALAPPDATA%\u5-engine\runtime`
+on Windows, `~/Library/Application Support/u5-engine/runtime` on macOS) and
+plays from there. Set `U5_ENGINE_RUNTIME_DIR` to put the mirror somewhere else.
 
 Controls follow the original: letter keys are the A–Z commands, the arrow keys
 or numeric keypad move, Space passes a turn, Ctrl+S toggles sound, and Q saves.
