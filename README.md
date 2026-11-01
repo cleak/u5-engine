@@ -7,7 +7,8 @@ own copy of the original data files and is checked frame by frame against the
 original DOS game running in DOSBox.
 
 No original game data is included. You need your own copy of Ultima V; the GOG
-release works.
+release works. See [Download](#download) and
+[Getting the game files](#getting-the-game-files).
 
 ## Side by side
 
@@ -60,10 +61,122 @@ Open work is tracked in this repo's issues. Behaviour the spec doesn't yet pin
 down is listed in [u5-spec issues](https://github.com/cleak/u5-spec/issues).
 Until the spec owner answers, the engine follows captures of the original.
 
-## Quick start
+## Download
 
-You need a Rust toolchain (stable) and the original game files (the GOG.com
-release is the verified one).
+Prebuilt packages for each release are on the
+[Releases page](https://github.com/cleak/u5-engine/releases):
+
+| System | Package |
+|---|---|
+| Windows 10/11, 64-bit | `u5-engine-<version>-windows-x86_64.zip` |
+| Linux x86_64 (glibc 2.35+: Ubuntu 22.04, Debian 12, Fedora 36 or newer) | `u5-engine-<version>-linux-x86_64.tar.gz` |
+| macOS 11+, Apple Silicon and Intel | `u5-engine-<version>-macos-universal.zip` |
+
+`SHA256SUMS` lists the checksum of every package. Each package has a
+`RUNNING.txt` with platform notes.
+
+Unpack the package and start the game: on Windows double-click `u5-engine-gui.exe`, on Linux run `u5-engine`, and on macOS open `U5 Engine.app`. With
+no arguments the game opens in a window. On first run it looks for your Ultima V
+files in the usual install locations, and if it can't find them it asks you to
+pick the folder. You can also name the folder on the command line:
+
+```sh
+u5-engine --visual-playable /path/to/ultima5   # windowed game
+u5-engine --play /path/to/ultima5              # terminal mode, same rules
+u5-engine --help                               # every option
+```
+
+The engine never writes into your game folder. Your saves live in a per-user
+folder: `~/.local/share/u5-engine` on Linux (or under `$XDG_DATA_HOME`),
+`%LOCALAPPDATA%\u5-engine` on Windows, and `~/Library/Application Support/u5-engine`
+on macOS. Set `U5_ENGINE_RUNTIME_DIR` to put them somewhere else. Run
+`u5-engine --setup` to choose a different game folder later.
+
+Controls follow the original: letter keys are the A–Z commands, the arrow keys
+or numeric keypad move, Space passes a turn, Ctrl+S toggles sound, and Q saves.
+
+### Linux runtime libraries
+
+The Linux binary links ALSA and udev directly and loads the X11 or Wayland and
+Vulkan libraries when it starts. A normal desktop install usually has them all;
+if not:
+
+```sh
+# Debian / Ubuntu (on 24.04 and later the ALSA package is libasound2t64)
+sudo apt install libasound2 libudev1 libx11-6 libxcursor1 libxrandr2 libxi6 \
+    libxkbcommon0 libxkbcommon-x11-0 libwayland-client0 libvulkan1 mesa-vulkan-drivers
+
+# Fedora
+sudo dnf install alsa-lib systemd-libs libX11 libXcursor libXrandr libXi \
+    libxkbcommon libxkbcommon-x11 libwayland-client vulkan-loader mesa-vulkan-drivers
+```
+
+You need a graphics driver with Vulkan support. The first-run folder picker
+uses your desktop's file-chooser portal (`xdg-desktop-portal` plus its GTK,
+GNOME or KDE backend), which GNOME and KDE desktops already include. If you
+don't have a portal, pass the game folder on the command line instead.
+
+### macOS and Windows warnings
+
+The macOS app is signed and notarized only when the release was built with the
+project's Apple developer certificate. If the zip contains
+`MACOS-UNSIGNED.txt`, macOS will block the app until you clear the quarantine
+flag; that file explains how. Windows SmartScreen may warn about an
+unrecognised app the first time; choose **More info**, then **Run anyway**.
+
+## Getting the game files
+
+This project ships no game data. You need your own copy of
+**Ultima V: Warriors of Destiny**.
+
+**Buy it.** The engine is tested against the DOS version sold by
+[GOG.com](https://www.gog.com/). GOG has sold Ultima V in the
+"Ultima 4+5+6" collection and, at times, as a separate game; check the store
+for what is offered now. Any copy of the original DOS PC release should work,
+but the GOG one is the verified one.
+
+**Windows.** Install it with the GOG installer or GOG Galaxy. The installer's
+default folder is normally `C:\GOG Games\Ultima 5`; GOG Galaxy uses
+`C:\Program Files (x86)\GOG Galaxy\Games\Ultima 5` unless you changed its
+library folder. The exact folder name can vary between GOG releases. The one
+you want contains files such as `BRIT.DAT`, `DATA.OVL` and `ULTIMA.EXE`.
+
+**Linux and macOS.** You don't need Windows or Wine. Download the **Windows**
+offline installer from your GOG library (`setup_ultima_5_….exe`, plus any
+`.bin` files that come with it, all in one folder) and unpack it with
+[innoextract](https://constexpr.org/innoextract/):
+
+```sh
+# Install innoextract (1.8 or newer handles current GOG installers)
+sudo apt install innoextract        # Debian / Ubuntu
+sudo dnf install innoextract        # Fedora
+brew install innoextract            # macOS (Homebrew)
+
+# Unpack into a folder of your choice
+innoextract --gog --output-dir ~/Games/ultima5 setup_ultima_5_*.exe
+
+# Find the folder that holds the game data
+find ~/Games/ultima5 -iname BRIT.DAT
+```
+
+Depending on the installer version, the game files land either at the top of
+the output folder or in a subfolder such as `app/`. Use the folder that
+`find` reports.
+
+**Pointing the engine at the files.** On first run the engine checks common
+install locations (including the GOG folders above) and uses the first copy it
+finds. If it finds nothing, it opens a folder picker; choose the folder that
+contains `BRIT.DAT`. You can always override this by passing the folder on the
+command line, as shown under [Download](#download).
+
+## Building from source
+
+For developers. You need a Rust toolchain (stable) and the original game files.
+On Linux, install the Bevy build dependencies first:
+
+```sh
+sudo apt install pkg-config libasound2-dev libudev-dev libx11-dev libxkbcommon-dev libwayland-dev
+```
 
 ```sh
 # Windowed (Bevy) game. With no game folder it finds your copy (GOG, GOG
@@ -90,14 +203,7 @@ upper-case names into a managed folder (`~/.local/share/u5-engine/game-data`,
 `%LOCALAPPDATA%\u5-engine\game-data`), so lower-case copies and nested
 installer layouts work too.
 
-The engine never writes into the directory you give it. On first launch it
-copies your saves into a writable mirror (`~/.local/share/u5-engine/runtime`,
-`$XDG_DATA_HOME/u5-engine/runtime` when set, `%LOCALAPPDATA%\u5-engine\runtime`
-on Windows, `~/Library/Application Support/u5-engine/runtime` on macOS) and
-plays from there. Set `U5_ENGINE_RUNTIME_DIR` to put the mirror somewhere else.
-
-Controls follow the original: letter keys are the A–Z commands, the arrow keys
-or numeric keypad move, Space passes a turn, Ctrl+S toggles sound, and Q saves.
+Release packaging and CI are described in [`docs/releasing.md`](docs/releasing.md).
 
 ## How it's verified
 

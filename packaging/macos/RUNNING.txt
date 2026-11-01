@@ -1,0 +1,40 @@
+u5-engine for macOS (Apple Silicon and Intel)
+=============================================
+
+u5-engine plays Ultima V: Warriors of Destiny from your own copy of the
+original game files. No game files are included; see "Getting the game files"
+in README.md.
+
+Starting the game
+-----------------
+Drag "U5 Engine.app" to your Applications folder and open it.
+
+On first run it looks for the game files in the usual places; if it cannot
+find them it asks you to choose the folder that holds them (the one containing
+BRIT.DAT and DATA.OVL).
+
+From Terminal you can name the folder yourself:
+
+    "/Applications/U5 Engine.app/Contents/MacOS/u5-engine" --visual-playable ~/Games/ultima5
+
+Terminal mode (same game, text display):
+
+    "/Applications/U5 Engine.app/Contents/MacOS/u5-engine" --play ~/Games/ultima5
+
+All options:
+
+    "/Applications/U5 Engine.app/Contents/MacOS/u5-engine" --help
+
+Your files are safe
+-------------------
+The engine never writes into the game folder you give it. It plays from a
+copy in its own data folder. Set U5_ENGINE_RUNTIME_DIR to use another
+location.
+
+Requirements
+------------
+macOS 11 (Big Sur) or later. One app runs natively on both Apple Silicon and
+Intel Macs.
+
+If the download includes MACOS-UNSIGNED.txt, this build is not signed or
+notarized; that file explains how to open it.

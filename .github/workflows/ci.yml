@@ -1,0 +1,74 @@
+name: CI
+
+on:
+  push:
+    # Branch pushes only; tag pushes are handled by release.yml.
+    branches: ["**"]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+  CARGO_INCREMENTAL: "0"
+  # CI has no original game files. Asset-backed tests are behind the
+  # `original-asset-tests` feature or skip themselves when U5_TEST_ASSET_DIR
+  # is unset, so it is deliberately left unset here.
+
+jobs:
+  test-linux:
+    name: Test (Linux)
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Bevy build dependencies
+        # Bevy: ALSA (audio), udev (gamepads), X11 and Wayland (windowing).
+        # The native folder picker (rfd with its default xdg-portal backend)
+        # talks to the desktop portal over D-Bus in pure Rust and needs no
+        # GTK headers. If rfd is ever switched to its `gtk3` feature, add
+        # libgtk-3-dev here and in release.yml.
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            pkg-config libasound2-dev libudev-dev \
+            libx11-dev libxkbcommon-dev libwayland-dev
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: linux-release
+
+      - name: Test workspace
+        run: cargo test --release --workspace --locked
+
+      - name: Build windowed binary
+        run: cargo build --release --locked -p u5-tui --features visual --bins
+
+  build-windows:
+    name: Build (Windows)
+    runs-on: windows-latest
+    timeout-minutes: 90
+    env:
+      # Match the release build: link the C runtime statically so players do
+      # not need the Visual C++ redistributable.
+      RUSTFLAGS: -C target-feature=+crt-static
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: windows-release
+
+      - name: Build windowed binary
+        run: cargo build --release --locked -p u5-tui --features visual --bins

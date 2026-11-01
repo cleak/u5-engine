@@ -1,0 +1,40 @@
+u5-engine for Windows (x86_64)
+==============================
+
+u5-engine plays Ultima V: Warriors of Destiny from your own copy of the
+original game files. No game files are included; see "Getting the game files"
+in README.md.
+
+Starting the game
+-----------------
+Double-click u5-engine.exe (or u5-engine-gui.exe, when it is included).
+
+The game opens in a window. On first run it looks for the game files in the
+usual GOG install folders; if it cannot find them it asks you to choose the
+folder that holds them (the one containing BRIT.DAT and DATA.OVL).
+
+From a Command Prompt or PowerShell you can name the folder yourself:
+
+    u5-engine.exe --visual-playable "C:\GOG Games\Ultima 5"
+
+Terminal mode (same game, text display):
+
+    u5-engine.exe --play "C:\GOG Games\Ultima 5"
+
+All options:
+
+    u5-engine.exe --help
+
+Your files are safe
+-------------------
+The engine never writes into the game folder you give it. It plays from a
+copy in %LOCALAPPDATA%\u5-engine\runtime. Set U5_ENGINE_RUNTIME_DIR to use
+another location.
+
+Requirements
+------------
+64-bit Windows 10 or 11 with a DirectX 12 or Vulkan capable graphics driver.
+No other runtime needs to be installed.
+
+Windows SmartScreen may warn about an unrecognised app the first time; choose
+"More info", then "Run anyway".
