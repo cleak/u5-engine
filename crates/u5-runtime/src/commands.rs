@@ -2085,6 +2085,12 @@ pub const TROLL_BRIDGE_ANNOUNCE_LINE: &str = "\nThou spieth trolls under the bri
 pub const TROLL_BRIDGE_SNEAK_ROLL_LOW: u8 = 1;
 pub const TROLL_BRIDGE_SNEAK_ROLL_HIGH: u8 = 30;
 pub const TROLL_BRIDGE_SNEAK_SUFFIX: &str = " sneaks across...\n\n";
+/// `overworld.md §7.1` step 2: "pause ten world-tick units" after the
+/// announcement.
+pub const TROLL_BRIDGE_ANNOUNCE_PAUSE_TICKS: usize = 10;
+/// `overworld.md §7.1` step 2: each of the three sneak dots is "preceded by a
+/// five-unit pause".
+pub const TROLL_BRIDGE_DOT_PAUSE_TICKS: usize = 5;
 /// Step 2's no-one-caught outcome: "there is no toll and no fight."
 pub const TROLL_BRIDGE_EVADED_LINE: &str = "Trolls evaded!\n";
 /// Step 3's demand, printed with the toll amount spliced between the two

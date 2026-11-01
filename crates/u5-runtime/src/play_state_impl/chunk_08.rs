@@ -3495,7 +3495,13 @@ impl PlayState {
         }
         self.mark_visibility_dirty();
         self.emit_message_line(TROLL_BRIDGE_ANNOUNCE_LINE);
-        self.animation.tick_static_tiles();
+        // §7.1 step 2: "pause ten world-tick units". The pauses "run through
+        // the world-tick pause helper", each unit a full world tick with its
+        // animator and `0..63` wind check (`endgame.md §5.1`,
+        // `rest-and-camp.md §7.1`), not a bare tile-frame bump.
+        for _ in 0..TROLL_BRIDGE_ANNOUNCE_PAUSE_TICKS {
+            let _ = self.advance_visual_tick();
+        }
         let mut caught = None;
         for index in 0..self.party.len() {
             let status = self.party[index].status;
@@ -3506,8 +3512,14 @@ impl PlayState {
                 continue;
             }
             let name = party_name_to_string(&self.party_names[index]).unwrap_or_default();
-            self.animation.tick_static_tiles();
             self.emit_message_line(format!("{name}{TROLL_BRIDGE_SNEAK_SUFFIX}"));
+            // §7.1 step 2: "three dots each preceded by a five-unit pause",
+            // before the `1..30` roll - fifteen full world ticks per walked
+            // member. The line is still emitted whole (its trailing `\n\n`
+            // closes the row), so only the ticks are paced here.
+            for _ in 0..3 * TROLL_BRIDGE_DOT_PAUSE_TICKS {
+                let _ = self.advance_visual_tick();
+            }
             let roll = self.troll_bridge_sneak_roll();
             if self.party[index].climb_stat < roll {
                 caught = Some(index);
