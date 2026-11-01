@@ -2656,11 +2656,11 @@ impl PlayState {
     ///
     /// Stage A is "paced by a world tick every eight steps rather than by
     /// a fixed wait, so it also advances ambient animation while it runs":
-    /// each of those ticks runs the `animation.md §6` static-tile pass,
-    /// which is the ambient animation this engine has. The gate-presence
-    /// counter is deliberately *not* advanced by that pass - `§9.1` states
-    /// it "is not advanced by the animation tick" - so the two remain
-    /// independent while both move during the stage.
+    /// each of those ticks, like the opening pause, is a full world step
+    /// ([`Self::advance_visual_tick`]) with its gameplay draws (`§5` item
+    /// 4). The gate-presence counter is deliberately *not* advanced by that
+    /// step - `§9.1` states it "is not advanced by the animation tick" - so
+    /// the two remain independent while both move during the stage.
     ///
     /// Stage B drives the shared counter from 15 down to 1 and ends it at
     /// zero. The pixel-level presentation of both stages lives in
@@ -2676,14 +2676,20 @@ impl PlayState {
         // `resolve_natural_moongate_entry` without reaching here and stays
         // silent.
         self.emit_sound_effect(SoundEffect::MoongateTransit);
-        let animation = &mut self.animation;
-        let playback =
-            run_moongate_transit(&mut self.natural_moongate_counter, &mut |step, _phase| {
-                for _ in 0..step.world_ticks() {
-                    animation.tick_static_tiles();
-                }
-                Ok(())
-            })?;
+        // §9.2 step 1 "One world-tick pause" and stage A's "world tick every
+        // eight steps" are full world steps (`animation.md §13.2`): `§5` item
+        // 4 counts the `0xDC` arrival presentation's "own paced world ticks"
+        // among the gameplay draws, so each carries its animator and `0..63`
+        // wind-check draws. Only stage B writes the presence counter, after
+        // every tick, so it runs on a local copy written back at the end.
+        let mut counter = self.natural_moongate_counter;
+        let playback = run_moongate_transit(&mut counter, &mut |step, _phase| {
+            for _ in 0..step.world_ticks() {
+                let _ = self.advance_visual_tick();
+            }
+            Ok(())
+        })?;
+        self.natural_moongate_counter = counter;
         self.last_natural_moongate_transit = Some(playback);
         Ok(playback)
     }

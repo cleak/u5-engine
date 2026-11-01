@@ -5470,8 +5470,9 @@ impl PlayState {
         // *every* call: both the idle world tick and the White-potion
         // spell-effect sweep reach the §6 pass through here, and §13.1
         // names both. Scripted scene animation that drives
-        // `AnimationClock::tick_static_tiles` directly (the endgame and the
-        // moongate transit) is not the world tick and is left alone.
+        // `AnimationClock::tick_static_tiles` directly (the endgame) is not
+        // the world tick and is left alone. (The moongate transit's ticks are
+        // full world steps, `overworld.md §9.2` and `§5` item 4.)
         //
         // The composite pass is deliberately *not* suppressed with it:
         // `visibility.md §8.2` says "The composite still runs while Negate

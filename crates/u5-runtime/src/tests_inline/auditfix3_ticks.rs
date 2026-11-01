@@ -41,3 +41,27 @@ fn auditfix3_ticks_troll_bridge_pauses_are_full_world_ticks() {
     assert_eq!(TROLL_BRIDGE_ANNOUNCE_PAUSE_TICKS, 10);
     assert_eq!(TROLL_BRIDGE_DOT_PAUSE_TICKS, 5);
 }
+
+/// `overworld.md §9.2` steps 1-2: the transit opens with "One world-tick
+/// pause" and stage A is "paced by a world tick every eight steps" (32 over
+/// 256). `§5` item 4 counts the `0xDC` arrival presentation's "own paced
+/// world ticks" among the gameplay draws, so each is a full world step.
+#[test]
+fn auditfix3_ticks_moongate_transit_runs_full_world_ticks() {
+    let mut state = britannia_state(open_world_grid(), 4, 4);
+    state.natural_moongate_counter = MOONGATE_PHASE_FULL;
+    state.prng_state = 0x1234;
+    let mut reference = state.clone();
+
+    let playback = state.play_natural_moongate_transit().unwrap();
+    assert!(playback.ran_to_completion);
+    assert_eq!(playback.stage_a_world_ticks, 32);
+
+    for _ in 0..1 + 32 {
+        let _ = reference.advance_visual_tick();
+    }
+    assert_ne!(reference.prng_state, 0x1234, "a world tick draws");
+    assert_eq!(state.prng_state, reference.prng_state);
+    // Stage B still ends the shared presence counter at zero.
+    assert_eq!(state.natural_moongate_counter, 0);
+}
