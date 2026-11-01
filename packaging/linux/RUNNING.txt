@@ -1,0 +1,53 @@
+u5-engine for Linux (x86_64)
+============================
+
+u5-engine plays Ultima V: Warriors of Destiny from your own copy of the
+original game files. No game files are included; see "Getting the game files"
+in README.md.
+
+Starting the game
+-----------------
+    ./u5-engine
+
+With no arguments the game opens in a window. On first run it looks for the
+game files in the usual places; if it cannot find them it asks you to choose
+the folder that holds them (the one containing BRIT.DAT and DATA.OVL).
+
+You can also name the folder yourself:
+
+    ./u5-engine --visual-playable /path/to/ultima5
+
+Terminal mode (same game, text display):
+
+    ./u5-engine --play /path/to/ultima5
+
+All options:
+
+    ./u5-engine --help
+
+Your files are safe
+-------------------
+The engine never writes into the game folder you give it. It plays from a
+copy in a per-user data folder ($XDG_DATA_HOME/u5-engine/runtime when
+XDG_DATA_HOME is set). Set U5_ENGINE_RUNTIME_DIR to choose the location, for
+example:
+
+    U5_ENGINE_RUNTIME_DIR=~/.local/share/u5-engine/runtime ./u5-engine
+
+Libraries
+---------
+The binary needs glibc 2.35 or newer (Ubuntu 22.04, Debian 12, Fedora 36 or
+later) and these runtime libraries, which most desktops already have:
+
+    Debian/Ubuntu: sudo apt install libasound2 libudev1 libx11-6 libxcursor1 \
+                       libxrandr2 libxi6 libxkbcommon0 libxkbcommon-x11-0 \
+                       libwayland-client0 libvulkan1 mesa-vulkan-drivers
+    Fedora:        sudo dnf install alsa-lib systemd-libs libX11 libXcursor \
+                       libXrandr libXi libxkbcommon libxkbcommon-x11 \
+                       libwayland-client vulkan-loader mesa-vulkan-drivers
+
+(On Ubuntu 24.04 and later the ALSA package is named libasound2t64.)
+
+A Vulkan-capable graphics driver is required. The folder chooser uses your
+desktop's file-chooser portal (xdg-desktop-portal with the GTK, GNOME or KDE
+backend), which is standard on GNOME and KDE desktops.

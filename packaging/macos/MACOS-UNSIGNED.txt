@@ -1,0 +1,24 @@
+This macOS build is NOT signed or notarized
+===========================================
+
+The project did not have an Apple Developer ID certificate available when this
+release was built, so macOS Gatekeeper will refuse to open the app with a
+message that it "cannot be opened" or "is damaged".
+
+To open it anyway:
+
+1. Move "U5 Engine.app" to your Applications folder.
+2. Remove the download quarantine flag in Terminal:
+
+       xattr -dr com.apple.quarantine "/Applications/U5 Engine.app"
+
+3. Open the app normally.
+
+On macOS 14 and earlier you can instead Control-click the app, choose Open,
+and confirm. On macOS 15 and later, try to open it once, then go to System
+Settings > Privacy & Security and choose "Open Anyway".
+
+Only do this for a download you got from the project's GitHub releases page,
+and compare its checksum with SHA256SUMS:
+
+    shasum -a 256 u5-engine-*-macos-universal.zip

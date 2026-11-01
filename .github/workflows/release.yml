@@ -1,0 +1,368 @@
+name: Release
+
+# Builds the windowed game for Linux, Windows and macOS and attaches the
+# packages plus SHA256SUMS to the GitHub release for the tag.
+#
+# - Pushing a tag v* builds that tag and publishes its release.
+# - Running the workflow by hand with a tag (e.g. v1.0.0) rebuilds that
+#   existing tag and (re)uploads its release assets.
+# - Running it by hand with the tag left empty builds the chosen branch as a
+#   dry run: packages are kept as workflow artifacts and nothing is published.
+#
+# See docs/releasing.md.
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Existing tag to build and publish (e.g. v1.0.0). Leave empty for a dry run of the selected branch."
+        required: false
+        default: ""
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.event.inputs.tag || github.ref }}
+  cancel-in-progress: false
+
+env:
+  CARGO_TERM_COLOR: always
+  CARGO_INCREMENTAL: "0"
+
+jobs:
+  meta:
+    name: Resolve version
+    runs-on: ubuntu-latest
+    outputs:
+      ref: ${{ steps.meta.outputs.ref }}
+      tag: ${{ steps.meta.outputs.tag }}
+      version: ${{ steps.meta.outputs.version }}
+      publish: ${{ steps.meta.outputs.publish }}
+    steps:
+      - name: Resolve tag, version and ref
+        id: meta
+        env:
+          EVENT: ${{ github.event_name }}
+          INPUT_TAG: ${{ github.event.inputs.tag }}
+        run: |
+          set -euo pipefail
+          if [[ "$EVENT" == "push" ]]; then
+            tag="$GITHUB_REF_NAME"
+          else
+            tag="$INPUT_TAG"
+          fi
+          if [[ -n "$tag" ]]; then
+            if [[ ! "$tag" =~ ^v[0-9]+\.[0-9]+\.[0-9]+([-+][0-9A-Za-z.-]+)?$ ]]; then
+              echo "::error::Tag '$tag' is not of the form vMAJOR.MINOR.PATCH[-suffix]"
+              exit 1
+            fi
+            {
+              echo "tag=$tag"
+              echo "ref=refs/tags/$tag"
+              echo "version=${tag#v}"
+              echo "publish=true"
+            } >> "$GITHUB_OUTPUT"
+          else
+            {
+              echo "tag="
+              echo "ref=$GITHUB_SHA"
+              echo "version=dev-${GITHUB_SHA::8}"
+              echo "publish=false"
+            } >> "$GITHUB_OUTPUT"
+          fi
+
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ steps.meta.outputs.ref }}
+
+      - name: Check the tag matches the workspace version
+        if: steps.meta.outputs.publish == 'true'
+        env:
+          VERSION: ${{ steps.meta.outputs.version }}
+        run: |
+          set -euo pipefail
+          cargo_version=$(sed -n '/^\[workspace.package\]/,/^\[/{s/^version *= *"\(.*\)"/\1/p}' Cargo.toml)
+          if [[ "$cargo_version" != "$VERSION" ]]; then
+            echo "::error file=Cargo.toml::workspace version is '$cargo_version' but the tag says '$VERSION'"
+            exit 1
+          fi
+
+  linux:
+    name: Linux x86_64
+    needs: meta
+    # Build on the oldest supported runner so the binary runs on any distro
+    # with glibc 2.35 or newer.
+    runs-on: ubuntu-22.04
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.meta.outputs.ref }}
+
+      - name: Install Bevy build dependencies
+        # rfd's default xdg-portal backend needs no GTK headers; add
+        # libgtk-3-dev here if rfd is switched to its gtk3 feature.
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            pkg-config libasound2-dev libudev-dev \
+            libx11-dev libxkbcommon-dev libwayland-dev
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: release-linux
+
+      - name: Build
+        run: cargo build --release --locked -p u5-tui --features visual --bins
+
+      - name: Package
+        env:
+          VERSION: ${{ needs.meta.outputs.version }}
+        run: |
+          set -euo pipefail
+          strip target/release/u5-engine
+          if [[ -f target/release/u5-engine-gui ]]; then strip target/release/u5-engine-gui; fi
+          packaging/package.sh linux "$VERSION" target/release dist
+          ls -l dist
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: package-linux-x86_64
+          path: dist/*
+          if-no-files-found: error
+
+  windows:
+    name: Windows x86_64
+    needs: meta
+    runs-on: windows-latest
+    timeout-minutes: 90
+    env:
+      # Static C runtime: players do not need the Visual C++ redistributable.
+      RUSTFLAGS: -C target-feature=+crt-static
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.meta.outputs.ref }}
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: release-windows
+
+      - name: Build
+        run: cargo build --release --locked -p u5-tui --features visual --bins
+
+      - name: Package
+        shell: pwsh
+        env:
+          VERSION: ${{ needs.meta.outputs.version }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $name = "u5-engine-$env:VERSION-windows-x86_64"
+          $stage = Join-Path $env:RUNNER_TEMP $name
+          New-Item -ItemType Directory -Force -Path $stage, dist | Out-Null
+          Copy-Item target/release/u5-engine.exe $stage
+          if (Test-Path target/release/u5-engine-gui.exe) {
+            Copy-Item target/release/u5-engine-gui.exe $stage
+          }
+          Copy-Item README.md $stage
+          Copy-Item packaging/windows/RUNNING.txt $stage
+          if (Test-Path LICENSE) {
+            Copy-Item LICENSE $stage
+          } else {
+            Write-Output "::warning::No LICENSE file in the repository root"
+          }
+          Compress-Archive -Path $stage -DestinationPath "dist/$name.zip" -CompressionLevel Optimal
+          Get-ChildItem dist
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: package-windows-x86_64
+          path: dist/*
+          if-no-files-found: error
+
+  macos:
+    name: macOS universal
+    needs: meta
+    runs-on: macos-14
+    timeout-minutes: 120
+    outputs:
+      notarized: ${{ steps.sign.outputs.notarized }}
+    env:
+      MACOSX_DEPLOYMENT_TARGET: "11.0"
+      APPLE_CERTIFICATE_P12_BASE64: ${{ secrets.APPLE_CERTIFICATE_P12_BASE64 }}
+      APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+      APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+      APPLE_ID: ${{ secrets.APPLE_ID }}
+      APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+      APPLE_APP_PASSWORD: ${{ secrets.APPLE_APP_PASSWORD }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.meta.outputs.ref }}
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-darwin,x86_64-apple-darwin
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: release-macos
+
+      - name: Build (Apple Silicon)
+        run: cargo build --release --locked -p u5-tui --features visual --bin u5-engine --target aarch64-apple-darwin
+
+      - name: Build (Intel)
+        run: cargo build --release --locked -p u5-tui --features visual --bin u5-engine --target x86_64-apple-darwin
+
+      - name: Assemble universal app bundle
+        env:
+          VERSION: ${{ needs.meta.outputs.version }}
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/universal" "$RUNNER_TEMP/stage"
+          lipo -create -output "$RUNNER_TEMP/universal/u5-engine" \
+            target/aarch64-apple-darwin/release/u5-engine \
+            target/x86_64-apple-darwin/release/u5-engine
+          strip -x "$RUNNER_TEMP/universal/u5-engine"
+          lipo -info "$RUNNER_TEMP/universal/u5-engine"
+          packaging/package.sh macos-bundle "$VERSION" "$RUNNER_TEMP/universal/u5-engine" "$RUNNER_TEMP/stage"
+
+      - name: Sign and notarize (when the Apple secrets are configured)
+        id: sign
+        run: |
+          set -euo pipefail
+          app="$RUNNER_TEMP/stage/U5 Engine.app"
+          if [[ -z "$APPLE_CERTIFICATE_P12_BASE64" || -z "$APPLE_CERTIFICATE_PASSWORD" || -z "$APPLE_SIGNING_IDENTITY" ]]; then
+            echo "::warning title=macOS build is unsigned::The APPLE_* signing secrets are not configured, so the macOS app is ad-hoc signed only and not notarized. See docs/releasing.md."
+            # Ad-hoc signature: required for arm64 code and keeps the bundle
+            # consistent; Gatekeeper still treats it as unidentified.
+            codesign --force --deep --sign - "$app"
+            echo "notarized=false" >> "$GITHUB_OUTPUT"
+            echo "note=packaging/macos/MACOS-UNSIGNED.txt" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          keychain="$RUNNER_TEMP/signing.keychain-db"
+          keychain_password=$(openssl rand -base64 32)
+          echo "$APPLE_CERTIFICATE_P12_BASE64" | base64 --decode > "$RUNNER_TEMP/certificate.p12"
+          security create-keychain -p "$keychain_password" "$keychain"
+          security set-keychain-settings -lut 21600 "$keychain"
+          security unlock-keychain -p "$keychain_password" "$keychain"
+          security import "$RUNNER_TEMP/certificate.p12" -k "$keychain" \
+            -P "$APPLE_CERTIFICATE_PASSWORD" -T /usr/bin/codesign
+          security set-key-partition-list -S apple-tool:,apple:,codesign: \
+            -s -k "$keychain_password" "$keychain" >/dev/null
+          # shellcheck disable=SC2046
+          security list-keychains -d user -s "$keychain" $(security list-keychains -d user | tr -d '"')
+          rm -f "$RUNNER_TEMP/certificate.p12"
+
+          codesign --force --timestamp --options runtime \
+            --sign "$APPLE_SIGNING_IDENTITY" --keychain "$keychain" "$app"
+          codesign --verify --strict --verbose=2 "$app"
+
+          if [[ -z "$APPLE_ID" || -z "$APPLE_TEAM_ID" || -z "$APPLE_APP_PASSWORD" ]]; then
+            echo "::warning title=macOS build is not notarized::Signed with Developer ID, but APPLE_ID, APPLE_TEAM_ID or APPLE_APP_PASSWORD is missing, so it was not notarized."
+            echo "notarized=false" >> "$GITHUB_OUTPUT"
+            echo "note=packaging/macos/MACOS-UNSIGNED.txt" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          ditto -c -k --keepParent "$app" "$RUNNER_TEMP/notarize.zip"
+          xcrun notarytool submit "$RUNNER_TEMP/notarize.zip" \
+            --apple-id "$APPLE_ID" --team-id "$APPLE_TEAM_ID" \
+            --password "$APPLE_APP_PASSWORD" --wait --timeout 30m
+          xcrun stapler staple "$app"
+          spctl --assess --type execute --verbose=4 "$app"
+          echo "notarized=true" >> "$GITHUB_OUTPUT"
+          echo "note=" >> "$GITHUB_OUTPUT"
+
+      - name: Remove signing keychain
+        if: always()
+        run: security delete-keychain "$RUNNER_TEMP/signing.keychain-db" 2>/dev/null || true
+
+      - name: Package
+        env:
+          VERSION: ${{ needs.meta.outputs.version }}
+          NOTE: ${{ steps.sign.outputs.note }}
+        run: |
+          set -euo pipefail
+          packaging/package.sh macos-zip "$VERSION" "$RUNNER_TEMP/stage" dist ${NOTE:+"$NOTE"}
+          ls -l dist
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: package-macos-universal
+          path: dist/*
+          if-no-files-found: error
+
+  publish:
+    name: Publish release
+    needs: [meta, linux, windows, macos]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: package-*
+          path: dist
+          merge-multiple: true
+
+      - name: Checksums and release notes
+        env:
+          NOTARIZED: ${{ needs.macos.outputs.notarized }}
+          PUBLISH: ${{ needs.meta.outputs.publish }}
+        run: |
+          set -euo pipefail
+          cd dist
+          sha256sum -- *.tar.gz *.zip > SHA256SUMS
+          cat SHA256SUMS
+          {
+            echo "Downloads: Linux (x86_64), Windows (x86_64) and macOS (universal)."
+            echo "You need your own copy of the original Ultima V game files; see the README."
+            echo "Verify downloads with \`sha256sum -c SHA256SUMS\`."
+            if [[ "$NOTARIZED" != "true" ]]; then
+              echo
+              echo "**The macOS build is not signed or notarized.** macOS will refuse to open it until you remove the quarantine flag; see MACOS-UNSIGNED.txt inside the zip."
+            fi
+          } > ../release-notes.md
+          {
+            echo "### Packages"
+            echo '```'
+            cat SHA256SUMS
+            echo '```'
+            if [[ "$PUBLISH" != "true" ]]; then
+              echo "Dry run: nothing was published. Download the packages from this run's artifacts."
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Keep the dry-run bundle
+        if: needs.meta.outputs.publish != 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-dry-run
+          path: |
+            dist/*
+            release-notes.md
+
+      - name: Attach packages to the GitHub release
+        if: needs.meta.outputs.publish == 'true'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ needs.meta.outputs.tag }}
+          name: u5-engine ${{ needs.meta.outputs.version }}
+          body_path: release-notes.md
+          generate_release_notes: true
+          prerelease: ${{ contains(needs.meta.outputs.version, '-') }}
+          fail_on_unmatched_files: true
+          files: |
+            dist/*.tar.gz
+            dist/*.zip
+            dist/SHA256SUMS
