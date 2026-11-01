@@ -5635,8 +5635,9 @@ impl PlayState {
                     session.set_npc_slot(npc_slot);
                 }
                 let (rendered, suspended) = self.active_conversation_opening_rendered();
-                let opening = self.finish_conversation_opening(&rendered, suspended);
+                let (opening, theft) = self.finish_conversation_opening(&rendered, suspended);
                 self.emit_tlk_message(opening);
+                self.emit_falsehood_theft_sound_after_line(theft);
                 // `town-mode.md §7` step 4: the epilogue runs "When the
                 // dispatcher returns", and the Talk dispatcher runs the whole
                 // conversation (`conversation.md §2`). A conversation still
@@ -6113,9 +6114,10 @@ impl PlayState {
             session.set_npc_slot(npc_slot);
         }
         let (rendered, suspended) = self.active_conversation_opening_rendered();
-        let opening = self.finish_conversation_opening(&rendered, suspended);
+        let (opening, theft) = self.finish_conversation_opening(&rendered, suspended);
         let text = opening.text.clone();
         self.emit_tlk_message(opening);
+        self.emit_falsehood_theft_sound_after_line(theft);
         Some(text)
     }
 
@@ -6133,9 +6135,10 @@ impl PlayState {
     ) -> String {
         let (rendered, suspended) =
             self.active_conversation_opening_rendered_with_seed(stranger_host_seed);
-        let opening = self.finish_conversation_opening(&rendered, suspended);
+        let (opening, theft) = self.finish_conversation_opening(&rendered, suspended);
         let text = opening.text.clone();
         self.emit_tlk_message(opening);
+        self.emit_falsehood_theft_sound_after_line(theft);
         text
     }
 
@@ -6146,18 +6149,22 @@ impl PlayState {
     /// final cleanup"; the Britain wizard's stranger branch leaves the cursor
     /// at the start of the row after `Good day!"` and the next key is a
     /// command. The same close the keyword path runs on `ended`.
+    ///
+    /// The flag says whether the Falsehood theft ran; the caller owes its
+    /// sound once the closing text is out
+    /// ([`Self::emit_falsehood_theft_sound_after_line`]).
     fn finish_conversation_opening(
         &mut self,
         rendered: &crate::tlk_runner::TlkRenderedText,
         suspended: bool,
-    ) -> crate::tlk_runner::TlkRenderedText {
+    ) -> (crate::tlk_runner::TlkRenderedText, bool) {
         let ended = self
             .active_conversation
             .as_ref()
             .is_some_and(|session| session.has_ended());
         if !ended {
             let prompt = self.open_conversation_prompt(suspended);
-            return conversation_opening_rendered(rendered, prompt);
+            return (conversation_opening_rendered(rendered, prompt), false);
         }
         if let Some(session) = self.active_conversation.as_mut() {
             session.acknowledge_close();
@@ -6165,10 +6172,11 @@ impl PlayState {
         self.active_conversation = None;
         self.active_conversation_npc_slot = None;
         let mut opening = conversation_opening_stopped_rendered(rendered);
-        if self.run_final_conversation_cleanup() {
+        let theft = self.run_final_conversation_cleanup();
+        if theft {
             append_falsehood_stolen_goods_line(&mut opening);
         }
-        opening
+        (opening, theft)
     }
 
     /// Which prompt closes the opening: `§7`'s ASK-WHO name prompt when
@@ -6408,6 +6416,7 @@ impl PlayState {
             party_member_names: &party_member_names,
         };
         let mut text = String::new();
+        let mut theft = false;
         let mut rendered = crate::tlk_runner::TlkRenderedText::default();
         let mut ended = false;
         let mut asked_party_name = None;
@@ -6502,13 +6511,15 @@ impl PlayState {
             }
             self.active_conversation = None;
             self.active_conversation_npc_slot = None;
-            if self.run_final_conversation_cleanup() {
+            theft = self.run_final_conversation_cleanup();
+            if theft {
                 append_falsehood_stolen_goods_line(&mut rendered);
                 text = rendered.text.clone();
             }
         }
         debug_assert_eq!(rendered.text, text);
         self.emit_tlk_message(rendered);
+        self.emit_falsehood_theft_sound_after_line(theft);
         (text, ended)
     }
 
@@ -6854,6 +6865,15 @@ impl PlayState {
         self.run_final_conversation_cleanup_with_seed(host_clock_prng_seed_now())
     }
 
+    /// `conversation.md §10`: "The line is printed before the sound." The
+    /// theft's descending glissando plays once the closing text carrying the
+    /// stolen-goods line has been emitted.
+    pub(crate) fn emit_falsehood_theft_sound_after_line(&mut self, theft: bool) {
+        if theft {
+            self.emit_sound_effect(SoundEffect::ActionSnap);
+        }
+    }
+
     /// Deterministic-seed form of [`Self::run_final_conversation_cleanup`].
     /// The production caller samples the host clock after the warning line and
     /// sound; tests can inject the same resulting 12-bit seed directly.
@@ -6861,7 +6881,9 @@ impl PlayState {
         if self.resident_shadowlord != Some(SHADOWLORD_FALSEHOOD_INDEX) {
             return false;
         }
-        self.emit_sound_effect(SoundEffect::ActionSnap);
+        // The glissando follows the stolen-goods line, so the callers play it
+        // once the closing text is emitted
+        // ([`Self::emit_falsehood_theft_sound_after_line`]).
 
         // `prng.md §3`: this sample precedes inventory inspection even when
         // the selected branch below is a deterministic high-to-low scan.

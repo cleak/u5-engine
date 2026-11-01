@@ -4395,6 +4395,7 @@ fn active_conversation_keeps_numeric_signal_separate_from_falsehood_theft() {
     assert!(!ended);
     assert_eq!(state.conversation_signal_flags[5], 1);
 
+    let serial = state.sound_effect_serial;
     let (text, ended) = state.submit_active_conversation_keyword("bye");
     assert!(ended);
     assert!(state.active_conversation.is_none());
@@ -4403,6 +4404,26 @@ fn active_conversation_keeps_numeric_signal_separate_from_falsehood_theft() {
     // blank row under the farewell, with its own closing line feed.
     assert_eq!(text, "\n\"Farewell\"\n\nSomething was stolen!\n\n");
     assert_eq!(crate::play_state_impl::TLK_FALSEHOOD_STOLEN_GOODS_LINE, "\nSomething was stolen!\n");
+    // The theft glissando plays exactly once, after that text is out.
+    assert_eq!(state.sound_effects_after(serial), vec![SoundEffect::ActionSnap]);
+}
+
+/// `conversation.md §10`: "The line is printed before the sound." The theft
+/// itself runs before its closing text is emitted, so it must not sound;
+/// the conversation close plays the glissando after the line.
+#[test]
+fn falsehood_theft_cleanup_leaves_its_sound_to_the_close_after_the_line() {
+    let mut state = test_state(open_grid(), 1, 1);
+    state.resident_shadowlord = Some(SHADOWLORD_FALSEHOOD_INDEX);
+    state.keys = 1;
+    let serial = state.sound_effect_serial;
+
+    assert!(state.run_final_conversation_cleanup_with_seed(0x0123));
+
+    assert_eq!(state.keys, 0);
+    assert_eq!(state.sound_effects_after(serial), Vec::<SoundEffect>::new());
+    state.emit_falsehood_theft_sound_after_line(true);
+    assert_eq!(state.sound_effects_after(serial), vec![SoundEffect::ActionSnap]);
 }
 
 #[test]
