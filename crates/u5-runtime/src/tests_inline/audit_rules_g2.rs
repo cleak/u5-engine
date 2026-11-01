@@ -1029,10 +1029,8 @@ fn g2_shops_s8_b_buy_heading_draws_from_both_published_pools() {
 
 /// `systems/shops.md §8.1`: after `Sold!` the arms flow prints "the post-item
 /// prompt `"Anything else,\n` followed by `milady?` when the speaking
-/// member's gender field is the female value and `sir?` otherwise". The
-/// engine joins the suffix with a space instead of the published line feed.
+/// member's gender field is the female value and `sir?` otherwise".
 #[test]
-#[ignore = "divergence: g2-shops-arms-anything-else-linefeed"]
 fn g2_shops_s8_1_post_item_prompt_breaks_the_line_after_the_comma() {
     let dialogue = HashMap::new();
     let mut state = g2_shopkeeper_state(0x81, G2_OPEN_TIMES);

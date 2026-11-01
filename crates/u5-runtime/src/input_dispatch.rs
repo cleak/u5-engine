@@ -4592,8 +4592,9 @@ fn arms_post_item_prompt(speaker_is_female: bool, transaction_completed: bool) -
     };
     // Measured 2026-09-07 (`qa/paired/shop-arms-menus.tsv`): the row reads
     // `"Anything else,` - the opening quote is part of the line, and there is
-    // no closing one. `shops.md` §8.1 transcribes the literal without it.
-    format!("\"Anything else, {suffix}")
+    // no closing one. `shops.md` §8.1 gives the prompt as `"Anything else,\n`
+    // followed by the suffix, so the suffix starts its own row.
+    format!("\"Anything else,\n{suffix}")
 }
 
 /// `systems/shops.md §8.1`: the arms "anything else" tail is addressed by the
@@ -9044,14 +9045,14 @@ mod arms_shop_resident_literal_tests {
     fn arms_post_item_prompt_has_the_three_published_forms() {
         assert_eq!(
             arms_post_item_prompt(true, true),
-            "\"Anything else, milady?"
+            "\"Anything else,\nmilady?"
         );
-        assert_eq!(arms_post_item_prompt(false, true), "\"Anything else, sir?");
+        assert_eq!(arms_post_item_prompt(false, true), "\"Anything else,\nsir?");
         assert_eq!(
             arms_post_item_prompt(false, false),
-            "\"Anything else, then?"
+            "\"Anything else,\nthen?"
         );
-        assert_eq!(arms_post_item_prompt(true, false), "\"Anything else, then?");
+        assert_eq!(arms_post_item_prompt(true, false), "\"Anything else,\nthen?");
     }
 
     /// `systems/shops.md §8.1`: a successful purchase "prints the fixed
@@ -9065,7 +9066,7 @@ mod arms_shop_resident_literal_tests {
             None,
             ArmsShopSpeech::default(),
         );
-        assert_eq!(rendered, "Sold!\n\"Anything else, sir?");
+        assert_eq!(rendered, "Sold!\n\"Anything else,\nsir?");
     }
 
     /// `systems/shops.md §8.1`: "A decline or carry-cap refusal uses this
@@ -9089,7 +9090,7 @@ mod arms_shop_resident_literal_tests {
             // `shops.md §8.A`: the `No` echo is followed by a blank line,
             // so two feeds lead the prompt (playtest K07).
             assert!(
-                rendered.starts_with(&format!("\n\n\"Anything else, {suffix}")),
+                rendered.starts_with(&format!("\n\n\"Anything else,\n{suffix}")),
                 "declined quote with completed={completed} rendered {rendered:?}"
             );
         }
@@ -9153,7 +9154,7 @@ mod arms_shop_resident_literal_tests {
         assert_eq!(
             rendered,
             "Sold!
-\"Anything else, milady?"
+\"Anything else,\nmilady?"
         );
     }
 
@@ -9180,7 +9181,7 @@ mod arms_shop_resident_literal_tests {
         assert_eq!(
             rendered,
             "Sold!
-\"Anything else, sir?"
+\"Anything else,\nsir?"
         );
     }
 
