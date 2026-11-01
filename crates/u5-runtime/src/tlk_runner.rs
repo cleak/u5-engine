@@ -404,12 +404,17 @@ fn emit_rendered_text(out: &mut TlkRunOutput, text: &str, font: TlkGlyphFont) {
 /// `conversation.md §7.6`: the refusal arm clears the resident pending-word
 /// count before printing its fixed line. The clean runner emits cells eagerly,
 /// so reproduce that observable result by dropping the unflushed trailing word
-/// from both aligned output views.
+/// from both aligned output views. A pause or key-wait hold leaves no word
+/// pending (`conversation.md §7.2`: shipped `0xFF` IF-ELSE uses that follow
+/// "a row break ... or a key wait" have "no word ... pending"), so its marker
+/// is a boundary too.
 fn discard_pending_word(out: &mut TlkRunOutput) {
     let keep = out
         .rendered_glyphs
         .iter()
-        .rposition(|glyph| glyph.byte.is_ascii_whitespace())
+        .rposition(|glyph| {
+            glyph.byte.is_ascii_whitespace() || TextHoldKind::from_marker(glyph.byte).is_some()
+        })
         .map_or(0, |index| index + 1);
     out.rendered_glyphs.truncate(keep);
     out.text = out
@@ -470,6 +475,9 @@ pub fn run_tlk_stream_from(bytes: &[u8], start: usize, inputs: &TlkRunInputs) ->
                 return out;
             }
             TLK_CODE_END_STREAM => {
+                // `conversation.md §7.2`: `0x82` stops "without flushing the
+                // pending word", so a word queued before it is lost.
+                discard_pending_word(&mut out);
                 out.stop = TlkRunStop::EndOfStream;
                 out.consumed = pos;
                 return out;
@@ -921,12 +929,42 @@ mod tests {
 
     #[test]
     fn end_of_stream_halts_runner() {
-        let mut bytes = enc("Bye");
+        let mut bytes = enc("Bye ");
         bytes.push(TLK_CODE_END_STREAM);
         bytes.extend_from_slice(&enc("ignored"));
         let out = render(&bytes);
-        assert_eq!(out.text, "Bye");
+        assert_eq!(out.text, "Bye ");
         assert_eq!(out.stop, TlkRunStop::EndOfStream);
+    }
+
+    /// `conversation.md §7.2`: `0x82` stops the stream "without flushing the
+    /// pending word", so a partial word queued before it is lost. A row
+    /// break, or a pause after one (the shipped shapes), leaves nothing
+    /// pending and loses nothing.
+    #[test]
+    fn end_of_stream_drops_the_unflushed_pending_word() {
+        let mut bytes = enc("Fare thee");
+        bytes.push(TLK_CODE_END_STREAM);
+        let out = render(&bytes);
+        assert_eq!(out.text, "Fare ");
+        assert_eq!(out.rendered_glyphs.len(), out.text.len());
+        assert_eq!(out.stop, TlkRunStop::EndOfStream);
+
+        let mut bytes = enc("Fare thee well");
+        bytes.push(TLK_CODE_LITERAL_NEWLINE);
+        bytes.push(TLK_CODE_PAUSE);
+        bytes.push(TLK_CODE_END_STREAM);
+        let out = render(&bytes);
+        assert!(out.text.starts_with("Fare thee well\n"), "{:?}", out.text);
+        assert_eq!(out.stop, TlkRunStop::EndOfStream);
+        let kept = render(&{
+            let mut b = enc("Fare thee well");
+            b.push(TLK_CODE_LITERAL_NEWLINE);
+            b.push(TLK_CODE_PAUSE);
+            b.push(0x00);
+            b
+        });
+        assert_eq!(out.text, kept.text, "a pause marker is a word boundary");
     }
 
     #[test]
