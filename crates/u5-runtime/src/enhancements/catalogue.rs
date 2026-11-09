@@ -1,7 +1,7 @@
 //! The enhancement catalogue: every toggle and valued setting, as data
 //! (Phase B design 1.3.2, 1.4.1 and 1.4.2).
 //!
-//! The catalogue is the single list of setting keys. One [`toggles!`]
+//! The catalogue is the single list of setting keys. One `toggles!`
 //! invocation lists every boolean toggle; the [`Toggle`] enum, the
 //! [`TOGGLE_KEYS`] table and the [`TOGGLES`] rows are generated from it, so
 //! a toggle cannot exist without a full row. Valued settings are
