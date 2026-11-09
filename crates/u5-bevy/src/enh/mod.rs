@@ -30,6 +30,9 @@
 //! - The presentation pipeline host ([`present`]) is added only when a
 //!   feature registers a step. With no step the frame sprite shows the
 //!   faithful image, and no upload site is edited.
+//! - The save watcher (`sidecar_io`) is added only while a feature that
+//!   keeps a per-save sidecar is on and the host gave a save folder, and
+//!   runs only while such a feature is on.
 //!
 //! Every enhancement system sits in one of the six [`EnhSet`]s. The plugin
 //! declares their edges once, against the faithful systems of both app
@@ -42,6 +45,7 @@ pub mod input;
 pub mod overlay;
 pub mod present;
 pub mod side;
+pub mod sidecar_io;
 pub mod synthetic;
 pub mod toast;
 
@@ -203,6 +207,11 @@ impl Plugin for EnhancementsPlugin {
             self.launch.enhancements.toggles,
             &self.launch.enhancements.values,
         );
+        sidecar_io::add_save_watcher(
+            app,
+            self.launch.enhancements.toggles,
+            self.launch.save_dir.as_deref(),
+        );
     }
 }
 
@@ -255,12 +264,14 @@ fn toggle_changes_pending(pending: Res<PendingToggleChanges>) -> bool {
 /// - `NextLaunch`: stored only.
 ///
 /// When the toggles changed, the [`KeyMap`] is rebuilt, so a feature
-/// switched off releases its keys in the same frame.
+/// switched off releases its keys in the same frame, and the save watcher
+/// is told, so a sidecar feature switched on starts from the save on disk.
 fn apply_pending_toggles(
     mut pending: ResMut<PendingToggleChanges>,
     mut toggles: ResMut<Toggles>,
     launch: Res<EnhLaunch>,
     keymap: Option<ResMut<KeyMap>>,
+    save_watch: Option<ResMut<sidecar_io::SaveWatch>>,
     idle: IdleProbe,
 ) {
     let before = toggles.0;
@@ -277,6 +288,11 @@ fn apply_pending_toggles(
         for note in keymap.rebuild(&launch.0.enhancements.keys, toggles.0) {
             warn!("{note}");
         }
+    }
+    if toggles.0 != before
+        && let Some(mut save_watch) = save_watch
+    {
+        save_watch.toggles_changed(before, toggles.0);
     }
     if stored.is_empty() {
         return;

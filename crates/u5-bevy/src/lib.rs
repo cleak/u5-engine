@@ -10088,6 +10088,7 @@ fn run_visual_intro_menu_app(
         title_tick_frames: None,
         pending_reveal_clicks: Vec::new(),
         pending_speaker_cancels: Vec::new(),
+        new_game_saves: 0,
     };
     let mut app = App::new();
     app.add_plugins(DefaultPlugins.set(WindowPlugin {
@@ -10872,6 +10873,11 @@ struct VisualIntroState {
     /// system last ran, drained into [`SpeakerEffect::cancel`] events ahead
     /// of any new sound.
     pending_speaker_cancels: Vec<InterruptibleSound>,
+    /// New games committed in this intro: character creation and the
+    /// Ultima IV transfer, each of which writes a fresh `SAVED.GAM`. Only
+    /// counted; the enhancements' save watcher reads it (Phase B design
+    /// 1.3.10, "New game") and nothing in the game does.
+    new_game_saves: u64,
 }
 
 #[derive(Debug, Default)]
@@ -13407,6 +13413,9 @@ fn step_visual_intro_panel(intro: &mut VisualIntroState, ch: char) -> bool {
             intro.dispatch.consume_gameplay_prng_draws(draws);
         }
     }
+    if outcome_writes_new_game(&outcome) {
+        intro.new_game_saves += 1;
+    }
     match outcome {
         VisualIntroPanelOutcome::Stay => {}
         VisualIntroPanelOutcome::ReturnToMenu {
@@ -13457,6 +13466,22 @@ fn step_visual_intro_panel(intro: &mut VisualIntroState, ch: char) -> bool {
         }
     }
     true
+}
+
+/// Whether a panel outcome is a new game's fresh `SAVED.GAM`: character
+/// creation, committed in [`step_visual_intro_panel`], or the Ultima IV transfer,
+/// committed by its screen before it returns. Only counted, for the
+/// enhancements' save watcher (Phase B design 1.3.10).
+fn outcome_writes_new_game(outcome: &VisualIntroPanelOutcome) -> bool {
+    matches!(
+        outcome,
+        VisualIntroPanelOutcome::CommitChargen(_)
+            | VisualIntroPanelOutcome::ReturnToMenu {
+                subflow: IntroSubflow::UltimaIvTransfer,
+                result: IntroSubflowResult::SaveReady,
+                ..
+            }
+    )
 }
 
 fn cancel_visual_intro_panel(intro: &mut VisualIntroState) -> bool {
@@ -17453,6 +17478,7 @@ fn visual_intro_suite_state(
         title_tick_frames: None,
         pending_reveal_clicks: Vec::new(),
         pending_speaker_cancels: Vec::new(),
+        new_game_saves: 0,
     };
     if title_dismissed {
         intro.dispatch.dismiss_title();
@@ -21417,6 +21443,7 @@ mod tests {
             title_tick_frames: None,
             pending_reveal_clicks: Vec::new(),
             pending_speaker_cancels: Vec::new(),
+            new_game_saves: 0,
         };
 
         let frame = render_intro_frame(&mut intro);
@@ -21552,6 +21579,7 @@ mod tests {
             title_tick_frames: None,
             pending_reveal_clicks: Vec::new(),
             pending_speaker_cancels: Vec::new(),
+            new_game_saves: 0,
         };
         intro.dispatch.dismiss_title();
 
@@ -21850,6 +21878,7 @@ mod tests {
             title_tick_frames: None,
             pending_reveal_clicks: Vec::new(),
             pending_speaker_cancels: Vec::new(),
+            new_game_saves: 0,
         };
 
         apply_pre_flourish_outcome(&mut intro);
@@ -21914,6 +21943,7 @@ mod tests {
             title_tick_frames: None,
             pending_reveal_clicks: Vec::new(),
             pending_speaker_cancels: Vec::new(),
+            new_game_saves: 0,
         };
         let baseline_surface = intro.surface.clone();
 
@@ -22454,6 +22484,7 @@ mod tests {
             title_tick_frames: None,
             pending_reveal_clicks: Vec::new(),
             pending_speaker_cancels: Vec::new(),
+            new_game_saves: 0,
         };
         assert!(visual_intro_title_surface_visible(&intro));
         assert!(matches!(
@@ -22559,6 +22590,7 @@ mod tests {
             title_tick_frames: None,
             pending_reveal_clicks: Vec::new(),
             pending_speaker_cancels: Vec::new(),
+            new_game_saves: 0,
         };
 
         let outcome = finish_visual_intro_title_to_menu(&mut intro, true);
@@ -23230,6 +23262,7 @@ mod tests {
             title_tick_frames: None,
             pending_reveal_clicks: Vec::new(),
             pending_speaker_cancels: Vec::new(),
+            new_game_saves: 0,
         };
 
         assert!(step_visual_intro(&mut intro, 'x'));
@@ -23406,6 +23439,7 @@ mod tests {
             title_tick_frames: None,
             pending_reveal_clicks: Vec::new(),
             pending_speaker_cancels: Vec::new(),
+            new_game_saves: 0,
         };
 
         let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
@@ -23471,6 +23505,7 @@ mod tests {
             title_tick_frames: None,
             pending_reveal_clicks: Vec::new(),
             pending_speaker_cancels: Vec::new(),
+            new_game_saves: 0,
         };
 
         // `cleak/u5-spec#67`: a keystroke during the flourish does not
@@ -23540,6 +23575,7 @@ mod tests {
             title_tick_frames: None,
             pending_reveal_clicks: Vec::new(),
             pending_speaker_cancels: Vec::new(),
+            new_game_saves: 0,
         };
 
         // `systems/intro.md §3` item 6: "The early `J` shortcut is therefore
@@ -23595,6 +23631,7 @@ mod tests {
             title_tick_frames: None,
             pending_reveal_clicks: Vec::new(),
             pending_speaker_cancels: Vec::new(),
+            new_game_saves: 0,
         };
 
         // `systems/intro.md §3` step 4: a key during the strokes
@@ -23663,6 +23700,7 @@ mod tests {
             title_tick_frames: None,
             pending_reveal_clicks: Vec::new(),
             pending_speaker_cancels: Vec::new(),
+            new_game_saves: 0,
         };
 
         assert!(advance_visual_intro_animation_tick(&mut intro));
@@ -23714,6 +23752,7 @@ mod tests {
             title_tick_frames: None,
             pending_reveal_clicks: Vec::new(),
             pending_speaker_cancels: Vec::new(),
+            new_game_saves: 0,
         };
 
         assert!(advance_visual_intro_animation_tick(&mut intro));
@@ -23853,6 +23892,7 @@ mod tests {
             title_tick_frames: None,
             pending_reveal_clicks: Vec::new(),
             pending_speaker_cancels: Vec::new(),
+            new_game_saves: 0,
         };
 
         let advanced = advance_visual_intro_animation_tick(&mut intro);
@@ -23899,6 +23939,7 @@ mod tests {
             title_tick_frames: None,
             pending_reveal_clicks: Vec::new(),
             pending_speaker_cancels: Vec::new(),
+            new_game_saves: 0,
         };
 
         let frame = render_intro_frame(&mut intro);
@@ -29696,6 +29737,7 @@ mod tests {
             title_tick_frames: None,
             pending_reveal_clicks: Vec::new(),
             pending_speaker_cancels: Vec::new(),
+            new_game_saves: 0,
         };
 
         let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
@@ -30042,6 +30084,7 @@ mod tests {
             title_tick_frames: None,
             pending_reveal_clicks: Vec::new(),
             pending_speaker_cancels: Vec::new(),
+            new_game_saves: 0,
         };
         intro.dispatch.dismiss_title();
         intro.dispatch.submit_menu_key(b'U');
@@ -30107,6 +30150,7 @@ mod tests {
             title_tick_frames: None,
             pending_reveal_clicks: Vec::new(),
             pending_speaker_cancels: Vec::new(),
+            new_game_saves: 0,
         }
     }
 
@@ -30151,6 +30195,7 @@ mod tests {
             title_tick_frames: None,
             pending_reveal_clicks: Vec::new(),
             pending_speaker_cancels: Vec::new(),
+            new_game_saves: 0,
         };
         if matches!(intro.panel, VisualIntroPanel::ReturnToView { .. }) {
             intro.modal_backing = Some(visual_intro_title_art_buffer(&intro.game_dir, None, None));

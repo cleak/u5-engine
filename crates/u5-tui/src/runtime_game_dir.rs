@@ -209,6 +209,25 @@ fn clear_readonly(path: &Path) -> io::Result<()> {
 mod tests {
     use super::*;
 
+    /// Phase B design 1.3.10: the engine's sidecar stamps use their own
+    /// copy of this hash, which must stay the same function.
+    #[test]
+    fn the_engine_fnv_is_this_fnv() {
+        for bytes in [
+            &b""[..],
+            b"a",
+            b"foobar",
+            b"c:/games/ultima5",
+            &[0xff; 4192],
+        ] {
+            assert_eq!(
+                fnv1a64(bytes),
+                u5_runtime::enhancements::fnv1a64(bytes),
+                "{bytes:?}"
+            );
+        }
+    }
+
     fn temp_dir(label: &str) -> PathBuf {
         let unique = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)

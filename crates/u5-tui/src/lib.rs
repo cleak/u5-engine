@@ -28,7 +28,7 @@ pub use enhancement_settings::{
 };
 pub use intro_loop::run_intro_menu_loop;
 pub use play_loop::{
-    FreeTextLineInput, ansi_function_key, ansi_navigation_key,
+    FreeTextLineInput, TerminalSaveWatch, ansi_function_key, ansi_navigation_key,
     complete_headless_blocking_presentations, free_text_line_input, handle_empty_play_input,
     handle_play_script_command, is_music_toggle_token, is_simple_typeahead_key,
     is_typeahead_toggle_token, key_flushed_typeahead, play_input_key_and_suffix,
@@ -36,7 +36,8 @@ pub use play_loop::{
     play_script_state_line, play_state_accepts_typeahead, play_state_runs_input_wait_pass,
     play_state_whole_line_reader, print_play_frame, print_play_script_snapshot,
     raster_diagnostic_line, raster_frame_kind, replay_play_script_commands,
-    run_interactive_play_loop, run_play_loop, run_play_script_commands,
+    run_interactive_play_loop, run_interactive_play_loop_watched, run_play_loop,
+    run_play_loop_with, run_play_script_commands, run_play_script_commands_watched,
     run_terminal_input_wait_pass, unclassified_escape_sequence,
 };
 pub use route_smoke::{

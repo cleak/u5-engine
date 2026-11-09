@@ -2226,3 +2226,109 @@ fn play_script_frame_keeps_the_keyword_echo_and_reply() {
         "{text}"
     );
 }
+
+// ---- the enhancements' save watch (Phase B design 1.3.9, plan M0-16) ----
+
+/// A save folder with a seed save whose modification time is well in the
+/// past, so a save in the same clock tick still changes it.
+fn watched_save_dir() -> std::path::PathBuf {
+    let dir = debug_game_dir();
+    fs::write(
+        dir.join(SAVED_GAM_FILENAME),
+        saved_game_seed_bytes(0, 0, 15, 15),
+    )
+    .unwrap();
+    fs::write(dir.join(SAVED_OOL_FILENAME), vec![0; SAVED_OOL_LEN]).unwrap();
+    write_empty_ool_mirrors(&dir);
+    fs::File::options()
+        .write(true)
+        .open(dir.join(SAVED_GAM_FILENAME))
+        .unwrap()
+        .set_modified(UNIX_EPOCH + std::time::Duration::from_secs(1_000_000))
+        .unwrap();
+    dir
+}
+
+fn saved_stamp(dir: &Path) -> u5_runtime::enhancements::SaveStamp {
+    u5_runtime::enhancements::SaveStamp::of_image(&fs::read(dir.join(SAVED_GAM_FILENAME)).unwrap())
+}
+
+fn script(commands: &[&str]) -> Vec<String> {
+    commands.iter().map(|s| s.to_string()).collect()
+}
+
+#[test]
+fn the_script_loop_stamps_a_save_through_the_prompt_once() {
+    let dir = watched_save_dir();
+    let mut state = test_state(open_grid(), 3, 4);
+    let mut watch = TerminalSaveWatch::new(&dir);
+    run_play_script_commands_watched(
+        &mut state,
+        &dir,
+        &script(&["d", "Q", "Y", "a", "s"]),
+        None,
+        Some(&mut watch),
+    )
+    .unwrap();
+    assert_eq!(watch.take_stamps(), [saved_stamp(&dir)]);
+    assert!(watch.take_stamps().is_empty());
+    let _ = fs::remove_dir_all(dir);
+}
+
+#[test]
+fn the_script_loop_stamps_a_buffered_q_y_once_and_nothing_without_a_save() {
+    let dir = watched_save_dir();
+    let mut state = test_state(open_grid(), 3, 4);
+    let mut watch = TerminalSaveWatch::new(&dir);
+    run_play_script_commands_watched(
+        &mut state,
+        &dir,
+        &script(&["d", "QN", "Q", "N", "a"]),
+        None,
+        Some(&mut watch),
+    )
+    .unwrap();
+    assert!(watch.take_stamps().is_empty(), "no save, no stamp");
+    run_play_script_commands_watched(&mut state, &dir, &script(&["QY"]), None, Some(&mut watch))
+        .unwrap();
+    assert_eq!(watch.take_stamps(), [saved_stamp(&dir)]);
+    let _ = fs::remove_dir_all(dir);
+}
+
+#[test]
+fn the_interactive_loop_stamps_a_save_once() {
+    let dir = watched_save_dir();
+    let mut state = test_state(open_grid(), 3, 4);
+    let mut watch = TerminalSaveWatch::new(&dir);
+    run_interactive_play_loop_watched(
+        &mut state,
+        &dir,
+        None,
+        &mut std::io::Cursor::new(b"d\nQ\nY\na\n".to_vec()),
+        Some(&mut watch),
+    )
+    .unwrap();
+    assert_eq!(watch.take_stamps(), [saved_stamp(&dir)]);
+    let _ = fs::remove_dir_all(dir);
+}
+
+#[test]
+fn the_save_bytes_are_the_same_with_and_without_the_terminal_watch() {
+    let play = |watch: bool| {
+        let dir = watched_save_dir();
+        let mut state = test_state(open_grid(), 3, 4);
+        let mut save_watch = watch.then(|| TerminalSaveWatch::new(&dir));
+        run_play_script_commands_watched(
+            &mut state,
+            &dir,
+            &script(&["d", "Q", "Y", "s", "QY"]),
+            None,
+            save_watch.as_mut(),
+        )
+        .unwrap();
+        let bytes = fs::read(dir.join(SAVED_GAM_FILENAME)).unwrap();
+        let _ = fs::remove_dir_all(dir);
+        (bytes, state.turn, state.message.clone())
+    };
+    assert_eq!(play(true), play(false));
+}

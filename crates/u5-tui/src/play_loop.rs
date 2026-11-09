@@ -6,9 +6,10 @@
 
 use std::collections::VecDeque;
 use std::io::{self, BufRead, Write};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::time::Duration;
 
+use u5_runtime::enhancements::{SaveStamp, SaveWatcher};
 use u5_runtime::stats_panel::transcribe_cell_frame_for_plain_text;
 use u5_runtime::{
     Area, Direction, ExplorationTurnGateOutcome, INPUT_CODE_EAST, INPUT_CODE_NORTH,
@@ -28,6 +29,64 @@ pub fn run_play_loop(
     raster_depth: TileGraphicsDepth,
     play_script: Option<Vec<String>>,
 ) -> io::Result<()> {
+    run_play_loop_with(
+        game_dir,
+        options,
+        raster_diagnostics,
+        raster_depth,
+        play_script,
+        None,
+    )
+}
+
+/// The terminal half of the enhancements' save watcher (Phase B design
+/// 1.3.9): the play loop polls it after every command, and the sidecar
+/// features take the stamps of the saves it found. It exists only while a
+/// sidecar feature is on ([`u5_runtime::enhancements::sidecar_feature_on`]);
+/// the terminal modes turn features on from the command line only.
+#[derive(Debug)]
+pub struct TerminalSaveWatch {
+    watcher: SaveWatcher,
+    save_dir: PathBuf,
+    stamps: Vec<SaveStamp>,
+}
+
+impl TerminalSaveWatch {
+    /// A watch on `save_dir` that knows the save already there.
+    pub fn new(save_dir: &Path) -> Self {
+        Self {
+            watcher: SaveWatcher::new(save_dir),
+            save_dir: save_dir.to_path_buf(),
+            stamps: Vec::new(),
+        }
+    }
+
+    /// After a command that consumed a key.
+    pub fn after_command(&mut self, state: &PlayState) {
+        self.stamps.extend(self.watcher.poll(state, &self.save_dir));
+    }
+
+    /// The stamps of the saves found since the last call, oldest first.
+    pub fn take_stamps(&mut self) -> Vec<SaveStamp> {
+        std::mem::take(&mut self.stamps)
+    }
+}
+
+fn after_command(save_watch: &mut Option<&mut TerminalSaveWatch>, state: &PlayState) {
+    if let Some(watch) = save_watch {
+        watch.after_command(state);
+    }
+}
+
+/// [`run_play_loop`] with the save watch the enabled sidecar features need.
+pub fn run_play_loop_with(
+    game_dir: &Path,
+    options: PlayOptions,
+    raster_diagnostics: bool,
+    raster_depth: TileGraphicsDepth,
+    play_script: Option<Vec<String>>,
+    mut save_watch: Option<TerminalSaveWatch>,
+) -> io::Result<()> {
     let intro_target = options.target;
     let intro_floor = options.floor;
     let mut state = PlayState::load_scene(game_dir, options)?;
@@ -44,13 +103,20 @@ pub fn run_play_loop(
     );
     if let Some(commands) = play_script {
         println!("Script mode: {} command(s).", commands.len());
-        return run_play_script_commands(&mut state, game_dir, &commands, tile_atlas.as_ref());
+        return run_play_script_commands_watched(
+            &mut state,
+            game_dir,
+            &commands,
+            tile_atlas.as_ref(),
+            save_watch.as_mut(),
+        );
     }
-    run_interactive_play_loop(
+    run_interactive_play_loop_watched(
         &mut state,
         game_dir,
         tile_atlas.as_ref(),
         &mut io::stdin().lock(),
+        save_watch.as_mut(),
     )
 }
 
@@ -98,6 +164,17 @@ pub fn run_interactive_play_loop<R: BufRead>(
     game_dir: &Path,
     tile_atlas: Option<&TileAtlas>,
     input_reader: &mut R,
+) -> io::Result<()> {
+    run_interactive_play_loop_watched(state, game_dir, tile_atlas, input_reader, None)
+}
+
+/// [`run_interactive_play_loop`], polling `save_watch` after every key.
+pub fn run_interactive_play_loop_watched<R: BufRead>(
+    state: &mut PlayState,
+    game_dir: &Path,
+    tile_atlas: Option<&TileAtlas>,
+    input_reader: &mut R,
+    mut save_watch: Option<&mut TerminalSaveWatch>,
 ) -> io::Result<()> {
     let mut input = String::new();
     let mut queued_input = VecDeque::new();
@@ -182,7 +259,9 @@ pub fn run_interactive_play_loop<R: BufRead>(
             }
         };
         let effects_before = state.sound_effect_serial;
-        if handle_play_key_input(state, key, &suffix, game_dir)? == PlayInputDisposition::Quit {
+        let disposition = handle_play_key_input(state, key, &suffix, game_dir)?;
+        after_command(&mut save_watch, state);
+        if disposition == PlayInputDisposition::Quit {
             break;
         }
         if key_flushed_typeahead(state, effects_before) {
@@ -236,6 +315,17 @@ pub fn run_play_script_commands(
     commands: &[String],
     tile_atlas: Option<&TileAtlas>,
 ) -> io::Result<()> {
+    run_play_script_commands_watched(state, game_dir, commands, tile_atlas, None)
+}
+
+/// [`run_play_script_commands`], polling `save_watch` after every command.
+pub fn run_play_script_commands_watched(
+    state: &mut PlayState,
+    game_dir: &Path,
+    commands: &[String],
+    tile_atlas: Option<&TileAtlas>,
+    mut save_watch: Option<&mut TerminalSaveWatch>,
+) -> io::Result<()> {
     run_play_script_load_entry_reaction(state, game_dir)?;
     print_play_script_snapshot(state, tile_atlas)?;
     for (index, command) in commands.iter().enumerate() {
@@ -261,6 +351,7 @@ pub fn run_play_script_commands(
         // here, as the gate pays it (`commands.md §3`, playtest S14).
         u5_runtime::input_dispatch::settle_exploration_acted_charge(state, game_dir)?;
         drain_play_script_prompt_head_panel_refresh(state);
+        after_command(&mut save_watch, state);
         print_play_script_snapshot(state, tile_atlas)?;
         if disposition == PlayInputDisposition::Quit {
             break;

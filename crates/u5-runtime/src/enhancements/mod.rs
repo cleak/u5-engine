@@ -18,6 +18,8 @@
 //! - [`idle`]: the idle-prompt predicate's runtime half,
 //!   [`PlayState::idle_command_prompt`](crate::PlayState::idle_command_prompt)
 //!   (design 1.3.7).
+//! - [`sidecar`]: per-save sidecars; so far the [`SaveWatcher`] that detects
+//!   a save from outside the runtime and its [`SaveStamp`] (design 1.3.9).
 //!
 //! Nothing in the game calls into this module yet. The desktop host's
 //! adapter, command-line flags and parity lock live in `u5-tui`
@@ -27,6 +29,7 @@
 pub mod catalogue;
 pub mod idle;
 pub mod resolve;
+pub mod sidecar;
 pub mod source;
 
 pub use catalogue::{
@@ -40,6 +43,7 @@ pub use resolve::{
     CHEATS_SWITCH, KeyBindings, PRESET_KEY, PresetLabel, ResolveInput, ResolvedEnhancements,
     SettingValues, resolve,
 };
+pub use sidecar::{SIDECAR_KEYS, SaveStamp, SaveWatcher, fnv1a64, sidecar_feature_on};
 pub use source::{
     Capability, CliSetting, HostCapabilities, LockReason, LockState, SettingNote, SettingValue,
     SettingsSink, SettingsSource, ValueProblem,
