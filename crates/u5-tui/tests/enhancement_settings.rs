@@ -370,6 +370,7 @@ fn qa_modes_never_resolve() {
         "src/play_loop.rs",
         "src/intro_loop.rs",
         "../u5-bevy/src/lib.rs",
+        "../u5-bevy/src/enh/mod.rs",
     ] {
         let source = crate_source(file);
         for name in RESOLVE_NAMES {
@@ -384,10 +385,10 @@ fn qa_modes_never_resolve() {
         .filter(|item| RESOLVE_NAMES.iter().any(|name| item.contains(name)))
         .map(|item| item_name(item).to_string())
         .collect();
-    assert_eq!(resolving, ["launch_settings"]);
+    assert_eq!(resolving, ["launch_config"]);
     let callers: Vec<String> = top_level_items(&main)
         .iter()
-        .filter(|item| item.contains("launch_settings(&args)"))
+        .filter(|item| item.contains("launch_config(&args)"))
         .map(|item| item_name(item).to_string())
         .collect();
     assert_eq!(callers, ["run_visual", "run_visual_intro"]);

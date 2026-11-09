@@ -18,8 +18,8 @@
 //!
 //! Nothing in the game calls into this module yet. The desktop host's
 //! adapter, command-line flags and parity lock live in `u5-tui`
-//! (`enhancement_settings`); the launch config that hands the result to the
-//! shell follows in M0-10.
+//! (`enhancement_settings`); the shell receives the result in
+//! `u5_bevy::VisualLaunchConfig`.
 
 pub mod catalogue;
 pub mod resolve;

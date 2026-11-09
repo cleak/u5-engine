@@ -21,6 +21,8 @@ pub use cli::{
     parse_pending_vehicle_arg, parse_start_arg, parse_time_arg, parse_transport_arg,
     run_create_character_command, run_interactive_create_character, split_play_script,
 };
+#[cfg(feature = "visual")]
+pub use enhancement_settings::visual_launch_config;
 pub use enhancement_settings::{
     PARITY_LOCK_ENV, PARITY_LOCK_LINE, SettingsFile, launch_enhancements, run_show_settings,
 };

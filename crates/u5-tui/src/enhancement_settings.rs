@@ -19,7 +19,8 @@
 //!   get here at all: they never resolve.
 //! - [`launch_enhancements`] resolves once per launch and prints the one
 //!   startup line, [`PARITY_LOCK_LINE`] under the lock, which the paired
-//!   harness requires in every `engine.log`.
+//!   harness requires in every `engine.log`. `visual_launch_config` turns
+//!   the result into the shell's `VisualLaunchConfig`.
 //!
 //! Only the default launch (and `u5-engine-gui`, which is that launch) reads
 //! the file ([`SettingsFile::Read`]); every other launch resolves from the
@@ -298,7 +299,7 @@ pub fn launch_enhancements(
     file: SettingsFile,
     cli: &[CliSetting],
     parity_lock_flag: bool,
-) -> ResolvedEnhancements {
+) -> LaunchSettings {
     let lock = lock_state_for_process(parity_lock_flag);
     let env = HostEnv::from_process();
     let path = u5_host_desktop::paths::config_file(&env);
@@ -316,7 +317,30 @@ pub fn launch_enhancements(
     for line in startup_report(&settings) {
         eprintln!("{line}");
     }
-    settings.resolved
+    settings
+}
+
+/// The shell's launch config for one play launch (design 1.3.3).
+///
+/// Settings changed in play are stored back into the file this launch read,
+/// and only when it read it cleanly: never under the lock (the file is not
+/// even opened), never for a launch that does not read the file, and never
+/// over a damaged or unreadable file. The save folder is the writable game
+/// folder the launch runs from.
+#[cfg(feature = "visual")]
+pub fn visual_launch_config(
+    settings: LaunchSettings,
+    save_dir: &Path,
+) -> u5_bevy::VisualLaunchConfig {
+    let settings_sink = settings
+        .config
+        .filter(|_| settings.warnings.is_empty() && settings.resolved.lock == LockState::Off)
+        .map(|path| std::sync::Arc::new(ConfigSink::new(path)) as std::sync::Arc<dyn SettingsSink>);
+    u5_bevy::VisualLaunchConfig {
+        enhancements: settings.resolved,
+        settings_sink,
+        save_dir: Some(save_dir.to_path_buf()),
+    }
 }
 
 /// `--show-settings`: the settings the default launch would use, with this
@@ -946,5 +970,42 @@ mod tests {
         ] {
             assert_eq!(value_to_setting(&toml_value(&value)), value);
         }
+    }
+
+    #[cfg(feature = "visual")]
+    #[test]
+    fn launch_config_stores_only_into_a_cleanly_read_file() {
+        let dir = temp_dir("launch-config");
+        let save_dir = dir.join("data");
+        let path = dir.join("config.toml");
+
+        // The default launch with a missing file: classic, and settings
+        // changed in play go back to that file.
+        let launch =
+            visual_launch_config(resolve_launch(Some(&path), &[], LockState::Off), &save_dir);
+        assert!(launch.enhancements.is_classic());
+        assert!(launch.settings_sink.is_some());
+        assert_eq!(launch.save_dir.as_deref(), Some(save_dir.as_path()));
+
+        // A launch that does not read the file stores nothing.
+        let launch = visual_launch_config(resolve_launch(None, &[], LockState::Off), &save_dir);
+        assert!(launch.settings_sink.is_none());
+        assert_eq!(launch.save_dir.as_deref(), Some(save_dir.as_path()));
+
+        // The lock never opens the file and never stores.
+        let locked = resolve_launch(Some(&path), &[], LockState::Locked(LockReason::EnvVar));
+        let launch = visual_launch_config(locked, &save_dir);
+        assert!(launch.settings_sink.is_none());
+        assert!(!launch.wants_enhancements());
+
+        // A damaged file is never written over from play.
+        fs::write(&path, "this is [not toml").unwrap();
+        let damaged = resolve_launch(Some(&path), &[], LockState::Off);
+        assert!(!damaged.warnings.is_empty());
+        let launch = visual_launch_config(damaged, &save_dir);
+        assert!(launch.settings_sink.is_none());
+        assert!(launch.enhancements.is_classic());
+        assert_eq!(fs::read_to_string(&path).unwrap(), "this is [not toml");
+        fs::remove_dir_all(&dir).unwrap();
     }
 }

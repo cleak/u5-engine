@@ -750,18 +750,23 @@ pub fn describe_failure(error: &io::Error, game_data: Option<&ReadyGameData>) ->
 /// when needed) and start the windowed game. Shared by `u5-engine` (no
 /// arguments, visual build) and `u5-engine-gui`.
 #[cfg(feature = "visual")]
-pub fn run_default_launch(force_setup: bool) -> Result<(), String> {
+pub fn run_default_launch(
+    force_setup: bool,
+    cli: &[u5_runtime::enhancements::CliSetting],
+) -> Result<(), String> {
     let ready = resolve_game_data(None, force_setup, WizardMode::Window)?;
     let game_dir = crate::prepare_writable_game_dir(&ready.data_dir)
         .map_err(|error| describe_failure(&error, Some(&ready)))?;
-    // The default launch reads config.toml (Phase B design 1.2.4). The
-    // command-line settings and the launch config arrive in M0-10.
-    let _enhancements = crate::enhancement_settings::launch_enhancements(
+    // The default launch reads config.toml (Phase B design 1.2.4), with
+    // `cli` on top.
+    let settings = crate::enhancement_settings::launch_enhancements(
         crate::enhancement_settings::SettingsFile::Read,
-        &[],
+        cli,
         false,
     );
-    u5_bevy::run_visual_intro_loop(&game_dir, u5_runtime::TileGraphicsDepth::Ega16)
+    let launch = crate::enhancement_settings::visual_launch_config(settings, &game_dir);
+    u5_bevy::run_visual_intro_loop_with(&game_dir, u5_runtime::TileGraphicsDepth::Ega16, launch)
+        .map(|_exit| ())
         .map_err(|error| describe_failure(&error, Some(&ready)))
 }
 
@@ -792,7 +797,8 @@ pub fn run_gui_main() -> ExitCode {
         }
     }
     let force_setup = first.as_deref() == Some("--setup");
-    match run_default_launch(force_setup) {
+    // This binary takes no settings flags; the stored settings apply.
+    match run_default_launch(force_setup, &[]) {
         Ok(()) => ExitCode::SUCCESS,
         Err(message) => {
             report_gui_error(&message);

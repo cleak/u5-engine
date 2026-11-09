@@ -190,6 +190,13 @@ use u5_runtime::{TEXT_SCREEN_COLUMNS, TEXT_SCREEN_ROWS};
 /// its own commit hand-off.
 mod u4_transfer;
 
+/// The enhancements foundation (Phase B design 1.3.5): the launch config,
+/// [`EnhancementsPlugin`] and the [`EnhSet`] slots. Absent from the app
+/// under Classic.
+pub mod enh;
+
+pub use enh::{EnhSet, EnhancementsPlugin, ShellExit, VisualLaunchConfig};
+
 /// The on-screen size of a logical frame at `scale`, aspect-corrected.
 ///
 /// Horizontal scale is `scale`; vertical scale is `scale *
@@ -1453,11 +1460,29 @@ const CREATE_VIRTUE_PANEL_SPECS: [ImagePanelSpec; 8] = [
     },
 ];
 
+/// The `--visual` shell with the 1.0.1 game: [`run_visual_loop_with`] under
+/// [`VisualLaunchConfig::classic`].
 pub fn run_visual_loop(
     game_dir: &Path,
     options: PlayOptions,
     raster_depth: TileGraphicsDepth,
 ) -> std::io::Result<()> {
+    run_visual_loop_with(
+        game_dir,
+        options,
+        raster_depth,
+        VisualLaunchConfig::classic(),
+    )
+    .map(|_| ())
+}
+
+/// The `--visual` shell with the settings its host resolved.
+pub fn run_visual_loop_with(
+    game_dir: &Path,
+    options: PlayOptions,
+    raster_depth: TileGraphicsDepth,
+    launch: VisualLaunchConfig,
+) -> std::io::Result<ShellExit> {
     let state = PlayState::load_scene(game_dir, options)?;
     let atlas = load_tile_atlas(game_dir, raster_depth)?;
     let text_font = load_ibm_ch_font(game_dir)?;
@@ -1504,10 +1529,11 @@ pub fn run_visual_loop(
             frame_delay: screenshot_delay,
             preset_keys,
         },
+        &launch,
     );
     app.run();
 
-    Ok(())
+    Ok(ShellExit::default())
 }
 
 /// Everything the `--visual` app registers on top of its platform plugins:
@@ -1516,7 +1542,15 @@ pub fn run_visual_loop(
 ///
 /// `run_visual_loop` adds `DefaultPlugins` with its window first; a headless
 /// test adds its own plugins and builds the same schedules without a window.
-fn build_visual_app(app: &mut App, bootstrap: Bootstrap, screenshot: ScreenshotConfig) {
+///
+/// [`enh::add_enhancements`] then adds the enhancements foundation, which
+/// under Classic adds nothing.
+fn build_visual_app(
+    app: &mut App,
+    bootstrap: Bootstrap,
+    screenshot: ScreenshotConfig,
+    launch: &VisualLaunchConfig,
+) {
     app.insert_resource(ClearColor(Color::BLACK))
         .insert_resource(PendingBootstrap(Mutex::new(Some(bootstrap))))
         .insert_resource(screenshot)
@@ -1525,6 +1559,7 @@ fn build_visual_app(app: &mut App, bootstrap: Bootstrap, screenshot: ScreenshotC
         .insert_resource(AnimationPump::default());
     add_visual_update_systems(app);
     add_speaker_audio(app);
+    enh::add_enhancements(app, launch);
 }
 
 /// The `--visual` app's `Update` chain. The default player path builds its
@@ -1548,13 +1583,29 @@ fn add_visual_update_systems(app: &mut App) {
     );
 }
 
+/// The default player shell (intro, then gameplay) with the 1.0.1 game:
+/// [`run_visual_intro_loop_with`] under [`VisualLaunchConfig::classic`].
 pub fn run_visual_intro_loop(
     game_dir: &Path,
     raster_depth: TileGraphicsDepth,
 ) -> std::io::Result<()> {
+    run_visual_intro_loop_with(game_dir, raster_depth, VisualLaunchConfig::classic()).map(|_| ())
+}
+
+/// The default player shell with the settings its host resolved.
+pub fn run_visual_intro_loop_with(
+    game_dir: &Path,
+    raster_depth: TileGraphicsDepth,
+    launch: VisualLaunchConfig,
+) -> std::io::Result<ShellExit> {
     let launch_result = Arc::new(Mutex::new(None));
-    run_visual_intro_menu_app(game_dir.to_path_buf(), raster_depth, launch_result.clone());
-    Ok(())
+    run_visual_intro_menu_app(
+        game_dir.to_path_buf(),
+        raster_depth,
+        launch_result.clone(),
+        &launch,
+    );
+    Ok(ShellExit::default())
 }
 
 /// QA timing control: when this environment variable holds a positive whole
@@ -9982,6 +10033,7 @@ fn run_visual_intro_menu_app(
     game_dir: PathBuf,
     raster_depth: TileGraphicsDepth,
     launch_result: Arc<Mutex<Option<PlayOptions>>>,
+    launch: &VisualLaunchConfig,
 ) {
     let screenshot_path: Option<PathBuf> = optional_env_path("U5_BEVY_SCREENSHOT");
     let screenshot_delay: u32 = screenshot_delay_from_env();
@@ -10065,6 +10117,7 @@ fn run_visual_intro_menu_app(
             frame_delay: screenshot_delay,
             preset_keys,
         },
+        launch,
     );
     app.run();
 }
@@ -10075,7 +10128,15 @@ fn run_visual_intro_menu_app(
 ///
 /// The caller adds `DefaultPlugins` with its window first; a headless test
 /// adds its own plugins and builds the same schedules without a window.
-fn build_visual_intro_app(app: &mut App, intro: VisualIntroState, screenshot: ScreenshotConfig) {
+///
+/// [`enh::add_enhancements`] then adds the enhancements foundation, which
+/// under Classic adds nothing.
+fn build_visual_intro_app(
+    app: &mut App,
+    intro: VisualIntroState,
+    screenshot: ScreenshotConfig,
+    launch: &VisualLaunchConfig,
+) {
     app.insert_resource(ClearColor(Color::BLACK))
         .insert_resource(intro)
         .insert_resource(VisualIntroAnimationPump::default())
@@ -10087,6 +10148,7 @@ fn build_visual_intro_app(app: &mut App, intro: VisualIntroState, screenshot: Sc
         .add_systems(Startup, setup_intro);
     add_speaker_audio(app);
     add_visual_intro_update_systems(app);
+    enh::add_enhancements(app, launch);
 }
 
 fn add_visual_intro_update_systems(app: &mut App) {
@@ -19894,11 +19956,19 @@ mod tests {
     /// the same chain give the same snapshot; a dropped, added, renamed or
     /// reordered system, or a lost edge, changes it.
     fn update_schedule_snapshot(app: &mut App) -> (Vec<String>, Vec<String>) {
+        schedule_snapshot(app, Update)
+    }
+
+    /// [`update_schedule_snapshot`] for any schedule.
+    fn schedule_snapshot(
+        app: &mut App,
+        label: impl bevy::ecs::schedule::ScheduleLabel + Clone,
+    ) -> (Vec<String>, Vec<String>) {
         let world = app.world_mut();
         let mut schedule = world
             .resource_mut::<bevy::ecs::schedule::Schedules>()
-            .remove(Update)
-            .expect("the app must install an Update schedule");
+            .remove(label.clone())
+            .expect("the app must install the schedule");
         let graph = schedule.graph();
         let node = |id| match graph.get_system_at(id) {
             Some(system) => system.name().into_owned(),
@@ -20817,7 +20887,12 @@ mod tests {
             rune_font: font,
         };
         let mut app = headless_builder_app();
-        build_visual_app(&mut app, bootstrap, builder_screenshot_config());
+        build_visual_app(
+            &mut app,
+            bootstrap,
+            builder_screenshot_config(),
+            &VisualLaunchConfig::classic(),
+        );
 
         assert_eq!(startup_system_names(&app), ["u5_bevy::setup"]);
         let world = app.world();
@@ -20841,7 +20916,12 @@ mod tests {
     fn intro_app_builder_builds_the_1_0_1_schedules_without_a_window() {
         let intro = read_only_intro_state_for_local_assets(Path::new("."), VisualIntroPanel::Menu);
         let mut app = headless_builder_app();
-        build_visual_intro_app(&mut app, intro, builder_screenshot_config());
+        build_visual_intro_app(
+            &mut app,
+            intro,
+            builder_screenshot_config(),
+            &VisualLaunchConfig::classic(),
+        );
 
         assert_eq!(startup_system_names(&app), ["u5_bevy::setup_intro"]);
         let world = app.world();
@@ -20860,6 +20940,235 @@ mod tests {
             INTRO_UPDATE_EDGES_1_0_1,
             "default player builder",
         );
+    }
+
+    /// A launch with a toggle on, so the enhancements foundation is added.
+    /// The catalogue's only toggle ships later, so the resolver would never
+    /// turn it on; the shell does not care.
+    fn enh_launch(lock: u5_runtime::enhancements::LockState) -> VisualLaunchConfig {
+        let mut launch = VisualLaunchConfig::classic();
+        launch.enhancements.toggles.set(
+            u5_runtime::enhancements::Toggle::EnhancementsFreezeOverlays,
+            true,
+        );
+        launch.enhancements.lock = lock;
+        launch
+    }
+
+    // Test-only systems, one per enhancement slot.
+    fn enh_probe_input() {}
+    fn enh_probe_apply() {}
+    fn enh_probe_feed() {}
+    fn enh_probe_observe() {}
+    fn enh_probe_layout() {}
+    fn enh_probe_present() {}
+
+    fn add_enh_probes(app: &mut App) {
+        app.add_systems(PreUpdate, enh_probe_input.in_set(EnhSet::Input))
+            .add_systems(
+                Update,
+                (
+                    enh_probe_apply.in_set(EnhSet::Apply),
+                    enh_probe_feed.in_set(EnhSet::Feed),
+                    enh_probe_observe.in_set(EnhSet::Observe),
+                    enh_probe_layout.in_set(EnhSet::Layout),
+                    enh_probe_present.in_set(EnhSet::Present),
+                ),
+            );
+    }
+
+    /// Asserts that, in executor order, `system` runs after every name in
+    /// `after` and before every name in `before`.
+    fn assert_slot(order: &[String], system: &str, after: &[&str], before: &[&str], label: &str) {
+        let at = |name: &str| {
+            order
+                .iter()
+                .position(|entry| entry == name)
+                .unwrap_or_else(|| panic!("{label}: {name} is not scheduled: {order:?}"))
+        };
+        let index = at(system);
+        for name in after {
+            assert!(
+                at(name) < index,
+                "{label}: {system} must run after {name}: {order:?}"
+            );
+        }
+        for name in before {
+            assert!(
+                index < at(name),
+                "{label}: {system} must run before {name}: {order:?}"
+            );
+        }
+    }
+
+    /// Every `EnhSet` slot in an Update chain: `drivers` are the chain's
+    /// input drivers (`drive_visual`, and `drive_visual_intro` on the
+    /// default player path).
+    fn assert_update_slots(order: &[String], drivers: &[&str], label: &str) {
+        let apply = "u5_bevy::tests::enh_probe_apply";
+        let feed = "u5_bevy::tests::enh_probe_feed";
+        let layout = "u5_bevy::tests::enh_probe_layout";
+        let pending = "u5_bevy::enh::apply_pending_toggles";
+        assert_slot(order, apply, &[], drivers, label);
+        assert_slot(order, pending, &[], drivers, label);
+        assert_slot(order, feed, &[apply, pending], drivers, label);
+        assert_slot(
+            order,
+            "u5_bevy::tests::enh_probe_observe",
+            drivers,
+            &["u5_bevy::animate_static_tiles"],
+            label,
+        );
+        assert_slot(
+            order,
+            layout,
+            &["u5_bevy::fit_display_to_window"],
+            &[],
+            label,
+        );
+        assert_slot(
+            order,
+            "u5_bevy::tests::enh_probe_present",
+            &[layout, "u5_bevy::present_camp_apparition_flash"],
+            &["u5_bevy::screenshot_system"],
+            label,
+        );
+    }
+
+    /// The `EnhSet` edges `EnhancementsPlugin` declares in `Update`, the
+    /// same for both chains, with each faithful system by its bare name.
+    /// Executor order alone cannot show a `before` edge to a system that
+    /// would run first anyway, so the edges are checked as declared.
+    const ENH_SET_EDGES: &[&str] = &[
+        "Apply -> Feed",
+        "Apply -> drive_visual",
+        "Apply -> drive_visual_intro",
+        "Feed -> drive_visual",
+        "Feed -> drive_visual_intro",
+        "Layout -> Present",
+        "Observe -> animate_static_tiles",
+        "Present -> screenshot_system",
+        "drive_visual -> Observe",
+        "drive_visual_intro -> Observe",
+        "fit_display_to_window -> Layout",
+        "present_camp_apparition_flash -> Present",
+    ];
+
+    /// The edges of an [`update_schedule_snapshot`] that touch a set, with
+    /// `set Apply` as `Apply` and a system's type set as its bare name.
+    fn enh_set_edges(edges: &[String]) -> Vec<String> {
+        let node = |text: &str| -> Option<String> {
+            let set = text.strip_prefix("set ")?;
+            Some(match set.strip_prefix("SystemTypeSet(") {
+                Some(type_set) => {
+                    let name = &type_set[type_set.rfind("u5_bevy::")? + "u5_bevy::".len()..];
+                    name.strip_suffix(">())")?.to_string()
+                }
+                None => set.to_string(),
+            })
+        };
+        let mut sets: Vec<String> = edges
+            .iter()
+            .filter_map(|edge| {
+                let (from, to) = edge.split_once(" -> set ")?;
+                Some(format!(
+                    "{} -> {}",
+                    node(from)?,
+                    node(&format!("set {to}"))?
+                ))
+            })
+            .collect();
+        sets.sort();
+        sets
+    }
+
+    #[test]
+    fn enhancement_sets_run_in_their_slots_in_the_visual_chain() {
+        let mut app = App::new();
+        add_visual_update_systems(&mut app);
+        enh::add_enhancements(
+            &mut app,
+            &enh_launch(u5_runtime::enhancements::LockState::Off),
+        );
+        add_enh_probes(&mut app);
+        let (order, edges) = update_schedule_snapshot(&mut app);
+        assert_update_slots(&order, &["u5_bevy::drive_visual"], "--visual");
+        assert_eq!(enh_set_edges(&edges), ENH_SET_EDGES, "--visual");
+    }
+
+    #[test]
+    fn enhancement_sets_run_in_their_slots_in_the_intro_chain() {
+        let mut app = App::new();
+        add_visual_intro_update_systems(&mut app);
+        enh::add_enhancements(
+            &mut app,
+            &enh_launch(u5_runtime::enhancements::LockState::Off),
+        );
+        add_enh_probes(&mut app);
+        let (order, edges) = update_schedule_snapshot(&mut app);
+        assert_update_slots(
+            &order,
+            &["u5_bevy::drive_visual", "u5_bevy::drive_visual_intro"],
+            "default player path",
+        );
+        assert_eq!(enh_set_edges(&edges), ENH_SET_EDGES, "default player path");
+    }
+
+    #[test]
+    fn enhancement_input_slot_runs_after_bevy_input() {
+        let mut app = App::new();
+        app.add_plugins(bevy::input::InputPlugin);
+        enh::add_enhancements(
+            &mut app,
+            &enh_launch(u5_runtime::enhancements::LockState::Off),
+        );
+        add_enh_probes(&mut app);
+        let (order, _) = schedule_snapshot(&mut app, PreUpdate);
+        assert_slot(
+            &order,
+            "u5_bevy::tests::enh_probe_input",
+            &["bevy_input::keyboard::keyboard_input_system"],
+            &[],
+            "PreUpdate",
+        );
+    }
+
+    #[test]
+    fn enhancement_builders_add_the_foundation_only_when_a_toggle_is_on() {
+        use u5_runtime::enhancements::{LockReason, LockState};
+
+        // Classic and the lock: the builders' 1.0.1 schedules, and no
+        // enhancement plugin or resource.
+        for launch in [
+            VisualLaunchConfig::classic(),
+            enh_launch(LockState::Locked(LockReason::QaEnv)),
+        ] {
+            let intro =
+                read_only_intro_state_for_local_assets(Path::new("."), VisualIntroPanel::Menu);
+            let mut app = headless_builder_app();
+            build_visual_intro_app(&mut app, intro, builder_screenshot_config(), &launch);
+            assert!(!app.is_plugin_added::<EnhancementsPlugin>());
+            assert!(!app.world().contains_resource::<enh::Toggles>());
+            assert!(!app.world().contains_resource::<enh::PendingToggleChanges>());
+            assert!(!app.world().contains_resource::<enh::EnhLaunch>());
+            assert_update_snapshot(
+                &mut app,
+                INTRO_UPDATE_SYSTEMS_1_0_1,
+                INTRO_UPDATE_EDGES_1_0_1,
+                "default player builder, no enhancements",
+            );
+        }
+
+        let intro = read_only_intro_state_for_local_assets(Path::new("."), VisualIntroPanel::Menu);
+        let mut app = headless_builder_app();
+        build_visual_intro_app(
+            &mut app,
+            intro,
+            builder_screenshot_config(),
+            &enh_launch(LockState::Off),
+        );
+        assert!(app.is_plugin_added::<EnhancementsPlugin>());
+        assert!(app.world().contains_resource::<enh::Toggles>());
     }
 
     #[test]
