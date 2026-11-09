@@ -87,6 +87,14 @@ jobs:
       - name: Self-test the warning-line gate
         run: python3 -m unittest qa/tools/test_check_no_build_warnings.py
 
+      - name: Self-test the paired harness's exports
+        # The parity lock and the load-latency export, over synthetic
+        # folders; nothing is launched.
+        run: >-
+          python3 -m unittest
+          qa/tools/test_paired_suite_parity_lock.py
+          qa/tools/test_paired_suite_load_latency.py
+
       - name: Build with warnings denied, then scan for warning lines
         run: qa/tools/check_no_build_warnings.sh
 

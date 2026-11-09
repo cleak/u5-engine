@@ -15,7 +15,7 @@ Packaging logic shared by the workflow and local runs is in
 | Job | Runner | Needs | What it does |
 |---|---|---|---|
 | Format | `ubuntu-latest` | | Checks that `RUST_TOOLCHAIN` in both workflows equals `channel` in `rust-toolchain.toml`, then runs `cargo fmt --all -- --check`. |
-| Build warnings | `ubuntu-latest` | Format | Self-tests and runs `qa/tools/check_no_build_warnings.sh`: builds the workspace and `-p u5-tui --features visual` (all targets) with `RUSTFLAGS=-Dwarnings`, and fails on any `warning:` line, which also catches build-script `cargo:warning` lines. |
+| Build warnings | `ubuntu-latest` | Format | Runs the Python self-tests of the warning-line gate and of `paired_suite.py`'s exports (parity lock, load latency), then `qa/tools/check_no_build_warnings.sh`: builds the workspace and `-p u5-tui --features visual` (all targets) with `RUSTFLAGS=-Dwarnings`, and fails on any `warning:` line, which also catches build-script `cargo:warning` lines. |
 | Clippy | `ubuntu-latest` | Build warnings | `cargo clippy --locked --workspace --all-targets -- -D warnings`, then the same for `-p u5-tui --features visual`. |
 | Test (Linux) | `ubuntu-latest` | Clippy | Installs the Bevy build dependencies, runs `cargo test --release --workspace --locked`, then builds the windowed binary (`-p u5-tui --features visual --bins`). |
 | Build (Windows) | `windows-latest` | Format | Builds the windowed binary with the static C runtime, as the release does. |
