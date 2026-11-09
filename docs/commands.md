@@ -42,3 +42,39 @@ uncertain, read the spec and the focused runtime tests before editing.
 - Stock town/dungeon entry and return coordinates use the published gazetteer
   table; other exact transition coordinate families remain sidecar-backed where
   the public spec has not published rows.
+
+## Enhancement Hotkeys
+
+The optional enhancements ([settings.md](settings.md)) add their own keys.
+Each key exists only while its feature is on, so with every enhancement off
+(Classic, the default) no key below does anything the 1.0.1 game does not.
+In this build no feature that binds a key has shipped yet.
+
+| Default | `[keys]` setting | Action | Bound while |
+|---|---|---|---|
+| F12 | `keys.menu` | Open the menu | `menu.overlay` is on |
+| F11 | `keys.fullscreen` | Switch fullscreen | `display.fullscreen_key` is on |
+| Tab | `keys.map` | Open the map | `automap.fullscreen_map` is on |
+| Ctrl+M | `keys.minimap` | Show or hide the minimap | `automap.minimap` is on |
+| Ctrl+J | `keys.journal` | Open the journal | `journal.page`, `journal.clues` or `journal.quest_tracker` is on |
+| Ctrl+P | `keys.column` | Show or hide the side column | `display.grow_left` is on |
+| Ctrl+A | `keys.auto_member` | Auto-combat for this member | `combat.auto` is on |
+| Ctrl+Shift+A | `keys.auto_party` | Auto-combat for the party | `combat.auto` is on |
+| Ctrl+F | `keys.auto_until_done` | Auto-combat until the fight ends | `combat.auto` is on |
+| Ctrl+F12 | `keys.cheats` | Open the cheats page | a cheat or `cheats.state_watch` is on |
+
+- None of the defaults is a key the game reads.
+- A hotkey counts only when it is the first key typed in its frame and no key
+  is waiting ahead of it; otherwise the game gets it and drops it, as 1.0.1
+  does, and a short note explains.
+- A menu, map, journal or cheats page opens only at the command prompt, with
+  nothing pending. While it is open every key belongs to it, and the world
+  keeps its idle time as if the player had stopped typing. Escape or the
+  opening key closes it; keys still held are ignored until released.
+- Change a key with `--set keys.NAME=CHORD` or in `config.toml`'s `[keys]`
+  section: modifiers `Ctrl`, `Shift`, `Alt`, then one key, joined by `+`. A
+  chord the game reads is refused with a note.
+- On macOS the chords use Control, not Command.
+- The terminal frontend binds no chords. Play scripts reach a feature
+  through `@` tokens (`@journal`, `@auto`, ...), which run as ordinary script
+  text while the feature is off.

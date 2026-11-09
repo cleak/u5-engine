@@ -433,3 +433,30 @@ fn only_the_default_launch_reads_the_file() {
         assert!(!source.contains("ConfigDocument"), "{file}");
     }
 }
+
+/// `docs/settings.md` documents every enhancement option the usage lists
+/// (build plan M0-20, docs consistency).
+#[test]
+fn the_settings_docs_list_every_enhancement_option() {
+    let usage = cli_usage();
+    let start = usage
+        .find("ENHANCEMENTS")
+        .expect("the usage has an ENHANCEMENTS section");
+    let rest = &usage[start..];
+    let end = rest.find("\n\n").unwrap_or(rest.len());
+    let flags: Vec<&str> = rest[..end]
+        .lines()
+        .filter_map(|line| line.trim_start().strip_prefix("--"))
+        .filter_map(|line| line.split_whitespace().next())
+        .collect();
+    assert!(flags.contains(&"preset") && flags.contains(&"parity-lock"));
+    let docs =
+        fs::read_to_string(Path::new(env!("CARGO_MANIFEST_DIR")).join("../../docs/settings.md"))
+            .unwrap();
+    for flag in flags {
+        assert!(
+            docs.contains(&format!("| `--{flag}")),
+            "docs/settings.md has no row for --{flag}"
+        );
+    }
+}

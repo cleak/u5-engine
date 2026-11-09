@@ -85,6 +85,46 @@ their trap-column X/Y as the separately published defensive exception.
 | `SAVED.BTH` | Clean companion save for Blackthorn capture/rescue story state whose exact original `SAVED.GAM` offsets are not yet public. |
 | `.u5-engine-town-npc-mutations` | Engine-owned companion save for public destructive town-NPC schedule/dialogue rewrites. It stores only scene, roster slot, three AI bytes, four schedule times, and dialogue byte; original `.NPC` assets remain read-only. |
 
+## Player Sidecars
+
+The files above are clean-room metadata about the game. Player sidecars are
+different: they are what the optional enhancements
+([settings.md](settings.md)) remember about one save, kept beside it in the
+writable save folder.
+
+```text
+<save folder>/              the folder SAVED.GAM is written to
+  SAVED.GAM SAVED.OOL BRIT.OOL UNDER.OOL
+  SAVED.WPS .u5-engine-town-npc-mutations
+  .u5-engine-enh/           created on a feature's first write
+```
+
+| File | Tag | Kept for |
+|---|---|---|
+| `automap.u5e` | `AMAP` | Map memory: the automap's explored cells. |
+| `save-meta.u5e` | `META` | The save's flags, such as "a cheat was used". |
+| `journal.u5e` | `QJRN` | The journal's clue log. |
+| `gemmap.u5e` | `GEMK` | The enhanced gem map's discoveries. |
+
+- No other per-save file exists. In this build no feature that writes one has
+  shipped, and with every enhancement off (Classic) the folder is never
+  created, read or touched.
+- `SAVED.GAM` never gains a byte, so the original game still loads every
+  save.
+- Each file is one container: the magic `U5EH`, a container version, the
+  tag, the feature's payload version, a stamp of the `SAVED.GAM` it was
+  written with (its hash, length, Avatar name and game date), the payload
+  length, the payload and an FNV-1a-64 checksum.
+- A file is written to a temporary name and renamed, so a crash or a full
+  disk leaves the old file whole, and a failed write never fails the save.
+- On load the stamp is checked against the save: the same save, the same
+  character saved elsewhere since (a one-line note), another character or an
+  older save (the memory is set aside and replaced at the next save), or no
+  file. A damaged file is renamed to `<name>.bad` and started afresh; a file
+  from a newer engine is never overwritten.
+- Turning a feature off leaves its file alone; turning it on again checks the
+  file against the current save.
+
 ## General Rules
 
 - TSV files are whitespace-separated and may contain comments starting with

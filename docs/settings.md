@@ -29,6 +29,74 @@ or put back to its default, with a one-line note in the log.
 A key marked "later" is not available in this build: it is not listed on any
 settings page, a stored value is kept but not used, and presets skip it.
 
+## Presets
+
+- **Classic** (the default): every setting at its default. The game is the
+  1.0.1 game.
+- **Recommended**: a short list of helpers.
+- **Everything**: every feature-tier setting, and Recommended's list.
+
+No preset turns on a cheat, and the only deviation a preset sets is
+`combat.fast_forward`. A preset sets only what is available in this build,
+so in this build every preset still gives the Classic game.
+
+## Changing settings
+
+- `config.toml`, in the per-user config folder (`U5_ENGINE_CONFIG` names
+  another file). `[enhancements]` holds `preset`; each other section holds
+  its own keys, as `name = value`.
+- The setup window's Enhancements page: `u5-engine --settings`.
+- The command line, for one launch:
+
+| Option | What it does |
+|---|---|
+| `--preset NAME` | Start from `classic`, `recommended` or `everything`. |
+| `--enable KEY[,KEY...]` | Turn on/off settings on, e.g. `section.name`. |
+| `--disable KEY[,KEY...]` | Turn on/off settings off. |
+| `--set KEY=VALUE` | Set any setting. |
+| `--parity-lock` | Force every enhancement off for this launch. |
+| `--settings` | Open the Enhancements page in the setup window, then start the game. |
+| `--show-settings` | Print the settings a launch would use, then exit. |
+
+`config.toml` applies to the default launch (no game folder or mode on the
+command line); other launches use the command line alone. An unknown key on
+the command line is an error, as for any unknown option.
+
+## The parity lock
+
+`--parity-lock`, or `U5_PARITY_LOCK=1` in the environment, turns every
+enhancement off whatever `config.toml` or the command line says, and the
+settings file is not read. The test settings `U5_FIXED_HOST_CLOCK` and
+`U5_EMULATOR_LOAD_LATENCY_MS` lock it too, and the route smoke and the frame
+suites never read settings at all. A locked launch prints one line,
+`enhancements: parity-locked (all off)`, which the paired DOSBox harness
+requires in every run.
+
+## Hotkeys and files
+
+Each feature's keys exist only while that feature is on; the defaults and
+how to change them are in [commands.md](commands.md#enhancement-hotkeys).
+Features that remember things per save keep them in one folder beside the
+save; see [sidecars.md](sidecars.md#player-sidecars).
+
+## How a setting is checked
+
+A setting that only shows things must leave the game exactly as it was, and
+one that types keys must change it exactly as typing those keys would:
+
+- `cargo test` runs the equivalence tests on synthetic games, in the
+  terminal and in the windowed shell, including every row of the toggle
+  matrix.
+- `qa/enhancements/matrix.tsv` is the toggle matrix: every key alone, a
+  pairwise covering of the toggles and classed values, and everything on
+  except the cheats. It is generated from the catalogue, and a test keeps
+  the two equal (`U5_BLESS_TOGGLE_MATRIX=1` rewrites it).
+- `python3 qa/tools/toggle_matrix.py` runs `u5-engine --equivalence-suite`
+  over the matrix on real game files (a fresh `game-dev-u5 prepare-profile`
+  copy). Every configuration must equal the all-off run, Classic must match
+  the 1.0.1 route-smoke manifest, and the whole matrix must take under ten
+  minutes.
+
 ## Columns
 
 - **Type = default**: `bool`, `int a..b`, `enum a|b`, `list of a|b`,

@@ -6,6 +6,9 @@
 //! - Host code stays out of the engine: the engine crates' enhancement
 //!   modules never name `toml`, `std::env` or a host crate, and the engine
 //!   crates do not depend on them. Ports replace the host layer only.
+//! - `docs/commands.md` lists every `[keys]` row with its default chord and
+//!   label, and `docs/sidecars.md` lists every player sidecar file with its
+//!   tag, in a section of its own (build plan M0-20).
 //! - Every `take_pending_*` and wall-clock `advance_*_to` method the engine
 //!   and its frontends name is classified in [`GUARDED_DRAINS`], so a new
 //!   pending queue or animator cannot slip past the idle predicate (design
@@ -15,7 +18,10 @@ use std::collections::BTreeSet;
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use u5_runtime::enhancements::{GUARDED_DRAINS, settings_table};
+use u5_runtime::enhancements::{
+    CONTAINER_MAGIC, GUARDED_DRAINS, MATRIX_FILE, OPTIONS, OptionDefault, OptionKind, SIDECAR_DIR,
+    SIDECAR_FILES, settings_table,
+};
 
 const BEGIN: &str = "<!-- BEGIN GENERATED: settings table (cargo test -p u5-runtime) -->\n";
 const END: &str = "<!-- END GENERATED -->\n";
@@ -257,4 +263,122 @@ fn the_drain_scan_sees_calls_and_definitions_only() {
         names.into_iter().collect::<Vec<_>>(),
         ["advance_text_hold_to", "take_pending_potion_flash"]
     );
+}
+
+fn read_doc(name: &str) -> String {
+    fs::read_to_string(workspace_root().join("docs").join(name))
+        .unwrap_or_else(|error| panic!("docs/{name}: {error}"))
+}
+
+/// The text of `heading`'s section: from the heading to the next `## `.
+fn section<'a>(text: &'a str, heading: &str) -> &'a str {
+    let start = text
+        .find(heading)
+        .unwrap_or_else(|| panic!("no `{heading}` section"));
+    let rest = &text[start + heading.len()..];
+    &rest[..rest.find("\n## ").unwrap_or(rest.len())]
+}
+
+#[test]
+fn the_hotkey_docs_list_every_keys_row() {
+    let text = read_doc("commands.md");
+    let hotkeys = section(&text, "## Enhancement Hotkeys");
+    let mut rows = 0;
+    for spec in OPTIONS.iter().filter(|spec| spec.kind == OptionKind::Chord) {
+        let OptionDefault::Str(chord) = spec.default else {
+            panic!("{} has a chord default", spec.key);
+        };
+        let line = format!("| {chord} | `{}` | {} |", spec.key, spec.label);
+        assert!(
+            hotkeys.contains(&line),
+            "docs/commands.md lacks the hotkey row starting `{line}`"
+        );
+        rows += 1;
+    }
+    // No row for a key the catalogue does not have.
+    assert_eq!(
+        hotkeys.matches("| `keys.").count(),
+        rows,
+        "docs/commands.md lists a [keys] row the catalogue does not have"
+    );
+}
+
+#[test]
+fn the_sidecar_docs_list_every_player_sidecar() {
+    let text = read_doc("sidecars.md");
+    let player = section(&text, "## Player Sidecars");
+    assert!(player.contains(SIDECAR_DIR));
+    let magic = std::str::from_utf8(&CONTAINER_MAGIC).unwrap();
+    assert!(player.contains(&format!("`{magic}`")));
+    for (tag, name) in SIDECAR_FILES {
+        let tag = std::str::from_utf8(tag).unwrap();
+        let line = format!("| `{name}` | `{tag}` |");
+        assert!(player.contains(&line), "docs/sidecars.md lacks `{line}`");
+    }
+    assert_eq!(
+        player.matches(".u5e` |").count(),
+        SIDECAR_FILES.len(),
+        "docs/sidecars.md lists a player sidecar the engine does not have"
+    );
+    // Kept apart from the clean-room metadata sidecars listed before it.
+    let metadata = &text[..text.find("## Player Sidecars").unwrap()];
+    assert!(!metadata.contains(SIDECAR_DIR));
+}
+
+#[test]
+fn the_settings_docs_name_files_that_exist() {
+    let text = read_doc("settings.md");
+    for path in [MATRIX_FILE, "qa/tools/toggle_matrix.py"] {
+        assert!(text.contains(path), "docs/settings.md does not name {path}");
+        assert!(workspace_root().join(path).is_file(), "{path} is missing");
+    }
+}
+
+/// GitHub's anchor for a Markdown heading.
+fn anchor(heading: &str) -> String {
+    heading
+        .trim()
+        .to_lowercase()
+        .chars()
+        .filter_map(|c| match c {
+            ' ' => Some('-'),
+            c if c.is_alphanumeric() || c == '-' || c == '_' => Some(c),
+            _ => None,
+        })
+        .collect()
+}
+
+/// Every link from the enhancement docs to another doc names a file and a
+/// heading that exist.
+#[test]
+fn the_enhancement_docs_links_resolve() {
+    for name in [
+        "settings.md",
+        "release-notes.md",
+        "commands.md",
+        "sidecars.md",
+    ] {
+        let text = read_doc(name);
+        for (index, _) in text.match_indices("](") {
+            let target = &text[index + 2..];
+            let target = &target[..target.find(')').unwrap()];
+            if target.contains("://") || !target.contains(".md") {
+                continue;
+            }
+            let (file, fragment) = target.split_once('#').unwrap_or((target, ""));
+            let linked = read_doc(file);
+            if fragment.is_empty() {
+                continue;
+            }
+            assert!(
+                linked
+                    .lines()
+                    .filter_map(|line| line.strip_prefix('#'))
+                    .map(|line| anchor(line.trim_start_matches('#')))
+                    .any(|heading| heading == fragment),
+                "docs/{name}: no heading `#{fragment}` in {file}"
+            );
+        }
+    }
+    assert_eq!(anchor(" Enhancement Hotkeys"), "enhancement-hotkeys");
 }

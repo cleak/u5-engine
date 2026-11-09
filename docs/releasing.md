@@ -62,6 +62,25 @@ repository has one, and `RUNNING.txt`. If a `u5-engine-gui` binary exists (see
 Only the publish job gets `contents: write`; everything else runs with
 read-only repository access.
 
+### Before a release candidate
+
+CI has no game files, so these gates run on game-dev-server, on a fresh
+`game-dev-u5 prepare-profile` copy, before each release candidate:
+
+- the route smoke, `u5-engine --route-smoke --route-smoke-manifest OUT
+  GAME_DIR`: the manifest's sha256 must still start `22254c83f2af767b`
+  unless a change to the game was meant;
+- both visual suites (`--visual-frame-suite`, `--visual-route-suite`),
+  compared with the last release's manifests;
+- the toggle matrix, `python3 qa/tools/toggle_matrix.py`: every enhancement
+  configuration equals the all-off game (see `docs/settings.md`);
+- the cast-blink paired smoke, then the full paired DOSBox sweep with the
+  standard flags. The release bar is two clean checks in a row: no crash,
+  hang, softlock or major issue, and no real paired difference.
+
+Changes players will notice go in [release-notes.md](release-notes.md);
+paste the section for the tag into the release text.
+
 ### Cutting a release
 
 1. Make sure `main` is green in CI.
