@@ -19,9 +19,10 @@ use u5_runtime::{
 pub const RUNTIME_DIR_ENV: &str = u5_host_desktop::RUNTIME_DIR_ENV;
 
 /// The per-save enhancement folder beside `SAVED.GAM` (Phase B design
-/// 1.2.7). It belongs to the save it sits next to, so the mirror never
-/// copies one from the source folder over the runtime save's own.
-pub const ENHANCEMENT_SIDECAR_DIR: &str = ".u5-engine-enh";
+/// 1.2.7, 1.3.10), the engine's [`SIDECAR_DIR`](u5_runtime::enhancements::SIDECAR_DIR).
+/// It belongs to the save it sits next to, so the mirror never copies one
+/// from the source folder over the runtime save's own.
+pub const ENHANCEMENT_SIDECAR_DIR: &str = u5_runtime::enhancements::SIDECAR_DIR;
 
 /// Return a writable game directory suitable for interactive play.
 ///

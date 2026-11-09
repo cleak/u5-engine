@@ -18,8 +18,10 @@
 //! - [`idle`]: the idle-prompt predicate's runtime half,
 //!   [`PlayState::idle_command_prompt`](crate::PlayState::idle_command_prompt)
 //!   (design 1.3.7).
-//! - [`sidecar`]: per-save sidecars; so far the [`SaveWatcher`] that detects
-//!   a save from outside the runtime and its [`SaveStamp`] (design 1.3.9).
+//! - [`sidecar`]: per-save sidecars: the [`SaveWatcher`] that detects a save
+//!   from outside the runtime and its [`SaveStamp`] (design 1.3.9), and the
+//!   [`SidecarStore`] that keeps each feature's file beside the save, with
+//!   its container and [`Freshness`] (design 1.3.10).
 //!
 //! Nothing in the game calls into this module yet. The desktop host's
 //! adapter, command-line flags and parity lock live in `u5-tui`
@@ -43,7 +45,13 @@ pub use resolve::{
     CHEATS_SWITCH, KeyBindings, PRESET_KEY, PresetLabel, ResolveInput, ResolvedEnhancements,
     SettingValues, resolve,
 };
-pub use sidecar::{SIDECAR_KEYS, SaveStamp, SaveWatcher, fnv1a64, sidecar_feature_on};
+pub use sidecar::{
+    CONTAINER_MAGIC, CONTAINER_VERSION, Container, ContainerError, Freshness,
+    SAVE_META_PAYLOAD_VERSION, SIDECAR_DIR, SIDECAR_FILES, SIDECAR_KEYS, SaveMeta, SaveStamp,
+    SaveWatcher, SidecarPayload, SidecarStore, SidecarWrite, TAG_AUTOMAP, TAG_GEM_MAP, TAG_JOURNAL,
+    TAG_SAVE_META, decode_container, encode_container, fnv1a64, sidecar_feature_on,
+    sidecar_file_name,
+};
 pub use source::{
     Capability, CliSetting, HostCapabilities, LockReason, LockState, SettingNote, SettingValue,
     SettingsSink, SettingsSource, ValueProblem,
