@@ -12,13 +12,28 @@ Packaging logic shared by the workflow and local runs is in
 
 ## CI (`ci.yml`)
 
-| Job | Runner | What it does |
-|---|---|---|
-| Test (Linux) | `ubuntu-latest` | Installs the Bevy build dependencies, runs `cargo test --release --workspace --locked`, then builds the windowed binary (`-p u5-tui --features visual --bins`). |
-| Build (Windows) | `windows-latest` | Builds the windowed binary with the static C runtime, as the release does. |
+| Job | Runner | Needs | What it does |
+|---|---|---|---|
+| Format | `ubuntu-latest` | | Checks that `RUST_TOOLCHAIN` in both workflows equals `channel` in `rust-toolchain.toml`, then runs `cargo fmt --all -- --check`. |
+| Build warnings | `ubuntu-latest` | Format | Self-tests and runs `qa/tools/check_no_build_warnings.sh`: builds the workspace and `-p u5-tui --features visual` (all targets) with `RUSTFLAGS=-Dwarnings`, and fails on any `warning:` line, which also catches build-script `cargo:warning` lines. |
+| Clippy | `ubuntu-latest` | Build warnings | `cargo clippy --locked --workspace --all-targets -- -D warnings`, then the same for `-p u5-tui --features visual`. |
+| Test (Linux) | `ubuntu-latest` | Clippy | Installs the Bevy build dependencies, runs `cargo test --release --workspace --locked`, then builds the windowed binary (`-p u5-tui --features visual --bins`). |
+| Build (Windows) | `windows-latest` | Format | Builds the windowed binary with the static C runtime, as the release does. |
 
-Both jobs cache `~/.cargo` and `target/` with `Swatinem/rust-cache`. A newer
-push to the same branch cancels a running CI build.
+The gates run in the order format, warning lines, clippy, test, so the cheap
+failures come first. The build jobs cache `~/.cargo` and `target/` with
+`Swatinem/rust-cache`. A newer push to the same branch cancels a running CI
+build.
+
+To run the gates locally before pushing:
+
+```sh
+cargo fmt --all -- --check
+qa/tools/check_no_build_warnings.sh
+cargo clippy --locked --workspace --all-targets -- -D warnings
+cargo clippy --locked -p u5-tui --features visual --all-targets -- -D warnings
+cargo test --release --workspace --locked
+```
 
 CI has no original game files. Tests that need them are compiled only with the
 `original-asset-tests` feature, or skip themselves when `U5_TEST_ASSET_DIR` is
@@ -34,6 +49,7 @@ new crate brings a new system library (see below).
 | Job | Runner | Output |
 |---|---|---|
 | Resolve version | `ubuntu-latest` | Works out the tag, the version (the tag without `v`) and whether to publish. For tags it also checks that `[workspace.package] version` in `Cargo.toml` equals the tag. |
+| Verify | `ubuntu-latest` | Nothing kept. Runs the format check, both clippy runs and `cargo test --release --workspace --locked` on the code being released. Every platform build `needs:` it, so a tag that fails them builds and publishes nothing. |
 | Linux x86_64 | `ubuntu-22.04` | `u5-engine-<version>-linux-x86_64.tar.gz`. Built on 22.04 so the binary needs only glibc 2.35. |
 | Windows x86_64 | `windows-latest` (MSVC) | `u5-engine-<version>-windows-x86_64.zip`, built with `+crt-static` so no Visual C++ redistributable is needed. |
 | macOS universal | `macos-15` | `u5-engine-<version>-macos-universal.zip`: one `U5 Engine.app` whose binary is `lipo`-merged from the `aarch64-apple-darwin` and `x86_64-apple-darwin` builds (minimum macOS 11). Signed and notarized when the Apple secrets exist. |
@@ -228,6 +244,21 @@ runtime list.
 
 ## Maintenance notes
 
+- **Toolchain.** `rust-toolchain.toml` pins the exact Rust release (with
+  `rustfmt` and `clippy`) for local builds and CI alike. To move to a newer
+  release, change `channel` there and `RUST_TOOLCHAIN` in both workflows in
+  one commit, and fix whatever new format or clippy findings it brings; the
+  CI format job fails if the three disagree.
+- **Action pins.** Every action is pinned by full commit SHA with its
+  release in a trailing comment. `.github/dependabot.yml` opens a weekly
+  pull request that moves the pins and comments together; review the
+  action's changes before merging it. `dtolnay/rust-toolchain` has no
+  releases, so it is pinned to a `master` commit and always given
+  `toolchain:` explicitly.
+- **Rebuilding an old tag.** The Verify job runs on the tagged code. A tag
+  from before these gates (1.0.1 and earlier) has no `rust-toolchain.toml`
+  and does not pass the format and clippy checks, so rebuild such a tag
+  from a branch that still has the old workflow.
 - `ubuntu-22.04` is the oldest GitHub-hosted runner. When GitHub retires it,
   move the Linux release job to the next oldest runner (raising the glibc
   floor, which `packaging/linux/RUNNING.txt` and the README state) or build

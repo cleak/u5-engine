@@ -31,6 +31,12 @@ concurrency:
 env:
   CARGO_TERM_COLOR: always
   CARGO_INCREMENTAL: "0"
+  # The toolchain every job installs. Keep it equal to `channel` in
+  # rust-toolchain.toml; CI's format job fails if they differ.
+  RUST_TOOLCHAIN: "1.98.0"
+
+# Actions are pinned by full commit SHA with the release in a comment;
+# Dependabot (.github/dependabot.yml) proposes bumps as pull requests.
 
 jobs:
   meta:
@@ -74,7 +80,7 @@ jobs:
             } >> "$GITHUB_OUTPUT"
           fi
 
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           ref: ${{ steps.meta.outputs.ref }}
 
@@ -90,15 +96,56 @@ jobs:
             exit 1
           fi
 
+  verify:
+    name: Verify
+    # Format, clippy and the tests, once, before any platform builds: every
+    # build job needs this one, so a tag that fails them publishes nothing.
+    needs: meta
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          ref: ${{ needs.meta.outputs.ref }}
+
+      - name: Install Bevy build dependencies
+        # The same packages as the Linux build below.
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            pkg-config libasound2-dev libudev-dev \
+            libx11-dev libxkbcommon-dev libwayland-dev
+
+      - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # v1 (master)
+        with:
+          toolchain: ${{ env.RUST_TOOLCHAIN }}
+          components: rustfmt, clippy
+
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+        with:
+          shared-key: release-verify
+
+      - name: Check formatting
+        run: cargo fmt --all -- --check
+
+      - name: Clippy (workspace)
+        run: cargo clippy --locked --workspace --all-targets -- -D warnings
+
+      - name: Clippy (windowed build)
+        run: cargo clippy --locked -p u5-tui --features visual --all-targets -- -D warnings
+
+      - name: Test workspace
+        run: cargo test --release --workspace --locked
+
   linux:
     name: Linux x86_64
-    needs: meta
+    needs: [meta, verify]
     # Build on the oldest supported runner so the binary runs on any distro
     # with glibc 2.35 or newer.
     runs-on: ubuntu-22.04
     timeout-minutes: 90
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           ref: ${{ needs.meta.outputs.ref }}
 
@@ -111,9 +158,11 @@ jobs:
             pkg-config libasound2-dev libudev-dev \
             libx11-dev libxkbcommon-dev libwayland-dev
 
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # v1 (master)
+        with:
+          toolchain: ${{ env.RUST_TOOLCHAIN }}
 
-      - uses: Swatinem/rust-cache@v2
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         with:
           shared-key: release-linux
 
@@ -130,7 +179,7 @@ jobs:
           packaging/package.sh linux "$VERSION" target/release dist
           ls -l dist
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: package-linux-x86_64
           path: dist/*
@@ -138,20 +187,22 @@ jobs:
 
   windows:
     name: Windows x86_64
-    needs: meta
+    needs: [meta, verify]
     runs-on: windows-latest
     timeout-minutes: 90
     env:
       # Static C runtime: players do not need the Visual C++ redistributable.
       RUSTFLAGS: -C target-feature=+crt-static
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           ref: ${{ needs.meta.outputs.ref }}
 
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # v1 (master)
+        with:
+          toolchain: ${{ env.RUST_TOOLCHAIN }}
 
-      - uses: Swatinem/rust-cache@v2
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         with:
           shared-key: release-windows
 
@@ -182,7 +233,7 @@ jobs:
           Compress-Archive -Path $stage -DestinationPath "dist/$name.zip" -CompressionLevel Optimal
           Get-ChildItem dist
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: package-windows-x86_64
           path: dist/*
@@ -190,7 +241,7 @@ jobs:
 
   macos:
     name: macOS universal
-    needs: meta
+    needs: [meta, verify]
     runs-on: macos-15
     timeout-minutes: 120
     outputs:
@@ -204,15 +255,16 @@ jobs:
       APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
       APPLE_APP_PASSWORD: ${{ secrets.APPLE_APP_PASSWORD }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           ref: ${{ needs.meta.outputs.ref }}
 
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # v1 (master)
         with:
+          toolchain: ${{ env.RUST_TOOLCHAIN }}
           targets: aarch64-apple-darwin,x86_64-apple-darwin
 
-      - uses: Swatinem/rust-cache@v2
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         with:
           shared-key: release-macos
 
@@ -297,7 +349,7 @@ jobs:
           packaging/package.sh macos-zip "$VERSION" "$RUNNER_TEMP/stage" dist ${NOTE:+"$NOTE"}
           ls -l dist
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: package-macos-universal
           path: dist/*
@@ -310,7 +362,7 @@ jobs:
     permissions:
       contents: write
     steps:
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
           pattern: package-*
           path: dist
@@ -346,7 +398,7 @@ jobs:
 
       - name: Keep the dry-run bundle
         if: needs.meta.outputs.publish != 'true'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: release-dry-run
           path: |
@@ -355,7 +407,7 @@ jobs:
 
       - name: Attach packages to the GitHub release
         if: needs.meta.outputs.publish == 'true'
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2.6.2
         with:
           tag_name: ${{ needs.meta.outputs.tag }}
           name: u5-engine ${{ needs.meta.outputs.version }}

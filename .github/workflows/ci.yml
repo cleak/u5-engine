@@ -21,13 +21,113 @@ env:
   # `original-asset-tests` feature or skip themselves when U5_TEST_ASSET_DIR
   # is unset, so it is deliberately left unset here.
 
+  # The toolchain every job installs. Keep it equal to `channel` in
+  # rust-toolchain.toml and in release.yml; the format job fails if they
+  # differ.
+  RUST_TOOLCHAIN: "1.98.0"
+
+# Actions are pinned by full commit SHA with the release in a comment;
+# Dependabot (.github/dependabot.yml) proposes bumps as pull requests.
+#
+# The gates run in order format, warning lines, clippy, test, each job
+# needing the one before, so the cheap failures come first.
+
 jobs:
-  test-linux:
-    name: Test (Linux)
+  fmt:
+    name: Format
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      - name: Check the workflow toolchains match rust-toolchain.toml
+        run: |
+          set -euo pipefail
+          channel=$(sed -n 's/^channel *= *"\(.*\)"/\1/p' rust-toolchain.toml)
+          for workflow in .github/workflows/ci.yml .github/workflows/release.yml; do
+            pinned=$(sed -n 's/^  RUST_TOOLCHAIN: *"\(.*\)"/\1/p' "$workflow")
+            if [[ -z "$channel" || "$pinned" != "$channel" ]]; then
+              echo "::error file=$workflow::RUST_TOOLCHAIN is '$pinned' but rust-toolchain.toml's channel is '$channel'"
+              exit 1
+            fi
+          done
+
+      - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # v1 (master)
+        with:
+          toolchain: ${{ env.RUST_TOOLCHAIN }}
+          components: rustfmt
+
+      - name: Check formatting
+        run: cargo fmt --all -- --check
+
+  warnings:
+    name: Build warnings
+    needs: fmt
     runs-on: ubuntu-latest
     timeout-minutes: 90
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      - name: Install Bevy build dependencies
+        # The same packages as the test job; see the note there.
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            pkg-config libasound2-dev libudev-dev \
+            libx11-dev libxkbcommon-dev libwayland-dev
+
+      - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # v1 (master)
+        with:
+          toolchain: ${{ env.RUST_TOOLCHAIN }}
+
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+        with:
+          shared-key: linux-warnings
+
+      - name: Self-test the warning-line gate
+        run: python3 -m unittest qa/tools/test_check_no_build_warnings.py
+
+      - name: Build with warnings denied, then scan for warning lines
+        run: qa/tools/check_no_build_warnings.sh
+
+  clippy:
+    name: Clippy
+    needs: warnings
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      - name: Install Bevy build dependencies
+        # The same packages as the test job; see the note there.
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            pkg-config libasound2-dev libudev-dev \
+            libx11-dev libxkbcommon-dev libwayland-dev
+
+      - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # v1 (master)
+        with:
+          toolchain: ${{ env.RUST_TOOLCHAIN }}
+          components: clippy
+
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+        with:
+          shared-key: linux-clippy
+
+      - name: Clippy (workspace)
+        run: cargo clippy --locked --workspace --all-targets -- -D warnings
+
+      - name: Clippy (windowed build)
+        run: cargo clippy --locked -p u5-tui --features visual --all-targets -- -D warnings
+
+  test-linux:
+    name: Test (Linux)
+    needs: clippy
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
       - name: Install Bevy build dependencies
         # Bevy: ALSA (audio), udev (gamepads), X11 and Wayland (windowing).
@@ -41,9 +141,11 @@ jobs:
             pkg-config libasound2-dev libudev-dev \
             libx11-dev libxkbcommon-dev libwayland-dev
 
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # v1 (master)
+        with:
+          toolchain: ${{ env.RUST_TOOLCHAIN }}
 
-      - uses: Swatinem/rust-cache@v2
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         with:
           shared-key: linux-release
 
@@ -55,6 +157,7 @@ jobs:
 
   build-windows:
     name: Build (Windows)
+    needs: fmt
     runs-on: windows-latest
     timeout-minutes: 90
     env:
@@ -62,11 +165,13 @@ jobs:
       # not need the Visual C++ redistributable.
       RUSTFLAGS: -C target-feature=+crt-static
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # v1 (master)
+        with:
+          toolchain: ${{ env.RUST_TOOLCHAIN }}
 
-      - uses: Swatinem/rust-cache@v2
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         with:
           shared-key: windows-release
 

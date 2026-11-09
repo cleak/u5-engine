@@ -171,7 +171,8 @@ command line, as shown under [Download](#download).
 
 ## Building from source
 
-For developers. You need a Rust toolchain (stable) and the original game files.
+For developers. You need a Rust toolchain and the original game files; rustup
+installs the pinned version from `rust-toolchain.toml` on the first build.
 On Linux, install the Bevy build dependencies first:
 
 ```sh
