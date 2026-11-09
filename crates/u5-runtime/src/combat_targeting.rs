@@ -58,14 +58,14 @@ pub const COMBAT_TARGETING_NOTHING_LINE: &str = "Nothing!";
 /// ```
 ///
 /// - the leading feed closes the `Aim! ` row, so `Nothing!` starts at
-/// column zero instead of inheriting that prompt's trailing space, and the
-/// trailing feed closes its own row so that `§8.4`'s "next full actor
-/// banner contributes its own leading feed, making the blank row after the
-/// result" lands as a blank rather than merely closing this one. This
-/// engine printed ` Nothing!` wrapped onto the prompt's row and ran the
-/// banner straight underneath, and sat a row high for the rest of the
-/// capture - the same shape the `-Not here` refusal had before its feed was
-/// added.
+///   column zero instead of inheriting that prompt's trailing space, and the
+///   trailing feed closes its own row so that `§8.4`'s "next full actor
+///   banner contributes its own leading feed, making the blank row after the
+///   result" lands as a blank rather than merely closing this one. This
+///   engine printed ` Nothing!` wrapped onto the prompt's row and ran the
+///   banner straight underneath, and sat a row high for the rest of the
+///   capture - the same shape the `-Not here` refusal had before its feed was
+///   added.
 pub const COMBAT_TARGETING_NOTHING_MESSAGE: &str = "\nNothing!\n";
 
 /// `combat.md §8.2` separator between an item-name line and its colon, for
@@ -561,7 +561,7 @@ mod tests {
     fn the_five_missile_item_ids_are_the_published_rows() {
         assert_eq!(
             COMBAT_MISSILE_INTERFERENCE_ITEM_IDS
-                .map(|item| equipment_name(item))
+                .map(equipment_name)
                 .to_vec(),
             vec!["Sling", "Flaming Oil", "Bow", "Crossbow", "Magic Bow"]
         );

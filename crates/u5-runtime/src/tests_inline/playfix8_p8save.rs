@@ -258,7 +258,7 @@ fn playtest_n25_a_dungeon_load_resumes_with_the_saved_transport() {
 
 /// N25 (f): `formats/saved-gam.md §3.3` - "Preserve the marker byte-for-byte"
 /// - and §3.1: the marker "has no meaning for a travelling member". The inn
-/// registry writer zeroed the marker of every travelling record.
+///   registry writer zeroed the marker of every travelling record.
 #[test]
 fn playtest_n25_travelling_records_keep_their_inn_marker_byte() {
     let mut bytes = saved_game_seed_bytes(0, 0, 10, 20);

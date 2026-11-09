@@ -138,10 +138,10 @@ fn run_with_command_epilogue(
     state.stats_panel_command_baseline = crate::stats_panel::stats_panel_snapshot_of(state);
     let mut combat_was_active = state.combat_active;
     let mut result = command(state);
-    if result.is_ok() {
-        if let Err(error) = settle_dungeon_acted_charge(state, game_dir) {
-            result = Err(error);
-        }
+    if result.is_ok()
+        && let Err(error) = settle_dungeon_acted_charge(state, game_dir)
+    {
+        result = Err(error);
     }
     // `combat.md §8.1`: the turn banner is "emitted at the start of every
     // keyboard-driven combatant's turn, *before any key is read*". A
@@ -163,10 +163,12 @@ fn run_with_command_epilogue(
     // remaining lower slots before accepting another world command.
     // `dungeon-mode.md §14.1` (u5-spec#298 Q1): a post-combat code 5 or 6
     // past the level stack takes the `§13.2` surface exit.
-    if result.is_ok() && !state.combat_active && state.pending_dungeon_surface_exit.is_some() {
-        if let Err(error) = state.drain_pending_dungeon_surface_exit(game_dir) {
-            result = Err(error);
-        }
+    if result.is_ok()
+        && !state.combat_active
+        && state.pending_dungeon_surface_exit.is_some()
+        && let Err(error) = state.drain_pending_dungeon_surface_exit(game_dir)
+    {
+        result = Err(error);
     }
     // `town-mode.md §14`: drain the town NPC-conflict chain's exit -
     // "On exit the town chain clears the NPC slot, reloads the town map,
@@ -190,10 +192,12 @@ fn run_with_command_epilogue(
     if result.is_ok() && combat_was_active && !state.combat_active {
         state.drain_town_tail_after_combat();
     }
-    if result.is_ok() && town_attack_epilogue_owed && town_conflict_drained {
-        if let Err(error) = state.run_town_attack_epilogue_after_combat(game_dir) {
-            result = Err(error);
-        }
+    if result.is_ok()
+        && town_attack_epilogue_owed
+        && town_conflict_drained
+        && let Err(error) = state.run_town_attack_epilogue_after_combat(game_dir)
+    {
+        result = Err(error);
     }
     if result.is_ok() && !state.combat_active && !state.pending_outdoor_reaction_slots.is_empty() {
         if let Area::World { plane } = state.area {
@@ -207,26 +211,31 @@ fn run_with_command_epilogue(
     // `movement.md §8.1` / `active-objects.md §8` (u5-spec#305 Q4): a
     // difficult-terrain step whose extra call fought still owes its later
     // calls, terrain charge and consumed-action tail once the fight returns.
-    if result.is_ok() && !state.combat_active && state.pending_difficult_terrain_step.is_some() {
-        if let Err(error) = state.resume_difficult_terrain_step_after_combat(game_dir) {
-            result = Err(error);
-        }
+    if result.is_ok()
+        && !state.combat_active
+        && state.pending_difficult_terrain_step.is_some()
+        && let Err(error) = state.resume_difficult_terrain_step_after_combat(game_dir)
+    {
+        result = Err(error);
     }
     // `dungeon-mode.md §11` step 4 / `§4` step 6: an ambushed dungeon camp's
     // post-action helper follows the ambush fight (playtest P23-07).
-    if result.is_ok() && !state.combat_active && state.pending_dungeon_post_action_helper {
-        if let Err(error) = state.resume_dungeon_post_action_helper_after_combat(game_dir) {
-            result = Err(error);
-        }
+    if result.is_ok()
+        && !state.combat_active
+        && state.pending_dungeon_post_action_helper
+        && let Err(error) = state.resume_dungeon_post_action_helper_after_combat(game_dir)
+    {
+        result = Err(error);
     }
     // `dungeon-mode.md §4.1` (issue #304 Q1): a contact fight launched by the
     // post-action monster step comes before the turn's underfoot reaction,
     // which "then runs" once the fight has returned (playtest P19-04).
-    if result.is_ok() && !state.combat_active && state.pending_dungeon_underfoot_reaction.is_some()
+    if result.is_ok()
+        && !state.combat_active
+        && state.pending_dungeon_underfoot_reaction.is_some()
+        && let Err(error) = state.resume_dungeon_underfoot_reaction_after_combat(game_dir)
     {
-        if let Err(error) = state.resume_dungeon_underfoot_reaction_after_combat(game_dir) {
-            result = Err(error);
-        }
+        result = Err(error);
     }
     // `dungeon-mode.md §4` step 6: the helper's last act, the upkeep pass,
     // follows a contact fight and the underfoot reaction it deferred; any
@@ -260,15 +269,15 @@ fn run_with_command_epilogue(
     if result.is_ok() && !combat_was_active {
         open_owed_combat_player_turn(state);
     }
-    if result.is_ok() {
-        if let Err(error) = run_overworld_loop_head_hooks(state, game_dir) {
-            result = Err(error);
-        }
+    if result.is_ok()
+        && let Err(error) = run_overworld_loop_head_hooks(state, game_dir)
+    {
+        result = Err(error);
     }
-    if result.is_ok() {
-        if let Err(error) = run_dungeon_entry_underfoot_reaction(state, game_dir) {
-            result = Err(error);
-        }
+    if result.is_ok()
+        && let Err(error) = run_dungeon_entry_underfoot_reaction(state, game_dir)
+    {
+        result = Err(error);
     }
     // The command's own panel mechanism, applied where the command ends.
     //
@@ -749,11 +758,11 @@ fn handle_play_key_input_inner(
         }
         // `commands.md §3`/§7: a Search that reached the acting-member
         // picker reports "acted" whether the pick searched or cancelled.
-        if let Some(turn_before) = search_turn_before {
-            if state.active_party_selector.is_none() {
-                state.charge_tile_command_acted_exit(turn_before);
-                state.apply_top_down_post_turn_effects_after_turn(turn_before, game_dir)?;
-            }
+        if let Some(turn_before) = search_turn_before
+            && state.active_party_selector.is_none()
+        {
+            state.charge_tile_command_acted_exit(turn_before);
+            state.apply_top_down_post_turn_effects_after_turn(turn_before, game_dir)?;
         }
         // `commands.md §3` / `magic.md §5` step 1: `Player: None!` at Cast's
         // acting-member picker is a C path, so it reports acted too
@@ -862,23 +871,24 @@ fn handle_play_key_input_inner(
     // `systems/shops.md` tavern drunkenness: every top-level town command
     // performs a fresh even-odds gate. Active prompts/sessions above consume
     // their own keys before this point and therefore are not commands.
-    if let Area::Town { scene, floor } = state.area {
-        if state.town_drunkenness_counter != 0 && state.random_range_u8(0, 1) == 1 {
-            state.town_alarm_sweep(scene, floor, None);
-            state.town_drunkenness_counter -= 1;
-            // `town-mode.md §7`/§7.1: drunkenness is a pre-dispatch stage
-            // after the command read, so `Hic!` lands on that command's
-            // prompt row - after its feed and marker - and its line break
-            // leaves the substituted step's echo on the next row with no
-            // prompt pair of its own (playtest J18).
-            state.flush_message_slot();
-            state.emit_command_echo_line("Hic!");
-            state.message_row_open_mid_line = false;
-            state.town_hiccup_echo_continues = true;
-            let replacement = state.random_range_u8(0, 3);
-            key = char::from(INPUT_CODE_CARDINAL_FIRST + replacement);
-            suffix = "";
-        }
+    if let Area::Town { scene, floor } = state.area
+        && state.town_drunkenness_counter != 0
+        && state.random_range_u8(0, 1) == 1
+    {
+        state.town_alarm_sweep(scene, floor, None);
+        state.town_drunkenness_counter -= 1;
+        // `town-mode.md §7`/§7.1: drunkenness is a pre-dispatch stage
+        // after the command read, so `Hic!` lands on that command's
+        // prompt row - after its feed and marker - and its line break
+        // leaves the substituted step's echo on the next row with no
+        // prompt pair of its own (playtest J18).
+        state.flush_message_slot();
+        state.emit_command_echo_line("Hic!");
+        state.message_row_open_mid_line = false;
+        state.town_hiccup_echo_continues = true;
+        let replacement = state.random_range_u8(0, 3);
+        key = char::from(INPUT_CODE_CARDINAL_FIRST + replacement);
+        suffix = "";
     }
     // `dungeon-mode.md §15`: the dungeon's minute advance "sits at the head
     // of each iteration ... so a command the dispatcher reports as \"no
@@ -1732,7 +1742,7 @@ fn handle_active_shop_key_input(
             | ActiveShopSession::ArmsLocal(..)
             | ActiveShopSession::ArmsStocked(..)
     );
-    let entry_answer_echo = (session.awaiting_entry_answer() && !arms_entry).then(|| {
+    let entry_answer_echo = (session.awaiting_entry_answer() && !arms_entry).then_some({
         if yes {
             Some("Yes")
         } else if no {
@@ -2816,10 +2826,10 @@ fn handle_active_shop_key_input(
                 let (first, last) = tavern_closing_bark_records(state.arms_transaction_completed);
                 usize::from(state.random_range_u8(first as u8, last as u8))
             });
-            if let Some(letter) = tavern_letter_echo {
-                if !matches!(outcome, TavernOutcome::InvalidInput) {
-                    state.emit_message_line_continuing_row(letter.to_string());
-                }
+            if let Some(letter) = tavern_letter_echo
+                && !matches!(outcome, TavernOutcome::InvalidInput)
+            {
+                state.emit_message_line_continuing_row(letter.to_string());
             }
             if blue_boar_choice_list
                 && matches!(
@@ -3146,7 +3156,8 @@ fn handle_active_shop_key_input(
             let vendor_name = area_scene_byte.and_then(|scene| {
                 crate::play_state_impl::shop_vendor_name_for_scene(SHOP_DIALOG_ID_HERBALIST, scene)
             });
-            let message = match outcome {
+
+            match outcome {
                 ReagentShopOutcome::DeclinedEntry => {
                     shop_closing_bark(state, SHOP_DIALOG_ID_HERBALIST, vendor_name, game_dir)
                 }
@@ -3157,8 +3168,7 @@ fn handle_active_shop_key_input(
                     game_dir,
                 ),
                 outcome => format_reagent_outcome(outcome, vendor_name, game_dir),
-            };
-            message
+            }
         }
         ActiveShopSession::HorseTrader(s) => {
             let vendor = area_scene_byte.and_then(|scene| {
@@ -3661,6 +3671,9 @@ fn handle_active_shop_key_input(
         )
         && session.keeps_cursor_inline()
         && !state.message.is_empty();
+    // The two arms do the same thing for different spec reasons, each
+    // documented at its condition; merging them would merge the comments.
+    #[allow(clippy::if_same_then_else)]
     if arms_row_left_open {
         state.flush_message_slot();
         state.open_message_row();
@@ -4937,10 +4950,10 @@ fn render_shared_shoppe_flourish(game_dir: &Path, record_id: usize) -> Option<St
 /// `shops.md` §8.A lists the closing bark as *two* rows, not one - "Shared
 /// closing bark, nothing bought" and "Shared closing bark, purchase completed"
 /// - each "one of four `SHOPPE.DAT` records from the current shop-kind" row
-/// under a uniform `0..3` draw. The arms rows are the two halves of the shared
-/// `0..7` band, which is what the engine had collapsed: it drew `0..3`
-/// whichever way the visit went, so a paid-up customer got sent off with
-/// `Harrumph!`.
+///   under a uniform `0..3` draw. The arms rows are the two halves of the shared
+///   `0..7` band, which is what the engine had collapsed: it drew `0..3`
+///   whichever way the visit went, so a paid-up customer got sent off with
+///   `Harrumph!`.
 ///
 /// Measured 2026-09-10. `shop-arms-buy-confirm` buys a Dagger and leaves, and
 /// the original closed it on record `7`; the scenarios that buy nothing and
@@ -6458,21 +6471,19 @@ fn handle_active_conversation_key_input(
     line.push_str(suffix);
     let line = line.trim_end_matches(['\r', '\n']).to_string();
     let (_text, ended) = state.submit_active_conversation_keyword(&line);
-    if !ended {
-        if let Some(session) = state.active_conversation.as_ref() {
-            let prompt = session.prompt_message();
-            if !prompt.is_empty() {
-                // The reply is already on the transcript: the submit path
-                // ends in `emit_tlk_message`, which pushes the rendered
-                // lines *and* marks the slot flushed. Re-assigning the
-                // reply text here left the slot differing from the flushed
-                // value, so the safety-net flush appended it a second time
-                // and every answer printed twice - `Greyson` / `Greyson`,
-                // `I am an adventurer!` / `I am an adventurer!`. The slot
-                // only owes the prompt that follows the reply - and when the
-                // reply is held behind a pause, only once the hold is over.
-                state.set_message_after_text_hold(prompt);
-            }
+    if !ended && let Some(session) = state.active_conversation.as_ref() {
+        let prompt = session.prompt_message();
+        if !prompt.is_empty() {
+            // The reply is already on the transcript: the submit path
+            // ends in `emit_tlk_message`, which pushes the rendered
+            // lines *and* marks the slot flushed. Re-assigning the
+            // reply text here left the slot differing from the flushed
+            // value, so the safety-net flush appended it a second time
+            // and every answer printed twice - `Greyson` / `Greyson`,
+            // `I am an adventurer!` / `I am an adventurer!`. The slot
+            // only owes the prompt that follows the reply - and when the
+            // reply is held behind a pause, only once the hold is over.
+            state.set_message_after_text_hold(prompt);
         }
     }
     PlayInputDisposition::Continue
@@ -6604,7 +6615,7 @@ fn handle_endgame_key_input(
     if state.advance_endgame_greeting_page() {
         return Ok(PlayInputDisposition::Continue);
     }
-    let answer = parse_inline_yes_no(suffix).or_else(|| match key {
+    let answer = parse_inline_yes_no(suffix).or(match key {
         'Y' | 'y' => Some(true),
         'N' | 'n' => Some(false),
         _ => None,

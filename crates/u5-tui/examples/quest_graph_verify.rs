@@ -302,7 +302,7 @@ fn main() {
                     *spoken.entry(term.name).or_default() += 1;
                 }
             }
-            for pair in fields.get(5..).unwrap_or_default().chunks_exact(2) {
+            for pair in fields.get(5..).unwrap_or_default().as_chunks::<2>().0 {
                 keywords += 1;
                 for term in TERMS {
                     // The same four-character, case-folding compare the Talk

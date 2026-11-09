@@ -450,7 +450,7 @@ fn beacon_record_offsets(record: &[u8], index: usize) -> Option<usize> {
     let mut cells = [(0i8, 0i8); BEACON_STENCIL_MAX_OFFSETS];
     let mut length = 0usize;
     let mut padding_seen = false;
-    for pair in record.chunks_exact(2) {
+    for pair in record.as_chunks::<2>().0 {
         let dx = pair[0] as i8;
         let dy = pair[1] as i8;
         if (dx, dy) == (0, 0) {
@@ -485,7 +485,7 @@ pub fn parse_beacon_bearing_stencils(bytes: &[u8]) -> Option<BeaconBearingStenci
         let start = index * BEACON_STENCIL_RECORD_BYTES;
         let record = &bytes[start..start + BEACON_STENCIL_RECORD_BYTES];
         let length = beacon_record_offsets(record, index)?;
-        for (slot, pair) in record.chunks_exact(2).take(length).enumerate() {
+        for (slot, pair) in record.as_chunks::<2>().0.iter().take(length).enumerate() {
             table.offsets[index][slot] = (pair[0] as i8, pair[1] as i8);
         }
         table.lengths[index] = length as u8;

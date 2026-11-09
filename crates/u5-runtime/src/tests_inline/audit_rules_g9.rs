@@ -315,13 +315,13 @@ fn g9_dungeon_dat_s4_room_arena_arithmetic_and_doom_slot_fifteen_is_the_last_rec
     // arena_index = bank * 16 + (cell & 0x0F). Doom room fifteen selects the
     // final record of the arena file.
     for record in 0usize..8 {
-        let expected_bank = if record <= 1 { 0 } else { record - 1 };
+        let expected_bank = record.saturating_sub(1);
         assert_eq!(crate::tile_helpers::dungeon_arena_bank(record), expected_bank);
     }
     for scene_byte in 33u8..=40 {
         let scene = DungeonScene::new(scene_byte).unwrap();
         for slot in 0u8..16 {
-            let bank = if scene.record <= 1 { 0 } else { scene.record - 1 };
+            let bank = scene.record.saturating_sub(1);
             assert_eq!(
                 dungeon_room_arena_index(scene, 0xF0 | slot),
                 bank * 16 + usize::from(slot)
@@ -394,11 +394,11 @@ fn g9_tiles_s3_s4_row_strides_follow_the_depth_formulas() {
     for width in 1usize..=40 {
         assert_eq!(
             graphic_image_row_stride(width, TileGraphicsDepth::Ega16).unwrap(),
-            ((width + 7) / 8) * 4
+            width.div_ceil(8) * 4
         );
         assert_eq!(
             graphic_image_row_stride(width, TileGraphicsDepth::Cga4).unwrap(),
-            (width + 3) / 4
+            width.div_ceil(4)
         );
     }
 }
@@ -1080,7 +1080,7 @@ fn g9_town_mode_s7_2_poisoned_member_is_selectable_and_free() {
     // `town-mode.md §7.2`: "Any other status letter, Poisoned included, is
     // selectable", and a successful selection is free.
     let mut state = test_state(open_grid(), 5, 5);
-    state.party = g9_town_party(&[b'G', b'P']);
+    state.party = g9_town_party(b"GP");
     let turn = state.turn;
     state.set_active_player_command('2');
     assert_eq!(state.active_player, Some(1));
@@ -1114,7 +1114,7 @@ fn g9_town_mode_s7_2_zero_clears_the_selection_for_free() {
     // `town-mode.md §7.2`: `0` prints `None!`, clears the active player, and
     // is free.
     let mut state = test_state(open_grid(), 5, 5);
-    state.party = g9_town_party(&[b'G', b'G']);
+    state.party = g9_town_party(b"GG");
     state.active_player = Some(1);
     let turn = state.turn;
     state.set_active_player_command('0');
@@ -1208,7 +1208,7 @@ fn g9_commands_s11_shadowlord_names_only_in_the_three_flame_keeps() {
     for scene in 0u8..=255 {
         let expected = match scene {
             0 => Y::WordOfPower,
-            30 | 31 | 32 => Y::ShadowlordName,
+            30..=32 => Y::ShadowlordName,
             _ => Y::NoEffect,
         };
         assert_eq!(yell_input_context(scene), expected, "{scene}");

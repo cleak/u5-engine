@@ -551,7 +551,7 @@ pub fn play_script_state_line(state: &PlayState) -> String {
 }
 
 pub fn play_input_key_and_suffix(input: &str) -> Option<(char, String)> {
-    let input = input.trim_end_matches(|ch| ch == '\r' || ch == '\n');
+    let input = input.trim_end_matches(['\r', '\n']);
     if is_typeahead_toggle_token(input) {
         return Some((PLAY_TYPEAHEAD_TOGGLE_KEY, String::new()));
     }
@@ -578,7 +578,7 @@ pub fn play_input_key_and_suffix(input: &str) -> Option<(char, String)> {
 }
 
 pub fn play_input_typeahead_chars(input: &str) -> Option<Vec<char>> {
-    let input = input.trim_end_matches(|ch| ch == '\r' || ch == '\n');
+    let input = input.trim_end_matches(['\r', '\n']);
     if input.is_empty()
         || is_typeahead_toggle_token(input)
         || is_music_toggle_token(input)
@@ -867,24 +867,24 @@ pub fn handle_play_script_command(
             FreeTextLineInput::Discard => return Ok(PlayInputDisposition::Continue),
             FreeTextLineInput::Key => {}
         }
-    } else if play_state_typeahead_setting_in_force(state) {
-        if let Some(keys) = play_input_typeahead_chars(command) {
-            for key in keys {
-                if !play_state_honours_typeahead_queue(state) {
-                    break;
-                }
-                settle_play_script_exploration_gate(state, game_dir)?;
-                run_play_script_input_helper_entry(state);
-                let effects_before = state.sound_effect_serial;
-                if handle_play_key_input(state, key, "", game_dir)? == PlayInputDisposition::Quit {
-                    return Ok(PlayInputDisposition::Quit);
-                }
-                if key_flushed_typeahead(state, effects_before) {
-                    break;
-                }
+    } else if play_state_typeahead_setting_in_force(state)
+        && let Some(keys) = play_input_typeahead_chars(command)
+    {
+        for key in keys {
+            if !play_state_honours_typeahead_queue(state) {
+                break;
             }
-            return Ok(PlayInputDisposition::Continue);
+            settle_play_script_exploration_gate(state, game_dir)?;
+            run_play_script_input_helper_entry(state);
+            let effects_before = state.sound_effect_serial;
+            if handle_play_key_input(state, key, "", game_dir)? == PlayInputDisposition::Quit {
+                return Ok(PlayInputDisposition::Quit);
+            }
+            if key_flushed_typeahead(state, effects_before) {
+                break;
+            }
         }
+        return Ok(PlayInputDisposition::Continue);
     }
     if let Some(code) = play_script_direction_prompt_digit(state, command) {
         return handle_play_key_input(state, char::from(code), "", game_dir);
@@ -904,9 +904,7 @@ pub fn handle_play_script_command(
 /// as an arrow key typed at the terminal does. Digits anywhere else (a
 /// member picker, say) stay digits.
 fn play_script_direction_prompt_digit(state: &PlayState, command: &str) -> Option<u8> {
-    if state.active_direction_prompt.is_none() {
-        return None;
-    }
+    state.active_direction_prompt?;
     match command.as_bytes() {
         [digit @ b'1'..=b'9'] => u5_runtime::input_keypad_digit_direction_code(digit - b'0'),
         _ => None,

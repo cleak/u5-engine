@@ -97,14 +97,13 @@ impl PlayState {
     /// party-target spell under C-Cast (whose session keeps the 1-based
     /// indicator in its buffer, empty meaning the first member).
     fn use_target_selector_highlight(&self) -> Option<usize> {
-        if let Some(session) = self.active_use.as_ref() {
-            match session.pending {
-                Some(
-                    UsePendingAction::PotionTarget { highlight, .. }
-                    | UsePendingAction::ScrollResurrectionTarget { highlight, .. },
-                ) => return Some(highlight),
-                _ => {}
-            }
+        if let Some(session) = self.active_use.as_ref()
+            && let Some(
+                UsePendingAction::PotionTarget { highlight, .. }
+                | UsePendingAction::ScrollResurrectionTarget { highlight, .. },
+            ) = session.pending
+        {
+            return Some(highlight);
         }
         self.active_cast_followup
             .as_ref()
@@ -1677,16 +1676,15 @@ impl PlayState {
             // `combat.md §8` Z row: "for a party-side actor it opens that
             // character's own sheet" - the roster member behind the acting
             // descriptor, not the descriptor index (playtest S05).
-            if let Some(slot) = self.combat_acting_roster_slot() {
-                if slot < COMBAT_PARTY_ACTOR_SLOTS
-                    && self
-                        .party
-                        .get(slot)
-                        .copied()
-                        .is_some_and(PartyMember::living)
-                {
-                    return slot;
-                }
+            if let Some(slot) = self.combat_acting_roster_slot()
+                && slot < COMBAT_PARTY_ACTOR_SLOTS
+                && self
+                    .party
+                    .get(slot)
+                    .copied()
+                    .is_some_and(PartyMember::living)
+            {
+                return slot;
             }
             return self
                 .active_player
@@ -2401,10 +2399,9 @@ impl PlayState {
                     let nx = nx as u8;
                     let ny = ny as u8;
                     if let (Some((origin_x, origin_y)), Some(max_range)) = (range_origin, max_range)
+                        && combat_arena_range(origin_x, origin_y, nx, ny) > max_range
                     {
-                        if combat_arena_range(origin_x, origin_y, nx, ny) > max_range {
-                            continue;
-                        }
+                        continue;
                     }
                     session.kind = CastFollowupKind::CombatCoordinate {
                         x: nx,
@@ -2729,9 +2726,7 @@ impl PlayState {
     }
 
     pub fn step_active_mix(&mut self, key: char, suffix: &str) -> Option<MoveOutcome> {
-        let Some(mut session) = self.active_mix.take() else {
-            return None;
-        };
+        let mut session = self.active_mix.take()?;
         let had_suffix = !suffix.is_empty();
         for ch in std::iter::once(key).chain(suffix.chars()) {
             if let Some(outcome) = self.step_mix_session_char(&mut session, ch) {
@@ -2741,10 +2736,11 @@ impl PlayState {
         if had_suffix {
             if session.phase == MixPhase::Spell && !session.spell_buffer.is_empty() {
                 self.accept_mix_spell(&mut session);
-            } else if session.phase == MixPhase::Quantity && !session.quantity_buffer.is_empty() {
-                if let Some(outcome) = self.complete_mix_session(&mut session) {
-                    return Some(outcome);
-                }
+            } else if session.phase == MixPhase::Quantity
+                && !session.quantity_buffer.is_empty()
+                && let Some(outcome) = self.complete_mix_session(&mut session)
+            {
+                return Some(outcome);
             }
         }
         let rendered = self.render_mix_session(&session);
@@ -3098,9 +3094,7 @@ impl PlayState {
     }
 
     pub fn step_active_new_order(&mut self, key: char, suffix: &str) -> Option<MoveOutcome> {
-        let Some(mut session) = self.active_new_order.take() else {
-            return None;
-        };
+        let mut session = self.active_new_order.take()?;
         for ch in std::iter::once(key).chain(suffix.chars()) {
             match ch {
                 '\u{1b}' | ' ' => {
@@ -3162,9 +3156,7 @@ impl PlayState {
     }
 
     pub fn step_active_yell(&mut self, key: char, suffix: &str) -> Option<MoveOutcome> {
-        let Some(mut session) = self.active_yell.take() else {
-            return None;
-        };
+        let mut session = self.active_yell.take()?;
         // `commands.md §11` publishes two results for this prompt and neither
         // is a cancel: "Empty input prints the ordinary nothing-said result.
         // Nonempty input in this range prints the ordinary no-effect result."
@@ -3305,9 +3297,7 @@ impl PlayState {
     }
 
     pub fn step_active_wishing_well(&mut self, key: char, suffix: &str) -> Option<MoveOutcome> {
-        let Some(mut session) = self.active_wishing_well.take() else {
-            return None;
-        };
+        let mut session = self.active_wishing_well.take()?;
         if !session.coin_accepted {
             for ch in std::iter::once(key).chain(suffix.chars()) {
                 match ch.to_ascii_uppercase() {
@@ -3441,9 +3431,9 @@ impl PlayState {
     /// `magic.md §6` (corrected 2026-10-25, u5-spec#302 Q1, R621): "the
     /// mixer itself adds no game time ... The command is not free, though"
     /// - M-Mix reports "acted" on every exit, so the overworld and town
-    /// epilogue runs once when its last prompt closes. Nothing is charged
-    /// while the mixer session is still open; the dungeon charges its own
-    /// acted letters ([`Self::charge_tile_command_acted_exit`]).
+    ///   epilogue runs once when its last prompt closes. Nothing is charged
+    ///   while the mixer session is still open; the dungeon charges its own
+    ///   acted letters ([`Self::charge_tile_command_acted_exit`]).
     pub fn charge_mix_command_acted_exit(&mut self, turn_before: u64) {
         if self.active_mix.is_some() {
             return;
@@ -3971,38 +3961,37 @@ impl PlayState {
             } = session.kind
             {
                 let mut selected_member_now = false;
-                if party_index.is_none() {
-                    if let Some(digit) = ch.to_digit(10) {
-                        let index = digit.saturating_sub(1) as usize;
-                        if index < self.party.len() {
-                            // The member prompt consumed this key; the
-                            // relative-focus prompt reads the next one,
-                            // even though both accept digits.
-                            selected_member_now = true;
-                            // `§12` step 2: the lighting gate sits between
-                            // the member pick and the `Dir-` chooser.
-                            let lit = self.has_personal_light();
-                            if self.accept_dungeon_acting_member_then(index, lit) {
-                                if !lit {
-                                    self.emit_message_line(DUNGEON_LOOK_DARKNESS_REFUSAL);
-                                    return Ok(Some(MoveOutcome::Observed));
-                                }
-                                party_index = Some(index);
-                                session.kind =
-                                    DirectionPromptKind::DungeonLook { party_index, drink };
+                if party_index.is_none()
+                    && let Some(digit) = ch.to_digit(10)
+                {
+                    let index = digit.saturating_sub(1) as usize;
+                    if index < self.party.len() {
+                        // The member prompt consumed this key; the
+                        // relative-focus prompt reads the next one,
+                        // even though both accept digits.
+                        selected_member_now = true;
+                        // `§12` step 2: the lighting gate sits between
+                        // the member pick and the `Dir-` chooser.
+                        let lit = self.has_personal_light();
+                        if self.accept_dungeon_acting_member_then(index, lit) {
+                            if !lit {
+                                self.emit_message_line(DUNGEON_LOOK_DARKNESS_REFUSAL);
+                                return Ok(Some(MoveOutcome::Observed));
                             }
+                            party_index = Some(index);
+                            session.kind = DirectionPromptKind::DungeonLook { party_index, drink };
                         }
                     }
                 }
-                if let Some(index) = party_index.filter(|_| !selected_member_now) {
-                    if let Some(focus) = dungeon_chooser_focus_from_key(ch) {
-                        self.complete_dungeon_direction_echo(focus);
-                        return Ok(Some(self.look_dungeon_with_focus(
-                            drink,
-                            Some(index),
-                            focus,
-                        )));
-                    }
+                if let Some(index) = party_index.filter(|_| !selected_member_now)
+                    && let Some(focus) = dungeon_chooser_focus_from_key(ch)
+                {
+                    self.complete_dungeon_direction_echo(focus);
+                    return Ok(Some(self.look_dungeon_with_focus(
+                        drink,
+                        Some(index),
+                        focus,
+                    )));
                 }
                 continue;
             }
@@ -4019,15 +4008,15 @@ impl PlayState {
             }
             if let DirectionPromptKind::DungeonSearch { mut party_index } = session.kind {
                 let mut selected_member_now = false;
-                if party_index.is_none() {
-                    if let Some(digit) = ch.to_digit(10) {
-                        let index = digit.saturating_sub(1) as usize;
-                        if index < self.party.len() {
-                            selected_member_now = true;
-                            if self.accept_dungeon_acting_member(index) {
-                                party_index = Some(index);
-                                session.kind = DirectionPromptKind::DungeonSearch { party_index };
-                            }
+                if party_index.is_none()
+                    && let Some(digit) = ch.to_digit(10)
+                {
+                    let index = digit.saturating_sub(1) as usize;
+                    if index < self.party.len() {
+                        selected_member_now = true;
+                        if self.accept_dungeon_acting_member(index) {
+                            party_index = Some(index);
+                            session.kind = DirectionPromptKind::DungeonSearch { party_index };
                         }
                     }
                 }
@@ -5729,21 +5718,8 @@ impl PlayState {
             .iter()
             .copied()
             .enumerate()
-            .filter_map(|(index, count)| {
-                // `inventory.md §4.7`: "The party-wide inventory pages use the
-                // same eight-row frame and row renderer as the R-Ready
-                // picker", so a charge is §4.5's counted row - quantity,
-                // selector, name - not an invented `Name: count` (playtest
-                // H43).
-                //
-                // §4.7 (added 2026-10-25, u5-spec#300 Q11): each row is
-                // `[count][-][label]` with the published ten-cell label, used
-                // verbatim (`_5-Grav Por`, `100-In Zu Grav`); no label exceeds
-                // ten cells, so no spell-charge row takes a second line. The
-                // engine showed the parser code while the labels were
-                // unpublished.
-                (count > 0).then(|| z_stats_counted_row(count, Z_STATS_SPELL_LABELS[index]))
-            })
+            .filter(|&(_, count)| count > 0)
+            .map(|(index, count)| z_stats_counted_row(count, Z_STATS_SPELL_LABELS[index]))
             .collect::<Vec<_>>()
     }
 
@@ -6275,14 +6251,14 @@ impl PlayState {
         // readiness at least one quarrel. The item-to-ammunition mapping
         // is owned by `ranged_weapon_required_ammo` so this gate and the
         // published helper cannot drift apart.
-        if let Some(ammo_id) = ranged_weapon_required_ammo(item_id as u8) {
-            if self.equipment_stock[usize::from(ammo_id)] == 0 {
-                // `inventory.md §5.2`: one line covers arrows and quarrels
-                // alike - "Required arrows or quarrels absent | `Thou hast no
-                // ammunition for that weapon!`".
-                self.message = self.ready_refusal(READY_NO_AMMUNITION_REFUSAL);
-                return MoveOutcome::Blocked;
-            }
+        if let Some(ammo_id) = ranged_weapon_required_ammo(item_id as u8)
+            && self.equipment_stock[usize::from(ammo_id)] == 0
+        {
+            // `inventory.md §5.2`: one line covers arrows and quarrels
+            // alike - "Required arrows or quarrels absent | `Thou hast no
+            // ammunition for that weapon!`".
+            self.message = self.ready_refusal(READY_NO_AMMUNITION_REFUSAL);
+            return MoveOutcome::Blocked;
         }
 
         let Some(slot) = self.ready_target_slot(item_id) else {
@@ -6303,11 +6279,11 @@ impl PlayState {
         // the weapon and off-hand slots have none - the two hand refusals
         // below cover them. The engine used to compose one sentence with the
         // slot name substituted, which only ever matched the helm.
-        if self.party_equipment[request.party_index][slot] != EQUIPMENT_EMPTY {
-            if let Some(refusal) = ready_occupied_slot_refusal(slot) {
-                self.message = self.ready_refusal(refusal);
-                return MoveOutcome::Blocked;
-            }
+        if self.party_equipment[request.party_index][slot] != EQUIPMENT_EMPTY
+            && let Some(refusal) = ready_occupied_slot_refusal(slot)
+        {
+            self.message = self.ready_refusal(refusal);
+            return MoveOutcome::Blocked;
         }
         // The hand slots instead take §5.2's "No hand available for a
         // one-handed item, including a two-handed weapon already held". A

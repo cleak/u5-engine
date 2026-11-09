@@ -45,18 +45,18 @@ impl Direction {
     }
 
     pub fn from_play_key(key: char) -> Option<Self> {
-        if let Some(byte) = input_byte_from_char(key) {
-            if let Some(direction) = crate::input_code_direction(byte) {
-                match direction {
-                    crate::InputDirection::North => return Some(Self::North),
-                    crate::InputDirection::South => return Some(Self::South),
-                    crate::InputDirection::East => return Some(Self::East),
-                    crate::InputDirection::West => return Some(Self::West),
-                    crate::InputDirection::Northwest => return Some(Self::NorthWest),
-                    crate::InputDirection::Northeast => return Some(Self::NorthEast),
-                    crate::InputDirection::Southwest => return Some(Self::SouthWest),
-                    crate::InputDirection::Southeast => return Some(Self::SouthEast),
-                }
+        if let Some(byte) = input_byte_from_char(key)
+            && let Some(direction) = crate::input_code_direction(byte)
+        {
+            match direction {
+                crate::InputDirection::North => return Some(Self::North),
+                crate::InputDirection::South => return Some(Self::South),
+                crate::InputDirection::East => return Some(Self::East),
+                crate::InputDirection::West => return Some(Self::West),
+                crate::InputDirection::Northwest => return Some(Self::NorthWest),
+                crate::InputDirection::Northeast => return Some(Self::NorthEast),
+                crate::InputDirection::Southwest => return Some(Self::SouthWest),
+                crate::InputDirection::Southeast => return Some(Self::SouthEast),
             }
         }
         match key.to_ascii_lowercase() {

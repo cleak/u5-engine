@@ -20,10 +20,6 @@ pub struct UseItemPickerRow {
     pub(crate) request: UseItemRequest,
 }
 
-/// `commands.md §5` + observation: the U-Use handler's message-window
-/// prompt, printed on the line after the `Use item` verb echo.
-pub const USE_ITEM_PROMPT_MESSAGE: &str = ITEM_SELECTION_PROMPT;
-
 /// `shops.md §2` "Transport gate": "After the schedule test passes, either
 /// horse transport marker causes the following fixed refusal, except for the
 /// horse-trader trigger". The two lines are published verbatim; the
@@ -741,13 +737,12 @@ impl PlayState {
                     index,
                     target: None,
                 } = row.request
+                    && let Some(slot) = self.combat_use_bound_party_member()
                 {
-                    if let Some(slot) = self.combat_use_bound_party_member() {
-                        row.request = UseItemRequest::Potion {
-                            index,
-                            target: Some(slot),
-                        };
-                    }
+                    row.request = UseItemRequest::Potion {
+                        index,
+                        target: Some(slot),
+                    };
                 }
                 // `inventory.md §7.1`: in dungeon exploration the Skull Key
                 // refuses `Not here!` with no `Direction-` prompt (its key
@@ -5319,7 +5314,7 @@ impl PlayState {
         if !stood_down
             && let Some(npc) = self.talk_record_at(target_x, target_y)
             && npc.type_byte == crate::tlk_control_codes::TALK_GUARD_SPRITE
-            && !crate::talk_guard_sprite_dispatches(npc.cached_wp, dialog_id as u8)
+            && !crate::talk_guard_sprite_dispatches(npc.cached_wp, dialog_id)
         {
             self.message = crate::talk_non_speaker_refusal_for_sprite(Some(
                 crate::tlk_control_codes::TALK_GUARD_SPRITE,
@@ -5569,7 +5564,7 @@ impl PlayState {
         if !stood_down
             && let Some(npc) = self.talk_record_at(target_x, target_y)
             && npc.type_byte == crate::tlk_control_codes::TALK_GUARD_SPRITE
-            && !crate::talk_guard_sprite_dispatches(npc.cached_wp, dialog_id as u8)
+            && !crate::talk_guard_sprite_dispatches(npc.cached_wp, dialog_id)
         {
             self.message = crate::talk_non_speaker_refusal_for_sprite(Some(
                 crate::tlk_control_codes::TALK_GUARD_SPRITE,
@@ -5641,37 +5636,37 @@ impl PlayState {
             _ => None,
         };
 
-        if keyword.is_none() {
-            if let Some(raw_fields) = raw_fields {
-                let session = crate::conversation_session::ConversationSession::new(
-                    raw_fields.clone(),
-                    fields.clone(),
-                );
-                self.active_conversation = Some(Box::new(session));
-                self.active_conversation_npc_slot = conversation_npc_slot;
-                // `conversation.md §7.6` / §10: the branch-flag bit `0x8C`
-                // tests and `0x88` sets is the speaking NPC's roster slot,
-                // supplied by the engine and never by the script.
-                let npc_slot = self.active_conversation_npc_slot.map(|slot| slot as u8);
-                if let Some(session) = self.active_conversation.as_mut() {
-                    session.set_npc_slot(npc_slot);
-                }
-                let (rendered, suspended) = self.active_conversation_opening_rendered();
-                let (opening, theft) = self.finish_conversation_opening(&rendered, suspended);
-                self.emit_tlk_message(opening);
-                self.emit_falsehood_theft_sound_after_line(theft);
-                // `town-mode.md §7` step 4: the epilogue runs "When the
-                // dispatcher returns", and the Talk dispatcher runs the whole
-                // conversation (`conversation.md §2`). A conversation still
-                // open owes its turn to the moment it closes (playtest
-                // P14-10); one that stopped in its opening spends it now.
-                if self.active_conversation.is_some() {
-                    self.pending_talk_conversation_turn = !self.talk_entered_by_contact;
-                } else {
-                    self.advance_talk_turn();
-                }
-                return MoveOutcome::Talked;
+        if keyword.is_none()
+            && let Some(raw_fields) = raw_fields
+        {
+            let session = crate::conversation_session::ConversationSession::new(
+                raw_fields.clone(),
+                fields.clone(),
+            );
+            self.active_conversation = Some(Box::new(session));
+            self.active_conversation_npc_slot = conversation_npc_slot;
+            // `conversation.md §7.6` / §10: the branch-flag bit `0x8C`
+            // tests and `0x88` sets is the speaking NPC's roster slot,
+            // supplied by the engine and never by the script.
+            let npc_slot = self.active_conversation_npc_slot.map(|slot| slot as u8);
+            if let Some(session) = self.active_conversation.as_mut() {
+                session.set_npc_slot(npc_slot);
             }
+            let (rendered, suspended) = self.active_conversation_opening_rendered();
+            let (opening, theft) = self.finish_conversation_opening(&rendered, suspended);
+            self.emit_tlk_message(opening);
+            self.emit_falsehood_theft_sound_after_line(theft);
+            // `town-mode.md §7` step 4: the epilogue runs "When the
+            // dispatcher returns", and the Talk dispatcher runs the whole
+            // conversation (`conversation.md §2`). A conversation still
+            // open owes its turn to the moment it closes (playtest
+            // P14-10); one that stopped in its opening spends it now.
+            if self.active_conversation.is_some() {
+                self.pending_talk_conversation_turn = !self.talk_entered_by_contact;
+            } else {
+                self.advance_talk_turn();
+            }
+            return MoveOutcome::Talked;
         }
         self.advance_talk_turn();
 
@@ -5822,7 +5817,7 @@ impl PlayState {
                 fields
                     .get(2)
                     .filter(|greeting| !greeting.is_empty())
-                    .map(String::clone)
+                    .cloned()
                     .unwrap_or_else(|| "...".to_string())
             };
             let (legacy_text, legacy_actions) = talk_response_text_and_actions(&greeting_text);
@@ -5846,66 +5841,66 @@ impl PlayState {
         family: Option<&str>,
         shoppe_renderer: Option<&crate::shoppe_bark::ShoppeTextRenderer>,
     ) -> String {
-        if crate::shoppe_records::talk_entry_uses_shared_preamble(dialog_id) {
-            if let Some(renderer) = shoppe_renderer {
-                let ordinal = self.random_range_u8(0, 3);
-                if let Some(record_id) = crate::shoppe_records::shared_shop_bark_record(
-                    dialog_id,
-                    crate::shoppe_records::SharedShopBarkKind::Preamble,
-                    ordinal,
-                ) {
-                    // `shops.md §4.1` / `§8.0`: `#` takes the shop's display
-                    // name and `$` takes the *vendor's* name. They are two
-                    // different resident tables sharing one shop-instance
-                    // row, so the shop label must not stand in for the
-                    // shopkeeper.
-                    let label = session.shop_label();
-                    let scene_byte = match self.area {
-                        Area::Town { scene, .. } => Some(scene.byte),
-                        _ => None,
-                    };
-                    let vendor = scene_byte
-                        .and_then(|scene| shop_vendor_name_for_scene(dialog_id, scene))
-                        .unwrap_or(label);
-                    let ctx = crate::shoppe_bark::ShoppeBarkContext {
-                        vendor_name: vendor,
-                        shop_name: label,
-                        hour: self.clock.hour,
-                        ..Default::default()
-                    };
-                    if let Ok(rendered) = renderer.render_record(record_id, &ctx) {
-                        // `shops.md §8.B`: "**All seven non-arms entries**
-                        // first emit an opening double quote, render one
-                        // record from their shared entry row, then place the
-                        // input continuation according to the resulting
-                        // window-local cursor column ... The record supplies
-                        // the greeting/question and its closing quote."
-                        //
-                        // The engine printed the record bare: Cove's healer
-                        // opened `I bid thee welcome` where the stock game
-                        // opened `"I bid thee welcome`, and its answer row
-                        // never appeared at all.
-                        // `shops.md §8.0`: the Talk dispatcher "first emits
-                        // the same conversation entry newline used for all
-                        // Talk dispatches" before handing control to the shop
-                        // overlay, so the greeting opens a row below the
-                        // command echo the way a conversation reply does.
-                        let greeting = format!("\n\"{rendered}");
-                        let continuation = crate::shoppe_records::shop_entry_input_continuation(
-                            crate::wrapped_final_row_columns(&greeting),
-                        );
-                        let rendered = format!("{greeting}{continuation}");
-                        // Measured 2026-09-07/08 at four shops - the Paws
-                        // tavern, the North Britanny inn, Cove's healer and
-                        // Cove's herbalist (`qa/paired/paws-tavern.tsv`,
-                        // `nb-inn.tsv`, `cove-healer.tsv`,
-                        // `cove-herbalist.tsv`): entry prints the greeting
-                        // record and nothing else, and the shop then waits on
-                        // a `:` row where `Y` echoes as `:Yes`. The engine
-                        // used to append an invented key summary
-                        // (`Rest (R), Leave (L), Pick up (P), or Space.`).
-                        return rendered;
-                    }
+        if crate::shoppe_records::talk_entry_uses_shared_preamble(dialog_id)
+            && let Some(renderer) = shoppe_renderer
+        {
+            let ordinal = self.random_range_u8(0, 3);
+            if let Some(record_id) = crate::shoppe_records::shared_shop_bark_record(
+                dialog_id,
+                crate::shoppe_records::SharedShopBarkKind::Preamble,
+                ordinal,
+            ) {
+                // `shops.md §4.1` / `§8.0`: `#` takes the shop's display
+                // name and `$` takes the *vendor's* name. They are two
+                // different resident tables sharing one shop-instance
+                // row, so the shop label must not stand in for the
+                // shopkeeper.
+                let label = session.shop_label();
+                let scene_byte = match self.area {
+                    Area::Town { scene, .. } => Some(scene.byte),
+                    _ => None,
+                };
+                let vendor = scene_byte
+                    .and_then(|scene| shop_vendor_name_for_scene(dialog_id, scene))
+                    .unwrap_or(label);
+                let ctx = crate::shoppe_bark::ShoppeBarkContext {
+                    vendor_name: vendor,
+                    shop_name: label,
+                    hour: self.clock.hour,
+                    ..Default::default()
+                };
+                if let Ok(rendered) = renderer.render_record(record_id, &ctx) {
+                    // `shops.md §8.B`: "**All seven non-arms entries**
+                    // first emit an opening double quote, render one
+                    // record from their shared entry row, then place the
+                    // input continuation according to the resulting
+                    // window-local cursor column ... The record supplies
+                    // the greeting/question and its closing quote."
+                    //
+                    // The engine printed the record bare: Cove's healer
+                    // opened `I bid thee welcome` where the stock game
+                    // opened `"I bid thee welcome`, and its answer row
+                    // never appeared at all.
+                    // `shops.md §8.0`: the Talk dispatcher "first emits
+                    // the same conversation entry newline used for all
+                    // Talk dispatches" before handing control to the shop
+                    // overlay, so the greeting opens a row below the
+                    // command echo the way a conversation reply does.
+                    let greeting = format!("\n\"{rendered}");
+                    let continuation = crate::shoppe_records::shop_entry_input_continuation(
+                        crate::wrapped_final_row_columns(&greeting),
+                    );
+                    let rendered = format!("{greeting}{continuation}");
+                    // Measured 2026-09-07/08 at four shops - the Paws
+                    // tavern, the North Britanny inn, Cove's healer and
+                    // Cove's herbalist (`qa/paired/paws-tavern.tsv`,
+                    // `nb-inn.tsv`, `cove-healer.tsv`,
+                    // `cove-herbalist.tsv`): entry prints the greeting
+                    // record and nothing else, and the shop then waits on
+                    // a `:` row where `Y` echoes as `:Yes`. The engine
+                    // used to append an invented key summary
+                    // (`Rest (R), Leave (L), Pick up (P), or Space.`).
+                    return rendered;
                 }
             }
         }
@@ -6650,7 +6645,7 @@ impl PlayState {
                     .get(index)
                     .copied()
                     .or_else(|| previous.as_ref().map(|record| record.strength))
-                    .unwrap_or_else(|| {
+                    .unwrap_or({
                         if index == 0 {
                             self.avatar_stats.strength
                         } else {
@@ -6662,7 +6657,7 @@ impl PlayState {
                     .get(index)
                     .copied()
                     .or_else(|| previous.as_ref().map(|record| record.intelligence))
-                    .unwrap_or_else(|| {
+                    .unwrap_or({
                         if index == 0 {
                             self.avatar_stats.intelligence
                         } else {
@@ -6910,6 +6905,9 @@ impl PlayState {
         // `prng.md §3`: this sample precedes inventory inspection even when
         // the selected branch below is a deterministic high-to-low scan.
         self.prng_state = host_seed;
+        // The empty arms are a priority chain: each condition takes one
+        // item from the first stock that has one, and the chain stops there.
+        #[allow(clippy::if_same_then_else)]
         if self.keys != 0 || self.gems != 0 || self.torches != 0 {
             // `conversation.md §10` item 1 (u5-spec#304 Q3): "one draw from
             // the inclusive range `0..2`: `0` picks keys, `1` gems, `2`
@@ -7566,7 +7564,7 @@ const SURFACE_VIEW_MARKER_XOR_PEN: u8 = 15;
 /// erases it for polls 4..=7, the eighth restores it, and so on. (A
 /// frontend with no wait loop never polls and so shows it steadily.)
 const fn surface_view_marker_visible(idle_polls: u32) -> bool {
-    (idle_polls / 4) % 2 == 0
+    (idle_polls / 4).is_multiple_of(2)
 }
 
 fn draw_surface_view_cell(

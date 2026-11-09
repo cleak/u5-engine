@@ -142,7 +142,7 @@ fn playfix_f18_saved_slot_warp_keeps_the_horse_or_carpet() {
         assert_eq!(state.player.transport, transport);
         let slot_zero = state.active_objects[0];
         assert_eq!(
-            (slot_zero.x as usize, slot_zero.y as usize),
+            (slot_zero.x, slot_zero.y),
             (6, 7),
             "slot zero follows the party"
         );

@@ -41,20 +41,16 @@ pub const TEXT_SCREEN_ROWS: u8 = 25;
 /// window twenty-seven characters before a forced wrap. That is
 /// withdrawn — twenty-eight fit. `RETRACTIONS.md` R344.)*
 pub const fn text_window_inner_width(top_left_x: u8, bottom_right_x: u8) -> u8 {
-    if bottom_right_x > top_left_x {
-        bottom_right_x - top_left_x
-    } else {
-        0
-    }
+    bottom_right_x.saturating_sub(top_left_x)
 }
 
 /// `text-output.md §4` text-window **capacity** in cells:
 /// "A window's **capacity** in cells is `bottom_right_x - top_left_x
 /// + 1`: both corner columns are inclusive, so the trailing column is
-/// usable and a glyph is written into it normally. A window whose
-/// corners are columns 6 and 33 therefore holds **twenty-eight**
-/// characters on one row, and the twenty-ninth is what forces the
-/// wrap."
+///   usable and a glyph is written into it normally. A window whose
+///   corners are columns 6 and 33 therefore holds **twenty-eight**
+///   characters on one row, and the twenty-ninth is what forces the
+///   wrap."
 ///
 /// This is the figure the wrap-aware printer accepts on a row and the
 /// figure the per-cell emitter writes before wrapping — §6: "The
@@ -167,7 +163,7 @@ pub const fn text_window_clamp_rectangle(
 /// - cursor `(0, 0)` (window-local);
 /// - colour foreground 15 (bright white) on background 0 (black);
 /// - all style flags cleared.
-/// The active window is index 0.
+///   The active window is index 0.
 pub const TEXT_WINDOW_DEFAULT_FOREGROUND: u8 = 15;
 pub const TEXT_WINDOW_DEFAULT_BACKGROUND: u8 = 0;
 pub const TEXT_WINDOW_DEFAULT_ACTIVE_INDEX: u8 = 0;

@@ -309,8 +309,8 @@ pub const fn banner_sail_row_swap_gates(gate_bit: bool) -> BannerSailRowSwapGate
 /// exchanges. **`§12.5` does not publish which rows they are** - it says
 /// only that the stage "swaps row pairs within the banner and sail tiles"
 /// - so this engine refuses to bake a geometry in and takes them from the
-/// caller instead. Everything `§12.5` does establish is here: the id set,
-/// the two-swap shape, and the shared gate.
+///   caller instead. Everything `§12.5` does establish is here: the id set,
+///   the two-swap shape, and the shared gate.
 ///
 /// Returns `None` unless `pixels` is exactly one tile and both pairs are
 /// in range.

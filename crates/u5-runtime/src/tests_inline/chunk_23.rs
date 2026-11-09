@@ -4072,7 +4072,7 @@ fn combat_hit_helper_reproduces_the_published_per_score_hit_table() {
         );
         assert_eq!(
             hits as f64,
-            f64::from(2 * (30 - i32::from(score as i16)) + 1),
+            f64::from(2 * (30 - i32::from(score)) + 1),
             "score {score} must match `(2 * (30 - S) + 1) / 61`"
         );
     }
@@ -11467,7 +11467,7 @@ fn combat_jimmy_restraint_reads_the_linked_roster_members_dexterity() {
     let mut state = combat_player_command_state(10, 10);
     assert_ne!(state.combat_actors[0].flags, 0);
     state.combat_actors[0].owner_target_class = 1;
-    let second = state.party[0].clone();
+    let second = state.party[0];
     state.party.push(second);
     state.keys = 1;
     state.party[0].climb_stat = 0;
@@ -21706,7 +21706,7 @@ fn dungeon_room_special_ids_7_8_13_15_draw_eight_ways_for_one_through_eight() {
 /// prompt pair is suppressed only after a hoisted direction that keeps the
 /// facing and is not refused - an accepted step or a calm-wind silent consume
 /// - and a course change is followed by an ordinary prompt pair. A furled
-/// ship, like a party on foot, never touches the flag."
+///   ship, like a party on foot, never touches the flag."
 #[test]
 fn overworld_prompt_pair_is_suppressed_once_after_a_shipboard_direction() {
     fn frigate_state(sails_hoisted: bool) -> PlayState {

@@ -121,11 +121,11 @@ fn surface_container_trap_cleanup_finds_the_packed_descriptor_of_the_dying_membe
         aux1: 0,
         aux3: 0,
     });
-    let template = state.party[0].clone();
+    let template = state.party[0];
     state.party.truncate(1);
     state.party.push(PartyMember {
         slot: 1,
-        ..template.clone()
+        ..template
     });
     state.party.push(PartyMember {
         slot: 2,

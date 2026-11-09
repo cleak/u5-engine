@@ -179,7 +179,7 @@ fn ag8_lighting_s5_decay_is_saturating_subtraction() {
     // Counters never underflow or wrap."
     for counter in 0..=u8::MAX {
         for increment in [0u8, 1, 2, 9, 10, 60, 255] {
-            let expected = if counter > increment { counter - increment } else { 0 };
+            let expected = counter.saturating_sub(increment);
             assert_eq!(decay_light_counter(counter, increment), expected);
         }
     }
@@ -340,7 +340,7 @@ fn ag8_rest_s5_camp_mp_write_is_an_assignment_that_can_lower_mp() {
     state.avatar_stats.intelligence = 12;
     state.party_intelligence = vec![12, 20, 20];
 
-    state.apply_completed_long_camp_recovery(8, None, &[b'G', b'G', b'G']);
+    state.apply_completed_long_camp_recovery(8, None, b"GGG");
 
     assert_eq!(state.party[0].mana, 12);
     assert_eq!(state.party[1].mana, 20);
@@ -360,7 +360,7 @@ fn ag8_rest_s5_member_poisoned_during_the_camp_still_recovers_and_stays_poisoned
     ];
     state.normalize_party_progress_vectors();
 
-    state.apply_completed_long_camp_recovery(8, None, &[b'G', b'P']);
+    state.apply_completed_long_camp_recovery(8, None, b"GP");
 
     assert!(state.party[0].hp >= 2 && state.party[0].hp <= 64);
     assert_eq!(state.party[0].status, b'P');
@@ -385,7 +385,7 @@ fn ag8_rest_s5_hp_gain_is_one_to_sixty_three_capped_at_maximum() {
         let first = u5_prng_range_u16(&mut expected, 1, 63);
         let second = u5_prng_range_u16(&mut expected, 1, 63);
 
-        state.apply_completed_long_camp_recovery(6, None, &[b'G', b'G']);
+        state.apply_completed_long_camp_recovery(6, None, b"GG");
 
         assert_eq!(state.party[0].hp, 10 + first);
         assert_eq!(state.party[1].hp, 10 + second);
@@ -395,7 +395,7 @@ fn ag8_rest_s5_hp_gain_is_one_to_sixty_three_capped_at_maximum() {
     capped.camp_cooldown = 0;
     capped.party = vec![ag8_member(0, b'F', b'G', 20, 79, 80, 0)];
     capped.normalize_party_progress_vectors();
-    capped.apply_completed_long_camp_recovery(9, None, &[b'G']);
+    capped.apply_completed_long_camp_recovery(9, None, b"G");
     assert_eq!(capped.party[0].hp, 80);
 }
 
@@ -412,7 +412,7 @@ fn ag8_rest_s6_sleep_ambush_restores_entry_statuses_without_curing_or_reviving()
         ag8_member(2, b'F', b'G', 20, 30, 30, 0),
         ag8_member(3, b'F', b'D', 20, 0, 30, 0),
     ];
-    let restored = state.restore_sleep_ambush_party_statuses(&[b'G', b'P', b'G', b'G']);
+    let restored = state.restore_sleep_ambush_party_statuses(b"GPGG");
     assert_eq!(state.party[0].status, b'G');
     assert_eq!(state.party[1].status, b'P');
     assert_eq!(state.party[2].status, b'G');

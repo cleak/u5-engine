@@ -761,7 +761,7 @@
     #[test]
     fn cast_rel_hur_by_a_second_member_still_prompts_for_its_direction() {
         let mut state = britannia_state(open_world_grid(), 5, 5);
-        let mut second = state.party[0].clone();
+        let mut second = state.party[0];
         second.slot = 1;
         state.party.push(second);
         state.spell_charges[REL_HUR_SPELL_INDEX] = 2;

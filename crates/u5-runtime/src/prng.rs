@@ -7,7 +7,7 @@ use chrono::{Local, Timelike};
 ///   2. rotate right by `PRNG_STATE_ROTATE_BITS`
 ///   3. XOR with `PRNG_STATE_ADD`
 ///   4. `wrapping_add(PRNG_STATE_FINAL_BIAS)`
-/// Result becomes the new 16-bit state word.
+///      Result becomes the new 16-bit state word.
 pub const PRNG_STATE_ADD: u16 = 0x9248;
 pub const PRNG_STATE_ROTATE_BITS: u32 = 3;
 pub const PRNG_STATE_FINAL_BIAS: u16 = 0x0011;

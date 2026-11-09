@@ -477,7 +477,7 @@ pub fn parse_dungeon_chest_content_entries(
             })?)
         };
         let mut grants = Vec::new();
-        for pair in parts[5..].chunks_exact(2) {
+        for pair in parts[5..].as_chunks::<2>().0 {
             let grant =
                 parse_tile_get_grant(DUNGEON_CHEST_TABLE_FILE, line_number, pair[0], pair[1])?;
             if grants

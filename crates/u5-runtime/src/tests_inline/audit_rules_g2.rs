@@ -189,7 +189,7 @@ fn g2_tlk_s4_blob_load_is_a_fixed_1024_byte_window() {
     bytes.extend_from_slice(&1u16.to_le_bytes());
     bytes.extend_from_slice(&6u16.to_le_bytes());
     // One unterminated run of 1100 text bytes, then its NUL.
-    bytes.extend(std::iter::repeat(b'A' ^ TLK_TEXT_XOR_MASK).take(1100));
+    bytes.extend(std::iter::repeat_n(b'A' ^ TLK_TEXT_XOR_MASK, 1100));
     bytes.push(0);
 
     let raw = parse_tlk_blob_fields_raw(&bytes).unwrap();

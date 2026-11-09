@@ -751,11 +751,10 @@ fn world_enter_existing_table_without_matching_coordinate_consumes_world_action(
     let mut state = britannia_state(grid, 10, 20);
     state.debug_enter = Some(PlayTarget::Town(Scene::new(17).unwrap()));
 
-    assert_eq!(
+    assert!(
         state
             .handle_top_down_key_with_inline('E', &dir, None, None, None, None)
-            .unwrap(),
-        true
+            .unwrap()
     );
 
     assert_eq!(
@@ -1439,9 +1438,11 @@ fn stonegate_load_appends_entry_presentation_notes() {
     fs::write(dir.join("KEEP.DAT"), location_pages()).unwrap();
     fs::write(dir.join("KEEP.NPC"), vec![0; (scene.block + 1) * 576]).unwrap();
     fs::write(dir.join("KEEP.TLK"), [0, 0]).unwrap();
-    let mut options = PlayOptions::default();
-    options.target = PlayTarget::Town(scene);
-    options.start = Some((1, 1));
+    let mut options = PlayOptions {
+        target: PlayTarget::Town(scene),
+        start: Some((1, 1)),
+        ..PlayOptions::default()
+    };
     options.special_items[SPECIAL_ITEM_SCEPTRE_LB_INDEX] = SPECIAL_ITEM_OWNED_VALUE;
     options.shadowlord_hideouts = [SHADOWLORD_VANQUISHED, 2, SHADOWLORD_VANQUISHED];
 
@@ -1469,11 +1470,13 @@ fn town_entry_installs_living_shadowlord_for_matching_fresh_scene() {
     fs::write(dir.join("TOWNE.DAT"), open_grid()).unwrap();
     fs::write(dir.join("TOWNE.NPC"), vec![0; (scene.block + 1) * 576]).unwrap();
     fs::write(dir.join("TOWNE.TLK"), [0, 0]).unwrap();
-    let mut options = PlayOptions::default();
-    options.target = PlayTarget::Town(scene);
-    options.start = Some((5, 5));
-    options.shadowlord_hideouts = [1, SHADOWLORD_VANQUISHED, SHADOWLORD_VANQUISHED];
-    options.saved_active_objects = None;
+    let options = PlayOptions {
+        target: PlayTarget::Town(scene),
+        start: Some((5, 5)),
+        shadowlord_hideouts: [1, SHADOWLORD_VANQUISHED, SHADOWLORD_VANQUISHED],
+        saved_active_objects: None,
+        ..PlayOptions::default()
+    };
 
     let state = PlayState::load_town_scene(&dir, scene, options).unwrap();
 
@@ -1525,11 +1528,13 @@ fn town_entry_preserving_reentry_records_host_without_duplicate_shadowlord_actor
         aux1: 0,
         aux3: 0,
     };
-    let mut options = PlayOptions::default();
-    options.target = PlayTarget::Town(scene);
-    options.start = Some((5, 5));
-    options.shadowlord_hideouts = [1, SHADOWLORD_VANQUISHED, SHADOWLORD_VANQUISHED];
-    options.saved_active_objects = Some(vec![existing]);
+    let options = PlayOptions {
+        target: PlayTarget::Town(scene),
+        start: Some((5, 5)),
+        shadowlord_hideouts: [1, SHADOWLORD_VANQUISHED, SHADOWLORD_VANQUISHED],
+        saved_active_objects: Some(vec![existing]),
+        ..PlayOptions::default()
+    };
 
     let state = PlayState::load_town_scene(&dir, scene, options).unwrap();
 

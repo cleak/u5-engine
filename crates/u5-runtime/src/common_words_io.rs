@@ -251,9 +251,9 @@ pub fn common_word_dictionary_refs(
     array::from_fn(|index| dictionary[index].as_str())
 }
 
-pub fn common_word_dictionary_refs_or_published<'a>(
-    dictionary: Option<&'a CommonWordDictionary>,
-) -> [&'a str; COMMON_WORD_DICTIONARY_ENTRIES] {
+pub fn common_word_dictionary_refs_or_published(
+    dictionary: Option<&CommonWordDictionary>,
+) -> [&str; COMMON_WORD_DICTIONARY_ENTRIES] {
     match dictionary {
         Some(dictionary) => common_word_dictionary_refs(dictionary),
         None => PUBLISHED_COMMON_WORD_DICTIONARY,

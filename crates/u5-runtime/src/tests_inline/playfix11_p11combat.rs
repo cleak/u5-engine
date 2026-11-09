@@ -270,15 +270,13 @@ fn spec302_q5_dragged_under_turns_play_the_argh_and_release_rumbles() {
             &[SoundEffect::CombatDraggedUnderRumble]
         };
         let dragged: Vec<SoundEffect> = sounds
-            .iter()
-            .cloned()
-            .filter(|effect| {
+            .iter().filter(|&effect| {
                 matches!(
                     effect,
                     SoundEffect::CombatDraggedUnderRumble
                         | SoundEffect::CombatDraggedUnderReleaseRumble
                 )
-            })
+            }).cloned()
             .collect();
         assert_eq!(dragged, expected, "seed {seed}: {sounds:?}");
     }

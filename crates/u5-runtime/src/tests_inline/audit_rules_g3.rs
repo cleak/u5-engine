@@ -602,7 +602,7 @@ fn g3_traps_s4_surface_combat_cleanup_stamps_a_corpse_and_clears_the_hint() {
     let mut alive = combat_player_command_state(8, 5);
     alive.active_player = Some(0);
     let linked = usize::from(alive.combat_actors[0].active_object_slot);
-    let object_before = alive.active_objects[linked].clone();
+    let object_before = alive.active_objects[linked];
     alive.apply_surface_container_trap_combat_cleanup(0);
     assert!(!alive.combat_actors[0].is_marked_dead());
     assert_eq!(alive.active_objects[linked], object_before);
@@ -953,7 +953,7 @@ fn g3_audio_s8_10_terrain_classifiers_match_the_published_tiles() {
     // Clock tick-tock: 3 units at 3000 / 2000 Hz.
     let tick = crate::audio::SoundEffect::AmbientClockTick { residue: 0 }.program(&mut j);
     assert_eq!(tick.frequencies(), vec![3000]);
-    assert_eq!(tick.ops[0].nanos(true) >= crate::audio::calibrated_nanos(3), true);
+    assert!(tick.ops[0].nanos(true) >= crate::audio::calibrated_nanos(3));
     let silent = crate::audio::SoundEffect::AmbientClockTick { residue: 2 }.program(&mut j);
     assert_eq!(silent.tone_count(), 0);
 }

@@ -479,7 +479,7 @@
 
         let viewport = state.render_top_down_frame(5, &atlas).unwrap().unwrap();
 
-        assert!(!viewport.pixels.iter().any(|&pixel| pixel == 13));
+        assert!(!viewport.pixels.contains(&13));
     }
 
     #[test]
@@ -627,7 +627,7 @@
         ];
         state.prng_state = 0;
         let mut expected_prng = state.prng_state;
-        let expected_damage = u5_prng_range_u16(&mut expected_prng, 0, 7) as u16;
+        let expected_damage = u5_prng_range_u16(&mut expected_prng, 0, 7);
 
         assert_eq!(
             state.look_dungeon_with_drink(Some(true), Some(1)),
@@ -1399,7 +1399,6 @@
     #[test]
     fn surface_view_overlay_audit_masks_cover_public_class_contracts() {
         let gem = ViewOverlayMode::GemView;
-        let solid_2 = [[2, 2, 2, 2]; 4];
 
         assert_eq!(surface_view_audit_mask(0x00, 0x00, gem), [[0; 4]; 4]);
         assert_eq!(
@@ -4245,7 +4244,7 @@
 
         for y in 0..16 {
             for x in 0..16 {
-                let expected = if x < 2 || x >= 14 || y < 2 || y >= 14 {
+                let expected = if !(2..14).contains(&x) || !(2..14).contains(&y) {
                     15
                 } else {
                     5
@@ -4289,7 +4288,7 @@
         let rgba = viewport.to_rgba();
 
         assert_eq!(rgba.len(), viewport.width * viewport.height * 4);
-        for chunk in rgba.chunks_exact(4) {
+        for chunk in rgba.as_chunks::<4>().0 {
             assert_eq!(chunk[3], 0xff, "alpha should be opaque");
         }
         let player_index = ((PLAYER_SPRITE_TILE as u8) % atlas.depth.pixel_limit()) as usize;
@@ -4317,7 +4316,7 @@
         let rgba = viewport.to_rgba();
 
         assert_eq!(rgba.len(), viewport.width * viewport.height * 4);
-        for chunk in rgba.chunks_exact(4) {
+        for chunk in rgba.as_chunks::<4>().0 {
             let rgb = [chunk[0], chunk[1], chunk[2]];
             assert!(
                 CGA_PALETTE_RGB.contains(&rgb),
@@ -4338,12 +4337,10 @@
 
         assert_eq!(rgba.len(), 48 * 24 * 4);
         assert!(
-            rgba.chunks_exact(4)
-                .any(|pixel| pixel == TEXT_PANEL_HEADER_RGBA)
+            rgba.as_chunks::<4>().0.contains(&TEXT_PANEL_HEADER_RGBA)
         );
         assert!(
-            rgba.chunks_exact(4)
-                .any(|pixel| pixel == TEXT_PANEL_BODY_RGBA)
+            rgba.as_chunks::<4>().0.contains(&TEXT_PANEL_BODY_RGBA)
         );
         assert!(wrap_text_panel_lines("DUNGEON:0 LEVEL 0", 12, 4).contains(&"LEVEL 0".to_string()));
     }

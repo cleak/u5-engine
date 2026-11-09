@@ -16,8 +16,10 @@ fn main() {
     let dir = Path::new(&dir);
 
     // Match the --scene BRITANNIA default-start case.
-    let mut options = PlayOptions::default();
-    options.target = PlayTarget::World(WorldPlane::Britannia);
+    let options = PlayOptions {
+        target: PlayTarget::World(WorldPlane::Britannia),
+        ..PlayOptions::default()
+    };
     let state = PlayState::load_scene(dir, options).unwrap();
     let radius: isize = 5;
     let px = state.player.x as isize;
@@ -57,13 +59,13 @@ fn main() {
         }
         let dx = (obj.x as isize - px).rem_euclid(WORLD_SIDE as isize);
         let dy = (obj.y as isize - py).rem_euclid(WORLD_SIDE as isize);
-        if dx <= radius || dx >= WORLD_SIDE as isize - radius {
-            if dy <= radius || dy >= WORLD_SIDE as isize - radius {
-                println!(
-                    "  slot {i}: type=0x{:02x} tile=0x{:02x} at ({}, {}, z={})",
-                    obj.type_byte, obj.tile, obj.x, obj.y, obj.z
-                );
-            }
+        if (dx <= radius || dx >= WORLD_SIDE as isize - radius)
+            && (dy <= radius || dy >= WORLD_SIDE as isize - radius)
+        {
+            println!(
+                "  slot {i}: type=0x{:02x} tile=0x{:02x} at ({}, {}, z={})",
+                obj.type_byte, obj.tile, obj.x, obj.y, obj.z
+            );
         }
     }
 

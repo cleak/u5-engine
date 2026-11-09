@@ -251,7 +251,7 @@ pub fn audit_ool_plane_bytes(source: OolAuditSource, bytes: &[u8]) -> io::Result
         tile_class_counts: [0; OOL_AUDIT_TILE_CLASS_COUNT],
     };
 
-    for (slot, record) in bytes.chunks_exact(OOL_RECORD_LEN).enumerate() {
+    for (slot, record) in bytes.as_chunks::<OOL_RECORD_LEN>().0.iter().enumerate() {
         let role = active_object_slot_role(slot).expect("slot from fixed table");
         audit.role_counts[ool_role_index(role)] += 1;
 

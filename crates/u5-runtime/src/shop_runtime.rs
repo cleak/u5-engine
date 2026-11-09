@@ -241,9 +241,7 @@ impl ArmsSellBrowser {
     }
 
     fn after_sale(self, sold_item: u8, stock: &EquipmentStock) -> Option<Self> {
-        if first_nonzero_equipment(stock).is_none() {
-            return None;
-        }
+        first_nonzero_equipment(stock)?;
         // `shops.md` §8.1: "a sale whose counter remains nonzero rebuilds the
         // same page and selection"; only a sale that *removes* the item
         // reselects around it. Measured 2026-10-14 and 2026-10-16
@@ -4271,7 +4269,7 @@ mod tests {
         let mut gold = 9999u16;
         let mut pending = None;
         let mut state = ShipBrokerState::for_shipwright(Shipwright::TheRustyBucket);
-        for ignored in [b'F', b'S', b'X'] {
+        for ignored in *b"FSX" {
             assert_eq!(
                 step(
                     &mut state,
@@ -4461,7 +4459,7 @@ mod tests {
         );
         assert_eq!(state, GuildShopState::for_shop(GuildShop::TheGuild));
         guild_step(&mut state, b'Y', &mut gold, &mut counters);
-        for key in [b'X', b'\r', b'Y'] {
+        for key in *b"X\rY" {
             assert_eq!(
                 guild_step(&mut state, key, &mut gold, &mut counters),
                 GuildShopOutcome::InvalidInput

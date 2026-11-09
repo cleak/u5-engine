@@ -60,11 +60,13 @@ fn playtest_p13_07_load_time_notice_closes_its_row_for_later_commands() {
     fs::write(dir.join("TOWNE.DAT"), open_grid()).unwrap();
     fs::write(dir.join("TOWNE.NPC"), vec![0; (scene.block + 1) * 576]).unwrap();
     fs::write(dir.join("TOWNE.TLK"), [0, 0]).unwrap();
-    let mut options = PlayOptions::default();
-    options.target = PlayTarget::Town(scene);
-    options.start = Some((5, 5));
-    options.shadowlord_hideouts = [1, SHADOWLORD_VANQUISHED, SHADOWLORD_VANQUISHED];
-    options.saved_active_objects = None;
+    let options = PlayOptions {
+        target: PlayTarget::Town(scene),
+        start: Some((5, 5)),
+        shadowlord_hideouts: [1, SHADOWLORD_VANQUISHED, SHADOWLORD_VANQUISHED],
+        saved_active_objects: None,
+        ..PlayOptions::default()
+    };
 
     let mut state = PlayState::load_town_scene(&dir, scene, options).unwrap();
     assert!(state.message.contains("An air of\nfalsehood doth"));
@@ -295,10 +297,12 @@ fn playtest_p13_07_stonegate_load_notices_close_their_rows() {
     fs::write(dir.join("KEEP.DAT"), location_pages()).unwrap();
     fs::write(dir.join("KEEP.NPC"), vec![0; (scene.block + 1) * 576]).unwrap();
     fs::write(dir.join("KEEP.TLK"), [0, 0]).unwrap();
-    let mut options = PlayOptions::default();
-    options.target = PlayTarget::Town(scene);
-    options.start = Some((1, 1));
-    options.shadowlord_hideouts = [0, SHADOWLORD_VANQUISHED, 3];
+    let options = PlayOptions {
+        target: PlayTarget::Town(scene),
+        start: Some((1, 1)),
+        shadowlord_hideouts: [0, SHADOWLORD_VANQUISHED, 3],
+        ..PlayOptions::default()
+    };
     let mut state = PlayState::load_town_scene(&dir, scene, options).unwrap();
     assert!(!state.message_row_open_mid_line);
     state.flush_staged_narration();

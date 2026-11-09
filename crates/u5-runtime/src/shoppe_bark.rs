@@ -634,9 +634,7 @@ mod tests {
     #[test]
     fn checked_parse_rejects_trailing_bytes_after_record_slots() {
         let mut bytes = Vec::with_capacity(SHOPPE_DAT_LEN);
-        for _ in 0..SHOPPE_DAT_RECORD_SLOTS {
-            bytes.push(0);
-        }
+        bytes.extend(std::iter::repeat_n(0, SHOPPE_DAT_RECORD_SLOTS));
         bytes.resize(SHOPPE_DAT_LEN, 0);
         assert!(matches!(
             parse_shoppe_records_checked(&bytes),
@@ -658,7 +656,6 @@ mod tests {
         ));
     }
 
-    #[test]
     /// A record's own `\n` bytes are part of its text. The printable test in
     /// [`render_shoppe_bark`] starts at `0x20`, so newlines were dropped and
     /// the words on either side ran together. Measured 2026-09-10
@@ -673,6 +670,7 @@ mod tests {
         assert!(!rendered.contains("onetwo"));
     }
 
+    #[test]
     fn render_shoppe_record_uses_required_lookup() {
         let bytes = b"hello\0";
         let records = parse_shoppe_records(bytes);

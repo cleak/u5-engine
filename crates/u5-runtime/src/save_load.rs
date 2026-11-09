@@ -922,7 +922,7 @@ pub fn save_image_has_active_avatar(image: &[u8]) -> bool {
     image
         .get(SAVE_AVATAR_NAME_OFFSET)
         .copied()
-        .map_or(false, |byte| byte != 0)
+        .is_some_and(|byte| byte != 0)
 }
 
 /// `chargen.md §3` shipped factory-seed `INIT.GAM` size in bytes.

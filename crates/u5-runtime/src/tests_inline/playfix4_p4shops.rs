@@ -127,7 +127,7 @@ fn playfix4_h28_tavern_entry_refusal_takes_the_no_sale_closing_bark() {
         party_size: 1,
         living_party_members: 1,
     };
-    for key in [b'N', b'n', b' '] {
+    for key in *b"Nn " {
         let mut tavern = TavernState::for_tavern(Tavern::TheCatsLair);
         let (mut gold, mut food) = (100, 10);
         assert_eq!(

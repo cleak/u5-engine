@@ -937,10 +937,10 @@ impl PlayState {
                 .copied()
                 .unwrap_or(self.avatar_stats.intelligence)
         };
-        if let Some(mana) = lord_british_camp_refreshed_mana(member.class_byte, intelligence) {
-            if let Some(member) = self.party.get_mut(member_index) {
-                member.mana = mana;
-            }
+        if let Some(mana) = lord_british_camp_refreshed_mana(member.class_byte, intelligence)
+            && let Some(member) = self.party.get_mut(member_index)
+        {
+            member.mana = mana;
         }
     }
 
@@ -3377,7 +3377,7 @@ impl PlayState {
         match effect.published_line() {
             Some(line) => {
                 // Its own row, not a sentence appended to the command's.
-                // `append_result_sentence` appends to the compatibility
+                // Appending a result sentence writes to the compatibility
                 // slot, and when that slot already holds a completed
                 // command echo - `Search-Pass`, say - flushing the
                 // combined string prints the echo a second time. Measured

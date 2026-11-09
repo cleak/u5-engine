@@ -348,7 +348,7 @@
         prompt.player.facing = Direction::East;
         // Two eligible members, so the shared selector prompts rather than
         // picking silently (`commands.md §5.8`).
-        let second = prompt.party[0].clone();
+        let second = prompt.party[0];
         prompt.party.push(PartyMember { slot: 1, ..second });
         let serial = prompt.sound_effect_serial;
         assert_eq!(

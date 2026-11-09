@@ -1069,7 +1069,7 @@
                     state.party[0].level = HEAL_COST;
                 }
                 if label == "Player: None!" {
-                    let second = state.party[0].clone();
+                    let second = state.party[0];
                     state.party.push(PartyMember { slot: 1, ..second });
                 }
                 let clock_before = state.clock;
@@ -1373,7 +1373,7 @@
                 .iter()
                 .filter(|entry| entry.is_command_echo)
                 .map(|entry| entry.text.as_str())
-                .last(),
+                .next_back(),
             Some("Attack-")
         );
 
@@ -4321,7 +4321,7 @@
 
         let mut awaken = dungeon_state(open_dungeon_record(), 0, 1, 1);
         awaken.party = vec![
-            cure.party[0].clone(),
+            cure.party[0],
             PartyMember {
                 slot: 1,
                 class_byte: b'A',

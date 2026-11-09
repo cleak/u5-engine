@@ -760,7 +760,7 @@ fn shipped_chair_census_matches_the_published_proportions() {
     let mut dead_row_cells = 0usize;
     for stem in ["TOWNE", "DWELLING", "CASTLE", "KEEP"] {
         let bytes = std::fs::read(dir.join(format!("{stem}.DAT"))).expect("location file reads");
-        for page in bytes.chunks_exact(1024) {
+        for page in bytes.as_chunks::<1024>().0 {
             for y in 0..32usize {
                 for x in 0..32usize {
                     let terrain = page[y * 32 + x];

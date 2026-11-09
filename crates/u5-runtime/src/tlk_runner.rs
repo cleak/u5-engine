@@ -71,7 +71,7 @@ pub struct TlkRunInputs<'a> {
 }
 
 /// Reason the runner stopped processing the current stream.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
 pub enum TlkRunStop {
     /// Hit `0xFF` end-of-response, or a passing IF-ELSE with the reserved
     /// `0xFF` argument: the caller opens a nested keyword prompt
@@ -84,6 +84,7 @@ pub enum TlkRunStop {
     /// current field terminator.
     NulTerminator,
     /// Exhausted the input slice without finding an explicit terminator.
+    #[default]
     Exhausted,
     /// Stopped at `0x83` PAUSE (only when `yield_on_pause` is set).
     PausedAt(usize),
@@ -333,12 +334,6 @@ impl TlkRenderedText {
 
     pub fn rendered_lines(&self) -> impl Iterator<Item = &[TlkRenderedGlyph]> {
         self.glyphs.split(|glyph| glyph.byte == b'\n')
-    }
-}
-
-impl Default for TlkRunStop {
-    fn default() -> Self {
-        TlkRunStop::Exhausted
     }
 }
 
@@ -2205,7 +2200,7 @@ mod tests {
             "the refusal line is still placed, wrapped across the window: {placed:?}"
         );
         assert!(
-            !placed.chars().any(|ch| !ch.is_ascii()),
+            !!placed.is_ascii(),
             "the placed text view matches the placed cells: {placed:?}"
         );
     }

@@ -29,15 +29,15 @@ pub fn classify_round_walk_application(
     use crate::combat_actor::CombatRoundLoopControl;
     use crate::combat_frame::CombatActorSlotDispatchApplication;
     for entry in application.applications.iter() {
-        if let CombatActorSlotDispatchApplication::Slot { control_after, .. } = entry {
-            if let CombatRoundLoopControl::Exit(exit) = control_after {
-                return CombatDriverStep::Exited(*exit);
-            }
+        if let CombatActorSlotDispatchApplication::Slot { control_after, .. } = entry
+            && let CombatRoundLoopControl::Exit(exit) = control_after
+        {
+            return CombatDriverStep::Exited(*exit);
         }
-        if let CombatActorSlotDispatchApplication::EndOfRound { control } = entry {
-            if let CombatRoundLoopControl::Exit(exit) = control {
-                return CombatDriverStep::Exited(*exit);
-            }
+        if let CombatActorSlotDispatchApplication::EndOfRound { control } = entry
+            && let CombatRoundLoopControl::Exit(exit) = control
+        {
+            return CombatDriverStep::Exited(*exit);
         }
     }
     CombatDriverStep::RoundCycled

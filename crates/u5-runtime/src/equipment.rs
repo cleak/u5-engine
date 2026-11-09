@@ -184,7 +184,7 @@ pub const fn r_ready_unequip_returns_stock(current_counter: u8) -> bool {
 /// Caller passes the raw `0..16` PRNG roll.
 pub const RING_VANISH_DENOMINATOR: u8 = 16;
 pub const fn ring_immediately_vanishes(roll: u8) -> bool {
-    roll % RING_VANISH_DENOMINATOR == 0
+    roll.is_multiple_of(RING_VANISH_DENOMINATOR)
 }
 
 /// `catalogs/item-list.md §5.4`: a Ring of Regeneration wearer has a
@@ -192,7 +192,7 @@ pub const fn ring_immediately_vanishes(roll: u8) -> bool {
 /// member's maximum HP. Caller passes the raw `0..8` PRNG roll.
 pub const RING_REGEN_DENOMINATOR: u8 = 8;
 pub const fn ring_regenerates(roll: u8) -> bool {
-    roll % RING_REGEN_DENOMINATOR == 0
+    roll.is_multiple_of(RING_REGEN_DENOMINATOR)
 }
 
 /// `inventory.md §3` per-character readied-equipment slot block. The
@@ -612,7 +612,7 @@ pub fn character_has_readied(equipment_block: &[u8; 6], item_id: u8) -> bool {
     if item_id == EQUIPMENT_EMPTY_SLOT_SENTINEL {
         return false;
     }
-    equipment_block.iter().any(|&slot| slot == item_id)
+    equipment_block.contains(&item_id)
 }
 
 /// `inventory.md §3.1` published equipment-class tag bytes used by
@@ -819,10 +819,8 @@ pub fn readied_equipment_summary(equipment: &[u8; EQUIPMENT_SLOT_COUNT]) -> Stri
         .iter()
         .copied()
         .enumerate()
-        .filter_map(|(slot, item)| {
-            (item != EQUIPMENT_EMPTY)
-                .then(|| format!("{}={}", slot_name(slot), equipment_name(item as usize)))
-        })
+        .filter(|&(_, item)| item != EQUIPMENT_EMPTY)
+        .map(|(slot, item)| format!("{}={}", slot_name(slot), equipment_name(item as usize)))
         .collect::<Vec<_>>();
     if entries.is_empty() {
         "none".to_string()

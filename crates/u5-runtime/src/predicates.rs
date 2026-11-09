@@ -631,15 +631,15 @@ pub const fn sleep_ambush_rest_interrupted(roll: u8) -> bool {
 ///   - Surface tile 0x04 or wilderness band 0x09..=0x0F: 2 by day, 5 at
 ///     hours 0..=4.
 ///   - Any other surface tile: 1 by day, 4 at hours 0..=4.
-/// `formats/saved-gam.md §10` dungeon room-clear bitmap shape. The
-/// 16-byte bitmap covers eight dungeons (`0..7`) by sixteen room
-/// ids (`0..15`), giving 128 bits total. Layout is dungeon-major
-/// then room-major: dungeon `D` occupies the bits at byte offsets
-/// `D*2..=D*2+1`, with low bit = room id 0. Per-dungeon byte
-/// count = sixteen room bits packed at eight bits per byte = 2.
-/// Anchored to ceil(SAVE_DUNGEON_ROOM_CLEAR_ROOMS_PER_DUNGEON / 8)
-/// so resizing the per-dungeon room count automatically widens
-/// the per-dungeon byte stride.
+///     `formats/saved-gam.md §10` dungeon room-clear bitmap shape. The
+///     16-byte bitmap covers eight dungeons (`0..7`) by sixteen room
+///     ids (`0..15`), giving 128 bits total. Layout is dungeon-major
+///     then room-major: dungeon `D` occupies the bits at byte offsets
+///     `D*2..=D*2+1`, with low bit = room id 0. Per-dungeon byte
+///     count = sixteen room bits packed at eight bits per byte = 2.
+///     Anchored to ceil(SAVE_DUNGEON_ROOM_CLEAR_ROOMS_PER_DUNGEON / 8)
+///     so resizing the per-dungeon room count automatically widens
+///     the per-dungeon byte stride.
 pub const SAVE_DUNGEON_ROOM_CLEAR_BYTES_PER_DUNGEON: usize =
     SAVE_DUNGEON_ROOM_CLEAR_ROOMS_PER_DUNGEON.div_ceil(8);
 /// `formats/saved-gam.md §10` rooms-per-dungeon ("sixteen room
@@ -1394,9 +1394,9 @@ pub const fn tile_propagates_sight_only_when_adjacent(tile: u8) -> bool {
 ///   * Hills (foothills) do NOT block sight -- the "see over the
 ///     mountain from a hill" mechanic doesn't exist but hills
 ///     themselves are transparent.
-/// Indoor wall/door tile ranges are town-interior fixtures; the same
-/// tile ids on the overworld are landmark icons (towns, signs, coastal
-/// markers, dwellings) that should be visible from a distance.
+///     Indoor wall/door tile ranges are town-interior fixtures; the same
+///     tile ids on the overworld are landmark icons (towns, signs, coastal
+///     markers, dwellings) that should be visible from a distance.
 pub fn world_surface_tile_blocks_sight(tile: u8) -> bool {
     is_mountain_tile(tile) || is_dense_forest_tile(tile)
 }
@@ -1425,7 +1425,7 @@ pub fn town_fire_source_is_adjacent(entry: TownFireSourceEntry, x: usize, y: usi
 pub fn town_fire_source_tile_matches(entry: TownFireSourceEntry, tile: u8) -> bool {
     entry
         .expected_tile
-        .map_or(true, |expected_tile| expected_tile == tile)
+        .is_none_or(|expected_tile| expected_tile == tile)
 }
 
 pub fn dungeon_teleport_matches(
@@ -1440,9 +1440,7 @@ pub fn dungeon_teleport_matches(
         && entry.level == level
         && entry.x == x
         && entry.y == y
-        && entry
-            .expected_cell
-            .map_or(true, |expected| expected == cell)
+        && entry.expected_cell.is_none_or(|expected| expected == cell)
 }
 
 pub fn dungeon_exit_tile_matches(
@@ -1457,9 +1455,7 @@ pub fn dungeon_exit_tile_matches(
         && entry.level == level
         && entry.x == x
         && entry.y == y
-        && entry
-            .expected_cell
-            .map_or(true, |expected| expected == cell)
+        && entry.expected_cell.is_none_or(|expected| expected == cell)
 }
 
 pub fn town_pushable_matches(
@@ -1474,9 +1470,7 @@ pub fn town_pushable_matches(
         && entry.floor == floor
         && entry.x == x
         && entry.y == y
-        && entry
-            .expected_tile
-            .map_or(true, |expected| expected == tile)
+        && entry.expected_tile.is_none_or(|expected| expected == tile)
 }
 
 pub fn world_get_tile_matches(
@@ -1489,9 +1483,7 @@ pub fn world_get_tile_matches(
     entry.plane == plane
         && entry.x == x
         && entry.y == y
-        && entry
-            .expected_tile
-            .map_or(true, |expected| expected == tile)
+        && entry.expected_tile.is_none_or(|expected| expected == tile)
 }
 
 pub fn object_pickup_matches(
@@ -1509,7 +1501,7 @@ pub fn object_pickup_matches(
         && object.z == floor
         && entry
             .expected_tile
-            .map_or(true, |expected| expected == object.tile)
+            .is_none_or(|expected| expected == object.tile)
 }
 
 pub fn world_damage_tile_matches(
@@ -1522,9 +1514,7 @@ pub fn world_damage_tile_matches(
     entry.plane == plane
         && entry.x == x
         && entry.y == y
-        && entry
-            .expected_tile
-            .map_or(true, |expected| expected == tile)
+        && entry.expected_tile.is_none_or(|expected| expected == tile)
 }
 
 pub fn world_damage_tile_entry_at(
@@ -1553,9 +1543,7 @@ pub fn town_get_tile_matches(
         && entry.floor == floor
         && entry.x == x
         && entry.y == y
-        && entry
-            .expected_tile
-            .map_or(true, |expected| expected == tile)
+        && entry.expected_tile.is_none_or(|expected| expected == tile)
 }
 
 /// `tile-catalog.md` §3/§6: the two-cell bed `0xAB..0xAC` (171..172,
@@ -1583,9 +1571,7 @@ pub fn town_rest_bed_matches(
         && entry.floor == floor
         && entry.x == x
         && entry.y == y
-        && entry
-            .expected_tile
-            .map_or(true, |expected| expected == tile)
+        && entry.expected_tile.is_none_or(|expected| expected == tile)
 }
 
 pub fn town_stair_matches(
@@ -1600,9 +1586,7 @@ pub fn town_stair_matches(
         && entry.floor == floor
         && entry.x == x
         && entry.y == y
-        && entry
-            .expected_tile
-            .map_or(true, |expected| expected == tile)
+        && entry.expected_tile.is_none_or(|expected| expected == tile)
 }
 
 pub fn town_trap_door_matches(
@@ -1617,9 +1601,7 @@ pub fn town_trap_door_matches(
         && entry.floor == floor
         && entry.x == x
         && entry.y == y
-        && entry
-            .expected_tile
-            .map_or(true, |expected| expected == tile)
+        && entry.expected_tile.is_none_or(|expected| expected == tile)
 }
 
 pub const fn town_poison_gas_live_tile_matches(tile: u8, transport_marker: u8) -> bool {

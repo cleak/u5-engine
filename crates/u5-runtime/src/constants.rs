@@ -729,9 +729,9 @@ pub const SAVE_RARE_REAGENT_HARVEST_COOKIES_OFFSET: usize = 0x02B2;
 /// ... An engine that gives record 15 a separate never-written cookie
 /// yields an infinitely repeatable Glass Sword." §7 restates it: "`0x0241`
 /// - the equipment counter for item id `39`, the Glass Sword - is also the
-/// gate for fixed hidden-treasure record 15. It is the same byte, not a
-/// parallel cookie." Anchored to the equipment block so the alias cannot
-/// drift; the byte is written only by the equipment-stock block write.
+///   gate for fixed hidden-treasure record 15. It is the same byte, not a
+///   parallel cookie." Anchored to the equipment block so the alias cannot
+///   drift; the byte is written only by the equipment-stock block write.
 pub const SAVE_FIXED_HIDDEN_TREASURE_RECORD_15_GATE_OFFSET: usize =
     SAVE_EQUIPMENT_STOCK_OFFSET + EQUIPMENT_ID_GLASS_SWORD;
 pub const SAVE_SHADOWLORD_HIDEOUTS_OFFSET: usize = 0x0322;

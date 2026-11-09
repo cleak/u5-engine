@@ -823,9 +823,11 @@ fn load_scene_starts_with_no_transient_potion_presentation() {
 
 #[test]
 fn world_progress_state_codec_round_trips() {
-    let mut progress = WorldProgressState::default();
-    progress.rare_reagent_harvest_days = [7, 8, 9];
-    progress.fixed_hidden_treasure_mirror_present = true;
+    let mut progress = WorldProgressState {
+        rare_reagent_harvest_days: [7, 8, 9],
+        fixed_hidden_treasure_mirror_present: true,
+        ..WorldProgressState::default()
+    };
     progress.fixed_hidden_treasure_found[0] = 0x01;
     progress.fixed_hidden_treasure_found[7] = 0xa5;
     progress.fixed_hidden_treasure_found[FIXED_HIDDEN_TREASURE_FOUND_BYTES - 1] = 0x40;
@@ -922,9 +924,11 @@ fn from_save_keeps_native_hidden_treasure_state_over_sidecar_mirror() {
     fs::write(dir.join(SAVED_GAM_FILENAME), save).unwrap();
     fs::write(dir.join(SAVED_OOL_FILENAME), vec![0; SAVED_OOL_LEN]).unwrap();
 
-    let mut progress = WorldProgressState::default();
-    progress.rare_reagent_harvest_days = [7, 8, 9];
-    progress.fixed_hidden_treasure_mirror_present = true;
+    let mut progress = WorldProgressState {
+        rare_reagent_harvest_days: [7, 8, 9],
+        fixed_hidden_treasure_mirror_present: true,
+        ..WorldProgressState::default()
+    };
     progress.fixed_hidden_treasure_found[0] = 0xa0;
     progress.fixed_hidden_treasure_daily_day = 0x56;
     progress.shadowlord_mirror_present = true;
@@ -2791,7 +2795,7 @@ fn starvation_warning_appends_after_pass_turn_hour_crossing() {
 
     assert_eq!(state.clock.hour, 9);
     assert!(state.party[0].hp < hp_before);
-    assert!((hp_before - state.party[0].hp) as u16 <= HOURLY_STARVATION_DAMAGE_MAX);
+    assert!((hp_before - state.party[0].hp) <= HOURLY_STARVATION_DAMAGE_MAX);
     assert!(state.message.starts_with("Starving!"));
     assert_eq!(state.message.matches("Starving!").count(), 1);
     assert!(state.pending_hourly_status_message.is_none());

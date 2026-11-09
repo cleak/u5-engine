@@ -24,7 +24,10 @@ pub fn synthetic_tile_atlas(depth: TileGraphicsDepth) -> TileAtlas {
     let pixel_limit = depth.pixel_limit();
     let mut pixels = Vec::with_capacity(TILE_ATLAS_PIXEL_LEN);
     for tile in 0..TILE_ATLAS_TILE_COUNT {
-        pixels.extend(std::iter::repeat((tile as u8) % pixel_limit).take(TILE_ATLAS_TILE_PIXELS));
+        pixels.extend(std::iter::repeat_n(
+            (tile as u8) % pixel_limit,
+            TILE_ATLAS_TILE_PIXELS,
+        ));
     }
     TileAtlas {
         depth,
@@ -1012,28 +1015,6 @@ pub fn configured_original_asset_dir() -> Option<PathBuf> {
     Some(path)
 }
 
-#[cfg(test)]
-mod pristine_game_dir_guard_tests {
-    use super::*;
-
-    #[test]
-    fn temp_dirs_are_accepted() {
-        assert_writable_game_dir(&debug_game_dir(), "unit test");
-    }
-
-    #[test]
-    #[should_panic(expected = "pristine local asset install")]
-    fn the_pristine_install_is_rejected() {
-        assert_writable_game_dir(Path::new(crate::DEFAULT_GAME_DIR), "unit test");
-    }
-
-    #[test]
-    #[should_panic(expected = "pristine local asset install")]
-    fn alternate_spellings_of_the_pristine_install_are_rejected() {
-        assert_writable_game_dir(Path::new("C:/Games/u5-clean/"), "unit test");
-    }
-}
-
 pub fn debug_game_dir() -> PathBuf {
     let unique = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
@@ -1241,4 +1222,26 @@ pub fn message_with_staged(state: &PlayState) -> String {
         text.push_str(&beat.text);
     }
     text
+}
+
+#[cfg(test)]
+mod pristine_game_dir_guard_tests {
+    use super::*;
+
+    #[test]
+    fn temp_dirs_are_accepted() {
+        assert_writable_game_dir(&debug_game_dir(), "unit test");
+    }
+
+    #[test]
+    #[should_panic(expected = "pristine local asset install")]
+    fn the_pristine_install_is_rejected() {
+        assert_writable_game_dir(Path::new(crate::DEFAULT_GAME_DIR), "unit test");
+    }
+
+    #[test]
+    #[should_panic(expected = "pristine local asset install")]
+    fn alternate_spellings_of_the_pristine_install_are_rejected() {
+        assert_writable_game_dir(Path::new("C:/Games/u5-clean/"), "unit test");
+    }
 }

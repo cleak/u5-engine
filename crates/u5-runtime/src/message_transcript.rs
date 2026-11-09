@@ -1254,10 +1254,10 @@ impl PlayState {
         // beneath the `Hic!` row its own key's prompt already opened, with
         // neither feed nor marker (playtest J18).
         let hiccup_continues = std::mem::take(&mut self.town_hiccup_echo_continues);
-        if self.take_overworld_prompt_pair_suppression() || hiccup_continues {
-            if let Some(entry) = self.message_transcript.last_mut() {
-                entry.prompt_pair_suppressed = true;
-            }
+        if (self.take_overworld_prompt_pair_suppression() || hiccup_continues)
+            && let Some(entry) = self.message_transcript.last_mut()
+        {
+            entry.prompt_pair_suppressed = true;
         }
         self.message_transcript_revision = self.message_transcript_revision.wrapping_add(1);
         self.pending_command_echo = Some(PendingCommandEcho {
@@ -1692,6 +1692,19 @@ impl PlayState {
     }
 }
 
+/// `containers.md §6`: in a dungeon chest's `A scroll: <rune>!` row "the
+/// rune word alone is drawn from the game's second character set ... The
+/// surrounding `A scroll: ` and `!` are ordinary text."
+fn set_dungeon_scroll_rune_word_runic(glyphs: &mut [TlkRenderedGlyph]) {
+    const PREFIX: usize = "A scroll: ".len();
+    let end = glyphs.len().saturating_sub(1);
+    if let Some(word) = glyphs.get_mut(PREFIX..end) {
+        for glyph in word {
+            glyph.font = TlkGlyphFont::Runic;
+        }
+    }
+}
+
 #[cfg(test)]
 mod diagnostics_serial_tests {
     use crate::TOWN_GRID_SIDE;
@@ -1725,18 +1738,5 @@ mod diagnostics_serial_tests {
             state.diagnostics_since(seen),
             ["Wandering encounter spawned in slot 2."]
         );
-    }
-}
-
-/// `containers.md §6`: in a dungeon chest's `A scroll: <rune>!` row "the
-/// rune word alone is drawn from the game's second character set ... The
-/// surrounding `A scroll: ` and `!` are ordinary text."
-fn set_dungeon_scroll_rune_word_runic(glyphs: &mut [TlkRenderedGlyph]) {
-    const PREFIX: usize = "A scroll: ".len();
-    let end = glyphs.len().saturating_sub(1);
-    if let Some(word) = glyphs.get_mut(PREFIX..end) {
-        for glyph in word {
-            glyph.font = TlkGlyphFont::Runic;
-        }
     }
 }

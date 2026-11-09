@@ -889,8 +889,8 @@ pub fn sage_topic_row_is_continuation(state: &crate::PlayState) -> bool {
 ///
 /// `shops.md` §8's provision offer prints `\n\nHow many wouldst\nthou like?" `
 /// - a closing quote and one space - and then "typed number allows two
-/// digits". The space is what `text-output.md` §10.6 keeps the cursor on, so
-/// the digits echo on that row rather than on a fresh one below it.
+///   digits". The space is what `text-output.md` §10.6 keeps the cursor on, so
+///   the digits echo on that row rather than on a fresh one below it.
 ///
 /// Measured 2026-09-18 (`paws-tavern`, beat `rations`, reading `offset+2`):
 /// the original's `thou like "` is the window's last row and this engine
@@ -1245,14 +1245,14 @@ fn layout_message_window_inner(
     // `Player: ` starts in column 24 and puts the cursor in 32;
     // `Open-` starts in column 25 - one past its end cap - and puts it
     // in 30, which is where the direction word then lands.
-    if !open_prompt_typed.is_empty() {
-        if let Some(row) = rows.last_mut() {
-            let room = (MESSAGE_WINDOW_RIGHT as usize + 1)
-                .saturating_sub(row.column as usize + row.glyphs.len());
-            for byte in open_prompt_typed.bytes().take(room) {
-                row.text.push(byte as char);
-                row.glyphs.push(crate::TlkRenderedGlyph::ordinary(byte));
-            }
+    if !open_prompt_typed.is_empty()
+        && let Some(row) = rows.last_mut()
+    {
+        let room = (MESSAGE_WINDOW_RIGHT as usize + 1)
+            .saturating_sub(row.column as usize + row.glyphs.len());
+        for byte in open_prompt_typed.bytes().take(room) {
+            row.text.push(byte as char);
+            row.glyphs.push(crate::TlkRenderedGlyph::ordinary(byte));
         }
     }
     // A prompt that ends in an authored space keeps its cursor past it, even

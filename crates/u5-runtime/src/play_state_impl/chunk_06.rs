@@ -2468,7 +2468,7 @@ impl PlayState {
             (0x9b, 0, -1) => 0x95,
             (0x9c, 0, -1) => 0x9a,
             (0x9c, 0, 1) => 0x9b,
-            (0x9a | 0x9b | 0x9c, _, _) => {
+            (0x9a..=0x9c, _, _) => {
                 self.message = GET_TABLE_CANT_REACH_PLATE_LINE.to_string();
                 return Some(MoveOutcome::Blocked);
             }
@@ -2580,12 +2580,12 @@ impl PlayState {
         }
         let target_tile = self.grid.get(ty * WORLD_SIDE + tx).copied();
         let skip_moonstone_scan = target_tile == Some(0xdc);
-        if !skip_moonstone_scan {
-            if let Some(outcome) = self.search_moonstone_pickup_at(tx, ty, |slot| {
+        if !skip_moonstone_scan
+            && let Some(outcome) = self.search_moonstone_pickup_at(tx, ty, |slot| {
                 moonstone_slot_matches_world(slot, plane, tx, ty)
-            }) {
-                return outcome;
-            }
+            })
+        {
+            return outcome;
         }
         if let Some(outcome) = self.search_rare_reagent_at(plane, tx, ty) {
             return outcome;
@@ -2683,7 +2683,7 @@ impl PlayState {
                 && entry_floor == floor
                 && x == tx
                 && y == ty
-                && expected_tile.map_or(true, |expected| expected == tile) =>
+                && expected_tile.is_none_or(|expected| expected == tile) =>
             {
                 Some(reveal_tile)
             }
@@ -2828,7 +2828,7 @@ impl PlayState {
     where
         F: Fn(MoonstoneGateSlot) -> bool,
     {
-        let Some(slot_index) = self
+        let slot_index = self
             .moonstone_slots
             .iter()
             .copied()
@@ -2836,10 +2836,7 @@ impl PlayState {
             .rev()
             .find_map(|(slot_index, slot)| {
                 (slot.is_valid() && matches_slot(slot)).then_some(slot_index)
-            })
-        else {
-            return None;
-        };
+            })?;
 
         if self.moonstone_pickup_exists(slot_index) {
             // `commands.md §5.8`: "searching the same cell again before
@@ -2856,9 +2853,7 @@ impl PlayState {
             return Some(MoveOutcome::Blocked);
         }
 
-        let Some(z) = self.current_floor() else {
-            return None;
-        };
+        let z = self.current_floor()?;
         let pickup = ActiveObject::moonstone_pickup(slot_index, x, y, z);
         if self.allocate_active_object_slot(pickup).is_none() {
             // An internal invariant, not a player-facing path: the original
@@ -2942,11 +2937,8 @@ impl PlayState {
         // while the first one's object still lies there. A record that is
         // still open and already lying on the floor (the key-gated record 13
         // keeps no found bit) meets the duplicate guard below.
-        let Some(entry) =
-            matching_entries.find(|entry| self.fixed_hidden_treasure_rule_allows(*entry, x, y))
-        else {
-            return None;
-        };
+        let entry =
+            matching_entries.find(|entry| self.fixed_hidden_treasure_rule_allows(*entry, x, y))?;
         if self.fixed_hidden_treasure_pickup_exists(entry.record) {
             // A second Search of a cell whose pickup is already on the floor.
             // `commands.md §5.8` gives the shape for the Moonstone's identical
@@ -3439,7 +3431,7 @@ impl PlayState {
                 && entry_level == level
                 && x == tx
                 && y == ty
-                && expected_cell.map_or(true, |expected| expected == tile) =>
+                && expected_cell.is_none_or(|expected| expected == tile) =>
             {
                 Some(reveal_cell)
             }
@@ -3898,7 +3890,9 @@ pub const INVENTORY_ADD_CLASS_CODE_TORCH: u8 = 0x0d;
 /// (u5-spec#298 Q18) now publishes which family id each grant stages -
 /// weapon 5, shield 6, helm 9, ring 10, armour 11, amulet 12 - and the
 /// secondary pool stages through [`chest_secondary_pool_family_id`]; this
-/// is the helm's.
+/// is the helm's. Kept with its siblings as part of the published table;
+/// no grant path names the helm's code on its own.
+#[allow(dead_code)]
 pub const INVENTORY_ADD_CLASS_CODE_EQUIPMENT: u8 = 0x09;
 pub const INVENTORY_ADD_CLASS_CODE_WEAPON: u8 = 0x05;
 pub const INVENTORY_ADD_CLASS_CODE_SHIELD: u8 = 0x06;

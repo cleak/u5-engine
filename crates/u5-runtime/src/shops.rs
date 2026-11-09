@@ -2264,7 +2264,7 @@ pub const fn tavern_follow_up_record_id(tavern: Tavern) -> usize {
 pub const TAVERN_PROVISION_QUOTE_RECORD_FIRST: usize = 77;
 /// `shops.md §8.5`: "one quote record drawn uniformly from a seven-record pool
 /// - `SHOPPE.DAT` ordinals `77` through `83`" (R432); the bound is inclusive
-/// (playtest E57).
+///   (playtest E57).
 pub const TAVERN_PROVISION_QUOTE_RECORD_LAST: usize = 83;
 pub const TAVERN_NO_SALE_RECORD_FIRST: usize = 61;
 pub const TAVERN_NO_SALE_RECORD_LAST: usize = 64;
@@ -3460,20 +3460,20 @@ impl PlayState {
 
         let quote = quote_healer_treatment(healer, treatment);
         let mut charity = false;
-        if let HealerTreatmentFee::Price(required) = quote.fee {
-            if self.gold < required {
-                // `shops.md §8.C` (u5-spec#298 Q19): "in Skara Brae (scene
-                // `7`, The Spirit Healers) only, when the fee is at most 100
-                // and party gold is below it, record `173` is not printed,
-                // the treatment is applied with no gold deducted".
-                if healer_low_fee_charity_applies(healer, required, self.gold) {
-                    charity = true;
-                } else {
-                    return Err(HealerTreatmentError::InsufficientGold {
-                        available: self.gold,
-                        required,
-                    });
-                }
+        if let HealerTreatmentFee::Price(required) = quote.fee
+            && self.gold < required
+        {
+            // `shops.md §8.C` (u5-spec#298 Q19): "in Skara Brae (scene
+            // `7`, The Spirit Healers) only, when the fee is at most 100
+            // and party gold is below it, record `173` is not printed,
+            // the treatment is applied with no gold deducted".
+            if healer_low_fee_charity_applies(healer, required, self.gold) {
+                charity = true;
+            } else {
+                return Err(HealerTreatmentError::InsufficientGold {
+                    available: self.gold,
+                    required,
+                });
             }
         }
 

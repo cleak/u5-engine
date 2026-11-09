@@ -382,7 +382,7 @@ pub fn render_text_window_rgba_with_runes(
         )
     })?;
     let mut rgba = vec![0; byte_count];
-    for pixel in rgba.chunks_exact_mut(4) {
+    for pixel in rgba.as_chunks_mut::<4>().0 {
         pixel.copy_from_slice(&TEXT_PANEL_BG_RGBA);
     }
 
@@ -492,7 +492,7 @@ pub fn render_text_panel_rgba(text: &str, width: usize, height: usize) -> io::Re
         )
     })?;
     let mut bytes = vec![0; byte_count];
-    for pixel in bytes.chunks_exact_mut(4) {
+    for pixel in bytes.as_chunks_mut::<4>().0 {
         pixel.copy_from_slice(&TEXT_PANEL_BG_RGBA);
     }
 

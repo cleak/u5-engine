@@ -367,13 +367,12 @@ impl PlayState {
                     {
                         return Ok(false);
                     }
-                    if let Some(entry) = self.world_damage_tile_at(game_dir, plane, x, y, tile)? {
-                        if !entry.effect.allows_transport(TransportState::Foot)
+                    if let Some(entry) = self.world_damage_tile_at(game_dir, plane, x, y, tile)?
+                        && (!entry.effect.allows_transport(TransportState::Foot)
                             || (reject_damaging
-                                && entry.effect.damages_transport(TransportState::Foot))
-                        {
-                            return Ok(false);
-                        }
+                                && entry.effect.damages_transport(TransportState::Foot)))
+                    {
+                        return Ok(false);
                     }
                 }
                 Ok(is_tile_walkable_for_transport(
@@ -449,12 +448,12 @@ impl PlayState {
     /// no NPC is at the cell.
     pub fn npc_live_tile_at(&self, x: usize, y: usize) -> Option<u8> {
         let npc = self.npc_at_current_floor(x, y)?;
-        if let Some(slot) = npc.active_object {
-            if let Some(object) = self.active_objects.get(slot) {
-                return Some(
-                    active_object_frame_tile(object.type_byte, object.phase).unwrap_or(object.tile),
-                );
-            }
+        if let Some(slot) = npc.active_object
+            && let Some(object) = self.active_objects.get(slot)
+        {
+            return Some(
+                active_object_frame_tile(object.type_byte, object.phase).unwrap_or(object.tile),
+            );
         }
         // No linked active-object slot: fall back to the NPC's
         // type-byte mapped walking-pose tile via the same frame
@@ -989,89 +988,89 @@ impl PlayState {
                     }
                     continue;
                 }
-                if self.npcs[index].z == floor {
-                    if let Some(behavior) = behavior {
-                        // `npc-schedules.md §9` value `4`, corrected by
-                        // **R317**: "While the player is four or more tiles
-                        // from the *waypoint*, the NPC takes the ordinary
-                        // bounded wander step with the **same constant cap of
-                        // three** that value `1` uses; when the player is
-                        // closer than that, it enters the engagement path".
-                        // "The distance this mode measures is used only to
-                        // choose between wandering and engaging and is then
-                        // discarded; the wander radius is a constant,
-                        // identical to value `1`, and never narrows as the
-                        // player closes."
-                        let approach_wanders = behavior == NpcAiBehavior::ApproachAndAttack
-                            && self.town_player_distance_to(ai_tx, ai_ty)
-                                >= TOWN_NPC_APPROACH_ENGAGE_WAYPOINT_DISTANCE;
-                        if approach_wanders {
-                            if let Some((nx, ny)) = self.town_npc_wander_step(
-                                index,
-                                floor,
-                                ai_tx,
-                                ai_ty,
-                                TOWN_NPC_BOUNDED_WANDER_CAP,
-                            ) {
-                                self.npcs[index].x = nx;
-                                self.npcs[index].y = ny;
-                                moved = true;
-                                self.sync_npc_active_object(index, floor);
-                                continue;
-                            }
-                        } else if behavior.raises_contact_event()
-                            && (behavior.engages_without_distance_gate()
-                                || behavior == NpcAiBehavior::ApproachAndAttack
-                                || self.town_npc_player_distance(index) < TOWN_NPC_ENGAGE_RADIUS)
+                if self.npcs[index].z == floor
+                    && let Some(behavior) = behavior
+                {
+                    // `npc-schedules.md §9` value `4`, corrected by
+                    // **R317**: "While the player is four or more tiles
+                    // from the *waypoint*, the NPC takes the ordinary
+                    // bounded wander step with the **same constant cap of
+                    // three** that value `1` uses; when the player is
+                    // closer than that, it enters the engagement path".
+                    // "The distance this mode measures is used only to
+                    // choose between wandering and engaging and is then
+                    // discarded; the wander radius is a constant,
+                    // identical to value `1`, and never narrows as the
+                    // player closes."
+                    let approach_wanders = behavior == NpcAiBehavior::ApproachAndAttack
+                        && self.town_player_distance_to(ai_tx, ai_ty)
+                            >= TOWN_NPC_APPROACH_ENGAGE_WAYPOINT_DISTANCE;
+                    if approach_wanders {
+                        if let Some((nx, ny)) = self.town_npc_wander_step(
+                            index,
+                            floor,
+                            ai_tx,
+                            ai_ty,
+                            TOWN_NPC_BOUNDED_WANDER_CAP,
+                        ) {
+                            self.npcs[index].x = nx;
+                            self.npcs[index].y = ny;
+                            moved = true;
+                            self.sync_npc_active_object(index, floor);
+                            continue;
+                        }
+                    } else if behavior.raises_contact_event()
+                        && (behavior.engages_without_distance_gate()
+                            || behavior == NpcAiBehavior::ApproachAndAttack
+                            || self.town_npc_player_distance(index) < TOWN_NPC_ENGAGE_RADIUS)
+                    {
+                        // `npc-schedules.md §9`: "At the **start** of an
+                        // engagement invocation, orthogonal adjacency
+                        // produces the appropriate event and no movement:
+                        // values 4/5 require nonzero dialogue, whereas 6/7
+                        // do not. A zero-dialogue NPC in 4/5 continues to
+                        // step selection." §9.2: events "do not stop the
+                        // pass or form a queue: if more than one NPC
+                        // produces one during the pass, the last producer
+                        // visited supplies the event that town mode
+                        // handles." Because the event is taken here,
+                        // before this NPC steps, adjacency its own step
+                        // creates waits for a later invocation.
+                        if self.town_npc_adjacent_to_player(index)
+                            && town_npc_contact_dialogue_allows(
+                                behavior,
+                                self.npcs[index].dialog_id,
+                            )
                         {
-                            // `npc-schedules.md §9`: "At the **start** of an
-                            // engagement invocation, orthogonal adjacency
-                            // produces the appropriate event and no movement:
-                            // values 4/5 require nonzero dialogue, whereas 6/7
-                            // do not. A zero-dialogue NPC in 4/5 continues to
-                            // step selection." §9.2: events "do not stop the
-                            // pass or form a queue: if more than one NPC
-                            // produces one during the pass, the last producer
-                            // visited supplies the event that town mode
-                            // handles." Because the event is taken here,
-                            // before this NPC steps, adjacency its own step
-                            // creates waits for a later invocation.
-                            if self.town_npc_adjacent_to_player(index)
-                                && town_npc_contact_dialogue_allows(
-                                    behavior,
-                                    self.npcs[index].dialog_id,
-                                )
-                            {
-                                self.pending_town_npc_contact = Some(TownNpcContactEvent {
-                                    npc_slot: self.npcs[index].slot,
-                                    behavior,
-                                });
-                            } else if let Some((nx, ny)) = self.town_npc_chase_step(index, floor) {
-                                self.npcs[index].x = nx;
-                                self.npcs[index].y = ny;
-                                moved = true;
-                                self.sync_npc_active_object(index, floor);
-                                continue;
-                            }
-                        } else if behavior.is_wander() {
-                            // §9 value `2`: "the same one-attempt-per-turn
-                            // coin and the same single direction draw, with
-                            // the waypoint-radius test switched off entirely
-                            // (cap zero)."
-                            let cap = if matches!(behavior, NpcAiBehavior::BoundedWander) {
-                                TOWN_NPC_BOUNDED_WANDER_CAP
-                            } else {
-                                TOWN_NPC_UNBOUNDED_WANDER_CAP
-                            };
-                            if let Some((nx, ny)) =
-                                self.town_npc_wander_step(index, floor, ai_tx, ai_ty, cap)
-                            {
-                                self.npcs[index].x = nx;
-                                self.npcs[index].y = ny;
-                                moved = true;
-                                self.sync_npc_active_object(index, floor);
-                                continue;
-                            }
+                            self.pending_town_npc_contact = Some(TownNpcContactEvent {
+                                npc_slot: self.npcs[index].slot,
+                                behavior,
+                            });
+                        } else if let Some((nx, ny)) = self.town_npc_chase_step(index, floor) {
+                            self.npcs[index].x = nx;
+                            self.npcs[index].y = ny;
+                            moved = true;
+                            self.sync_npc_active_object(index, floor);
+                            continue;
+                        }
+                    } else if behavior.is_wander() {
+                        // §9 value `2`: "the same one-attempt-per-turn
+                        // coin and the same single direction draw, with
+                        // the waypoint-radius test switched off entirely
+                        // (cap zero)."
+                        let cap = if matches!(behavior, NpcAiBehavior::BoundedWander) {
+                            TOWN_NPC_BOUNDED_WANDER_CAP
+                        } else {
+                            TOWN_NPC_UNBOUNDED_WANDER_CAP
+                        };
+                        if let Some((nx, ny)) =
+                            self.town_npc_wander_step(index, floor, ai_tx, ai_ty, cap)
+                        {
+                            self.npcs[index].x = nx;
+                            self.npcs[index].y = ny;
+                            moved = true;
+                            self.sync_npc_active_object(index, floor);
+                            continue;
                         }
                     }
                 }
@@ -1791,7 +1790,7 @@ impl PlayState {
                 .and_then(|route| {
                     route
                         .into_iter()
-                        .try_fold(start, |cell, code| npc_step_from_direction_code(cell, code))
+                        .try_fold(start, npc_step_from_direction_code)
                 })
             else {
                 return false;
@@ -1964,7 +1963,9 @@ impl PlayState {
 
     pub fn floor_link_marker_coordinates(&self, marker: u8) -> Vec<(usize, usize)> {
         self.grid
-            .chunks_exact(32)
+            .as_chunks::<32>()
+            .0
+            .iter()
             .enumerate()
             .flat_map(|(y, row)| {
                 row.iter()

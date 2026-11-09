@@ -632,6 +632,12 @@ pub enum UsePendingAction {
     SceptreFieldDirection,
 }
 
+impl Default for ReadySession {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl ReadySession {
     pub const fn new() -> Self {
         Self {
@@ -650,6 +656,12 @@ impl ReadySession {
     pub fn select_party_index(&mut self, party_index: usize) {
         self.selected_party_index = Some(party_index);
         self.cursor = 0;
+    }
+}
+
+impl Default for UseSession {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
@@ -718,7 +730,7 @@ impl ZStatsSession {
         let members = party_len.max(1);
         if position < members * 2 {
             self.selected_party_index = position / 2;
-            self.page = if position % 2 == 0 {
+            self.page = if position.is_multiple_of(2) {
                 ZStatsPage::Stats
             } else {
                 ZStatsPage::Equipment
@@ -856,6 +868,12 @@ impl CastFollowupSession {
     }
 }
 
+impl Default for RestSession {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl RestSession {
     pub const fn new() -> Self {
         Self {
@@ -945,6 +963,12 @@ impl ShrineSession {
     }
 }
 
+impl Default for MixSession {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl MixSession {
     pub fn new() -> Self {
         Self {
@@ -958,9 +982,21 @@ impl MixSession {
     }
 }
 
+impl Default for NewOrderSession {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl NewOrderSession {
     pub const fn new() -> Self {
         Self { first: None }
+    }
+}
+
+impl Default for YellSession {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
@@ -1214,9 +1250,8 @@ pub fn spell_recipe_label(mask: u8) -> String {
     let names = REAGENTS
         .iter()
         .zip(REAGENT_MASKS.iter())
-        .filter_map(|(reagent, reagent_mask)| {
-            (mask & *reagent_mask != 0).then(|| reagent.abbreviation())
-        })
+        .filter(|&(_, reagent_mask)| mask & *reagent_mask != 0)
+        .map(|(reagent, _)| reagent.abbreviation())
         .collect::<Vec<_>>();
     if names.is_empty() {
         "no reagents".to_string()

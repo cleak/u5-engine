@@ -609,18 +609,17 @@ impl EndgameState {
     /// `{leader_name}: ` was the name being prefixed to the greeting
     /// instead of substituted into it.
     pub fn first_prompt_text(&self, leader_name: &str) -> String {
-        if let Some(messages) = &self.messages {
-            if let (Some(greeting), Some(prompt)) =
+        if let Some(messages) = &self.messages
+            && let (Some(greeting), Some(prompt)) =
                 (messages.initial_greeting(), messages.first_box_prompt())
-            {
-                // The greeting is its own page: the original stops here
-                // and waits for a key before the question
-                // (`greeting_page_pending`).
-                if self.greeting_page_pending {
-                    return format!("{greeting}{leader_name}!\"");
-                }
-                return format!("{greeting}{leader_name}!\"\n\n{prompt}");
+        {
+            // The greeting is its own page: the original stops here
+            // and waits for a key before the question
+            // (`greeting_page_pending`).
+            if self.greeting_page_pending {
+                return format!("{greeting}{leader_name}!\"");
             }
+            return format!("{greeting}{leader_name}!\"\n\n{prompt}");
         }
         "Endgame: Lord British asks whether thou hast brought his box. (Y/N)".to_string()
     }
@@ -638,17 +637,17 @@ impl EndgameState {
     }
 
     pub fn second_prompt_text(&self, first_answer: bool) -> String {
-        if let Some(messages) = &self.messages {
-            if let Some(prompt) = messages.second_box_prompt() {
-                // The echo and the blank line §5.1 puts after it are both
-                // committed by the caller, so the record follows directly.
-                // Measured 2026-10-16 (`doom-final-room-refusal`, beats
-                // `answered-no` and `after-key`, reading `scroll`): the
-                // original keeps one blank row between `You reply: No` and
-                // this record, where a leading feed here spent a second.
-                let _ = first_answer;
-                return prompt.to_string();
-            }
+        if let Some(messages) = &self.messages
+            && let Some(prompt) = messages.second_box_prompt()
+        {
+            // The echo and the blank line §5.1 puts after it are both
+            // committed by the caller, so the record follows directly.
+            // Measured 2026-10-16 (`doom-final-room-refusal`, beats
+            // `answered-no` and `after-key`, reading `scroll`): the
+            // original keeps one blank row between `You reply: No` and
+            // this record, where a leading feed here spent a second.
+            let _ = first_answer;
+            return prompt.to_string();
         }
         "Endgame: Lord British asks again for the sandalwood box. (Y/N)".to_string()
     }
@@ -2606,12 +2605,11 @@ impl PlayState {
     }
 
     pub fn prepare_endgame_refusal_tableau(&mut self) {
-        if let Some(object) = self.active_objects.get_mut(0) {
-            if endgame_tableau_role_for_slot(0, *object)
+        if let Some(object) = self.active_objects.get_mut(0)
+            && endgame_tableau_role_for_slot(0, *object)
                 == Some(EndgameTableauActorRole::PartyMember(0))
-            {
-                object.y = object.y.saturating_sub(1);
-            }
+        {
+            object.y = object.y.saturating_sub(1);
         }
         loop {
             let moved = self
@@ -3422,10 +3420,10 @@ mod fade_to_black_tests {
             let index = usize::from(y) * 320 + usize::from(x);
             assert!(!seen[index], "pixel ({x}, {y}) visited twice");
             seen[index] = true;
-            if let Some(previous) = previous {
-                if index != previous + 1 {
-                    row_major = false;
-                }
+            if let Some(previous) = previous
+                && index != previous + 1
+            {
+                row_major = false;
             }
             previous = Some(index);
         }

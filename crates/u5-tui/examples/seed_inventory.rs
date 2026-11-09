@@ -62,9 +62,7 @@ fn main() {
                 state.party_equipment[0][slot] = count;
             }
             "strength" => {
-                for strength in &mut state.party_strengths {
-                    *strength = count;
-                }
+                state.party_strengths.fill(count);
             }
             "reagents" => state.reagents = [count; REAGENT_COUNT],
             "mana" => {
@@ -105,13 +103,13 @@ fn main() {
                     state.party.pop();
                     state.party_roster.pop();
                 }
-                let template_member = state.party[0].clone();
+                let template_member = state.party[0];
                 let template_record = state.party_roster[0].clone();
                 for index in 1..usize::from(count).max(1) {
-                    let mut member = template_member.clone();
+                    let mut member = template_member;
                     member.slot = index as u8;
                     let mut record = template_record.clone();
-                    record.member = member.clone();
+                    record.member = member;
                     let name = format!("Mate{index}");
                     record.name = [0; SAVE_CHARACTER_NAME_LEN];
                     for (slot, byte) in record.name.iter_mut().zip(name.bytes()) {

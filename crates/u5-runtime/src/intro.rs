@@ -337,7 +337,7 @@ pub const fn title_flourish_band_shift(frame: usize) -> u8 {
 
 /// `intro.md §3`: even frames fill top-down, odd frames bottom-up.
 pub const fn title_flourish_fills_top_down(frame: usize) -> bool {
-    frame % 2 == 0
+    frame.is_multiple_of(2)
 }
 
 /// `intro.md §3`: the band slot each element of the packed, centred
@@ -447,8 +447,8 @@ pub const INTRO_MENU_SELECT_CAPTION_CURSOR_GLYPH: u8 =
 /// the four consecutive fixed-cell glyph codes `0x05..=0x08` - "the
 /// same four ... that the gameplay message window's input cursor uses"
 /// - advancing **one phase per menu poll pass**. Each of the four is a
-/// diagonal hatch of two-pixel steps shifted two pixels along, so the
-/// cell reads as a diagonal pattern marching across it.
+///   diagonal hatch of two-pixel steps shifted two pixels along, so the
+///   cell reads as a diagonal pattern marching across it.
 ///
 /// Because the cycle is shared with the gameplay prompt this delegates
 /// to [`crate::gameplay_chrome::prompt_cursor_glyph`] rather than
@@ -476,7 +476,7 @@ pub const INTRO_MENU_COPYRIGHT_CAPTION_ROW: u8 = 24;
 /// `cleak/u5-spec#78`: the left-edge column at which the blue border
 /// fill starts on `row`, or `None` when the row is outside the band.
 pub fn intro_menu_frame_border_start_column(row: u16) -> Option<u16> {
-    if row < INTRO_MENU_FRAME_TOP_Y || row > INTRO_MENU_FRAME_BOTTOM_Y {
+    if !(INTRO_MENU_FRAME_TOP_Y..=INTRO_MENU_FRAME_BOTTOM_Y).contains(&row) {
         return None;
     }
     let profile_len = INTRO_MENU_FRAME_CORNER_PROFILE.len() as u16;
@@ -927,7 +927,7 @@ pub fn require_graphical_acknowledgements_surface() -> ! {
 /// "What exists is a fixed six-entry row-to-letter table: rows `0`
 /// through `5` map to `J`, `C`, `T`, `U`, `A`, `R`."
 pub const INTRO_MENU_ROW_COUNT: usize = 6;
-pub const INTRO_MENU_ROW_LETTERS: [u8; INTRO_MENU_ROW_COUNT] = [b'J', b'C', b'T', b'U', b'A', b'R'];
+pub const INTRO_MENU_ROW_LETTERS: [u8; INTRO_MENU_ROW_COUNT] = *b"JCTUAR";
 
 /// `intro.md §6.2`: "The initial highlight is row 0, `Journey
 /// Onward`, and the highlight index survives across poll passes."

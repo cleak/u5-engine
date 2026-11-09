@@ -1400,29 +1400,28 @@ pub fn gameplay_chrome_content(state: &crate::PlayState) -> GameplayChromeConten
     // mid-entry is not shown until the presentation ends (p10 R06).
     if (state.shrine_presentation_map.is_some() || state.shrine_approach_walk.is_some())
         && !state.combat_active
+        && let Some((top, bottom)) = state.presentation_entry_chrome.clone()
     {
-        if let Some((top, bottom)) = state.presentation_entry_chrome.clone() {
-            return GameplayChromeContent {
-                top,
-                bottom,
-                stats_label,
-                timing_glyph,
-                stats_panel_single_box,
-                picker_page_glyph,
-            };
-        }
+        return GameplayChromeContent {
+            top,
+            bottom,
+            stats_label,
+            timing_glyph,
+            stats_panel_single_box,
+            picker_page_glyph,
+        };
     }
-    if state.combat_active {
-        if let Some((top, bottom)) = state.combat_entry_chrome.clone() {
-            return GameplayChromeContent {
-                top,
-                bottom,
-                stats_label,
-                timing_glyph,
-                stats_panel_single_box,
-                picker_page_glyph,
-            };
-        }
+    if state.combat_active
+        && let Some((top, bottom)) = state.combat_entry_chrome.clone()
+    {
+        return GameplayChromeContent {
+            top,
+            bottom,
+            stats_label,
+            timing_glyph,
+            stats_panel_single_box,
+            picker_page_glyph,
+        };
     }
     match state.area {
         crate::Area::Dungeon { level, .. } => GameplayChromeContent {
@@ -1433,16 +1432,16 @@ pub fn gameplay_chrome_content(state: &crate::PlayState) -> GameplayChromeConten
             stats_panel_single_box,
             picker_page_glyph,
         },
-        crate::Area::World { plane } if plane == crate::WorldPlane::Underworld => {
-            GameplayChromeContent {
-                top: ChromeGap::Unbroken,
-                bottom: ChromeGap::Unbroken,
-                stats_label,
-                timing_glyph,
-                stats_panel_single_box,
-                picker_page_glyph,
-            }
-        }
+        crate::Area::World {
+            plane: crate::WorldPlane::Underworld,
+        } => GameplayChromeContent {
+            top: ChromeGap::Unbroken,
+            bottom: ChromeGap::Unbroken,
+            stats_label,
+            timing_glyph,
+            stats_panel_single_box,
+            picker_page_glyph,
+        },
         // `moons.md §2.2`, the erase arm inside the surface/town family:
         // Ararat by the scene test, a below-entry floor by the level test.
         // The renderer is reached (so the cached pair is still written by

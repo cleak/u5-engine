@@ -466,7 +466,7 @@
     /// to its high nibble before any comparison, so the whole `0x6?` family -
     /// not just the exact byte `0x60`, and including the marked/fired variants
     /// - enables the down arm. That arm calls the same level-step helper a
-    /// down ladder uses, so the party simply descends one level".
+    ///   down ladder uses, so the party simply descends one level".
     #[test]
     fn dungeon_k_on_any_pit_byte_descends_one_level() {
         let scene = DungeonScene::new(33).unwrap();
@@ -1649,8 +1649,8 @@
     /// `conversation.md §2` step 5: "The dispatcher in step 5 is also called
     /// by the NPC's automatic conversation-contact event, without steps 1–4"
     /// - no liveness gate and no mirror/bed status-tile gate. A keeper parked
-    /// on a bed cell, or a starving party, still reaches the dispatcher,
-    /// whose behaviour-4-to-1 rewrite then runs (audit A148 follow-up).
+    ///   on a bed cell, or a starving party, still reaches the dispatcher,
+    ///   whose behaviour-4-to-1 rewrite then runs (audit A148 follow-up).
     #[test]
     fn contact_entry_skips_talks_liveness_and_status_tile_gates() {
         let dir = debug_game_dir();

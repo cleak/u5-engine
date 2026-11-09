@@ -1055,7 +1055,7 @@ mod light_beacon_shipped_location_sources {
         for class in classes {
             let bytes = fs::read(source.join(class)).unwrap();
             let mut class_cells = 0;
-            for page in bytes.chunks_exact(PAGE_BYTES) {
+            for page in bytes.as_chunks::<PAGE_BYTES>().0 {
                 let hits = page
                     .iter()
                     .filter(|tile| **tile == BEACON_BRIGHT_LIGHT_TILE)

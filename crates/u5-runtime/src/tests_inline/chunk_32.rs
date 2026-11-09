@@ -422,7 +422,7 @@ fn blackthorn_rescue_prints_every_published_beat_in_order() {
 
 /// The other side of that condition. A roster that cannot act but is not Dead
 /// - `blackthorn.md §7`: "It is reachable for a roster carrying a preserved
-/// legacy Ashes status" - prints one beat 8a per such slot, in slot order.
+///   legacy Ashes status" - prints one beat 8a per such slot, in slot order.
 #[test]
 fn blackthorn_rescue_prints_one_not_dead_line_per_undead_slot() {
     let dir = debug_game_dir();
@@ -494,7 +494,7 @@ fn blackthorn_rescue_first_not_dead_runs_on_from_the_intoned_row() {
     }
     // Slot 0 Ashes, slot 1 Dead, slot 2 Ashes: two beat-8a lines, with the
     // Dead slot's silent revive between beat 8 and the first of them.
-    for (member, status) in state.party.iter_mut().zip([b'A', b'D', b'A']) {
+    for (member, status) in state.party.iter_mut().zip(*b"ADA") {
         member.status = status;
         member.hp = 0;
     }

@@ -21,7 +21,6 @@ struct TlkHeaderEntry {
 /// NPC). Counted to the end of the window, `TOWNE.TLK` id 33 has
 /// fifty-nine records, so that cap cut off its last labelled block and final
 /// marker. Every record in the window is kept now.
-
 pub fn parse_tlk(path: &Path) -> io::Result<HashMap<u16, Vec<String>>> {
     let bytes = read(path)?;
     parse_tlk_bytes(&bytes)
@@ -88,7 +87,7 @@ pub fn parse_tlk_bytes(bytes: &[u8]) -> io::Result<HashMap<u16, Vec<String>>> {
         let mut fields = Vec::new();
         let mut pos = entry.blob_offset;
         while pos < end {
-            let (field, next) = decode_tlk_field(&bytes, pos, end);
+            let (field, next) = decode_tlk_field(bytes, pos, end);
             fields.push(field);
             pos = next;
             if pos == end {

@@ -328,7 +328,9 @@ fn save_frame_capture_state(
 
     let byte_hash = hash_bytes(&rgba);
     let nonblack_pixels = rgba
-        .chunks_exact(4)
+        .as_chunks::<4>()
+        .0
+        .iter()
         .filter(|pixel| pixel[0] != 0 || pixel[1] != 0 || pixel[2] != 0)
         .count();
     write_rgba_png(out, width, height, rgba)?;
@@ -351,6 +353,7 @@ fn save_frame_capture_state(
     })
 }
 
+#[allow(clippy::too_many_arguments)]
 fn blit_rgba(
     dst: &mut [u8],
     dst_width: usize,
@@ -566,7 +569,9 @@ fn save_text_window_report(
     let rgba = render_text_panel_rgba(text, TEXT_WINDOW_RENDER_WIDTH, TEXT_WINDOW_RENDER_HEIGHT)?;
     let byte_hash = hash_bytes(&rgba);
     let nonblack_pixels = rgba
-        .chunks_exact(4)
+        .as_chunks::<4>()
+        .0
+        .iter()
         .filter(|pixel| pixel[0] != 0 || pixel[1] != 0 || pixel[2] != 0)
         .count();
     write_rgba_png(
@@ -626,10 +631,10 @@ fn write_rgba_png(out: &Path, width: u32, height: u32, rgba: Vec<u8>) -> io::Res
                 "framebuffer size did not match viewport dimensions",
             )
         })?;
-    if let Some(parent) = out.parent() {
-        if !parent.as_os_str().is_empty() {
-            std::fs::create_dir_all(parent)?;
-        }
+    if let Some(parent) = out.parent()
+        && !parent.as_os_str().is_empty()
+    {
+        std::fs::create_dir_all(parent)?;
     }
     image
         .save(out)
@@ -756,6 +761,323 @@ pub(crate) fn save_screen_cursor_cell(
             )
         })
     })
+}
+
+/// `--save-screen`: compose the whole 320x200 gameplay screen headlessly.
+///
+/// Border chrome first, then the text-window surface (stats panel)
+/// composited skipping black, then the message window's rows with
+/// their ribbon end-cap prefixes, then the tile viewport at its
+/// measured origin. Shares every constant and painter with the Bevy
+/// compositor via `u5_runtime::gameplay_chrome`.
+pub fn run_save_screen(
+    game_dir: &Path,
+    options: PlayOptions,
+    raster_depth: TileGraphicsDepth,
+    script: Option<Vec<String>>,
+    out: &Path,
+) -> io::Result<()> {
+    let mut state = PlayState::load_scene(game_dir, options)?;
+    let atlas = load_tile_atlas(game_dir, raster_depth)?;
+    if let Some(commands) = script {
+        replay_play_script_commands(&mut state, game_dir, &commands, |_, _, _| Ok(()))?;
+    }
+    complete_headless_blocking_presentations(&mut state, Some(&atlas))?;
+    let ibm = load_ibm_ch_font(game_dir)?;
+    let runes = load_runes_ch_font(game_dir)?;
+    let rgba = compose_gameplay_screen(&mut state, game_dir, &atlas, &ibm, &runes)?;
+    write_rgba_png(
+        out,
+        TEXT_WINDOW_RENDER_WIDTH as u32,
+        TEXT_WINDOW_RENDER_HEIGHT as u32,
+        rgba,
+    )?;
+    println!(
+        "Saved {}x{} composed gameplay screen to {} (player at ({}, {}) facing {}, turn {})",
+        TEXT_WINDOW_RENDER_WIDTH,
+        TEXT_WINDOW_RENDER_HEIGHT,
+        out.display(),
+        state.player.x,
+        state.player.y,
+        u5_runtime::Direction::name(state.player.facing),
+        state.turn,
+    );
+    Ok(())
+}
+
+/// The side-panel text windows, painted in the Bevy shell's order: the
+/// stats panel, then - while a shop is up - its two framed side panels, the
+/// arms sell browser and the inn guest register (`shops.md §8.A`). This
+/// oracle painted the stats panel alone, so `--save-screen` showed the
+/// ordinary roster where the sell browser's item rows belong (playtest F51).
+fn paint_save_screen_panel_windows(
+    system: &mut TextWindowSystem,
+    state: &PlayState,
+    active_cursor: Option<usize>,
+) {
+    paint_stats_panel_text_window(system, state, active_cursor);
+    if state.active_shop.is_some() {
+        u5_runtime::paint_arms_sell_browser_text_window(system, state);
+        u5_runtime::paint_inn_pickup_register_text_window(system, state);
+    }
+}
+
+use u5_runtime::endgame_narrative_frame::{
+    compose_endgame_narrative_window_rgba, endgame_narrative_window_on_screen,
+};
+
+/// Compose the full gameplay screen into a fresh RGBA buffer.
+///
+/// `endgame.md §8.3`: while a final narrative window is up the screen is
+/// that window's full page instead, taken from the same composer the
+/// visual shell's page agrees with.
+pub fn compose_gameplay_screen(
+    state: &mut PlayState,
+    game_dir: &Path,
+    atlas: &u5_runtime::TileAtlas,
+    ibm: &FixedCellFont,
+    runes: &FixedCellFont,
+) -> io::Result<Vec<u8>> {
+    let width = TEXT_WINDOW_RENDER_WIDTH;
+    let height = TEXT_WINDOW_RENDER_HEIGHT;
+    // `endgame.md §8.3`: a final narrative window is a hard cut onto the
+    // full-screen window, composed exactly as the visual shell composes it -
+    // none of the gameplay layout below survives onto it (playtest F58).
+    if let Some(window) = endgame_narrative_window_on_screen(state) {
+        return compose_endgame_narrative_window_rgba(state, game_dir, window);
+    }
+    // `endgame.md §8.4`/`§9`: after the sixth window the parchment page and
+    // the certificate printed over it are the whole screen (P15-06).
+    if u5_runtime::endgame_certificate_frame::endgame_certificate_on_screen(state) {
+        return u5_runtime::endgame_certificate_frame::compose_endgame_certificate_rgba(
+            state, game_dir, ibm, runes,
+        );
+    }
+    let mut rgba = vec![0u8; width * height * 4];
+    for pixel in rgba.as_chunks_mut::<4>().0 {
+        pixel.copy_from_slice(&[0, 0, 0, 0xff]);
+    }
+
+    state.refresh_cached_moon_glyphs();
+    let content = gameplay_chrome_content(state);
+    paint_gameplay_frame_chrome(
+        &mut rgba,
+        width,
+        height,
+        &content,
+        ChromeFonts { ibm, runes },
+        ChromePalette::EGA,
+    );
+
+    // Only the stats panel goes through the text-window pipeline. The
+    // message window is painted directly below, because each echoed
+    // line carries the two-colour ribbon end cap that the 1-bit
+    // fixed-cell text path cannot express.
+    let active_cursor = state.active_player;
+    let mut system = TextWindowSystem::new();
+    configure_play_text_windows(&mut system);
+    paint_save_screen_panel_windows(&mut system, state, active_cursor);
+    // `inventory.md §4.5`: a decorated picker row, the Z-stats moonstone row
+    // and `magic.md §8`'s sextant coordinate row all mark individual cells
+    // runic, and this composer was drawing every cell from `IBM.CH` - the
+    // no-runes overload silently falls back to the text font, so the runic
+    // cells rendered as whatever `IBM.CH` holds at that code.
+    let text = u5_runtime::render_text_window_rgba_with_runes(&system, ibm, Some(runes))?;
+    overlay_panel_text_window_rgba(&mut rgba, &text, width, height, state);
+
+    let layout = save_screen_message_window_layout(state);
+    let cursor_cell = save_screen_cursor_cell(state, &layout);
+    for row in layout.rows {
+        if row.prefixed {
+            paint_message_line_cap(&mut rgba, width, height, ibm, row.row, ChromePalette::EGA);
+        }
+        for (offset, glyph) in row.glyphs.iter().enumerate() {
+            let font = match glyph.font {
+                u5_runtime::TlkGlyphFont::Ordinary => ibm,
+                u5_runtime::TlkGlyphFont::Runic => runes,
+            };
+            paint_fixed_cell_glyph(
+                &mut rgba,
+                width,
+                height,
+                font,
+                glyph.byte,
+                row.column.saturating_add(offset as u8),
+                row.row,
+                CHROME_RULE_INDEX,
+            );
+        }
+    }
+
+    if let Some((column, row)) = cursor_cell {
+        paint_fixed_cell_glyph(
+            &mut rgba,
+            width,
+            height,
+            ibm,
+            prompt_cursor_glyph(0),
+            column,
+            row,
+            CHROME_RULE_INDEX,
+        );
+    }
+
+    let local_view_overlay = save_screen_local_view_overlay_active(state);
+    if let Some(viewport) = save_screen_viewport(state, atlas)? {
+        blit_save_screen_viewport(&mut rgba, width, height, &viewport, local_view_overlay);
+    }
+    Ok(rgba)
+}
+
+/// Lay the viewport raster into the composed screen.
+///
+/// `view.md §4`: the local View/Peer/X-Ray raster is "centered inside the
+/// main gameplay viewport" at `anchor = 32 + cell * 4`, covering
+/// `(32,32)..(159,159)` - "The formula is authoritative". The Bevy shell
+/// clears the viewport and blits there; this path put the 128-pixel raster
+/// flush at the viewport's own origin (playtest K02).
+fn blit_save_screen_viewport(
+    rgba: &mut [u8],
+    width: usize,
+    height: usize,
+    viewport: &u5_runtime::TileViewport,
+    local_view_overlay: bool,
+) {
+    let (origin_x, origin_y) = if local_view_overlay {
+        clear_save_screen_viewport(rgba, width, height);
+        (LOCAL_VIEW_OVERLAY_ORIGIN_X, LOCAL_VIEW_OVERLAY_ORIGIN_Y)
+    } else {
+        (VIEWPORT_ORIGIN_X, VIEWPORT_ORIGIN_Y)
+    };
+    blit_rgba(
+        rgba,
+        width,
+        height,
+        &viewport.to_rgba(),
+        viewport.width,
+        viewport.height,
+        origin_x,
+        origin_y,
+    );
+}
+
+/// Whether the viewport [`save_screen_viewport`] returns is the local
+/// 32-by-32 View/Peer/X-Ray raster rather than a full-viewport frame. The
+/// dungeon V-View and the telescope sky replace the whole viewport
+/// (`view.md §6`, `§4.2.2`), as in the Bevy compositor's same test.
+fn save_screen_local_view_overlay_active(state: &PlayState) -> bool {
+    use u5_runtime::endgame_tableau_frame::endgame_frame_shows_tableau;
+    !endgame_frame_shows_tableau(state)
+        && state.active_view_overlay.as_ref().is_some_and(|overlay| {
+            !matches!(
+                overlay.kind,
+                u5_runtime::ViewOverlayKind::Dungeon { .. } | u5_runtime::ViewOverlayKind::Sky(_)
+            )
+        })
+}
+
+/// Black out the inclusive `(8,8)..(183,183)` viewport compose rectangle,
+/// as the Bevy shell does before blitting a local view overlay.
+fn clear_save_screen_viewport(rgba: &mut [u8], width: usize, height: usize) {
+    let side = VIEWPORT_SIZE_PX;
+    for y in VIEWPORT_ORIGIN_Y..(VIEWPORT_ORIGIN_Y + side).min(height) {
+        for x in VIEWPORT_ORIGIN_X..(VIEWPORT_ORIGIN_X + side).min(width) {
+            let offset = (y * width + x) * 4;
+            rgba[offset..offset + 4].copy_from_slice(&[0, 0, 0, 255]);
+        }
+    }
+}
+
+/// Lay the panel text-window raster over the chrome.
+///
+/// Mirrors the Bevy shell's opaque cells (`render_visual_play_frame_over_viewport`):
+/// the picker's panel cells, and under the leaked inverse the timed-effect
+/// slot's glyph and caps, are whole text cells whose black pixels cover the
+/// chrome beneath (`inventory.md §4.4`, u5-spec#299 Q12). Every other cell
+/// lays only its non-black pixels. Overlaying only the non-black pixels
+/// everywhere drew the inverted `P` as a solid white cell and the caps
+/// without their black triangles (playtest J25).
+fn overlay_panel_text_window_rgba(
+    rgba: &mut [u8],
+    text: &[u8],
+    width: usize,
+    height: usize,
+    state: &PlayState,
+) {
+    let opaque_cells: Vec<(u8, u8)> = u5_runtime::picker_panel_opaque_cells(state)
+        .into_iter()
+        .chain(u5_runtime::stats_panel_opaque_effect_cell(state))
+        .chain(u5_runtime::stats_panel_opaque_effect_cap_cells(state))
+        .collect();
+    let cell = u5_runtime::CH_CELL_SIDE;
+    // The chrome a residue cell leaves to the band
+    // (`picker_residue_cell_chrome_columns`), saved before the text lands.
+    let kept_chrome: Vec<(usize, [u8; 4])> = opaque_cells
+        .iter()
+        .flat_map(|&(column, row)| {
+            let (x0, y0) = (usize::from(column) * cell, usize::from(row) * cell);
+            let keep = u5_runtime::picker_residue_cell_chrome_columns(state, column, row);
+            (y0..(y0 + cell).min(height))
+                .flat_map(move |y| (x0..(x0 + keep).min(width)).map(move |x| (y * width + x) * 4))
+        })
+        .map(|at| (at, [rgba[at], rgba[at + 1], rgba[at + 2], rgba[at + 3]]))
+        .collect();
+    for (dst, src) in rgba
+        .as_chunks_mut::<4>()
+        .0
+        .iter_mut()
+        .zip(text.as_chunks::<4>().0)
+    {
+        if src[0] == 0 && src[1] == 0 && src[2] == 0 {
+            continue;
+        }
+        dst.copy_from_slice(src);
+    }
+    for (column, row) in opaque_cells {
+        let (x0, y0) = (usize::from(column) * cell, usize::from(row) * cell);
+        for y in y0..(y0 + cell).min(height) {
+            let start = (y * width + x0) * 4;
+            let end = (y * width + (x0 + cell).min(width)) * 4;
+            rgba[start..end].copy_from_slice(&text[start..end]);
+        }
+    }
+    for (at, pixel) in kept_chrome {
+        rgba[at..at + 4].copy_from_slice(&pixel);
+    }
+}
+
+/// The raster that fills the gameplay viewport, chosen as the visual shell
+/// chooses it. `endgame.md §3.1`: "The throne-room tableau is the ordinary
+/// eleven-by-eleven world viewport", so during the endgame's tableau phase
+/// it replaces the dungeon the party left (playtest G32); through the
+/// absorption hold the held final room stands in for it.
+fn save_screen_viewport(
+    state: &mut PlayState,
+    atlas: &u5_runtime::TileAtlas,
+) -> io::Result<Option<u5_runtime::TileViewport>> {
+    use u5_runtime::endgame_tableau_frame::{
+        endgame_frame_shows_tableau, render_endgame_tableau_viewport,
+    };
+    if !endgame_frame_shows_tableau(state) {
+        // `karma.md §7`/`§8`: a shrine or Codex presentation shows its own
+        // `MISCMAPS.DAT` grid, not the surface view (playtest P15-08).
+        if let Some(viewport) =
+            u5_runtime::shrine_presentation_frame::render_shrine_presentation_viewport(
+                state, atlas,
+            )?
+        {
+            return Ok(Some(viewport));
+        }
+        return state.render_top_down_frame(VIEWPORT_RADIUS, atlas);
+    }
+    if state.endgame_absorption_arena_view().is_some()
+        && let Some(mut arena) = state.endgame_absorption_arena.take()
+    {
+        let viewport = arena.render_top_down_frame(VIEWPORT_RADIUS, atlas);
+        state.endgame_absorption_arena = Some(arena);
+        return viewport;
+    }
+    render_endgame_tableau_viewport(state, atlas).map(Some)
 }
 
 #[cfg(test)]
@@ -1211,316 +1533,4 @@ mod tests {
         assert!(!manifest.contains("Avatar"));
         let _ = fs::remove_dir_all(dir);
     }
-}
-
-/// `--save-screen`: compose the whole 320x200 gameplay screen headlessly.
-///
-/// Border chrome first, then the text-window surface (stats panel)
-/// composited skipping black, then the message window's rows with
-/// their ribbon end-cap prefixes, then the tile viewport at its
-/// measured origin. Shares every constant and painter with the Bevy
-/// compositor via `u5_runtime::gameplay_chrome`.
-pub fn run_save_screen(
-    game_dir: &Path,
-    options: PlayOptions,
-    raster_depth: TileGraphicsDepth,
-    script: Option<Vec<String>>,
-    out: &Path,
-) -> io::Result<()> {
-    let mut state = PlayState::load_scene(game_dir, options)?;
-    let atlas = load_tile_atlas(game_dir, raster_depth)?;
-    if let Some(commands) = script {
-        replay_play_script_commands(&mut state, game_dir, &commands, |_, _, _| Ok(()))?;
-    }
-    complete_headless_blocking_presentations(&mut state, Some(&atlas))?;
-    let ibm = load_ibm_ch_font(game_dir)?;
-    let runes = load_runes_ch_font(game_dir)?;
-    let rgba = compose_gameplay_screen(&mut state, game_dir, &atlas, &ibm, &runes)?;
-    write_rgba_png(
-        out,
-        TEXT_WINDOW_RENDER_WIDTH as u32,
-        TEXT_WINDOW_RENDER_HEIGHT as u32,
-        rgba,
-    )?;
-    println!(
-        "Saved {}x{} composed gameplay screen to {} (player at ({}, {}) facing {}, turn {})",
-        TEXT_WINDOW_RENDER_WIDTH,
-        TEXT_WINDOW_RENDER_HEIGHT,
-        out.display(),
-        state.player.x,
-        state.player.y,
-        u5_runtime::Direction::name(state.player.facing),
-        state.turn,
-    );
-    Ok(())
-}
-
-/// The side-panel text windows, painted in the Bevy shell's order: the
-/// stats panel, then - while a shop is up - its two framed side panels, the
-/// arms sell browser and the inn guest register (`shops.md §8.A`). This
-/// oracle painted the stats panel alone, so `--save-screen` showed the
-/// ordinary roster where the sell browser's item rows belong (playtest F51).
-fn paint_save_screen_panel_windows(
-    system: &mut TextWindowSystem,
-    state: &PlayState,
-    active_cursor: Option<usize>,
-) {
-    paint_stats_panel_text_window(system, state, active_cursor);
-    if state.active_shop.is_some() {
-        u5_runtime::paint_arms_sell_browser_text_window(system, state);
-        u5_runtime::paint_inn_pickup_register_text_window(system, state);
-    }
-}
-
-use u5_runtime::endgame_narrative_frame::{
-    compose_endgame_narrative_window_rgba, endgame_narrative_window_on_screen,
-};
-
-/// Compose the full gameplay screen into a fresh RGBA buffer.
-///
-/// `endgame.md §8.3`: while a final narrative window is up the screen is
-/// that window's full page instead, taken from the same composer the
-/// visual shell's page agrees with.
-pub fn compose_gameplay_screen(
-    state: &mut PlayState,
-    game_dir: &Path,
-    atlas: &u5_runtime::TileAtlas,
-    ibm: &FixedCellFont,
-    runes: &FixedCellFont,
-) -> io::Result<Vec<u8>> {
-    let width = TEXT_WINDOW_RENDER_WIDTH;
-    let height = TEXT_WINDOW_RENDER_HEIGHT;
-    // `endgame.md §8.3`: a final narrative window is a hard cut onto the
-    // full-screen window, composed exactly as the visual shell composes it -
-    // none of the gameplay layout below survives onto it (playtest F58).
-    if let Some(window) = endgame_narrative_window_on_screen(state) {
-        return compose_endgame_narrative_window_rgba(state, game_dir, window);
-    }
-    // `endgame.md §8.4`/`§9`: after the sixth window the parchment page and
-    // the certificate printed over it are the whole screen (P15-06).
-    if u5_runtime::endgame_certificate_frame::endgame_certificate_on_screen(state) {
-        return u5_runtime::endgame_certificate_frame::compose_endgame_certificate_rgba(
-            state, game_dir, ibm, runes,
-        );
-    }
-    let mut rgba = vec![0u8; width * height * 4];
-    for pixel in rgba.chunks_exact_mut(4) {
-        pixel.copy_from_slice(&[0, 0, 0, 0xff]);
-    }
-
-    state.refresh_cached_moon_glyphs();
-    let content = gameplay_chrome_content(state);
-    paint_gameplay_frame_chrome(
-        &mut rgba,
-        width,
-        height,
-        &content,
-        ChromeFonts { ibm, runes },
-        ChromePalette::EGA,
-    );
-
-    // Only the stats panel goes through the text-window pipeline. The
-    // message window is painted directly below, because each echoed
-    // line carries the two-colour ribbon end cap that the 1-bit
-    // fixed-cell text path cannot express.
-    let active_cursor = state.active_player;
-    let mut system = TextWindowSystem::new();
-    configure_play_text_windows(&mut system);
-    paint_save_screen_panel_windows(&mut system, state, active_cursor);
-    // `inventory.md §4.5`: a decorated picker row, the Z-stats moonstone row
-    // and `magic.md §8`'s sextant coordinate row all mark individual cells
-    // runic, and this composer was drawing every cell from `IBM.CH` - the
-    // no-runes overload silently falls back to the text font, so the runic
-    // cells rendered as whatever `IBM.CH` holds at that code.
-    let text = u5_runtime::render_text_window_rgba_with_runes(&system, ibm, Some(runes))?;
-    overlay_panel_text_window_rgba(&mut rgba, &text, width, height, state);
-
-    let layout = save_screen_message_window_layout(state);
-    let cursor_cell = save_screen_cursor_cell(state, &layout);
-    for row in layout.rows {
-        if row.prefixed {
-            paint_message_line_cap(&mut rgba, width, height, ibm, row.row, ChromePalette::EGA);
-        }
-        for (offset, glyph) in row.glyphs.iter().enumerate() {
-            let font = match glyph.font {
-                u5_runtime::TlkGlyphFont::Ordinary => ibm,
-                u5_runtime::TlkGlyphFont::Runic => runes,
-            };
-            paint_fixed_cell_glyph(
-                &mut rgba,
-                width,
-                height,
-                font,
-                glyph.byte,
-                row.column.saturating_add(offset as u8),
-                row.row,
-                CHROME_RULE_INDEX,
-            );
-        }
-    }
-
-    if let Some((column, row)) = cursor_cell {
-        paint_fixed_cell_glyph(
-            &mut rgba,
-            width,
-            height,
-            ibm,
-            prompt_cursor_glyph(0),
-            column,
-            row,
-            CHROME_RULE_INDEX,
-        );
-    }
-
-    let local_view_overlay = save_screen_local_view_overlay_active(state);
-    if let Some(viewport) = save_screen_viewport(state, atlas)? {
-        blit_save_screen_viewport(&mut rgba, width, height, &viewport, local_view_overlay);
-    }
-    Ok(rgba)
-}
-
-/// Lay the viewport raster into the composed screen.
-///
-/// `view.md §4`: the local View/Peer/X-Ray raster is "centered inside the
-/// main gameplay viewport" at `anchor = 32 + cell * 4`, covering
-/// `(32,32)..(159,159)` - "The formula is authoritative". The Bevy shell
-/// clears the viewport and blits there; this path put the 128-pixel raster
-/// flush at the viewport's own origin (playtest K02).
-fn blit_save_screen_viewport(
-    rgba: &mut [u8],
-    width: usize,
-    height: usize,
-    viewport: &u5_runtime::TileViewport,
-    local_view_overlay: bool,
-) {
-    let (origin_x, origin_y) = if local_view_overlay {
-        clear_save_screen_viewport(rgba, width, height);
-        (LOCAL_VIEW_OVERLAY_ORIGIN_X, LOCAL_VIEW_OVERLAY_ORIGIN_Y)
-    } else {
-        (VIEWPORT_ORIGIN_X, VIEWPORT_ORIGIN_Y)
-    };
-    blit_rgba(
-        rgba,
-        width,
-        height,
-        &viewport.to_rgba(),
-        viewport.width,
-        viewport.height,
-        origin_x,
-        origin_y,
-    );
-}
-
-/// Whether the viewport [`save_screen_viewport`] returns is the local
-/// 32-by-32 View/Peer/X-Ray raster rather than a full-viewport frame. The
-/// dungeon V-View and the telescope sky replace the whole viewport
-/// (`view.md §6`, `§4.2.2`), as in the Bevy compositor's same test.
-fn save_screen_local_view_overlay_active(state: &PlayState) -> bool {
-    use u5_runtime::endgame_tableau_frame::endgame_frame_shows_tableau;
-    !endgame_frame_shows_tableau(state)
-        && state.active_view_overlay.as_ref().is_some_and(|overlay| {
-            !matches!(
-                overlay.kind,
-                u5_runtime::ViewOverlayKind::Dungeon { .. } | u5_runtime::ViewOverlayKind::Sky(_)
-            )
-        })
-}
-
-/// Black out the inclusive `(8,8)..(183,183)` viewport compose rectangle,
-/// as the Bevy shell does before blitting a local view overlay.
-fn clear_save_screen_viewport(rgba: &mut [u8], width: usize, height: usize) {
-    let side = VIEWPORT_SIZE_PX;
-    for y in VIEWPORT_ORIGIN_Y..(VIEWPORT_ORIGIN_Y + side).min(height) {
-        for x in VIEWPORT_ORIGIN_X..(VIEWPORT_ORIGIN_X + side).min(width) {
-            let offset = (y * width + x) * 4;
-            rgba[offset..offset + 4].copy_from_slice(&[0, 0, 0, 255]);
-        }
-    }
-}
-
-/// Lay the panel text-window raster over the chrome.
-///
-/// Mirrors the Bevy shell's opaque cells (`render_visual_play_frame_over_viewport`):
-/// the picker's panel cells, and under the leaked inverse the timed-effect
-/// slot's glyph and caps, are whole text cells whose black pixels cover the
-/// chrome beneath (`inventory.md §4.4`, u5-spec#299 Q12). Every other cell
-/// lays only its non-black pixels. Overlaying only the non-black pixels
-/// everywhere drew the inverted `P` as a solid white cell and the caps
-/// without their black triangles (playtest J25).
-fn overlay_panel_text_window_rgba(
-    rgba: &mut [u8],
-    text: &[u8],
-    width: usize,
-    height: usize,
-    state: &PlayState,
-) {
-    let opaque_cells: Vec<(u8, u8)> = u5_runtime::picker_panel_opaque_cells(state)
-        .into_iter()
-        .chain(u5_runtime::stats_panel_opaque_effect_cell(state))
-        .chain(u5_runtime::stats_panel_opaque_effect_cap_cells(state))
-        .collect();
-    let cell = u5_runtime::CH_CELL_SIDE;
-    // The chrome a residue cell leaves to the band
-    // (`picker_residue_cell_chrome_columns`), saved before the text lands.
-    let kept_chrome: Vec<(usize, [u8; 4])> = opaque_cells
-        .iter()
-        .flat_map(|&(column, row)| {
-            let (x0, y0) = (usize::from(column) * cell, usize::from(row) * cell);
-            let keep = u5_runtime::picker_residue_cell_chrome_columns(state, column, row);
-            (y0..(y0 + cell).min(height))
-                .flat_map(move |y| (x0..(x0 + keep).min(width)).map(move |x| (y * width + x) * 4))
-        })
-        .map(|at| (at, [rgba[at], rgba[at + 1], rgba[at + 2], rgba[at + 3]]))
-        .collect();
-    for (dst, src) in rgba.chunks_exact_mut(4).zip(text.chunks_exact(4)) {
-        if src[0] == 0 && src[1] == 0 && src[2] == 0 {
-            continue;
-        }
-        dst.copy_from_slice(src);
-    }
-    for (column, row) in opaque_cells {
-        let (x0, y0) = (usize::from(column) * cell, usize::from(row) * cell);
-        for y in y0..(y0 + cell).min(height) {
-            let start = (y * width + x0) * 4;
-            let end = (y * width + (x0 + cell).min(width)) * 4;
-            rgba[start..end].copy_from_slice(&text[start..end]);
-        }
-    }
-    for (at, pixel) in kept_chrome {
-        rgba[at..at + 4].copy_from_slice(&pixel);
-    }
-}
-
-/// The raster that fills the gameplay viewport, chosen as the visual shell
-/// chooses it. `endgame.md §3.1`: "The throne-room tableau is the ordinary
-/// eleven-by-eleven world viewport", so during the endgame's tableau phase
-/// it replaces the dungeon the party left (playtest G32); through the
-/// absorption hold the held final room stands in for it.
-fn save_screen_viewport(
-    state: &mut PlayState,
-    atlas: &u5_runtime::TileAtlas,
-) -> io::Result<Option<u5_runtime::TileViewport>> {
-    use u5_runtime::endgame_tableau_frame::{
-        endgame_frame_shows_tableau, render_endgame_tableau_viewport,
-    };
-    if !endgame_frame_shows_tableau(state) {
-        // `karma.md §7`/`§8`: a shrine or Codex presentation shows its own
-        // `MISCMAPS.DAT` grid, not the surface view (playtest P15-08).
-        if let Some(viewport) =
-            u5_runtime::shrine_presentation_frame::render_shrine_presentation_viewport(
-                state, atlas,
-            )?
-        {
-            return Ok(Some(viewport));
-        }
-        return state.render_top_down_frame(VIEWPORT_RADIUS, atlas);
-    }
-    if state.endgame_absorption_arena_view().is_some()
-        && let Some(mut arena) = state.endgame_absorption_arena.take()
-    {
-        let viewport = arena.render_top_down_frame(VIEWPORT_RADIUS, atlas);
-        state.endgame_absorption_arena = Some(arena);
-        return viewport;
-    }
-    render_endgame_tableau_viewport(state, atlas).map(Some)
 }

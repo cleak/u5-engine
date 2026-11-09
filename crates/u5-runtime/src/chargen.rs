@@ -840,6 +840,20 @@ fn normalize_chargen_name(
     Ok(name)
 }
 
+fn read_init_ool_plane(game_dir: &Path) -> io::Result<Vec<u8>> {
+    let bytes = read_disk_file(&game_dir.join(INIT_OOL_FILENAME))?;
+    if bytes.len() != OOL_PLANE_LEN {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            format!(
+                "{INIT_OOL_FILENAME} must be {OOL_PLANE_LEN} bytes, got {}",
+                bytes.len()
+            ),
+        ));
+    }
+    Ok(bytes)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1119,18 +1133,4 @@ mod tests {
             assert!(round1_winners.contains(&q.option_b));
         }
     }
-}
-
-fn read_init_ool_plane(game_dir: &Path) -> io::Result<Vec<u8>> {
-    let bytes = read_disk_file(&game_dir.join(INIT_OOL_FILENAME))?;
-    if bytes.len() != OOL_PLANE_LEN {
-        return Err(io::Error::new(
-            io::ErrorKind::InvalidData,
-            format!(
-                "{INIT_OOL_FILENAME} must be {OOL_PLANE_LEN} bytes, got {}",
-                bytes.len()
-            ),
-        ));
-    }
-    Ok(bytes)
 }

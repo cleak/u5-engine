@@ -6888,9 +6888,10 @@ fn shoppe_dat_with_records(records: &[(usize, &[u8])]) -> Vec<u8> {
         }
         bytes.push(0);
     }
-    for _ in SHOPPE_DAT_NONEMPTY_RECORDS..SHOPPE_DAT_RECORD_SLOTS {
-        bytes.push(0);
-    }
+    bytes.extend(std::iter::repeat_n(
+        0,
+        SHOPPE_DAT_RECORD_SLOTS - SHOPPE_DAT_NONEMPTY_RECORDS,
+    ));
     assert_eq!(bytes.len(), SHOPPE_DAT_LEN);
     bytes
 }

@@ -1548,12 +1548,10 @@
                     phase_tick: Some(CombatActorPhaseTick::Ready { .. }),
                     ..
                 } = entry
-                {
-                    if *acted >= COMBAT_PARTY_ACTOR_SLOTS {
+                    && *acted >= COMBAT_PARTY_ACTOR_SLOTS {
                         since_player_turn += 1;
                         per_bat_since_player_turn[*acted - COMBAT_PARTY_ACTOR_SLOTS] += 1;
                     }
-                }
             }
             slot = match application.stop_reason {
                 CombatRoundWalkStopReason::EndOfRound => 0,
@@ -2449,7 +2447,7 @@
             CombatWeaponAttackRangeRoute::Melee,
             CombatWeaponAttackRangeRoute::Ranged { effect_code: 0 },
         ];
-        for raw_damage in [-1i16, 0, 3, i16::from(COMBAT_INSTANT_KILL_DAMAGE)] {
+        for raw_damage in [-1i16, 0, 3, COMBAT_INSTANT_KILL_DAMAGE] {
             for route in routes {
                 for resolution in [
                     CombatWeaponAttackResolution::Miss {

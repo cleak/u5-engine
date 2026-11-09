@@ -449,7 +449,6 @@ pub const fn inn_for_scene(scene_byte: u8) -> Option<Inn> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::shops::{GuildCommodity, Reagent, ShipwrightPurchaseQuote};
 
     #[test]
     fn dialog_id_dispatch_picks_each_shop_kind() {
@@ -550,10 +549,7 @@ mod tests {
                 inn: Inn::HotelBrittany
             }))
         ));
-        assert!(matches!(
-            shop_session_for_talk_context(0x83, Some(31)),
-            None
-        ));
+        assert!(shop_session_for_talk_context(0x83, Some(31)).is_none());
         assert!(matches!(
             shop_session_for_talk_context(0x83, Some(22)),
             Some(ActiveShopSession::HorseTrader(HorseTraderState::Greeting {

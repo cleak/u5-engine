@@ -1197,7 +1197,7 @@ pub const fn dungeon_fountain_effect(tile: u8) -> Option<DungeonFountainEffect> 
 /// instead. `0xF?` cells remain walkable gameplay triggers; the wall
 /// cue is a first-person presentation choice, not a movement blocker.
 pub const fn dungeon_renderer_paints_wall_cue(tile: u8) -> bool {
-    matches!(tile >> 4, 0xB..=0xE | 0xF)
+    matches!(tile >> 4, 0xB..=0xF)
 }
 
 /// `dungeon-mode.md §13` K-Klimb apply-path outcome for the underfoot
@@ -1429,7 +1429,7 @@ pub const fn dungeon_klimb_z_step(z: u8, direction: KlimbDirection) -> Option<u8
 /// room-trigger families (`0xA?`, `0xE?`, `0xF?`) still expand even
 /// though they paint a door-like glyph.
 pub const fn dungeon_minimap_flood_expands(tile: u8) -> bool {
-    !matches!(tile >> 4, 0xB | 0xC | 0xD)
+    !matches!(tile >> 4, 0xB..=0xD)
 }
 
 /// `dungeon-mode.md §12.3`: which of the engine's two fixed
@@ -1948,7 +1948,7 @@ pub const fn dungeon_search_outcome_line(
 ) -> Option<&'static str> {
     match tile >> 4 {
         0x0 => Some(crate::DUNGEON_SEARCH_NOTHING_OF_NOTE),
-        0x1 | 0x2 | 0x3 => Some(crate::DUNGEON_SEARCH_NOTHING_ON_LADDER),
+        0x1..=0x3 => Some(crate::DUNGEON_SEARCH_NOTHING_ON_LADDER),
         0x5 => Some(crate::DUNGEON_SEARCH_NOTHING_ON_FOUNTAIN),
         0x7 => Some(crate::DUNGEON_SEARCH_TREASURE),
         0x9 => Some(crate::DUNGEON_SEARCH_IMPOSSIBLE_TILE),
@@ -2179,7 +2179,7 @@ mod dungeon_room_clear_tests {
             "§5: one hundred twelve bits"
         );
         assert_eq!(DUNGEON_ROOM_CLEAR_ADDRESSED_BYTES, 14);
-        assert!(DUNGEON_ROOM_CLEAR_ADDRESSED_BYTES < SAVE_DUNGEON_ROOM_CLEAR_BITMAP_LEN);
+        const { assert!(DUNGEON_ROOM_CLEAR_ADDRESSED_BYTES < SAVE_DUNGEON_ROOM_CLEAR_BITMAP_LEN) };
     }
 
     #[test]

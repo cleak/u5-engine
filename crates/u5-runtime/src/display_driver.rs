@@ -169,7 +169,7 @@ pub enum EgaDisplayOperation<'a> {
 }
 
 pub fn ega_driver_dispatch_slot(dispatch_offset: u8) -> Option<u8> {
-    if dispatch_offset % 3 != 0 || dispatch_offset > EGA_DRIVER_LAST_DISPATCH_OFFSET {
+    if !dispatch_offset.is_multiple_of(3) || dispatch_offset > EGA_DRIVER_LAST_DISPATCH_OFFSET {
         return None;
     }
     Some(dispatch_offset / 3)

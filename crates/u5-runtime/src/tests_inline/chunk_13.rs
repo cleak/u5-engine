@@ -3958,7 +3958,7 @@ fn overworld_chunk_buffer_dimensions_match_spec() {
     );
     // The 11-by-11 viewport projects out of this buffer, so the
     // window must comfortably cover the viewport on every axis.
-    assert!(OVERWORLD_CHUNK_BUFFER_WINDOW_SIDE >= VIEWPORT_SIDE);
+    const { assert!(OVERWORLD_CHUNK_BUFFER_WINDOW_SIDE >= VIEWPORT_SIDE) };
 }
 
 #[test]
@@ -4247,8 +4247,8 @@ fn title_surface_dimensions_match_spec() {
         );
     }
     // The title-tick frame rectangle also fits inside the surface.
-    assert!(TITLE_TICK_FRAME_X + TITLE_TICK_FRAME_WIDTH <= TITLE_SURFACE_WIDTH);
-    assert!(TITLE_TICK_FRAME_Y + TITLE_TICK_FRAME_HEIGHT <= TITLE_SURFACE_HEIGHT);
+    const { assert!(TITLE_TICK_FRAME_X + TITLE_TICK_FRAME_WIDTH <= TITLE_SURFACE_WIDTH) };
+    const { assert!(TITLE_TICK_FRAME_Y + TITLE_TICK_FRAME_HEIGHT <= TITLE_SURFACE_HEIGHT) };
 }
 
 #[test]
@@ -4635,7 +4635,7 @@ fn directed_wind_cone_max_cells_matches_spec() {
     assert_eq!(DIRECTED_WIND_MAX_CELLS, 63);
     // Sanity-check: the capped directed area cannot exceed the
     // 121-cell arena footprint.
-    assert!(DIRECTED_WIND_MAX_CELLS <= COMBAT_ARENA_SIDE * COMBAT_ARENA_SIDE);
+    const { assert!(DIRECTED_WIND_MAX_CELLS <= COMBAT_ARENA_SIDE * COMBAT_ARENA_SIDE) };
 }
 
 #[test]
@@ -5104,7 +5104,7 @@ fn question_dat_len_matches_shipped_total() {
     // A 30-record file shorter than the published total would be
     // a malformed shipped asset; the length acts as a coarse
     // sanity bound against truncation.
-    assert!(QUESTION_DAT_LEN >= QUESTION_DAT_RECORDS);
+    const { assert!(QUESTION_DAT_LEN >= QUESTION_DAT_RECORDS) };
 }
 
 #[test]
@@ -6286,8 +6286,8 @@ fn chargen_starting_calendar_matches_init_gam_seed() {
     // one-based 1..=28 per saved-gam.md §5).
     assert!((1..=13).contains(&CHARGEN_STARTING_MONTH));
     assert!((1..=28).contains(&CHARGEN_STARTING_DAY));
-    assert!(CHARGEN_STARTING_HOUR < 24);
-    assert!(CHARGEN_STARTING_MINUTE < 60);
+    const { assert!(CHARGEN_STARTING_HOUR < 24) };
+    const { assert!(CHARGEN_STARTING_MINUTE < 60) };
 }
 
 #[test]
@@ -8884,7 +8884,7 @@ fn return_to_view_published_wait_cadence_constants() {
     assert_eq!(RTV_FIXED_WIPE_TRAILING_TICKS, 3);
     assert_eq!(RTV_FIXED_WIPE_TOTAL_TICKS, 8);
     assert_eq!(RTV_MOVE_ACTOR_AND_TICK_TICKS, 7);
-    assert!(RTV_WAIT_EXITS_ON_KEYPRESS);
+    const { assert!(RTV_WAIT_EXITS_ON_KEYPRESS) };
 }
 
 #[test]
@@ -9410,29 +9410,29 @@ fn acting_member_scan_auto_selects_one_and_prompts_at_two() {
     // last match rather than the first.
     assert_eq!(acting_member_scan(&[]), ActingMemberSelection::NoneAble);
     assert_eq!(
-        acting_member_scan(&[b'D', b'A', b'S', b'C']),
+        acting_member_scan(b"DASC"),
         ActingMemberSelection::NoneAble
     );
     assert_eq!(
-        acting_member_scan(&[b'D', b'G', b'S']),
+        acting_member_scan(b"DGS"),
         ActingMemberSelection::Selected(1)
     );
     // Poisoned qualifies alongside Good.
     assert_eq!(
-        acting_member_scan(&[b'D', b'D', b'P']),
+        acting_member_scan(b"DDP"),
         ActingMemberSelection::Selected(2)
     );
     assert_eq!(
-        acting_member_scan(&[b'G', b'G']),
+        acting_member_scan(b"GG"),
         ActingMemberSelection::Prompt
     );
     assert_eq!(
-        acting_member_scan(&[b'G', b'D', b'P']),
+        acting_member_scan(b"GDP"),
         ActingMemberSelection::Prompt
     );
 
     // Exactly {Good, Poisoned} qualify; every other status does not.
-    for status in [b'G', b'P'] {
+    for status in *b"GP" {
         assert!(acting_member_status_eligible(status), "status {status}");
     }
     for status in [b'D', b'A', b'S', b'C', 0u8, 0xff] {
@@ -9603,7 +9603,7 @@ fn visibility_sweep_constants_match_catalog() {
     // "inclusive squared-distance threshold 32" reveal with it: the `32` is an
     // argument the producer never reads. The sweep passes the negative
     // no-line-of-sight sentinel instead (`systems/visibility.md §3`, R327).
-    assert!(VISIBILITY_NO_LINE_OF_SIGHT_LIGHT < 0);
+    const { assert!(VISIBILITY_NO_LINE_OF_SIGHT_LIGHT < 0) };
 }
 
 #[test]
@@ -16115,8 +16115,8 @@ fn title_tick_frame_rectangle_and_cadence_match_spec() {
     assert_eq!(title_tick_next_frame(2), 3);
     assert_eq!(title_tick_next_frame(3), 0);
     // Rectangle stays inside the 320x200 title surface.
-    assert!(TITLE_TICK_FRAME_X + TITLE_TICK_FRAME_WIDTH <= 320);
-    assert!(TITLE_TICK_FRAME_Y + TITLE_TICK_FRAME_HEIGHT <= 200);
+    const { assert!(TITLE_TICK_FRAME_X + TITLE_TICK_FRAME_WIDTH <= 320) };
+    const { assert!(TITLE_TICK_FRAME_Y + TITLE_TICK_FRAME_HEIGHT <= 200) };
 }
 
 #[test]
@@ -16525,7 +16525,7 @@ fn shoppe_record_cluster_constants_match_spec_table() {
     assert_eq!(SHOPPE_RECORDS_INNKEEPER_FIRST, 174);
     assert_eq!(SHOPPE_RECORDS_INNKEEPER_LAST, 193);
     // Last innkeeper record fits inside the file's record-slot count.
-    assert!(SHOPPE_RECORDS_INNKEEPER_LAST < SHOPPE_DAT_RECORD_SLOTS);
+    const { assert!(SHOPPE_RECORDS_INNKEEPER_LAST < SHOPPE_DAT_RECORD_SLOTS) };
 }
 
 #[test]
@@ -16666,7 +16666,7 @@ fn chargen_name_field_constants_match_spec() {
     assert_eq!(CHARGEN_NAME_FIELD_LEN, 9);
     // The save-record character-name field width must accommodate the
     // 8-character input plus the seed-preserved ninth byte.
-    assert!(CHARGEN_NAME_FIELD_LEN > CHARGEN_NAME_INPUT_MAX_LEN);
+    const { assert!(CHARGEN_NAME_FIELD_LEN > CHARGEN_NAME_INPUT_MAX_LEN) };
 }
 
 #[test]
@@ -18032,7 +18032,7 @@ fn tlk_per_class_npc_counts_match_shipped_data() {
     assert_eq!(KEEP_TLK_NPCS, 32);
     // Largest class header (TOWNE 48 NPCs * 4 bytes/entry) fits
     // inside the engine's 512-byte fixed header read window.
-    assert!(TOWNE_TLK_NPCS * TLK_HEADER_ENTRY_LEN <= TLK_HEADER_FIXED_READ);
+    const { assert!(TOWNE_TLK_NPCS * TLK_HEADER_ENTRY_LEN <= TLK_HEADER_FIXED_READ) };
 }
 
 #[test]
@@ -20890,7 +20890,7 @@ fn inventory_caps_match_spec() {
     assert_eq!(SPELL_CHARGE_BAND_LEN, 48);
     // Cross-check: shop's existing SHOP_GOLD_CAP matches the
     // inventory layer's gold cap.
-    assert_eq!(SHOP_GOLD_CAP as u16, PARTY_GOLD_CAP);
+    assert_eq!(SHOP_GOLD_CAP, PARTY_GOLD_CAP);
     // Cross-check: spell band len equals SPELL_COUNT.
     assert_eq!(SPELL_CHARGE_BAND_LEN, SPELL_COUNT);
 }
@@ -21114,7 +21114,7 @@ fn wrap_byte_kind_classifies_break_visible_and_control() {
     assert_eq!(wrap_byte_kind(0x80), WrapByteKind::Control);
     assert_eq!(wrap_byte_kind(0xFF), WrapByteKind::Control);
     // Min line-buffer width sanity
-    assert!(WRAP_MIN_LINE_BUFFER >= 64);
+    const { assert!(WRAP_MIN_LINE_BUFFER >= 64) };
 }
 
 #[test]
@@ -21662,8 +21662,8 @@ fn combat_combatant_capacity_matches_spec() {
     // takes the first free records, it does not reserve slot zero
     // for a player figure.
     assert_eq!(COMBAT_PARTY_ACTOR_SLOTS, 6);
-    assert!(COMBAT_PARTY_ACTOR_SLOTS <= COMBAT_ACTOR_SLOTS);
-    assert!(CBT_PLACEMENT_SLOT_COUNT <= COMBAT_ACTOR_SLOTS - COMBAT_PARTY_ACTOR_SLOTS);
+    const { assert!(COMBAT_PARTY_ACTOR_SLOTS <= COMBAT_ACTOR_SLOTS) };
+    const { assert!(CBT_PLACEMENT_SLOT_COUNT <= COMBAT_ACTOR_SLOTS - COMBAT_PARTY_ACTOR_SLOTS) };
 }
 
 #[test]
@@ -21928,7 +21928,7 @@ fn save_active_object_and_dungeon_buffer_offsets_match_spec() {
     assert_eq!(OOL_RECORD_LEN * OOL_SLOTS, ACTIVE_OBJECT_SAVE_BYTES);
     assert_eq!(ACTIVE_OBJECT_SAVE_BYTES, 256);
     // Active-object table fits inside the save image
-    assert!(SAVE_ACTIVE_OBJECT_TABLE_OFFSET + ACTIVE_OBJECT_SAVE_BYTES <= 0x1060);
+    const { assert!(SAVE_ACTIVE_OBJECT_TABLE_OFFSET + ACTIVE_OBJECT_SAVE_BYTES <= 0x1060) };
 }
 
 #[test]
@@ -22544,7 +22544,7 @@ fn active_object_should_prune_wraps_in_unsigned_eight_bit_arithmetic() {
     assert!(active_object_should_prune(15, 16, 240, 240));
     // Signed subtraction would make this look like -239 (inside a
     // +/-32 band on the wrong side); unsigned makes it 17.
-    assert!(active_object_should_prune(1, 1, 240, 240) == false);
+    assert!(!active_object_should_prune(1, 1, 240, 240));
     assert!(active_object_should_prune(240, 1, 1, 1)); // 240 - 1 = 239
 }
 
@@ -22648,7 +22648,7 @@ fn chargen_questionnaire_floors_strength_to_twenty_over_seeded_tallies() {
         ShrineVirtue::Spirituality,
         ShrineVirtue::Humility,
     ] {
-        let stats = chargen_stats_from_winners(&vec![v; 7]);
+        let stats = chargen_stats_from_winners(&[v; 7]);
         assert!(stats.strength >= CHARGEN_STR_FLOOR);
     }
 }
@@ -24939,7 +24939,7 @@ fn endgame_tableau_class_table_matches_public_sprite_mapping() {
 #[test]
 fn endgame_tableau_six_member_layout_restores_dead_and_omits_lord_british_until_victory() {
     let mut state = test_state(open_grid(), 5, 5);
-    let classes = [b'A', b'M', b'B', b'F', b'D', b'R'];
+    let classes = *b"AMBFDR";
     state.party = classes
         .iter()
         .enumerate()
@@ -25792,7 +25792,8 @@ fn z_stats_selector_cancels_with_the_published_none_result() {
     // selector accepts zero and opens shared Equipment without selecting a
     // member." Escape still cancels, and `0` keeps its cancel meaning at the
     // callers that do not enable the shared-Equipment answer.
-    for cancel in ['\u{1b}'] {
+    {
+        let cancel = '\u{1b}';
         let mut state = test_state(open_grid(), 5, 5);
         assert!(
             state

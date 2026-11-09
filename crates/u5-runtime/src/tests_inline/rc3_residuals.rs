@@ -73,7 +73,7 @@ fn rc3_reagent_offer_appends_the_colon_only_past_column_twelve() {
     // `"Ab. Is this thy` / `need?" ` - the cursor stands at column 7.
     let short = crate::input_dispatch::reagent_offer_text("Ab.");
     assert_eq!(short, "\n\n\"Ab. Is this thy need?\" ");
-    assert!(crate::wrapped_final_row_columns(&short) + 1 <= 12);
+    assert!(crate::wrapped_final_row_columns(&short) < 12);
     // A record that leaves the question's tail on a row of its own past
     // column 12 takes the colon continuation.
     let long = crate::input_dispatch::reagent_offer_text("Abcdefgh.");

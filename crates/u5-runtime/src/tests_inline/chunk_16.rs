@@ -1382,7 +1382,7 @@ BRITANNIA 11 21
         state.prng_state = trap_prng_state_for(TrapEffect::Bomb);
         let mut expected = state.prng_state;
         let _ = u5_prng_range_u16(&mut expected, 0, 7);
-        let bomb = u5_prng_range_u16(&mut expected, 1, 8) as u16;
+        let bomb = u5_prng_range_u16(&mut expected, 1, 8);
         assert_eq!(
             state.apply_shared_trap_effect_to_slot(1),
             format!("Bomb trap dealt {bomb} HP across 1 party member(s).")

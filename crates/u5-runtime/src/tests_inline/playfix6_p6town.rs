@@ -255,9 +255,9 @@ fn p6town_scare_talk_prints_begone_and_damages_the_living_party() {
     ];
     let mut state = test_state(open_grid(), 1, 1);
     state.player.facing = Direction::East;
-    let template = state.party[0].clone();
+    let template = state.party[0];
     state.party[0].hp = 100;
-    state.party.push(PartyMember { slot: 1, hp: 100, status: b'D', ..template.clone() });
+    state.party.push(PartyMember { slot: 1, hp: 100, status: b'D', ..template });
     state.party.push(PartyMember { slot: 2, hp: 100, status: b'S', ..template });
     state.load_scheduled_npcs(&npcs);
 

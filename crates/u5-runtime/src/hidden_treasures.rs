@@ -84,7 +84,7 @@ pub const fn underworld_stack_record(
     if record_index > HIDDEN_TREASURE_UNDERWORLD_STACK_LAST {
         return None;
     }
-    if record_index % 2 == 0 {
+    if record_index.is_multiple_of(2) {
         Some((
             HiddenTreasurePickupClass::Armour,
             HIDDEN_TREASURE_UNDERWORLD_STACK_ARMOUR_STATE,

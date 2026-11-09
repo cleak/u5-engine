@@ -488,7 +488,7 @@ pub enum CombatAiMovementOutcome {
     /// The destination is deliberately not carried: the actor leaves the
     /// fight, so there is no cell to commit it to. What the arm does next
     /// - the release, the side recount and the class-specific extra - is
-    /// `§14`, and the line it prints is `§11.1`.
+    ///   `§14`, and the line it prints is `§11.1`.
     ArenaExit {
         direction_code: u8,
     },
@@ -1616,9 +1616,9 @@ pub const fn combat_step_or_attack_occupant_is_active(view: CombatTargetCandidat
 /// earlier "step-or-attack primitive: if the cell is occupied by a hostile,
 /// attack instead" reading is withdrawn (`RETRACTIONS.md` R310). Rejection
 /// - "which includes both terrain the mover cannot enter **and a cell
-/// already occupied by a live actor**" - returns [`
+///   already occupied by a live actor**" - returns [`
 /// CombatStepOrAttackOutcome::BlockedActor`] or `BlockedWall` and costs the
-/// actor nothing.
+///   actor nothing.
 ///
 /// `attacks_hostile_occupant` is therefore `false` for every direction key.
 /// It is set only by the `A`-Attack targeting cursor's own confirmation.
@@ -1754,15 +1754,15 @@ pub const fn resolve_combat_out_of_arena_leave(
     if ship_style_combat {
         return CombatOutOfArenaLeaveOutcome::RefusedShipStyle;
     }
-    if actor_is_party_side && constrained_exit {
-        if let Some(required_direction_code) = established_exit_direction_code {
-            if required_direction_code != direction_code {
-                return CombatOutOfArenaLeaveOutcome::RefusedConstrainedDirection {
-                    required_direction_code,
-                    attempted_direction_code: direction_code,
-                };
-            }
-        }
+    if actor_is_party_side
+        && constrained_exit
+        && let Some(required_direction_code) = established_exit_direction_code
+        && required_direction_code != direction_code
+    {
+        return CombatOutOfArenaLeaveOutcome::RefusedConstrainedDirection {
+            required_direction_code,
+            attempted_direction_code: direction_code,
+        };
     }
 
     let presentation = if live_foes_remain {
@@ -4758,12 +4758,11 @@ pub fn resolve_combat_ai_movement(
     offers_horizontal_axis: bool,
     random_cardinal_direction_codes: &[u8],
 ) -> CombatAiMovementOutcome {
-    if teleport_capable {
-        if let Some((x, y)) = teleport_candidate {
-            if combat_ai_legal_cell(legal_cells, x as i16, y as i16) {
-                return CombatAiMovementOutcome::Teleport { x, y };
-            }
-        }
+    if teleport_capable
+        && let Some((x, y)) = teleport_candidate
+        && combat_ai_legal_cell(legal_cells, x as i16, y as i16)
+    {
+        return CombatAiMovementOutcome::Teleport { x, y };
     }
 
     // `combat.md §9.1`: the surrounded predicate's second consumer, "an

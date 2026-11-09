@@ -446,16 +446,24 @@ impl CombatArenaRecord {
             .skip(1)
         {
             let entry = index - 1;
-            for slot in 0..DUNGEON_ROOM_PARTY_POSITION_COUNT {
-                row[DUNGEON_ROOM_PARTY_COLUMN_X + slot] = DUNGEON_AMBUSH_PARTY_ENTRY_X[entry][slot];
-                row[DUNGEON_ROOM_PARTY_COLUMN_Y + slot] = DUNGEON_AMBUSH_PARTY_ENTRY_Y[entry][slot];
-            }
+            row[DUNGEON_ROOM_PARTY_COLUMN_X
+                ..(DUNGEON_ROOM_PARTY_POSITION_COUNT + DUNGEON_ROOM_PARTY_COLUMN_X)]
+                .copy_from_slice(
+                    &DUNGEON_AMBUSH_PARTY_ENTRY_X[entry][..DUNGEON_ROOM_PARTY_POSITION_COUNT],
+                );
+            row[DUNGEON_ROOM_PARTY_COLUMN_Y
+                ..(DUNGEON_ROOM_PARTY_POSITION_COUNT + DUNGEON_ROOM_PARTY_COLUMN_Y)]
+                .copy_from_slice(
+                    &DUNGEON_AMBUSH_PARTY_ENTRY_Y[entry][..DUNGEON_ROOM_PARTY_POSITION_COUNT],
+                );
         }
         if let Some((source_x, source_y)) = dungeon_ambush_source_rows(facing_seed) {
-            for slot in 0..DUNGEON_ROOM_SOURCE_COUNT {
-                rows[DUNGEON_ROOM_SOURCE_X_ROW][DUNGEON_ROOM_SOURCE_COLUMN + slot] = source_x[slot];
-                rows[DUNGEON_ROOM_SOURCE_Y_ROW][DUNGEON_ROOM_SOURCE_COLUMN + slot] = source_y[slot];
-            }
+            rows[DUNGEON_ROOM_SOURCE_X_ROW][DUNGEON_ROOM_SOURCE_COLUMN
+                ..(DUNGEON_ROOM_SOURCE_COUNT + DUNGEON_ROOM_SOURCE_COLUMN)]
+                .copy_from_slice(&source_x[..DUNGEON_ROOM_SOURCE_COUNT]);
+            rows[DUNGEON_ROOM_SOURCE_Y_ROW][DUNGEON_ROOM_SOURCE_COLUMN
+                ..(DUNGEON_ROOM_SOURCE_COUNT + DUNGEON_ROOM_SOURCE_COLUMN)]
+                .copy_from_slice(&source_y[..DUNGEON_ROOM_SOURCE_COUNT]);
         }
         let source_byte = class
             .wrapping_mul(4)
@@ -819,7 +827,7 @@ pub fn parse_combat_arena_bank(
     }
 
     let mut records = Vec::with_capacity(expected_records);
-    for chunk in bytes.chunks_exact(COMBAT_ARENA_RECORD_LEN) {
+    for chunk in bytes.as_chunks::<COMBAT_ARENA_RECORD_LEN>().0 {
         records.push(CombatArenaRecord::from_record_bytes(chunk)?);
     }
 

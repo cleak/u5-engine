@@ -916,7 +916,7 @@ pub const TERRAIN_COMBAT_REPLACEMENT_DENOMINATOR: u8 = 9;
 /// tile. The caller is responsible for the spawn-index threshold
 /// gate; this helper only encodes the one-in-nine die.
 pub const fn terrain_combat_replacement_roll_picks_replacement(replacement_roll_seed: u8) -> bool {
-    replacement_roll_seed % TERRAIN_COMBAT_REPLACEMENT_DENOMINATOR == 0
+    replacement_roll_seed.is_multiple_of(TERRAIN_COMBAT_REPLACEMENT_DENOMINATOR)
 }
 
 /// `encounters.md §8` shipped dungeon-encounter arena bank size.
@@ -1216,14 +1216,14 @@ impl PlayState {
         if let Some(snapshot) = &mut self.combat_frame_snapshot {
             snapshot.encounter_mode_high_bit = true;
         }
-        if !enter_endgame_after_successful_absorbable_combat {
-            if let Some(snapshot) = &mut self.combat_frame_snapshot {
-                snapshot.dungeon_room_clear_on_success = Some(PendingDungeonRoomClear {
-                    scene,
-                    room_slot,
-                    trigger_cell,
-                });
-            }
+        if !enter_endgame_after_successful_absorbable_combat
+            && let Some(snapshot) = &mut self.combat_frame_snapshot
+        {
+            snapshot.dungeon_room_clear_on_success = Some(PendingDungeonRoomClear {
+                scene,
+                room_slot,
+                trigger_cell,
+            });
         }
         if enter_endgame_after_successful_absorbable_combat && has_absorbable_field {
             let endgame_messages = require_endgame_messages(game_dir)?;
@@ -2456,7 +2456,7 @@ mod combat_setup_batch_tests {
     #[test]
     fn combat_placement_leaves_arena_records_at_a_decision_point() {
         let seats = [(5u8, 8u8), (6, 9), (4, 9), (5, 10), (7, 10), (3, 10)];
-        let (mut state, dir) = batch_combat_state(&[b'G', b'G', b'G']);
+        let (mut state, dir) = batch_combat_state(b"GGG");
         fs::write(
             dir.join(BRIT_CBT_FILE),
             seated_arena_record(&seats).repeat(BRIT_CBT_RECORDS),
@@ -2563,7 +2563,7 @@ mod combat_setup_batch_tests {
     fn every_living_party_member_reaches_its_own_authored_arena_seat() {
         // The seat rows the shipped forest/hill outdoor arenas use.
         let seats = [(5u8, 8u8), (6, 9), (4, 9), (5, 10), (7, 10), (3, 10)];
-        let (mut state, dir) = batch_combat_state(&[b'G', b'G', b'G']);
+        let (mut state, dir) = batch_combat_state(b"GGG");
         fs::write(
             dir.join(BRIT_CBT_FILE),
             seated_arena_record(&seats).repeat(BRIT_CBT_RECORDS),
@@ -2621,7 +2621,7 @@ mod combat_setup_batch_tests {
     #[test]
     fn a_combat_turn_does_not_refresh_record_zero_from_the_world_globals() {
         let seats = [(5u8, 8u8), (6, 9), (4, 9), (5, 10), (7, 10), (3, 10)];
-        let (mut state, dir) = batch_combat_state(&[b'G', b'G', b'G']);
+        let (mut state, dir) = batch_combat_state(b"GGG");
         fs::write(
             dir.join(BRIT_CBT_FILE),
             seated_arena_record(&seats).repeat(BRIT_CBT_RECORDS),
@@ -2661,7 +2661,7 @@ mod combat_setup_batch_tests {
     /// covers the pirate half of the same paragraph.)*
     #[test]
     fn combat_entry_prints_the_group_name_and_conflict_banner_around_one_blank_row() {
-        let (mut state, dir) = batch_combat_state(&[b'G']);
+        let (mut state, dir) = batch_combat_state(b"G");
 
         state
             .enter_terrain_combat_from_world_object(&dir, WorldPlane::Britannia, 1, batch_trigger())
@@ -2705,7 +2705,7 @@ mod combat_setup_batch_tests {
     fn a_seating_ring_vanish_prints_below_the_group_name_and_above_the_banner() {
         let mut vanished = None;
         for seed in 0u16..4096 {
-            let (mut state, dir) = batch_combat_state(&[b'G']);
+            let (mut state, dir) = batch_combat_state(b"G");
             state.party_equipment[0][EQUIP_SLOT_RING] = EQUIPMENT_ID_RING_INVISIBILITY as u8;
             state.prng_state = seed;
             state
@@ -2747,7 +2747,7 @@ mod combat_setup_batch_tests {
     /// attacker still gets the group name: one bat announces `BATS`."
     #[test]
     fn a_bat_encounter_prints_the_published_group_name_above_the_banner() {
-        let (mut state, dir) = batch_combat_state(&[b'G']);
+        let (mut state, dir) = batch_combat_state(b"G");
         let mut trigger = batch_trigger();
         // `encounters.md §4`: `class = (sprite_byte - 0x40) / 4`, so
         // `0x94` is class 21, Bat.
@@ -2919,7 +2919,7 @@ mod combat_setup_batch_tests {
     /// reach the transcript at the moment setup produces it.
     #[test]
     fn combat_banner_reaches_the_transcript_before_a_later_writer_takes_the_slot() {
-        let (mut state, dir) = batch_combat_state(&[b'G']);
+        let (mut state, dir) = batch_combat_state(b"G");
 
         state
             .enter_terrain_combat_from_world_object(&dir, WorldPlane::Britannia, 1, batch_trigger())
@@ -2950,7 +2950,7 @@ mod combat_setup_batch_tests {
     /// authoritative pairing."
     #[test]
     fn monster_descriptors_start_at_six_while_records_continue_from_the_seated_party() {
-        let (mut state, dir) = batch_combat_state(&[b'G', b'G', b'G', b'G']);
+        let (mut state, dir) = batch_combat_state(b"GGGG");
 
         state
             .enter_terrain_combat_from_world_object(&dir, WorldPlane::Britannia, 1, batch_trigger())
@@ -2985,7 +2985,7 @@ mod combat_setup_batch_tests {
     /// tile byte is zero, so a hidden seat must not read as free.
     #[test]
     fn an_invisibility_ring_hides_only_its_wearer_and_keeps_the_seat_allocated() {
-        let (mut state, dir) = batch_combat_state(&[b'G', b'G', b'G', b'G']);
+        let (mut state, dir) = batch_combat_state(b"GGGG");
         state.party_equipment[0][EQUIP_SLOT_RING] = EQUIPMENT_ID_RING_INVISIBILITY as u8;
 
         state
@@ -3021,7 +3021,7 @@ mod combat_setup_batch_tests {
     /// non-zero hidden value must still park the wearer's record.
     #[test]
     fn the_animator_leaves_a_hidden_wearers_record_parked() {
-        let (mut state, dir) = batch_combat_state(&[b'G', b'G', b'G', b'G']);
+        let (mut state, dir) = batch_combat_state(b"GGGG");
         state.party_equipment[0][EQUIP_SLOT_RING] = EQUIPMENT_ID_RING_INVISIBILITY as u8;
         state
             .enter_terrain_combat_from_world_object(&dir, WorldPlane::Britannia, 1, batch_trigger())
@@ -3075,7 +3075,7 @@ mod combat_setup_batch_tests {
     /// is seeded with "the character's roster slot index".
     #[test]
     fn a_dead_member_packs_the_survivors_into_the_low_descriptor_indexes() {
-        let (mut state, dir) = batch_combat_state(&[b'G', b'D', b'G', b'G']);
+        let (mut state, dir) = batch_combat_state(b"GDGG");
         let (active_objects, actors) = seat_batch_party(&mut state);
 
         // Three survivors, packed into descriptors zero through two.
@@ -3112,7 +3112,7 @@ mod combat_setup_batch_tests {
     /// own index.
     #[test]
     fn packed_experience_and_names_follow_the_descriptor_owner_byte() {
-        let (mut state, dir) = batch_combat_state(&[b'G', b'D', b'G', b'G']);
+        let (mut state, dir) = batch_combat_state(b"GDGG");
         state.party_names[2][..5].copy_from_slice(b"Iolo\0");
         state.party_names[1][..5].copy_from_slice(b"Gwen\0");
         let (active_objects, actors) = seat_batch_party(&mut state);
@@ -3142,7 +3142,7 @@ mod combat_setup_batch_tests {
     /// if that member was the active player." Only `'D'` skips seating.
     #[test]
     fn an_asleep_member_is_seated_disabled_prone_and_clears_the_active_player() {
-        let (mut state, dir) = batch_combat_state(&[b'G', b'S', b'G']);
+        let (mut state, dir) = batch_combat_state(b"GSG");
         state.active_player = Some(1);
         let (active_objects, actors) = seat_batch_party(&mut state);
 
@@ -3181,7 +3181,7 @@ mod combat_setup_batch_tests {
     /// [`PlayState::combat_roster_slot_for_actor_slot`].
     #[test]
     fn packed_party_damage_wounds_the_character_the_descriptor_names() {
-        let (mut state, dir) = batch_combat_state(&[b'G', b'D', b'G', b'G']);
+        let (mut state, dir) = batch_combat_state(b"GDGG");
         let (active_objects, actors) = seat_batch_party(&mut state);
         state.active_objects = active_objects;
         state.combat_actors = actors;
@@ -3212,7 +3212,7 @@ mod combat_setup_batch_tests {
     /// instead of indexing the descriptor table by the sentinel.
     #[test]
     fn the_combat_cursor_finds_the_packed_descriptor_of_the_active_player() {
-        let (mut state, dir) = batch_combat_state(&[b'G', b'D', b'G', b'G']);
+        let (mut state, dir) = batch_combat_state(b"GDGG");
         let (active_objects, actors) = seat_batch_party(&mut state);
         state.active_objects = active_objects;
         state.combat_actors = actors;
@@ -3237,7 +3237,7 @@ mod combat_setup_batch_tests {
     /// shows the acting member's row inverted with no arrow on it.
     #[test]
     fn the_combat_cursor_follows_the_pending_actor_without_moving_the_roster_marker() {
-        let (mut state, dir) = batch_combat_state(&[b'G', b'D', b'G', b'G']);
+        let (mut state, dir) = batch_combat_state(b"GDGG");
         let (active_objects, actors) = seat_batch_party(&mut state);
         state.active_objects = active_objects;
         state.combat_actors = actors;
@@ -3274,7 +3274,7 @@ mod combat_setup_batch_tests {
     /// default case".
     #[test]
     fn seating_an_asleep_member_runs_one_full_world_tick() {
-        let (mut awake, awake_dir) = batch_combat_state(&[b'G', b'G', b'G']);
+        let (mut awake, awake_dir) = batch_combat_state(b"GGG");
         awake.prng_state = 0x1234;
         let _ = seat_batch_party(&mut awake);
         assert_eq!(
@@ -3283,14 +3283,14 @@ mod combat_setup_batch_tests {
         );
         let _ = fs::remove_dir_all(awake_dir);
 
-        let (mut asleep, asleep_dir) = batch_combat_state(&[b'G', b'S', b'G']);
+        let (mut asleep, asleep_dir) = batch_combat_state(b"GSG");
         asleep.prng_state = 0x1234;
         let _ = seat_batch_party(&mut asleep);
 
         // The reference is the same fixture taking exactly one world tick
         // and nothing else, so the asleep branch is pinned to one tick
         // rather than to some other number of draws.
-        let (mut reference, reference_dir) = batch_combat_state(&[b'G', b'S', b'G']);
+        let (mut reference, reference_dir) = batch_combat_state(b"GSG");
         reference.prng_state = 0x1234;
         reference.advance_visual_tick();
 
@@ -3310,15 +3310,15 @@ mod combat_setup_batch_tests {
     /// inside the per-slot walk, not once per seating pass.
     #[test]
     fn each_asleep_member_charges_its_own_world_tick() {
-        let (mut one, one_dir) = batch_combat_state(&[b'G', b'S', b'G']);
+        let (mut one, one_dir) = batch_combat_state(b"GSG");
         one.prng_state = 0x1234;
         let _ = seat_batch_party(&mut one);
 
-        let (mut two, two_dir) = batch_combat_state(&[b'G', b'S', b'S']);
+        let (mut two, two_dir) = batch_combat_state(b"GSS");
         two.prng_state = 0x1234;
         let _ = seat_batch_party(&mut two);
 
-        let (mut reference, reference_dir) = batch_combat_state(&[b'G', b'S', b'S']);
+        let (mut reference, reference_dir) = batch_combat_state(b"GSS");
         reference.prng_state = 0x1234;
         reference.advance_visual_tick();
         reference.advance_visual_tick();
@@ -3342,7 +3342,7 @@ mod combat_setup_batch_tests {
     /// target picker".
     #[test]
     fn an_arena_centre_magic_field_becomes_a_setup_id_one_special_object() {
-        let (mut state, dir) = batch_combat_state(&[b'G', b'G', b'G', b'G']);
+        let (mut state, dir) = batch_combat_state(b"GGGG");
         let mut record = batch_arena_record();
         record[5 * COMBAT_ARENA_ROW_STRIDE + 5] = COMBAT_ARENA_CENTRE_SPECIAL_TILE;
         fs::write(dir.join(BRIT_CBT_FILE), record.repeat(BRIT_CBT_RECORDS)).unwrap();
@@ -3378,7 +3378,7 @@ mod combat_setup_batch_tests {
         // The conversion is draw-free, so it cannot perturb the `§5.3`
         // entry stream ahead of the count roll. Re-running the same entry
         // on the plain arena has to leave the PRNG in the same place.
-        let (mut plain, plain_dir) = batch_combat_state(&[b'G', b'G', b'G', b'G']);
+        let (mut plain, plain_dir) = batch_combat_state(b"GGGG");
         plain.prng_state = prng_before;
         plain
             .enter_terrain_combat_from_world_object(&plain_dir, WorldPlane::Britannia, 1, trigger)

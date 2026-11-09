@@ -88,7 +88,7 @@ fn p3w_w2_town_bed_hours_prompt_zero_cancels_silently_and_spends_the_turn() {
         assert!(state.active_rest.is_none(), "{cancel:?} cancels");
         let rows = p3w_rows(&state);
         let prompt_row = format!("Hole up- {}", crate::commands::TOWN_BED_HOURS_PROMPT);
-        assert!(rows.iter().any(|row| *row == prompt_row), "{rows:?}");
+        assert!(rows.contains(&prompt_row), "{rows:?}");
         assert!(!rows.iter().any(|row| row.contains("None!")), "{rows:?}");
         assert!(
             !rows.iter().any(|row| row.ends_with(&format!("hours? {cancel}"))

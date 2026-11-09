@@ -58,7 +58,7 @@ fn g4_common_words_s6_word_content_lengths_and_character_set() {
         assert!(word.bytes().all(|byte| byte < 0x80 && !byte.is_ascii_whitespace()));
         lengths.push((word.len(), *word));
     }
-    lengths.sort_by(|a, b| b.0.cmp(&a.0));
+    lengths.sort_by_key(|a| std::cmp::Reverse(a.0));
     assert_eq!(lengths[0], (12, "Blackthorn's"));
     assert_eq!(lengths[1], (11, "Shadowlords"));
     assert_eq!(lengths[2], (10, "Blackthorn"));
@@ -929,9 +929,10 @@ fn g4_tile_catalog_s3_1_class_letters_select_the_four_person_art_families() {
     ] {
         assert_eq!(combat_party_class_id(letter), Some(class), "{}", letter as char);
     }
-    assert_eq!(0u16 * 4 + 0x40 + 256, 320);
-    assert_eq!(3u16 * 4 + 0x40 + 256, 332);
-    for letter in [b'G', b'X', b'Z', b'0', b' '] {
+    let actor_tile = |class: u16| class * 4 + 0x40 + 256;
+    assert_eq!(actor_tile(0), 320);
+    assert_eq!(actor_tile(3), 332);
+    for letter in *b"GXZ0 " {
         assert_eq!(combat_party_class_id(letter), None, "{}", letter as char);
     }
 }

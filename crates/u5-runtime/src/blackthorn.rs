@@ -1021,13 +1021,12 @@ impl BlackthornCutsceneVm {
                 self.repeat_count = 1;
             }
             BlackthornCutsceneCommand::WriteTerrain { x, y, tile } => {
-                if let Some(index) = blackthorn_cutscene_tile_index(x, y) {
-                    if let Some(cell) = self.tile_buffer.get_mut(index) {
-                        *cell = tile;
-                        self.presentation_events.push(
-                            BlackthornCutscenePresentationEvent::TerrainBuffered { x, y, tile },
-                        );
-                    }
+                if let Some(index) = blackthorn_cutscene_tile_index(x, y)
+                    && let Some(cell) = self.tile_buffer.get_mut(index)
+                {
+                    *cell = tile;
+                    self.presentation_events
+                        .push(BlackthornCutscenePresentationEvent::TerrainBuffered { x, y, tile });
                 }
             }
             BlackthornCutsceneCommand::ExplicitRedraw => {

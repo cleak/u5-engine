@@ -74,11 +74,7 @@ pub const fn light_counter_spend_with_tag(cadence: LightDecayCadence, tag_byte: 
 /// counter units the current turn spends (1 for town/dungeon/combat, 2
 /// for ordinary overworld, longer for waits).
 pub const fn decay_light_counter(counter: u8, increment: u8) -> u8 {
-    if counter > increment {
-        counter - increment
-    } else {
-        0
-    }
+    counter.saturating_sub(increment)
 }
 
 /// `lighting.md §3`: ambient values 51..=255 are the "do-not-recompute"
@@ -181,8 +177,8 @@ pub const LAST_IN_HOUR_MINUTE: u8 = crate::MINUTES_PER_HOUR - 1;
 ///   - hour == DUSK_HOUR → dusk gradient indexed by
 ///     `(LAST_IN_HOUR_MINUTE - minute) / DAWN_DUSK_STEP_MINUTES`;
 ///   - otherwise (06..=18 surface) → full daylight.
-/// Caller still applies the personal-light floors in [`apply_personal_light`]
-/// and the [`ambient_is_sentinel`] skip rule before writing the result.
+///     Caller still applies the personal-light floors in [`apply_personal_light`]
+///     and the [`ambient_is_sentinel`] skip rule before writing the result.
 pub const fn daylight_base_value(hour: u8, minute: u8, underworld: bool, depth_z: u8) -> u8 {
     daylight_base_value_for_scene(hour, minute, underworld, depth_z, crate::SCENE_OVERWORLD)
 }

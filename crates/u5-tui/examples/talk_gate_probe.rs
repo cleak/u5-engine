@@ -101,10 +101,10 @@ fn route_to_cell(state: &mut PlayState, goal: (usize, usize), budget: usize) {
     // stopped dead against them: East Britanny's shipwright route planned to
     // (8,10) and every run of it ended at (3,14).
     for npc in &terrain.npcs {
-        if let Some(slot) = npc.active_object {
-            if let Some(object) = terrain.active_objects.get_mut(slot) {
-                *object = ActiveObject::empty();
-            }
+        if let Some(slot) = npc.active_object
+            && let Some(object) = terrain.active_objects.get_mut(slot)
+        {
+            *object = ActiveObject::empty();
         }
     }
     terrain.npcs.clear();
@@ -121,7 +121,10 @@ fn route_to_cell(state: &mut PlayState, goal: (usize, usize), budget: usize) {
             return;
         }
         let start = (terrain.player.x, terrain.player.y);
-        let mut came: HashMap<(usize, usize), ((usize, usize), char, bool)> = HashMap::new();
+        // Each reached cell maps to (the cell it came from, the step key,
+        // whether that step opened a door).
+        type Step = ((usize, usize), char, bool);
+        let mut came: HashMap<(usize, usize), Step> = HashMap::new();
         let mut queue = VecDeque::from([start]);
         came.insert(start, (start, ' ', false));
         let mut reached = false;

@@ -207,9 +207,7 @@ impl ConversationSessionOutput {
         // the empty-input exit has already printed its own two - "Print
         // `BYE` followed by two line feeds, run the NPC's mandatory Bye
         // response in quotes" - so do not add a third.
-        if !self.text.is_empty() && !self.text.ends_with('\n') {
-            self.push_plain_text("\n");
-        } else if self.text.is_empty() {
+        if self.text.is_empty() || !self.text.ends_with('\n') {
             self.push_plain_text("\n");
         }
         if !already_quoted {
@@ -698,7 +696,7 @@ impl ConversationSession {
                 } else {
                     TLK_ASK_WHO_AFFIRMATIVE_LINE
                 };
-                let mut rendered = TlkRenderedText::plain(&format!("\n\"{acknowledgement}"));
+                let mut rendered = TlkRenderedText::plain(format!("\n\"{acknowledgement}"));
                 let acknowledgement_len = rendered.text.len();
                 rendered.push_rendered(&out.rendered_text().trimmed_ask_who_quote_pair());
                 out.text = rendered.text;
@@ -1692,7 +1690,7 @@ fn tlk_ordinary_keyword_response_index(
         .find(|idx| raw_fields.and_then(|raw| raw[*idx].first()) == Some(&TLK_CODE_LABEL_RECORD))
         .unwrap_or(raw_len);
     let mut idx = TLK_LEADING_ENTRY_COUNT;
-    if idx % 2 == 0 {
+    if idx.is_multiple_of(2) {
         idx += 1;
     }
     while idx < first_declaration && idx + 1 < decoded_fields.len() {

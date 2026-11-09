@@ -87,10 +87,7 @@ impl From<Option<u8>> for InlineRestRequest {
 }
 
 pub fn parse_inline_rest_request(value: &str) -> InlineRestRequest {
-    let mut parts = value
-        .trim()
-        .split(|ch| matches!(ch, '/' | ':' | ','))
-        .map(str::trim);
+    let mut parts = value.trim().split(['/', ':', ',']).map(str::trim);
     let hours = parts.next().and_then(parse_inline_hours);
     let watcher = parts
         .next()
@@ -413,7 +410,7 @@ pub fn parse_inline_ready_request(value: &str) -> io::Result<Option<InlineReadyR
         return Ok(None);
     }
     let parts: Vec<_> = trimmed
-        .split(|ch| matches!(ch, '/' | ':' | ','))
+        .split(['/', ':', ','])
         .map(str::trim)
         .filter(|part| !part.is_empty())
         .collect();
@@ -459,7 +456,7 @@ pub fn parse_inline_mix_request(value: &str) -> io::Result<Option<InlineMixReque
         return Ok(None);
     }
     let parts: Vec<_> = trimmed
-        .split(|ch| matches!(ch, '/' | ':' | ','))
+        .split(['/', ':', ','])
         .map(str::trim)
         .filter(|part| !part.is_empty())
         .collect();
@@ -495,7 +492,7 @@ pub fn parse_inline_mix_request(value: &str) -> io::Result<Option<InlineMixReque
 pub fn inline_mix_candidate(value: &str) -> bool {
     let parts: Vec<_> = value
         .trim()
-        .split(|ch| matches!(ch, '/' | ':' | ','))
+        .split(['/', ':', ','])
         .map(str::trim)
         .filter(|part| !part.is_empty())
         .collect();
@@ -508,7 +505,7 @@ pub fn parse_inline_shrine_request(value: &str) -> io::Result<Option<InlineShrin
         return Ok(None);
     }
     let parts: Vec<_> = trimmed
-        .split(|ch| matches!(ch, '/' | ':' | ','))
+        .split(['/', ':', ','])
         .map(str::trim)
         .filter(|part| !part.is_empty())
         .collect();

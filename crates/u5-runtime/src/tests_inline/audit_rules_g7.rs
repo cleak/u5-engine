@@ -942,7 +942,7 @@ fn g7_view_s4_view_class_table_covers_every_terrain_id() {
             0xE0..=0xE3 => 0x0E,
             0xD8..=0xDC => 0x0F,
             0x20..=0x26 => 0x10,
-            _ => unreachable!("tile {tile:#04x} has no published class"),
+            // No catch-all arm: the compiler proves every tile has a class.
         }
     };
     for tile in 0u8..=255 {

@@ -19,7 +19,7 @@ fn stonegate_trapdoor_script_sounds_the_descent_then_one_rumble_per_death() {
     state.apply_stonegate_trapdoor_script(0);
 
     let mut expected = vec![SoundEffect::StonegateDescent];
-    expected.extend(std::iter::repeat(SoundEffect::StonegateMemberDeath).take(members));
+    expected.extend(std::iter::repeat_n(SoundEffect::StonegateMemberDeath, members));
     assert_eq!(state.sound_effects_after(serial), expected);
     assert_eq!(state.sound_effect_serial, serial + 1 + members as u64);
     assert!(state.party.iter().all(|member| member.hp == 0));

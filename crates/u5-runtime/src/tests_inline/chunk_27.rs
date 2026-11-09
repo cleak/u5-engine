@@ -25,7 +25,7 @@ fn chrome_test_font() -> FixedCellFont {
 fn chrome_frame(content: &GameplayChromeContent) -> Vec<u8> {
     let font = chrome_test_font();
     let mut rgba = vec![0u8; TEXT_WINDOW_RENDER_WIDTH * TEXT_WINDOW_RENDER_HEIGHT * 4];
-    for pixel in rgba.chunks_exact_mut(4) {
+    for pixel in rgba.as_chunks_mut::<4>().0 {
         pixel.copy_from_slice(&[0, 0, 0, 0xff]);
     }
     paint_gameplay_frame_chrome(
@@ -144,7 +144,7 @@ fn sky_strip_cells_map_to_columns_six_through_seventeen() {
     assert_eq!(sky_strip_cell_column(11), 17);
 
     // Hour 8 puts the fixed marker at cell 9 and Trammel at cell 0.
-    let cells = sky_strip_cells(8, [b'4', b'6']);
+    let cells = sky_strip_cells(8, *b"46");
     assert_eq!(
         cells[9],
         Some(SkyStripCell {
@@ -171,7 +171,7 @@ fn sky_strip_cells_map_to_columns_six_through_seventeen() {
 
 #[test]
 fn sky_strip_gap_caps_sit_at_columns_five_and_eighteen() {
-    let content = ChromeGap::SkyStrip(Box::new(sky_strip_cells(8, [b'4', b'6'])));
+    let content = ChromeGap::SkyStrip(Box::new(sky_strip_cells(8, *b"46")));
     let gap = top_gap(&content).unwrap();
 
     assert_eq!(gap.left_cap_column, 5);
@@ -697,7 +697,7 @@ fn chrome_paint_takes_its_two_colours_as_parameters() {
     let content = GameplayChromeContent::default();
     let paint = |palette: ChromePalette| {
         let mut rgba = vec![0u8; TEXT_WINDOW_RENDER_WIDTH * TEXT_WINDOW_RENDER_HEIGHT * 4];
-        for pixel in rgba.chunks_exact_mut(4) {
+        for pixel in rgba.as_chunks_mut::<4>().0 {
             pixel.copy_from_slice(&[0, 0, 0, 0xff]);
         }
         paint_gameplay_frame_chrome(

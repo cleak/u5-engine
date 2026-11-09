@@ -186,7 +186,7 @@ mod tests {
     fn synthetic_british_pth_bytes() -> Vec<u8> {
         let mut bytes = Vec::with_capacity(BRITISH_PTH_LEN);
         for len in [856usize, 548, 411, 964] {
-            bytes.extend(std::iter::repeat(0x11).take(len));
+            bytes.extend(std::iter::repeat_n(0x11, len));
             bytes.push(0);
         }
         bytes

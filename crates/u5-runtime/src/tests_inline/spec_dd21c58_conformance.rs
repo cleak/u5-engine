@@ -714,7 +714,7 @@ fn entering_dungeon_combat_from_a_chest_cell_converts_and_repaints_the_centre() 
         .iter()
         .find(|object| {
             object.type_byte == COMBAT_ARENA_CENTRE_SPECIAL_SETUP_ID
-                && (usize::from(object.x), usize::from(object.y)) == (column, row)
+                && (object.x, object.y) == (column, row)
         })
         .expect("the centre cell converted to a setup-id-one special object");
     assert_eq!(
@@ -740,7 +740,7 @@ fn entering_dungeon_combat_from_a_chest_cell_converts_and_repaints_the_centre() 
             .active_objects
             .iter()
             .all(|object| object.type_byte != COMBAT_ARENA_CENTRE_SPECIAL_SETUP_ID
-                || (usize::from(object.x), usize::from(object.y)) != (column, row)),
+                || (object.x, object.y) != (column, row)),
         "a non-chest underfoot class presents no qualifying centre cell"
     );
     assert_eq!(ladder.combat_terrain[row][column], 0xC8);

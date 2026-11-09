@@ -127,10 +127,7 @@ pub const fn natural_moongate_cached_glyph_slot(hour: u8) -> u8 {
 /// statements ("the tables are not twenty-four-entry hour tables, and
 /// they contain no off-horizon sentinel entries at all"). Index this
 /// table with `day - 1`.
-pub const TRAMMEL_GLYPH_BY_DAY: [u8; MOON_GLYPH_DAYS_PER_MONTH] = [
-    b'0', b'1', b'1', b'2', b'2', b'3', b'3', b'4', b'5', b'5', b'6', b'6', b'7', b'7', b'0', b'1',
-    b'1', b'2', b'2', b'3', b'3', b'4', b'5', b'5', b'6', b'6', b'7', b'7',
-];
+pub const TRAMMEL_GLYPH_BY_DAY: [u8; MOON_GLYPH_DAYS_PER_MONTH] = *b"0112233455667701122334556677";
 
 /// `moons.md §2.2` day-indexed Felucca glyph table.
 ///
@@ -140,10 +137,7 @@ pub const TRAMMEL_GLYPH_BY_DAY: [u8; MOON_GLYPH_DAYS_PER_MONTH] = [
 /// day twenty-eight is `b'0'`, the first entry of the next repetition.
 /// The calendar wrap from day twenty-eight back to day one is a real
 /// discontinuity the original does not smooth.
-pub const FELUCCA_GLYPH_BY_DAY: [u8; MOON_GLYPH_DAYS_PER_MONTH] = [
-    b'0', b'0', b'1', b'2', b'3', b'4', b'5', b'6', b'7', b'0', b'0', b'1', b'2', b'3', b'4', b'5',
-    b'6', b'7', b'0', b'0', b'1', b'2', b'3', b'4', b'5', b'6', b'7', b'0',
-];
+pub const FELUCCA_GLYPH_BY_DAY: [u8; MOON_GLYPH_DAYS_PER_MONTH] = *b"0012345670012345670012345670";
 
 /// `moons.md §2.2` length of both published glyph tables: the calendar
 /// month is twenty-eight days, "one through twenty-eight". "There is

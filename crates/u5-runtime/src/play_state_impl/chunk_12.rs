@@ -36,12 +36,11 @@ impl PlayState {
     }
 
     pub fn world_live_tile_at(&self, x: usize, y: usize) -> u8 {
-        if let Some(buffer) = &self.world_live_chunks {
-            if matches!(self.area, Area::World { plane } if plane == buffer.plane)
-                && buffer.contains_world_tile(x, y)
-            {
-                return buffer.tile_at(x, y);
-            }
+        if let Some(buffer) = &self.world_live_chunks
+            && matches!(self.area, Area::World { plane } if plane == buffer.plane)
+            && buffer.contains_world_tile(x, y)
+        {
+            return buffer.tile_at(x, y);
         }
         self.grid[world_cell_index(x, y)]
     }

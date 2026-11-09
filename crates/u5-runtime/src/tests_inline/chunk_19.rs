@@ -1471,7 +1471,7 @@
                 level: 8,
             },
         ];
-        let entry_statuses = [b'G', b'G', b'G', b'G', b'P', b'D'];
+        let entry_statuses = *b"GGGGPD";
 
         assert_eq!(
             state.apply_completed_long_camp_recovery(5, Some(3), &entry_statuses),
@@ -1515,7 +1515,7 @@
             max_hp: 90,
             level: 8,
         }];
-        let entry_statuses = [b'G'];
+        let entry_statuses = *b"G";
 
         assert_eq!(state.camp_cooldown, 0, "a fresh party is not on cooldown");
         let (first_hp, _) = state.apply_completed_long_camp_recovery(6, None, &entry_statuses);
@@ -1642,7 +1642,7 @@
             max_hp: 90,
             level: 8,
         }];
-        let entry_statuses = [b'D'];
+        let entry_statuses = *b"D";
 
         assert_eq!(
             state.apply_completed_long_camp_recovery(6, None, &entry_statuses),
@@ -1669,7 +1669,7 @@
             max_hp: 90,
             level: 8,
         }];
-        let entry_statuses = [b'G'];
+        let entry_statuses = *b"G";
 
         assert_eq!(
             state.apply_completed_long_camp_recovery(

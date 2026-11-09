@@ -773,8 +773,10 @@ pub fn route_smoke_cases() -> Vec<RouteSmokeCase> {
     stonegate_entry.shadowlord_hideouts =
         [SCENE_MOONGLOW, SHADOWLORD_HIDEOUT_VANQUISHED, SCENE_JHELOM];
 
-    let mut castle_view = PlayOptions::default();
-    castle_view.gems = 1;
+    let castle_view = PlayOptions {
+        gems: 1,
+        ..PlayOptions::default()
+    };
 
     let mut dungeon_view = dungeon_options.clone();
     dungeon_view.gems = 1;
@@ -804,8 +806,10 @@ pub fn route_smoke_cases() -> Vec<RouteSmokeCase> {
     let mut death_vision = PlayOptions::default();
     death_vision.party_intelligence[0] = 30;
 
-    let mut light_decay = PlayOptions::default();
-    light_decay.light_spell_counter = 2;
+    let light_decay = PlayOptions {
+        light_spell_counter: 2,
+        ..PlayOptions::default()
+    };
 
     let dungeon_rest_no_direct_recovery = PlayOptions {
         target: PlayTarget::Dungeon(dungeon),
@@ -4451,21 +4455,20 @@ fn word_of_power_seal_for_case(case_name: &str) -> Option<WordOfPowerSeal> {
 }
 
 fn stamp_word_of_power_seal_route(state: &mut PlayState, case_name: &str) {
-    if let Some(seal) = word_of_power_seal_for_case(case_name) {
-        if let Area::World { plane } = state.area {
-            if plane == seal.plane {
-                state.player.x = (seal.x + 1) % WORLD_SIDE;
-                state.player.y = seal.y;
-                state.sync_player_object();
-                let idx = world_cell_index(seal.x, seal.y);
-                if let Some(cell) = state.grid.get_mut(idx) {
-                    *cell = WORD_OF_POWER_SEALED_TILE;
-                }
-                state.word_of_power_seal_flags.fill(0);
-                let _ = state.refresh_world_live_chunks_for_current_area();
-                state.mark_visibility_dirty();
-            }
+    if let Some(seal) = word_of_power_seal_for_case(case_name)
+        && let Area::World { plane } = state.area
+        && plane == seal.plane
+    {
+        state.player.x = (seal.x + 1) % WORLD_SIDE;
+        state.player.y = seal.y;
+        state.sync_player_object();
+        let idx = world_cell_index(seal.x, seal.y);
+        if let Some(cell) = state.grid.get_mut(idx) {
+            *cell = WORD_OF_POWER_SEALED_TILE;
         }
+        state.word_of_power_seal_flags.fill(0);
+        let _ = state.refresh_world_live_chunks_for_current_area();
+        state.mark_visibility_dirty();
     }
 }
 
@@ -4558,10 +4561,10 @@ fn seed_town_talk_status_tile_route(state: &mut PlayState, status_tile: u8) {
     let npc_x = 16usize;
     let npc_y = 15usize;
     state.grid[npc_y * 32 + npc_x] = status_tile;
-    if let Some(slot) = state.npcs.first().and_then(|npc| npc.active_object) {
-        if let Some(object) = state.active_objects.get_mut(slot) {
-            object.type_byte = 1;
-        }
+    if let Some(slot) = state.npcs.first().and_then(|npc| npc.active_object)
+        && let Some(object) = state.active_objects.get_mut(slot)
+    {
+        object.type_byte = 1;
     }
     state.mark_visibility_dirty();
 }
@@ -4892,10 +4895,10 @@ fn seed_town_jimmy_unoccupied_target(state: &mut PlayState, tile: u8) {
     // horse-wander fixture that spends PRNG draws the route is trying to
     // prove the Jimmy path never makes.
     for npc in &state.npcs {
-        if let Some(slot) = npc.active_object {
-            if let Some(object) = state.active_objects.get_mut(slot) {
-                *object = ActiveObject::empty();
-            }
+        if let Some(slot) = npc.active_object
+            && let Some(object) = state.active_objects.get_mut(slot)
+        {
+            *object = ActiveObject::empty();
         }
     }
     state.npcs.clear();
@@ -5248,6 +5251,8 @@ fn seed_directed_wind_combat_route(
     }
 
     let mut active_objects = vec![ActiveObject::empty(); COMBAT_ACTOR_SLOTS];
+    // `slot` indexes the active-object table and names the party member.
+    #[allow(clippy::needless_range_loop)]
     for slot in 0..party_count {
         let (x, y) = if Some(slot) == target_party_slot {
             directed_route_coordinate_from_caster(direction, 1)
@@ -5527,13 +5532,10 @@ fn seed_combat_spell_route(state: &mut PlayState, code: &str) -> io::Result<()> 
     } else {
         [[0x04; COMBAT_ARENA_SIDE]; COMBAT_ARENA_SIDE]
     };
-    match code {
-        "IQX" => {
-            combat_terrain[1][8] = 0x04;
-            combat_terrain[5][5] = 0x04;
-            combat_terrain[5][6] = 0x04;
-        }
-        _ => {}
+    if code == "IQX" {
+        combat_terrain[1][8] = 0x04;
+        combat_terrain[5][5] = 0x04;
+        combat_terrain[5][6] = 0x04;
     }
     state.prng_state = match code {
         "GP" => first_nonzero_prng_roll_seed(15),
@@ -6026,22 +6028,21 @@ fn validate_combat_spell_route_state(state: &PlayState, case_name: &str) -> io::
                 )));
             }
         }
-        "combat-kill-gargoyle-lava-marker" => {
+        "combat-kill-gargoyle-lava-marker"
             // `combat.md §6.3`: the Gargoyle branch writes the lava terrain
             // byte, writes **no** tile byte into the active-object record,
             // runs no drop rolls, and releases the slot. The earlier reading
             // that it fell through to the ordinary drop check is withdrawn.
-            if state.message == "Failed!"
+            if (state.message == "Failed!"
                 || !state.combat_actors[COMBAT_PARTY_ACTOR_SLOTS].is_empty()
                 || state.combat_terrain[5][6] != COMBAT_GARGOYLE_DEATH_TERRAIN_TILE
                 || state.active_objects[COMBAT_PARTY_ACTOR_SLOTS].tile
-                    == COMBAT_DEFAULT_DEATH_DROP_TILE
-            {
+                    == COMBAT_DEFAULT_DEATH_DROP_TILE)
+            => {
                 return Err(io::Error::other(format!(
                     "route smoke `{case_name}` did not apply the Gargoyle lava death transition"
                 )));
             }
-        }
         _ => {}
     }
     Ok(())
@@ -6754,7 +6755,7 @@ fn validate_route_smoke_case_state(
             // Good, Poisoned and Ashes take 10 down to 7.
             if state.clock.hour != 6
                 || state.food != 7
-                || state.party.get(0).is_none_or(|member| member.hp != 12)
+                || state.party.first().is_none_or(|member| member.hp != 12)
                 || state
                     .party
                     .get(1)
@@ -6809,8 +6810,7 @@ fn validate_route_smoke_case_state(
                 || state.food != 0
                 || schedule_pass_draws.is_none()
                 || state
-                    .party
-                    .get(0)
+                    .party.first()
                     .is_none_or(|member| member.hp != poisoned_hp || member.status != b'P')
                 || state
                     .party
@@ -6880,8 +6880,7 @@ fn validate_route_smoke_case_state(
                 || state.player.x != 16
                 || state.player.y != 15
                 || state
-                    .party
-                    .get(0)
+                    .party.first()
                     .is_none_or(|member| member.status != b'P')
                 || state
                     .party
@@ -8177,7 +8176,7 @@ fn validate_route_smoke_case_state(
         "dungeon-hole-up-no-direct-recovery" => {
             let camp_messages = load_camp_result_messages(game_dir)?;
             if state.clock.hour != 9
-                || state.party.get(0).is_none_or(|member| {
+                || state.party.first().is_none_or(|member| {
                     member.status != b'G' || member.hp != 5 || member.mana != 8
                 })
                 || state.party.get(1).is_none_or(|member| {
@@ -8212,7 +8211,7 @@ fn validate_route_smoke_case_state(
             let camp_messages = load_camp_result_messages(game_dir)?;
             if state.clock.hour != 14
                 || state.active_rest.is_some()
-                || state.party.get(0).is_none_or(|member| {
+                || state.party.first().is_none_or(|member| {
                     member.status != b'G' || member.hp != 2 || member.mana != 22
                 })
                 || state.party.get(1).is_none_or(|member| {
@@ -8647,7 +8646,7 @@ fn validate_route_smoke_case_state(
                     "route smoke `{case_name}` did not stay aboard the frigate"
                 )));
             };
-            if hull >= OUTDOOR_IMPACT_HULL_ROLL_HIGH + 1 || hull == 0 {
+            if hull > OUTDOOR_IMPACT_HULL_ROLL_HIGH || hull == 0 {
                 return Err(io::Error::other(format!(
                     "route smoke `{case_name}` left hull at {hull}"
                 )));
@@ -8682,23 +8681,22 @@ fn validate_route_smoke_case_state(
                 )));
             }
         }
-        "terrain-combat-out-of-arena-leave" => {
-            if !state.combat_active
+        "terrain-combat-out-of-arena-leave"
+            if (!state.combat_active
                 || !state.message.contains("Escape!")
                 || state.combat_frame_snapshot.is_none()
                 || !state.combat_actors[0].is_empty()
                 || state
                     .active_objects
                     .first()
-                    .is_some_and(|object| !object.is_empty())
-            {
-                return Err(io::Error::other(format!(
-                    "route smoke `{case_name}` did not release only the acting combatant on an out-of-arena leave (combat_active={}, snapshot={}, message `{}`)",
-                    state.combat_active,
-                    state.combat_frame_snapshot.is_some(),
-                    state.message
-                )));
-            }
+                    .is_some_and(|object| !object.is_empty())) =>
+        {
+            return Err(io::Error::other(format!(
+                "route smoke `{case_name}` did not release only the acting combatant on an out-of-arena leave (combat_active={}, snapshot={}, message `{}`)",
+                state.combat_active,
+                state.combat_frame_snapshot.is_some(),
+                state.message
+            )));
         }
         _ => {}
     }

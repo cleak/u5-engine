@@ -4,7 +4,7 @@
     fn location_pages() -> Vec<u8> {
         let mut pages = Vec::with_capacity(16 * 1024);
         for page in 0..16 {
-            pages.extend(std::iter::repeat(page as u8).take(1024));
+            pages.extend(std::iter::repeat_n(page as u8, 1024));
         }
         pages
     }
@@ -1088,7 +1088,7 @@
         assert!(
             font.glyphs
                 .iter()
-                .any(|glyph| { glyph.pixels.iter().any(|pixel| *pixel == 1) })
+                .any(|glyph| { glyph.pixels.contains(&1) })
         );
         for glyph in &font.glyphs {
             assert_eq!((glyph.width, glyph.height), (cell_width, cell_height));

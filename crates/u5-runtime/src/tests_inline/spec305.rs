@@ -418,7 +418,7 @@ mod spec305 {
         let mut rolls = Vec::new();
         for member in &state.party {
             if member.status != PARTY_STATUS_DEAD {
-                rolls.push(u5_prng_range_u16(&mut expected, 1, 8) as u16);
+                rolls.push(u5_prng_range_u16(&mut expected, 1, 8));
             }
         }
 

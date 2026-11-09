@@ -277,7 +277,7 @@ pub const fn active_object_compositor_variant(negate_time_active: bool, selector
 /// derives the observable rate from the fact that "the requested span of four
 /// divides its output range exactly so the four outcomes are equally likely"
 /// - so the draw is `random(0, 3)` over the shared gameplay stream, not a
-/// modulo of a wider draw.
+///   modulo of a wider draw.
 pub const ACTIVE_OBJECT_VARIANT_RANGE_LOW: u8 = 0;
 /// See [`ACTIVE_OBJECT_VARIANT_RANGE_LOW`].
 pub const ACTIVE_OBJECT_VARIANT_RANGE_HIGH: u8 = 3;
@@ -367,14 +367,13 @@ pub const fn active_object_default_composite(
         return ActiveObjectCompositeResult::Companion(effective_tile);
     }
 
-    match active_object_default_variant_base(
+    if let Some(base) = active_object_default_variant_base(
         effective_tile,
         current_terrain,
         previous_row_terrain,
         next_row_terrain,
     ) {
-        Some(base) => return ActiveObjectCompositeResult::Companion(base + (variant & 0x03)),
-        None => {}
+        return ActiveObjectCompositeResult::Companion(base + (variant & 0x03));
     }
 
     match current_terrain {

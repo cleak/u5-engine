@@ -129,7 +129,7 @@ fn world_k_low_climb_stat_falls_but_still_moves() {
     state.prng_state = 0;
     let mut expected_prng = state.prng_state;
     let _stat_roll = u5_prng_range_u16(&mut expected_prng, 1, 30);
-    let expected_damage = u5_prng_range_u16(&mut expected_prng, 1, 5) as u16;
+    let expected_damage = u5_prng_range_u16(&mut expected_prng, 1, 5);
 
     assert_eq!(
         outdoor_klimb_toward(&mut state, Path::new(""), Direction::East),

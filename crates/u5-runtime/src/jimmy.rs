@@ -6,8 +6,8 @@
 //!     threshold against a `1..=30` roll, requiring the lock/trap high bit.
 //!   - Dungeon chests: `(2*depth - Dexterity + 30)/2` threshold
 //!     against a `1..=30` roll.
-//! These helpers implement only the success/failure decision; key counter
-//! mutation, narration, and tile rewrites are caller responsibilities.
+//!     These helpers implement only the success/failure decision; key counter
+//!     mutation, narration, and tile rewrites are caller responsibilities.
 
 /// `doors-and-z-transitions.md §9` outdoor Klimb fall risk roll
 /// die. Each living party member rolls `1..=30` against their

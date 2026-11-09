@@ -797,10 +797,10 @@ impl PlayState {
             {
                 continue;
             }
-            if let Some(shadowlord_index) = placement.shadowlord_index {
-                if self.shadowlord_vanquished(shadowlord_index) {
-                    continue;
-                }
+            if let Some(shadowlord_index) = placement.shadowlord_index
+                && self.shadowlord_vanquished(shadowlord_index)
+            {
+                continue;
             }
             let x = placement.x as usize;
             let y = placement.y as usize;
@@ -2427,22 +2427,21 @@ impl PlayState {
             return Ok(MoveOutcome::Blocked);
         }
         let tile = self.grid[ny * 32 + nx];
-        if let Some(game_dir) = game_dir {
-            if let Some(delta) = town_walk_on_stair_delta(tile, direction) {
-                self.player.x = nx;
-                self.player.y = ny;
-                self.sync_player_object();
-                self.mark_visibility_dirty();
-                return self.change_town_floor(game_dir, scene, floor.saturating_add(delta));
-            }
+        if let Some(game_dir) = game_dir
+            && let Some(delta) = town_walk_on_stair_delta(tile, direction)
+        {
+            self.player.x = nx;
+            self.player.y = ny;
+            self.sync_player_object();
+            self.mark_visibility_dirty();
+            return self.change_town_floor(game_dir, scene, floor.saturating_add(delta));
         }
-        if let Some(game_dir) = game_dir {
-            if self
+        if let Some(game_dir) = game_dir
+            && self
                 .town_stair_at(game_dir, scene, floor, nx, ny, tile)?
                 .is_some()
-            {
-                return self.step_town_stair(game_dir, scene, floor, nx, ny, tile);
-            }
+        {
+            return self.step_town_stair(game_dir, scene, floor, nx, ny, tile);
         }
         let trapdoor_walkable = if let Some(game_dir) = game_dir {
             self.town_trap_door_at(game_dir, scene, floor, nx, ny, tile)?

@@ -828,7 +828,7 @@ impl PlayState {
                 let wy = world_y.rem_euclid(WORLD_SIDE as isize) as usize;
                 world_cell_index(wx, wy)
             }
-            TopDownRenderArea::Town { .. } => {
+            TopDownRenderArea::Town => {
                 if !(0..32).contains(&world_x) || !(0..32).contains(&world_y) {
                     return false;
                 }
@@ -974,20 +974,20 @@ impl PlayState {
         // marker so the latter wins at overlapping pixels. The secondary
         // coordinate has no arena-range precheck; ordinary pixel clipping is
         // the entire bounds policy.
-        if self.combat_cursor_blink {
-            if let Some((cursor_x, cursor_y)) = self.combat_cursor_actor_cell() {
-                draw_combat_cursor_marker_cell(
+        if self.combat_cursor_blink
+            && let Some((cursor_x, cursor_y)) = self.combat_cursor_actor_cell()
+        {
+            draw_combat_cursor_marker_cell(
+                viewport,
+                isize::from(cursor_x) + x_offset,
+                isize::from(cursor_y) + y_offset,
+            );
+            if let Some((marker_x, marker_y)) = self.combat_secondary_marker() {
+                draw_combat_secondary_marker_cell(
                     viewport,
-                    isize::from(cursor_x) + x_offset,
-                    isize::from(cursor_y) + y_offset,
+                    isize::from(marker_x) + x_offset,
+                    isize::from(marker_y) + y_offset,
                 );
-                if let Some((marker_x, marker_y)) = self.combat_secondary_marker() {
-                    draw_combat_secondary_marker_cell(
-                        viewport,
-                        isize::from(marker_x) + x_offset,
-                        isize::from(marker_y) + y_offset,
-                    );
-                }
             }
         }
         Ok(())
@@ -1431,10 +1431,11 @@ impl PlayState {
 
         // The raw 0x08 bit is a separate static rising-pit overlay after
         // ordinary object and field painting. It is not a visit marker.
-        if cell >> 4 < 9 && raw & 0x08 != 0 {
-            if let Some(objects) = banks.and_then(DungeonSpriteBanks::objects) {
-                self.draw_dungeon_object_sprite(viewport, objects, 8 + band, band, true);
-            }
+        if cell >> 4 < 9
+            && raw & 0x08 != 0
+            && let Some(objects) = banks.and_then(DungeonSpriteBanks::objects)
+        {
+            self.draw_dungeon_object_sprite(viewport, objects, 8 + band, band, true);
         }
     }
 
@@ -2346,10 +2347,10 @@ impl PlayState {
                 previous_marker,
                 tile,
             } => {
-                if cell_y > 0 {
-                    if let Some(previous) = prepared[index - cells].as_mut() {
-                        previous.grid = previous_marker;
-                    }
+                if cell_y > 0
+                    && let Some(previous) = prepared[index - cells].as_mut()
+                {
+                    previous.grid = previous_marker;
                 }
                 prepared[index] = Some(PreparedTopDownCell {
                     terrain: tile,
@@ -3440,7 +3441,7 @@ impl PlayState {
         self.dungeon_loop_minute_charged = true;
         self.dungeon_loop_iteration = self.dungeon_loop_iteration.wrapping_add(1);
         if self.negate_time_active()
-            || (tag == TimingStatusTag::HalfTime && self.dungeon_loop_iteration % 2 == 0)
+            || (tag == TimingStatusTag::HalfTime && self.dungeon_loop_iteration.is_multiple_of(2))
         {
             return;
         }
@@ -4057,21 +4058,6 @@ impl PlayState {
         Some(STARVATION_WARNING.to_string())
     }
 
-    /// Append one result sentence to the slot, separated by a space only
-    /// when the slot already holds something.
-    ///
-    /// An accepted step now leaves the slot empty (`text-output.md §10.2`),
-    /// so the consequence lines that used to continue the move narration
-    /// must not open with a stray space.
-    pub(crate) fn append_result_sentence(&mut self, sentence: &str) {
-        if self.message.is_empty() {
-            self.message = sentence.to_string();
-        } else {
-            self.message.push(' ');
-            self.message.push_str(sentence);
-        }
-    }
-
     pub fn append_pending_hourly_status_message(&mut self) {
         let Some(report) = self.pending_hourly_status_message.take() else {
             return;
@@ -4355,13 +4341,12 @@ impl PlayState {
         let mut changed = false;
 
         for idx in previous_live_cells {
-            if !indices.contains(&idx) {
-                if let Some(tile) = self.grid.get_mut(idx) {
-                    if *tile == NATURAL_MOONGATE_LIVE_TILE {
-                        *tile = NATURAL_MOONGATE_UNDERLYING_TILE;
-                        changed = true;
-                    }
-                }
+            if !indices.contains(&idx)
+                && let Some(tile) = self.grid.get_mut(idx)
+                && *tile == NATURAL_MOONGATE_LIVE_TILE
+            {
+                *tile = NATURAL_MOONGATE_UNDERLYING_TILE;
+                changed = true;
             }
         }
 
@@ -4371,11 +4356,11 @@ impl PlayState {
             } else {
                 NATURAL_MOONGATE_UNDERLYING_TILE
             };
-            if let Some(tile) = self.grid.get_mut(idx) {
-                if *tile != target {
-                    *tile = target;
-                    changed = true;
-                }
+            if let Some(tile) = self.grid.get_mut(idx)
+                && *tile != target
+            {
+                *tile = target;
+                changed = true;
             }
             if present && !self.natural_moongate_live_cells.contains(&idx) {
                 self.natural_moongate_live_cells.push(idx);
@@ -4389,10 +4374,10 @@ impl PlayState {
             // the stamp has to reach it; otherwise a gate rising while the
             // party stands still is Lookable but never drawn or lit until a
             // step reloads the window (playtest E24).
-            if let (Area::World { plane }, true) = (self.area, self.world_live_chunks.is_some()) {
-                if let Err(err) = self.rebuild_world_live_chunks_from_grid(plane) {
-                    self.push_diagnostic(err.to_string());
-                }
+            if let (Area::World { plane }, true) = (self.area, self.world_live_chunks.is_some())
+                && let Err(err) = self.rebuild_world_live_chunks_from_grid(plane)
+            {
+                self.push_diagnostic(err.to_string());
             }
             self.mark_visibility_dirty();
             self.recompute_daylight();
@@ -4463,11 +4448,11 @@ impl PlayState {
         let previous_live_cells = std::mem::take(&mut self.natural_moongate_live_cells);
         let mut changed = false;
         for idx in previous_live_cells {
-            if let Some(tile) = self.grid.get_mut(idx) {
-                if *tile == NATURAL_MOONGATE_LIVE_TILE {
-                    *tile = NATURAL_MOONGATE_UNDERLYING_TILE;
-                    changed = true;
-                }
+            if let Some(tile) = self.grid.get_mut(idx)
+                && *tile == NATURAL_MOONGATE_LIVE_TILE
+            {
+                *tile = NATURAL_MOONGATE_UNDERLYING_TILE;
+                changed = true;
             }
         }
         if changed {
@@ -4489,10 +4474,10 @@ impl PlayState {
             Area::World { .. } | Area::Town { .. } => {
                 let mut indices = Vec::new();
                 for slot in self.moonstone_slots.iter().copied() {
-                    if let Some(idx) = self.natural_moongate_index_for_slot(slot) {
-                        if !indices.contains(&idx) {
-                            indices.push(idx);
-                        }
+                    if let Some(idx) = self.natural_moongate_index_for_slot(slot)
+                        && !indices.contains(&idx)
+                    {
+                        indices.push(idx);
                     }
                 }
                 Some(indices)
@@ -5110,17 +5095,17 @@ impl PlayState {
         // pass taken while such a prompt is open used to sail the ship on,
         // charging turns and overwriting `Save game?` (playtest S24 P24-13).
         let command_wait = !self.prompt_waits_in_shared_wait();
-        if let (true, Area::World { plane }, Some(game_dir)) = (command_wait, self.area, game_dir) {
-            if self.world_falls_south_trigger_tile().is_some() {
-                let _ = self.apply_world_falls_chain(game_dir, plane)?;
-                // The chain spends visual ticks of its own - the descending
-                // sweep, the hidden marker, the restore - so this pass is
-                // already paid for. Adding the idle wait's own tick on top
-                // would animate the destination plane's objects one frame
-                // further than the chain left them.
-                self.under_sail_wait_cursor_poll_pending = false;
-                return Ok(IdleWaitPass::CommandWait);
-            }
+        if let (true, Area::World { plane }, Some(game_dir)) = (command_wait, self.area, game_dir)
+            && self.world_falls_south_trigger_tile().is_some()
+        {
+            let _ = self.apply_world_falls_chain(game_dir, plane)?;
+            // The chain spends visual ticks of its own - the descending
+            // sweep, the hidden marker, the restore - so this pass is
+            // already paid for. Adding the idle wait's own tick on top
+            // would animate the destination plane's objects one frame
+            // further than the chain left them.
+            self.under_sail_wait_cursor_poll_pending = false;
+            return Ok(IdleWaitPass::CommandWait);
         }
         if !command_wait || !self.under_sail_wait_pass_applies() {
             self.under_sail_wait_cursor_poll_pending = false;
@@ -6865,12 +6850,12 @@ impl PlayState {
         ) {
             return OutdoorActiveObjectStepAttempt::CandidateBlocked;
         }
-        if !type_bypasses_terrain_chance_gate(object.type_byte) {
-            if let Some(denominator) = terrain_chance_gate_denominator(tile) {
-                // `active-objects.md §8`: a one-in-`d` shared-generator draw.
-                if self.random_range_u8(0, denominator - 1) != 0 {
-                    return OutdoorActiveObjectStepAttempt::ChanceRefused;
-                }
+        if !type_bypasses_terrain_chance_gate(object.type_byte)
+            && let Some(denominator) = terrain_chance_gate_denominator(tile)
+        {
+            // `active-objects.md §8`: a one-in-`d` shared-generator draw.
+            if self.random_range_u8(0, denominator - 1) != 0 {
+                return OutdoorActiveObjectStepAttempt::ChanceRefused;
             }
         }
 
@@ -7493,6 +7478,31 @@ pub fn outdoor_active_object_step_accepts_tile(
     }
 }
 
+/// `overworld.md §5` (issue #305 Q5): the Underworld per-turn `0..255`
+/// draw's earthquake value, and its line.
+const UNDERWORLD_EARTHQUAKE_VALUE: u8 = 105;
+const UNDERWORLD_EARTHQUAKE_LINE: &str = "EARTHQUAKE!\n";
+
+/// `active-objects.md §8` random four-direction walker (issue #305 Q2): "0
+/// is north (same column, row minus one), 1 is east (column plus one, same
+/// row), 2 is south (same column, row plus one) and 3 is west".
+const OUTDOOR_RANDOM_WALK_DIRECTIONS: [Direction; 4] = [
+    Direction::North,
+    Direction::East,
+    Direction::South,
+    Direction::West,
+];
+
+/// `overworld.md §6.2.1`: the breath gate's shared inclusive range draw
+/// `[0, 7]`.
+fn outdoor_serpent_dragon_breath_draw(prng_state: &mut u16) -> u8 {
+    u5_prng_range_u16(
+        prng_state,
+        0,
+        u16::from(OUTDOOR_SERPENT_DRAGON_TRIGGER_DENOMINATOR - 1),
+    ) as u8
+}
+
 #[cfg(test)]
 mod time_cascade_and_daylight_spec_tests {
     use crate::test_fixtures::{
@@ -7690,29 +7700,4 @@ mod time_cascade_and_daylight_spec_tests {
         state.clock.minute = 0;
         assert_eq!(state.base_daylight(), FULL_DARKNESS);
     }
-}
-
-/// `overworld.md §5` (issue #305 Q5): the Underworld per-turn `0..255`
-/// draw's earthquake value, and its line.
-const UNDERWORLD_EARTHQUAKE_VALUE: u8 = 105;
-const UNDERWORLD_EARTHQUAKE_LINE: &str = "EARTHQUAKE!\n";
-
-/// `active-objects.md §8` random four-direction walker (issue #305 Q2): "0
-/// is north (same column, row minus one), 1 is east (column plus one, same
-/// row), 2 is south (same column, row plus one) and 3 is west".
-const OUTDOOR_RANDOM_WALK_DIRECTIONS: [Direction; 4] = [
-    Direction::North,
-    Direction::East,
-    Direction::South,
-    Direction::West,
-];
-
-/// `overworld.md §6.2.1`: the breath gate's shared inclusive range draw
-/// `[0, 7]`.
-fn outdoor_serpent_dragon_breath_draw(prng_state: &mut u16) -> u8 {
-    u5_prng_range_u16(
-        prng_state,
-        0,
-        u16::from(OUTDOOR_SERPENT_DRAGON_TRIGGER_DENOMINATOR - 1),
-    ) as u8
 }

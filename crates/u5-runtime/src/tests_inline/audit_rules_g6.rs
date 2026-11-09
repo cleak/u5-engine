@@ -363,20 +363,20 @@ fn g6_input_s8_typed_number_escape_clears_and_west_erases() {
 /// first position".
 #[test]
 fn g6_input_s8_typed_number_return_only_exit_and_discards() {
-    let (entry, submitted) = g6_typed_quantity(&[b'\r']);
+    let (entry, submitted) = g6_typed_quantity(b"\r");
     assert!(submitted);
     assert_eq!(entry.quantity(), 0);
 
-    let (entry, submitted) = g6_typed_quantity(&[b' ', b'A', b'.', b'3', b'x']);
+    let (entry, submitted) = g6_typed_quantity(b" A.3x");
     assert!(!submitted);
     assert_eq!(entry.as_str(), "3");
 
-    let (entry, _) = g6_typed_quantity(&[b'5', b'-']);
+    let (entry, _) = g6_typed_quantity(b"5-");
     assert_eq!(entry.as_str(), "5", "a sign after a digit is dropped");
-    let (entry, _) = g6_typed_quantity(&[b'-', b'-', b'4']);
+    let (entry, _) = g6_typed_quantity(b"--4");
     assert_eq!(entry.as_str(), "-4");
 
-    let (entry, submitted) = g6_typed_quantity(&[b'1', b'2', b'\n']);
+    let (entry, submitted) = g6_typed_quantity(b"12\n");
     assert!(submitted);
     assert_eq!(entry.quantity(), 12);
 }

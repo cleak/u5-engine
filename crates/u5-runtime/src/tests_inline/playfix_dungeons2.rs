@@ -264,8 +264,8 @@ fn playfix2_f17_a_party_look_closes_its_row() {
 
 /// F15: `dungeon-mode.md §8.1` - "Search, unlit | `\nYou find:\ndarkness.\n`
 /// - a *find* line, with a leading blank row", and `§12` ends every `Dir-`
-/// completion with its own line feed. Whether a member prompt ran first
-/// does not change the blank row.
+///   completion with its own line feed. Whether a member prompt ran first
+///   does not change the blank row.
 #[test]
 fn playfix2_f15_unlit_party_search_keeps_the_blank_row_before_you_find() {
     let rows_after_dir = |party: bool| {

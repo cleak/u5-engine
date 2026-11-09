@@ -230,10 +230,10 @@ fn p20_06_a_combat_use_result_row_is_closed_before_the_hazard_line() {
 
 /// u5-spec#312 Q1 (`catalogs/item-list.md §7.1`): "Every scroll effect label
 /// - all eight banners, and `No effect!` - is the literal followed by one
-/// line feed, with no leading feed", identically for world and combat `U`,
-/// so "A later line that carries no leading feed of its own, such as a
-/// combat hazard line, therefore starts on its own row and never joins a
-/// banner."
+///   line feed, with no leading feed", identically for world and combat `U`,
+///   so "A later line that carries no leading feed of its own, such as a
+///   combat hazard line, therefore starts on its own row and never joins a
+///   banner."
 #[test]
 fn spec312_q1_combat_scroll_banners_close_their_row_before_a_hazard_line() {
     let game_dir = std::path::Path::new(".");

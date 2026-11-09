@@ -2618,7 +2618,7 @@ mod tests {
         );
         // The re-gate happens "under a millisecond later": that is the
         // blocking install cost, and nothing else sits in the gap.
-        assert!(TONE_BLOCKING_INSTALL_NANOS < 1_000_000);
+        const { assert!(TONE_BLOCKING_INSTALL_NANOS < 1_000_000) };
     }
 
     #[test]
@@ -3299,8 +3299,8 @@ mod tests {
     /// per-iteration cost instead.
     #[test]
     fn the_baseline_calibration_zeroes_the_envelope_idle_gate() {
-        assert!(NOMINAL_BOOT_CALIBRATION <= 92);
-        assert!(NOMINAL_BOOT_CALIBRATION < 100);
+        const { assert!(NOMINAL_BOOT_CALIBRATION <= 92) };
+        const { assert!(NOMINAL_BOOT_CALIBRATION < 100) };
     }
 
     /// `audio.md §10.2`: "Its inner count would fall from 5 to 4 only at a

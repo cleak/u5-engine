@@ -62,6 +62,12 @@ pub struct U4TransferPreview {
     pub gold: u16,
 }
 
+impl Default for U4TransferSession {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl U4TransferSession {
     pub fn new() -> Self {
         Self {

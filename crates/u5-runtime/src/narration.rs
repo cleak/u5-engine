@@ -292,7 +292,7 @@ impl StagedNarration {
             _ => now_secs,
         };
         let delay_secs = beat.delay_secs;
-        *self.due_at_secs.get_or_insert_with(|| anchor + delay_secs)
+        *self.due_at_secs.get_or_insert(anchor + delay_secs)
     }
 
     pub fn clear(&mut self) {

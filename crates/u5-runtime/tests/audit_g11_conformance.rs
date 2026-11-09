@@ -387,7 +387,7 @@ fn a102_dungeon_sceptre_runs_the_an_grav_helper_ahead_of_the_party() {
     let mut grid = u5_runtime::test_fixtures::open_dungeon_record();
     // Party at (1, 1) facing the fixture's default; put a marked fire field
     // on the cell ahead.
-    let mut state = u5_runtime::test_fixtures::dungeon_state(grid.clone(), 0, 1, 1);
+    let state = u5_runtime::test_fixtures::dungeon_state(grid.clone(), 0, 1, 1);
     let (dx, dy) = state.player.facing.delta();
     let ahead = dungeon_cell_index(0, (1 + dx) as usize, (1 + dy) as usize);
     grid[ahead] = 0x8a;

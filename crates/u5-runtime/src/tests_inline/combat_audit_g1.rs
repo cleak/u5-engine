@@ -131,9 +131,8 @@ fn wound_band_morale_draw_spans_zero_through_two_fifty_six() {
     assert!(state.combat_ai_actor_fleeing(8));
     assert_eq!(state.prng_state, expected_state);
     assert!(monster_wound_sets_fleeing(30, 100, 256));
-    assert_eq!(
-        resolve_combat_wound_morale(30, 100, 256).fleeing,
-        true
+    assert!(
+        resolve_combat_wound_morale(30, 100, 256).fleeing
     );
 }
 
@@ -685,7 +684,7 @@ fn p10_friendly_fire_state(spell: usize) -> PlayState {
     state.party[0].status = b'G';
     state.party[0].mana = 99;
     state.party[0].level = 8;
-    let mut second = state.party[0].clone();
+    let mut second = state.party[0];
     second.slot = 1;
     state.party.push(second);
     state.party_intelligence = vec![31, 1];

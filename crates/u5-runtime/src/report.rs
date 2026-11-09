@@ -23,9 +23,9 @@ pub fn run_report(game_dir: &Path) -> io::Result<()> {
     let castle_tlk = parse_tlk(&game_dir.join("CASTLE.TLK"))?;
     let keep_tlk = parse_tlk(&game_dir.join("KEEP.TLK"))?;
 
-    let lb_slots = parse_npc_block(&game_dir, lb_candidate, &castle_tlk)?;
-    let fifth_slots = parse_npc_block(&game_dir, fifth_castle, &castle_tlk)?;
-    let special_slots = parse_npc_block(&game_dir, special_scene, &keep_tlk)?;
+    let lb_slots = parse_npc_block(game_dir, lb_candidate, &castle_tlk)?;
+    let fifth_slots = parse_npc_block(game_dir, fifth_castle, &castle_tlk)?;
+    let special_slots = parse_npc_block(game_dir, special_scene, &keep_tlk)?;
 
     let lb_names = names(&lb_slots);
     let fifth_names = names(&fifth_slots);
@@ -93,8 +93,8 @@ pub fn run_report(game_dir: &Path) -> io::Result<()> {
         special_names.len()
     ));
 
-    let floor0 = load_floor(&game_dir, lb_candidate, 0)?;
-    let floor1 = load_floor(&game_dir, lb_candidate, 1)?;
+    let floor0 = load_floor(game_dir, lb_candidate, 0)?;
+    let floor1 = load_floor(game_dir, lb_candidate, 1)?;
     let stats0 = analyze_map(lb_candidate, 0, &floor0);
     let stats1 = analyze_map(lb_candidate, 1, &floor1);
 
@@ -204,7 +204,7 @@ pub fn run_report(game_dir: &Path) -> io::Result<()> {
             "- Conversation envelope probe: FAIL, no named dialogue-bearing slot found.\n",
         );
     }
-    report.push_str("\n");
+    report.push('\n');
 
     report.push_str("## Findings\n\n");
     report.push_str("- The slice runs end-to-end for file loading, scene partitioning, roster/TLK joins, map analysis, render hashing, schedule sampling, and pathfinding smoke checks.\n");

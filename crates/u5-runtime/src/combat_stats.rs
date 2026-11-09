@@ -69,7 +69,7 @@ pub struct CombatClassStats {
 /// The raw value the damage/death handler returns when a hostile
 /// class dies is `floor(class_max_hp / MONSTER_REWARD_UNIT_HP_DIVISOR)
 /// + MONSTER_REWARD_UNIT_BIAS`. Combat callers consume the returned
-/// value immediately as party-attacker experience, capped at 9999.
+///   value immediately as party-attacker experience, capped at 9999.
 pub const MONSTER_REWARD_UNIT_HP_DIVISOR: u8 = 4;
 /// `catalogs/monster-bestiary.md §1` reward-unit derivation bias.
 /// Added to the floored HP divisor so every classed kill credits at

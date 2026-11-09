@@ -253,7 +253,7 @@ fn playtest_p21_09_town_floor_change_runs_its_turns_upkeep_pass() {
         .unwrap();
     assert!(!state.pending_town_status_provision_pass);
     assert!(
-        state.party[0].hp <= 60 - 1 - 1,
+        state.party[0].hp < 60 - 1,
         "poison point plus starvation"
     );
     assert!(state.pending_hourly_status_message.is_none());
@@ -302,7 +302,7 @@ fn issue_313_gate_travel_from_town_runs_no_upkeep_on_the_cast_turn() {
     handle_play_key_input(&mut state, ' ', "", &dir).unwrap();
     assert_eq!(state.clock, GameClock::new(13, 1).unwrap());
     assert!(
-        state.party[0].hp <= 60 - 1 - 1,
+        state.party[0].hp < 60 - 1,
         "the first overworld Pass charges poison and starvation"
     );
     assert!(
@@ -349,7 +349,7 @@ fn issue_313_failed_gate_travel_from_town_runs_the_full_epilogue() {
     assert!(matches!(state.area, Area::Town { .. }));
     assert_eq!(state.turn, 1);
     assert_eq!(state.clock, GameClock::new(13, 0).unwrap());
-    assert!(state.party[0].hp <= 60 - 1 - 1);
+    assert!(state.party[0].hp < 60 - 1);
     let rows = p21_rows(&state);
     assert!(
         p21_row_index(&rows, "Failed!") < p21_row_index(&rows, STARVATION_WARNING),
@@ -441,7 +441,7 @@ fn issue_313_first_overworld_turn_charges_an_hour_it_crosses_itself() {
 
     handle_play_key_input(&mut state, ' ', "", &dir).unwrap();
     assert_eq!(state.clock, GameClock::new(13, 1).unwrap());
-    assert!(state.party[0].hp <= 60 - 1 - 1, "poison and starvation");
+    assert!(state.party[0].hp < 60 - 1, "poison and starvation");
     assert!(
         p21_rows(&state).iter().any(|row| row == STARVATION_WARNING),
         "{:?}",

@@ -173,12 +173,12 @@ fn playtest_q19_aimed_spell_confirmed_on_an_empty_cell_still_plays_its_effect() 
 /// `moons.md §2.2`/`§3` and `weather.md §2.1` keep combat outside the strip
 /// and banner renderers, so nothing repaints either ribbon gap during a fight
 /// - the arena used to follow the live clock, wind and facing (Q10). Q10 then
-/// blanked both gaps, as `moons.md §3`'s "plain chrome" words it, but every
-/// stock arena capture keeps what the scene drew before the fight: a town or
-/// surface arena shows the strip and the wind banner (`combat-town-attack`,
-/// `combat-escape-ordinary`, `overworld-night-walk`), a dungeon room shows
-/// `L1` and `Dir: North` (`combat-dungeon-room`). The captures win: the gaps
-/// are frozen at combat entry.
+///   blanked both gaps, as `moons.md §3`'s "plain chrome" words it, but every
+///   stock arena capture keeps what the scene drew before the fight: a town or
+///   surface arena shows the strip and the wind banner (`combat-town-attack`,
+///   `combat-escape-ordinary`, `overworld-night-walk`), a dungeon room shows
+///   `L1` and `Dir: North` (`combat-dungeon-room`). The captures win: the gaps
+///   are frozen at combat entry.
 #[test]
 fn playtest_q10_combat_arena_keeps_the_pre_combat_ribbon_gaps_frozen() {
     fn enter(state: &mut PlayState) {

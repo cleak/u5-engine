@@ -362,6 +362,21 @@ pub fn read_codex_urn(ordained_mask: u8, codex_mask: &mut u8) -> CodexUrnReadOut
     CodexUrnReadOutcome::NoOrdained
 }
 
+/// `karma.md §12`'s "shared case-insensitive substring matcher", used for the
+/// shrine's virtue answer and for each of its three mantra answers. The
+/// location has already chosen the virtue, so this only ever tests the typed
+/// answer against *that* shrine's expected text.
+///
+/// `karma.md §7.1` (u5-spec#298 Q34): the matcher is `commands.md §11.3`'s,
+/// so the key may occur anywhere in a longer response "**except** where it
+/// starts inside a failed partial match of itself (`hhone` fails against
+/// `hone`; `honesty` and `I seek honesty` match)". *Corrected*
+/// (`RETRACTIONS.md` R553): this used an ordinary substring search, which
+/// accepted `hhone`.
+pub fn shrine_answer_matches(answer: &str, expected: &str) -> bool {
+    crate::commands::shared_text_matcher_matches(answer, expected)
+}
+
 #[cfg(test)]
 mod eternal_flame_tests {
     use super::*;
@@ -393,22 +408,7 @@ mod eternal_flame_tests {
     fn the_flame_tile_is_outside_the_shrine_altar_band() {
         // Row 5b is keyed by scene; the altar band is keyed by tile id.
         // The two rows must not overlap.
-        assert!(ETERNAL_FLAME_LOOK_TILE > SHRINE_ALTAR_TILE_LAST);
+        const { assert!(ETERNAL_FLAME_LOOK_TILE > SHRINE_ALTAR_TILE_LAST) };
         assert_eq!(shrine_virtue_for_altar_tile(ETERNAL_FLAME_LOOK_TILE), None);
     }
-}
-
-/// `karma.md §12`'s "shared case-insensitive substring matcher", used for the
-/// shrine's virtue answer and for each of its three mantra answers. The
-/// location has already chosen the virtue, so this only ever tests the typed
-/// answer against *that* shrine's expected text.
-///
-/// `karma.md §7.1` (u5-spec#298 Q34): the matcher is `commands.md §11.3`'s,
-/// so the key may occur anywhere in a longer response "**except** where it
-/// starts inside a failed partial match of itself (`hhone` fails against
-/// `hone`; `honesty` and `I seek honesty` match)". *Corrected*
-/// (`RETRACTIONS.md` R553): this used an ordinary substring search, which
-/// accepted `hhone`.
-pub fn shrine_answer_matches(answer: &str, expected: &str) -> bool {
-    crate::commands::shared_text_matcher_matches(answer, expected)
 }

@@ -542,7 +542,8 @@ fn the_selector_accepts_on_return_or_space_and_cancels_on_escape_or_zero() {
     }
     // `RETRACTIONS.md` R459: "The initial Z selector accepts zero and opens
     // shared Equipment without selecting a member." Only Escape cancels here.
-    for cancel in ['\u{1b}'] {
+    {
+        let cancel = '\u{1b}';
         let mut state = test_state(open_grid(), 5, 5);
         assert_eq!(
             handle_play_key_input(&mut state, 'Z', "", Path::new("")).unwrap(),

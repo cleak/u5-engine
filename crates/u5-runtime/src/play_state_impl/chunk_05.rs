@@ -1309,18 +1309,18 @@ impl PlayState {
     ) -> io::Result<MoveOutcome> {
         self.advance_turn();
 
-        if let Some(game_dir) = game_dir {
-            if let Some(entry) = transition {
-                // The plane change ends this turn's overworld block before
-                // the object epilogue: drop the walker owed to it rather than
-                // letting it run on the destination plane next turn.
-                self.pending_world_object_walker_pass = false;
-                self.apply_world_plane_transition(game_dir, entry)?;
-                return Ok(MoveOutcome::Transition(AreaTransition::ChangedWorldPlane {
-                    from: plane,
-                    to: entry.to_plane,
-                }));
-            }
+        if let Some(game_dir) = game_dir
+            && let Some(entry) = transition
+        {
+            // The plane change ends this turn's overworld block before
+            // the object epilogue: drop the walker owed to it rather than
+            // letting it run on the destination plane next turn.
+            self.pending_world_object_walker_pass = false;
+            self.apply_world_plane_transition(game_dir, entry)?;
+            return Ok(MoveOutcome::Transition(AreaTransition::ChangedWorldPlane {
+                from: plane,
+                to: entry.to_plane,
+            }));
         }
         // `audio.md §7.5` overworld row: "A normal accepted horse step adds
         // the second sting when the pre-loop special-underfoot latch permits

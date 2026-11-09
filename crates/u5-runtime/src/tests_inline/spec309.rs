@@ -216,7 +216,7 @@ fn spec309_the_sword_of_chaos_arm_runs_the_maintenance_endpoint() {
     let mut state = spec309_lone_member_arena(0, None);
     state.party_equipment[0][EQUIP_SLOT_WEAPON] = EQUIPMENT_SWORD_OF_CHAOS as u8;
     // A second member keeps the post-dispatch recount off its faint arm.
-    state.party.push(state.party[0].clone());
+    state.party.push(state.party[0]);
     state.party_combat_defense = vec![0; 2];
     state.combat_actors[1] =
         CombatActorDescriptor::from_row([20, 1, COMBAT_ACTOR_FLAG_SELECTABLE_80, 1, 1, 0, 6, 5]);

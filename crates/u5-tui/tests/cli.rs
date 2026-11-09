@@ -972,7 +972,7 @@ fn cli_parser_accepts_deterministic_create_character_command() {
     assert!(!args.visual);
     let command = args.create_character.unwrap();
     assert_eq!(command.name, b"AVATAR");
-    assert_eq!(command.male, false);
+    assert!(!command.male);
     assert_eq!(
         command.winners,
         vec![

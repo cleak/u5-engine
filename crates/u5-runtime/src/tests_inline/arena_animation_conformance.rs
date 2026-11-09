@@ -38,7 +38,7 @@ mod arena_animation_conformance {
         // `combat_class_sprite_byte` is `class * 4 + 0x40`, so the party's own
         // combat sprites are the first four such groups. Capture shows them
         // cycling four frames exactly like a monster.
-        for class_byte in [b'M', b'B', b'F', b'A'] {
+        for class_byte in *b"MBFA" {
             let base = combat_party_actor_byte(class_byte);
             assert_eq!(base & 0x03, 0, "{} is a family base", base);
             assert_eq!(active_object_next_frame_tile(base, base), Some(base + 1));

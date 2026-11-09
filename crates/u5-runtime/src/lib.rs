@@ -3,6 +3,23 @@
 //! This crate owns the simulation, parsers, and rules. It has no UI
 //! dependencies. UI shells (`u5-tui`, `u5-bevy`) consume its public API.
 
+// Clippy allow list (Phase B decision D1.15). CI runs clippy with
+// `-D warnings`; these lints are accepted crate-wide instead of fixed:
+// - `too_many_arguments`, `type_complexity`: rule and parser entry points
+//   take the game's state pieces explicitly; bundling them is a redesign,
+//   not a lint fix.
+// - `identity_op`: tests and tables spell offsets as `row * 32 + col` or
+//   `mask & !0` so the layout stays readable even when a term is zero.
+// - `needless_range_loop`: slot loops index several parallel fixed tables
+//   by the same slot number, the way the spec's tables are written.
+// The list may only shrink: tests/clippy_allow_list.rs pins it.
+#![allow(
+    clippy::too_many_arguments,
+    clippy::type_complexity,
+    clippy::identity_op,
+    clippy::needless_range_loop
+)]
+
 pub mod active_object_io;
 pub mod animation;
 pub mod audio;

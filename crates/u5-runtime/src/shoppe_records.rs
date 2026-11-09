@@ -93,6 +93,12 @@ impl ShoppeBand {
         total
     }
 
+    /// Whether the band owns no record slots. Every published band owns
+    /// at least one, so this is `false` for all of them.
+    pub const fn is_empty(self) -> bool {
+        self.len() == 0
+    }
+
     /// Returns `true` when the record id lies within this band.
     pub const fn contains(self, id: usize) -> bool {
         shoppe_record_in_bands(id, self.bands())
@@ -236,7 +242,7 @@ pub const fn shared_shop_bark_record(
 pub const SHOP_DIALOG_ID_ARMS: u8 = 0x81;
 
 pub const fn talk_entry_uses_shared_preamble(dialog_id: u8) -> bool {
-    matches!(dialog_id, 0x82 | 0x83 | 0x84 | 0x85 | 0x86 | 0x87 | 0x88)
+    matches!(dialog_id, 0x82..=0x88)
 }
 
 /// `shops.md §8.B`'s continuation table for a non-arms entry greeting:

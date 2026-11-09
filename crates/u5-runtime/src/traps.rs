@@ -50,7 +50,7 @@ pub const TRAP_ACID_RAW_ROLL_MAX: u8 = 60;
 pub fn shared_trap_acid_damage_from_index(index: u8) -> u8 {
     let raw = index % (TRAP_ACID_RAW_ROLL_MAX + 1);
     let damage = crate::combat_skewed_roll_1_to_30(raw);
-    debug_assert!(damage >= 1 && damage <= TRAP_ACID_DAMAGE_MAX);
+    debug_assert!((1..=TRAP_ACID_DAMAGE_MAX).contains(&damage));
     damage
 }
 

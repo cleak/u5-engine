@@ -430,7 +430,7 @@ fn g5_u4_source(class_index: u8, is_avatar: bool) -> U4TransferSource {
 /// test then overwrites the letter with the Avatar letter.
 #[test]
 fn g5_u4_transfer_s7_class_index_translation_and_avatar_override() {
-    let letters = [b'M', b'B', b'F', b'D', b'T', b'P', b'R', b'S'];
+    let letters = *b"MBFDTPRS";
     for (index, letter) in letters.iter().enumerate() {
         let mut save = saved_game_seed_bytes(0, 0, 10, 20);
         let avatar =

@@ -509,32 +509,32 @@ pub fn sky_strip_marker_position(hour: u8, marker: SkyStripMarker) -> Option<u8>
     #[allow(clippy::absurd_extreme_comparisons)]
     let position = match marker {
         SkyStripMarker::FixedHour
-            if hour >= SKY_STRIP_FIXED_HOUR_BAND_FIRST
-                && hour <= SKY_STRIP_FIXED_HOUR_BAND_LAST =>
+            if (SKY_STRIP_FIXED_HOUR_BAND_FIRST..=SKY_STRIP_FIXED_HOUR_BAND_LAST)
+                .contains(&hour) =>
         {
             Some(SKY_STRIP_FIXED_HOUR_OFFSET.wrapping_sub(hour))
         }
         SkyStripMarker::Trammel
-            if hour >= SKY_STRIP_TRAMMEL_MORNING_BAND_FIRST
-                && hour <= SKY_STRIP_TRAMMEL_MORNING_BAND_LAST =>
+            if (SKY_STRIP_TRAMMEL_MORNING_BAND_FIRST..=SKY_STRIP_TRAMMEL_MORNING_BAND_LAST)
+                .contains(&hour) =>
         {
             Some(SKY_STRIP_TRAMMEL_MORNING_OFFSET.wrapping_sub(hour))
         }
         SkyStripMarker::Trammel
-            if hour >= SKY_STRIP_TRAMMEL_NIGHT_BAND_FIRST
-                && hour <= SKY_STRIP_TRAMMEL_NIGHT_BAND_LAST =>
+            if (SKY_STRIP_TRAMMEL_NIGHT_BAND_FIRST..=SKY_STRIP_TRAMMEL_NIGHT_BAND_LAST)
+                .contains(&hour) =>
         {
             Some(SKY_STRIP_TRAMMEL_NIGHT_OFFSET.wrapping_sub(hour))
         }
         SkyStripMarker::Felucca
-            if hour >= SKY_STRIP_FELUCCA_MORNING_BAND_FIRST
-                && hour <= SKY_STRIP_FELUCCA_MORNING_BAND_LAST =>
+            if (SKY_STRIP_FELUCCA_MORNING_BAND_FIRST..=SKY_STRIP_FELUCCA_MORNING_BAND_LAST)
+                .contains(&hour) =>
         {
             Some(SKY_STRIP_FELUCCA_MORNING_OFFSET.wrapping_sub(hour))
         }
         SkyStripMarker::Felucca
-            if hour >= SKY_STRIP_FELUCCA_AFTERNOON_BAND_FIRST
-                && hour <= SKY_STRIP_FELUCCA_AFTERNOON_BAND_LAST =>
+            if (SKY_STRIP_FELUCCA_AFTERNOON_BAND_FIRST..=SKY_STRIP_FELUCCA_AFTERNOON_BAND_LAST)
+                .contains(&hour) =>
         {
             Some(SKY_STRIP_FELUCCA_AFTERNOON_OFFSET.wrapping_sub(hour))
         }

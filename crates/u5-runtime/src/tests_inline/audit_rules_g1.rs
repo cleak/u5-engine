@@ -54,7 +54,7 @@ fn g1_stat_arithmetic_s2_floor_subtract_of_an_equal_amount_stores_zero() {
         for amount in 0u8..=40 {
             let mut field = old;
             floor_sub_u8(&mut field, amount);
-            let expected = if old > amount { old - amount } else { 0 };
+            let expected = old.saturating_sub(amount);
             assert_eq!(field, expected, "{old} - {amount}");
             assert!(field <= old);
         }

@@ -1029,8 +1029,8 @@ fn town_open_object_chest_prints_chest_empty_when_nothing_grants() {
 
 /// `containers.md §4.1`/`traps.md §4`: "print `Trapped!` plus one line feed
 /// - no leading feed, no member name, no trap-kind word" before the shared
-/// resolver's own line, independent of whether the chest itself grants
-/// anything.
+///   resolver's own line, independent of whether the chest itself grants
+///   anything.
 #[test]
 fn town_open_object_chest_prints_trapped_notice_before_resolver_line() {
     let mut grid = open_grid();
@@ -1058,7 +1058,7 @@ fn town_open_object_chest_prints_trapped_notice_before_resolver_line() {
         .map(|entry| entry.text.as_str())
         .collect();
     assert!(
-        entries.iter().any(|text| *text == "Trapped!"),
+        entries.contains(&"Trapped!"),
         "{:?}",
         entries
     );

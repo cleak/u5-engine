@@ -873,7 +873,7 @@ pub const SHRINE_KNEEL_HOLD_BIOS_TICKS: u16 = {
 /// On the pacing rule the question begins on that twelfth edge, 60 ticks after
 /// the key; the hold is what remains after [`SHRINE_KNEEL_HOLD_BIOS_TICKS`]
 /// - eleven ticks. The spec warns that "the twelve-edge result has little
-/// margin: slightly slower printing would make it thirteen".
+///   margin: slightly slower printing would make it thirteen".
 pub const SHRINE_VIRTUE_QUESTION_HOLD_WORLD_TICKS: u16 = {
     let (_, question) = shrine_entry_lattice_timeline();
     (question / 1000) as u16 - SHRINE_KNEEL_HOLD_BIOS_TICKS
@@ -977,7 +977,7 @@ pub const USE_POCKET_WATCH_PREFIX: &str = "The pocket watch reads ";
 /// **Measured** (`qa/paired/hut-use-items.tsv`): using a potion asks which
 /// member drinks it with this prompt, and the chosen name completes the row
 /// - `On who: Iolo`. `inventory.md §6` describes the target without
-/// quoting the prompt. `cleak/u5-spec#225`.
+///   quoting the prompt. `cleak/u5-spec#225`.
 pub const USE_POTION_TARGET_PROMPT: &str = "On who: ";
 
 /// **Measured** (`qa/paired/use-scrolls.tsv`): a scroll that needs an

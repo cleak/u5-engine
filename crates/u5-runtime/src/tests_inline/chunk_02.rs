@@ -439,7 +439,7 @@ fn chargen_commit_writes_saved_files_from_init_seeds() {
     assert_eq!(saved[SAVE_TORCH_STOCK_OFFSET], 4);
     assert_eq!(&saved_ool[..OOL_PLANE_LEN], vec![0; OOL_PLANE_LEN]);
     assert_eq!(&saved_ool[OOL_PLANE_LEN..], init_ool.as_slice());
-    assert_eq!(avatar.male, true);
+    assert!(avatar.male);
     assert_eq!(avatar.stats, stats);
     let _ = fs::remove_dir_all(dir);
 }
@@ -984,7 +984,7 @@ fn u4_transfer_commit_writes_saved_game_from_init_seed_and_saved_ool_from_init_o
     assert_eq!(fs::read(dir.join("INIT.OOL")).unwrap(), init_ool);
     assert_eq!(fs::read(dir.join("UNDER.OOL")).unwrap(), under_ool);
     assert_eq!(avatar.class_byte, b'M');
-    assert_eq!(avatar.male, false);
+    assert!(!avatar.male);
     let _ = fs::remove_dir_all(dir);
 }
 

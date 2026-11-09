@@ -853,7 +853,7 @@
         let dir = debug_game_dir();
         fs::write(
             dir.join(TOWN_GET_TILE_TABLE_FILE),
-            &format!(
+            format!(
                 "CASTLE:0 0 2 1 {} {} FOOD 1\nCASTLE:0 0 2 3 {} {}\n",
                 GET_TILE_CROPS_REPLACEMENT,
                 GET_TILE_CROPS_SOURCE,
@@ -4384,12 +4384,12 @@
         // `vehicles.md §6` "Status domain and exit predicate": imported
         // outside-domain bytes are damaged while a G/P/S member holds the
         // loop open, but do not themselves keep it alive.
-        for status in [b'G', b'P', b'S'] {
+        for status in *b"GPS" {
             assert!(party_member_counts_as_living(status));
             assert!(outdoor_impact_damages_member(status));
         }
         // Ashes and charmed are damaged but do not hold the loop open.
-        for status in [b'A', b'C'] {
+        for status in *b"AC" {
             assert!(!party_member_counts_as_living(status));
             assert!(outdoor_impact_damages_member(status));
         }
@@ -4801,7 +4801,7 @@
         let dir = debug_game_dir();
         fs::write(
             dir.join(TOWN_GET_TILE_TABLE_FILE),
-            &format!(
+            format!(
                 "CASTLE:0 0 2 1 {} {} FOOD 1\n",
                 GET_TILE_CROPS_REPLACEMENT, GET_TILE_CROPS_SOURCE,
             ),

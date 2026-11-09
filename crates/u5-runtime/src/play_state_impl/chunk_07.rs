@@ -558,10 +558,11 @@ impl PlayState {
             self.emit_sound_effect(SoundEffect::BlockedStep);
             return MoveOutcome::Blocked;
         }
-        if party_side && record.is_none() {
-            if let Some(snapshot) = &mut self.combat_frame_snapshot {
-                snapshot.established_exit_direction_code = Some(code);
-            }
+        if party_side
+            && record.is_none()
+            && let Some(snapshot) = &mut self.combat_frame_snapshot
+        {
+            snapshot.established_exit_direction_code = Some(code);
         }
         let departure = if combat_has_active_not_dead_non_party_actor(&self.combat_actors) {
             COMBAT_DEPARTURE_ESCAPE_LINE
@@ -835,7 +836,8 @@ impl PlayState {
         let dexterity = self.dungeon_search_actor_dexterity(actor);
         let threshold = Self::dungeon_chest_pick_threshold(level, dexterity);
         let roll = self.random_range_u8(1, 30);
-        let detail = if u16::from(roll) > threshold && Self::is_plain_closed_dungeon_chest(tile) {
+
+        (if u16::from(roll) > threshold && Self::is_plain_closed_dungeon_chest(tile) {
             "no trap"
         } else {
             let tier = if u16::from(roll) <= threshold {
@@ -848,8 +850,7 @@ impl PlayState {
                 7..=u8::MAX => "complex trap",
                 _ => "trap",
             }
-        };
-        detail
+        }) as _
     }
 
     /// `dungeon-mode.md` Section 8.1, "Who acts": the Dexterity of the member
@@ -1794,9 +1795,7 @@ impl PlayState {
         key: char,
         suffix: &str,
     ) -> Option<MoveOutcome> {
-        let Some(mut session) = self.active_shrine_restoration.take() else {
-            return None;
-        };
+        let mut session = self.active_shrine_restoration.take()?;
         if key == '\u{1b}' {
             session.buffer.clear();
             self.active_shrine_restoration = Some(session);
@@ -2754,31 +2753,30 @@ impl PlayState {
             .map(|(slot, object)| (slot, *object))
         {
             if let Area::World { plane } = self.area {
-                if let Some(game_dir) = game_dir {
-                    if game_dir.join(BRIT_CBT_FILE).exists()
-                        && !is_whirlpool_object(object)
-                        && terrain_combat_base_class(object).is_some()
-                    {
-                        // `overworld.md §5`: A-Attack is step 5's dispatch,
-                        // and step 6's per-turn block runs once, after it
-                        // returns. `combat.md §4`: "the only time a fight
-                        // adds is its round-wrap minutes"; the one turn
-                        // advance owed is the round loop's exit
-                        // (`apply_combat_round_loop_exit_inner`). Advancing
-                        // here as well ran the two-minute block - and its
-                        // poison tick - before the arena (playtest H21).
-                        let _setup_report = self.enter_terrain_combat_from_world_object(
-                            game_dir,
-                            plane,
-                            object_slot,
-                            object,
-                        )?;
-                        // `commands.md §3`: the attack that enters combat is
-                        // still "no action", so the exit owes no outdoor turn
-                        // either (p10 R11).
-                        self.combat_exit_skips_world_turn = self.combat_active;
-                        return Ok(MoveOutcome::Used);
-                    }
+                if let Some(game_dir) = game_dir
+                    && game_dir.join(BRIT_CBT_FILE).exists()
+                    && !is_whirlpool_object(object)
+                    && terrain_combat_base_class(object).is_some()
+                {
+                    // `overworld.md §5`: A-Attack is step 5's dispatch,
+                    // and step 6's per-turn block runs once, after it
+                    // returns. `combat.md §4`: "the only time a fight
+                    // adds is its round-wrap minutes"; the one turn
+                    // advance owed is the round loop's exit
+                    // (`apply_combat_round_loop_exit_inner`). Advancing
+                    // here as well ran the two-minute block - and its
+                    // poison tick - before the arena (playtest H21).
+                    let _setup_report = self.enter_terrain_combat_from_world_object(
+                        game_dir,
+                        plane,
+                        object_slot,
+                        object,
+                    )?;
+                    // `commands.md §3`: the attack that enters combat is
+                    // still "no action", so the exit owes no outdoor turn
+                    // either (p10 R11).
+                    self.combat_exit_skips_world_turn = self.combat_active;
+                    return Ok(MoveOutcome::Used);
                 }
                 // `commands.md §3` (u5-spec#300 Q14): the overworld `A`
                 // reports "no action" on every path, so this refusal is free.
@@ -2891,36 +2889,35 @@ impl PlayState {
                             tile: type_byte,
                             ..object
                         };
-                        if let Some(game_dir) = game_dir {
-                            if game_dir.join(BRIT_CBT_FILE).exists()
-                                && terrain_combat_base_class(trigger).is_some()
-                            {
-                                // §14 keeps the alarm sweep on the
-                                // A-Attack routing - it ran at target
-                                // acceptance above; the death flow's
-                                // slot clear, floor reload and
-                                // Shadowlord re-install move to the
-                                // arena exit.
-                                self.pending_town_conflict = Some(PendingTownConflict {
-                                    scene_byte: scene.byte,
-                                    floor,
-                                    npc_slot,
-                                    type_byte,
-                                    awaiting_floor_reload: false,
-                                    owes_turn_epilogue: true,
-                                });
-                                let hostile_terrain = self.grid[y * TOWN_GRID_SIDE + x];
-                                let _setup_report = self
-                                    .enter_terrain_combat_from_object_in_scene_with_terrain(
-                                        game_dir,
-                                        WorldPlane::Britannia,
-                                        object_slot,
-                                        trigger,
-                                        scene.byte,
-                                        hostile_terrain,
-                                    )?;
-                                return Ok(MoveOutcome::Used);
-                            }
+                        if let Some(game_dir) = game_dir
+                            && game_dir.join(BRIT_CBT_FILE).exists()
+                            && terrain_combat_base_class(trigger).is_some()
+                        {
+                            // §14 keeps the alarm sweep on the
+                            // A-Attack routing - it ran at target
+                            // acceptance above; the death flow's
+                            // slot clear, floor reload and
+                            // Shadowlord re-install move to the
+                            // arena exit.
+                            self.pending_town_conflict = Some(PendingTownConflict {
+                                scene_byte: scene.byte,
+                                floor,
+                                npc_slot,
+                                type_byte,
+                                awaiting_floor_reload: false,
+                                owes_turn_epilogue: true,
+                            });
+                            let hostile_terrain = self.grid[y * TOWN_GRID_SIDE + x];
+                            let _setup_report = self
+                                .enter_terrain_combat_from_object_in_scene_with_terrain(
+                                    game_dir,
+                                    WorldPlane::Britannia,
+                                    object_slot,
+                                    trigger,
+                                    scene.byte,
+                                    hostile_terrain,
+                                )?;
+                            return Ok(MoveOutcome::Used);
                         }
                     }
                     self.advance_turn();
@@ -3046,8 +3043,8 @@ impl PlayState {
     }
 
     /// `commands.md §3`, the forwarded-route table: "`A` overworld | Always
-    /// \"no action\", including the successful attack that enters combat"
-    /// - "Zero skips the whole per-turn epilogue" - while "`A` town |
+    /// \"no action\", including the successful attack that enters combat" -
+    /// "Zero skips the whole per-turn epilogue" - while "`A` town |
     /// \"Acted\" ... The nothing-to-attack message still counts as acted."
     /// So a refused overworld attack spends no outdoor turn (p10 R01); the
     /// town refusal keeps its minute.
@@ -4233,14 +4230,14 @@ impl PlayState {
         // is the one a waterfall underfoot takes." The directly-south arm
         // runs at the top of the input helper, in
         // [`PlayState::idle_wait_pass`], before the turn's key is read.
-        if self.world_falls_underfoot_trigger_tile().is_some() {
-            if let Some(transition) = self.apply_world_falls_chain(game_dir, plane)? {
-                // A scene change ends the turn before the object epilogue;
-                // the walker it owed must not run on the destination next
-                // turn.
-                self.pending_world_object_walker_pass = false;
-                return Ok(Some(MoveOutcome::Transition(transition)));
-            }
+        if self.world_falls_underfoot_trigger_tile().is_some()
+            && let Some(transition) = self.apply_world_falls_chain(game_dir, plane)?
+        {
+            // A scene change ends the turn before the object epilogue;
+            // the walker it owed must not run on the destination next
+            // turn.
+            self.pending_world_object_walker_pass = false;
+            return Ok(Some(MoveOutcome::Transition(transition)));
         }
         let pre_effect_row_open = self.message_row_open_mid_line;
         if let Some(transition) = self.apply_world_underfoot_plane_transition(game_dir, plane)? {
@@ -4267,61 +4264,58 @@ impl PlayState {
         let _ = self.apply_rough_seas_if_eligible();
         // `overworld.md §5` step 6h: "roll for a random encounter, then
         // animate/move and prune eligible non-player active objects".
-        if object_epilogue_runs {
-            if let Some(slot) = self.apply_world_encounter_probe(game_dir, plane)? {
-                // The spawn is an engine-side event: `encounters.md §2.1`
-                // rolls it every overworld turn and the original prints
-                // nothing for it. Measured 2026-09-12
-                // (`cast-blink-overworld/blinked`), where this engine
-                // appended ` Wandering encounter spawned in slot 1.` to the
-                // command's own result row.
-                self.diagnostics
-                    .push(format!("wandering encounter spawned in slot {slot}"));
-            }
+        if object_epilogue_runs
+            && let Some(slot) = self.apply_world_encounter_probe(game_dir, plane)?
+        {
+            // The spawn is an engine-side event: `encounters.md §2.1`
+            // rolls it every overworld turn and the original prints
+            // nothing for it. Measured 2026-09-12
+            // (`cast-blink-overworld/blinked`), where this engine
+            // appended ` Wandering encounter spawned in slot 1.` to the
+            // command's own result row.
+            self.diagnostics
+                .push(format!("wandering encounter spawned in slot {slot}"));
         }
         self.apply_pending_world_object_walker_pass();
         // active-objects.md §8: adjacent whirlpool engagement is a
         // plane-transition effect when the party is not on foot.
         let pre_effect_message = self.message.clone();
         let pre_effect_row_open = self.message_row_open_mid_line;
-        if object_epilogue_runs {
-            if let Some(outcome) = self.apply_pending_outdoor_reactions(game_dir, plane)? {
-                if outcome.is_transition() {
-                    self.keep_post_turn_effect_rows_separate(
-                        &pre_effect_message,
-                        pre_effect_row_open,
-                    );
-                } else if self.combat_active {
-                    // `combat.md §4.1`: the engagement's `Attacked!`, group
-                    // name and `*** CONFLICT ***` went to the transcript as
-                    // they were printed, and each of those emits flushed the
-                    // command's own result above them first. Joining the two
-                    // back into the slot made it a new, unflushed line, so the
-                    // next flush printed `With what? *** CONFLICT ***` a
-                    // second time under the banner (playtest F42). The slot
-                    // keeps the engagement text it already recorded.
-                } else {
-                    // Immediate reaction lines were emitted to the transcript
-                    // as they occurred; preserve the command result in the
-                    // compatibility message slot.
-                    //
-                    // A reaction line that replaced the slot was emitted
-                    // through `emit_message_line`, which flushed the command's
-                    // own result to the transcript first. The restored result
-                    // is therefore already printed: mark it so, or the next
-                    // flush prints it a second time - a pirate's `* BOOOM! *`
-                    // was followed by an unmarked copy of `Fire-East`
-                    // (playtest E28).
-                    let reaction_replaced_slot = self.message != pre_effect_message;
-                    self.message = pre_effect_message;
-                    if reaction_replaced_slot {
-                        self.message_flushed = self.message.clone();
-                    }
-                    nonterminal_outcome = Some(outcome);
+        if object_epilogue_runs
+            && let Some(outcome) = self.apply_pending_outdoor_reactions(game_dir, plane)?
+        {
+            if outcome.is_transition() {
+                self.keep_post_turn_effect_rows_separate(&pre_effect_message, pre_effect_row_open);
+            } else if self.combat_active {
+                // `combat.md §4.1`: the engagement's `Attacked!`, group
+                // name and `*** CONFLICT ***` went to the transcript as
+                // they were printed, and each of those emits flushed the
+                // command's own result above them first. Joining the two
+                // back into the slot made it a new, unflushed line, so the
+                // next flush printed `With what? *** CONFLICT ***` a
+                // second time under the banner (playtest F42). The slot
+                // keeps the engagement text it already recorded.
+            } else {
+                // Immediate reaction lines were emitted to the transcript
+                // as they occurred; preserve the command result in the
+                // compatibility message slot.
+                //
+                // A reaction line that replaced the slot was emitted
+                // through `emit_message_line`, which flushed the command's
+                // own result to the transcript first. The restored result
+                // is therefore already printed: mark it so, or the next
+                // flush prints it a second time - a pirate's `* BOOOM! *`
+                // was followed by an unmarked copy of `Fire-East`
+                // (playtest E28).
+                let reaction_replaced_slot = self.message != pre_effect_message;
+                self.message = pre_effect_message;
+                if reaction_replaced_slot {
+                    self.message_flushed = self.message.clone();
                 }
-                if outcome.is_transition() || self.combat_active {
-                    return Ok(Some(outcome));
-                }
+                nonterminal_outcome = Some(outcome);
+            }
+            if outcome.is_transition() || self.combat_active {
+                return Ok(Some(outcome));
             }
         }
         Ok(nonterminal_outcome)
@@ -4596,106 +4590,104 @@ impl PlayState {
             self.wake_town_sleepers_without_panel_refresh(&waking);
         }
         let tile = self.grid[self.player.y * 32 + self.player.x];
-        if !matches!(self.player.transport, TransportState::Carpet { .. }) {
-            if let Some(entry) =
+        if !matches!(self.player.transport, TransportState::Carpet { .. })
+            && let Some(entry) =
                 self.town_trap_door_at(game_dir, scene, floor, self.player.x, self.player.y, tile)?
-            {
-                let step_sound_serial = self.sound_effect_serial;
-                self.apply_town_trapdoor_party_damage();
-                if scene.byte == STONEGATE_SCENE_BYTE {
-                    // `town-mode.md §7.1` orders the script: the black fill
-                    // and the 750-tone speaker sweep come first, and only
-                    // after them does the death loop run - `audio.md §8.2`
-                    // puts "one 75-update 100..500 Hz rumble per party member,
-                    // as that member is killed and the stats panel is
-                    // repainted" *inside* that loop.
-                    //
-                    // So the panel the player looks at during the sweep still
-                    // carries the fall's damage and not the deaths. Measured
-                    // 2026-09-18 (`qa/paired/stonegate-rescue-pacing.tsv`,
-                    // samples `t04` through `t24`): the original's roster row
-                    // reads `Avatar 54G` for the whole sweep - damaged from
-                    // 60, not dead - and only reads `0D` from `t28`, once the
-                    // sweep is over. This engine applied the deaths and
-                    // repainted at the end of the step, so it read `0D`
-                    // throughout.
-                    //
-                    // Paint the damage here, where the sweep sees it, and
-                    // decline the command's own end-of-step refresh so the
-                    // deaths stay off until the rescue takes over. That is
-                    // what the dispatcher's note asks a named hold to do.
-                    self.repaint_stats_panel();
-                    self.stats_panel_command_refresh = crate::stats_panel::PanelRefreshMode::None;
-                    self.apply_stonegate_trapdoor_script_after(floor, step_sound_serial);
-                    self.emit_town_underfoot_line(Self::TOWN_TRAPDOOR_MESSAGE);
-                    // The line closes its own row. `text-output.md` §10.4
-                    // then has the rescue's first beat spend its leading feed
-                    // deriving the blank beneath rather than closing a row
-                    // this one already closed.
-                    //
-                    // Measured 2026-09-18
-                    // (`qa/paired/stonegate-rescue-pacing.tsv`): the original
-                    // holds a blank row under `A TRAPDOOR!` across six
-                    // consecutive samples of the death sweep, and at `t28`
-                    // keeps it between `A TRAPDOOR!` and `An unending
-                    // darkness engulfs thee...`. This engine ran the two
-                    // together and sat one row high from there on.
-                    // `cleak/u5-spec#279` asks for the published framing;
-                    // this is the capture.
-                    return Ok(Some(MoveOutcome::Used));
-                }
-                let mut outcome =
-                    self.apply_town_trap_door_transition(game_dir, scene, entry, false)?;
-                // `town-mode.md §10`: "If an effect moves the party to a
-                // different floor, the handler re-reads the tile under the
-                // party's new position and applies that tile's effect too, so
-                // chained effects within one turn are possible" - including a
-                // landing on another trapdoor, which runs the whole trapdoor
-                // prefix and descends again. The chain stops once a landing
-                // no longer changes the floor.
-                loop {
-                    let landed_tile = self.grid[self.player.y * 32 + self.player.x];
-                    let Area::Town {
-                        floor: landed_floor,
-                        ..
-                    } = self.area
-                    else {
-                        break;
-                    };
-                    if !matches!(self.player.transport, TransportState::Carpet { .. })
-                        && let Some(next) = self.town_trap_door_at(
-                            game_dir,
-                            scene,
-                            landed_floor,
-                            self.player.x,
-                            self.player.y,
-                            landed_tile,
-                        )?
-                        && next.to_floor != landed_floor
-                    {
-                        self.apply_town_trapdoor_party_damage();
-                        outcome =
-                            self.apply_town_trap_door_transition(game_dir, scene, next, false)?;
-                        continue;
-                    }
-                    if Self::is_town_burning_live_tile(landed_tile) {
-                        self.apply_town_burning_underfoot_effect();
-                    }
-                    break;
-                }
+        {
+            let step_sound_serial = self.sound_effect_serial;
+            self.apply_town_trapdoor_party_damage();
+            if scene.byte == STONEGATE_SCENE_BYTE {
+                // `town-mode.md §7.1` orders the script: the black fill
+                // and the 750-tone speaker sweep come first, and only
+                // after them does the death loop run - `audio.md §8.2`
+                // puts "one 75-update 100..500 Hz rumble per party member,
+                // as that member is killed and the stats panel is
+                // repainted" *inside* that loop.
+                //
+                // So the panel the player looks at during the sweep still
+                // carries the fall's damage and not the deaths. Measured
+                // 2026-09-18 (`qa/paired/stonegate-rescue-pacing.tsv`,
+                // samples `t04` through `t24`): the original's roster row
+                // reads `Avatar 54G` for the whole sweep - damaged from
+                // 60, not dead - and only reads `0D` from `t28`, once the
+                // sweep is over. This engine applied the deaths and
+                // repainted at the end of the step, so it read `0D`
+                // throughout.
+                //
+                // Paint the damage here, where the sweep sees it, and
+                // decline the command's own end-of-step refresh so the
+                // deaths stay off until the rescue takes over. That is
+                // what the dispatcher's note asks a named hold to do.
+                self.repaint_stats_panel();
+                self.stats_panel_command_refresh = crate::stats_panel::PanelRefreshMode::None;
+                self.apply_stonegate_trapdoor_script_after(floor, step_sound_serial);
+                self.emit_town_underfoot_line(Self::TOWN_TRAPDOOR_MESSAGE);
+                // The line closes its own row. `text-output.md` §10.4
+                // then has the rescue's first beat spend its leading feed
+                // deriving the blank beneath rather than closing a row
+                // this one already closed.
+                //
+                // Measured 2026-09-18
+                // (`qa/paired/stonegate-rescue-pacing.tsv`): the original
+                // holds a blank row under `A TRAPDOOR!` across six
+                // consecutive samples of the death sweep, and at `t28`
+                // keeps it between `A TRAPDOOR!` and `An unending
+                // darkness engulfs thee...`. This engine ran the two
+                // together and sat one row high from there on.
+                // `cleak/u5-spec#279` asks for the published framing;
+                // this is the capture.
+                return Ok(Some(MoveOutcome::Used));
+            }
+            let mut outcome =
+                self.apply_town_trap_door_transition(game_dir, scene, entry, false)?;
+            // `town-mode.md §10`: "If an effect moves the party to a
+            // different floor, the handler re-reads the tile under the
+            // party's new position and applies that tile's effect too, so
+            // chained effects within one turn are possible" - including a
+            // landing on another trapdoor, which runs the whole trapdoor
+            // prefix and descends again. The chain stops once a landing
+            // no longer changes the floor.
+            loop {
+                let landed_tile = self.grid[self.player.y * 32 + self.player.x];
                 let Area::Town {
-                    scene: landed_scene,
                     floor: landed_floor,
+                    ..
                 } = self.area
                 else {
-                    unreachable!("town trapdoor transition must remain in town mode");
+                    break;
                 };
-                self.append_town_poison_gas_message(game_dir, landed_scene, landed_floor)?;
-                self.apply_pending_town_status_provision_pass();
-                self.apply_pending_town_object_epilogue();
-                self.append_pending_hourly_status_message();
-                return Ok(Some(outcome));
+                if !matches!(self.player.transport, TransportState::Carpet { .. })
+                    && let Some(next) = self.town_trap_door_at(
+                        game_dir,
+                        scene,
+                        landed_floor,
+                        self.player.x,
+                        self.player.y,
+                        landed_tile,
+                    )?
+                    && next.to_floor != landed_floor
+                {
+                    self.apply_town_trapdoor_party_damage();
+                    outcome = self.apply_town_trap_door_transition(game_dir, scene, next, false)?;
+                    continue;
+                }
+                if Self::is_town_burning_live_tile(landed_tile) {
+                    self.apply_town_burning_underfoot_effect();
+                }
+                break;
             }
+            let Area::Town {
+                scene: landed_scene,
+                floor: landed_floor,
+            } = self.area
+            else {
+                unreachable!("town trapdoor transition must remain in town mode");
+            };
+            self.append_town_poison_gas_message(game_dir, landed_scene, landed_floor)?;
+            self.apply_pending_town_status_provision_pass();
+            self.apply_pending_town_object_epilogue();
+            self.append_pending_hourly_status_message();
+            return Ok(Some(outcome));
         }
         // `town-mode.md §10` burning family. This arm runs after the
         // trapdoor arm and before the trailing party pass, and it is not
@@ -5781,7 +5773,7 @@ impl PlayState {
             _ => beat.text.map(str::to_string),
         };
         let releases = crate::blackthorn::blackthorn_capture_release_milliticks(
-            &timeline, 0, envelope, &text_of,
+            &timeline, 0, envelope, text_of,
         );
         self.stage_blackthorn_capture_beats(&timeline, &releases, text_of);
     }
@@ -5832,7 +5824,7 @@ impl PlayState {
         let start = crate::blackthorn::presentation_printed_rows(release_line)
             * crate::blackthorn::PRESENTATION_ROW_PRINT_MILLITICKS;
         let releases =
-            crate::blackthorn::blackthorn_capture_release_milliticks(&route, start, 0, &text_of);
+            crate::blackthorn::blackthorn_capture_release_milliticks(&route, start, 0, text_of);
         self.stage_blackthorn_capture_beats(&route, &releases, text_of);
     }
 
@@ -6954,14 +6946,13 @@ impl PlayState {
             });
         // Step 6: buffered, shown on the next redraw.
         let (x, y) = crate::blackthorn::BLACKTHORN_PENDULUM_CELL;
-        if let Some(index) = crate::blackthorn::blackthorn_cutscene_tile_index(x, y) {
-            if let Some(cell) = self
+        if let Some(index) = crate::blackthorn::blackthorn_cutscene_tile_index(x, y)
+            && let Some(cell) = self
                 .blackthorn_audience_map
                 .as_mut()
                 .and_then(|map| map.tiles.get_mut(index))
-            {
-                *cell = crate::blackthorn::BLACKTHORN_PENDULUM_UNOCCUPIED_TILE;
-            }
+        {
+            *cell = crate::blackthorn::BLACKTHORN_PENDULUM_UNOCCUPIED_TILE;
         }
         // Steps 5 and 7 (the actor clear is part of the shared routine).
         let report = if merciful {

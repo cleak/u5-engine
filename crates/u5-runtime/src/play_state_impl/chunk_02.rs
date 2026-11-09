@@ -259,7 +259,7 @@ impl PlayState {
                     game_dir,
                     outcome,
                 )?;
-                return Ok(true);
+                Ok(true)
             }
             'l' => {
                 let outcome = if let Some(focus) = inline_look_focus {
@@ -1651,11 +1651,11 @@ impl PlayState {
                 ))
             }
             _ => {
-                if let Some(spell_index) = spell_index {
-                    if !self.spell_allowed_in_current_cast_context(spell_index) {
-                        self.message = "Not here!".to_string();
-                        return Ok(MoveOutcome::Blocked);
-                    }
+                if let Some(spell_index) = spell_index
+                    && !self.spell_allowed_in_current_cast_context(spell_index)
+                {
+                    self.message = "Not here!".to_string();
+                    return Ok(MoveOutcome::Blocked);
                 }
                 self.message = "No effect!".to_string();
                 // The step-2 no-match result reports acted (playtest S11).
@@ -2055,10 +2055,10 @@ impl PlayState {
     /// `traps.md §3` effect id 2: roll an inclusive `1..8` damage separately
     /// for each in-party member of the six-slot band "that is not marked Dead
     /// - the only status excluded is Dead". The sweep applies exactly the two
-    /// gates the poison helper applies: an unsigned party-count check, then a
-    /// Dead skip. Ashes (`'A'`) is a distinct value from Dead and falls
-    /// through, so [`PartyMember::living`] is deliberately *not* the predicate
-    /// here.
+    ///   gates the poison helper applies: an unsigned party-count check, then a
+    ///   Dead skip. Ashes (`'A'`) is a distinct value from Dead and falls
+    ///   through, so [`PartyMember::living`] is deliberately *not* the predicate
+    ///   here.
     pub fn apply_bomb_trap_effect(&mut self, _triggering_slot: usize) -> String {
         let mut affected = 0usize;
         let mut total_applied = 0u16;
@@ -2137,9 +2137,9 @@ impl PlayState {
             // what the player types edits the row beneath (Virtue) or the
             // label's own row (Mantra). Both are served live by
             // [`Self::shrine_prompt_echo`], so the slot only mirrors them.
-            ShrinePhase::Virtue | ShrinePhase::Mantra => self
-                .shrine_prompt_echo_for(session)
-                .unwrap_or_else(String::new),
+            ShrinePhase::Virtue | ShrinePhase::Mantra => {
+                self.shrine_prompt_echo_for(session).unwrap_or_default()
+            }
             // `karma.md §12` "Completed-quest offering": the question is
             // `MISCMSG.DAT` record 34, logged when the phase opens, and what
             // the player types is a single digit echoed onto the row that
@@ -3034,9 +3034,7 @@ impl PlayState {
                 entry.plane == plane
                     && entry.x == self.player.x
                     && entry.y == self.player.y
-                    && entry
-                        .expected_tile
-                        .map_or(true, |expected| expected == tile)
+                    && entry.expected_tile.is_none_or(|expected| expected == tile)
             }) {
                 return Ok(Some(entry));
             }

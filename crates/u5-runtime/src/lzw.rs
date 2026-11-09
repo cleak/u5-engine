@@ -48,11 +48,7 @@ pub fn decode_gif_lzw_payload(
     let mut output = Vec::with_capacity(expected_len);
     let mut saw_end = false;
 
-    loop {
-        let Some(code) = reader.read_code(code_size) else {
-            break;
-        };
-
+    while let Some(code) = reader.read_code(code_size) {
         match code {
             LZW_CLEAR_CODE => {
                 reset_lzw_dictionary(&mut dictionary);
@@ -98,15 +94,15 @@ pub fn decode_gif_lzw_payload(
             ));
         }
 
-        if let Some(previous_entry) = previous.as_ref() {
-            if next_code < LZW_MAX_CODES {
-                let mut dictionary_entry = previous_entry.clone();
-                dictionary_entry.push(entry[0]);
-                dictionary.push(dictionary_entry);
-                next_code += 1;
-                if next_code == (1u16 << code_size) && code_size < LZW_MAX_CODE_SIZE {
-                    code_size += 1;
-                }
+        if let Some(previous_entry) = previous.as_ref()
+            && next_code < LZW_MAX_CODES
+        {
+            let mut dictionary_entry = previous_entry.clone();
+            dictionary_entry.push(entry[0]);
+            dictionary.push(dictionary_entry);
+            next_code += 1;
+            if next_code == (1u16 << code_size) && code_size < LZW_MAX_CODE_SIZE {
+                code_size += 1;
             }
         }
 

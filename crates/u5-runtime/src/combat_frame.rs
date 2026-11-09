@@ -1190,6 +1190,9 @@ pub const fn combat_player_command_action_reprompts(action: &CombatPlayerCommand
     }
 }
 
+// Built and consumed once per actor turn; boxing the large variant would
+// add an allocation to every dispatch for no measurable gain.
+#[allow(clippy::large_enum_variant)]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum CombatActorDispatchAction {
     Inactive,
@@ -1225,6 +1228,9 @@ pub enum CombatActorDispatchAction {
     DraggedUnderTurn,
 }
 
+// Built and consumed once per actor turn; boxing the large variant would
+// add an allocation to every dispatch for no measurable gain.
+#[allow(clippy::large_enum_variant)]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum CombatActorSlotDispatchApplication {
     EndOfRound {
@@ -1657,10 +1663,9 @@ impl PlayState {
             if let Some(member) = self
                 .combat_roster_slot_for_actor_slot(slot)
                 .and_then(|roster_slot| self.party.get_mut(roster_slot))
+                && member.status == b'S'
             {
-                if member.status == b'S' {
-                    member.status = b'G';
-                }
+                member.status = b'G';
             }
             // `combat.md §8.1`: the wake is "roster status back to Good ...
             // stats redrawn", and `stats-panel.md §2.2.1` puts the shared
@@ -2112,11 +2117,11 @@ impl PlayState {
     /// implement: "Earlier revisions called this step 'skip wall-cell
     /// slots, a defensive guard against bad placement'. That is withdrawn
     /// - it is a restraint guard, and reading it as a walkability guard
-    /// freezes actors the original leaves acting." `§7.1` spells out the
-    /// case that matters: a land class fought over water is placed by
-    /// `§5.4` onto one of arena 15's sixteen authored water cells and
-    /// "takes its turn every round on schedule; only its *movement* is
-    /// constrained".
+    ///   freezes actors the original leaves acting." `§7.1` spells out the
+    ///   case that matters: a land class fought over water is placed by
+    ///   `§5.4` onto one of arena 15's sixteen authored water cells and
+    ///   "takes its turn every round on schedule; only its *movement* is
+    ///   constrained".
     ///
     /// The tile ids are the same two [`JIMMY_STOCKS_TILE`] and
     /// [`JIMMY_MANACLES_TILE`] the `J` Jimmy release path tests, which is
@@ -3561,15 +3566,15 @@ impl PlayState {
 
             if traits.blink {
                 let blink_roll = self.combat_ai_blink_roll(actor_slot);
-                if combat_ai_special_one_in_eight_gate(blink_roll) {
-                    if let Some(special) = self.apply_combat_ai_blink_special(actor_slot) {
-                        return Some(Self::combat_ai_handled_special_turn(
-                            actor_slot,
-                            acting_group,
-                            special,
-                            false,
-                        ));
-                    }
+                if combat_ai_special_one_in_eight_gate(blink_roll)
+                    && let Some(special) = self.apply_combat_ai_blink_special(actor_slot)
+                {
+                    return Some(Self::combat_ai_handled_special_turn(
+                        actor_slot,
+                        acting_group,
+                        special,
+                        false,
+                    ));
                 }
             }
 
@@ -3899,20 +3904,19 @@ impl PlayState {
                 }
             }
             Some(CombatAiSpecialHook::SummonDaemon) => {
-                if let Some(candidate) = summon_candidate {
-                    if let Some(special) = self
+                if let Some(candidate) = summon_candidate
+                    && let Some(special) = self
                         .apply_combat_ai_summon_daemon_special_with_candidates(
                             actor_slot,
                             &[candidate],
                         )
-                    {
-                        return Some(Self::combat_ai_handled_special_turn(
-                            actor_slot,
-                            normal_group,
-                            special,
-                            false,
-                        ));
-                    }
+                {
+                    return Some(Self::combat_ai_handled_special_turn(
+                        actor_slot,
+                        normal_group,
+                        special,
+                        false,
+                    ));
                 }
             }
             None => {}
@@ -5108,15 +5112,14 @@ impl PlayState {
             if let Some(member) = self.party.get_mut(roster_slot) {
                 member.status = b'D';
             }
-            if let Some(actor) = self.combat_actors.get(slot) {
-                if let Some(object) = self
+            if let Some(actor) = self.combat_actors.get(slot)
+                && let Some(object) = self
                     .active_objects
                     .get_mut(actor.active_object_slot as usize)
-                {
-                    object.type_byte = COMBAT_PARTY_CORPSE_TILE;
-                    object.tile = COMBAT_PARTY_CORPSE_TILE;
-                    object.phase = STEADY_PHASE;
-                }
+            {
+                object.type_byte = COMBAT_PARTY_CORPSE_TILE;
+                object.tile = COMBAT_PARTY_CORPSE_TILE;
+                object.phase = STEADY_PHASE;
             }
             if self.active_player == Some(roster_slot) {
                 self.active_player = None;
@@ -6422,21 +6425,19 @@ impl PlayState {
                                 ));
                             }
                             if let CombatPartyPoisonOutcome::FallbackDamage { raw_damage } = outcome
-                            {
-                                if let Some(application) = self
+                                && let Some(application) = self
                                     .apply_combat_weapon_damage_to_target(
                                         None,
                                         slot,
                                         raw_damage as i16,
                                         true,
                                     )
-                                {
-                                    narration.extend(self.combat_spell_narrated_result_line(
-                                        slot,
-                                        None,
-                                        application,
-                                    ));
-                                }
+                            {
+                                narration.extend(self.combat_spell_narrated_result_line(
+                                    slot,
+                                    None,
+                                    application,
+                                ));
                             }
                             affected = true;
                         }
@@ -7694,7 +7695,7 @@ impl PlayState {
         intended_target_slot: usize,
         hit_raw_roll_0_to_60: u8,
     ) -> Option<CombatMonsterAttackApplication> {
-        if attacker_slot < COMBAT_PARTY_ACTOR_SLOTS || attacker_slot >= COMBAT_ACTOR_SLOTS {
+        if !(COMBAT_PARTY_ACTOR_SLOTS..COMBAT_ACTOR_SLOTS).contains(&attacker_slot) {
             return None;
         }
         let attacker = *self.combat_actors.get(attacker_slot)?;
@@ -7724,7 +7725,7 @@ impl PlayState {
         hit_raw_roll_0_to_60: u8,
         landing: (u8, u8),
     ) -> Option<CombatMonsterAttackApplication> {
-        if attacker_slot < COMBAT_PARTY_ACTOR_SLOTS || attacker_slot >= COMBAT_ACTOR_SLOTS {
+        if !(COMBAT_PARTY_ACTOR_SLOTS..COMBAT_ACTOR_SLOTS).contains(&attacker_slot) {
             return None;
         }
         let attacker = *self.combat_actors.get(attacker_slot)?;

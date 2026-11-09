@@ -254,7 +254,7 @@ pub const fn active_object_eviction_byte_accepted(byte: u8, phase: u8) -> bool {
 /// requires the off-screen viewport gate. Phases 2..=5 are
 /// off-screen-only; phases 1, 6..=10 do not consult the gate.
 pub const fn active_object_eviction_phase_is_off_screen(phase: u8) -> bool {
-    matches!(phase, 2 | 3 | 4 | 5)
+    matches!(phase, 2..=5)
 }
 
 /// `active-objects.md §4` on-screen **window** half-extent for the
@@ -736,7 +736,7 @@ pub fn decode_full_active_object_table(bytes: &[u8], label: &str) -> io::Result<
     }
 
     let mut objects = Vec::with_capacity(OOL_SLOTS);
-    for record in bytes.chunks_exact(OOL_RECORD_LEN) {
+    for record in bytes.as_chunks::<OOL_RECORD_LEN>().0 {
         let type_byte = record[0];
         objects.push(ActiveObject {
             type_byte,

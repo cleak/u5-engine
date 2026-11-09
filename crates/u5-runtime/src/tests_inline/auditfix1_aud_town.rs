@@ -190,9 +190,11 @@ fn aud_town_13_9_rejected_install_still_runs_the_resident_entry_sweep() {
     fs::write(dir.join("TOWNE.NPC"), npc).unwrap();
     fs::write(dir.join("TOWNE.TLK"), [0, 0]).unwrap();
     for rejected in [false, true] {
-        let mut options = PlayOptions::default();
-        options.target = PlayTarget::Town(scene);
-        options.start = Some((5, 5));
+        let mut options = PlayOptions {
+            target: PlayTarget::Town(scene),
+            start: Some((5, 5)),
+            ..PlayOptions::default()
+        };
         // Hatred hosted in Trinsic.
         options.shadowlord_hideouts = [SHADOWLORD_VANQUISHED, 6, SHADOWLORD_VANQUISHED];
         let mut state = if rejected {
@@ -258,7 +260,7 @@ fn aud_town_containers_3_get_skips_an_actor_standing_on_crops() {
     assert_eq!(state.message, GET_TILE_CROPS_PICKED_LINE);
     assert_eq!(state.grid[32 + 2], GET_TILE_CROPS_REPLACEMENT);
     assert_eq!(state.food, food + 1);
-    assert!(state.active_objects.iter().any(|object| *object == actor));
+    assert!(state.active_objects.contains(&actor));
     let _ = fs::remove_dir_all(dir);
 }
 
