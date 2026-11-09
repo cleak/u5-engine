@@ -113,6 +113,8 @@ impl Phase {
 const FOUNDATION_P2: Phase = Phase::new(1, "P2");
 /// Chapter 1, P5: launch plumbing and the input router (`[keys]`).
 const FOUNDATION_P5: Phase = Phase::new(1, "P5");
+/// Chapter 1, P6: the overlay model, shell services and side space.
+const FOUNDATION_P6: Phase = Phase::new(1, "P6");
 /// Chapter 1, P6b: Frozen overlays, optional and later (U1).
 const FOUNDATION_P6B: Phase = Phase::new(1, "P6b");
 
@@ -363,6 +365,22 @@ const fn key_row(key: &'static str, label: &'static str, chord: &'static str) ->
     }
 }
 
+/// The side panels `display.panel_priority` orders (1.3.8, 2.4.1):
+/// chapter 5's journal panel and chapter 8's scrollback panel. The
+/// minimap, parked (U18), is always last and is not listed.
+pub const PANEL_WORDS: &[&str] = &["journal", "conversation"];
+
+/// The toggles whose features claim side space (1.3.8): the journal
+/// panel (chapter 5) and the scrollback panel (chapter 8). The side-space
+/// arbiter exists only while one of them is on.
+pub const SIDE_CLAIM_KEYS: &[&str] = &["journal.side_panel", "journal.clue_scrollback"];
+
+/// The side-space arbiter's own settings (1.3.8). They stay in
+/// `[display]` but belong to the foundation's arbiter, and are inert while
+/// no [`SIDE_CLAIM_KEYS`] toggle is on, so they need no toggle of their
+/// own.
+pub const SIDE_SPACE_KEYS: &[&str] = &["display.panel_priority", "display.panel_guard"];
+
 /// Every valued setting, in catalogue order.
 pub const OPTIONS: &[OptionSpec] = &[
     OptionSpec {
@@ -415,6 +433,38 @@ pub const OPTIONS: &[OptionSpec] = &[
         "Ctrl+F",
     ),
     key_row("keys.cheats", "Open the cheats page", "Ctrl+F12"),
+    OptionSpec {
+        key: "display.panel_priority",
+        label: "Which side panel wins when two want one side",
+        kind: OptionKind::List(PANEL_WORDS),
+        default: OptionDefault::List(PANEL_WORDS),
+        class: Some(EffectClass::Presentation),
+        apply: ApplyAt::Frame,
+        tier: Tier::Feature,
+        deviation_values: &[],
+        ships: FOUNDATION_P6,
+        tags: &[],
+        cli_aliases: &[],
+        toggle: None,
+        parent: None,
+        needs: &[],
+    },
+    OptionSpec {
+        key: "display.panel_guard",
+        label: "Smallest game picture a side panel may leave, in percent",
+        kind: OptionKind::Int { min: 50, max: 100 },
+        default: OptionDefault::Int(80),
+        class: Some(EffectClass::Presentation),
+        apply: ApplyAt::Frame,
+        tier: Tier::Feature,
+        deviation_values: &[],
+        ships: FOUNDATION_P6,
+        tags: &[],
+        cli_aliases: &[],
+        toggle: None,
+        parent: None,
+        needs: &[],
+    },
 ];
 
 /// A catalogue row of either kind.
@@ -1072,6 +1122,12 @@ mod tests {
         // Classic and the feature's plugin out (1.3.5). Foundation rows
         // (no effect class) change nothing by themselves.
         for spec in OPTIONS.iter().filter(|spec| spec.class.is_some()) {
+            if SIDE_SPACE_KEYS.contains(&spec.key) {
+                // The arbiter's settings: inert while no side-claiming
+                // toggle is on.
+                assert_eq!((spec.toggle, spec.parent), (None, None), "{}", spec.key);
+                continue;
+            }
             assert!(
                 spec.toggle.is_some() != spec.parent.is_some(),
                 "{} must either switch a toggle or be a sub-option of one",
@@ -1096,6 +1152,48 @@ mod tests {
             "| enhancements.preset | Preset | enum classic\\|recommended\\|everything = classic \
              | -, P | feature | --preset | - | yes |"
         ));
+    }
+
+    #[test]
+    fn the_side_space_rows_match_the_design() {
+        // 1.3.8 and 2.4.1: `panel_priority` list = [journal, conversation]
+        // and `panel_guard` int 50..100 = 80, both class a, applied at the
+        // next frame, no alias.
+        let Some(CatalogueRow::Option(priority)) = CatalogueRow::find("display.panel_priority")
+        else {
+            panic!("display.panel_priority is a valued setting");
+        };
+        assert_eq!(
+            priority.kind,
+            OptionKind::List(&["journal", "conversation"])
+        );
+        assert_eq!(
+            priority.default,
+            OptionDefault::List(&["journal", "conversation"])
+        );
+        let Some(CatalogueRow::Option(guard)) = CatalogueRow::find("display.panel_guard") else {
+            panic!("display.panel_guard is a valued setting");
+        };
+        assert_eq!(guard.kind, OptionKind::Int { min: 50, max: 100 });
+        assert_eq!(guard.default, OptionDefault::Int(80));
+        for spec in [priority, guard] {
+            assert_eq!(spec.class, Some(EffectClass::Presentation));
+            assert_eq!(spec.apply, ApplyAt::Frame);
+            assert_eq!(spec.tier, Tier::Feature);
+            assert!(spec.cli_aliases.is_empty());
+            assert!(!spec.is_shipped(), "{} ships with P6", spec.key);
+            assert!(SIDE_SPACE_KEYS.contains(&spec.key));
+        }
+        assert_eq!(SIDE_SPACE_KEYS.len(), 2);
+        // The claiming toggles are the journal and scrollback panels; their
+        // rows arrive with chapters 5 and 8.
+        assert_eq!(
+            SIDE_CLAIM_KEYS,
+            ["journal.side_panel", "journal.clue_scrollback"]
+        );
+        for key in SIDE_CLAIM_KEYS {
+            assert!(is_well_formed_key(key));
+        }
     }
 
     #[test]

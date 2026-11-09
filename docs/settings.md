@@ -60,4 +60,6 @@ settings page, a stored value is kept but not used, and presets skip it.
 | keys.auto_party | Auto-combat for the party | chord = Ctrl+Shift+A | -, F | feature | - | a keyboard | later (chapter 1 P5) |
 | keys.auto_until_done | Auto-combat until the fight ends | chord = Ctrl+F | -, F | feature | - | a keyboard | later (chapter 1 P5) |
 | keys.cheats | Open the cheats page | chord = Ctrl+F12 | -, F | feature | - | a keyboard | later (chapter 1 P5) |
+| display.panel_priority | Which side panel wins when two want one side | list of journal\|conversation = [journal, conversation] | a, F | feature | - | - | later (chapter 1 P6) |
+| display.panel_guard | Smallest game picture a side panel may leave, in percent | int 50..100 = 80 | a, F | feature | - | - | later (chapter 1 P6) |
 <!-- END GENERATED -->

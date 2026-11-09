@@ -6,10 +6,10 @@
 //! Every text is a `&'static str` constant in its feature module, and a
 //! toast never names anything the player has not found (1.4.7).
 //!
-//! The toast is drawn by a `bevy_ui` node with its own CPU-built image, a
-//! strip over the frame's top row; the frame image is never written. The
-//! side-space arbiter (1.3.8) moves it into the window margin when one
-//! exists.
+//! The toast is drawn by a `bevy_ui` node with its own CPU-built image, in
+//! the window margin when one exists and otherwise as a strip over the
+//! frame's top row; the frame image is never written. It follows the frame
+//! where the side-space arbiter (1.3.8) puts it.
 //!
 //! [`ShellBadges`] holds the status badges chapters 6 and 7 set (automatic
 //! combat, a modified game); the margin badge reads it.
@@ -27,6 +27,7 @@ use bevy::render::render_resource::{Extent3d, TextureDimension, TextureFormat};
 use u5_runtime::{CH_CELL_SIDE, FixedCellFont};
 
 use super::EnhSet;
+use super::side::{PanelSide, SideLayout};
 use crate::{VISUAL_PLAY_FRAME_HEIGHT, VISUAL_PLAY_FRAME_WIDTH, VisualState, fitted_display_size};
 
 /// How long a refusal or confirmation shows.
@@ -167,16 +168,55 @@ pub struct ToastStrip {
     text: &'static str,
 }
 
-/// Where the strip sits, in logical window pixels: over the top text row
-/// of the fitted 4:3 frame, centred on it, one text row high. A text wider
-/// than the frame shrinks to fit it.
-pub(crate) fn toast_strip_rect(window: Vec2, cells: usize) -> Rect {
-    let frame = fitted_display_size(VISUAL_PLAY_FRAME_WIDTH, VISUAL_PLAY_FRAME_HEIGHT, window);
-    let cell = Vec2::new(frame.x / FRAME_COLUMNS as f32, frame.y / FRAME_ROWS as f32);
+/// Where the strip sits, in logical window pixels. One text row of the
+/// frame high, in the frame's cell size, and in the window margin when one
+/// exists (1.3.7):
+///
+/// 1. the band above the frame, when a row fits there, centred on the
+///    frame;
+/// 2. else a bar beside the frame that holds no side panel, when the whole
+///    line fits there, level with the frame's top;
+/// 3. else over the frame's top row, centred on it.
+///
+/// A line wider than the frame shrinks to the frame's width. The frame is
+/// where [`SideLayout`] puts it while it owns the frame, otherwise the
+/// fitted 4:3 frame in the middle of the window.
+pub(crate) fn toast_strip_rect(window: Vec2, layout: Option<&SideLayout>, cells: usize) -> Rect {
+    let frame = layout.and_then(|layout| layout.frame).unwrap_or_else(|| {
+        let size = fitted_display_size(VISUAL_PLAY_FRAME_WIDTH, VISUAL_PLAY_FRAME_HEIGHT, window);
+        Rect::from_center_size(window / 2.0, size)
+    });
+    let cell = Vec2::new(
+        frame.width() / FRAME_COLUMNS as f32,
+        frame.height() / FRAME_ROWS as f32,
+    );
     let natural = Vec2::new(cell.x * cells.max(1) as f32, cell.y);
-    let size = natural * (frame.x / natural.x).min(1.0);
-    let top_left = Vec2::new((window.x - size.x) / 2.0, (window.y - frame.y) / 2.0);
-    Rect::from_corners(top_left, top_left + size)
+    let size = natural * (frame.width() / natural.x).min(1.0);
+    let at = |top_left: Vec2| Rect::from_corners(top_left, top_left + size);
+    if frame.min.y >= size.y {
+        return at(Vec2::new(
+            frame.center().x - size.x / 2.0,
+            frame.min.y - size.y,
+        ));
+    }
+    let granted = |side: PanelSide| {
+        layout.is_some_and(|layout| {
+            layout
+                .granted
+                .iter()
+                .any(|(kind, _)| layout.side_of(*kind) == Some(side))
+        })
+    };
+    let bars = [
+        (PanelSide::Left, 0.0, frame.min.x),
+        (PanelSide::Right, frame.max.x, window.x),
+    ];
+    for (side, from, to) in bars {
+        if !granted(side) && to - from >= natural.x {
+            return at(Vec2::new((from + to - size.x) / 2.0, frame.min.y));
+        }
+    }
+    at(Vec2::new(frame.center().x - size.x / 2.0, frame.min.y))
 }
 
 /// The strip's pixels: `text` in the frame's own font, one cell per byte,
@@ -232,7 +272,7 @@ fn place(node: &mut Node, rect: Rect) {
     node.height = Val::Px(rect.height());
 }
 
-/// Shows the toast as a UI node over the frame's top row, in
+/// Shows the toast as a UI node in the margin or over the frame, in
 /// `EnhSet::Present`. It builds the strip's image when the text changes and
 /// follows the window size every frame. It reads the play frame's font, so
 /// nothing draws before gameplay; the title layer brings its own font with
@@ -241,10 +281,12 @@ fn draw_toast(
     mut commands: Commands,
     toasts: Res<Toasts>,
     visual: Option<Res<VisualState>>,
+    layout: Option<Res<SideLayout>>,
     windows: Query<&Window>,
     mut images: ResMut<Assets<Image>>,
     mut strips: Query<(Entity, &ToastStrip, &mut Node)>,
 ) {
+    let layout = layout.as_deref();
     let showing = toasts.current();
     let window = windows
         .single()
@@ -254,7 +296,7 @@ fn draw_toast(
     for (entity, strip, mut node) in &mut strips {
         match (showing, window) {
             (Some(text), Some(window)) if text == strip.text && !drawn => {
-                place(&mut node, toast_strip_rect(window, text.len()));
+                place(&mut node, toast_strip_rect(window, layout, text.len()));
                 drawn = true;
             }
             _ => commands.entity(entity).despawn(),
@@ -268,7 +310,7 @@ fn draw_toast(
     };
     let image = images.add(strip_image(&visual.text_font, text));
     let mut node = Node::default();
-    place(&mut node, toast_strip_rect(window, text.len()));
+    place(&mut node, toast_strip_rect(window, layout, text.len()));
     commands.spawn((
         Name::new("enh toast"),
         ToastStrip { text },

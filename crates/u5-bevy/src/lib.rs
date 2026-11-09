@@ -1571,7 +1571,7 @@ fn add_visual_update_systems(app: &mut App) {
         (
             drive_visual,
             animate_static_tiles,
-            fit_display_to_window,
+            fit_display_to_window.run_if(enh::side::faithful_fit_owns_frame),
             queue_frame_speaker_effects,
             play_speaker_effects,
             expire_speaker_voice,
@@ -10166,7 +10166,7 @@ fn add_visual_intro_update_systems(app: &mut App) {
             // Inert while the intro owns the framebuffer; after Journey
             // Onward this is the resident idle wait-loop redraw tick.
             animate_static_tiles,
-            fit_display_to_window,
+            fit_display_to_window.run_if(enh::side::faithful_fit_owns_frame),
             queue_frame_speaker_effects,
             play_speaker_effects,
             expire_speaker_voice,
@@ -20873,6 +20873,46 @@ mod tests {
             INTRO_UPDATE_SYSTEMS_1_0_1,
             INTRO_UPDATE_EDGES_1_0_1,
             "default player path",
+        );
+    }
+
+    /// Every run condition in an app's `Update` schedule, as
+    /// `system: condition`, sorted.
+    fn update_run_conditions(app: &App) -> Vec<String> {
+        let schedules = app.world().resource::<bevy::ecs::schedule::Schedules>();
+        let graph = schedules
+            .get(Update)
+            .expect("the app must install Update")
+            .graph();
+        let mut conditions: Vec<String> = graph
+            .systems()
+            .flat_map(|(_, system, conditions)| {
+                conditions
+                    .iter()
+                    .map(move |condition| format!("{}: {}", system.name(), condition.name()))
+            })
+            .collect();
+        conditions.sort();
+        conditions
+    }
+
+    /// The foundation's only edit to the faithful layout path (design
+    /// 1.3.8, 1.3.15): one run condition on `fit_display_to_window` in both
+    /// chains, true while there is no side layout. No other faithful system
+    /// carries a condition.
+    #[test]
+    fn the_faithful_fit_carries_only_the_side_layout_condition() {
+        let expected =
+            ["u5_bevy::fit_display_to_window: u5_bevy::enh::side::faithful_fit_owns_frame"];
+        let mut visual = App::new();
+        add_visual_update_systems(&mut visual);
+        assert_eq!(update_run_conditions(&visual), expected, "--visual");
+        let mut intro = App::new();
+        add_visual_intro_update_systems(&mut intro);
+        assert_eq!(
+            update_run_conditions(&intro),
+            expected,
+            "default player path"
         );
     }
 

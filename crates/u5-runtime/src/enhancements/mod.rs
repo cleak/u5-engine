@@ -31,8 +31,9 @@ pub mod source;
 
 pub use catalogue::{
     ApplyAt, CatalogueRow, EffectClass, FeatureToggles, OPTIONS, OptionDefault, OptionKind,
-    OptionSpec, PRESETS, Phase, Preset, PresetEntry, PresetValue, SHIPPED_PHASES, SoftDep,
-    TOGGLE_KEYS, TOGGLES, Tag, Tier, Toggle, ToggleSpec, settings_table,
+    OptionSpec, PANEL_WORDS, PRESETS, Phase, Preset, PresetEntry, PresetValue, SHIPPED_PHASES,
+    SIDE_CLAIM_KEYS, SIDE_SPACE_KEYS, SoftDep, TOGGLE_KEYS, TOGGLES, Tag, Tier, Toggle, ToggleSpec,
+    settings_table,
 };
 pub use idle::{GUARDED_DRAINS, GuardedDrain, IdleBlocker, IdlePromptKind};
 pub use resolve::{

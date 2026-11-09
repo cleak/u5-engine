@@ -22,6 +22,11 @@
 //! - The toast line and badges ([`toast`]) and the synthetic-key owner
 //!   ([`synthetic`]) are added only by a feature that uses them (the
 //!   overlay model brings the toasts for its refusals).
+//! - The side-space arbiter and panel host ([`side`]) are added only while
+//!   a side-claiming feature is on. Its run condition on the faithful
+//!   `fit_display_to_window`, `side::faithful_fit_owns_frame`, is the one
+//!   edit to the faithful layout path, and is true while the arbiter is
+//!   absent.
 //!
 //! Every enhancement system sits in one of the six [`EnhSet`]s. The plugin
 //! declares their edges once, against the faithful systems of both app
@@ -32,6 +37,7 @@
 pub mod idle;
 pub mod input;
 pub mod overlay;
+pub mod side;
 pub mod synthetic;
 pub mod toast;
 
@@ -188,6 +194,11 @@ impl Plugin for EnhancementsPlugin {
             self.launch.enhancements.toggles,
         );
         overlay::add_overlay_model(app, self.launch.enhancements.toggles);
+        side::add_side_space(
+            app,
+            self.launch.enhancements.toggles,
+            &self.launch.enhancements.values,
+        );
     }
 }
 

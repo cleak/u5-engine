@@ -206,26 +206,83 @@ fn assert_near(actual: Vec2, expected: Vec2, what: &str) {
 }
 
 #[test]
-fn the_strip_sits_over_the_frames_top_row() {
+fn the_strip_sits_over_the_frames_top_row_without_a_margin() {
     // 4:3: the frame fills the window; a row is a 25th of its height.
-    let rect = toast_strip_rect(Vec2::new(960.0, 720.0), 40);
+    let rect = toast_strip_rect(Vec2::new(960.0, 720.0), None, 40);
     assert_near(rect.min, Vec2::ZERO, "4:3 corner");
     assert_near(rect.size(), Vec2::new(960.0, 28.8), "4:3 size");
 
-    // 16:9: the 4:3 frame is centred; the strip is centred on it.
-    let rect = toast_strip_rect(Vec2::new(1920.0, 1080.0), 20);
+    // 16:9: the 4:3 frame is centred; its 240-pixel bars are narrower than
+    // the line, so the strip is centred on the frame.
+    let rect = toast_strip_rect(Vec2::new(1920.0, 1080.0), None, 20);
     assert_near(rect.min, Vec2::new(600.0, 0.0), "16:9 corner");
     assert_near(rect.size(), Vec2::new(720.0, 43.2), "16:9 size");
 
-    // Taller than 4:3: the frame is letterboxed; the strip follows its top.
-    let rect = toast_strip_rect(Vec2::new(800.0, 800.0), 40);
-    assert_near(rect.min, Vec2::new(0.0, 100.0), "square corner");
-    assert_near(rect.size(), Vec2::new(800.0, 24.0), "square size");
-
     // Wider than the frame: shrunk to fit it, still one row's place.
-    let rect = toast_strip_rect(Vec2::new(960.0, 720.0), 48);
+    let rect = toast_strip_rect(Vec2::new(960.0, 720.0), None, 48);
     assert_near(rect.min, Vec2::ZERO, "long corner");
     assert_near(rect.size(), Vec2::new(960.0, 24.0), "long size");
+}
+
+#[test]
+fn the_strip_moves_into_the_window_margin_when_one_exists() {
+    // Taller than 4:3: the letterbox band above the frame holds a row.
+    let rect = toast_strip_rect(Vec2::new(800.0, 800.0), None, 40);
+    assert_near(rect.min, Vec2::new(0.0, 76.0), "band corner");
+    assert_near(rect.size(), Vec2::new(800.0, 24.0), "band size");
+
+    // A band thinner than a row is no margin.
+    let rect = toast_strip_rect(Vec2::new(800.0, 620.0), None, 40);
+    assert_near(rect.min, Vec2::new(0.0, 10.0), "thin band corner");
+
+    // 32:9: a 1200-pixel bar holds a 20-cell line (720 pixels) whole, at
+    // the frame's cell size, level with the frame's top.
+    let rect = toast_strip_rect(Vec2::new(3840.0, 1080.0), None, 20);
+    assert_near(rect.min, Vec2::new(240.0, 0.0), "bar corner");
+    assert_near(rect.size(), Vec2::new(720.0, 43.2), "bar size");
+}
+
+#[test]
+fn the_strip_follows_the_side_layout_and_keeps_out_of_panels() {
+    use crate::enh::side::{
+        PanelClaim, PanelKind, SidePreference, SideSpaceSettings, solve_side_space,
+    };
+    let window = Vec2::new(3840.0, 1080.0);
+    let claim = |kind, side| PanelClaim { kind, side };
+    let solution = solve_side_space(
+        window,
+        UVec2::new(VISUAL_PLAY_FRAME_WIDTH, VISUAL_PLAY_FRAME_HEIGHT),
+        &[claim(PanelKind::Journal, SidePreference::Left)],
+        &SideSpaceSettings::default(),
+    );
+    let layout = solution.layout;
+    let frame = layout.frame.expect("the journal fits at 32:9");
+    // The left bar holds the panel; the right bar takes the toast.
+    let rect = toast_strip_rect(window, Some(&layout), 20);
+    assert_near(
+        rect.min,
+        Vec2::new((frame.max.x + window.x - 720.0) / 2.0, frame.min.y),
+        "right bar",
+    );
+
+    // Both bars hold panels and there is no band: over the frame.
+    let solution = solve_side_space(
+        window,
+        UVec2::new(VISUAL_PLAY_FRAME_WIDTH, VISUAL_PLAY_FRAME_HEIGHT),
+        &[
+            claim(PanelKind::Journal, SidePreference::Left),
+            claim(PanelKind::Conversation, SidePreference::Right),
+        ],
+        &SideSpaceSettings::default(),
+    );
+    let layout = solution.layout;
+    let frame = layout.frame.expect("both fit at 32:9");
+    let rect = toast_strip_rect(window, Some(&layout), 20);
+    assert_near(
+        rect.min,
+        Vec2::new(frame.center().x - 360.0, frame.min.y),
+        "over the frame",
+    );
 }
 
 #[test]
@@ -267,7 +324,7 @@ fn the_toast_draws_as_a_node_and_never_writes_the_frame() {
     let drawn = strips(&mut app);
     assert_eq!(drawn.len(), 1);
     assert_eq!(drawn[0].0, REFUSED);
-    let rect = toast_strip_rect(Vec2::new(1920.0, 1080.0), REFUSED.len());
+    let rect = toast_strip_rect(Vec2::new(1920.0, 1080.0), None, REFUSED.len());
     assert_eq!(drawn[0].1.left, Val::Px(rect.min.x));
     assert_eq!(drawn[0].1.top, Val::Px(rect.min.y));
     assert_eq!(drawn[0].1.width, Val::Px(rect.width()));
