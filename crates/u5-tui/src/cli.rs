@@ -89,6 +89,9 @@ pub struct CliArgs {
     pub parity_lock: bool,
     /// `--show-settings`: print the resolved settings and exit.
     pub show_settings: bool,
+    /// `--settings`: open the setup window's Enhancements page, then start
+    /// the game (the default launch).
+    pub settings: bool,
     /// Whether this launch reads the enhancement settings in `config.toml`.
     /// Only the default launch does (1.2.4). The parser never sets it; the
     /// frontend does, once it knows the launch is the default one.
@@ -228,6 +231,7 @@ where
     let mut enhancements: Vec<CliSetting> = Vec::new();
     let mut parity_lock = false;
     let mut show_settings = false;
+    let mut settings = false;
     let mut args = args.into_iter().map(Into::into);
     while let Some(arg) = args.next() {
         match arg.as_str() {
@@ -616,6 +620,7 @@ where
             }
             "--parity-lock" => parity_lock = true,
             "--show-settings" => show_settings = true,
+            "--settings" => settings = true,
             _ if arg.starts_with("--") => {
                 let Some(alias) = find_cli_alias(&arg) else {
                     return Err(io::Error::new(
@@ -666,6 +671,7 @@ where
             enhancements: Vec::new(),
             parity_lock: false,
             show_settings: false,
+            settings: false,
             settings_file: false,
         };
         return Ok(CliCommand {
@@ -956,17 +962,26 @@ where
         enhancements,
         parity_lock,
         show_settings,
+        settings,
         settings_file: false,
     };
     if args.show_settings {
         let mut mode = args.clone();
         mode.show_settings = false;
-        if mode.has_mode() || mode.setup {
+        if mode.has_mode() || mode.setup || mode.settings {
             return Err(io::Error::new(
                 io::ErrorKind::InvalidInput,
                 "--show-settings prints the settings and exits; it can only be combined with --preset, --enable, --disable, --set, their aliases and --parity-lock",
             ));
         }
+    }
+    // `--settings` edits what the default launch reads, then starts it, so
+    // it takes no mode and no folder other than one being set up.
+    if args.settings && (args.has_mode() || (explicit_game_dir.is_some() && !args.setup)) {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "--settings opens the Enhancements page and then starts the game; it cannot be combined with a mode flag or a game folder (use --setup <GAME_DIR> to set a folder up first)",
+        ));
     }
     if !args.enhancements.is_empty() && args.is_qa_mode() {
         return Err(io::Error::new(
@@ -1147,6 +1162,8 @@ ENHANCEMENTS (optional; with none, the game is the original):
                               Turn on/off settings off.
         --set <KEY=VALUE>     Set any setting.
         --parity-lock         Force every enhancement off for this launch.
+        --settings            Open the Enhancements page in the setup window,
+                              then start the game.
         --show-settings       Print the settings a launch would use, then exit.
                               config.toml settings apply to the default launch
                               (no GAME_DIR or mode); other launches use the

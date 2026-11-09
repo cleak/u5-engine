@@ -9,11 +9,12 @@ use u5_runtime::{
     location_audit_report_text, run_report,
 };
 use u5_tui::{
-    CliArgs, ReadyGameData, SETUP_WINDOW_FLAG, WizardMode, cli_usage, compare_manifest_files,
-    describe_failure, parse_cli_command, prepare_writable_game_dir, resolve_game_data,
-    run_audio_suite, run_create_character_command, run_interactive_create_character,
-    run_intro_menu_loop, run_play_loop, run_route_smoke, run_save_frame, run_save_frame_suite,
-    run_save_screen, run_setup_window_child, run_show_settings,
+    CliArgs, ReadyGameData, SETTINGS_WINDOW_FLAG, SETUP_WINDOW_FLAG, WizardMode, cli_usage,
+    compare_manifest_files, describe_failure, open_settings_page, parse_cli_command,
+    prepare_writable_game_dir, resolve_game_data, run_audio_suite, run_create_character_command,
+    run_interactive_create_character, run_intro_menu_loop, run_play_loop, run_route_smoke,
+    run_save_frame, run_save_frame_suite, run_save_screen, run_settings_window_child,
+    run_setup_window_child, run_show_settings,
 };
 
 fn main() -> ExitCode {
@@ -21,6 +22,10 @@ fn main() -> ExitCode {
     if argv.first().map(String::as_str) == Some(SETUP_WINDOW_FLAG) {
         // Internal: the windowed setup wizard's own process.
         return run_setup_window_child(argv.get(1).cloned());
+    }
+    if argv.first().map(String::as_str) == Some(SETTINGS_WINDOW_FLAG) {
+        // Internal: the Enhancements page's own process (`--settings`).
+        return run_settings_window_child(&argv[1..]);
     }
     let mut game_data = None;
     match run(argv, &mut game_data) {
@@ -40,6 +45,13 @@ fn run(argv: Vec<String>, game_data: &mut Option<ReadyGameData>) -> io::Result<(
     }
     if command.args.show_settings {
         return run_show_settings(&command.args.enhancements, command.args.parity_lock);
+    }
+    // `--settings`: the Enhancements page first, then the default launch,
+    // which reads what it saved. Closing its window starts nothing.
+    if command.args.settings
+        && !open_settings_page(command.args.parity_lock).map_err(io::Error::other)?
+    {
+        return Ok(());
     }
     if !command.args.needs_game_data() {
         return dispatch(command.finish(PathBuf::new())?);

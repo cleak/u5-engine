@@ -326,3 +326,674 @@ fn bevy_plugin_drives_the_flow_headlessly() {
     let exits = app.world().resource::<Events<AppExit>>();
     assert!(!exits.is_empty());
 }
+
+// ---- the Enhancements page (Phase B design 1.2.2, package M0-08) ----
+
+/// A host with settings: two ordinary rows a preset governs, one
+/// preference no preset touches, and the Cheats group.
+struct SettingsHost {
+    locked: bool,
+    preset: usize,
+    fail_save: bool,
+    saved: Mutex<Vec<SettingsChanges>>,
+}
+
+impl SettingsHost {
+    fn new() -> Self {
+        Self {
+            locked: false,
+            preset: 0,
+            fail_save: false,
+            saved: Mutex::new(Vec::new()),
+        }
+    }
+}
+
+fn switch(key: &str, label: &str, group: &str, role: RowRole, on: bool) -> SettingRow {
+    SettingRow {
+        key: key.to_string(),
+        label: label.to_string(),
+        group: group.to_string(),
+        tags: Vec::new(),
+        kind: RowKind::Switch,
+        role,
+        value: RowValue::Switch(on),
+        default: RowValue::Switch(false),
+    }
+}
+
+fn settings_fixture(locked: bool, preset: usize) -> SettingsRows {
+    let recommended = preset == 1;
+    let mut tier = switch(
+        "journal.tier",
+        "Spoilers",
+        "Journal",
+        RowRole::Setting,
+        false,
+    );
+    tier.kind = RowKind::Choice(vec![
+        ("1".to_string(), "1 Basic".to_string()),
+        ("2".to_string(), "2 Goals".to_string()),
+    ]);
+    tier.value = RowValue::Choice("2".to_string());
+    tier.default = RowValue::Choice("2".to_string());
+    let mut sharp = switch(
+        "display.sharp",
+        "Sharp scaling",
+        "Display",
+        RowRole::Setting,
+        recommended,
+    );
+    sharp.tags = vec!["wider view".to_string()];
+    SettingsRows {
+        rows: vec![
+            sharp,
+            switch(
+                "combat.auto",
+                "Auto-combat",
+                "Combat",
+                RowRole::Setting,
+                recommended,
+            ),
+            tier,
+            // Deliberately out of order: the page puts "Allow cheats"
+            // first and "Watch game state" last.
+            switch(
+                "cheats.state_watch",
+                "Watch game state",
+                "Cheats",
+                RowRole::WatchState,
+                false,
+            ),
+            switch(
+                "cheats.heal",
+                "Heal the party",
+                "Cheats",
+                RowRole::Cheat,
+                false,
+            ),
+            switch(
+                "cheats.enabled",
+                "Allow cheats",
+                "Cheats",
+                RowRole::AllowCheats,
+                false,
+            ),
+        ],
+        presets: vec![
+            PresetChoice {
+                key: "classic".to_string(),
+                label: "Classic".to_string(),
+                values: vec![
+                    ("display.sharp".to_string(), RowValue::Switch(false)),
+                    ("combat.auto".to_string(), RowValue::Switch(false)),
+                ],
+            },
+            PresetChoice {
+                key: "recommended".to_string(),
+                label: "Recommended".to_string(),
+                values: vec![
+                    ("display.sharp".to_string(), RowValue::Switch(false)),
+                    ("combat.auto".to_string(), RowValue::Switch(true)),
+                ],
+            },
+            PresetChoice {
+                key: "everything".to_string(),
+                label: "Everything".to_string(),
+                values: vec![
+                    ("display.sharp".to_string(), RowValue::Switch(true)),
+                    ("combat.auto".to_string(), RowValue::Switch(true)),
+                    // A key this page has no row for is skipped.
+                    ("maps.hidden".to_string(), RowValue::Switch(true)),
+                ],
+            },
+        ],
+        preset,
+        locked,
+        notes: Vec::new(),
+    }
+}
+
+impl WizardHost for SettingsHost {
+    fn discover(&self) -> Vec<Discovered> {
+        Vec::new()
+    }
+    fn validate(&self, path: &Path) -> ValidationReport {
+        validate_dir(path)
+    }
+    fn commit(&self, _: &Path) -> Result<CommitSummary, String> {
+        Err("unused".into())
+    }
+    fn start_folder_pick(&self) -> Option<Receiver<Option<PathBuf>>> {
+        None
+    }
+    fn help_text(&self) -> String {
+        String::new()
+    }
+    fn settings_rows(&self) -> Option<SettingsRows> {
+        let mut rows = settings_fixture(self.locked, self.preset);
+        if self.preset == 1 {
+            // Recommended as stored has display.sharp off.
+            rows.rows[0].value = RowValue::Switch(false);
+        }
+        Some(rows)
+    }
+    fn save_settings(&self, changes: &SettingsChanges) -> Result<(), String> {
+        if self.fail_save {
+            return Err("read-only folder".to_string());
+        }
+        self.saved.lock().unwrap().push(changes.clone());
+        Ok(())
+    }
+}
+
+fn page(model: &WizardModel) -> &SettingsPage {
+    model
+        .settings
+        .as_ref()
+        .expect("the Enhancements page is open")
+}
+
+fn row_of(model: &WizardModel, key: &str) -> usize {
+    page(model)
+        .rows
+        .iter()
+        .position(|row| row.key == key)
+        .unwrap()
+}
+
+fn value_of(model: &WizardModel, key: &str) -> RowValue {
+    page(model).rows[row_of(model, key)].value.clone()
+}
+
+fn row_texts(model: &WizardModel, host: &dyn WizardHost) -> Vec<String> {
+    page_for(model, host)
+        .rows
+        .into_iter()
+        .map(|row| row.text)
+        .collect()
+}
+
+#[test]
+fn hosts_without_settings_offer_no_page() {
+    let host = FakeHost::default();
+    let mut model = WizardModel::new("", Vec::new()).offer_settings(&host);
+    assert!(!model.offers_settings);
+    assert!(
+        !page_for(&model, &host)
+            .buttons
+            .iter()
+            .any(|(_, action)| *action == Action::OpenSettings)
+    );
+    assert!(!model.apply(Action::OpenSettings, &host));
+    assert_eq!(model.screen, Screen::Welcome);
+    // The settings-only wizard has nothing to show and finishes at once.
+    let only = WizardModel::settings_only(&host);
+    assert_eq!(
+        only.outcome,
+        Some(WizardOutcome::SettingsClosed { saved: false })
+    );
+    // The default save refuses.
+    assert!(host.save_settings(&SettingsChanges::default()).is_err());
+}
+
+#[test]
+fn welcome_opens_the_page_and_save_returns_there() {
+    let host = SettingsHost::new();
+    let mut model = WizardModel::new("", Vec::new()).offer_settings(&host);
+    assert!(model.offers_settings);
+    assert!(
+        page_for(&model, &host)
+            .buttons
+            .iter()
+            .any(|(label, action)| *action == Action::OpenSettings && label == "Enhancements...")
+    );
+    assert!(model.apply(Action::OpenSettings, &host));
+    assert_eq!(model.screen, Screen::Enhancements);
+    assert_eq!(primary_action(&model.screen), Some(Action::SaveSettings));
+    let index = row_of(&model, "combat.auto");
+    assert!(model.apply(Action::ToggleSetting(index), &host));
+    assert!(model.apply(Action::SaveSettings, &host));
+    assert_eq!(model.screen, Screen::Welcome);
+    assert!(model.settings.is_none());
+    assert_eq!(model.notice.as_deref(), Some("Settings saved."));
+    assert!(model.outcome.is_none());
+    // Cancel discards and goes back too.
+    model.apply(Action::OpenSettings, &host);
+    let index = row_of(&model, "combat.auto");
+    model.apply(Action::ToggleSetting(index), &host);
+    assert!(model.apply(Action::Back, &host));
+    assert_eq!(model.screen, Screen::Welcome);
+    assert_eq!(host.saved.lock().unwrap().len(), 1);
+}
+
+#[test]
+fn presets_set_their_rows_and_changes_show_custom() {
+    let host = SettingsHost::new();
+    let mut model = WizardModel::settings_only(&host);
+    assert_eq!(page(&model).mix(), MixLabel::Preset(0));
+    let texts = row_texts(&model, &host);
+    assert_eq!(texts[0], "Preset - your mix: Classic");
+    assert_eq!(
+        &texts[1..4],
+        ["(*) Classic", "( ) Recommended", "( ) Everything"]
+    );
+
+    assert!(model.apply(Action::SelectPreset(2), &host));
+    assert_eq!(value_of(&model, "display.sharp"), RowValue::Switch(true));
+    assert_eq!(value_of(&model, "combat.auto"), RowValue::Switch(true));
+    // A preference no preset names is left alone.
+    assert_eq!(
+        value_of(&model, "journal.tier"),
+        RowValue::Choice("2".into())
+    );
+    assert_eq!(page(&model).mix_text(), "Everything");
+
+    let sharp = row_of(&model, "display.sharp");
+    model.apply(Action::ToggleSetting(sharp), &host);
+    // Everything without sharp scaling is exactly Recommended: the base
+    // is tried first, then the presets in order.
+    assert_eq!(page(&model).mix(), MixLabel::Preset(1));
+    let auto = row_of(&model, "combat.auto");
+    model.apply(Action::ToggleSetting(auto), &host);
+    model.apply(Action::ToggleSetting(sharp), &host);
+    assert_eq!(page(&model).mix(), MixLabel::Custom(2));
+    assert_eq!(
+        row_texts(&model, &host)[0],
+        "Preset - your mix: Custom (based on Everything)"
+    );
+    assert!(
+        row_texts(&model, &host)[1..4]
+            .iter()
+            .all(|text| text.starts_with("( )"))
+    );
+
+    // Choosing a preset over changes asks whether to keep them.
+    assert!(model.apply(Action::SelectPreset(1), &host));
+    assert_eq!(page(&model).confirm, Some(Confirm::KeepChanges(1)));
+    let question = page_for(&model, &host);
+    assert_eq!(question.title, "Switch to Recommended?");
+    // Nothing else happens while the question is open.
+    assert!(!model.apply(Action::ToggleSetting(sharp), &host));
+    assert!(model.apply(Action::ConfirmYes, &host));
+    // Kept: combat.auto stays off on top of Recommended.
+    assert_eq!(value_of(&model, "combat.auto"), RowValue::Switch(false));
+    assert_eq!(page(&model).mix(), MixLabel::Preset(0));
+    assert_eq!(page(&model).base, 1);
+
+    // Recommended with combat.auto off is a change on top of it, so
+    // Everything asks too.
+    model.apply(Action::SelectPreset(2), &host);
+    model.apply(Action::ConfirmNo, &host);
+    assert_eq!(page(&model).mix(), MixLabel::Preset(2));
+    model.apply(Action::ToggleSetting(auto), &host);
+    model.apply(Action::SelectPreset(1), &host);
+    assert!(model.apply(Action::ConfirmNo, &host));
+    // Taken as it is.
+    assert_eq!(value_of(&model, "combat.auto"), RowValue::Switch(true));
+    assert_eq!(value_of(&model, "display.sharp"), RowValue::Switch(false));
+    assert_eq!(page(&model).mix(), MixLabel::Preset(1));
+
+    // Back cancels the question and the choice.
+    model.apply(Action::ToggleSetting(auto), &host);
+    model.apply(Action::SelectPreset(2), &host);
+    assert!(model.apply(Action::Back, &host));
+    assert_eq!(page(&model).confirm, None);
+    assert_eq!(model.screen, Screen::Enhancements);
+    assert_eq!(page(&model).base, 1);
+}
+
+#[test]
+fn cheats_group_is_collapsed_and_asks_before_allowing() {
+    let host = SettingsHost::new();
+    let mut model = WizardModel::settings_only(&host);
+    let texts = row_texts(&model, &host);
+    assert_eq!(texts.last().unwrap(), "> Cheats (changes your game)");
+    assert!(!texts.iter().any(|text| text.contains("Allow cheats")));
+    // Ordinary groups get headings, in the host's order; tags follow
+    // labels.
+    let headings: Vec<String> = page_for(&model, &host)
+        .rows
+        .into_iter()
+        .filter(|row| row.style == RowStyle::Heading)
+        .map(|row| row.text)
+        .collect();
+    assert_eq!(
+        headings[1..],
+        [
+            "Display",
+            "Combat",
+            "Journal",
+            "> Cheats (changes your game)"
+        ]
+    );
+    assert!(texts.contains(&"[ ] Sharp scaling (wider view)".to_string()));
+    assert!(texts.contains(&"[2 Goals] Spoilers".to_string()));
+    // Hidden rows cannot be toggled.
+    let heal = row_of(&model, "cheats.heal");
+    assert!(!model.apply(Action::ToggleSetting(heal), &host));
+
+    assert!(model.apply(Action::ToggleCheatsGroup, &host));
+    let rows = page_for(&model, &host).rows;
+    let open = rows
+        .iter()
+        .position(|row| row.text == "v Cheats (changes your game)")
+        .unwrap();
+    let group: Vec<(&str, RowStyle)> = rows[open + 1..]
+        .iter()
+        .map(|row| (row.text.as_str(), row.style))
+        .collect();
+    assert_eq!(
+        group,
+        [
+            ("[ ] Allow cheats", RowStyle::Setting),
+            ("[ ] Heal the party", RowStyle::Greyed),
+            ("[ ] Watch game state", RowStyle::Setting),
+        ]
+    );
+    // Greyed until allowed; Watch game state never is.
+    assert!(!model.apply(Action::ToggleSetting(heal), &host));
+    let watch = row_of(&model, "cheats.state_watch");
+    assert!(model.apply(Action::ToggleSetting(watch), &host));
+    assert_eq!(
+        value_of(&model, "cheats.state_watch"),
+        RowValue::Switch(true)
+    );
+
+    // Allow cheats asks first; No leaves it off.
+    let allow = row_of(&model, "cheats.enabled");
+    assert!(model.apply(Action::ToggleSetting(allow), &host));
+    assert_eq!(page(&model).confirm, Some(Confirm::AllowCheats(allow)));
+    let question = page_for(&model, &host);
+    assert_eq!(question.title, "Allow cheats?");
+    assert!(question.lines[0].0.contains("marked \"modified\""));
+    assert_eq!(
+        question.buttons,
+        [
+            ("[Y] Allow cheats".to_string(), Action::ConfirmYes),
+            ("[N] Cancel".to_string(), Action::ConfirmNo),
+        ]
+    );
+    model.apply(Action::ConfirmNo, &host);
+    assert_eq!(value_of(&model, "cheats.enabled"), RowValue::Switch(false));
+    assert!(page(&model).row_greyed(heal));
+
+    model.apply(Action::ToggleSetting(allow), &host);
+    model.apply(Action::ConfirmYes, &host);
+    assert_eq!(value_of(&model, "cheats.enabled"), RowValue::Switch(true));
+    assert!(!page(&model).row_greyed(heal));
+    assert!(model.apply(Action::ToggleSetting(heal), &host));
+    assert_eq!(value_of(&model, "cheats.heal"), RowValue::Switch(true));
+    // Turning cheats off needs no question, and greys the cheat again.
+    model.apply(Action::ToggleSetting(allow), &host);
+    assert_eq!(page(&model).confirm, None);
+    assert!(page(&model).row_greyed(heal));
+    assert!(!page(&model).row_greyed(watch));
+}
+
+#[test]
+fn cheats_group_is_hidden_under_the_lock() {
+    let host = SettingsHost {
+        locked: true,
+        ..SettingsHost::new()
+    };
+    let mut model = WizardModel::settings_only(&host);
+    let shown = page_for(&model, &host);
+    assert!(!shown.rows.iter().any(|row| row.text.contains("Cheats")));
+    assert!(
+        !shown
+            .rows
+            .iter()
+            .any(|row| row.text.contains("Watch game state"))
+    );
+    assert!(
+        shown
+            .lines
+            .iter()
+            .any(|(text, _)| text.contains("parity lock"))
+    );
+    assert!(!page(&model).focus_items().contains(&FocusItem::CheatsGroup));
+    assert!(!model.apply(Action::ToggleCheatsGroup, &host));
+    let watch = row_of(&model, "cheats.state_watch");
+    assert!(!model.apply(Action::ToggleSetting(watch), &host));
+    // Ordinary rows still save for later launches.
+    let auto = row_of(&model, "combat.auto");
+    assert!(model.apply(Action::ToggleSetting(auto), &host));
+}
+
+#[test]
+fn save_stores_only_changed_keys() {
+    let host = SettingsHost::new();
+    // Nothing changed: no host call, and the page closes unsaved.
+    let mut model = WizardModel::settings_only(&host);
+    let auto = row_of(&model, "combat.auto");
+    model.apply(Action::ToggleSetting(auto), &host);
+    model.apply(Action::ToggleSetting(auto), &host);
+    assert!(model.apply(Action::SaveSettings, &host));
+    assert_eq!(
+        model.outcome,
+        Some(WizardOutcome::SettingsClosed { saved: false })
+    );
+    assert!(host.saved.lock().unwrap().is_empty());
+
+    // One row changed: that row alone.
+    let mut model = WizardModel::settings_only(&host);
+    let tier = row_of(&model, "journal.tier");
+    model.apply(Action::ToggleSetting(tier), &host);
+    assert_eq!(
+        value_of(&model, "journal.tier"),
+        RowValue::Choice("1".into())
+    );
+    model.apply(Action::SaveSettings, &host);
+    assert_eq!(
+        model.outcome,
+        Some(WizardOutcome::SettingsClosed { saved: true })
+    );
+    assert_eq!(
+        host.saved.lock().unwrap().pop().unwrap(),
+        SettingsChanges {
+            preset: None,
+            values: vec![("journal.tier".to_string(), RowValue::Choice("1".into()))],
+        }
+    );
+
+    // A new preset: the preset, the rows it changed, and a row the player
+    // set apart from it although it equals what was stored.
+    let stored = SettingsHost {
+        preset: 1,
+        ..SettingsHost::new()
+    };
+    let mut model = WizardModel::settings_only(&stored);
+    assert_eq!(page(&model).mix(), MixLabel::Preset(1));
+    model.apply(Action::SelectPreset(2), &stored);
+    let auto = row_of(&model, "combat.auto");
+    model.apply(Action::ToggleSetting(auto), &stored);
+    model.apply(Action::SaveSettings, &stored);
+    assert_eq!(
+        stored.saved.lock().unwrap().pop().unwrap(),
+        SettingsChanges {
+            preset: Some("everything".to_string()),
+            values: vec![
+                ("display.sharp".to_string(), RowValue::Switch(true)),
+                ("combat.auto".to_string(), RowValue::Switch(false)),
+            ],
+        }
+    );
+
+    // Defaults asks, then puts every row back, and selects Classic.
+    let mut model = WizardModel::settings_only(&stored);
+    model.apply(Action::SettingsDefaults, &stored);
+    assert_eq!(page(&model).confirm, Some(Confirm::Defaults));
+    model.apply(Action::ConfirmYes, &stored);
+    assert_eq!(page(&model).mix(), MixLabel::Preset(0));
+    model.apply(Action::SaveSettings, &stored);
+    assert_eq!(
+        stored.saved.lock().unwrap().pop().unwrap(),
+        SettingsChanges {
+            preset: Some("classic".to_string()),
+            values: vec![("combat.auto".to_string(), RowValue::Switch(false))],
+        }
+    );
+
+    // A failed save keeps the page open with the reason.
+    let failing = SettingsHost {
+        fail_save: true,
+        ..SettingsHost::new()
+    };
+    let mut model = WizardModel::settings_only(&failing);
+    model.apply(Action::ToggleSetting(auto), &failing);
+    model.apply(Action::SaveSettings, &failing);
+    assert_eq!(model.screen, Screen::Enhancements);
+    assert!(model.outcome.is_none());
+    assert!(
+        page_for(&model, &failing)
+            .lines
+            .iter()
+            .any(|(text, _)| text == "Settings were not saved: read-only folder")
+    );
+    // Cancel, then: the game still starts.
+    model.apply(Action::Back, &failing);
+    assert_eq!(
+        model.outcome,
+        Some(WizardOutcome::SettingsClosed { saved: false })
+    );
+    // Closing the window is not Cancel: nothing starts.
+    let mut closed = WizardModel::settings_only(&failing);
+    closed.apply(Action::Quit, &failing);
+    assert_eq!(closed.outcome, Some(WizardOutcome::Cancelled));
+}
+
+#[test]
+fn focus_walks_presets_rows_group_and_buttons() {
+    let host = SettingsHost::new();
+    let mut model = WizardModel::settings_only(&host);
+    let items = page(&model).focus_items();
+    assert_eq!(
+        items,
+        [
+            FocusItem::Preset(0),
+            FocusItem::Preset(1),
+            FocusItem::Preset(2),
+            FocusItem::Row(0),
+            FocusItem::Row(1),
+            FocusItem::Row(2),
+            FocusItem::CheatsGroup,
+            FocusItem::Defaults,
+            FocusItem::Cancel,
+            FocusItem::Save,
+        ]
+    );
+    assert!(model.apply(Action::FocusPrev, &host));
+    assert_eq!(page(&model).focused(), Some(FocusItem::Save));
+    assert!(model.apply(Action::FocusNext, &host));
+    assert_eq!(page(&model).focused(), Some(FocusItem::Preset(0)));
+    for _ in 0..6 {
+        model.apply(Action::FocusNext, &host);
+    }
+    assert_eq!(page(&model).focused(), Some(FocusItem::CheatsGroup));
+    assert!(model.apply(Action::ActivateFocus, &host));
+    assert!(page(&model).cheats_open);
+    model.apply(Action::FocusNext, &host);
+    assert_eq!(page(&model).focused(), Some(FocusItem::Row(5)));
+    // The focused row is marked on the page.
+    let focused: Vec<String> = page_for(&model, &host)
+        .rows
+        .into_iter()
+        .filter(|row| row.focused)
+        .map(|row| row.text)
+        .collect();
+    assert_eq!(focused, ["[ ] Allow cheats"]);
+}
+
+fn key_press(app: &mut App, key: KeyCode) {
+    {
+        let mut keys = app.world_mut().resource_mut::<ButtonInput<KeyCode>>();
+        keys.press(key);
+    }
+    app.update();
+    let mut keys = app.world_mut().resource_mut::<ButtonInput<KeyCode>>();
+    keys.release(key);
+    keys.clear();
+}
+
+#[test]
+fn core_plugin_drives_the_page_from_the_keyboard() {
+    let host = Arc::new(SettingsHost::new());
+    let dyn_host: Arc<dyn WizardHost> = host.clone();
+    let result = WizardResult::default();
+    let mut app = App::new();
+    app.add_plugins(MinimalPlugins)
+        .init_resource::<ButtonInput<KeyCode>>()
+        .insert_resource(WizardHostResource(dyn_host.clone()))
+        .insert_resource(WizardState {
+            model: WizardModel::settings_only(dyn_host.as_ref()),
+            dirty: true,
+        })
+        .insert_resource(result.clone())
+        .add_plugins(WizardCorePlugin);
+    app.update();
+    // Down to the Recommended preset, choose it with Space.
+    key_press(&mut app, KeyCode::ArrowDown);
+    key_press(&mut app, KeyCode::Space);
+    let state = app.world().resource::<WizardState>();
+    assert!(state.dirty);
+    assert_eq!(page(&state.model).mix(), MixLabel::Preset(1));
+    // Tab to the Cheats group, open it, step to Allow cheats, ask, answer Y.
+    for _ in 0..5 {
+        key_press(&mut app, KeyCode::Tab);
+    }
+    key_press(&mut app, KeyCode::Space);
+    key_press(&mut app, KeyCode::ArrowDown);
+    key_press(&mut app, KeyCode::Space);
+    assert!(matches!(
+        page(&app.world().resource::<WizardState>().model).confirm,
+        Some(Confirm::AllowCheats(_))
+    ));
+    key_press(&mut app, KeyCode::KeyY);
+    // Enter saves and finishes the settings-only wizard.
+    key_press(&mut app, KeyCode::Enter);
+    assert_eq!(
+        result.0.lock().unwrap().clone(),
+        Some(WizardOutcome::SettingsClosed { saved: true })
+    );
+    assert!(!app.world().resource::<Events<AppExit>>().is_empty());
+    assert_eq!(
+        host.saved.lock().unwrap().clone(),
+        [SettingsChanges {
+            preset: Some("recommended".to_string()),
+            values: vec![
+                ("combat.auto".to_string(), RowValue::Switch(true)),
+                ("cheats.enabled".to_string(), RowValue::Switch(true)),
+            ],
+        }]
+    );
+}
+
+#[test]
+fn bevy_plugin_renders_the_page_and_takes_clicks() {
+    let host: Arc<dyn WizardHost> = Arc::new(SettingsHost::new());
+    let mut app = App::new();
+    app.add_plugins(MinimalPlugins)
+        .insert_resource(WizardHostResource(host.clone()))
+        .insert_resource(WizardState {
+            model: WizardModel::new("", Vec::new()).offer_settings(host.as_ref()),
+            dirty: true,
+        })
+        .insert_resource(WizardResult::default())
+        .add_plugins(SetupWizardPlugin);
+    app.update();
+    press(&mut app, Action::OpenSettings);
+    assert_eq!(screen(&app), Screen::Enhancements);
+    let rows = app
+        .world_mut()
+        .query_filtered::<Entity, With<WizardRowButton>>()
+        .iter(app.world())
+        .count();
+    // Three presets, three rows and the Cheats group heading.
+    assert_eq!(rows, 7);
+    press(&mut app, Action::ToggleSetting(1));
+    let model = &app.world().resource::<WizardState>().model;
+    assert_eq!(page(model).rows[1].value, RowValue::Switch(true));
+    press(&mut app, Action::Back);
+    assert_eq!(screen(&app), Screen::Welcome);
+}

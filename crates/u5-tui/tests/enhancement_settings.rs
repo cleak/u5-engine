@@ -178,6 +178,29 @@ fn show_settings_stands_alone() {
 }
 
 #[test]
+fn settings_flag_opens_the_page_before_the_default_launch() {
+    let args = parse_cli_args(["--settings"]).unwrap();
+    assert!(args.settings);
+    assert!(!args.has_mode());
+    assert!(!args.is_qa_mode());
+    let args = parse_cli_args(["--settings", "--preset", "recommended", "--parity-lock"]).unwrap();
+    assert!(args.settings && args.parity_lock);
+    // A folder being set up is still the default launch.
+    let command = parse_cli_command(["--settings", "--setup", "GAME"]).unwrap();
+    assert!(command.args.settings && command.args.setup);
+    for argv in [
+        &["--settings", "--play"][..],
+        &["--settings", "--visual"],
+        &["--settings", "--route-smoke"],
+        &["--settings", "GAME"],
+    ] {
+        assert!(parse_error(argv).contains("--settings opens"), "{argv:?}");
+    }
+    assert!(parse_error(&["--show-settings", "--settings"]).contains("--show-settings"));
+    assert!(!parse_cli_args(["--play", "GAME"]).unwrap().settings);
+}
+
+#[test]
 fn usage_lists_the_generic_flags() {
     for flag in [
         "--preset <NAME>",
@@ -186,6 +209,7 @@ fn usage_lists_the_generic_flags() {
         "--set <KEY=VALUE>",
         "--parity-lock",
         "--show-settings",
+        "--settings  ",
         "U5_PARITY_LOCK",
     ] {
         assert!(CLI_USAGE.contains(flag), "{flag}");
@@ -278,6 +302,17 @@ fn binary_rejects_an_unknown_key_before_anything_else() {
         stderr.contains("unknown setting `display.growleft`"),
         "{stderr}"
     );
+    assert!(!scratch.config().exists());
+}
+
+#[cfg(not(feature = "visual"))]
+#[test]
+fn binary_without_a_window_explains_settings() {
+    let scratch = Scratch::new("settings");
+    let output = scratch.engine().arg("--settings").output().unwrap();
+    assert!(!output.status.success());
+    let stderr = String::from_utf8(output.stderr).unwrap();
+    assert!(stderr.contains("no settings window"), "{stderr}");
     assert!(!scratch.config().exists());
 }
 

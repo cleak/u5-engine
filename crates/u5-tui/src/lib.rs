@@ -47,10 +47,14 @@ pub use save_frame::{
     run_save_screen, save_frame_suite,
 };
 #[cfg(feature = "visual")]
-pub use setup::{DesktopWizardHost, report_gui_error, run_default_launch, run_gui_main};
 pub use setup::{
-    SETUP_WINDOW_FLAG, WizardMode, describe_failure, expand_path, no_data_message,
-    resolve_game_data, run_setup_window_child, run_terminal_wizard,
+    DesktopWizardHost, report_gui_error, run_default_launch, run_gui_main, save_wizard_settings,
+    wizard_settings,
+};
+pub use setup::{
+    SETTINGS_WINDOW_FLAG, SETUP_WINDOW_FLAG, WizardMode, describe_failure, expand_path,
+    no_data_message, open_settings_page, resolve_game_data, run_settings_window_child,
+    run_setup_window_child, run_terminal_wizard,
 };
 pub use u5_host_desktop::{ReadyGameData, WizardNeed};
 pub use visual_manifest::{ManifestCompareReport, compare_manifest_files, compare_manifest_text};
