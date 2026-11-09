@@ -34,12 +34,18 @@
 //!   keeps a per-save sidecar is on and the host gave a save folder, and
 //!   runs only while such a feature is on.
 //!
+//! The Bevy half of the trajectory-equivalence harness (`equivalence`,
+//! test-only) runs the real `--visual` app headless, feature on against
+//! Classic, and compares the game frame by frame (design 1.3.12).
+//!
 //! Every enhancement system sits in one of the six [`EnhSet`]s. The plugin
 //! declares their edges once, against the faithful systems of both app
 //! chains and the intro builder; feature plugins put their systems in a set
 //! and never name a faithful system. The faithful systems themselves are
 //! not edited.
 
+#[cfg(test)]
+pub(crate) mod equivalence;
 pub mod idle;
 pub mod input;
 pub mod overlay;

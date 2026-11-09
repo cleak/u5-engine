@@ -1551,6 +1551,18 @@ fn build_visual_app(
     screenshot: ScreenshotConfig,
     launch: &VisualLaunchConfig,
 ) {
+    build_visual_app_with_speaker(app, bootstrap, screenshot, launch, SpeakerOutput::Device);
+}
+
+/// [`build_visual_app`] with the speaker's output chosen. Only the headless
+/// equivalence harness picks [`SpeakerOutput::Silent`].
+fn build_visual_app_with_speaker(
+    app: &mut App,
+    bootstrap: Bootstrap,
+    screenshot: ScreenshotConfig,
+    launch: &VisualLaunchConfig,
+    speaker: SpeakerOutput,
+) {
     app.insert_resource(ClearColor(Color::BLACK))
         .insert_resource(PendingBootstrap(Mutex::new(Some(bootstrap))))
         .insert_resource(screenshot)
@@ -1558,7 +1570,7 @@ fn build_visual_app(
         .add_systems(Startup, setup)
         .insert_resource(AnimationPump::default());
     add_visual_update_systems(app);
-    add_speaker_audio(app);
+    add_speaker_audio_to(app, speaker);
     enh::add_enhancements(app, launch);
 }
 
@@ -10209,8 +10221,29 @@ fn fit_display_to_window(windows: Query<&Window>, mut sprites: Query<&mut Sprite
 /// intro needs it too: `audio.md §7.1`'s subtitle-ignition burst fires while
 /// `VisualIntroState`, not `VisualState`, owns the frame.
 fn add_speaker_audio(app: &mut App) {
-    app.add_audio_source::<VisualSoundWave>()
-        .add_event::<SpeakerEffect>()
+    add_speaker_audio_to(app, SpeakerOutput::Device);
+}
+
+/// Where the speaker's rendered waves go.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum SpeakerOutput {
+    /// Bevy's audio playback, as every shell has it.
+    Device,
+    /// No playback system at all: every voice is the silent case, bounded by
+    /// its timer alone (see `expire_speaker_voice`). The headless
+    /// equivalence harness uses it, so a sound card's real-time playback
+    /// never decides when a voice ends and the runs stay on the manual
+    /// clock.
+    #[cfg_attr(not(test), allow(dead_code))]
+    Silent,
+}
+
+fn add_speaker_audio_to(app: &mut App, output: SpeakerOutput) {
+    match output {
+        SpeakerOutput::Device => app.add_audio_source::<VisualSoundWave>(),
+        SpeakerOutput::Silent => app.init_asset::<VisualSoundWave>(),
+    };
+    app.add_event::<SpeakerEffect>()
         .init_resource::<SpeakerJitter>()
         .init_resource::<SpeakerQueue>();
 }

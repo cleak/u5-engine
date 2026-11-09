@@ -28,9 +28,9 @@ pub use enhancement_settings::{
     PARITY_LOCK_ENV, PARITY_LOCK_LINE, SettingsFile, launch_enhancements, run_show_settings,
 };
 pub use equivalence::{
-    FeatureHooks, Mismatch, ReplayHooks, RunRecord, TerminalFeature, TokenEvent, TraceStep,
-    check_equivalence, compare_runs, parse_matrix, run_equivalence_suite, run_trace,
-    terminal_features,
+    FeatureHooks, MatrixRow, Mismatch, ReplayHooks, RunRecord, TerminalFeature, TokenEvent,
+    TraceStep, check_equivalence, compare_runs, parse_matrix, plan_configurations,
+    run_equivalence_suite, run_trace, terminal_features,
 };
 pub use intro_loop::run_intro_menu_loop;
 pub use play_loop::{

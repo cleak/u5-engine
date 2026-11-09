@@ -17,6 +17,9 @@
 //!   [`ResolvedEnhancements`] (design 1.3.2, 1.3.3).
 //! - [`digest`]: the [`trajectory_digest`] of a [`PlayState`](crate::PlayState)
 //!   that the equivalence harness compares runs with (design 1.3.12).
+//! - [`matrix`]: the toggle matrix the equivalence harness runs, derived
+//!   from the catalogue: each key alone, a pairwise covering array and all
+//!   on except cheats (design 1.3.12).
 //! - [`idle`]: the idle-prompt predicate's runtime half,
 //!   [`PlayState::idle_command_prompt`](crate::PlayState::idle_command_prompt)
 //!   (design 1.3.7).
@@ -33,6 +36,7 @@
 pub mod catalogue;
 pub mod digest;
 pub mod idle;
+pub mod matrix;
 pub mod resolve;
 pub mod sidecar;
 pub mod source;
@@ -47,6 +51,10 @@ pub use digest::{
     DIGEST_GROUPS, SKIPPED_FIELDS, TrajectoryDigest, digest_groups, trajectory_digest,
 };
 pub use idle::{GUARDED_DRAINS, GuardedDrain, IdleBlocker, IdlePromptKind};
+pub use matrix::{
+    ALL_ON_EXCEPT_CHEATS, CHEATS_SECTION, MATRIX_FILE, MatrixRow, PairwiseFactor, alternate_values,
+    covering_array, matrix_tsv, pairwise_factors, toggle_matrix,
+};
 pub use resolve::{
     CHEATS_SWITCH, KeyBindings, PRESET_KEY, PresetLabel, ResolveInput, ResolvedEnhancements,
     SettingValues, resolve,

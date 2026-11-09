@@ -95,6 +95,11 @@ jobs:
           qa/tools/test_paired_suite_parity_lock.py
           qa/tools/test_paired_suite_load_latency.py
 
+      - name: Self-test the toggle-matrix runner
+        # Report parsing and the pass rules, over synthetic reports; nothing
+        # is launched.
+        run: python3 -m unittest qa/tools/test_toggle_matrix.py
+
       - name: Build with warnings denied, then scan for warning lines
         run: qa/tools/check_no_build_warnings.sh
 

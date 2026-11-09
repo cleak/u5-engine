@@ -1,0 +1,35 @@
+# Ultima V enhancement toggle matrix (Phase B design 1.3.12).
+# Generated from the catalogue; a test keeps this file equal to it
+# (cargo test -p u5-tui --test toggle_matrix; U5_BLESS_TOGGLE_MATRIX=1
+# rewrites it). Classic is not listed: the suite always runs it.
+# Rows whose feature has not shipped resolve to Classic until it does.
+# name	settings
+alone:enhancements.freeze_overlays	enhancements.freeze_overlays=true
+alone:enhancements.schema=1	enhancements.schema=1
+alone:enhancements.preset=recommended	enhancements.preset=recommended
+alone:enhancements.preset=everything	enhancements.preset=everything
+alone:keys.menu=F13	keys.menu=F13
+alone:keys.fullscreen=F14	keys.fullscreen=F14
+alone:keys.map=F15	keys.map=F15
+alone:keys.minimap=F16	keys.minimap=F16
+alone:keys.journal=F17	keys.journal=F17
+alone:keys.column=F18	keys.column=F18
+alone:keys.auto_member=F19	keys.auto_member=F19
+alone:keys.auto_party=F20	keys.auto_party=F20
+alone:keys.auto_until_done=F21	keys.auto_until_done=F21
+alone:keys.cheats=F22	keys.cheats=F22
+alone:display.panel_priority=journal	display.panel_priority=journal
+alone:display.panel_priority=conversation	display.panel_priority=conversation
+alone:display.panel_guard=50	display.panel_guard=50
+alone:display.panel_guard=100	display.panel_guard=100
+pairwise:01	
+pairwise:02	display.panel_priority=journal,display.panel_guard=50
+pairwise:03	display.panel_priority=conversation,display.panel_guard=100
+pairwise:04	enhancements.freeze_overlays=true,display.panel_guard=50
+pairwise:05	enhancements.freeze_overlays=true,display.panel_priority=journal
+pairwise:06	enhancements.freeze_overlays=true,display.panel_priority=conversation,display.panel_guard=100
+pairwise:07	display.panel_guard=100
+pairwise:08	display.panel_priority=journal,display.panel_guard=100
+pairwise:09	display.panel_priority=conversation
+pairwise:10	display.panel_priority=conversation,display.panel_guard=50
+all-on-except-cheats	enhancements.freeze_overlays=true

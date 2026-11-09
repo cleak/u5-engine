@@ -33,6 +33,7 @@ use std::fs;
 use std::io::{self, Write as _};
 use std::path::Path;
 
+pub use u5_runtime::enhancements::MatrixRow;
 use u5_runtime::enhancements::{
     CliSetting, EffectClass, LockState, Preset, ResolvedEnhancements, Toggle, TrajectoryDigest,
     fnv1a64, trajectory_digest,
@@ -395,13 +396,6 @@ pub fn check_equivalence(
     compare_runs(&off, &on)
 }
 
-/// One configuration of the suite: a name and the settings it resolves.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct MatrixRow {
-    pub name: String,
-    pub settings: Vec<CliSetting>,
-}
-
 /// Parses a matrix file: one row per line, `NAME<TAB>SETTINGS`, where
 /// SETTINGS is a comma-separated list of `preset=NAME` and `KEY=VALUE`
 /// (the value as `--set` takes it). `#` starts a comment line. A row named
@@ -521,13 +515,77 @@ fn run_route_case(
     Ok((record, report))
 }
 
+/// One report line; tabs and line breaks in a field become spaces.
+fn report_line(
+    case: &str,
+    configuration: &str,
+    result: &str,
+    steps: usize,
+    saved: usize,
+    digest: &str,
+    detail: &str,
+) -> String {
+    [
+        case,
+        configuration,
+        result,
+        &steps.to_string(),
+        &saved.to_string(),
+        digest,
+        detail,
+    ]
+    .map(|field| field.replace(['\t', '\r', '\n'], " "))
+    .join("\t")
+}
+
+/// For each configuration, the index of the first earlier one that resolves
+/// exactly as it does (same toggles, values, key bindings and lock), or
+/// `None` for the first of its kind. Every run is a function of the case
+/// and the resolved settings alone, so a configuration that resolves as an
+/// earlier one runs the same runs: the suite runs each distinct resolution
+/// once. Until a row's feature ships it resolves as Classic (U13).
+pub fn plan_configurations(configs: &[(String, ResolvedEnhancements)]) -> Vec<Option<usize>> {
+    let same = |a: &ResolvedEnhancements, b: &ResolvedEnhancements| {
+        a.toggles == b.toggles && a.values == b.values && a.keys == b.keys && a.lock == b.lock
+    };
+    configs
+        .iter()
+        .enumerate()
+        .map(|(index, (_, resolved))| {
+            configs[..index]
+                .iter()
+                .position(|(_, earlier)| same(earlier, resolved))
+        })
+        .collect()
+}
+
+/// What a configuration resolved to, for the report's header: the toggles
+/// on, how many settings were refused or not yet shipped, and the
+/// configuration it runs as.
+fn configuration_summary(resolved: &ResolvedEnhancements, same_as: Option<&str>) -> String {
+    let on: Vec<&str> = resolved.toggles.iter_on().map(Toggle::key).collect();
+    let mut summary = if on.is_empty() {
+        "no toggle on".to_string()
+    } else {
+        format!("on {}", on.join(" "))
+    };
+    if !resolved.notes.is_empty() {
+        summary.push_str(&format!("; {} note(s)", resolved.notes.len()));
+    }
+    if let Some(first) = same_as {
+        summary.push_str(&format!("; runs as {first}"));
+    }
+    summary
+}
+
 /// `u5-engine --equivalence-suite OUT [--matrix FILE] GAME_DIR`.
 ///
 /// For every route-smoke case: the all-off run, then Classic and each
 /// matrix row with that row's features on, each compared against the
-/// all-off run with the row's own events removed. Writes
-/// [`REPORT_FILE`] and [`CLASSIC_MANIFEST_FILE`] into `out_dir` and fails
-/// on any difference.
+/// all-off run with the row's own events removed. A row that resolves
+/// exactly as an earlier one shares its runs ([`plan_configurations`]).
+/// Writes [`REPORT_FILE`] and [`CLASSIC_MANIFEST_FILE`] into `out_dir` and
+/// fails on any difference.
 pub fn run_equivalence_suite(
     game_dir: &Path,
     raster_depth: TileGraphicsDepth,
@@ -548,26 +606,57 @@ pub fn run_equivalence_suite(
             (row.name, resolved)
         })
         .collect();
+    let plan = plan_configurations(&configs);
 
     let cases = route_smoke_cases();
     let atlas = load_tile_atlas(game_dir, raster_depth)?;
     fs::create_dir_all(out_dir)?;
+    let distinct = plan.iter().filter(|same| same.is_none()).count();
     println!(
-        "Equivalence suite: {} case(s) x {} configuration(s).",
+        "Equivalence suite: {} case(s) x {} configuration(s), {distinct} distinct.",
         cases.len(),
         configs.len()
     );
     let mut lines = vec![
         "# Ultima V enhancement equivalence report".to_string(),
         "# Sanitized: route names, configuration names and hashes only.".to_string(),
-        "# case\tconfiguration\tresult\tsteps\tsaved-files\tfinal-digest\tdetail".to_string(),
     ];
+    for ((name, resolved), same) in configs.iter().zip(&plan) {
+        lines.push(format!(
+            "# configuration {name}: {}",
+            configuration_summary(resolved, same.map(|index| configs[index].0.as_str()))
+        ));
+    }
+    lines.push(
+        "# case\tconfiguration\tresult\tsteps\tsaved-files\tfinal-digest\tdetail".to_string(),
+    );
     let mut classic_reports = Vec::with_capacity(cases.len());
     let mut failures = Vec::new();
     for case in &cases {
         let (baseline, _) =
             run_route_case(game_dir, &atlas, case, &mut NoScriptTokenHooks, "eq-off")?;
-        for (name, resolved) in &configs {
+        // Each distinct configuration's result for this case, by index.
+        let mut results: BTreeMap<usize, (&'static str, String, usize, usize, String)> =
+            BTreeMap::new();
+        for (index, ((name, resolved), same)) in configs.iter().zip(&plan).enumerate() {
+            if let Some(first) = *same {
+                // Resolves exactly as an earlier configuration: the runs are
+                // the same runs, so its result stands for this one.
+                let (result, detail, steps, saved, digest) = results[&first].clone();
+                println!(
+                    "equivalence {} {name}: {result} (as {})",
+                    case.name, configs[first].0
+                );
+                let detail = if detail.is_empty() {
+                    format!("as {}", configs[first].0)
+                } else {
+                    format!("as {}: {detail}", configs[first].0)
+                };
+                lines.push(report_line(
+                    case.name, name, result, steps, saved, &digest, &detail,
+                ));
+                continue;
+            }
             let mut hooks = FeatureHooks::new(terminal_features(resolved));
             let (on, report) = run_route_case(game_dir, &atlas, case, &mut hooks, "eq-on")?;
             let events = hooks.into_events();
@@ -611,23 +700,18 @@ pub fn run_equivalence_suite(
                     ("DIFFER", detail)
                 };
             println!("equivalence {} {name}: {result}", case.name);
-            lines.push(
-                [
-                    case.name,
-                    name,
-                    result,
-                    &on.steps.len().to_string(),
-                    &on.saves
-                        .iter()
-                        .filter(|(_, hash)| hash.is_some())
-                        .count()
-                        .to_string(),
-                    &final_digest,
-                    &detail,
-                ]
-                .map(|field| field.replace(['\t', '\r', '\n'], " "))
-                .join("\t"),
-            );
+            let steps = on.steps.len();
+            let saved = on.saves.iter().filter(|(_, hash)| hash.is_some()).count();
+            lines.push(report_line(
+                case.name,
+                name,
+                result,
+                steps,
+                saved,
+                &final_digest,
+                &detail,
+            ));
+            results.insert(index, (result, detail, steps, saved, final_digest));
         }
     }
     let report_path = out_dir.join(REPORT_FILE);
