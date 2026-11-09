@@ -205,7 +205,7 @@ pub struct EternalFlameEntry {
     pub expected_tile: Option<u8>,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub struct WorldPlaneTransitionEntry {
     pub from_plane: WorldPlane,
     pub x: usize,

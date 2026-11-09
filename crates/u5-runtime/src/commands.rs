@@ -1248,7 +1248,7 @@ pub const fn dungeon_display_level(level: u8) -> u16 {
 
 /// `commands.md §5.3` punctuation contract (`cleak/u5-spec#81`): how a
 /// verb literal ends decides what continues the line.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum CommandEchoJoin {
     /// Trailing hyphen — a direction is awaited and its name is appended
     /// on the same line. `Look-` + `Pass` renders as one line.
@@ -1277,7 +1277,7 @@ impl CommandEchoJoin {
 
 /// One resident verb echo: the literal the dispatcher writes into the
 /// message transcript, plus how the handler's own output continues it.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub struct CommandEcho {
     pub text: &'static str,
     pub join: CommandEchoJoin,

@@ -94,7 +94,7 @@ pub const COMBAT_BARE_HANDED_EFFECT_CODE: u8 = 0;
 /// produces **one attack attempt** ... A character with no qualifying item
 /// makes a single bare-handed attempt, which behaves as melee with range
 /// one."
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub struct CombatAttackAttempt {
     /// The readied item this attempt swings, or `None` for the published
     /// bare-handed attempt.
@@ -438,7 +438,7 @@ pub fn resolve_combat_targeting_cursor_key(
 /// `combat.md §8.2`: the cursor "is entered once per readied weapon, not
 /// once per Attack command", so the whole attempt list plus the index of the
 /// attempt whose cursor is currently open is the session state.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct CombatTargetingCursorSession {
     pub actor_slot: usize,
     pub attempts: Vec<CombatAttackAttempt>,

@@ -118,7 +118,7 @@ pub const fn end_narrative_window(number: u8) -> Option<EndNarrativeWindow> {
     })
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub struct EndNarrativeWindowRange {
     /// One-based window number, `1..=6`.
     pub window: u8,
@@ -179,7 +179,7 @@ pub const END_DAT_PUBLISHED_WINDOW_RANGE_OPTIONS: [Option<EndNarrativeWindowRang
     Some(END_DAT_PUBLISHED_WINDOW_RANGES[5]),
 ];
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct EndNarrative {
     pub raw: Vec<u8>,
     pub window_ranges: [Option<EndNarrativeWindowRange>; END_DAT_WINDOW_COUNT],

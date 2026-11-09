@@ -14,7 +14,7 @@ use crate::*;
 
 pub const TOWN_NPC_MUTATIONS_FILENAME: &str = ".u5-engine-town-npc-mutations";
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub struct TownNpcMutation {
     pub scene_byte: u8,
     pub npc_slot: usize,

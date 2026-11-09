@@ -9,7 +9,7 @@ use crate::blackthorn::{
     blackthorn_challenge_wording, blackthorn_shrine_mantra,
 };
 
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
 pub enum BlackthornChallengePhase {
     #[default]
     AwaitingAudience,
@@ -85,7 +85,7 @@ pub enum BlackthornWrongEscalation {
     Kill,
 }
 
-#[derive(Clone, Copy, Debug, Default)]
+#[derive(Clone, Copy, Debug, Default, Hash)]
 pub struct BlackthornChallenge {
     pub phase: BlackthornChallengePhase,
     /// `blackthorn.md §3` step 2 / §4: "The shrine index is fixed

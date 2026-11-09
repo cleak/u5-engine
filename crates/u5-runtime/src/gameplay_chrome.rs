@@ -331,7 +331,7 @@ pub struct RibbonCapSprite {
 }
 
 /// One painted cell of the sky strip.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub struct SkyStripCell {
     /// `RUNES.CH` code point to draw.
     pub rune_code: u8,
@@ -340,7 +340,7 @@ pub struct SkyStripCell {
 }
 
 /// What occupies the gap punched through a ribbon band.
-#[derive(Clone, Debug, PartialEq, Eq, Default)]
+#[derive(Clone, Debug, PartialEq, Eq, Default, Hash)]
 pub enum ChromeGap {
     /// No gap: the ribbon and its rule run unbroken.
     #[default]
@@ -361,7 +361,7 @@ pub enum ChromeGap {
 /// waits for "the next drift hit, Wind Change, scene entry or load". Each
 /// half carries the frozen gap and the hour or wind byte it stays valid
 /// for.
-#[derive(Clone, Debug, PartialEq, Eq, Default)]
+#[derive(Clone, Debug, PartialEq, Eq, Default, Hash)]
 pub struct PostCombatRibbonHold {
     pub top: Option<(ChromeGap, u8)>,
     pub bottom: Option<(ChromeGap, u8)>,

@@ -53,7 +53,7 @@ pub struct ShopTransactionContext {
 
 /// Arms-shop state machine. Tracks where in the buy/sell branch the
 /// player is and produces transition outcomes on input.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Default, Hash)]
 pub enum ArmsShopState {
     /// `shops.md §8.B`'s arms entry, stages 1 and 2: the welcome line is on
     /// screen and the shop is waiting for one key before the attribution and
@@ -117,7 +117,7 @@ pub enum ArmsSellBrowserCommand {
 }
 
 /// Four-row view state for the arms sell browser.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub struct ArmsSellBrowser {
     pub selected: u8,
     pub page_start: u8,
@@ -555,7 +555,7 @@ fn quote_arms_shop_buy_item(
 // ---------- Healer ----------
 
 /// Healer / sanctum services per `shops.md §8.3`.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum HealerService {
     /// `C` — Cure poison. Flat cost.
     Cure,
@@ -573,7 +573,7 @@ pub const HEALER_COST_CURE: u16 = 25;
 pub const HEALER_COST_HEAL: u16 = 40;
 pub const HEALER_COST_RESURRECT: u16 = 215;
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Default, Hash)]
 pub enum HealerShopState {
     #[default]
     Greeting,
@@ -759,7 +759,7 @@ pub fn apply_healer_service(service: HealerService, member: &mut HealerPartyMemb
 
 // ---------- Innkeeper ----------
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum InnkeeperState {
     /// `shops.md §8`'s entry table, row `0x88`: the inn's initial greeting
     /// takes `Y`, `N` or Space, and only Yes reaches the service question.
@@ -1076,7 +1076,7 @@ pub fn step_innkeeper(
 
 /// Reagent shop transaction. The player picks a compact letter entry
 /// from the current herbalist's stocked menu and then a quantity.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum ReagentShopState {
     Greeting {
         herbalist: Herbalist,
@@ -1265,7 +1265,7 @@ pub fn step_reagent_shop(
 /// sign only in the first position", Backspace or the west code erasing one,
 /// Escape erasing the whole echo, and "Return the only exit with an empty
 /// entry submitting as zero".
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
 pub struct TypedQuantityEntry {
     bytes: [u8; 3],
     len: u8,
@@ -1314,7 +1314,7 @@ impl TypedQuantityEntry {
     }
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum TavernState {
     Greeting {
         tavern: Tavern,
@@ -1702,7 +1702,7 @@ pub const fn blue_boar_choice_for_key(byte: u8) -> Option<BlueBoarDrinkChoice> {
 
 // ---------- Sage / rumour vendor ----------
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum SageState {
     Prompt {
         table: &'static SageRumourTable,
@@ -1819,7 +1819,7 @@ pub fn step_sage(state: &mut SageState, input: SageInput<'_>, gold: &mut u16) ->
 
 // ---------- Horse trader ----------
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum HorseTraderState {
     Greeting { stable: Stable },
     ConfirmPurchase { stable: Stable, price: u16 },
@@ -1930,7 +1930,7 @@ pub fn step_horse_trader(
 
 // ---------- Ship broker / shipwright ----------
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum ShipBrokerState {
     /// `shops.md §8.B`: the entry greeting takes `Y`, `N` or Space only.
     Greeting {
@@ -2152,7 +2152,7 @@ pub fn step_ship_broker(
 
 // ---------- Guild trader ----------
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum GuildShopState {
     Greeting {
         shop: GuildShop,

@@ -557,13 +557,13 @@ pub enum CombatWeaponDamageRoute {
     Special,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum CombatWeaponAttackRangeRoute {
     Melee,
     Ranged { effect_code: u8 },
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum CombatWeaponAttackResolution {
     OutOfRange {
         target_range: u8,
@@ -717,7 +717,7 @@ pub enum CombatActivePlayerSelectionOutcome {
     Invalid,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum CombatSceneAbortVerb {
     Board,
     Enter,
@@ -800,7 +800,7 @@ pub const fn combat_scene_abort_tail(verb: CombatSceneAbortVerb) -> CombatSceneA
     }
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum CombatCommandBranch {
     Attack,
     CastSpell,
@@ -904,7 +904,7 @@ pub struct CombatWoundMorale {
     pub fleeing: bool,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum CombatMonsterDeathPath {
     DefaultDropCheck,
     SpecialTileTransition,
@@ -917,7 +917,7 @@ pub enum CombatMonsterDeathPath {
     Incorporeal,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub struct CombatMonsterDamageOutcome {
     pub class: u8,
     pub raw_damage: i16,
@@ -939,7 +939,7 @@ pub struct CombatMonsterDamageOutcome {
     pub death_path: Option<CombatMonsterDeathPath>,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub struct CombatPartyDamageOutcome {
     pub raw_damage: i16,
     pub applied_damage: u16,
@@ -1031,7 +1031,7 @@ impl CombatLinkedVisibilityOutcome {
     }
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum CombatPoisonStatusAttackOutcome {
     NotPoisonStatusClass,
     GateRejected,
@@ -1168,7 +1168,7 @@ pub enum CombatArenaFieldContactOutcome {
     FireDamage { raw_damage: u8 },
 }
 
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
 pub struct CombatActorDescriptor {
     pub hp_or_wound: u8,
     pub base_step: u8,

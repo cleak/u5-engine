@@ -39,6 +39,13 @@ pub struct CliArgs {
     pub raster_depth: TileGraphicsDepth,
     pub route_smoke: bool,
     pub route_smoke_manifest: Option<PathBuf>,
+    /// `--equivalence-suite OUT`: run every route-smoke case under Classic
+    /// and each matrix row, compare each against all-off (Phase B design
+    /// 1.3.12), write the report into OUT and exit.
+    pub equivalence_suite: Option<PathBuf>,
+    /// `--matrix FILE`: the configurations `--equivalence-suite` runs
+    /// besides Classic.
+    pub equivalence_matrix: Option<PathBuf>,
     pub play_script: Option<Vec<String>>,
     pub game_dir: PathBuf,
     pub play_options: PlayOptions,
@@ -106,6 +113,7 @@ impl CliArgs {
             || self.play
             || self.visual
             || self.route_smoke
+            || self.equivalence_suite.is_some()
             || self.save_frame.is_some()
             || self.save_frame_suite.is_some()
             || self.save_screen.is_some()
@@ -120,11 +128,14 @@ impl CliArgs {
             || self.show_settings
     }
 
-    /// Whether this is a QA mode: route smoke, the frame and route suites,
-    /// the reports and the save writers. They always run with every
-    /// enhancement off and never resolve settings (1.3.11).
+    /// Whether this is a QA mode: route smoke, the equivalence suite, the
+    /// frame and route suites, the reports and the save writers. They take
+    /// no enhancement setting from the command line or `config.toml`
+    /// (1.3.11); the equivalence suite turns features on only from its own
+    /// matrix.
     pub fn is_qa_mode(&self) -> bool {
         self.route_smoke
+            || self.equivalence_suite.is_some()
             || self.save_frame.is_some()
             || self.save_frame_suite.is_some()
             || self.save_screen.is_some()
@@ -204,6 +215,8 @@ where
     let mut raster_depth = TileGraphicsDepth::Ega16;
     let mut route_smoke = false;
     let mut route_smoke_manifest: Option<PathBuf> = None;
+    let mut equivalence_suite: Option<PathBuf> = None;
+    let mut equivalence_matrix: Option<PathBuf> = None;
     let mut play_script = None;
     let mut game_dir = None;
     let mut options = PlayOptions::default();
@@ -417,6 +430,34 @@ where
                     return Err(io::Error::new(
                         io::ErrorKind::InvalidInput,
                         "--route-smoke-manifest may only be supplied once",
+                    ));
+                }
+            }
+            "--equivalence-suite" => {
+                let value = args.next().ok_or_else(|| {
+                    io::Error::new(
+                        io::ErrorKind::InvalidInput,
+                        "--equivalence-suite requires an output folder",
+                    )
+                })?;
+                if equivalence_suite.replace(PathBuf::from(value)).is_some() {
+                    return Err(io::Error::new(
+                        io::ErrorKind::InvalidInput,
+                        "--equivalence-suite may only be supplied once",
+                    ));
+                }
+            }
+            "--matrix" => {
+                let value = args.next().ok_or_else(|| {
+                    io::Error::new(
+                        io::ErrorKind::InvalidInput,
+                        "--matrix requires a matrix file",
+                    )
+                })?;
+                if equivalence_matrix.replace(PathBuf::from(value)).is_some() {
+                    return Err(io::Error::new(
+                        io::ErrorKind::InvalidInput,
+                        "--matrix may only be supplied once",
                     ));
                 }
             }
@@ -651,6 +692,8 @@ where
             raster_depth,
             route_smoke: false,
             route_smoke_manifest: None,
+            equivalence_suite: None,
+            equivalence_matrix: None,
             play_script: None,
             game_dir,
             play_options: PlayOptions::default(),
@@ -711,6 +754,42 @@ where
         return Err(io::Error::new(
             io::ErrorKind::InvalidInput,
             "--route-smoke runs its own scripted scenes; it cannot be combined with play, visual, save-frame, visual-frame-suite, visual-route-suite, compare-frame-manifests, from-save, from-init, scene, start, or gameplay overrides",
+        ));
+    }
+    if equivalence_matrix.is_some() && equivalence_suite.is_none() {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "--matrix requires --equivalence-suite",
+        ));
+    }
+    if equivalence_suite.is_some()
+        && (play
+            || intro
+            || visual
+            || route_smoke
+            || save_frame.is_some()
+            || save_frame_suite.is_some()
+            || save_screen.is_some()
+            || visual_frame_suite.is_some()
+            || visual_route_suite.is_some()
+            || compare_frame_manifests.is_some()
+            || location_audit.is_some()
+            || audio_suite.is_some()
+            || write_seed
+            || create_character_interactive
+            || create_character_name.is_some()
+            || from_save
+            || from_init
+            || play_script.is_some()
+            || options != PlayOptions::default()
+            || wind_override.is_some()
+            || climbing_gear_override.is_some()
+            || pending_vehicle_override.is_some()
+            || transport_override.is_some())
+    {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "--equivalence-suite runs the route smoke cases under each configuration; it cannot be combined with another mode, play-script, from-save, from-init, scene, start, or gameplay overrides",
         ));
     }
     if route_smoke_manifest.is_some() && !route_smoke {
@@ -942,6 +1021,8 @@ where
         raster_depth,
         route_smoke,
         route_smoke_manifest,
+        equivalence_suite,
+        equivalence_matrix,
         play_script,
         game_dir,
         play_options: options,
@@ -1121,6 +1202,15 @@ OPTIONS:
         --route-smoke-manifest <PATH>
                               With --route-smoke, write a sanitized manifest
                               compatible with --compare-frame-manifests.
+        --equivalence-suite <OUT>
+                              Run every route smoke case with every
+                              enhancement off, then under Classic and each
+                              --matrix row, check each run equals the
+                              all-off run, write a sanitized report into
+                              OUT and exit.
+        --matrix <FILE>       With --equivalence-suite, the configurations
+                              to run besides Classic, one per line:
+                              NAME<TAB>preset=NAME,KEY=VALUE,...
         --raster-depth <D>    ega|tandy (default ega; CGA/Hercules are outside v1).
                               tandy draws the EGA records: a modern
                               approximation, not historical Tandy pixel parity.

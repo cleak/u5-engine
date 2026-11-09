@@ -37,7 +37,7 @@ pub const TEXT_HOLD_WAIT_KEY_MARKER: u8 = 0x02;
 pub const TEXT_HOLD_TIMED_PAUSE_PASSES: u16 = 28;
 
 /// What ends a hold.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum TextHoldKind {
     /// Ends after [`TEXT_HOLD_TIMED_PAUSE_PASSES`] BIOS ticks, or at once on
     /// a key, which it consumes.
@@ -108,7 +108,7 @@ pub fn split_rendered_at_holds(
 }
 
 /// One page still to print and the hold in front of it.
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Hash)]
 pub struct HeldPage {
     pub hold: TextHoldKind,
     pub text: TlkRenderedText,
@@ -145,6 +145,29 @@ pub struct PendingTextHold {
     /// Prompt to print once the last page is out, for a caller whose prompt
     /// is not part of the composed text.
     pub then_message: Option<String>,
+}
+
+// Hand-written because the clock readings are `f64`: they hash as their
+// bits, for the trajectory digest (`enhancements::digest`).
+impl std::hash::Hash for PendingTextHold {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        let Self {
+            pages,
+            due_at_secs,
+            passes_started_at_secs,
+            passes_run,
+            freezes_world,
+            row_open,
+            then_message,
+        } = self;
+        pages.hash(state);
+        due_at_secs.map(f64::to_bits).hash(state);
+        passes_started_at_secs.map(f64::to_bits).hash(state);
+        passes_run.hash(state);
+        freezes_world.hash(state);
+        row_open.hash(state);
+        then_message.hash(state);
+    }
 }
 
 impl PendingTextHold {

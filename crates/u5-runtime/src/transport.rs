@@ -6,7 +6,7 @@ use crate::*;
 /// an under-sail ship after a successful step onto it.
 pub const OVERWORLD_PIER_TILE: u8 = 0x47;
 
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
 pub enum TransportState {
     #[default]
     Foot,
@@ -115,7 +115,7 @@ pub const SHIP_SUNK_MESSAGE: &str = "Ship sunk!";
 pub const ABANDON_SHIP_MESSAGE: &str = "Abandon ship!";
 pub const DROWNING_MESSAGE: &str = "DROWNING!!!";
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum PendingVehicleAcquisition {
     Frigate { x: usize, y: usize, skiffs: u8 },
     Skiff { x: usize, y: usize, aux3: u8 },
@@ -124,7 +124,7 @@ pub enum PendingVehicleAcquisition {
 /// The three-byte queued shipwright-delivery state persisted exclusively in
 /// `SAVED.GAM` (`formats/saved-gam.md §10`). The class byte is retained
 /// verbatim so inactive and noncanonical packed values survive load/save.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
 pub struct PendingVehicleSaveState {
     pub x: u8,
     pub y: u8,

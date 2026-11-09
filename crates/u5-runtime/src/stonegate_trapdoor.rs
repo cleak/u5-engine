@@ -80,7 +80,7 @@ pub fn stonegate_trapdoor_death_hold_secs(step_sounds: &[crate::audio::SoundEffe
         .sum()
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub struct StonegateTrapdoorPlayback {
     pub viewport_rect: DisplayPixelRect,
     pub viewport_fill_colour: u8,

@@ -2,14 +2,14 @@
 
 use crate::*;
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum Area {
     Town { scene: Scene, floor: i8 },
     Dungeon { scene: DungeonScene, level: u8 },
     World { plane: WorldPlane },
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub struct Player {
     pub x: usize,
     pub y: usize,
@@ -17,7 +17,7 @@ pub struct Player {
     pub transport: TransportState,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub struct PartyMember {
     pub slot: u8,
     pub class_byte: u8,
@@ -79,7 +79,7 @@ impl PartyMember {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct PartyRosterRecord {
     pub member: PartyMember,
     pub name: [u8; SAVE_CHARACTER_NAME_LEN],
@@ -205,7 +205,7 @@ pub fn party_roster_carried_gender(
         .unwrap_or(SAVE_GENDER_MALE_BYTE)
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub struct MoonstoneGateSlot {
     pub scene: u8,
     pub x: u8,
@@ -228,7 +228,7 @@ impl MoonstoneGateSlot {
     }
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub struct AvatarStats {
     pub strength: u8,
     pub dexterity: u8,

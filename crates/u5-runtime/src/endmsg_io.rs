@@ -16,7 +16,7 @@ pub const ENDMSG_DAT_LEN: usize = 786;
 /// records the file holds.
 pub const ENDMSG_DAT_RECORDS: usize = 11;
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct EndgameMessages {
     pub records: Vec<String>,
 }

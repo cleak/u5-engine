@@ -321,7 +321,7 @@ pub fn moongate_transit_steps() -> io::Result<Vec<MoongateTransitStep>> {
 
 /// What one run of the transit spent, for callers and tests that need to
 /// see the blocking sequence actually ran to completion.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
 pub struct MoongateTransitPlayback {
     /// Stage A's dispatch steps - `256` when the stage ran whole.
     pub stage_a_dispatch_steps: u16,

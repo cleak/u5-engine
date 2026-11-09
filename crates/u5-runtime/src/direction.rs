@@ -1,6 +1,6 @@
 //! Eight-way compass direction, used by movement, facing, and wind.
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum Direction {
     NorthWest,
     North,

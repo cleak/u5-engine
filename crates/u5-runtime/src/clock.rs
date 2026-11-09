@@ -265,7 +265,7 @@ pub const fn apply_timing_tag_increment(increment: u8, tag_byte: u8) -> Option<u
     Some(increment)
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub struct GameClock {
     pub year: u16,
     pub month: u8,

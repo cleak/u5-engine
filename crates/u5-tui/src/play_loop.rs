@@ -334,23 +334,8 @@ pub fn run_play_script_commands_watched(
             index + 1,
             play_script_command_label(command)
         );
-        let disposition = handle_play_script_command(state, command, game_dir)?;
         // No pump in script mode either; see the interactive loop above.
-        state.flush_staged_narration();
-        state.flush_text_hold();
-        // The cinematics and the shrine's third-mantra resolution need
-        // walking to their end here too, exactly as
-        // [`replay_play_script_commands`] does: the exploration gate stays
-        // closed while one is pending, so without this every command after a
-        // third shrine mantra was a no-op (playtest E58).
-        state.run_blackthorn_rescue_to_handoff(game_dir)?;
-        state.run_blackthorn_audience_exit_to_handoff(game_dir)?;
-        resolve_shrine_third_mantra_without_pump(state, game_dir)?;
-        // The script shells run no exploration turn gate, so the acted turn an
-        // E-Enter shrine visit owes once its exit pacing has drained is paid
-        // here, as the gate pays it (`commands.md §3`, playtest S14).
-        u5_runtime::input_dispatch::settle_exploration_acted_charge(state, game_dir)?;
-        drain_play_script_prompt_head_panel_refresh(state);
+        let disposition = run_play_script_step(state, command, game_dir)?;
         after_command(&mut save_watch, state);
         print_play_script_snapshot(state, tile_atlas)?;
         if disposition == PlayInputDisposition::Quit {
@@ -393,10 +378,117 @@ fn drain_play_script_prompt_head_panel_refresh(state: &mut PlayState) {
     }
 }
 
+/// One play-script command and the walk to its end that every script shell
+/// runs after it.
+///
+/// The script shells have no presentation pump, so staged narration and text
+/// holds are flushed at once. The cinematics and the shrine's third-mantra
+/// resolution need walking to their handoff here as well as in the idle
+/// gate: the gate only runs while `play_state_accepts_typeahead`, which is
+/// false for the whole of a Blackthorn audience, so a script that finished an
+/// audience never reached the exit handoff and ended in the throne room
+/// instead of the destination scene (`blackthorn-audience-correct` and
+/// `-wrong`), and every command after a third shrine mantra was a no-op
+/// (playtest E58).
+pub fn run_play_script_step(
+    state: &mut PlayState,
+    command: &str,
+    game_dir: &Path,
+) -> io::Result<PlayInputDisposition> {
+    let disposition = handle_play_script_command(state, command, game_dir)?;
+    state.flush_staged_narration();
+    state.flush_text_hold();
+    state.run_blackthorn_rescue_to_handoff(game_dir)?;
+    state.run_blackthorn_audience_exit_to_handoff(game_dir)?;
+    resolve_shrine_third_mantra_without_pump(state, game_dir)?;
+    // The script shells run no exploration turn gate, so the acted turn an
+    // E-Enter shrine visit owes once its exit pacing has drained is paid
+    // here, as the gate pays it (`commands.md §3`, playtest S14).
+    u5_runtime::input_dispatch::settle_exploration_acted_charge(state, game_dir)?;
+    drain_play_script_prompt_head_panel_refresh(state);
+    Ok(disposition)
+}
+
+/// Play-script tokens that belong to an enhancement start with this
+/// character: `@journal`, `@automap-open`, `@auto` (Phase B design 1.3.12).
+pub const ENHANCEMENT_TOKEN_PREFIX: char = '@';
+
+/// Whether a play-script command is an enhancement's `@` token.
+pub fn is_enhancement_token(command: &str) -> bool {
+    command.trim_start().starts_with(ENHANCEMENT_TOKEN_PREFIX)
+}
+
+/// What the enhancements did with one `@` token (design 1.3.12).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum ScriptTokenIntercept {
+    /// No feature that is on owns the token: it runs exactly as 1.0.1 runs
+    /// it, with no error and no note.
+    PassThrough,
+    /// A feature took the token. Nothing runs for it: not the
+    /// exploration-gate settle, not the input-helper entry step, not the
+    /// after-command callback.
+    Consumed,
+    /// A feature took the token and typed these commands in its place
+    /// (effect class (b)). Each runs as an ordinary script command.
+    Emit(Vec<String>),
+}
+
+/// Who may intercept `@` tokens before [`handle_play_script_command`] sees
+/// them. Only `@` tokens are offered; every other command runs untouched.
+pub trait ScriptTokenHooks {
+    fn intercept(
+        &mut self,
+        index: usize,
+        token: &str,
+        state: &mut PlayState,
+    ) -> ScriptTokenIntercept;
+}
+
+/// Every toggle off: no token is intercepted, so the script runs as 1.0.1.
+#[derive(Clone, Copy, Debug, Default)]
+pub struct NoScriptTokenHooks;
+
+impl ScriptTokenHooks for NoScriptTokenHooks {
+    fn intercept(
+        &mut self,
+        _index: usize,
+        _token: &str,
+        _state: &mut PlayState,
+    ) -> ScriptTokenIntercept {
+        ScriptTokenIntercept::PassThrough
+    }
+}
+
 pub fn replay_play_script_commands<F>(
     state: &mut PlayState,
     game_dir: &Path,
     commands: &[String],
+    after_command: F,
+) -> io::Result<()>
+where
+    F: FnMut(&mut PlayState, usize, &str) -> io::Result<()>,
+{
+    replay_play_script_commands_hooked(
+        state,
+        game_dir,
+        commands,
+        &mut NoScriptTokenHooks,
+        after_command,
+    )
+}
+
+/// [`replay_play_script_commands`], offering each `@` token to `hooks`
+/// first. With [`NoScriptTokenHooks`] it is exactly the plain replay.
+///
+/// `after_command` runs after every command that ran, with the index of the
+/// script command it came from; a command a feature emitted for a token
+/// reports the token's index and its own text. A consumed token reports
+/// nothing.
+pub fn replay_play_script_commands_hooked<F>(
+    state: &mut PlayState,
+    game_dir: &Path,
+    commands: &[String],
+    hooks: &mut dyn ScriptTokenHooks,
     mut after_command: F,
 ) -> io::Result<()>
 where
@@ -404,26 +496,25 @@ where
 {
     run_play_script_load_entry_reaction(state, game_dir)?;
     for (index, command) in commands.iter().enumerate() {
-        let disposition = handle_play_script_command(state, command, game_dir)?;
-        state.flush_staged_narration();
-        state.flush_text_hold();
-        // The cinematics need walking to their handoff here as well as in the
-        // idle gate. The gate only runs while `play_state_accepts_typeahead`,
-        // which is false for the whole of a Blackthorn audience, so a script
-        // that finished an audience never reached the exit handoff and ended
-        // in the throne room instead of the destination scene -
-        // `blackthorn-audience-correct` and `-wrong`.
-        state.run_blackthorn_rescue_to_handoff(game_dir)?;
-        state.run_blackthorn_audience_exit_to_handoff(game_dir)?;
-        resolve_shrine_third_mantra_without_pump(state, game_dir)?;
-        // The script shells run no exploration turn gate, so the acted turn an
-        // E-Enter shrine visit owes once its exit pacing has drained is paid
-        // here, as the gate pays it (`commands.md §3`, playtest S14).
-        u5_runtime::input_dispatch::settle_exploration_acted_charge(state, game_dir)?;
-        drain_play_script_prompt_head_panel_refresh(state);
-        after_command(state, index, command)?;
-        if disposition == PlayInputDisposition::Quit {
-            break;
+        let emitted = if is_enhancement_token(command) {
+            match hooks.intercept(index, command, state) {
+                ScriptTokenIntercept::PassThrough => None,
+                ScriptTokenIntercept::Consumed => continue,
+                ScriptTokenIntercept::Emit(commands) => Some(commands),
+            }
+        } else {
+            None
+        };
+        let run = match &emitted {
+            Some(commands) => commands.as_slice(),
+            None => std::slice::from_ref(command),
+        };
+        for command in run {
+            let disposition = run_play_script_step(state, command, game_dir)?;
+            after_command(state, index, command)?;
+            if disposition == PlayInputDisposition::Quit {
+                return Ok(());
+            }
         }
     }
     Ok(())

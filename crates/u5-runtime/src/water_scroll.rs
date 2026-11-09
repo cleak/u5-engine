@@ -364,7 +364,7 @@ pub fn apply_banner_sail_row_swaps(
 /// shared tile asset. It is **not** a member of [`crate::AnimationClock`]:
 /// that clock is the `animation.md §6` shared phase counter with its own
 /// published period and nested gates, and this counter has neither.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
 pub struct WaterScrollClock {
     /// Current phase, always `< WATER_SCROLL_PHASE_COUNT`.
     pub phase: u8,

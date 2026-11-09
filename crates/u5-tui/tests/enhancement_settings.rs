@@ -422,7 +422,12 @@ fn only_the_default_launch_reads_the_file() {
     assert_eq!(item_name(&marker), "run");
     assert!(marker.contains("if default_launch {\n        args.intro = true;"));
 
-    for file in ["src/cli.rs", "src/play_loop.rs", "src/route_smoke.rs"] {
+    for file in [
+        "src/cli.rs",
+        "src/play_loop.rs",
+        "src/route_smoke.rs",
+        "src/equivalence.rs",
+    ] {
         let source = crate_source(file);
         assert!(!source.contains(read), "{file}");
         assert!(!source.contains("ConfigDocument"), "{file}");

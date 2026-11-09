@@ -80,7 +80,7 @@ pub const SKY_ROW_SPECS: [SkyRowSpec; SKY_VIEW_ROWS] = [
     },
 ];
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub struct SkyOverlayState {
     /// Absolute gameplay-screen coordinates, in the order the PRNG produced them.
     pub stars: [(u8, u8); SKY_VIEW_STARS],

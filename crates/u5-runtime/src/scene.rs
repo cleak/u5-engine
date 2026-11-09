@@ -5,7 +5,7 @@ use std::io;
 
 use crate::parse_u8_literal;
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum Family {
     Towne,
     Dwelling,
@@ -47,7 +47,7 @@ impl Family {
     }
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub struct Scene {
     pub byte: u8,
     pub family: Family,
@@ -122,7 +122,7 @@ pub const FIRST_DUNGEON_SCENE_BYTE: u8 = crate::SCENE_TOWN_FAMILY_LAST + 1;
 pub const LAST_DUNGEON_SCENE_BYTE: u8 =
     FIRST_DUNGEON_SCENE_BYTE + crate::DUNGEON_DAT_RECORD_COUNT as u8 - 1;
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub struct DungeonScene {
     pub byte: u8,
     pub record: usize,
@@ -195,7 +195,7 @@ pub enum DungeonPresentationFlavour {
     Mine,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum PlayTarget {
     Town(Scene),
     Dungeon(DungeonScene),
@@ -244,7 +244,7 @@ impl PlayTarget {
     }
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum WorldPlane {
     Britannia,
     Underworld,

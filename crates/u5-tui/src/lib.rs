@@ -6,6 +6,7 @@
 pub mod audio_suite;
 pub mod cli;
 pub mod enhancement_settings;
+pub mod equivalence;
 pub mod intro_loop;
 pub mod play_loop;
 pub mod route_smoke;
@@ -26,23 +27,31 @@ pub use enhancement_settings::visual_launch_config;
 pub use enhancement_settings::{
     PARITY_LOCK_ENV, PARITY_LOCK_LINE, SettingsFile, launch_enhancements, run_show_settings,
 };
+pub use equivalence::{
+    FeatureHooks, Mismatch, ReplayHooks, RunRecord, TerminalFeature, TokenEvent, TraceStep,
+    check_equivalence, compare_runs, parse_matrix, run_equivalence_suite, run_trace,
+    terminal_features,
+};
 pub use intro_loop::run_intro_menu_loop;
 pub use play_loop::{
-    FreeTextLineInput, TerminalSaveWatch, ansi_function_key, ansi_navigation_key,
+    ENHANCEMENT_TOKEN_PREFIX, FreeTextLineInput, NoScriptTokenHooks, ScriptTokenHooks,
+    ScriptTokenIntercept, TerminalSaveWatch, ansi_function_key, ansi_navigation_key,
     complete_headless_blocking_presentations, free_text_line_input, handle_empty_play_input,
-    handle_play_script_command, is_music_toggle_token, is_simple_typeahead_key,
-    is_typeahead_toggle_token, key_flushed_typeahead, play_input_key_and_suffix,
-    play_input_typeahead_chars, play_script_command_label, play_script_idle_tick_count,
-    play_script_state_line, play_state_accepts_typeahead, play_state_runs_input_wait_pass,
-    play_state_whole_line_reader, print_play_frame, print_play_script_snapshot,
-    raster_diagnostic_line, raster_frame_kind, replay_play_script_commands,
-    run_interactive_play_loop, run_interactive_play_loop_watched, run_play_loop,
-    run_play_loop_with, run_play_script_commands, run_play_script_commands_watched,
-    run_terminal_input_wait_pass, unclassified_escape_sequence,
+    handle_play_script_command, is_enhancement_token, is_music_toggle_token,
+    is_simple_typeahead_key, is_typeahead_toggle_token, key_flushed_typeahead,
+    play_input_key_and_suffix, play_input_typeahead_chars, play_script_command_label,
+    play_script_idle_tick_count, play_script_state_line, play_state_accepts_typeahead,
+    play_state_runs_input_wait_pass, play_state_whole_line_reader, print_play_frame,
+    print_play_script_snapshot, raster_diagnostic_line, raster_frame_kind,
+    replay_play_script_commands, replay_play_script_commands_hooked, run_interactive_play_loop,
+    run_interactive_play_loop_watched, run_play_loop, run_play_loop_with, run_play_script_commands,
+    run_play_script_commands_watched, run_play_script_step, run_terminal_input_wait_pass,
+    unclassified_escape_sequence,
 };
 pub use route_smoke::{
-    RouteSmokeCase, RouteSmokeExpectation, RouteSmokeFrameReport, RouteSmokeReport,
-    route_smoke_cases, run_route_smoke, run_route_smoke_case, write_route_smoke_manifest,
+    NoRouteTrace, RouteSmokeCase, RouteSmokeExpectation, RouteSmokeFrameReport, RouteSmokeReport,
+    RouteTraceObserver, route_smoke_cases, run_route_smoke, run_route_smoke_case,
+    run_route_smoke_case_traced, write_route_smoke_manifest,
 };
 pub use runtime_game_dir::{RUNTIME_DIR_ENV, prepare_writable_game_dir};
 pub use save_frame::{

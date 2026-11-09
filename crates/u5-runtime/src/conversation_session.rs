@@ -29,7 +29,7 @@ use crate::tlk_runner::{
 };
 
 /// Phase the conversation is currently in.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
 pub enum ConversationSessionPhase {
     /// Conversation just opened; greeting / description need to be
     /// presented before any keyword input is accepted.
@@ -377,7 +377,7 @@ impl ConversationSessionOutput {
 }
 
 /// Holder for a conversation in progress.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Hash)]
 pub struct ConversationSession {
     pub phase: ConversationSessionPhase,
     /// Raw blob fields for the active NPC. Index 0 = Name,
@@ -1522,7 +1522,7 @@ impl StreamEnd {
 
 /// Which labelled-block record a paused stream belongs to (`conversation.md
 /// §7.7`).
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 enum ScopedFrame {
     /// The head of the block with this label.
     Head(u8),

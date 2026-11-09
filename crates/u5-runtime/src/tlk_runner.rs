@@ -199,7 +199,7 @@ pub enum TlkRunEvent {
 /// `conversation.md §7.1`: ordinary queued bytes retain bit seven and render
 /// through the resident text font; bytes queued while the `0x8E` mask is
 /// flipped have bit seven clear and render through the alternate runic font.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
 pub enum TlkGlyphFont {
     #[default]
     Ordinary,
@@ -208,7 +208,7 @@ pub enum TlkGlyphFont {
 
 /// One display cell emitted by a TLK response, after dictionary expansion and
 /// printable-byte decoding but before fixed-font rasterisation.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub struct TlkRenderedGlyph {
     pub byte: u8,
     pub font: TlkGlyphFont,
@@ -265,7 +265,7 @@ pub fn ordinary_glyphs_from_engine_text(text: &str) -> Vec<TlkRenderedGlyph> {
 
 /// Text plus its per-cell font selection. `text` remains the terminal and
 /// diagnostics view; `glyphs` is the authoritative graphical presentation.
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
+#[derive(Clone, Debug, Default, PartialEq, Eq, Hash)]
 pub struct TlkRenderedText {
     pub text: String,
     pub glyphs: Vec<TlkRenderedGlyph>,

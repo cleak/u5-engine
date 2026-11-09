@@ -16,7 +16,7 @@ pub const MAP_VIEWPORT_DISSOLVE_RECT: DisplayPixelRect = DisplayPixelRect {
 pub const BLACKTHORN_RESCUE_PARTY_CELL: (u8, u8) = (5, 5);
 
 /// Caller-composed hidden surface consumed by one map-viewport dissolve.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum MapViewportDissolveSource {
     /// Rescue/refuge entry: colour zero only, before scratch-state clearing.
     BlackthornRescueBlack,
@@ -38,7 +38,7 @@ pub enum MapViewportDissolveSource {
 /// This mirrors the runtime's other completed blocking playback records. The
 /// driver visit order is actually exhausted here; frontends need only present
 /// the caller-composed end state after the call returns.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub struct MapViewportDissolvePlayback {
     pub source: MapViewportDissolveSource,
     pub rect: DisplayPixelRect,

@@ -94,7 +94,7 @@ pub const Z_STATS_SPELL_LABELS: [&str; Z_STATS_SPELLS_SLOTS] = [
 pub const Z_STATS_REAGENTS_SLOTS: usize = 8;
 pub const Z_STATS_ITEMS_SLOTS: usize = 38;
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum ZStatsPage {
     Stats,
     Equipment,
@@ -209,20 +209,20 @@ impl ZStatsPage {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct ZStatsSession {
     pub selected_party_index: usize,
     pub page: ZStatsPage,
     pub inventory_cursor: usize,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct ReadySession {
     pub selected_party_index: Option<usize>,
     pub cursor: usize,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct UseSession {
     pub cursor: usize,
     pub pending: Option<UsePendingAction>,
@@ -234,7 +234,7 @@ pub struct UseSession {
     pub strip_scrolls: u8,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct CastSession {
     pub caster_index: usize,
     pub buffer: String,
@@ -242,7 +242,7 @@ pub struct CastSession {
     pub combat_had_foe: bool,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct CastFollowupSession {
     pub caster_index: usize,
     pub spell_code: String,
@@ -265,7 +265,7 @@ pub struct CastFollowupSession {
 /// follow-up then string-matched. Nothing published looks like that, and a
 /// request the matcher failed to recognise printed it to the player - see
 /// `cleak/u5-engine#19`.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum CastArgumentRequest {
     /// Inline callers only: the suffix named no caster. The interactive
     /// prompt always supplies one.
@@ -277,7 +277,7 @@ pub enum CastArgumentRequest {
     Target,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum CastFollowupKind {
     Direction {
         pass_allowed: bool,
@@ -331,20 +331,20 @@ pub(crate) enum CombatSpellCursorKey {
     Move(crate::InputDirection),
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct RestSession {
     pub phase: RestPhase,
     pub hours: Option<u8>,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum RestPhase {
     Hours,
     WatchYesNo,
     WatchSlot,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub struct JimmySession {
     pub direction: Direction,
     /// The roster row the shared picker indicates (`inventory.md §4.3`),
@@ -352,7 +352,7 @@ pub struct JimmySession {
     pub highlight: usize,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub struct SurfaceChestSession {
     pub x: usize,
     pub y: usize,
@@ -367,7 +367,7 @@ pub struct SurfaceChestSession {
     pub dungeon: Option<DungeonChestSelection>,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub struct DungeonChestSelection {
     pub scene: DungeonScene,
     pub level: u8,
@@ -375,7 +375,7 @@ pub struct DungeonChestSelection {
     pub tile: u8,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum SurfaceChestVerb {
     Get,
     Open,
@@ -384,7 +384,7 @@ pub enum SurfaceChestVerb {
     Search,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct ShrineSession {
     pub virtue: ShrineVirtue,
     pub phase: ShrinePhase,
@@ -403,7 +403,7 @@ pub struct ShrineSession {
 /// `karma.md §12`: "Ask `\nMantra:` three times".
 pub const SHRINE_MANTRA_ASK_COUNT: u8 = 3;
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum ShrinePhase {
     /// **Measured** 2026-09-07: `E` on a shrine marker opens with the
     /// virtue question (`MISCMSG.DAT` record `29`) and a `:` input row - the
@@ -420,7 +420,7 @@ pub enum ShrinePhase {
     AltarQuest,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct MixSession {
     pub phase: MixPhase,
     pub spell_buffer: String,
@@ -430,26 +430,26 @@ pub struct MixSession {
     pub quantity_buffer: String,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum MixPhase {
     Spell,
     Reagents,
     Quantity,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct NewOrderSession {
     pub first: Option<usize>,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct YellSession {
     pub buffer: String,
 }
 
 /// `karma.md §7.1`: the four-field ruined-shrine restoration prompt entered
 /// from outdoor Yell. It is deliberately separate from M-Meditate's session.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct ShrineRestorationSession {
     pub word_index: usize,
     pub target_x: usize,
@@ -472,18 +472,18 @@ pub const SHRINE_RESTORATION_VIRTUE_ANSWER_PROMPT: &str = ":";
 pub const SHRINE_RESTORATION_MANTRA_ANSWER_PROMPT: &str = "Mantra:";
 pub const SHRINE_RESTORATION_SUCCESS_BANNER: &str = "\n\nThe Shrine is\nrestored!\n";
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct WishingWellSession {
     pub direction: Direction,
     pub coin_accepted: bool,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub struct DirectionPromptSession {
     pub kind: DirectionPromptKind,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum DirectionPromptKind {
     Attack,
     DungeonLook {
@@ -517,7 +517,7 @@ pub enum DirectionPromptKind {
     Talk,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum DungeonLookFocus {
     Ahead,
     Right,
@@ -580,12 +580,12 @@ pub const fn dungeon_look_focus_label(focus: DungeonLookFocus) -> &'static str {
     }
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub struct YesNoPromptSession {
     pub kind: YesNoPromptKind,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum YesNoPromptKind {
     DungeonFountainDrink {
         party_index: usize,
@@ -605,7 +605,7 @@ pub enum YesNoPromptKind {
     },
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum UsePendingAction {
     /// `inventory.md §4`: the `On who:` prompt is the shared party-member
     /// selector, and there "a digit moves the indicator; it does not commit
@@ -1322,7 +1322,7 @@ pub fn potion_inventory_name(index: usize) -> &'static str {
 /// The selector is a presentation stage as much as an input stage: while
 /// it is live the party-roster box's border label reads `Select:` and the
 /// candidate roster row is drawn in inverse video.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub struct PartySelectorSession {
     /// Which command opened the selector, so the confirmed slot can be
     /// handed to the right follow-on stage.
@@ -1338,7 +1338,7 @@ impl PartySelectorSession {
 }
 
 /// The command a live [`PartySelectorSession`] is selecting for.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum PartySelectorTarget {
     ZStats,
     /// `cleak/u5-spec#194` capture: the direction-form Search asks

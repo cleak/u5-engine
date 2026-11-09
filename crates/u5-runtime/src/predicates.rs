@@ -1741,7 +1741,7 @@ pub const fn world_difficult_terrain_step(tile: u8) -> Option<WorldDifficultTerr
 }
 
 /// One row of [`world_difficult_terrain_step`].
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub struct WorldDifficultTerrainStep {
     pub extra_object_update_calls: u8,
     pub extra_minutes: u8,

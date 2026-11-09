@@ -417,7 +417,7 @@ pub const fn npc_shop_trigger(dialog_index: u8) -> Option<NpcShopTrigger> {
 /// `formats/npc.md §5.3` per-waypoint AI behaviour selector. Values
 /// `0..=7` are the shipped behaviour families; values above `7` fall
 /// through to the no-action/default case.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum NpcAiBehavior {
     /// `0` — stationary at the selected waypoint.
     Stationary,
@@ -491,7 +491,7 @@ impl NpcAiBehavior {
 /// for town mode - the producer's roster index and the AI behaviour whose
 /// engagement step raised it (`formats/saved-gam.md §12` stores the pair as
 /// an event kind and an NPC index).
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub struct TownNpcContactEvent {
     pub npc_slot: usize,
     pub behavior: NpcAiBehavior,
@@ -796,7 +796,7 @@ pub const fn npc_path_tile_obstacle(tile: u8) -> bool {
     )
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct RuntimeNpc {
     pub slot: usize,
     pub type_byte: u8,
@@ -1021,7 +1021,7 @@ impl RuntimeNpc {
     }
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub struct DoorTracker {
     pub previous_tile: u8,
     pub x: usize,

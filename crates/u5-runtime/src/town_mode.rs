@@ -231,7 +231,7 @@ pub const TOWN_ARREST_JAIL_FLOOR: u8 = 0;
 pub const TOWN_ARREST_JAIL_X: u8 = 25;
 pub const TOWN_ARREST_JAIL_Y: u8 = 4;
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub struct TownArrestPrompt {
     pub scene_byte: u8,
     pub floor: i8,
@@ -393,7 +393,7 @@ pub const TOWN_ATTACK_KILL_ARM_MISSED_MESSAGE: &str = "Missed!";
 /// a hideout town whose Shadowlord is still standing in the
 /// active-object table, is rejected by the one-at-a-time check and does
 /// nothing)."
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub struct PendingTownConflict {
     pub scene_byte: u8,
     pub floor: i8,

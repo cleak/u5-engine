@@ -4,7 +4,7 @@ use std::io;
 
 use crate::*;
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct CombatFrameSnapshot {
     pub area: Area,
     pub player: Player,
@@ -53,7 +53,7 @@ pub struct CombatFrameSnapshot {
 /// `dungeon-mode.md §14.1` post-combat bracket (u5-spec#298 Q1, R527,
 /// R528): the three dungeon launchers read the first-party-exit record
 /// differently.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum DungeonPostCombatApplier {
     /// A-Attack: "reads only codes 5 and 6"; codes 1-4 leave the party
     /// where it was.
@@ -91,7 +91,7 @@ pub const COMBAT_ALL_MUST_USE_SAME_EXIT_LINE: &str = "All must use the same exit
 /// normal return from room combat, for every room including the deny-listed
 /// rooms ...; when room combat returns the loss result (the party side
 /// emptied while foes remain) the helper skips both."
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub struct PendingDungeonRoomClear {
     pub scene: DungeonScene,
     pub room_slot: u8,
@@ -157,7 +157,7 @@ pub fn combat_summon_flash_playback(
 }
 
 /// Completed `combat.md §6.3` vanish-on-death cell reveal.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct CombatTerrainRevealPlayback {
     pub actor_slot: usize,
     pub arena_cell: (u8, u8),
@@ -209,7 +209,7 @@ pub fn combat_terrain_reveal_playback(
 pub const COMBAT_AMBUSH_REVEAL_SLOTS_MAX: u8 = 8;
 pub const COMBAT_AMBUSH_REVEAL_SLOT_COUNT: usize = COMBAT_AMBUSH_REVEAL_SLOTS_MAX as usize;
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub struct CombatAmbushRevealRecord {
     pub trigger_x: u8,
     pub trigger_y: u8,
@@ -522,7 +522,7 @@ pub fn combat_exit_requests_body_retrieval_reconcile(
         && !combat_has_active_not_dead_non_party_actor(actors)
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum CombatWeaponDamageApplication {
     Party {
         target_slot: usize,
@@ -541,7 +541,7 @@ pub struct CombatWeaponAttackApplication {
     pub damage_application: Option<CombatWeaponDamageApplication>,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub struct CombatMonsterAttackApplication {
     pub attacker_slot: usize,
     pub target_slot: usize,
@@ -570,7 +570,7 @@ pub struct CombatMonsterAttackApplication {
 }
 
 /// `combat.md §11`, the Gremlin food-theft branch (`RETRACTIONS.md` R361).
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum CombatFoodTheftOutcome {
     /// The three-in-four draw rejected. "If either the draw or the food test
     /// fails, the attack falls through to ordinary melee resolution."
@@ -587,7 +587,7 @@ pub enum CombatFoodTheftOutcome {
 
 /// `combat.md §12`, "The Gazer branch is a sleep application, and it
 /// replaces ordinary damage" (`RETRACTIONS.md` R359).
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum CombatSleepEffectOutcome {
     /// "A party defender already marked dead is refused outright, with
     /// nothing written."

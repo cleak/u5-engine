@@ -310,7 +310,7 @@ pub const POTION_VARIATION_DENOMINATOR: u8 = 16;
 /// `catalogs/item-list.md §7.2` completed blocking EGA/Tandy presentation for
 /// one accepted potion target. The selected bottle owns this presentation even
 /// when the later variation roll substitutes another gameplay effect.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub struct PotionFlashPlayback {
     pub selected_index: usize,
     pub playfield_left: usize,

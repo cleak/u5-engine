@@ -182,7 +182,7 @@ pub fn ega_driver_dispatch_offset(slot: u8) -> Option<u8> {
     Some(slot * 3)
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub struct DisplayPixelRect {
     pub x0: usize,
     pub y0: usize,

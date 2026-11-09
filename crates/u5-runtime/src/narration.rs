@@ -73,7 +73,7 @@ pub struct NarrationBeat {
 
 /// What a [`NarrationBeat::cue`] does on release. Owned by the presentation
 /// that staged it; see `PlayState::release_narration_cue`.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum NarrationCue {
     /// One step of `blackthorn.md §3`'s capture narration timeline.
     BlackthornCapture(crate::blackthorn::BlackthornCaptureCue),
@@ -92,6 +92,44 @@ pub struct StagedNarration {
     last_due_secs: Option<f64>,
     /// Counted world steps of the head beat already handed out.
     head_steps_taken: u16,
+}
+
+// Hand-written because the clock readings are `f64`: they hash as their
+// bits, for the trajectory digest (`enhancements::digest`).
+impl std::hash::Hash for NarrationBeat {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        let Self {
+            delay_secs,
+            text,
+            continues_open_row,
+            chained,
+            world_steps,
+            panel_repaint,
+            cue,
+        } = self;
+        delay_secs.to_bits().hash(state);
+        text.hash(state);
+        continues_open_row.hash(state);
+        chained.hash(state);
+        world_steps.hash(state);
+        panel_repaint.hash(state);
+        cue.hash(state);
+    }
+}
+
+impl std::hash::Hash for StagedNarration {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        let Self {
+            beats,
+            due_at_secs,
+            last_due_secs,
+            head_steps_taken,
+        } = self;
+        beats.hash(state);
+        due_at_secs.map(f64::to_bits).hash(state);
+        last_due_secs.map(f64::to_bits).hash(state);
+        head_steps_taken.hash(state);
+    }
 }
 
 impl StagedNarration {

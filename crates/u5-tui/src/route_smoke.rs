@@ -110,8 +110,9 @@ use u5_runtime::{
 };
 
 use crate::{
-    complete_headless_blocking_presentations, play_script_command_label, play_script_state_line,
-    raster_diagnostic_line, raster_frame_kind, replay_play_script_commands,
+    complete_headless_blocking_presentations,
+    play_loop::{NoScriptTokenHooks, ScriptTokenHooks, replay_play_script_commands_hooked},
+    play_script_command_label, play_script_state_line, raster_diagnostic_line, raster_frame_kind,
 };
 
 const VIEWPORT_RADIUS: usize = 5;
@@ -3426,6 +3427,45 @@ pub fn run_route_smoke_case(
     atlas: &u5_runtime::TileAtlas,
     case: &RouteSmokeCase,
 ) -> io::Result<RouteSmokeReport> {
+    run_route_smoke_case_traced(
+        game_dir,
+        atlas,
+        case,
+        &mut NoScriptTokenHooks,
+        &mut NoRouteTrace,
+    )
+}
+
+/// What the equivalence suite watches in a route-smoke run (Phase B design
+/// 1.3.12). Both methods read the state the route smoke itself sees; the
+/// plain route smoke watches nothing ([`NoRouteTrace`]).
+pub trait RouteTraceObserver {
+    /// After each command, once its frame was captured.
+    fn after_command(&mut self, _state: &PlayState, _index: usize, _command: &str) {}
+
+    /// Once every check of the case passed, before its scratch folders are
+    /// removed. `command_game_dir` is the folder the commands ran against.
+    fn finished(&mut self, _state: &mut PlayState, _command_game_dir: &Path) -> io::Result<()> {
+        Ok(())
+    }
+}
+
+/// The plain route smoke: nothing watches.
+#[derive(Clone, Copy, Debug, Default)]
+pub struct NoRouteTrace;
+
+impl RouteTraceObserver for NoRouteTrace {}
+
+/// [`run_route_smoke_case`] with `@` tokens offered to `hooks` and every
+/// command reported to `trace`. With [`NoScriptTokenHooks`] and
+/// [`NoRouteTrace`] it is exactly the route smoke.
+pub fn run_route_smoke_case_traced(
+    game_dir: &Path,
+    atlas: &u5_runtime::TileAtlas,
+    case: &RouteSmokeCase,
+    hooks: &mut dyn ScriptTokenHooks,
+    trace: &mut dyn RouteTraceObserver,
+) -> io::Result<RouteSmokeReport> {
     let route_game_dir = prepare_route_smoke_case_game_dir(game_dir, case.name)?;
     let reload_save_dir = prepare_route_smoke_reload_save_dir(game_dir, case.name)?;
     let command_game_dir = route_game_dir.as_deref().unwrap_or(game_dir);
@@ -3454,10 +3494,11 @@ pub fn run_route_smoke_case(
 
     let reload_checkpoints = route_reload_checkpoints(case.name);
     let mut previous_area = state.area;
-    let result = replay_play_script_commands(
+    let result = replay_play_script_commands_hooked(
         &mut state,
         command_game_dir,
         &commands,
+        hooks,
         |state, index, command| {
             commands_run += 1;
             if state.area != previous_area {
@@ -3493,6 +3534,7 @@ pub fn run_route_smoke_case(
                 ),
                 metadata,
             )?);
+            trace.after_command(state, index, command);
             Ok(())
         },
     );
@@ -3560,12 +3602,14 @@ pub fn run_route_smoke_case(
         final_nonblack_pixels,
         frames,
     };
+    let finished = trace.finished(&mut state, command_game_dir);
     if let Some(dir) = &route_game_dir {
         let _ = fs::remove_dir_all(dir);
     }
     if let Some(dir) = &reload_save_dir {
         let _ = fs::remove_dir_all(dir);
     }
+    finished?;
     Ok(report)
 }
 
@@ -3708,7 +3752,7 @@ fn prepare_route_smoke_reload_save_dir(
     Ok(Some(dir))
 }
 
-fn route_smoke_temp_dir(case_name: &str, label: &str) -> io::Result<PathBuf> {
+pub(crate) fn route_smoke_temp_dir(case_name: &str, label: &str) -> io::Result<PathBuf> {
     let nonce = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .map(|duration| duration.as_nanos())
@@ -3721,7 +3765,7 @@ fn route_smoke_temp_dir(case_name: &str, label: &str) -> io::Result<PathBuf> {
     Ok(dir)
 }
 
-fn seed_route_smoke_save_files(game_dir: &Path, save_dir: &Path) -> io::Result<()> {
+pub(crate) fn seed_route_smoke_save_files(game_dir: &Path, save_dir: &Path) -> io::Result<()> {
     if copy_route_smoke_save_file(game_dir, save_dir, SAVED_GAM_FILENAME, SAVED_GAM_FILENAME)
         .is_err()
     {

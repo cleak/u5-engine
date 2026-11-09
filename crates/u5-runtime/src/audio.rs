@@ -289,7 +289,7 @@ pub const fn nanos_to_duration(nanos: u64) -> Duration {
 /// The moving comparison value therefore sweeps the gate's **duty cycle**, not
 /// its pitch: roughly 91% connected falling to 55% on the first envelope of a
 /// shared variant, reversed on the second, so the pair fades in and back out.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub struct EnvelopeSegment {
     /// Signed comparison delta, applied modulo 65536 after each comparison.
     pub delta: i32,
@@ -1979,7 +1979,7 @@ impl DissolveToneState {
 /// pickup, or the Codex approach: `audio.md §9` states those are silent, and
 /// inventing a cue for them is exactly the failure the section exists to
 /// prevent.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum SoundEffect {
     /// `§7.4` rejected town movement or rejected combat step-or-attack.
     BlockedStep,

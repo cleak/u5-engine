@@ -9,7 +9,7 @@ pub const BLACKTHORN_GUARD_PASSWORD_INPUT_MAX: usize = 14;
 pub const BLACKTHORN_GUARD_PASSWORD_COMPARE_LEN: usize = 4;
 pub const BLACKTHORN_GUARD_PASSWORD: &str = "IMPERA";
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum BlackthornGuardDemandPrompt {
     PalacePassword,
     MinocCharity,
@@ -29,7 +29,7 @@ pub enum BlackthornGuardDemandResolution {
     Refused { gold: u16 },
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub struct ActiveBlackthornGuardDemand {
     pub prompt: BlackthornGuardDemandPrompt,
     pub arrest: crate::TownArrestPrompt,
@@ -226,7 +226,7 @@ pub const BLACKTHORN_RESCUE_FLASH_PRNG_DRAWS_PER_INVOCATION: u16 = 1_856;
 /// Completed, blocking rescue tableau between the two viewport dissolves.
 /// The runtime records direct-screen operations so frontends do not have to
 /// infer them from the final Lord British's Castle handoff state.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct BlackthornRescuePlayback {
     pub party_cell: (u8, u8),
     pub party_atlas_index: u16,
@@ -289,7 +289,7 @@ pub fn blackthorn_rescue_playback() -> BlackthornRescuePlayback {
 /// `blackthorn.md` section 6 cutscene-VM actor families. The audience and
 /// failure beats reference these slots by index when emitting
 /// movement descriptors.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum BlackthornCutsceneActor {
     /// Slot 0: Avatar / party-leader presentation actor.
     Avatar,
@@ -460,14 +460,14 @@ pub const fn blackthorn_audience_class_tile(class_byte: u8) -> u8 {
     }
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub struct BlackthornCutsceneActorState {
     pub x: usize,
     pub y: usize,
     pub actor_byte: u8,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum BlackthornCutscenePresentationEvent {
     WorldTick,
     BiosTick,
@@ -495,7 +495,7 @@ pub enum BlackthornCutscenePresentationEvent {
     },
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct BlackthornCellRevealPlayback {
     pub cell: (u8, u8),
     pub atlas_index: u16,
@@ -915,7 +915,7 @@ pub const fn blackthorn_cutscene_beat_commands(
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct BlackthornCutsceneVm {
     pub actors: [Option<BlackthornCutsceneActorState>; BLACKTHORN_CUTSCENE_ACTOR_SLOT_COUNT],
     pub visible_actors:
@@ -1361,7 +1361,7 @@ pub fn presentation_print_leaves_row_open(text: &str) -> bool {
 
 /// One presentation step of the capture narration that runs when its staged
 /// hold ends (`blackthorn.md §3`, capture narration timeline).
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum BlackthornCaptureCue {
     /// A line with nothing else to run: steps 1, 6, 10 and 12. Its release
     /// states the row the line leaves ([`presentation_print_leaves_row_open`]).
@@ -1403,7 +1403,7 @@ pub enum BlackthornCaptureCue {
 /// cutscene script run in one go when its first sting is due - the guard
 /// approach, later the guard-release route - keeps its per-sting frames here
 /// for the stings that follow.
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
+#[derive(Clone, Debug, Default, PartialEq, Eq, Hash)]
 pub struct BlackthornCaptureNarration {
     /// The audience map, loaded when the narration was staged.
     pub map: Option<crate::MiscmapsCutsceneMap>,
@@ -2158,7 +2158,7 @@ pub const BLACKTHORN_CAPTIVE_CELL_HANDOFF_BIOS_TICKS: u16 = 5;
 /// and it is on none of the narrative beats: it sits between the verdict's
 /// closing quotation mark and `Strange words are intoned.`". Everything
 /// before it and everything after it "passes without input".
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum BlackthornRescuePhase {
     /// Steps 1 to 18: the darkness, refuge, shout, thunder and verdict beats.
     Narration,
@@ -2176,7 +2176,7 @@ pub enum BlackthornRescuePhase {
 /// up through step 1's wait and beat 1 until the dissolve of step 3 takes it
 /// to black." Step 9 then installs "the party-on-foot actor at the viewport
 /// centre" after beat 4 (u5-spec#302 re-audit blackthorn:7:14, 7:15).
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
 pub enum BlackthornRescueViewport {
     /// The conditional world tick's repaint of the live grid, up to beat 1.
     LiveGrid,

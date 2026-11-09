@@ -274,7 +274,7 @@ impl AnimationAssetBuffer {
     };
 }
 
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
 pub struct AnimationClock {
     /// `animation.md §6` shared phase counter, wrapped at
     /// [`STATIC_TILE_ANIMATION_PERIOD_TICKS`].
@@ -328,7 +328,7 @@ impl AnimationClock {
     }
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub struct ActiveObject {
     pub type_byte: u8,
     pub tile: u8,

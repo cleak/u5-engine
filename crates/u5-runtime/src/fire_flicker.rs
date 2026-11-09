@@ -293,7 +293,7 @@ pub const FIRE_FLICKER_DEFAULT_SEED: u64 = 0x9E37_79B9_7F4A_7C15;
 /// resets it, and no caller should; this engine's remaining divergence is
 /// that a fresh [`crate::PlayState`] starts a fresh clock, the same
 /// divergence [`crate::WaterScrollClock`] already has.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct FireFlickerClock {
     generator: u64,
     current: [[u8; TILE_ATLAS_TILE_PIXELS]; FIRE_FIELD_TILE_COUNT],

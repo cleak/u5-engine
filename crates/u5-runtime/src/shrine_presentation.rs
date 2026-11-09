@@ -73,7 +73,7 @@ pub const SHRINE_EXIT_CLOSING_WAIT_STEPS: u16 = 10;
 
 /// Which presentation arm is running: they share the frame shape and the
 /// exit block, and differ in how far the avatar climbs (§7, §8).
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Default, Hash)]
 pub enum PresentationArm {
     /// Nine frames, four rows climbed, then the meditation handler kneels.
     #[default]
@@ -141,7 +141,7 @@ pub enum ShrinePose {
 /// step, and the pose is a pure function of how many have run - so a shell
 /// that spreads the steps across a measured hold and one that runs them
 /// straight through draw the same sequence.
-#[derive(Clone, Copy, Debug, PartialEq, Default)]
+#[derive(Clone, Copy, Debug, PartialEq, Default, Hash)]
 pub struct ShrineApproachWalk {
     arm: PresentationArm,
     /// Counted world steps since the presentation started, the opening step

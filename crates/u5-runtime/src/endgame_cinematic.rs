@@ -10,7 +10,7 @@
 //! confirmation flow stay in [`crate::endgame`].
 
 /// One presentation step in the post-victory cinematic.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Default, Hash)]
 pub enum EndgameCinematicStep {
     /// No cinematic active.
     #[default]
@@ -88,7 +88,7 @@ pub const ENDGAME_WAITING_LEAD_IN_PAUSE_TICKS: u8 = ENDGAME_RITE_LEAD_IN_PAUSE_T
 pub const ENDGAME_FADE_TO_BLACK_RECT: (u16, u16, u16, u16) = (0, 0, 319, 199);
 
 /// Run state for the cinematic.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
 pub struct EndgameCinematic {
     pub step: EndgameCinematicStep,
     /// Number of Lord British victory-rite message records to page through

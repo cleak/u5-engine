@@ -12,9 +12,9 @@ use u5_tui::{
     CliArgs, ReadyGameData, SETTINGS_WINDOW_FLAG, SETUP_WINDOW_FLAG, WizardMode, cli_usage,
     compare_manifest_files, describe_failure, open_settings_page, parse_cli_command,
     prepare_writable_game_dir, resolve_game_data, run_audio_suite, run_create_character_command,
-    run_interactive_create_character, run_intro_menu_loop, run_play_loop, run_route_smoke,
-    run_save_frame, run_save_frame_suite, run_save_screen, run_settings_window_child,
-    run_setup_window_child, run_show_settings,
+    run_equivalence_suite, run_interactive_create_character, run_intro_menu_loop, run_play_loop,
+    run_route_smoke, run_save_frame, run_save_frame_suite, run_save_screen,
+    run_settings_window_child, run_setup_window_child, run_show_settings,
 };
 
 fn main() -> ExitCode {
@@ -157,6 +157,14 @@ fn dispatch(mut args: CliArgs) -> io::Result<()> {
     }
     if let Some(out_dir) = args.visual_route_suite.as_deref() {
         return run_visual_route_suite(&args, out_dir);
+    }
+    if let Some(out_dir) = args.equivalence_suite.as_deref() {
+        return run_equivalence_suite(
+            &args.game_dir,
+            args.raster_depth,
+            out_dir,
+            args.equivalence_matrix.as_deref(),
+        );
     }
     if args.route_smoke {
         return run_route_smoke(

@@ -158,7 +158,7 @@ pub const SANDALWOOD_BOX_PICKUP_TAG: u8 = 0x0E;
 /// or the closing title. The engine therefore carries the published
 /// data-derived fields only; composing the surrounding English prose
 /// in Rust would ship invented text. See `cleak/u5-spec#82`.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct EndgameCertificate {
     /// `§9`: current saved day rendered as an ordinal word.
     pub day_ordinal: String,
@@ -179,7 +179,7 @@ pub struct EndgameCertificate {
 /// player to report the completed quest to Origin. The elapsed-time
 /// arithmetic and its singular/plural, zero-omitting formatting are
 /// published; the Origin line's wording is not. See `cleak/u5-spec#82`.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub struct EndgameFinalReport {
     pub years: u16,
     pub months: u8,
@@ -195,7 +195,7 @@ impl EndgameFinalReport {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct EndgameState {
     pub first_confirmation: Option<bool>,
     pub final_confirmation: Option<bool>,
@@ -270,7 +270,7 @@ pub struct EndgameState {
 /// record 10, and only then walks Lord British to the bed and the leader to
 /// the chair over the next three; this engine printed all of it and teleported
 /// the actors on the answering key.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
 pub enum EndgameRefusalPhase {
     /// Not on the waiting branch, or nothing owed yet.
     #[default]
@@ -306,7 +306,7 @@ pub enum EndgameRefusalPhase {
 ///
 /// The engine had stepped slot 0 up and back and placed the box inside the
 /// answering key, and printed record `3` with it.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
 pub enum EndgameVictoryStagingPhase {
     /// Not on the victory branch, or the hand-over has finished.
     #[default]
@@ -329,7 +329,7 @@ pub const ENDGAME_VICTORY_HANDOVER_LEAD_TICKS: u16 = 8;
 /// **sandalwood box**".
 pub const ENDGAME_VICTORY_BOX_PLACEMENT_TICKS: u16 = 4;
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum EndgameOutcome {
     Victory,
     MissingBoxOrRefused,
@@ -338,7 +338,7 @@ pub enum EndgameOutcome {
 /// `endgame.md §7`: automatic presentation phases after the seven rite
 /// messages. Only [`Self::OrbAwaitingAcknowledgement`] waits for input;
 /// every later phase is advanced by the display-frame pump.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
 pub enum EndgameVictoryTableauPhase {
     #[default]
     Inactive,

@@ -806,7 +806,7 @@ pub const MISCMAPS_CUTSCENE_RECORD_COUNT: usize = 4;
 pub const MISCMAPS_CUTSCENE_RECORD_BYTES: usize =
     MISCMAPS_CUTSCENE_ROW_STRIDE * MISCMAPS_CUTSCENE_ROWS;
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct MiscmapsCutsceneMap {
     pub record_index: usize,
     pub tiles: Vec<u8>,

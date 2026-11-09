@@ -4,7 +4,7 @@ use std::io;
 
 use crate::*;
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum TileGraphicsDepth {
     Ega16,
     Cga4,
@@ -96,7 +96,7 @@ impl TileAtlas {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct TileViewport {
     pub depth: TileGraphicsDepth,
     pub cells_wide: usize,

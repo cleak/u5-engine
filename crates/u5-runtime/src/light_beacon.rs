@@ -216,7 +216,7 @@ pub const fn beacon_cone_bearings(bearing: u8) -> [u8; BEACON_CONE_BEARINGS] {
 /// A source slot holding `None` is the spec's "no beacon" sentinel. The
 /// shipped data image starts with both positions at that sentinel, so
 /// nothing is lit until a loader finds a source.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub struct LightBeaconState {
     pub sources: [Option<(u8, u8)>; BEACON_SOURCE_SLOTS],
     pub bearing: u8,
@@ -359,7 +359,7 @@ pub fn harvest_location_beacon_sources(grid: &[u8]) -> [Option<(u8, u8)>; BEACON
 /// reads them out of the shipped `DATA.OVL` at load time rather than
 /// carrying a copy: the table is published prose now, but the bytes stay
 /// where the game ships them.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub struct BeaconBearingStencils {
     offsets: [[(i8, i8); BEACON_STENCIL_MAX_OFFSETS]; BEACON_BEARING_COUNT as usize],
     lengths: [u8; BEACON_BEARING_COUNT as usize],

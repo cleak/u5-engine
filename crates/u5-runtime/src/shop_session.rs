@@ -11,7 +11,7 @@ use crate::shops::{
 
 /// Identifies which of the eight shop kinds is open and owns its
 /// per-shop state machine.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum ActiveShopSession {
     Arms(ArmsShopState),
     ArmsLocal(ArmsShopState, ArmsShop),

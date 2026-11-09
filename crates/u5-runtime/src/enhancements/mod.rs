@@ -15,6 +15,8 @@
 //!   [`SettingNote`]s resolution reports (design 1.3.3, 1.3.11, 1.3.14).
 //! - [`mod@resolve`]: the pure, total [`resolve()`] that turns those into
 //!   [`ResolvedEnhancements`] (design 1.3.2, 1.3.3).
+//! - [`digest`]: the [`trajectory_digest`] of a [`PlayState`](crate::PlayState)
+//!   that the equivalence harness compares runs with (design 1.3.12).
 //! - [`idle`]: the idle-prompt predicate's runtime half,
 //!   [`PlayState::idle_command_prompt`](crate::PlayState::idle_command_prompt)
 //!   (design 1.3.7).
@@ -29,6 +31,7 @@
 //! `u5_bevy::VisualLaunchConfig`.
 
 pub mod catalogue;
+pub mod digest;
 pub mod idle;
 pub mod resolve;
 pub mod sidecar;
@@ -39,6 +42,9 @@ pub use catalogue::{
     OptionSpec, PANEL_WORDS, PRESETS, Phase, Preset, PresetEntry, PresetValue, SHIPPED_PHASES,
     SIDE_CLAIM_KEYS, SIDE_SPACE_KEYS, SoftDep, TOGGLE_KEYS, TOGGLES, Tag, Tier, Toggle, ToggleSpec,
     settings_table,
+};
+pub use digest::{
+    DIGEST_GROUPS, SKIPPED_FIELDS, TrajectoryDigest, digest_groups, trajectory_digest,
 };
 pub use idle::{GUARDED_DRAINS, GuardedDrain, IdleBlocker, IdlePromptKind};
 pub use resolve::{

@@ -11,7 +11,7 @@ use crate::*;
 pub const WORLD_LIVE_CHUNK_QUADRANTS: [(usize, usize); OVERWORLD_CHUNK_BUFFER_CHUNKS] =
     [(0, 0), (1, 0), (0, 1), (1, 1)];
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub struct WorldChunkDescriptor {
     pub plane: WorldPlane,
     pub logical_slot: usize,
@@ -19,7 +19,7 @@ pub struct WorldChunkDescriptor {
     pub all_water: bool,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct WorldLiveChunkBuffer {
     pub plane: WorldPlane,
     pub scroll_base: (usize, usize),

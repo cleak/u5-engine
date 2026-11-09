@@ -27,7 +27,7 @@ pub const ARMS_SHOP_STOCK_TABLE_LEN: usize = 8;
 /// `shops.md §7` / public issue #41 scene-local arms-shop rows. The
 /// stock arrays are the published `a..h` resident menu bytes; `0xFF`
 /// terminates each row while `0x00` remains a valid equipment id.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum ArmsShop {
     IolosBows,
     NaughtyNomaans,
@@ -72,7 +72,7 @@ impl ArmsShop {
     }
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub struct ArmsStockTable {
     pub item_ids: [u8; ARMS_SHOP_STOCK_TABLE_LEN],
     pub len: u8,
@@ -533,7 +533,7 @@ pub enum ArmsSaleError {
     NoStock,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum GuildShop {
     TheDen,
     TheGuild,
@@ -550,7 +550,7 @@ impl GuildShop {
     }
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum GuildCommodity {
     Keys,
     Gems,
@@ -651,7 +651,7 @@ pub enum GuildPurchaseError {
     InsufficientGold { available: u16, required: u16 },
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum Shipwright {
     IslandShipwrights,
     TheCrowsNest,
@@ -670,7 +670,7 @@ impl Shipwright {
     }
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum ShipwrightPurchaseKind {
     Frigate,
     Skiff,
@@ -712,7 +712,7 @@ pub const fn shipwright_menu_action(byte: u8) -> ShipwrightMenuAction {
     }
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub struct ShipwrightPurchaseQuote {
     pub shipwright: Shipwright,
     pub kind: ShipwrightPurchaseKind,
@@ -743,7 +743,7 @@ pub enum ShipwrightPurchaseError {
     NoReturnWorld,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum Stable {
     HorseAndRider,
     TheStablehouse,
@@ -782,7 +782,7 @@ pub enum HorsePurchaseError {
     NoCurrentFloor,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum Healer {
     TheHealersMission,
     WoundsOfHonour,
@@ -921,7 +921,7 @@ pub const fn healer_treatment_accepts(
     }
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum Herbalist {
     TheHerbalist,
     HealersHerbs,
@@ -942,7 +942,7 @@ impl Herbalist {
     }
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum Reagent {
     SulfurAsh,
     Ginseng,
@@ -1101,7 +1101,7 @@ pub const fn tavern_drink_prompt(byte: u8) -> TavernDrinkPrompt {
     }
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum Tavern {
     TheHonestMeal,
     TheWayfarerTavern,
@@ -1305,7 +1305,7 @@ pub const fn inn_pickup_status_converts_to_dead(stored_status: CharacterStatus) 
 /// month-rollover cap stay a single value.
 pub const INN_STAY_COUNTER_MAX: u8 = INN_STAY_COUNTER_CAP;
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum Inn {
     TheWayfarerInn,
     TheWarriorsStead,
@@ -1458,7 +1458,7 @@ pub const fn inn_main_action(byte: u8) -> InnMainAction {
     }
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub struct InnGuestRecord {
     /// The roster record this lodged guest is (`formats/saved-gam.md` §3.3,
     /// u5-spec#299 Q14: "a lodged companion is an ordinary roster record
@@ -1650,7 +1650,7 @@ pub fn sage_topic_matches(typed: &str, topic: &str) -> bool {
     typed_bytes[topic_bytes.len()] == b' '
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub struct SageRumourEntry {
     pub keyword: &'static str,
     pub subject: &'static str,
@@ -1819,7 +1819,7 @@ pub const SAGE_RUMOUR_TABLE: SageRumourTable = [
     },
 ];
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub struct SageRumourQuote {
     pub entry: SageRumourEntry,
     pub input_len: usize,

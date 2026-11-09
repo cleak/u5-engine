@@ -998,7 +998,7 @@ pub const PICKER_PANEL_COLUMNS: usize = 16;
 pub const PICKER_PANEL_ROWS: usize = 9;
 
 /// One painted cell of the panel text window.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub struct PanelCell {
     pub code: u8,
     pub runic: bool,
@@ -1023,7 +1023,7 @@ pub struct PanelCell {
 /// `1 Sceptre`, a second `Shard/Falsehd`, a stray `S` in column 0 and a
 /// `d` in column 15 beside `G:150`, all residue; this engine cleared the
 /// panel on every frame.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct PickerPanelCells {
     cells: Vec<Option<PanelCell>>,
 }
@@ -1665,7 +1665,7 @@ pub fn paint_z_stats_page_text_window(system: &mut TextWindowSystem, state: &Pla
 }
 
 /// Which of `stats-panel.md §2.2`'s mechanisms a command leaves behind.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
 pub enum PanelRefreshMode {
     /// The command repaints the panel itself. The census's majority case, so
     /// the default: seventy-four of the ninety-seven sites that touch the
@@ -1706,7 +1706,7 @@ pub enum PanelRefreshMode {
 /// Only the body is snapshotted. The selector highlight and the active-player
 /// marker are not part of a refresh - `stats-panel.md §9` has member
 /// selection "leave the body alone" - and are injected live at paint time.
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
+#[derive(Clone, Debug, Default, PartialEq, Eq, Hash)]
 pub struct StatsPanelSnapshot {
     /// One entry per roster row, already reduced to the panel's fixed width.
     pub rows: Vec<String>,

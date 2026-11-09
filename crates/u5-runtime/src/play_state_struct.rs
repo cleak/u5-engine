@@ -1185,7 +1185,7 @@ pub struct PlayState {
 /// What a difficult-terrain step still owes after a terrain combat opened
 /// inside one of its extra object-update calls; see
 /// [`PlayState::pending_difficult_terrain_step`].
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub struct PendingDifficultTerrainStep {
     pub plane: WorldPlane,
     pub step: WorldDifficultTerrainStep,
@@ -1195,7 +1195,7 @@ pub struct PendingDifficultTerrainStep {
     pub transition: Option<WorldPlaneTransitionEntry>,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct ViewOverlay {
     pub title: String,
     pub text_map: String,
@@ -1203,14 +1203,14 @@ pub struct ViewOverlay {
     pub mode: ViewOverlayMode,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum ViewOverlayKind {
     Surface,
     Sky(SkyOverlayState),
     Dungeon { level: u8 },
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum ViewOverlayMode {
     GemView,
     PeerSpell,
@@ -1240,7 +1240,7 @@ pub enum ViewOverlayMode {
 /// window, straight from the map, with no distance test, no propagation
 /// frontier and no blocker rule (`systems/visibility.md §3`/`§4`, corrected by
 /// R327). It then holds that unchanged field through twenty repaints.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub struct VisibilitySweep {
     pub frames_remaining: u8,
     pub pause_bios_ticks_per_frame: u8,
@@ -1251,7 +1251,7 @@ pub struct VisibilitySweep {
     pub visible_cells: [bool; VIEWPORT_SIDE * VIEWPORT_SIDE],
 }
 
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
+#[derive(Clone, Debug, Default, PartialEq, Eq, Hash)]
 pub struct WorldOverlayCache {
     pub britannia: Option<Vec<ActiveObject>>,
     pub underworld: Option<Vec<ActiveObject>>,
@@ -1273,7 +1273,7 @@ impl WorldOverlayCache {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Hash)]
 pub struct WorldReturn {
     pub plane: WorldPlane,
     pub x: usize,
@@ -1300,7 +1300,7 @@ pub struct WorldReturn {
 /// staged hold is also what makes the loop buffer keys for that time, as the
 /// original's blocking flash does. One mechanism for every spell whose result
 /// follows its flash.
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
+#[derive(Clone, Debug, Default, PartialEq, Eq, Hash)]
 pub struct MessageWindowFlashHold {
     /// A C-Cast dispatch is running, so a shared variant is a spell's flash
     /// (scrolls and potions reach the same sound through their own paths).
@@ -1326,7 +1326,7 @@ impl MessageWindowFlashHold {
 /// prefix before its handler runs; the original renders those lines with
 /// a leading `>` glyph and continuation lines without one. `is_command_echo`
 /// carries that distinction to the renderer.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct MessageEntry {
     pub text: String,
     /// Set when this entry is a blank row a *producer* wrote, from a line
@@ -1401,7 +1401,7 @@ pub struct MessageEntry {
 
 /// Bookkeeping for a verb echo that has been written to the transcript
 /// but whose handler has not finished yet.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Hash)]
 pub(crate) struct PendingCommandEcho {
     pub(crate) echo: CommandEcho,
     /// `PlayState::message` as it stood when the echo was opened, so the
