@@ -27,6 +27,9 @@
 //!   `fit_display_to_window`, `side::faithful_fit_owns_frame`, is the one
 //!   edit to the faithful layout path, and is true while the arbiter is
 //!   absent.
+//! - The presentation pipeline host ([`present`]) is added only when a
+//!   feature registers a step. With no step the frame sprite shows the
+//!   faithful image, and no upload site is edited.
 //!
 //! Every enhancement system sits in one of the six [`EnhSet`]s. The plugin
 //! declares their edges once, against the faithful systems of both app
@@ -37,6 +40,7 @@
 pub mod idle;
 pub mod input;
 pub mod overlay;
+pub mod present;
 pub mod side;
 pub mod synthetic;
 pub mod toast;
