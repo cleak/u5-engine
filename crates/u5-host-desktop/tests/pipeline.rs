@@ -289,3 +289,82 @@ fn choosing_the_managed_copy_itself_reuses_it() {
         first.data_dir.canonicalize().unwrap()
     );
 }
+
+#[test]
+fn commit_keeps_every_enhancement_section_and_changes_only_its_three_keys() {
+    let scratch = Scratch::new("sections");
+    let game = scratch.home().join("GOG Games").join("Ultima 5");
+    populate(&game, str::to_string);
+    let host = scratch.host(&[]);
+    let sections = "\
+# My own note.
+game_dir = \"/old/place\" # chosen in 2025
+data_dir = \"/old/copy\"
+version = \"gog-1.0\"
+future_key = [1, 2]
+
+[enhancements]
+preset = \"modern\"   # keep this
+
+[display]
+vsync = false
+
+[cheats.engaged]
+hp = true
+";
+    fs::create_dir_all(host.paths.config_file.parent().unwrap()).unwrap();
+    fs::write(&host.paths.config_file, sections).unwrap();
+
+    let result = host.commit(&game, Origin::Setup).unwrap();
+    let config = host.load_config().unwrap();
+    let text = fs::read_to_string(&host.paths.config_file).unwrap();
+    let game_dir = config.game_dir.clone().unwrap();
+    let data_dir = config.data_dir.clone().unwrap();
+    assert_eq!(game_dir, game.canonicalize().unwrap());
+    assert_eq!(
+        data_dir.canonicalize().unwrap(),
+        result.data_dir.canonicalize().unwrap()
+    );
+    let quote = |path: &Path| toml_edit::Value::from(path.to_str().unwrap()).to_string();
+    let expected = sections
+        .replace("\"/old/place\"", &quote(&game_dir))
+        .replace("\"/old/copy\"", &quote(&data_dir))
+        .replace("\"gog-1.0\"", &format!("\"{}\"", config.version.unwrap()));
+    assert_eq!(text, expected);
+    assert!(
+        !host
+            .paths
+            .config_file
+            .with_file_name("config.toml.bak")
+            .exists()
+    );
+}
+
+#[test]
+fn a_damaged_config_is_backed_up_before_discovery_commits_over_it() {
+    let scratch = Scratch::new("damaged-backup");
+    let game = scratch.home().join("GOG Games").join("Ultima 5");
+    populate(&game, str::to_string);
+    let host = scratch.host(&[]);
+    let damaged = "game_dir = [\n[display]\nvsync = false\n";
+    fs::create_dir_all(host.paths.config_file.parent().unwrap()).unwrap();
+    fs::write(&host.paths.config_file, damaged).unwrap();
+
+    let ready = ready(host.resolve(&ResolveRequest::default()));
+    assert!(
+        ready
+            .notes
+            .iter()
+            .any(|note| note.contains("Ignoring settings")),
+        "{:?}",
+        ready.notes
+    );
+    let backup = host.paths.config_file.with_file_name("config.toml.bak");
+    assert_eq!(fs::read_to_string(backup).unwrap(), damaged);
+    let text = fs::read_to_string(&host.paths.config_file).unwrap();
+    assert!(text.starts_with("# Ultima V engine settings"), "{text}");
+    assert_eq!(
+        host.load_config().unwrap().game_dir.unwrap(),
+        game.canonicalize().unwrap()
+    );
+}

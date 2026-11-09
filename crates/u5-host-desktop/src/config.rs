@@ -2,14 +2,17 @@
 //!
 //! It remembers the game folder the player chose, the managed (normalised)
 //! copy the engine actually runs from, and the release that copy was
-//! validated as. Unknown keys are ignored, so older and newer builds can
-//! share one file.
+//! validated as. Unknown keys are ignored, and saving keeps them (through
+//! [`ConfigDocument`]), so older and newer builds can share one file.
 
 use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
+use toml_edit::Value;
+
+use crate::settings::ConfigDocument;
 
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Config {
@@ -62,7 +65,14 @@ impl Config {
             .map_err(|error| ConfigError::Parse(path.to_path_buf(), error.message().to_string()))
     }
 
-    /// Write the file (creating its folder), via a temporary file.
+    /// Write this config's three keys into the file (creating its folder),
+    /// via a temporary file.
+    ///
+    /// Every other key, section and comment in the file is kept, so setup
+    /// never deletes enhancement settings (Phase B design 1.3.4). With no
+    /// file, the text 1.0.1 wrote is written. A file that is not valid TOML
+    /// is first copied to `config.toml.bak`, then replaced by that text. An
+    /// unchanged file is not rewritten.
     pub fn save(&self, path: &Path) -> Result<(), ConfigError> {
         let body = toml::to_string_pretty(self)
             .map_err(|error| ConfigError::Parse(path.to_path_buf(), error.to_string()))?;
@@ -72,15 +82,18 @@ impl Config {
              {body}"
         );
         let io = |error| ConfigError::Io(path.to_path_buf(), error);
-        if let Some(parent) = path
-            .parent()
-            .filter(|parent| !parent.as_os_str().is_empty())
-        {
-            fs::create_dir_all(parent).map_err(io)?;
-        }
-        let temp = path.with_extension("toml.tmp");
-        fs::write(&temp, text).map_err(io)?;
-        fs::rename(&temp, path).map_err(io)
+        let mut document = ConfigDocument::load(path).map_err(io)?;
+        document
+            .start_fresh(&text)
+            .map_err(|error| ConfigError::Parse(path.to_path_buf(), error.to_string()))?;
+        // `to_string_pretty` succeeded, so every path is UTF-8.
+        let path_value =
+            |dir: &Option<PathBuf>| dir.as_ref().and_then(|dir| dir.to_str()).map(Value::from);
+        document.assign("game_dir", path_value(&self.game_dir));
+        document.assign("data_dir", path_value(&self.data_dir));
+        document.assign("version", self.version.as_deref().map(Value::from));
+        document.save_if_changed().map_err(io)?;
+        Ok(())
     }
 }
 
@@ -120,5 +133,145 @@ mod tests {
             Some("gog-1.0")
         );
         fs::remove_dir_all(dir).unwrap();
+    }
+
+    struct Scratch(PathBuf);
+
+    impl Scratch {
+        fn new(label: &str) -> Self {
+            let unique = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos();
+            let dir = std::env::temp_dir().join(format!(
+                "u5-host-config-{label}-{}-{unique}",
+                std::process::id()
+            ));
+            fs::create_dir_all(&dir).unwrap();
+            Self(dir)
+        }
+        fn config(&self) -> PathBuf {
+            self.0.join("config.toml")
+        }
+    }
+
+    impl Drop for Scratch {
+        fn drop(&mut self) {
+            let _ = fs::remove_dir_all(&self.0);
+        }
+    }
+
+    fn sample() -> Config {
+        Config {
+            game_dir: Some(PathBuf::from(r"C:\GOG Games\Ultima 5")),
+            data_dir: Some(PathBuf::from(
+                "/home/ann/.local/share/u5-engine/game-data/x",
+            )),
+            version: Some("gog-1.0".into()),
+        }
+    }
+
+    /// What 1.0.1's `Config::save` wrote for [`sample`], byte for byte.
+    const SAMPLE_1_0_1: &str = "\
+# Ultima V engine settings. Written by the setup wizard; safe to edit.
+# game_dir: the folder you chose. data_dir: the managed copy the game runs from.
+game_dir = 'C:\\GOG Games\\Ultima 5'
+data_dir = \"/home/ann/.local/share/u5-engine/game-data/x\"
+version = \"gog-1.0\"
+";
+
+    #[test]
+    fn with_no_file_the_1_0_1_bytes_are_written() {
+        let scratch = Scratch::new("golden");
+        let path = scratch.config();
+        sample().save(&path).unwrap();
+        assert_eq!(fs::read_to_string(&path).unwrap(), SAMPLE_1_0_1);
+        // Matches the serialiser 1.0.1 used, header included.
+        let body = toml::to_string_pretty(&sample()).unwrap();
+        assert!(SAMPLE_1_0_1.ends_with(&body));
+        assert_eq!(SAMPLE_1_0_1.lines().count(), body.lines().count() + 2);
+
+        let partial = scratch.0.join("partial.toml");
+        Config {
+            version: Some("unknown".into()),
+            ..Config::default()
+        }
+        .save(&partial)
+        .unwrap();
+        assert!(
+            fs::read_to_string(&partial)
+                .unwrap()
+                .ends_with("\nversion = \"unknown\"\n")
+        );
+    }
+
+    #[test]
+    fn a_1_0_1_file_round_trips_byte_for_byte_and_is_not_rewritten() {
+        let scratch = Scratch::new("unchanged");
+        let path = scratch.config();
+        fs::write(&path, SAMPLE_1_0_1).unwrap();
+        let config = Config::load(&path).unwrap();
+        assert_eq!(config, sample());
+        #[cfg(unix)]
+        let inode = {
+            use std::os::unix::fs::MetadataExt as _;
+            fs::metadata(&path).unwrap().ino()
+        };
+        config.save(&path).unwrap();
+        assert_eq!(fs::read_to_string(&path).unwrap(), SAMPLE_1_0_1);
+        // Saved only when changed: the file was not replaced.
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::MetadataExt as _;
+            assert_eq!(fs::metadata(&path).unwrap().ino(), inode);
+        }
+    }
+
+    #[test]
+    fn save_keeps_every_section_it_does_not_own() {
+        let scratch = Scratch::new("sections");
+        let path = scratch.config();
+        let extra = "\
+future_key = 1 # from a newer build
+
+[enhancements]
+preset = \"modern\"
+
+[display]
+vsync = false
+";
+        let original = format!("{SAMPLE_1_0_1}{extra}");
+        fs::write(&path, &original).unwrap();
+        let moved = Config {
+            game_dir: Some(PathBuf::from("/games/u5")),
+            data_dir: None,
+            version: Some("unknown".into()),
+        };
+        moved.save(&path).unwrap();
+        let expected = original
+            .replace(r"'C:\GOG Games\Ultima 5'", "\"/games/u5\"")
+            .replace(
+                "data_dir = \"/home/ann/.local/share/u5-engine/game-data/x\"\n",
+                "",
+            )
+            .replace("\"gog-1.0\"", "\"unknown\"");
+        assert_eq!(fs::read_to_string(&path).unwrap(), expected);
+        assert_eq!(Config::load(&path).unwrap(), moved);
+    }
+
+    #[test]
+    fn a_damaged_file_is_backed_up_then_replaced_by_the_1_0_1_text() {
+        let scratch = Scratch::new("damaged");
+        let path = scratch.config();
+        let damaged = "game_dir = [\n[display]\nvsync = false\n";
+        fs::write(&path, damaged).unwrap();
+        assert!(Config::load(&path).is_err());
+        sample().save(&path).unwrap();
+        assert_eq!(
+            fs::read_to_string(scratch.0.join("config.toml.bak")).unwrap(),
+            damaged
+        );
+        assert_eq!(fs::read_to_string(&path).unwrap(), SAMPLE_1_0_1);
+        assert!(!scratch.0.join("config.toml.tmp").exists());
     }
 }

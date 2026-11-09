@@ -4516,6 +4516,7 @@ dependencies = [
  "rfd",
  "serde",
  "toml",
+ "toml_edit 0.22.27",
  "u5-gamedata",
  "winreg",
 ]

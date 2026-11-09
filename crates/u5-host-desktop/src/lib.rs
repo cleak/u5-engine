@@ -14,6 +14,7 @@ pub mod discovery;
 pub mod help;
 pub mod paths;
 pub mod pipeline;
+pub mod settings;
 
 use std::io::Write as _;
 
@@ -28,6 +29,7 @@ pub use pipeline::{
     CHOSEN_FOLDER_LIMITS, DesktopHost, Origin, ReadyGameData, Resolution, ResolveRequest,
     SetupError, WizardNeed, has_every_required_file_exactly, managed_directory_name,
 };
+pub use settings::ConfigDocument;
 
 /// The runtime save-mirror root for this process, migrating saves from the
 /// old temp-folder location on first use. Returns the root and, when a

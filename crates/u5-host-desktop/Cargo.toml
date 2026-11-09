@@ -15,6 +15,8 @@ native-dialogs = ["dep:rfd"]
 u5-gamedata = { workspace = true }
 serde = { version = "1", features = ["derive"] }
 toml = "0.8"
+# In-place edits of config.toml; already in the build through `toml`.
+toml_edit = "0.22"
 rfd = { version = "0.17", optional = true }
 
 [target.'cfg(windows)'.dependencies]
