@@ -15,12 +15,15 @@
 //!   `run_if(toggle_on(T))`.
 //! - The foundation's own `apply_pending_toggles` runs only while
 //!   [`PendingToggleChanges`] holds something.
+//! - The hotkey router ([`input`]) is added only while some key is bound.
 //!
 //! Every enhancement system sits in one of the six [`EnhSet`]s. The plugin
 //! declares their edges once, against the faithful systems of both app
 //! chains and the intro builder; feature plugins put their systems in a set
 //! and never name a faithful system. The faithful systems themselves are
 //! not edited.
+
+pub mod input;
 
 use std::fmt;
 use std::path::PathBuf;
@@ -32,6 +35,7 @@ use u5_runtime::enhancements::{
     ApplyAt, FeatureToggles, LockState, ResolvedEnhancements, SettingValue, SettingsSink, Toggle,
 };
 
+use self::input::KeyMap;
 use crate::{
     animate_static_tiles, drive_visual, drive_visual_intro, fit_display_to_window,
     present_camp_apparition_flash, screenshot_system,
@@ -166,6 +170,11 @@ impl Plugin for EnhancementsPlugin {
                     .run_if(toggle_changes_pending)
                     .in_set(EnhSet::Apply),
             );
+        input::add_input_router(
+            app,
+            &self.launch.enhancements.keys,
+            self.launch.enhancements.toggles,
+        );
     }
 }
 
@@ -216,12 +225,24 @@ fn toggle_changes_pending(pending: Res<PendingToggleChanges>) -> bool {
 /// - `IdlePrompt`: held. The idle-prompt predicate (design 1.3.7) releases
 ///   them; until it exists they stay pending, which changes nothing.
 /// - `NextLaunch`: stored only.
+///
+/// When the toggles changed, the [`KeyMap`] is rebuilt, so a feature
+/// switched off releases its keys in the same frame.
 fn apply_pending_toggles(
     mut pending: ResMut<PendingToggleChanges>,
     mut toggles: ResMut<Toggles>,
     launch: Res<EnhLaunch>,
+    keymap: Option<ResMut<KeyMap>>,
 ) {
+    let before = toggles.0;
     let stored = drain_pending_toggles(&mut pending.0, &mut toggles.0, |t| t.spec().apply);
+    if toggles.0 != before
+        && let Some(mut keymap) = keymap
+    {
+        for note in keymap.rebuild(&launch.0.enhancements.keys, toggles.0) {
+            warn!("{note}");
+        }
+    }
     if stored.is_empty() {
         return;
     }
