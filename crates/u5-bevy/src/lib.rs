@@ -1495,18 +1495,43 @@ pub fn run_visual_loop(
             ..default()
         }),
         ..default()
-    }))
-    .insert_resource(ClearColor(Color::BLACK))
-    .insert_resource(PendingBootstrap(Mutex::new(Some(bootstrap))))
-    .insert_resource(ScreenshotConfig {
-        path: screenshot_path,
-        frame_delay: screenshot_delay,
-        preset_keys,
-    })
-    .insert_resource(ScreenshotState::default())
-    .add_systems(Startup, setup)
-    .insert_resource(AnimationPump::default())
-    .add_systems(
+    }));
+    build_visual_app(
+        &mut app,
+        bootstrap,
+        ScreenshotConfig {
+            path: screenshot_path,
+            frame_delay: screenshot_delay,
+            preset_keys,
+        },
+    );
+    app.run();
+
+    Ok(())
+}
+
+/// Everything the `--visual` app registers on top of its platform plugins:
+/// the resources, the startup system, the `Update` chain and the speaker
+/// backend, in the order [`run_visual_loop`] has always added them.
+///
+/// `run_visual_loop` adds `DefaultPlugins` with its window first; a headless
+/// test adds its own plugins and builds the same schedules without a window.
+fn build_visual_app(app: &mut App, bootstrap: Bootstrap, screenshot: ScreenshotConfig) {
+    app.insert_resource(ClearColor(Color::BLACK))
+        .insert_resource(PendingBootstrap(Mutex::new(Some(bootstrap))))
+        .insert_resource(screenshot)
+        .insert_resource(ScreenshotState::default())
+        .add_systems(Startup, setup)
+        .insert_resource(AnimationPump::default());
+    add_visual_update_systems(app);
+    add_speaker_audio(app);
+}
+
+/// The `--visual` app's `Update` chain. The default player path builds its
+/// own chain in [`add_visual_intro_update_systems`]; the two share every
+/// gameplay system and its order.
+fn add_visual_update_systems(app: &mut App) {
+    app.add_systems(
         Update,
         (
             drive_visual,
@@ -1521,10 +1546,6 @@ pub fn run_visual_loop(
         )
             .chain(),
     );
-    add_speaker_audio(&mut app);
-    app.run();
-
-    Ok(())
 }
 
 pub fn run_visual_intro_loop(
@@ -9984,28 +10005,7 @@ fn run_visual_intro_menu_app(
     )
     .unwrap_or_else(|err| panic!("intro pre-flourish phase failed: {err}"));
 
-    let mut app = App::new();
-    app.add_plugins(DefaultPlugins.set(WindowPlugin {
-        primary_window: Some(Window {
-            title: "Ultima V Intro".into(),
-            // The same 960x720 window as gameplay, so Journey Onward never
-            // resizes the window (the resize left stale compositor pixels
-            // beside the gameplay surface on the streaming display).
-            resolution: {
-                let size = aspect_corrected_display_size(
-                    INTRO_FRAMEBUFFER_WIDTH,
-                    INTRO_FRAMEBUFFER_HEIGHT,
-                    DISPLAY_SCALE,
-                );
-                (size.x, size.y).into()
-            },
-            resizable: true,
-            ..default()
-        }),
-        ..default()
-    }))
-    .insert_resource(ClearColor(Color::BLACK))
-    .insert_resource(VisualIntroState {
+    let intro = VisualIntroState {
         game_dir,
         raster_depth,
         dispatch: UnifiedMenuDispatch::new(),
@@ -10036,21 +10036,57 @@ fn run_visual_intro_menu_app(
         title_tick_frames: None,
         pending_reveal_clicks: Vec::new(),
         pending_speaker_cancels: Vec::new(),
-    })
-    .insert_resource(VisualIntroAnimationPump::default())
-    // Journey Onward reuses this App. Keep the gameplay wait-loop clock alive
-    // from startup so it can begin on the first full `VisualState` frame.
-    .insert_resource(AnimationPump::default())
-    .insert_resource(ScreenshotConfig {
-        path: screenshot_path,
-        frame_delay: screenshot_delay,
-        preset_keys,
-    })
-    .insert_resource(ScreenshotState::default())
-    .add_systems(Startup, setup_intro);
-    add_speaker_audio(&mut app);
-    add_visual_intro_update_systems(&mut app);
+    };
+    let mut app = App::new();
+    app.add_plugins(DefaultPlugins.set(WindowPlugin {
+        primary_window: Some(Window {
+            title: "Ultima V Intro".into(),
+            // The same 960x720 window as gameplay, so Journey Onward never
+            // resizes the window (the resize left stale compositor pixels
+            // beside the gameplay surface on the streaming display).
+            resolution: {
+                let size = aspect_corrected_display_size(
+                    INTRO_FRAMEBUFFER_WIDTH,
+                    INTRO_FRAMEBUFFER_HEIGHT,
+                    DISPLAY_SCALE,
+                );
+                (size.x, size.y).into()
+            },
+            resizable: true,
+            ..default()
+        }),
+        ..default()
+    }));
+    build_visual_intro_app(
+        &mut app,
+        intro,
+        ScreenshotConfig {
+            path: screenshot_path,
+            frame_delay: screenshot_delay,
+            preset_keys,
+        },
+    );
     app.run();
+}
+
+/// Everything the default player app (the intro, then gameplay after
+/// Journey Onward) registers on top of its platform plugins, in the order
+/// [`run_visual_intro_menu_app`] has always added them.
+///
+/// The caller adds `DefaultPlugins` with its window first; a headless test
+/// adds its own plugins and builds the same schedules without a window.
+fn build_visual_intro_app(app: &mut App, intro: VisualIntroState, screenshot: ScreenshotConfig) {
+    app.insert_resource(ClearColor(Color::BLACK))
+        .insert_resource(intro)
+        .insert_resource(VisualIntroAnimationPump::default())
+        // Journey Onward reuses this App. Keep the gameplay wait-loop clock alive
+        // from startup so it can begin on the first full `VisualState` frame.
+        .insert_resource(AnimationPump::default())
+        .insert_resource(screenshot)
+        .insert_resource(ScreenshotState::default())
+        .add_systems(Startup, setup_intro);
+    add_speaker_audio(app);
+    add_visual_intro_update_systems(app);
 }
 
 fn add_visual_intro_update_systems(app: &mut App) {
@@ -19853,6 +19889,47 @@ mod tests {
     #[cfg(feature = "original-asset-tests")]
     use u5_runtime::{parse_british_bit, parse_title_bit};
 
+    /// The `Update` schedule of `app` as plain text: every system in the
+    /// order the executor runs it, then every ordering edge. Two builds of
+    /// the same chain give the same snapshot; a dropped, added, renamed or
+    /// reordered system, or a lost edge, changes it.
+    fn update_schedule_snapshot(app: &mut App) -> (Vec<String>, Vec<String>) {
+        let world = app.world_mut();
+        let mut schedule = world
+            .resource_mut::<bevy::ecs::schedule::Schedules>()
+            .remove(Update)
+            .expect("the app must install an Update schedule");
+        let graph = schedule.graph();
+        let node = |id| match graph.get_system_at(id) {
+            Some(system) => system.name().into_owned(),
+            None => format!(
+                "set {:?}",
+                graph
+                    .get_set_at(id)
+                    .expect("a graph node is a system or a set")
+            ),
+        };
+        let mut edges: Vec<String> = graph
+            .dependency()
+            .graph()
+            .all_edges()
+            .map(|(from, to)| format!("{} -> {}", node(from), node(to)))
+            .collect();
+        edges.sort();
+        schedule
+            .initialize(world)
+            .expect("the Update schedule must build");
+        let systems = schedule
+            .systems()
+            .expect("an initialized schedule lists its systems")
+            .map(|(_, system)| system.name().into_owned())
+            .collect();
+        world
+            .resource_mut::<bevy::ecs::schedule::Schedules>()
+            .insert(schedule);
+        (systems, edges)
+    }
+
     fn enc_tlk_text(text: &str) -> Vec<u8> {
         text.bytes().map(|b| b ^ TLK_TEXT_XOR_MASK).collect()
     }
@@ -20600,6 +20677,189 @@ mod tests {
         assert_eq!(INTRO_FRAMEBUFFER_HEIGHT, 200);
         assert_eq!(INTRO_FRAMEBUFFER_WIDTH, VISUAL_PLAY_FRAME_WIDTH);
         assert_eq!(INTRO_FRAMEBUFFER_HEIGHT, VISUAL_PLAY_FRAME_HEIGHT);
+    }
+
+    /// The `--visual` app's `Update` chain as `run_visual_loop` built it in
+    /// 1.0.1, recorded from that build before the chain moved into
+    /// [`add_visual_update_systems`]. The `apply_deferred` entries are the
+    /// sync points Bevy inserts after a system with deferred commands.
+    const VISUAL_UPDATE_SYSTEMS_1_0_1: &[&str] = &[
+        "u5_bevy::drive_visual",
+        "u5_bevy::animate_static_tiles",
+        "u5_bevy::fit_display_to_window",
+        "u5_bevy::queue_frame_speaker_effects",
+        "u5_bevy::play_speaker_effects",
+        "bevy_ecs::apply_deferred",
+        "u5_bevy::expire_speaker_voice",
+        "bevy_ecs::apply_deferred",
+        "u5_bevy::present_camp_apparition_flash",
+        "u5_bevy::screenshot_system",
+        "bevy_ecs::apply_deferred",
+        "u5_bevy::log_runtime_diagnostics",
+    ];
+
+    const VISUAL_UPDATE_EDGES_1_0_1: &[&str] = &[
+        "u5_bevy::animate_static_tiles -> u5_bevy::fit_display_to_window",
+        "u5_bevy::drive_visual -> u5_bevy::animate_static_tiles",
+        "u5_bevy::expire_speaker_voice -> u5_bevy::present_camp_apparition_flash",
+        "u5_bevy::fit_display_to_window -> u5_bevy::queue_frame_speaker_effects",
+        "u5_bevy::play_speaker_effects -> u5_bevy::expire_speaker_voice",
+        "u5_bevy::present_camp_apparition_flash -> u5_bevy::screenshot_system",
+        "u5_bevy::queue_frame_speaker_effects -> u5_bevy::play_speaker_effects",
+        "u5_bevy::screenshot_system -> u5_bevy::log_runtime_diagnostics",
+    ];
+
+    /// The default player app's `Update` chain (the intro, then gameplay)
+    /// as 1.0.1 built it, recorded from that build.
+    const INTRO_UPDATE_SYSTEMS_1_0_1: &[&str] = &[
+        "u5_bevy::drive_visual",
+        "u5_bevy::drive_visual_intro",
+        "bevy_ecs::apply_deferred",
+        "u5_bevy::animate_visual_intro_title_effects",
+        "u5_bevy::animate_static_tiles",
+        "u5_bevy::fit_display_to_window",
+        "u5_bevy::queue_frame_speaker_effects",
+        "u5_bevy::play_speaker_effects",
+        "bevy_ecs::apply_deferred",
+        "u5_bevy::expire_speaker_voice",
+        "bevy_ecs::apply_deferred",
+        "u5_bevy::present_camp_apparition_flash",
+        "u5_bevy::screenshot_system",
+        "bevy_ecs::apply_deferred",
+        "u5_bevy::log_runtime_diagnostics",
+    ];
+
+    const INTRO_UPDATE_EDGES_1_0_1: &[&str] = &[
+        "u5_bevy::animate_static_tiles -> u5_bevy::fit_display_to_window",
+        "u5_bevy::animate_visual_intro_title_effects -> u5_bevy::animate_static_tiles",
+        "u5_bevy::drive_visual -> u5_bevy::drive_visual_intro",
+        "u5_bevy::drive_visual_intro -> u5_bevy::animate_visual_intro_title_effects",
+        "u5_bevy::expire_speaker_voice -> u5_bevy::present_camp_apparition_flash",
+        "u5_bevy::fit_display_to_window -> u5_bevy::queue_frame_speaker_effects",
+        "u5_bevy::play_speaker_effects -> u5_bevy::expire_speaker_voice",
+        "u5_bevy::present_camp_apparition_flash -> u5_bevy::screenshot_system",
+        "u5_bevy::queue_frame_speaker_effects -> u5_bevy::play_speaker_effects",
+        "u5_bevy::screenshot_system -> u5_bevy::log_runtime_diagnostics",
+    ];
+
+    fn assert_update_snapshot(app: &mut App, systems: &[&str], edges: &[&str], label: &str) {
+        let (actual_systems, actual_edges) = update_schedule_snapshot(app);
+        assert_eq!(
+            actual_systems, systems,
+            "{label}: the Update systems or their order moved from 1.0.1"
+        );
+        assert_eq!(
+            actual_edges, edges,
+            "{label}: the Update ordering edges moved from 1.0.1"
+        );
+    }
+
+    /// The headless plugin set the builders run under in tests: no window,
+    /// no renderer, no audio device, only what the registrations themselves
+    /// need (the asset server for the speaker's wave assets).
+    fn headless_builder_app() -> App {
+        let mut app = App::new();
+        app.add_plugins((MinimalPlugins, bevy::asset::AssetPlugin::default()));
+        app
+    }
+
+    fn startup_system_names(app: &App) -> Vec<String> {
+        app.world()
+            .resource::<bevy::ecs::schedule::Schedules>()
+            .get(Startup)
+            .expect("the builder must install a Startup schedule")
+            .graph()
+            .systems()
+            .map(|(_, system, _)| system.name().into_owned())
+            .collect()
+    }
+
+    fn builder_screenshot_config() -> ScreenshotConfig {
+        ScreenshotConfig {
+            path: None,
+            frame_delay: 0,
+            preset_keys: Vec::new(),
+        }
+    }
+
+    #[test]
+    fn visual_update_chain_matches_the_1_0_1_schedule() {
+        let mut app = App::new();
+        add_visual_update_systems(&mut app);
+        assert_update_snapshot(
+            &mut app,
+            VISUAL_UPDATE_SYSTEMS_1_0_1,
+            VISUAL_UPDATE_EDGES_1_0_1,
+            "--visual",
+        );
+    }
+
+    #[test]
+    fn intro_update_chain_matches_the_1_0_1_schedule() {
+        let mut app = App::new();
+        add_visual_intro_update_systems(&mut app);
+        assert_update_snapshot(
+            &mut app,
+            INTRO_UPDATE_SYSTEMS_1_0_1,
+            INTRO_UPDATE_EDGES_1_0_1,
+            "default player path",
+        );
+    }
+
+    #[test]
+    fn visual_app_builder_builds_the_1_0_1_schedules_without_a_window() {
+        let font = parse_ch_font(&vec![0x00; CH_FONT_LEN], IBM_CH_FILE).unwrap();
+        let bootstrap = Bootstrap {
+            game_dir: PathBuf::from("."),
+            state: test_state(open_grid(), 1, 1),
+            atlas: synthetic_tile_atlas(TileGraphicsDepth::Ega16),
+            text_font: font.clone(),
+            rune_font: font,
+        };
+        let mut app = headless_builder_app();
+        build_visual_app(&mut app, bootstrap, builder_screenshot_config());
+
+        assert_eq!(startup_system_names(&app), ["u5_bevy::setup"]);
+        let world = app.world();
+        assert!(world.contains_resource::<PendingBootstrap>());
+        assert!(world.contains_resource::<ScreenshotConfig>());
+        assert!(world.contains_resource::<ScreenshotState>());
+        assert!(world.contains_resource::<AnimationPump>());
+        assert!(world.contains_resource::<SpeakerJitter>());
+        assert!(world.contains_resource::<SpeakerQueue>());
+        assert!(world.contains_resource::<Events<SpeakerEffect>>());
+        assert!(!world.contains_resource::<VisualIntroState>());
+        assert_update_snapshot(
+            &mut app,
+            VISUAL_UPDATE_SYSTEMS_1_0_1,
+            VISUAL_UPDATE_EDGES_1_0_1,
+            "--visual builder",
+        );
+    }
+
+    #[test]
+    fn intro_app_builder_builds_the_1_0_1_schedules_without_a_window() {
+        let intro = read_only_intro_state_for_local_assets(Path::new("."), VisualIntroPanel::Menu);
+        let mut app = headless_builder_app();
+        build_visual_intro_app(&mut app, intro, builder_screenshot_config());
+
+        assert_eq!(startup_system_names(&app), ["u5_bevy::setup_intro"]);
+        let world = app.world();
+        assert!(world.contains_resource::<VisualIntroState>());
+        assert!(world.contains_resource::<VisualIntroAnimationPump>());
+        // Journey Onward reuses the App, so the gameplay pump exists from
+        // startup.
+        assert!(world.contains_resource::<AnimationPump>());
+        assert!(world.contains_resource::<ScreenshotConfig>());
+        assert!(world.contains_resource::<ScreenshotState>());
+        assert!(world.contains_resource::<SpeakerQueue>());
+        assert!(!world.contains_resource::<PendingBootstrap>());
+        assert_update_snapshot(
+            &mut app,
+            INTRO_UPDATE_SYSTEMS_1_0_1,
+            INTRO_UPDATE_EDGES_1_0_1,
+            "default player builder",
+        );
     }
 
     #[test]
@@ -32328,8 +32588,9 @@ mod tests {
     }
 
     /// The shell's own gameplay systems over a loaded scene at 60 Hz host
-    /// frames: the keyboard dispatcher, the idle pump, the speaker queue, its
-    /// expiry and the viewport flash. Keys arrive the way the window delivers
+    /// frames: the `--visual` app's whole `Update` chain from
+    /// [`add_visual_update_systems`] - the keyboard dispatcher, the idle pump,
+    /// the speaker queue, its expiry and the viewport flash. Keys arrive the way the window delivers
     /// them - one ordered `KeyboardInput` event per press, plus the
     /// `ButtonInput` state the input plugin derives from those events.
     #[cfg(feature = "original-asset-tests")]
@@ -32389,18 +32650,15 @@ mod tests {
             app.init_resource::<Assets<VisualSoundWave>>()
                 .init_resource::<SpeakerJitter>()
                 .init_resource::<SpeakerQueue>();
-            app.add_systems(
-                Update,
-                (
-                    drive_visual,
-                    animate_static_tiles,
-                    queue_frame_speaker_effects,
-                    play_speaker_effects,
-                    expire_speaker_voice,
-                    present_camp_apparition_flash,
-                )
-                    .chain(),
-            );
+            // The window-only systems in the chain are inert here: no window
+            // to fit, and no screenshot path.
+            app.insert_resource(ScreenshotConfig {
+                path: None,
+                frame_delay: 0,
+                preset_keys: Vec::new(),
+            })
+            .insert_resource(ScreenshotState::default());
+            add_visual_update_systems(&mut app);
             Self { app, dir }
         }
 
@@ -33187,6 +33445,8 @@ mod tests {
         // host-clock seeded and its idle frames draw from it, so pin the
         // seed after them, just before the preset keys.
         shell.visual_mut().state.prng_state = 0x1234;
+        // The shell's chain already runs `screenshot_system` after the
+        // viewport flash; a screenshot path wakes it.
         let shot = shell.dir.join("never-taken.png");
         shell
             .app
@@ -33195,11 +33455,7 @@ mod tests {
                 frame_delay: u32::MAX,
                 preset_keys: vec!['U', '\r', ' ', 'Z'],
             })
-            .insert_resource(ScreenshotState::default())
-            .add_systems(
-                Update,
-                screenshot_system.after(present_camp_apparition_flash),
-            );
+            .insert_resource(ScreenshotState::default());
 
         let started = std::time::Instant::now();
         let mut drunk_at = None;
