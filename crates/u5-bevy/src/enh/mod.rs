@@ -19,6 +19,9 @@
 //! - The overlay model ([`overlay`]) is added only while an overlay feature
 //!   is on. The idle predicate ([`idle`]) is a run condition and adds
 //!   nothing of its own.
+//! - The toast line and badges ([`toast`]) and the synthetic-key owner
+//!   ([`synthetic`]) are added only by a feature that uses them (the
+//!   overlay model brings the toasts for its refusals).
 //!
 //! Every enhancement system sits in one of the six [`EnhSet`]s. The plugin
 //! declares their edges once, against the faithful systems of both app
@@ -29,6 +32,8 @@
 pub mod idle;
 pub mod input;
 pub mod overlay;
+pub mod synthetic;
+pub mod toast;
 
 use std::fmt;
 use std::path::PathBuf;

@@ -18,6 +18,7 @@ use u5_runtime::{
 
 use super::*;
 use crate::enh::input::{EnhActionEvent, OverlayKey};
+use crate::enh::toast::{ShellBadges, ToastKind};
 use crate::enh::{VisualLaunchConfig, add_enhancements, configure_enh_sets};
 use crate::{
     AnimationPump, HeldDirectionRepeat, SpeakerEffect, SpeakerVoice, TypedKey,
@@ -49,7 +50,7 @@ fn test_overlay(
 }
 
 /// A synthetic town at its idle command prompt, drawing into a real image.
-fn idle_visual_state(images: &mut Assets<Image>) -> VisualState {
+pub(crate) fn idle_visual_state(images: &mut Assets<Image>) -> VisualState {
     let font = parse_ch_font(&vec![0x00; CH_FONT_LEN], IBM_CH_FILE).unwrap();
     let image_handle = images.add(Image::new(
         Extent3d {
@@ -84,12 +85,12 @@ fn idle_visual_state(images: &mut Assets<Image>) -> VisualState {
 /// The gameplay input driver and idle pump on [`idle_visual_state`], under
 /// manual time; with `overlay`, the router with every default bound, the
 /// overlay model and the test overlay.
-struct Game {
-    app: App,
+pub(crate) struct Game {
+    pub(crate) app: App,
 }
 
 impl Game {
-    fn new(overlay: bool) -> Self {
+    pub(crate) fn new(overlay: bool) -> Self {
         let mut images = Assets::<Image>::default();
         let visual = idle_visual_state(&mut images);
         let mut app = App::new();
@@ -121,7 +122,7 @@ impl Game {
         Self { app }
     }
 
-    fn event(&mut self, key_code: KeyCode, state: ButtonState, repeat: bool) {
+    pub(crate) fn event(&mut self, key_code: KeyCode, state: ButtonState, repeat: bool) {
         let world = self.app.world_mut();
         let mut keyboard = world.resource_mut::<ButtonInput<KeyCode>>();
         match state {
@@ -138,20 +139,20 @@ impl Game {
         });
     }
 
-    fn press(&mut self, key: KeyCode) {
+    pub(crate) fn press(&mut self, key: KeyCode) {
         self.event(key, ButtonState::Pressed, false);
     }
 
-    fn repeat(&mut self, key: KeyCode) {
+    pub(crate) fn repeat(&mut self, key: KeyCode) {
         self.event(key, ButtonState::Pressed, true);
     }
 
-    fn release(&mut self, key: KeyCode) {
+    pub(crate) fn release(&mut self, key: KeyCode) {
         self.event(key, ButtonState::Released, false);
     }
 
     /// One frame of manual time, as the shell's harness steps it.
-    fn frame(&mut self) {
+    pub(crate) fn frame(&mut self) {
         let world = self.app.world_mut();
         world.resource_mut::<Time>().advance_by(FRAME);
         world
@@ -164,16 +165,16 @@ impl Game {
             .clear();
     }
 
-    fn visual(&self) -> &VisualState {
+    pub(crate) fn visual(&self) -> &VisualState {
         self.app.world().resource::<VisualState>()
     }
 
-    fn visual_mut(&mut self) -> Mut<'_, VisualState> {
+    pub(crate) fn visual_mut(&mut self) -> Mut<'_, VisualState> {
         self.app.world_mut().resource_mut::<VisualState>()
     }
 
     /// The game's state, its queue and the frame it shows.
-    fn game_view(&self) -> String {
+    pub(crate) fn game_view(&self) -> String {
         let visual = self.visual();
         let image = self
             .app
@@ -194,7 +195,7 @@ impl Game {
     }
 
     /// The Avatar's cell, the turn and the message: what a step changes.
-    fn where_the_avatar_is(&self) -> (usize, usize, u64, String) {
+    pub(crate) fn where_the_avatar_is(&self) -> (usize, usize, u64, String) {
         let state = &self.visual().state;
         (
             state.player.x,
@@ -204,11 +205,11 @@ impl Game {
         )
     }
 
-    fn open(&self) -> Option<OverlayId> {
+    pub(crate) fn open(&self) -> Option<OverlayId> {
         self.app.world().resource::<OverlayState>().open()
     }
 
-    fn events<E: Event + Copy>(&self) -> Vec<E> {
+    pub(crate) fn events<E: Event + Copy>(&self) -> Vec<E> {
         self.app
             .world()
             .resource::<Events<E>>()
@@ -217,12 +218,12 @@ impl Game {
             .collect()
     }
 
-    fn request(&mut self, request: OverlayRequest) {
+    pub(crate) fn request(&mut self, request: OverlayRequest) {
         self.app.world_mut().send_event(request);
     }
 
     /// Taps the map key: the test overlay asks for the map.
-    fn tap_map_key(&mut self) {
+    pub(crate) fn tap_map_key(&mut self) {
         self.press(KeyCode::Tab);
         self.frame();
         self.release(KeyCode::Tab);
@@ -270,7 +271,10 @@ fn no_overlay_model_while_no_overlay_feature_is_on() {
     assert!(!world.contains_resource::<OverlayState>());
     assert!(!world.contains_resource::<Events<OverlayRequest>>());
     assert!(!world.contains_resource::<Events<OverlayChanged>>());
+    assert!(!world.contains_resource::<Toasts>());
+    assert!(!world.contains_resource::<ShellBadges>());
     assert!(!has_system(&mut app, "apply_overlay_requests"));
+    assert!(!has_system(&mut app, "tick_toasts"));
     assert!(!has_system(&mut app, "close_when_not_idle"));
     // An overlay feature binds its opener; the model follows it.
     assert_eq!(Toggle::from_key("automap.fullscreen_map"), None);
@@ -285,6 +289,9 @@ fn the_model_brings_the_router_it_needs() {
     assert!(has_system(&mut app, "enh_input_router"));
     assert!(has_system(&mut app, "apply_overlay_requests"));
     assert!(has_system(&mut app, "close_when_not_idle"));
+    assert!(has_system(&mut app, "toast_overlay_refusals"));
+    assert!(has_system(&mut app, "tick_toasts"));
+    assert!(app.world().contains_resource::<Toasts>());
     let state = app.world().resource::<OverlayState>();
     assert!(!state.is_open());
     assert!(!state.frozen(), "Live in v1 (U1)");
@@ -350,6 +357,13 @@ fn an_overlay_is_refused_away_from_the_idle_prompt() {
         assert!(
             !game.app.world().resource::<KeyLatch>().is_modal(),
             "{label}"
+        );
+        let toasts = game.app.world().resource::<Toasts>();
+        assert_eq!(toasts.current(), Some(OverlayId::Map.refusal()), "{label}");
+        assert_eq!(
+            toasts.kind(),
+            Some(ToastKind::Short),
+            "{label}: a 2 s toast explains"
         );
     }
     for id in OverlayId::ALL {
@@ -605,4 +619,43 @@ fn a_speaker_voice_does_not_close_an_open_overlay() {
     game.app.world_mut().despawn(voice);
     game.frame();
     assert_eq!(game.open(), Some(OverlayId::Map));
+}
+
+// ---------------------------------------------------------------------------
+// The last-frame copy.
+
+/// An overlay copies the presented frame without writing it or marking it
+/// changed, and without calling the play renderer.
+#[test]
+fn the_last_frame_copy_reads_the_presented_frame_only() {
+    let mut game = Game::new(true);
+    game.frame();
+    let handle = game.visual().image_handle.clone();
+    {
+        let mut images = game.app.world_mut().resource_mut::<Assets<Image>>();
+        let data = images.get_mut(&handle).unwrap().data.as_mut().unwrap();
+        data[0..4].copy_from_slice(&[1, 2, 3, 4]);
+    }
+    let before = game.game_view();
+    let images = game.app.world().resource::<Assets<Image>>();
+    let count = images.len();
+    let copy = copy_last_frame(images, &handle).expect("a frame");
+    assert_eq!(images.len(), count, "nothing was added");
+    assert_eq!(
+        (copy.width, copy.height),
+        (VISUAL_PLAY_FRAME_WIDTH, VISUAL_PLAY_FRAME_HEIGHT)
+    );
+    assert_eq!(copy.rgba[0..4], [1, 2, 3, 4]);
+    assert_eq!(
+        copy.rgba.len(),
+        (VISUAL_PLAY_FRAME_WIDTH * VISUAL_PLAY_FRAME_HEIGHT * 4) as usize
+    );
+    assert_eq!(game.game_view(), before, "state and frame untouched");
+    assert_eq!(
+        copy_last_frame(
+            game.app.world().resource::<Assets<Image>>(),
+            &Handle::default()
+        ),
+        None
+    );
 }
