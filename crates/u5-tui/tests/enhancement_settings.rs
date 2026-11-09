@@ -372,6 +372,8 @@ fn qa_modes_never_resolve() {
         "../u5-bevy/src/lib.rs",
         "../u5-bevy/src/enh/mod.rs",
         "../u5-bevy/src/enh/input.rs",
+        "../u5-bevy/src/enh/idle.rs",
+        "../u5-bevy/src/enh/overlay.rs",
     ] {
         let source = crate_source(file);
         for name in RESOLVE_NAMES {

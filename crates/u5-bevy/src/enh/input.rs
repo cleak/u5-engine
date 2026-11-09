@@ -526,7 +526,7 @@ impl KeyLatch {
     }
 }
 
-fn is_modifier(key: KeyCode) -> bool {
+pub(super) fn is_modifier(key: KeyCode) -> bool {
     matches!(
         key,
         KeyCode::ShiftLeft

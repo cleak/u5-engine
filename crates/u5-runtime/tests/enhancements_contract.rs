@@ -6,11 +6,16 @@
 //! - Host code stays out of the engine: the engine crates' enhancement
 //!   modules never name `toml`, `std::env` or a host crate, and the engine
 //!   crates do not depend on them. Ports replace the host layer only.
+//! - Every `take_pending_*` and wall-clock `advance_*_to` method the engine
+//!   and its frontends name is classified in [`GUARDED_DRAINS`], so a new
+//!   pending queue or animator cannot slip past the idle predicate (design
+//!   1.3.7, 1.7; build plan M0-12).
 
+use std::collections::BTreeSet;
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use u5_runtime::enhancements::settings_table;
+use u5_runtime::enhancements::{GUARDED_DRAINS, settings_table};
 
 const BEGIN: &str = "<!-- BEGIN GENERATED: settings table (cargo test -p u5-runtime) -->\n";
 const END: &str = "<!-- END GENERATED -->\n";
@@ -170,4 +175,86 @@ fn the_scan_catches_host_code_and_ignores_comments() {
         host_names_in("// reads config.toml via toml_edit and std::env\nlet x = 1;").is_empty()
     );
     assert!(host_names_in("const NOTE: &str = \"config.toml\";").is_empty());
+}
+
+/// Where the engine and its frontends drain pending work between frames.
+const DRAIN_SCAN_DIRS: &[&str] = &[
+    "crates/u5-runtime/src",
+    "crates/u5-bevy/src",
+    "crates/u5-tui/src",
+];
+
+fn is_ident_char(c: char) -> bool {
+    c.is_ascii_alphanumeric() || c == '_'
+}
+
+/// Every `take_pending_*` and `advance_*_to` method named in `source`, as a
+/// definition or a call: an identifier with that shape followed by `(`.
+/// Comments are not scanned.
+fn drain_names_in(source: &str) -> BTreeSet<String> {
+    let code = code_only(source);
+    let mut names = BTreeSet::new();
+    for prefix in ["take_pending_", "advance_"] {
+        for (start, _) in code.match_indices(prefix) {
+            if code[..start].chars().next_back().is_some_and(is_ident_char) {
+                continue;
+            }
+            let rest = &code[start..];
+            let len = rest.find(|c| !is_ident_char(c)).unwrap_or(rest.len());
+            let name = &rest[..len];
+            if !rest[len..].trim_start().starts_with('(') {
+                continue;
+            }
+            let shaped = prefix == "take_pending_"
+                || (name.ends_with("_to") && name.len() > "advance_to".len());
+            if shaped && name.len() > prefix.len() {
+                names.insert(name.to_string());
+            }
+        }
+    }
+    names
+}
+
+/// Design 1.7, the first risk: a new `take_pending_*` queue or wall-clock
+/// `advance_*_to` animator fails here until it is listed in
+/// `GUARDED_DRAINS` with the idle blocker that covers it.
+#[test]
+fn every_pending_drain_is_classified_for_the_idle_predicate() {
+    let root = workspace_root();
+    let mut found = BTreeSet::new();
+    for dir in DRAIN_SCAN_DIRS {
+        let mut files = Vec::new();
+        rust_files(&root.join(dir), &mut files);
+        assert!(!files.is_empty(), "{dir} has sources");
+        for path in files {
+            found.extend(drain_names_in(&fs::read_to_string(&path).unwrap()));
+        }
+    }
+    let classified: BTreeSet<String> = GUARDED_DRAINS
+        .iter()
+        .map(|drain| drain.method.to_string())
+        .collect();
+    let unclassified: Vec<&String> = found.difference(&classified).collect();
+    assert!(
+        unclassified.is_empty(),
+        "classify these in u5_runtime::enhancements::idle::GUARDED_DRAINS, with the \
+         idle blocker that holds the predicate false while they have work: {unclassified:?}"
+    );
+    let stale: Vec<&String> = classified.difference(&found).collect();
+    assert!(stale.is_empty(), "no longer named anywhere: {stale:?}");
+}
+
+#[test]
+fn the_drain_scan_sees_calls_and_definitions_only() {
+    let names = drain_names_in(
+        "let _ = state.take_pending_potion_flash();\n\
+         pub fn advance_text_hold_to (&mut self) {}\n\
+         self.staged_narration.advance_to(now);\n\
+         let a = advance_by(x); my_take_pending_x(); // take_pending_y()\n\
+         const N: &str = \"take_pending_z\";",
+    );
+    assert_eq!(
+        names.into_iter().collect::<Vec<_>>(),
+        ["advance_text_hold_to", "take_pending_potion_flash"]
+    );
 }

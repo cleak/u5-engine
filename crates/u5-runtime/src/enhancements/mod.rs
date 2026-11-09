@@ -15,6 +15,9 @@
 //!   [`SettingNote`]s resolution reports (design 1.3.3, 1.3.11, 1.3.14).
 //! - [`mod@resolve`]: the pure, total [`resolve()`] that turns those into
 //!   [`ResolvedEnhancements`] (design 1.3.2, 1.3.3).
+//! - [`idle`]: the idle-prompt predicate's runtime half,
+//!   [`PlayState::idle_command_prompt`](crate::PlayState::idle_command_prompt)
+//!   (design 1.3.7).
 //!
 //! Nothing in the game calls into this module yet. The desktop host's
 //! adapter, command-line flags and parity lock live in `u5-tui`
@@ -22,6 +25,7 @@
 //! `u5_bevy::VisualLaunchConfig`.
 
 pub mod catalogue;
+pub mod idle;
 pub mod resolve;
 pub mod source;
 
@@ -30,6 +34,7 @@ pub use catalogue::{
     OptionSpec, PRESETS, Phase, Preset, PresetEntry, PresetValue, SHIPPED_PHASES, SoftDep,
     TOGGLE_KEYS, TOGGLES, Tag, Tier, Toggle, ToggleSpec, settings_table,
 };
+pub use idle::{GUARDED_DRAINS, GuardedDrain, IdleBlocker, IdlePromptKind};
 pub use resolve::{
     CHEATS_SWITCH, KeyBindings, PRESET_KEY, PresetLabel, ResolveInput, ResolvedEnhancements,
     SettingValues, resolve,

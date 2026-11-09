@@ -16,6 +16,9 @@
 //! - The foundation's own `apply_pending_toggles` runs only while
 //!   [`PendingToggleChanges`] holds something.
 //! - The hotkey router ([`input`]) is added only while some key is bound.
+//! - The overlay model ([`overlay`]) is added only while an overlay feature
+//!   is on. The idle predicate ([`idle`]) is a run condition and adds
+//!   nothing of its own.
 //!
 //! Every enhancement system sits in one of the six [`EnhSet`]s. The plugin
 //! declares their edges once, against the faithful systems of both app
@@ -23,7 +26,9 @@
 //! and never name a faithful system. The faithful systems themselves are
 //! not edited.
 
+pub mod idle;
 pub mod input;
+pub mod overlay;
 
 use std::fmt;
 use std::path::PathBuf;
@@ -32,9 +37,11 @@ use std::sync::Arc;
 use bevy::input::InputSystem;
 use bevy::prelude::*;
 use u5_runtime::enhancements::{
-    ApplyAt, FeatureToggles, LockState, ResolvedEnhancements, SettingValue, SettingsSink, Toggle,
+    ApplyAt, FeatureToggles, IdlePromptKind, LockState, ResolvedEnhancements, SettingValue,
+    SettingsSink, Toggle,
 };
 
+use self::idle::IdleProbe;
 use self::input::KeyMap;
 use crate::{
     animate_static_tiles, drive_visual, drive_visual_intro, fit_display_to_window,
@@ -175,6 +182,7 @@ impl Plugin for EnhancementsPlugin {
             &self.launch.enhancements.keys,
             self.launch.enhancements.toggles,
         );
+        overlay::add_overlay_model(app, self.launch.enhancements.toggles);
     }
 }
 
@@ -222,8 +230,8 @@ fn toggle_changes_pending(pending: Res<PendingToggleChanges>) -> bool {
 /// the changed keys through the host's sink.
 ///
 /// - `Frame`: applied now.
-/// - `IdlePrompt`: held. The idle-prompt predicate (design 1.3.7) releases
-///   them; until it exists they stay pending, which changes nothing.
+/// - `IdlePrompt`: held until the game waits at the exploration command
+///   prompt with nothing pending (the idle predicate, design 1.3.7).
 /// - `NextLaunch`: stored only.
 ///
 /// When the toggles changed, the [`KeyMap`] is rebuilt, so a feature
@@ -233,9 +241,16 @@ fn apply_pending_toggles(
     mut toggles: ResMut<Toggles>,
     launch: Res<EnhLaunch>,
     keymap: Option<ResMut<KeyMap>>,
+    idle: IdleProbe,
 ) {
     let before = toggles.0;
-    let stored = drain_pending_toggles(&mut pending.0, &mut toggles.0, |t| t.spec().apply);
+    let at_idle_prompt = idle.view().at(&[IdlePromptKind::Exploration]);
+    let stored = drain_pending_toggles(
+        &mut pending.0,
+        &mut toggles.0,
+        |t| t.spec().apply,
+        at_idle_prompt,
+    );
     if toggles.0 != before
         && let Some(mut keymap) = keymap
     {
@@ -254,17 +269,20 @@ fn apply_pending_toggles(
 }
 
 /// The pure part of [`apply_pending_toggles`]: applies or holds each change
-/// and returns the settings to store, in request order.
+/// and returns the settings to store, in request order. `at_idle_prompt`
+/// releases the changes held for the idle prompt.
 fn drain_pending_toggles(
     pending: &mut Vec<(Toggle, bool)>,
     toggles: &mut FeatureToggles,
     apply_at: impl Fn(Toggle) -> ApplyAt,
+    at_idle_prompt: bool,
 ) -> Vec<(String, SettingValue)> {
     let mut stored = Vec::new();
     pending.retain(|&(toggle, on)| {
         match apply_at(toggle) {
             ApplyAt::Frame => toggles.set(toggle, on),
             ApplyAt::NextLaunch => {}
+            ApplyAt::IdlePrompt if at_idle_prompt => toggles.set(toggle, on),
             ApplyAt::IdlePrompt => return true,
         }
         stored.push((toggle.key().to_string(), SettingValue::Bool(on)));
@@ -395,22 +413,30 @@ mod tests {
     fn pending_changes_apply_at_their_point() {
         let mut toggles = FeatureToggles::CLASSIC;
         let mut pending = vec![(T, true)];
-        let stored = drain_pending_toggles(&mut pending, &mut toggles, |_| ApplyAt::Frame);
+        let stored = drain_pending_toggles(&mut pending, &mut toggles, |_| ApplyAt::Frame, false);
         assert!(toggles.on(T));
         assert!(pending.is_empty());
         assert_eq!(stored, [(T.key().to_string(), SettingValue::Bool(true))]);
 
         let mut pending = vec![(T, false)];
-        let stored = drain_pending_toggles(&mut pending, &mut toggles, |_| ApplyAt::NextLaunch);
+        let stored =
+            drain_pending_toggles(&mut pending, &mut toggles, |_| ApplyAt::NextLaunch, false);
         assert!(toggles.on(T), "a next-launch change is stored only");
         assert!(pending.is_empty());
         assert_eq!(stored, [(T.key().to_string(), SettingValue::Bool(false))]);
 
         let mut pending = vec![(T, false)];
-        let stored = drain_pending_toggles(&mut pending, &mut toggles, |_| ApplyAt::IdlePrompt);
+        let stored =
+            drain_pending_toggles(&mut pending, &mut toggles, |_| ApplyAt::IdlePrompt, false);
         assert!(toggles.on(T), "an idle-prompt change waits for the prompt");
         assert_eq!(pending, [(T, false)]);
         assert!(stored.is_empty(), "nothing is stored before it applies");
+
+        let stored =
+            drain_pending_toggles(&mut pending, &mut toggles, |_| ApplyAt::IdlePrompt, true);
+        assert!(!toggles.on(T), "the idle prompt releases it");
+        assert!(pending.is_empty());
+        assert_eq!(stored, [(T.key().to_string(), SettingValue::Bool(false))]);
     }
 
     #[test]
