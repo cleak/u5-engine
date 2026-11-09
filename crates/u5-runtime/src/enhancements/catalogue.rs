@@ -30,6 +30,11 @@
 //!
 //! Classic, the default, is every key at its default, which is
 //! [`FeatureToggles::CLASSIC`]: no toggle on.
+//!
+//! [`settings_table`] renders the catalogue as the table in
+//! `docs/settings.md`; a test keeps the two equal.
+
+use super::source::Capability;
 
 /// The three effect classes (user requirement, 2026-11-01).
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -140,6 +145,9 @@ pub struct ToggleSpec {
     /// Extra command-line flags, each with a `--no-` form.
     pub cli_aliases: &'static [&'static str],
     pub soft_deps: &'static [SoftDep],
+    /// What the host must offer; on a host without it the resolver forces
+    /// the toggle off with a note (1.3.14).
+    pub needs: &'static [Capability],
 }
 
 impl ToggleSpec {
@@ -182,6 +190,7 @@ toggles! {
         tags: &[],
         cli_aliases: &[],
         soft_deps: &[],
+        needs: &[],
     },
 }
 
@@ -232,6 +241,17 @@ impl FeatureToggles {
             .iter()
             .map(|(t, _)| *t)
             .filter(move |t| self.on(*t))
+    }
+
+    /// Bit `index`, the toggle at that position of the catalogue the
+    /// resolver ran against (for the built-in one, `Toggle as u8`).
+    #[cfg(test)]
+    pub(crate) fn bit(self, index: usize) -> bool {
+        (self.0 >> index) & 1 == 1
+    }
+
+    pub(crate) fn set_bit(&mut self, index: usize) {
+        self.0 |= 1u128 << index;
     }
 }
 
@@ -291,6 +311,16 @@ pub struct OptionSpec {
     /// `display.scale_mode` other than `fit`). `None` for a sub-option or
     /// preference.
     pub toggle: Option<Toggle>,
+    /// The toggle this setting is a sub-option of, inert while that toggle
+    /// is off (such as `journal.spoiler_tier` under `journal.page`). Every
+    /// valued setting with an effect class maps to a toggle or has a
+    /// parent, so [`FeatureToggles::is_classic`] sees every setting that
+    /// changes anything (1.3.5).
+    pub parent: Option<Toggle>,
+    /// What the host must offer; on a host without it the resolver keeps
+    /// the default with a note (1.3.14). A chord naming an F-key also
+    /// needs [`Capability::FunctionKeys`], whatever this lists.
+    pub needs: &'static [Capability],
 }
 
 impl OptionSpec {
@@ -328,6 +358,8 @@ const fn key_row(key: &'static str, label: &'static str, chord: &'static str) ->
         tags: &[],
         cli_aliases: &[],
         toggle: None,
+        parent: None,
+        needs: &[Capability::Keyboard],
     }
 }
 
@@ -346,6 +378,8 @@ pub const OPTIONS: &[OptionSpec] = &[
         tags: &[],
         cli_aliases: &[],
         toggle: None,
+        parent: None,
+        needs: &[],
     },
     OptionSpec {
         key: "enhancements.preset",
@@ -360,6 +394,8 @@ pub const OPTIONS: &[OptionSpec] = &[
         tags: &[],
         cli_aliases: &["--preset"],
         toggle: None,
+        parent: None,
+        needs: &[],
     },
     key_row("keys.menu", "Open the menu", "F12"),
     key_row("keys.fullscreen", "Switch fullscreen", "F11"),
@@ -567,7 +603,7 @@ impl Preset {
 
     /// Every key the preset names, shipped or not. Keys whose rows are
     /// not in the catalogue yet belong to features still to be built.
-    pub fn entries(self) -> &'static [PresetEntry] {
+    pub const fn entries(self) -> &'static [PresetEntry] {
         match self {
             Preset::Classic => &[],
             Preset::Recommended => RECOMMENDED,
@@ -605,6 +641,110 @@ impl Preset {
         }
         toggles
     }
+}
+
+/// The catalogue as the Markdown table of `docs/settings.md`, one line per
+/// row, toggles first, each kind in catalogue order. Hidden rows are listed
+/// with the phase that ships them.
+pub fn settings_table() -> String {
+    let mut table = String::from(
+        "| Key | Setting | Type = default | Cls, When | Tier | Alias | Needs | Available |\n\
+         |---|---|---|---|---|---|---|---|\n",
+    );
+    for row in CatalogueRow::all() {
+        let (kind, class, apply, tier) = match row {
+            CatalogueRow::Toggle(spec) => (
+                "bool = false".to_string(),
+                Some(spec.class),
+                spec.apply,
+                tier_text(spec.tier, &[]),
+            ),
+            CatalogueRow::Option(spec) => (
+                option_kind_text(spec),
+                spec.class,
+                spec.apply,
+                tier_text(spec.tier, spec.deviation_values),
+            ),
+        };
+        let class = match class {
+            None => "-",
+            Some(EffectClass::Presentation) => "a",
+            Some(EffectClass::InputDriven) => "b",
+            Some(EffectClass::StateAltering) => "c",
+        };
+        let apply = match apply {
+            ApplyAt::Frame => "F",
+            ApplyAt::IdlePrompt => "P",
+            ApplyAt::NextLaunch => "L",
+        };
+        let tier = row
+            .tags()
+            .iter()
+            .fold(tier, |text, tag| format!("{text}, {}", tag.label()));
+        let needs = match row {
+            CatalogueRow::Toggle(spec) => spec.needs,
+            CatalogueRow::Option(spec) => spec.needs,
+        };
+        let available = if row.is_shipped() {
+            "yes".to_string()
+        } else {
+            format!(
+                "later (chapter {} {})",
+                row.ships().chapter,
+                row.ships().name
+            )
+        };
+        table.push_str(&format!(
+            "| {} | {} | {kind} | {class}, {apply} | {tier} | {} | {} | {available} |\n",
+            row.key(),
+            row.label(),
+            list_or_dash(row.cli_aliases().iter().copied()),
+            list_or_dash(needs.iter().map(|need| need.label())),
+        ));
+    }
+    table
+}
+
+fn list_or_dash<'a>(items: impl Iterator<Item = &'a str>) -> String {
+    let items: Vec<&str> = items.collect();
+    if items.is_empty() {
+        "-".to_string()
+    } else {
+        items.join(", ")
+    }
+}
+
+fn tier_text(tier: Tier, deviation_values: &[&str]) -> String {
+    let mut text = match tier {
+        Tier::Feature => "feature".to_string(),
+        Tier::Deviation => "deviation".to_string(),
+        Tier::Cheat => "cheat".to_string(),
+    };
+    if !deviation_values.is_empty() {
+        text.push_str(&format!(" (deviation: {})", deviation_values.join(", ")));
+    }
+    text
+}
+
+/// `type = default` in 1.4.1's notation. `|` is escaped for the table.
+fn option_kind_text(spec: &OptionSpec) -> String {
+    let kind = match spec.kind {
+        OptionKind::Bool => "bool".to_string(),
+        OptionKind::Int { min, max } => format!("int {min}..{max}"),
+        OptionKind::Enum(words) => format!("enum {}", words.join("\\|")),
+        OptionKind::Color => "color".to_string(),
+        OptionKind::Path => "path".to_string(),
+        OptionKind::List(words) => format!("list of {}", words.join("\\|")),
+        OptionKind::Chord => "chord".to_string(),
+    };
+    let default = match spec.default {
+        OptionDefault::Bool(value) => value.to_string(),
+        OptionDefault::Int(value) => value.to_string(),
+        OptionDefault::Str("") => "\"\"".to_string(),
+        OptionDefault::Str(text) => text.to_string(),
+        OptionDefault::List(items) => format!("[{}]", items.join(", ")),
+    };
+    format!("{kind} = {default}")
 }
 
 #[cfg(test)]
@@ -924,6 +1064,38 @@ mod tests {
             assert!(!toggles.on(spec.toggle));
             assert!(toggles.is_classic());
         }
+    }
+
+    #[test]
+    fn every_valued_setting_maps_to_a_toggle_or_is_a_sub_option() {
+        // Without this, `audio.volume = 50` alone would leave the toggles
+        // Classic and the feature's plugin out (1.3.5). Foundation rows
+        // (no effect class) change nothing by themselves.
+        for spec in OPTIONS.iter().filter(|spec| spec.class.is_some()) {
+            assert!(
+                spec.toggle.is_some() != spec.parent.is_some(),
+                "{} must either switch a toggle or be a sub-option of one",
+                spec.key
+            );
+        }
+        for spec in OPTIONS.iter().filter(|spec| spec.class.is_none()) {
+            assert_eq!(spec.toggle, None, "{} is a foundation row", spec.key);
+        }
+    }
+
+    #[test]
+    fn the_settings_table_has_one_line_per_row() {
+        let table = settings_table();
+        let lines: Vec<&str> = table.lines().collect();
+        assert_eq!(lines.len(), 2 + TOGGLES.len() + OPTIONS.len());
+        for (line, row) in lines[2..].iter().zip(CatalogueRow::all()) {
+            assert!(line.starts_with(&format!("| {} | ", row.key())), "{line}");
+            assert_eq!(line.ends_with("| yes |"), row.is_shipped(), "{line}");
+        }
+        assert!(table.contains(
+            "| enhancements.preset | Preset | enum classic\\|recommended\\|everything = classic \
+             | -, P | feature | --preset | - | yes |"
+        ));
     }
 
     #[test]
