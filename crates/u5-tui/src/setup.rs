@@ -433,6 +433,13 @@ pub fn run_default_launch(force_setup: bool) -> Result<(), String> {
     let ready = resolve_game_data(None, force_setup, WizardMode::Window)?;
     let game_dir = crate::prepare_writable_game_dir(&ready.data_dir)
         .map_err(|error| describe_failure(&error, Some(&ready)))?;
+    // The default launch reads config.toml (Phase B design 1.2.4). The
+    // command-line settings and the launch config arrive in M0-10.
+    let _enhancements = crate::enhancement_settings::launch_enhancements(
+        crate::enhancement_settings::SettingsFile::Read,
+        &[],
+        false,
+    );
     u5_bevy::run_visual_intro_loop(&game_dir, u5_runtime::TileGraphicsDepth::Ega16)
         .map_err(|error| describe_failure(&error, Some(&ready)))
 }

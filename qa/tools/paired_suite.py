@@ -124,6 +124,35 @@ def scenario_fixed_clock(path: pathlib.Path) -> str | None:
 
 EMULATOR_LOAD_LATENCY_ENV = "U5_EMULATOR_LOAD_LATENCY_MS"
 
+# Phase B design 1.3.11: every paired run is a parity run, so the engine
+# side runs with every enhancement off whatever its `config.toml` says, and
+# prints exactly this line to its output, which `game-dev-u5-paired` writes
+# to `<artifact>/engine.log`.
+PARITY_LOCK_ENV = "U5_PARITY_LOCK"
+PARITY_LOCK_LINE = "enhancements: parity-locked (all off)"
+
+
+def export_parity_lock(environ: dict | None = None) -> None:
+    """Lock the engine side of every run (inherited through
+    `game-dev-u5-paired` like the other exports)."""
+    (os.environ if environ is None else environ)[PARITY_LOCK_ENV] = "1"
+
+
+def parity_lock_confirmed(artifact: str) -> bool:
+    """Did this run's engine announce the parity lock?
+
+    A run without the line proves nothing about the faithful game: the
+    engine may have run with enhancements on, or be a build from before
+    the lock existed. It is a failed run, not a comparison.
+    """
+    if not artifact:
+        return False
+    try:
+        text = (pathlib.Path(artifact) / "engine.log").read_text(errors="replace")
+    except OSError:
+        return False
+    return any(line.rstrip() == PARITY_LOCK_LINE for line in text.splitlines())
+
 
 def scenario_emulator_load_latency(path: pathlib.Path) -> str | None:
     """The `# emulator-load-latency: MS` a scenario pins, if any.
@@ -302,6 +331,7 @@ def main() -> None:
     )
     parser.add_argument("scenarios", nargs="*")
     args = parser.parse_args()
+    export_parity_lock()
     if args.fixed_clock:
         # Inherited by `game-dev-u5-paired`, and from it by both sides.
         os.environ["U5_FIXED_HOST_CLOCK"] = args.fixed_clock
@@ -426,6 +456,10 @@ def main() -> None:
             pathlib.Path(artifact).glob("engine-*.png")
         )
         launched = result.returncode == 0 and (captured or not wanted_shots)
+        if launched and not parity_lock_confirmed(artifact):
+            failures += 1
+            print(f"FAIL {name} (parity lock not confirmed)\t{artifact}", flush=True)
+            continue
         if launched and wanted_shots and not captures_are_usable(artifact):
             failures += 1
             print(

@@ -17,6 +17,9 @@ use u5_runtime::{
     question_record_display_text, run_chargen_tournament,
 };
 
+use u5_runtime::enhancements::{CliSetting, Preset};
+
+use crate::enhancement_settings::{check_cli_key, cli_alias_usage, find_cli_alias};
 use crate::runtime_game_dir::prepare_writable_game_dir;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -78,6 +81,18 @@ pub struct CliArgs {
     /// `--setup`: run the game-data setup wizard (or, with a folder, set
     /// that folder up) before anything else.
     pub setup: bool,
+    /// `--preset`, `--enable`, `--disable`, `--set` and the catalogue
+    /// aliases, in command-line order (Phase B design 1.2.4). Keys are
+    /// already checked against the catalogue.
+    pub enhancements: Vec<CliSetting>,
+    /// `--parity-lock`: every enhancement off, whatever else says (1.3.11).
+    pub parity_lock: bool,
+    /// `--show-settings`: print the resolved settings and exit.
+    pub show_settings: bool,
+    /// Whether this launch reads the enhancement settings in `config.toml`.
+    /// Only the default launch does (1.2.4). The parser never sets it; the
+    /// frontend does, once it knows the launch is the default one.
+    pub settings_file: bool,
 }
 
 impl CliArgs {
@@ -99,11 +114,33 @@ impl CliArgs {
             || self.create_character.is_some()
             || self.create_character_interactive
             || self.write_seed
+            || self.show_settings
+    }
+
+    /// Whether this is a QA mode: route smoke, the frame and route suites,
+    /// the reports and the save writers. They always run with every
+    /// enhancement off and never resolve settings (1.3.11).
+    pub fn is_qa_mode(&self) -> bool {
+        self.route_smoke
+            || self.save_frame.is_some()
+            || self.save_frame_suite.is_some()
+            || self.save_screen.is_some()
+            || self.visual_frame_suite.is_some()
+            || self.visual_route_suite.is_some()
+            || self.compare_frame_manifests.is_some()
+            || self.location_audit.is_some()
+            || self.audio_suite.is_some()
+            || self.create_character.is_some()
+            || self.create_character_interactive
+            || self.write_seed
     }
 
     /// Whether the mode reads game data at all.
     pub fn needs_game_data(&self) -> bool {
-        !(self.help || self.audio_suite.is_some() || self.compare_frame_manifests.is_some())
+        !(self.help
+            || self.show_settings
+            || self.audio_suite.is_some()
+            || self.compare_frame_manifests.is_some())
     }
 }
 
@@ -188,6 +225,9 @@ where
     let mut create_character_interactive = false;
     let mut write_seed = false;
     let mut seed_beside: Option<u8> = None;
+    let mut enhancements: Vec<CliSetting> = Vec::new();
+    let mut parity_lock = false;
+    let mut show_settings = false;
     let mut args = args.into_iter().map(Into::into);
     while let Some(arg) = args.next() {
         match arg.as_str() {
@@ -511,11 +551,79 @@ where
                 })?;
                 transport_override = Some(parse_transport_arg(&value)?);
             }
+            // Enhancement settings (Phase B design 1.2.4). One generic form
+            // for every key, checked against the catalogue so a typo stops
+            // the launch like any unknown option.
+            "--preset" => {
+                let value = args.next().ok_or_else(|| {
+                    io::Error::new(
+                        io::ErrorKind::InvalidInput,
+                        "--preset requires classic, recommended or everything",
+                    )
+                })?;
+                let preset = Preset::from_key(value.trim()).ok_or_else(|| {
+                    io::Error::new(
+                        io::ErrorKind::InvalidInput,
+                        format!("unknown preset `{value}`; use classic, recommended or everything"),
+                    )
+                })?;
+                enhancements.push(CliSetting::Preset(preset));
+            }
+            "--enable" | "--disable" => {
+                let option = arg.as_str();
+                let value = args.next().ok_or_else(|| {
+                    io::Error::new(
+                        io::ErrorKind::InvalidInput,
+                        format!("{option} requires KEY[,KEY...]"),
+                    )
+                })?;
+                let keys: Vec<&str> = value
+                    .split(',')
+                    .map(str::trim)
+                    .filter(|key| !key.is_empty())
+                    .collect();
+                if keys.is_empty() {
+                    return Err(io::Error::new(
+                        io::ErrorKind::InvalidInput,
+                        format!("{option} requires KEY[,KEY...]"),
+                    ));
+                }
+                for key in keys {
+                    check_cli_key(option, key, true)?;
+                    enhancements.push(if option == "--enable" {
+                        CliSetting::Enable(key.to_string())
+                    } else {
+                        CliSetting::Disable(key.to_string())
+                    });
+                }
+            }
+            "--set" => {
+                let value = args.next().ok_or_else(|| {
+                    io::Error::new(io::ErrorKind::InvalidInput, "--set requires KEY=VALUE")
+                })?;
+                let Some((key, setting)) = value.split_once('=') else {
+                    return Err(io::Error::new(
+                        io::ErrorKind::InvalidInput,
+                        format!("--set requires KEY=VALUE, got `{value}`"),
+                    ));
+                };
+                let key = key.trim();
+                check_cli_key("--set", key, false)?;
+                enhancements.push(CliSetting::Set {
+                    key: key.to_string(),
+                    value: setting.trim().to_string(),
+                });
+            }
+            "--parity-lock" => parity_lock = true,
+            "--show-settings" => show_settings = true,
             _ if arg.starts_with("--") => {
-                return Err(io::Error::new(
-                    io::ErrorKind::InvalidInput,
-                    format!("unknown option `{arg}`"),
-                ));
+                let Some(alias) = find_cli_alias(&arg) else {
+                    return Err(io::Error::new(
+                        io::ErrorKind::InvalidInput,
+                        format!("unknown option `{arg}`"),
+                    ));
+                };
+                enhancements.push(alias.setting(&arg, || args.next())?);
             }
             _ => {
                 if game_dir.replace(PathBuf::from(arg)).is_some() {
@@ -555,6 +663,10 @@ where
             write_seed: false,
             seed_beside: None,
             setup: false,
+            enhancements: Vec::new(),
+            parity_lock: false,
+            show_settings: false,
+            settings_file: false,
         };
         return Ok(CliCommand {
             args,
@@ -841,7 +953,27 @@ where
         write_seed,
         seed_beside,
         setup,
+        enhancements,
+        parity_lock,
+        show_settings,
+        settings_file: false,
     };
+    if args.show_settings {
+        let mut mode = args.clone();
+        mode.show_settings = false;
+        if mode.has_mode() || mode.setup {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "--show-settings prints the settings and exits; it can only be combined with --preset, --enable, --disable, --set, their aliases and --parity-lock",
+            ));
+        }
+    }
+    if !args.enhancements.is_empty() && args.is_qa_mode() {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "--preset, --enable, --disable and --set apply to play launches only; route smoke, the frame and route suites, reports and save writers always run with every enhancement off",
+        ));
+    }
     Ok(CliCommand {
         args,
         explicit_game_dir,
@@ -1007,6 +1139,20 @@ OPTIONS:
                               Write a sanitized aggregate LOCATION.DAT cell
                               audit report, then exit.
 
+ENHANCEMENTS (optional; with none, the game is the original):
+        --preset <NAME>       classic, recommended or everything.
+        --enable <KEY[,KEY...]>
+                              Turn on/off settings on, e.g. section.name.
+        --disable <KEY[,KEY...]>
+                              Turn on/off settings off.
+        --set <KEY=VALUE>     Set any setting.
+        --parity-lock         Force every enhancement off for this launch.
+        --show-settings       Print the settings a launch would use, then exit.
+                              config.toml settings apply to the default launch
+                              (no GAME_DIR or mode); other launches use the
+                              command line alone. Route smoke and the suites
+                              always run with every enhancement off.
+
 SMOKE COMMANDS:
     cargo run -- C:\\Games\\U5-Clean
     cargo run -- --play C:\\Games\\U5-Clean
@@ -1036,8 +1182,23 @@ ENVIRONMENT:
     U5_ENGINE_DATA_DIR        Folder for the managed copy of the game files and
                               the log (default: e.g. ~/.local/share/u5-engine).
     U5_ENGINE_RUNTIME_DIR     Folder for the writable runtime mirrors (saves).
+    U5_PARITY_LOCK            1 forces every enhancement off, like --parity-lock.
     cargo run --features visual -- --intro --visual C:\\Games\\U5-Clean
 ";
+
+/// The `--help` text: [`CLI_USAGE`] with the shipped catalogue aliases
+/// (`--x` and `--no-x`) listed at the end of its ENHANCEMENTS section.
+pub fn cli_usage() -> String {
+    let aliases = cli_alias_usage();
+    if aliases.is_empty() {
+        return CLI_USAGE.to_string();
+    }
+    CLI_USAGE.replacen(
+        "\nSMOKE COMMANDS:",
+        &format!("{aliases}\nSMOKE COMMANDS:"),
+        1,
+    )
+}
 
 pub fn parse_chargen_answers_arg(value: &str) -> io::Result<Vec<bool>> {
     let trimmed = value.trim();

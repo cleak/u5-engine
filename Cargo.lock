@@ -4533,6 +4533,7 @@ name = "u5-tui"
 version = "1.0.1"
 dependencies = [
  "image",
+ "toml_edit 0.22.27",
  "u5-bevy",
  "u5-bevy-setup",
  "u5-gamedata",

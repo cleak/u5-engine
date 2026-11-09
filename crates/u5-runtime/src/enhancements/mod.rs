@@ -16,8 +16,10 @@
 //! - [`mod@resolve`]: the pure, total [`resolve()`] that turns those into
 //!   [`ResolvedEnhancements`] (design 1.3.2, 1.3.3).
 //!
-//! Nothing in the game calls into this module yet. The host adapter and the
-//! command-line flags follow in M0-07.
+//! Nothing in the game calls into this module yet. The desktop host's
+//! adapter, command-line flags and parity lock live in `u5-tui`
+//! (`enhancement_settings`); the launch config that hands the result to the
+//! shell follows in M0-10.
 
 pub mod catalogue;
 pub mod resolve;

@@ -15,6 +15,9 @@ u5-gamedata = { workspace = true }
 u5-host-desktop = { workspace = true }
 u5-bevy-setup = { workspace = true, optional = true }
 image = { workspace = true }
+# The enhancement-settings adapter reads `config.toml` items; the same
+# version u5-host-desktop edits the file with.
+toml_edit = "0.22"
 
 [lib]
 name = "u5_tui"

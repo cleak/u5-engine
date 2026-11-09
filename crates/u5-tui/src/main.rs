@@ -9,11 +9,11 @@ use u5_runtime::{
     location_audit_report_text, run_report,
 };
 use u5_tui::{
-    CLI_USAGE, CliArgs, ReadyGameData, SETUP_WINDOW_FLAG, WizardMode, compare_manifest_files,
+    CliArgs, ReadyGameData, SETUP_WINDOW_FLAG, WizardMode, cli_usage, compare_manifest_files,
     describe_failure, parse_cli_command, prepare_writable_game_dir, resolve_game_data,
     run_audio_suite, run_create_character_command, run_interactive_create_character,
     run_intro_menu_loop, run_play_loop, run_route_smoke, run_save_frame, run_save_frame_suite,
-    run_save_screen, run_setup_window_child,
+    run_save_screen, run_setup_window_child, run_show_settings,
 };
 
 fn main() -> ExitCode {
@@ -35,8 +35,11 @@ fn main() -> ExitCode {
 fn run(argv: Vec<String>, game_data: &mut Option<ReadyGameData>) -> io::Result<()> {
     let command = parse_cli_command(argv)?;
     if command.args.help {
-        print!("{CLI_USAGE}");
+        print!("{}", cli_usage());
         return Ok(());
+    }
+    if command.args.show_settings {
+        return run_show_settings(&command.args.enhancements, command.args.parity_lock);
     }
     if !command.args.needs_game_data() {
         return dispatch(command.finish(PathBuf::new())?);
@@ -58,6 +61,9 @@ fn run(argv: Vec<String>, game_data: &mut Option<ReadyGameData>) -> io::Result<(
     if default_launch {
         args.intro = true;
         args.visual = cfg!(feature = "visual");
+        // Only the default launch reads the enhancement settings in
+        // config.toml (Phase B design 1.2.4).
+        args.settings_file = true;
     }
     dispatch(args)
 }
@@ -278,12 +284,28 @@ fn run_location_audit(game_dir: &Path, out: &Path) -> io::Result<()> {
 
 #[cfg(feature = "visual")]
 fn run_visual(args: CliArgs) -> io::Result<()> {
+    // Resolved and announced here; the launch config that hands them to
+    // the shell follows in M0-10.
+    let _enhancements = launch_settings(&args);
     u5_bevy::run_visual_loop(&args.game_dir, args.play_options, args.raster_depth)
 }
 
 #[cfg(feature = "visual")]
 fn run_visual_intro(args: CliArgs) -> io::Result<()> {
+    let _enhancements = launch_settings(&args);
     u5_bevy::run_visual_intro_loop(&args.game_dir, args.raster_depth)
+}
+
+/// This play launch's enhancement settings, with the startup line printed.
+/// QA modes never get here (Phase B design 1.3.11).
+#[cfg(feature = "visual")]
+fn launch_settings(args: &CliArgs) -> u5_runtime::enhancements::ResolvedEnhancements {
+    let file = if args.settings_file {
+        u5_tui::SettingsFile::Read
+    } else {
+        u5_tui::SettingsFile::Ignore
+    };
+    u5_tui::launch_enhancements(file, &args.enhancements, args.parity_lock)
 }
 
 #[cfg(feature = "visual")]

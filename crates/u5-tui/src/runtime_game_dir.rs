@@ -18,6 +18,11 @@ use u5_runtime::{
 
 pub const RUNTIME_DIR_ENV: &str = u5_host_desktop::RUNTIME_DIR_ENV;
 
+/// The per-save enhancement folder beside `SAVED.GAM` (Phase B design
+/// 1.2.7). It belongs to the save it sits next to, so the mirror never
+/// copies one from the source folder over the runtime save's own.
+pub const ENHANCEMENT_SIDECAR_DIR: &str = ".u5-engine-enh";
+
 /// Return a writable game directory suitable for interactive play.
 ///
 /// Writable fixture/install directories are used as-is. The pristine default
@@ -132,6 +137,9 @@ const fn fnv1a64(bytes: &[u8]) -> u64 {
 fn mirror_directory(source: &Path, target: &Path) -> io::Result<()> {
     for entry in fs::read_dir(source)? {
         let entry = entry?;
+        if is_enhancement_sidecar_dir(&entry.file_name()) {
+            continue;
+        }
         let source_path = entry.path();
         let target_path = target.join(entry.file_name());
         let file_type = entry.file_type()?;
@@ -147,6 +155,11 @@ fn mirror_directory(source: &Path, target: &Path) -> io::Result<()> {
         }
     }
     Ok(())
+}
+
+fn is_enhancement_sidecar_dir(name: &OsStr) -> bool {
+    name.to_str()
+        .is_some_and(|name| name.eq_ignore_ascii_case(ENHANCEMENT_SIDECAR_DIR))
 }
 
 fn source_file_changed(source: &Path, target: &Path) -> io::Result<bool> {
@@ -242,6 +255,41 @@ mod tests {
             fs::read(runtime.join(SAVED_GAM_FILENAME)).unwrap(),
             b"played-save"
         );
+
+        clear_readonly(&save_path).unwrap();
+        fs::remove_dir_all(source).unwrap();
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn mirror_skips_the_enhancement_sidecar_folder() {
+        let source = temp_dir("sidecar-source");
+        let root = temp_dir("sidecar-root");
+        let save_path = source.join(SAVED_GAM_FILENAME);
+        fs::write(source.join("IBM.CH"), b"font").unwrap();
+        fs::write(&save_path, b"source-save").unwrap();
+        let sidecars = source.join(ENHANCEMENT_SIDECAR_DIR);
+        fs::create_dir_all(&sidecars).unwrap();
+        fs::write(sidecars.join("automap.u5e"), b"source-memory").unwrap();
+        let mut permissions = fs::metadata(&save_path).unwrap().permissions();
+        permissions.set_readonly(true);
+        fs::set_permissions(&save_path, permissions).unwrap();
+
+        let runtime = prepare_writable_game_dir_in(&source, &root).unwrap();
+        assert_eq!(fs::read(runtime.join("IBM.CH")).unwrap(), b"font");
+        assert!(!runtime.join(ENHANCEMENT_SIDECAR_DIR).exists());
+
+        // The runtime save's own folder is left alone by the next mirror.
+        let own = runtime.join(ENHANCEMENT_SIDECAR_DIR);
+        fs::create_dir_all(&own).unwrap();
+        fs::write(own.join("automap.u5e"), b"runtime-memory").unwrap();
+        prepare_writable_game_dir_in(&source, &root).unwrap();
+        assert_eq!(
+            fs::read(own.join("automap.u5e")).unwrap(),
+            b"runtime-memory"
+        );
+        assert!(is_enhancement_sidecar_dir(OsStr::new(".U5-ENGINE-ENH")));
+        assert!(!is_enhancement_sidecar_dir(OsStr::new("u5-engine-enh")));
 
         clear_readonly(&save_path).unwrap();
         fs::remove_dir_all(source).unwrap();
