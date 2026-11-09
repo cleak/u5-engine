@@ -198,7 +198,10 @@ fn cli_wind_override_applies_after_save_load_and_stores_the_requested_byte() {
     // p10 R07: the override writes the requested wind's byte rather than
     // keeping the save's stale (here out-of-range) one, so the banner, the
     // State line and the next save all agree (`weather.md §2`/§9).
-    assert_eq!(args.play_options.wind_save_byte, WindState::East.save_byte());
+    assert_eq!(
+        args.play_options.wind_save_byte,
+        WindState::East.save_byte()
+    );
 
     let calm = parse_cli_args([
         "--play",
@@ -301,7 +304,10 @@ fn cli_usage_labels_tandy_as_modern_approximation() {
         .join(" ");
     assert!(tandy_help.contains("modern"), "{tandy_help}");
     assert!(tandy_help.contains("approximation"), "{tandy_help}");
-    assert!(tandy_help.contains("not historical Tandy pixel parity"), "{tandy_help}");
+    assert!(
+        tandy_help.contains("not historical Tandy pixel parity"),
+        "{tandy_help}"
+    );
 }
 
 // from chunk_02
@@ -1032,7 +1038,11 @@ fn cli_create_character_command_writes_saved_files_and_returns_without_play() {
 #[test]
 fn cli_binary_create_character_save_loads_through_play_script() {
     let dir = debug_game_dir();
-    fs::write(dir.join("INIT.GAM"), one_member_party_seed(saved_game_seed_bytes(17, 0, 15, 15))).unwrap();
+    fs::write(
+        dir.join("INIT.GAM"),
+        one_member_party_seed(saved_game_seed_bytes(17, 0, 15, 15)),
+    )
+    .unwrap();
     fs::write(dir.join("INIT.OOL"), vec![0; OOL_PLANE_LEN]).unwrap();
 
     let create = Command::new(env!("CARGO_BIN_EXE_u5-engine"))
@@ -1461,7 +1471,11 @@ fn write_seed_keeps_the_template_moonstone_slots() {
     .unwrap();
     assert!(args.write_seed);
     for (index, slot) in args.play_options.moonstone_slots.iter().enumerate() {
-        assert_eq!((slot.x, slot.y, slot.scene), (xs[index], ys[index], 0), "slot {index}");
+        assert_eq!(
+            (slot.x, slot.y, slot.scene),
+            (xs[index], ys[index], 0),
+            "slot {index}"
+        );
     }
     let _ = fs::remove_dir_all(dir);
 }

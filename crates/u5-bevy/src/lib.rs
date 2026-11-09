@@ -22,6 +22,8 @@ use u5_runtime::TITLE_TICK_FRAME_Y;
 // `combat.md §11` (u5-spec#308 Q3): a placed field marker carries its
 // `0xE8..0xEB` field id (playtest P20-01).
 use u5_runtime::CombatArenaFieldKind;
+#[cfg(all(test, feature = "original-asset-tests"))]
+use u5_runtime::ENDGAME_TABLEAU_HEIGHT;
 use u5_runtime::audio::{InterruptibleSound, RumbleJitter, SoundEffect, SpeakerProgram};
 use u5_runtime::audio_render::{RenderedSpeaker, render_program};
 #[cfg(test)]
@@ -31,10 +33,10 @@ use u5_runtime::{
     BLINK_COST, BLINK_SPELL_INDEX, BRIT_CBT_RECORDS, BRIT_DAT_FILENAME, BRIT_OOL_FILENAME,
     BRITISH_PTH_PEN_ORIGINS, BritishPth, CBT_PLACEMENT_SLOT_COUNT, CGA_PALETTE_RGB, CH_CELL_SIDE,
     CHARGEN_GYPSY_PARAGRAPH_BOX, CHARGEN_QUESTION_PARAGRAPH_BOX, CHARGEN_RESULT_PARAGRAPH_BOX,
-    COMBAT_ACTOR_FLAG_PHASE_BLINK_FILTER, COMBAT_ACTOR_FLAG_SELECTABLE_80,
-    COMBAT_ACTOR_SLOTS, COMBAT_ARENA_SIDE, COMBAT_CLASS_GIANT_RAT, COMBAT_DEFAULT_DEATH_DROP_TILE,
-    COMBAT_GARGOYLE_DEATH_TERRAIN_TILE, COMBAT_GAZER_DEATH_MARKER_TILE,
-    COMBAT_PARTY_ACTOR_SLOTS, COMBAT_PARTY_CORPSE_TILE, COMBAT_PLACEMENT_SPEED_ADJUST_ROLL_NEUTRAL,
+    COMBAT_ACTOR_FLAG_PHASE_BLINK_FILTER, COMBAT_ACTOR_FLAG_SELECTABLE_80, COMBAT_ACTOR_SLOTS,
+    COMBAT_ARENA_SIDE, COMBAT_CLASS_GIANT_RAT, COMBAT_DEFAULT_DEATH_DROP_TILE,
+    COMBAT_GARGOYLE_DEATH_TERRAIN_TILE, COMBAT_GAZER_DEATH_MARKER_TILE, COMBAT_PARTY_ACTOR_SLOTS,
+    COMBAT_PARTY_CORPSE_TILE, COMBAT_PLACEMENT_SPEED_ADJUST_ROLL_NEUTRAL,
     COMBAT_VANISH_DEATH_MARKER_TILE, CREATE_FOOD_COST, CREATE_FOOD_SPELL_INDEX, CURE_COST,
     CURE_SPELL_INDEX, ChargenSession, ChargenSessionResult, ChargenSessionStep,
     CombatActorDescriptor, DEATH_VISION_LOOK_TILE, DEATH_WIND_COST, DEATH_WIND_SPELL_INDEX,
@@ -42,14 +44,14 @@ use u5_runtime::{
     DISPEL_FIELD_COST, DISPEL_FIELD_SPELL_INDEX, DUNGEON_CBT_RECORDS, DUNGEON_LEVEL_SPELL_COST,
     DUNGEON_MONSTER_COMBAT_CLASSES, Direction, DisplayDriverFamily, DungeonRoomCombatSetup,
     DungeonScene, EGA_PALETTE_RGB as ENHANCED_EGA_PALETTE_RGB, ENERGY_FIELD_COST,
-    ENERGY_FIELD_SPELL_INDEX,
-    EQUIP_SLOT_RING, EQUIP_SLOT_WEAPON, EQUIPMENT_EMPTY, EQUIPMENT_ID_ARROWS, EQUIPMENT_ID_BOW,
-    EQUIPMENT_ID_RING_REGENERATION, ExplorationTurnGateOutcome, FIELD_SPELL_COST,
-    FIRE_FIELD_SPELL_INDEX, FIRST_PLAYABLE_FRIGATE_TILE, FIRST_PLAYABLE_FULL_SHIP_HULL,
-    FLAME_WIND_COST, FLAME_WIND_SPELL_INDEX, FULL_SCREEN_TEXT_WINDOW_INDEX, FixedCellFont,
-    GATE_TRAVEL_COST, GATE_TRAVEL_SPELL_INDEX, GREAT_HEAL_COST, GREAT_HEAL_SPELL_INDEX, GameClock,
-    GraphicImage, GuildShop, HEAL_COST, HEAL_SPELL_INDEX, HORSE_PARKED_FIRST, Healer, Herbalist,
-    IN_LOR_COST, IN_LOR_SPELL_INDEX, IN_WIS_COST, IN_WIS_SPELL_INDEX, INTRO_DOORWAY_LINES,
+    ENERGY_FIELD_SPELL_INDEX, EQUIP_SLOT_RING, EQUIP_SLOT_WEAPON, EQUIPMENT_EMPTY,
+    EQUIPMENT_ID_ARROWS, EQUIPMENT_ID_BOW, EQUIPMENT_ID_RING_REGENERATION,
+    ExplorationTurnGateOutcome, FIELD_SPELL_COST, FIRE_FIELD_SPELL_INDEX,
+    FIRST_PLAYABLE_FRIGATE_TILE, FIRST_PLAYABLE_FULL_SHIP_HULL, FLAME_WIND_COST,
+    FLAME_WIND_SPELL_INDEX, FULL_SCREEN_TEXT_WINDOW_INDEX, FixedCellFont, GATE_TRAVEL_COST,
+    GATE_TRAVEL_SPELL_INDEX, GREAT_HEAL_COST, GREAT_HEAL_SPELL_INDEX, GameClock, GraphicImage,
+    GuildShop, HEAL_COST, HEAL_SPELL_INDEX, HORSE_PARKED_FIRST, Healer, Herbalist, IN_LOR_COST,
+    IN_LOR_SPELL_INDEX, IN_WIS_COST, IN_WIS_SPELL_INDEX, INTRO_DOORWAY_LINES,
     INTRO_INLINE_DOORWAY_STEP, INTRO_MENU_COPYRIGHT_CAPTION, INTRO_MENU_COPYRIGHT_CAPTION_COLUMN,
     INTRO_MENU_COPYRIGHT_CAPTION_ROW, INTRO_MENU_FRAME_BORDER_COLOR,
     INTRO_MENU_FRAME_BOTTOM_RULE_Y, INTRO_MENU_FRAME_BOTTOM_Y, INTRO_MENU_FRAME_INTERIOR_BOTTOM_Y,
@@ -66,12 +68,12 @@ use u5_runtime::{
     JIMMY_MANACLES_TILE, JIMMY_RELEASE_AI_MODE, JIMMY_STOCKS_TILE, JOURNEY_ONWARD_SHORTCUT_BANNER,
     LOAD_EMPTY_SAVE_LINE_1, LOAD_EMPTY_SAVE_LINE_2, LOAD_EMPTY_SAVE_LINE_3,
     LOCAL_VIEW_OVERLAY_ORIGIN_X, LOCAL_VIEW_OVERLAY_ORIGIN_Y, MAGIC_LOCK_COST,
-    MAGIC_LOCK_SPELL_INDEX, MAIN_TEXT_WINDOW_INDEX, MISCMAPS_DAT_FILE,
-    MORAL_STANDING_MAX, MonitorModel, MonochromeBitmap, MoonstoneGateSlot, NARRATIVE_GATE_X,
-    NARRATIVE_GATE_Y, NATURAL_MOONGATE_TERRAIN_TILE, NEGATE_MAGIC_COST, NEGATE_MAGIC_SPELL_INDEX,
-    NPC_DIALOG_ID_NONE, NPC_SCHEDULE_AI_OFFSET, NPC_SCHEDULE_WAYPOINT_COUNT, NpcSlot,
-    OOL_RECORD_LEN, OOL_SLOTS, OPEN_SPELL_COST, OPEN_SPELL_INDEX, PCS_GLYPH_HEIGHT, PEER_COST,
-    PEER_SPELL_INDEX, PLAY_EXIT_TO_DOS_KEY, PLAY_MUSIC_TOGGLE_KEY, PLAY_SCRIPT_MAX_IDLE_TICKS,
+    MAGIC_LOCK_SPELL_INDEX, MAIN_TEXT_WINDOW_INDEX, MISCMAPS_DAT_FILE, MORAL_STANDING_MAX,
+    MonitorModel, MonochromeBitmap, MoonstoneGateSlot, NARRATIVE_GATE_X, NARRATIVE_GATE_Y,
+    NATURAL_MOONGATE_TERRAIN_TILE, NEGATE_MAGIC_COST, NEGATE_MAGIC_SPELL_INDEX, NPC_DIALOG_ID_NONE,
+    NPC_SCHEDULE_AI_OFFSET, NPC_SCHEDULE_WAYPOINT_COUNT, NpcSlot, OOL_RECORD_LEN, OOL_SLOTS,
+    OPEN_SPELL_COST, OPEN_SPELL_INDEX, PCS_GLYPH_HEIGHT, PEER_COST, PEER_SPELL_INDEX,
+    PLAY_EXIT_TO_DOS_KEY, PLAY_MUSIC_TOGGLE_KEY, PLAY_SCRIPT_MAX_IDLE_TICKS,
     PLAY_TYPEAHEAD_TOGGLE_KEY, POISON_FIELD_SPELL_INDEX, POISON_WIND_COST, POISON_WIND_SPELL_INDEX,
     PROPORTIONAL_DRAW_CLIP_Y, PROPORTIONAL_WIDTH_TABLE, PROTECTION_COST, PROTECTION_SPELL_INDEX,
     PartyCapability, PartyMember, PlayInputDisposition, PlayOptions, PlayState, PlayTarget,
@@ -83,11 +85,10 @@ use u5_runtime::{
     SAVED_OOL_FILENAME, SAVED_OOL_LEN, SCENE_EMPATH_ABBEY, SCENE_JHELOM, SCENE_MOONGLOW,
     SCENE_SERPENTS_HOLD, SCENE_STONEGATE, SCENE_THE_LYCAEUM, SHADOWLORD_COWARDICE_INDEX,
     SHADOWLORD_FALSEHOOD_INDEX, SHADOWLORD_HATRED_INDEX, SHADOWLORD_HIDEOUT_VANQUISHED,
-    SHADOWLORD_OBJECT_TILE_BASE, SHADOWLORD_VANQUISHED,
-    SHIPPED_PALETTE_REGISTERS, SLEEP_COST, SLEEP_FIELD_SPELL_INDEX,
-    SLEEP_SPELL_INDEX, SPECIAL_ITEM_HMS_CAPE_PLANS_INDEX, SPECIAL_ITEM_MAGIC_CARPET_INDEX,
-    SPECIAL_ITEM_OWNED_VALUE, SPECIAL_ITEM_POCKET_WATCH_INDEX, SPECIAL_ITEM_SCEPTRE_LB_INDEX,
-    SPECIAL_ITEM_SEXTANT_INDEX, SPECIAL_ITEM_SHARD_COWARDICE_INDEX,
+    SHADOWLORD_OBJECT_TILE_BASE, SHADOWLORD_VANQUISHED, SHIPPED_PALETTE_REGISTERS, SLEEP_COST,
+    SLEEP_FIELD_SPELL_INDEX, SLEEP_SPELL_INDEX, SPECIAL_ITEM_HMS_CAPE_PLANS_INDEX,
+    SPECIAL_ITEM_MAGIC_CARPET_INDEX, SPECIAL_ITEM_OWNED_VALUE, SPECIAL_ITEM_POCKET_WATCH_INDEX,
+    SPECIAL_ITEM_SCEPTRE_LB_INDEX, SPECIAL_ITEM_SEXTANT_INDEX, SPECIAL_ITEM_SHARD_COWARDICE_INDEX,
     SPECIAL_ITEM_SHARD_FALSEHOOD_INDEX, SPECIAL_ITEM_SHARD_HATRED_INDEX,
     SPECIAL_ITEM_SPYGLASS_INDEX, SPECIAL_ITEM_WOODEN_BOX_INDEX, STEADY_PHASE, SURFACE_CHASM_X,
     SURFACE_CHASM_Y, Scene, Shipwright, ShrineVirtue, Stable, StoryRecords,
@@ -107,15 +108,15 @@ use u5_runtime::{
     ViewOverlayMode, WORD_OF_POWER_SEALED_TILE, WORLD_RUINED_SHRINE_TILE, WORLD_SHRINE_COORDINATES,
     WORLD_SIDE, WindState, WorldPlane, WorldReturn, X_RAY_COST, X_RAY_SPELL_INDEX,
     YELL_NOTHING_SAID_MESSAGE, YELL_SAILS_HOISTED_MESSAGE, advance_paced_combat_presentation,
-    blit_tile_id_to_viewport, combat_actor_is_active_not_dead,
-    combat_class_companion, combat_class_sprite_byte, combat_class_stats, combat_party_actor_byte,
-    commit_chargen_save, configure_talk_shop_text_window,
+    blit_tile_id_to_viewport, combat_actor_is_active_not_dead, combat_class_companion,
+    combat_class_sprite_byte, combat_class_stats, combat_party_actor_byte, commit_chargen_save,
+    configure_talk_shop_text_window,
     conversation_session::ConversationSession,
     default_party_equipment, default_party_experience, default_party_intelligence,
     default_party_names, default_party_roster, default_party_stay_counters, dungeon_cell_index,
     dungeon_room_combat_instance_from_setup, dungeon_room_combat_setup_from_record_for_entry,
-    dungeon_room_entry_seed_for_direction, handle_play_key_input,
-    hash_bytes, input_function_key_code, input_numpad_flag, input_typed_digit_direction_code,
+    dungeon_room_entry_seed_for_direction, handle_play_key_input, hash_bytes,
+    input_function_key_code, input_numpad_flag, input_typed_digit_direction_code,
     intro_doorway_paragraph_boxes,
     intro_menu::{IntroSubflow, IntroSubflowResult},
     intro_menu_frame_border_start_column, intro_step_has_story6_secondary_pass,
@@ -127,14 +128,13 @@ use u5_runtime::{
     load_proportional_font, load_question_records, load_return_to_view_assets, load_story_records,
     load_tile_atlas, load_title_bit, load_ultima_title_tick_frames,
     menu_dispatch::{UnifiedMenuDispatch, UnifiedMenuStep},
-    paint_arms_sell_browser_text_window,
-    paint_inn_pickup_register_text_window, paint_prompt_text_window_with_cursor,
-    paint_stats_panel_text_window, play_options_from_save_bytes_named,
-    published_world_location_entries, read_save_image_file, render_play_text_window_system,
-    render_return_to_view_playback_frame_over, render_text_panel_rgba, render_text_window_rgba,
-    render_text_window_rgba_with_runes, resolve_palette_register,
-    return_to_view_caption_start_column, return_to_view_fixed_wipe_rectangles,
-    run_intro_pre_flourish_phase,
+    paint_arms_sell_browser_text_window, paint_inn_pickup_register_text_window,
+    paint_prompt_text_window_with_cursor, paint_stats_panel_text_window,
+    play_options_from_save_bytes_named, published_world_location_entries, read_save_image_file,
+    render_play_text_window_system, render_return_to_view_playback_frame_over,
+    render_text_panel_rgba, render_text_window_rgba, render_text_window_rgba_with_runes,
+    resolve_palette_register, return_to_view_caption_start_column,
+    return_to_view_fixed_wipe_rectangles, run_intro_pre_flourish_phase,
     run_return_to_view_playback_until_restart, save_image_has_active_avatar,
     shop_runtime::{
         ArmsShopState, GuildShopState, HealerShopState, HorseTraderState, InnkeeperState,
@@ -151,16 +151,14 @@ use u5_runtime::{
 };
 #[cfg(test)]
 use u5_runtime::{
-    ENDGAME_TABLEAU_LORD_BRITISH_ACTOR_BYTE, ENDGAME_TABLEAU_LORD_BRITISH_SLOT,
-    ENDGAME_TABLEAU_WALKABLE_TILE, INTRO_DOORWAY_SECOND_LINE_PEN_Y, STATS_PANEL_TEXT_LEFT,
-};
-#[cfg(test)]
-use u5_runtime::{
     ENDGAME_GATE_CELL, ENDGAME_TABLEAU_WIDTH, MOONGATE_PHASE_ENDGAME_GROUND_TILE,
     MOONGATE_PHASE_SCRATCH_TILE, moongate_phase_gate_tile,
 };
-#[cfg(all(test, feature = "original-asset-tests"))]
-use u5_runtime::ENDGAME_TABLEAU_HEIGHT;
+#[cfg(test)]
+use u5_runtime::{
+    ENDGAME_TABLEAU_LORD_BRITISH_ACTOR_BYTE, ENDGAME_TABLEAU_LORD_BRITISH_SLOT,
+    ENDGAME_TABLEAU_WALKABLE_TILE, INTRO_DOORWAY_SECOND_LINE_PEN_Y, STATS_PANEL_TEXT_LEFT,
+};
 // Gameplay-screen border chrome and the message/command window.
 use u5_runtime::{
     CHROME_RULE_INDEX, ChromeFonts, ChromePalette, MESSAGE_WINDOW_RIGHT, MessageWindowRow,
@@ -642,8 +640,7 @@ const INTRO_SUBTITLE_IGNITION_FRESH_RUN_OUTER_UNITS: u64 = 10_495;
 /// 11.6 ms per publication at 3000 cycles" `intro.md §5` gives for the same
 /// remainder from its own split.
 const INTRO_SUBTITLE_IGNITION_PUBLICATION_WORK_NANOS: u64 = (INTRO_SUBTITLE_IGNITION_FRESH_RUN_NANOS
-    - INTRO_SUBTITLE_IGNITION_FRESH_RUN_OUTER_UNITS
-        * u5_runtime::audio::OUTER_CALIBRATED_UNIT_NANOS
+    - INTRO_SUBTITLE_IGNITION_FRESH_RUN_OUTER_UNITS * u5_runtime::audio::OUTER_CALIBRATED_UNIT_NANOS
     - INTRO_SUBTITLE_IGNITION_FRESH_RUN_SOUNDED * u5_runtime::audio::IGNITION_BURST_TOTAL_NANOS)
     / INTRO_SUBTITLE_IGNITION_FRESH_RUN_PUBLICATIONS;
 
@@ -1943,90 +1940,92 @@ pub fn visual_route_suite(
     let mut failures: Vec<String> = Vec::new();
     for case in visual_route_suite_cases() {
         let run_case = || -> io::Result<()> {
-        std::fs::write(game_dir.join(BRIT_OOL_FILENAME), &baseline_brit_ool)?;
-        std::fs::write(game_dir.join(UNDER_OOL_FILENAME), &baseline_under_ool)?;
-        let route_game_dir = prepare_visual_route_case_game_dir(game_dir, case.label)?;
-        let reload_save_dir = prepare_visual_route_reload_save_dir(game_dir, case.label)?;
-        let reload_checkpoints = visual_route_reload_checkpoints(case.label);
-        let command_game_dir = route_game_dir.as_deref().unwrap_or(game_dir);
-        let mut state = PlayState::load_scene(game_dir, case.options)?;
-        state.prng_state = VISUAL_SUITE_PRNG_SEED;
-        if let Some(configure) = case.configure {
-            configure(&mut state);
-        }
-        apply_visual_route_initial_setup(&mut state, case.label, game_dir)?;
-        let initial = write_visual_play_report(
-            out_dir,
-            &visual_route_step_label(case.label, 0, "initial"),
-            case.frame_kind,
-            &mut state,
-            &atlas,
-            ctx,
-        )?;
-        let mut previous_hash = initial.byte_hash;
-        let mut previous_area = state.area;
-        reports.push(initial);
-
-        for (index, command) in case.script.iter().enumerate() {
-            apply_visual_route_command(&mut state, command, command_game_dir).map_err(|err| {
-                io::Error::new(
-                    err.kind(),
-                    format!(
-                        "visual route `{}` step {} command `{command}`: {err}",
-                        case.label,
-                        index + 1
-                    ),
-                )
-            })?;
-            settle_visual_route_presentations(&mut state, command_game_dir)?;
-            if state.area != previous_area {
-                state.prng_state = VISUAL_SUITE_PRNG_SEED;
-                previous_area = state.area;
+            std::fs::write(game_dir.join(BRIT_OOL_FILENAME), &baseline_brit_ool)?;
+            std::fs::write(game_dir.join(UNDER_OOL_FILENAME), &baseline_under_ool)?;
+            let route_game_dir = prepare_visual_route_case_game_dir(game_dir, case.label)?;
+            let reload_save_dir = prepare_visual_route_reload_save_dir(game_dir, case.label)?;
+            let reload_checkpoints = visual_route_reload_checkpoints(case.label);
+            let command_game_dir = route_game_dir.as_deref().unwrap_or(game_dir);
+            let mut state = PlayState::load_scene(game_dir, case.options)?;
+            state.prng_state = VISUAL_SUITE_PRNG_SEED;
+            if let Some(configure) = case.configure {
+                configure(&mut state);
             }
-            if reload_checkpoints.contains(&(index + 1)) {
-                let Some(save_dir) = reload_save_dir.as_deref() else {
-                    return Err(io::Error::other(format!(
-                        "visual route suite `{}` has reload checkpoints but no temp save dir",
-                        case.label
-                    )));
-                };
-                reload_visual_route_state_from_checkpoint(&mut state, game_dir, save_dir)?;
-                previous_area = state.area;
-            }
-            let report = write_visual_play_report(
+            apply_visual_route_initial_setup(&mut state, case.label, game_dir)?;
+            let initial = write_visual_play_report(
                 out_dir,
-                &visual_route_step_label(case.label, index + 1, command),
+                &visual_route_step_label(case.label, 0, "initial"),
                 case.frame_kind,
                 &mut state,
                 &atlas,
                 ctx,
             )?;
-            // An `idle:` step pumps the world's animation and narrates
-            // nothing (`u5-engine#19`), so it legitimately repeats the frame
-            // whenever nothing on screen is animating.
-            let idle_step = command.starts_with("idle");
-            if report.byte_hash == previous_hash
-                && !idle_step
-                && !visual_route_allows_unchanged_step(case.label, index + 1)
-            {
-                return Err(io::Error::other(format!(
-                    "visual route suite `{}` step {} command `{}` did not change the frame",
-                    case.label,
-                    index + 1,
-                    command
-                )));
+            let mut previous_hash = initial.byte_hash;
+            let mut previous_area = state.area;
+            reports.push(initial);
+
+            for (index, command) in case.script.iter().enumerate() {
+                apply_visual_route_command(&mut state, command, command_game_dir).map_err(
+                    |err| {
+                        io::Error::new(
+                            err.kind(),
+                            format!(
+                                "visual route `{}` step {} command `{command}`: {err}",
+                                case.label,
+                                index + 1
+                            ),
+                        )
+                    },
+                )?;
+                settle_visual_route_presentations(&mut state, command_game_dir)?;
+                if state.area != previous_area {
+                    state.prng_state = VISUAL_SUITE_PRNG_SEED;
+                    previous_area = state.area;
+                }
+                if reload_checkpoints.contains(&(index + 1)) {
+                    let Some(save_dir) = reload_save_dir.as_deref() else {
+                        return Err(io::Error::other(format!(
+                            "visual route suite `{}` has reload checkpoints but no temp save dir",
+                            case.label
+                        )));
+                    };
+                    reload_visual_route_state_from_checkpoint(&mut state, game_dir, save_dir)?;
+                    previous_area = state.area;
+                }
+                let report = write_visual_play_report(
+                    out_dir,
+                    &visual_route_step_label(case.label, index + 1, command),
+                    case.frame_kind,
+                    &mut state,
+                    &atlas,
+                    ctx,
+                )?;
+                // An `idle:` step pumps the world's animation and narrates
+                // nothing (`u5-engine#19`), so it legitimately repeats the frame
+                // whenever nothing on screen is animating.
+                let idle_step = command.starts_with("idle");
+                if report.byte_hash == previous_hash
+                    && !idle_step
+                    && !visual_route_allows_unchanged_step(case.label, index + 1)
+                {
+                    return Err(io::Error::other(format!(
+                        "visual route suite `{}` step {} command `{}` did not change the frame",
+                        case.label,
+                        index + 1,
+                        command
+                    )));
+                }
+                previous_hash = report.byte_hash;
+                reports.push(report);
             }
-            previous_hash = report.byte_hash;
-            reports.push(report);
-        }
-        validate_visual_route_final_state(&state, case.label, command_game_dir)?;
-        if let Some(dir) = &reload_save_dir {
-            let _ = std::fs::remove_dir_all(dir);
-        }
-        if let Some(dir) = &route_game_dir {
-            let _ = std::fs::remove_dir_all(dir);
-        }
-        Ok(())
+            validate_visual_route_final_state(&state, case.label, command_game_dir)?;
+            if let Some(dir) = &reload_save_dir {
+                let _ = std::fs::remove_dir_all(dir);
+            }
+            if let Some(dir) = &route_game_dir {
+                let _ = std::fs::remove_dir_all(dir);
+            }
+            Ok(())
         };
         if let Err(error) = run_case() {
             println!("visual-route {}: FAILED", case.label);
@@ -2044,10 +2043,7 @@ pub fn visual_route_suite(
         failures.push(format!("visual key routes: {error}"));
     }
     if !failures.is_empty() {
-        println!(
-            "\nVisual route: {} case(s) failed.",
-            failures.len()
-        );
+        println!("\nVisual route: {} case(s) failed.", failures.len());
         for failure in &failures {
             println!("  {failure}");
         }
@@ -9311,9 +9307,9 @@ fn seed_visual_route_yew_wanted_poster(state: &mut PlayState) {
     // cell wins at row 4 (audit A180), so this used to push an active object
     // carrying `0xA0` - which is now, correctly, described as that object.
     // Stamp the live tile instead and clear any object on the cell.
-    state
-        .active_objects
-        .retain(|object| object.is_empty() || object.x != 17 || object.y != 21 || object.z != floor);
+    state.active_objects.retain(|object| {
+        object.is_empty() || object.x != 17 || object.y != 21 || object.z != floor
+    });
     if let Some(cell) = state.grid.get_mut(21 * TOWN_GRID_SIDE + 17) {
         *cell = 0xA0;
     }
@@ -10605,7 +10601,8 @@ fn keys_pressed_in_typed_order(
 fn visual_read_honours_queue(state: &PlayState) -> bool {
     state.typeahead_buffer_enabled
         || visual_read_forces_typeahead(state)
-        || (state.cinematic_hold_owns_input() && !state.blackthorn_rescue_awaiting_acknowledgement())
+        || (state.cinematic_hold_owns_input()
+            && !state.blackthorn_rescue_awaiting_acknowledgement())
 }
 
 /// `input.md §6`: whether a read in the current state honours the rest of the
@@ -12575,10 +12572,14 @@ fn run_visual_intro_start_menu_loader(
         if report.aborted_after.is_some() {
             reveal_abort_key_consumed = true;
             animated = false;
-            intro.surface.copy_rect_from(&source, u5_runtime::INTRO_START_MENU_REVEAL_RECT);
+            intro
+                .surface
+                .copy_rect_from(&source, u5_runtime::INTRO_START_MENU_REVEAL_RECT);
         }
     } else {
-        intro.surface.copy_rect_from(&source, u5_runtime::INTRO_START_MENU_REVEAL_RECT);
+        intro
+            .surface
+            .copy_rect_from(&source, u5_runtime::INTRO_START_MENU_REVEAL_RECT);
     }
 
     if animated {
@@ -12720,7 +12721,9 @@ fn advance_visual_intro_start_menu_reveal(intro: &mut VisualIntroState) -> bool 
         return false;
     };
     reveal.slices += 1;
-    let elapsed = reveal.slices.saturating_mul(INTRO_START_MENU_REVEAL_SLICE_NANOS);
+    let elapsed = reveal
+        .slices
+        .saturating_mul(INTRO_START_MENU_REVEAL_SLICE_NANOS);
     let due_clicks = u5_runtime::gated_dissolve_clicks_due(elapsed, reveal.total_clicks());
     let due_pixels = (due_clicks as usize * 2).min(reveal.total_pixels());
     while reveal.copied_pixels() < due_pixels && reveal.copy_next(&mut intro.surface) {}
@@ -12750,7 +12753,9 @@ fn abort_visual_intro_start_menu_reveal(intro: &mut VisualIntroState) -> bool {
         }
     }
     let source = reveal.source.clone();
-    intro.surface.copy_rect_from(&source, u5_runtime::INTRO_START_MENU_REVEAL_RECT);
+    intro
+        .surface
+        .copy_rect_from(&source, u5_runtime::INTRO_START_MENU_REVEAL_RECT);
     // `intro.md §3` step 4 / `audio.md §8.6.1`: the carrier is retuned from
     // inside the dissolve and silenced at its exit, so the click run stops
     // here with the transfer instead of playing out its ~2.9 s.
@@ -14159,9 +14164,10 @@ fn dungeon_skips_digit_translation(state: &PlayState) -> bool {
     matches!(state.area, u5_runtime::Area::Dungeon { .. })
         && !state.combat_active
         && state.active_rest.is_none()
-        && !state.active_direction_prompt.as_ref().is_some_and(|session| {
-            matches!(session.kind, u5_runtime::DirectionPromptKind::Klimb)
-        })
+        && !state
+            .active_direction_prompt
+            .as_ref()
+            .is_some_and(|session| matches!(session.kind, u5_runtime::DirectionPromptKind::Klimb))
 }
 
 /// `input.md §5`: "With Shift held and NumLock off, the keypad delivers
@@ -17652,7 +17658,10 @@ fn render_visual_play_frame_over_viewport(
     let kept_chrome: Vec<(usize, [u8; 4])> = opaque_cells
         .iter()
         .flat_map(|&(column, row)| {
-            let (x0, y0) = (usize::from(column) * CH_CELL_SIDE, usize::from(row) * CH_CELL_SIDE);
+            let (x0, y0) = (
+                usize::from(column) * CH_CELL_SIDE,
+                usize::from(row) * CH_CELL_SIDE,
+            );
             let keep = u5_runtime::picker_residue_cell_chrome_columns(state, column, row);
             (y0..(y0 + CH_CELL_SIDE).min(height))
                 .flat_map(move |y| (x0..(x0 + keep).min(width)).map(move |x| (y * width + x) * 4))
@@ -17664,7 +17673,10 @@ fn render_visual_play_frame_over_viewport(
     // their black pixels cover the chrome beneath them. Under the leaked
     // inverse the timed-effect slot's caps are too (u5-spec#299 Q12).
     for (column, row) in opaque_cells {
-        let (x0, y0) = (usize::from(column) * CH_CELL_SIDE, usize::from(row) * CH_CELL_SIDE);
+        let (x0, y0) = (
+            usize::from(column) * CH_CELL_SIDE,
+            usize::from(row) * CH_CELL_SIDE,
+        );
         for y in y0..(y0 + CH_CELL_SIDE).min(height) {
             let start = (y * width + x0) * 4;
             let end = (y * width + (x0 + CH_CELL_SIDE).min(width)) * 4;
@@ -18866,25 +18878,30 @@ fn render_integrated_status_framebuffer(
         // `text-output.md §10.6`: a prompt that is waiting for a key
         // keeps its own line open and carries the cursor inline, so no
         // fresh live row (and no end-cap triangle) is drawn for it.
-        let open_prompt = display_state.open_prompt_line().filter(|_| !flash_hold).or_else(|| {
-            if flash_hold {
-                return None;
-            }
-            // A shop's typed quantity prompt has no literal of its own to
-            // match: its question is already in the log, wrapped, with the
-            // authored trailing space trimmed off the last row and recorded
-            // as `trailing_spaces`. Rebuilding that row plus its space gives
-            // the layout the same open-prompt row every other typed prompt
-            // hands it, so the digits echo on the question's row and no live
-            // row - and no blank above it - is drawn.
-            if !u5_runtime::open_row_owns_the_cursor(&display_state) {
-                return None;
-            }
-            log.lines()
-                .last()
-                .filter(|line| !line.text.is_empty())
-                .map(|line| format!("{}{}", line.text, " ".repeat(line.trailing_spaces as usize)))
-        });
+        let open_prompt = display_state
+            .open_prompt_line()
+            .filter(|_| !flash_hold)
+            .or_else(|| {
+                if flash_hold {
+                    return None;
+                }
+                // A shop's typed quantity prompt has no literal of its own to
+                // match: its question is already in the log, wrapped, with the
+                // authored trailing space trimmed off the last row and recorded
+                // as `trailing_spaces`. Rebuilding that row plus its space gives
+                // the layout the same open-prompt row every other typed prompt
+                // hands it, so the digits echo on the question's row and no live
+                // row - and no blank above it - is drawn.
+                if !u5_runtime::open_row_owns_the_cursor(&display_state) {
+                    return None;
+                }
+                log.lines()
+                    .last()
+                    .filter(|line| !line.text.is_empty())
+                    .map(|line| {
+                        format!("{}{}", line.text, " ".repeat(line.trailing_spaces as usize))
+                    })
+            });
         // The spell-name colon line is a live row whose text comes from
         // the cast/mix session rather than the shell's own input buffer.
         let spell_echo = display_state.typed_prompt_echo().filter(|_| !flash_hold);
@@ -19800,13 +19817,13 @@ mod tests {
         Area, ArmsShop, CH_CELL_SIDE, CH_FONT_LEN, COMBAT_ARENA_SIDE, Direction, GuildShop,
         IBM_CH_FILE, INIT_GAM_FILENAME, INIT_OOL_FILENAME, INTRO_START_MENU_REVEAL_RECT,
         INTRO_STEP_1_RECT_TRANSITION, OOL_PLANE_LEN, PenStroke, ProportionalFont,
-        ProportionalGlyph, ProportionalWidthTable,
-        SAVE_CHARACTER_DEX_OFFSET, SAVE_CHARACTER_GENDER_OFFSET, SAVE_CHARACTER_INT_OFFSET,
-        SAVE_CHARACTER_NAME_LEN, SAVE_CHARACTER_STR_OFFSET, SAVE_ROSTER_OFFSET, SAVED_GAM_FILENAME,
-        SAVED_GAM_LEN, SAVED_OOL_FILENAME, SHOPPE_RECORDS_ARMS_DESCRIPTIONS_FIRST,
-        SHRINE_TABLE_FILE, STORY_DAT_FILE, ShrineVirtue, SurfaceChestVerb, TILES_EGA_FILE, Tavern,
-        TileGraphicsDepth, TlkRenderedGlyph, WorldPlane, dungeon_cell_index, parse_british_bit,
-        parse_ch_font, parse_title_bit, world_cell_index, wrap_text_panel_lines,
+        ProportionalGlyph, ProportionalWidthTable, SAVE_CHARACTER_DEX_OFFSET,
+        SAVE_CHARACTER_GENDER_OFFSET, SAVE_CHARACTER_INT_OFFSET, SAVE_CHARACTER_NAME_LEN,
+        SAVE_CHARACTER_STR_OFFSET, SAVE_ROSTER_OFFSET, SAVED_GAM_FILENAME, SAVED_GAM_LEN,
+        SAVED_OOL_FILENAME, SHOPPE_RECORDS_ARMS_DESCRIPTIONS_FIRST, SHRINE_TABLE_FILE,
+        STORY_DAT_FILE, ShrineVirtue, SurfaceChestVerb, TILES_EGA_FILE, Tavern, TileGraphicsDepth,
+        TlkRenderedGlyph, WorldPlane, dungeon_cell_index, parse_british_bit, parse_ch_font,
+        parse_title_bit, world_cell_index, wrap_text_panel_lines,
     };
 
     fn enc_tlk_text(text: &str) -> Vec<u8> {
@@ -20431,7 +20448,10 @@ mod tests {
         handle_play_key_input(&mut state, 'K', "", Path::new("")).unwrap();
         assert!(state.active_direction_prompt.is_some());
         assert!(!dungeon_skips_digit_translation(&state));
-        assert_eq!(key_code_to_command_char(KeyCode::Digit8, true, false), Some('*'));
+        assert_eq!(
+            key_code_to_command_char(KeyCode::Digit8, true, false),
+            Some('*')
+        );
     }
 
     /// Playtest P16-20: `input.md §5` has Shift-held keypad keys deliver
@@ -21831,7 +21851,10 @@ mod tests {
             INTRO_SUBTITLE_IGNITION_FRESH_RUN_OUTER_UNITS
         );
         let total = 119.0 * silent + 101.0 * sounded;
-        assert!((total - 12.03).abs() < 0.01, "fresh ignition run {total:.3} s");
+        assert!(
+            (total - 12.03).abs() < 0.01,
+            "fresh ignition run {total:.3} s"
+        );
         // "Per publication about 42.8 ms does not depend on the cycle setting
         // ... the CPU-bound remainder is about 11.6 ms per publication".
         let mean = total / 220.0;
@@ -21895,7 +21918,10 @@ mod tests {
         assert_eq!(outcome.reveal_clicks.len(), 1);
         // `intro.md §5` (u5-spec#298 Q39): "the preview runs in full after
         // the same start-up cost".
-        assert!(matches!(intro.panel, VisualIntroPanel::MenuLabelHold { .. }));
+        assert!(matches!(
+            intro.panel,
+            VisualIntroPanel::MenuLabelHold { .. }
+        ));
         assert!(!intro.title_sequence_skipped);
         assert!(intro.pending_auto_return_to_view);
         assert_eq!(
@@ -21935,7 +21961,10 @@ mod tests {
         ));
 
         // The preview start-up (u5-spec#298 Q39) follows the loader.
-        assert!(matches!(intro.panel, VisualIntroPanel::MenuLabelHold { .. }));
+        assert!(matches!(
+            intro.panel,
+            VisualIntroPanel::MenuLabelHold { .. }
+        ));
         assert_eq!(
             visual_intro_menu_highlight(&intro),
             IntroSubflow::JourneyOnward
@@ -22199,7 +22228,11 @@ mod tests {
                 advance_visual_intro_animation_tick(intro);
             }
             elapsed += f64::from(frame_secs);
-            assert!(elapsed < 120.0, "intro phase never ended: {}", summarize_intro(intro));
+            assert!(
+                elapsed < 120.0,
+                "intro phase never ended: {}",
+                summarize_intro(intro)
+            );
         }
         elapsed
     }
@@ -22227,8 +22260,9 @@ mod tests {
             );
         };
 
-        let flourish =
-            simulate_visual_intro_until(&mut intro, &mut pump, frame, |i| i.title_flourish_complete);
+        let flourish = simulate_visual_intro_until(&mut intro, &mut pump, frame, |i| {
+            i.title_flourish_complete
+        });
         // 85 presentation steps at the normative 14 ms.
         close(flourish, 85.0 * 0.014, "flourish");
 
@@ -22237,7 +22271,10 @@ mod tests {
         });
         // Eighteen unconditional ticks plus the twenty-tick bounded poll.
         close(presents, 38.0 * tick, "Presents hold");
-        assert_eq!(intro.title_card_hold_ticks, INTRO_TITLE_BOUNDED_POLL_BIOS_TICKS);
+        assert_eq!(
+            intro.title_card_hold_ticks,
+            INTRO_TITLE_BOUNDED_POLL_BIOS_TICKS
+        );
         assert_eq!(intro.title_signature_progress, 0);
 
         let ornament = simulate_visual_intro_until(&mut intro, &mut pump, frame, |i| {
@@ -22246,8 +22283,9 @@ mod tests {
         // The ornament's bounded poll, then the first stroke chunk's tick.
         close(ornament, 21.0 * tick, "ornament hold");
 
-        let signature =
-            simulate_visual_intro_until(&mut intro, &mut pump, frame, |i| i.title_signature_complete);
+        let signature = simulate_visual_intro_until(&mut intro, &mut pump, frame, |i| {
+            i.title_signature_complete
+        });
         let signature_ticks = (signature / tick).round();
         close(signature, signature_ticks * tick, "signature");
         assert!(signature_ticks > 0.0);
@@ -22267,7 +22305,10 @@ mod tests {
         // 16,160 checked visits at the published cadence, in 20 ms slices:
         // `timing.md §5.1` (u5-spec#298 Q35), 2.90 s at fixed 3000 cycles.
         close(reveal, 145.0 * 0.020, "logo reveal");
-        assert!((2.88..=2.92).contains(&reveal), "published reveal is 2.90 s");
+        assert!(
+            (2.88..=2.92).contains(&reveal),
+            "published reveal is 2.90 s"
+        );
         assert_eq!(intro.pending_reveal_clicks.len(), 16_160);
 
         let expected_ignition: f64 = match &intro.panel {
@@ -22292,7 +22333,10 @@ mod tests {
             (ignition - expected_ignition).abs() <= 0.25,
             "ignition: {ignition:.3} s, expected {expected_ignition:.3} s"
         );
-        assert!((ignition - 12.03).abs() <= 0.25, "ignition: {ignition:.3} s");
+        assert!(
+            (ignition - 12.03).abs() <= 0.25,
+            "ignition: {ignition:.3} s"
+        );
 
         // `intro.md §5` (u5-spec#298 Q39): the preview's start-up, 1.70 s at
         // fixed 3000 cycles, before its first visible output.
@@ -22320,7 +22364,10 @@ mod tests {
     fn the_last_title_image_stays_up_through_the_published_archive_load() {
         let tick = f64::from(BIOS_USER_TICK_INTERVAL_SECS);
         let load = f64::from(INTRO_START_MENU_ARCHIVE_LOAD_BIOS_TICKS) * tick;
-        assert!((load - 1.07).abs() <= tick / 2.0, "archive load {load:.3} s");
+        assert!(
+            (load - 1.07).abs() <= tick / 2.0,
+            "archive load {load:.3} s"
+        );
         let composition = f64::from(INTRO_COMPOSITION_HOLD_BIOS_TICKS) * tick;
         assert!(
             (composition - 2.15).abs() <= tick / 2.0,
@@ -22406,7 +22453,10 @@ mod tests {
         // `intro.md §5` (u5-spec#298 Q39): "a key inside the logo dissolve is
         // consumed by the loader, so the preview runs in full after the same
         // start-up cost".
-        assert!(matches!(intro.panel, VisualIntroPanel::MenuLabelHold { .. }));
+        assert!(matches!(
+            intro.panel,
+            VisualIntroPanel::MenuLabelHold { .. }
+        ));
         // P11: the click run stops with the transfer rather than playing out.
         assert_eq!(
             intro.pending_speaker_cancels,
@@ -23040,10 +23090,7 @@ mod tests {
             );
         }
         assert!(advance_visual_intro_animation_tick(&mut intro));
-        assert!(matches!(
-            intro.panel,
-            VisualIntroPanel::StartMenuReveal(_)
-        ));
+        assert!(matches!(intro.panel, VisualIntroPanel::StartMenuReveal(_)));
         while matches!(intro.panel, VisualIntroPanel::StartMenuReveal(_)) {
             assert!(advance_visual_intro_animation_tick(&mut intro));
         }
@@ -24602,13 +24649,19 @@ mod tests {
         assert!(!state.message_window_flash_hold_active());
         let after = render_visual_play_frame(&mut state, &atlas, play_ctx(&font));
         // The flash's second inversion restores the view.
-        assert_ne!(rgba_pixel(&held, width, x, y), rgba_pixel(&after, width, x, y));
+        assert_ne!(
+            rgba_pixel(&held, width, x, y),
+            rgba_pixel(&after, width, x, y)
+        );
         let mut again = after.clone();
         assert!(apply_visual_potion_flash_xor(
             &mut again,
             u5_runtime::potion_flash_playback(0).unwrap()
         ));
-        assert_eq!(rgba_pixel(&held, width, x, y), rgba_pixel(&again, width, x, y));
+        assert_eq!(
+            rgba_pixel(&held, width, x, y),
+            rgba_pixel(&again, width, x, y)
+        );
     }
 
     #[test]
@@ -26918,8 +26971,14 @@ mod tests {
         );
         // `input.md §5` (u5-spec#300 Q15, R589): Shift with a top-row digit
         // is the punctuation the keyboard sends, never a direction.
-        assert_eq!(key_code_to_input_byte(KeyCode::Digit8, true, false), Some(b'*'));
-        assert_eq!(key_code_to_input_byte(KeyCode::Digit1, true, false), Some(b'!'));
+        assert_eq!(
+            key_code_to_input_byte(KeyCode::Digit8, true, false),
+            Some(b'*')
+        );
+        assert_eq!(
+            key_code_to_input_byte(KeyCode::Digit1, true, false),
+            Some(b'!')
+        );
         assert_eq!(
             key_code_to_input_byte(KeyCode::F1, false, false),
             Some(u5_runtime::INPUT_CODE_F1)
@@ -28027,7 +28086,10 @@ mod tests {
 
         assert_eq!(state.turn, 0);
         assert_eq!(state.clock, clock_before);
-        assert_ne!(state.prng_state, prng_before, "the world step's wind check drew");
+        assert_ne!(
+            state.prng_state, prng_before,
+            "the world step's wind check drew"
+        );
         assert!(
             state
                 .message
@@ -28058,7 +28120,10 @@ mod tests {
             ));
             assert_eq!(prompt_cursor_visible, pass % 2 == 0);
             assert!(visual_idle_tick(&mut idle, Path::new(".")));
-            assert_eq!(state.prng_state, idle.prng_state, "pass {pass}: same draws as idle");
+            assert_eq!(
+                state.prng_state, idle.prng_state,
+                "pass {pass}: same draws as idle"
+            );
             assert_eq!(state.animation.frame, idle.animation.frame);
         }
         assert_ne!(state.prng_state, seed, "the world step drew");
@@ -28085,7 +28150,10 @@ mod tests {
         let clock_before = talk.clock;
         assert!(visual_idle_tick(&mut talk, Path::new(".")));
         assert!(visual_idle_tick(&mut talk, Path::new(".")));
-        assert_eq!(talk.prng_state, idle.prng_state, "same draws as an idle command wait");
+        assert_eq!(
+            talk.prng_state, idle.prng_state,
+            "same draws as an idle command wait"
+        );
         assert_eq!(talk.animation.frame, idle.animation.frame);
         assert_eq!(talk.turn, 0);
         assert_eq!(talk.clock, clock_before);
@@ -28236,7 +28304,10 @@ mod tests {
         )
         .unwrap();
 
-        assert_eq!(input_line, "JOB", "playtest N19: the reader uppercases keys");
+        assert_eq!(
+            input_line, "JOB",
+            "playtest N19: the reader uppercases keys"
+        );
         assert!(state.active_conversation.is_some());
         assert!(!transcript_contains(&state, "mend"));
 
@@ -28264,8 +28335,15 @@ mod tests {
         let mut input_line = String::new();
 
         for key in [KeyCode::KeyJ, KeyCode::KeyO] {
-            handle_visual_line_key(&mut state, &mut input_line, key, false, false, Path::new(""))
-                .unwrap();
+            handle_visual_line_key(
+                &mut state,
+                &mut input_line,
+                key,
+                false,
+                false,
+                Path::new(""),
+            )
+            .unwrap();
         }
         let entries_before = state.message_entries().len();
         let message_before = state.message.clone();
@@ -28280,12 +28358,23 @@ mod tests {
         .unwrap();
         assert!(input_line.is_empty());
         assert!(state.active_conversation.is_some());
-        assert_eq!(state.message_entries().len(), entries_before, "nothing submitted");
+        assert_eq!(
+            state.message_entries().len(),
+            entries_before,
+            "nothing submitted"
+        );
         assert_eq!(state.message, message_before);
 
         for key in [KeyCode::KeyJ, KeyCode::KeyO, KeyCode::KeyB, KeyCode::Enter] {
-            handle_visual_line_key(&mut state, &mut input_line, key, false, false, Path::new(""))
-                .unwrap();
+            handle_visual_line_key(
+                &mut state,
+                &mut input_line,
+                key,
+                false,
+                false,
+                Path::new(""),
+            )
+            .unwrap();
         }
         assert!(transcript_contains(&state, "mend"));
     }
@@ -28477,12 +28566,21 @@ mod tests {
 
         let mut input_line = String::new();
         for key in [KeyCode::KeyS, KeyCode::KeyP, KeyCode::KeyI, KeyCode::KeyR] {
-            let typed =
-                handle_visual_line_key(&mut state, &mut input_line, key, false, false, Path::new(""))
-                    .unwrap();
+            let typed = handle_visual_line_key(
+                &mut state,
+                &mut input_line,
+                key,
+                false,
+                false,
+                Path::new(""),
+            )
+            .unwrap();
             assert_eq!(typed, Some(PlayInputDisposition::Continue));
         }
-        assert_eq!(input_line, "SPIR", "playtest N19: the reader uppercases keys");
+        assert_eq!(
+            input_line, "SPIR",
+            "playtest N19: the reader uppercases keys"
+        );
         assert!(
             state.typed_prompt_echo_uppercases(),
             "the sage topic row echoes upper-cased"
@@ -28560,7 +28658,10 @@ mod tests {
             handle_visual_line_key(&mut state, &mut input_line, key, false, false, &dir).unwrap();
         }
 
-        assert_eq!(input_line, "AHM", "playtest N19: the reader uppercases keys");
+        assert_eq!(
+            input_line, "AHM",
+            "playtest N19: the reader uppercases keys"
+        );
         assert!(state.active_blackthorn.is_some());
         // blackthorn.md §4: the answer is not submitted until Enter, so
         // no shrine is ruined yet.
@@ -28816,7 +28917,10 @@ mod tests {
         for key in [KeyCode::KeyA, KeyCode::KeyH, KeyCode::KeyM] {
             handle_visual_line_key(&mut state, &mut input_line, key, false, false, &dir).unwrap();
         }
-        assert_eq!(input_line, "AHM", "playtest N19: the reader uppercases keys");
+        assert_eq!(
+            input_line, "AHM",
+            "playtest N19: the reader uppercases keys"
+        );
         assert_eq!(state.shrine_ordained_mask, 0);
 
         // `karma.md §12`: three `Mantra:` asks, and only the third reaches
@@ -31230,11 +31334,7 @@ mod tests {
                     window_index,
                 )
                 .expect("shared narrative composer");
-            let differing = shell
-                .iter()
-                .zip(&headless)
-                .filter(|(a, b)| a != b)
-                .count();
+            let differing = shell.iter().zip(&headless).filter(|(a, b)| a != b).count();
             assert_eq!(
                 (shell.len(), differing),
                 (headless.len(), 0),
@@ -31344,11 +31444,18 @@ mod tests {
         let mut transcript_seen = 0usize;
         let mut was_combat = false;
         let mut diagnostic_cursor = 0;
-        let mut report = |app: &mut App, label: &str, elapsed_ms: f64, transcript_seen: &mut usize, was_combat: &mut bool| {
+        let mut report = |app: &mut App,
+                          label: &str,
+                          elapsed_ms: f64,
+                          transcript_seen: &mut usize,
+                          was_combat: &mut bool| {
             let visual = app.world().resource::<VisualState>();
             let st = &visual.state;
             for line in take_new_runtime_diagnostics(st, &mut diagnostic_cursor) {
-                if line.contains("ncounter") || line.contains("combat") || line.contains("approaches") {
+                if line.contains("ncounter")
+                    || line.contains("combat")
+                    || line.contains("approaches")
+                {
                     println!("  [{elapsed_ms:>8.0} ms] diag {line}");
                 }
             }
@@ -31358,22 +31465,42 @@ mod tests {
                         let dx = object.x as isize - st.player.x as isize;
                         let dy = object.y as isize - st.player.y as isize;
                         if dx.abs() <= 1 && dy.abs() <= 1 {
-                            println!("  [{elapsed_ms:>8.0} ms] adjacent object {slot}: type {:#04x} at ({}, {}) on tile {:#04x}", object.type_byte, object.x, object.y, st.grid.get(world_cell_index(object.x, object.y)).copied().unwrap_or(0));
+                            println!(
+                                "  [{elapsed_ms:>8.0} ms] adjacent object {slot}: type {:#04x} at ({}, {}) on tile {:#04x}",
+                                object.type_byte,
+                                object.x,
+                                object.y,
+                                st.grid
+                                    .get(world_cell_index(object.x, object.y))
+                                    .copied()
+                                    .unwrap_or(0)
+                            );
                         }
                     }
                 }
             }
             let entries = st.message_entries();
             for entry in entries.iter().skip(*transcript_seen) {
-                println!("  [{elapsed_ms:>8.0} ms] text {:?} (prng {:#06x})", entry.text, st.prng_state);
+                println!(
+                    "  [{elapsed_ms:>8.0} ms] text {:?} (prng {:#06x})",
+                    entry.text, st.prng_state
+                );
             }
             *transcript_seen = entries.len();
             if st.combat_active && !*was_combat {
-                println!("  [{elapsed_ms:>8.0} ms] combat starts: arena centre tile {:#04x}", st.combat_terrain[5][5]);
+                println!(
+                    "  [{elapsed_ms:>8.0} ms] combat starts: arena centre tile {:#04x}",
+                    st.combat_terrain[5][5]
+                );
                 for (index, actor) in st.combat_actors.iter().enumerate() {
                     if !actor.is_empty() {
-                        let name = combat_class_stats(actor.owner_target_class).map(|s| s.name).unwrap_or("?");
-                        println!("      actor {index}: class {} ({name}) at ({}, {}) hp {}", actor.owner_target_class, actor.x, actor.y, actor.hp_or_wound);
+                        let name = combat_class_stats(actor.owner_target_class)
+                            .map(|s| s.name)
+                            .unwrap_or("?");
+                        println!(
+                            "      actor {index}: class {} ({name}) at ({}, {}) hp {}",
+                            actor.owner_target_class, actor.x, actor.y, actor.hp_or_wound
+                        );
                     }
                 }
             }
@@ -31386,19 +31513,37 @@ mod tests {
                     .collect();
                 println!(
                     "SHOT {label} @{elapsed_ms:.0} ms: {:?} at ({}, {}) facing {:?} clock {:02}:{:02} combat {} party [{}] prng {:#06x}",
-                    st.area, st.player.x, st.player.y, st.player.facing, st.clock.hour, st.clock.minute,
-                    st.combat_active, hp.join(" "), st.prng_state
+                    st.area,
+                    st.player.x,
+                    st.player.y,
+                    st.player.facing,
+                    st.clock.hour,
+                    st.clock.minute,
+                    st.combat_active,
+                    hp.join(" "),
+                    st.prng_state
                 );
                 if st.combat_active {
-                    for (index, actor) in st.combat_actors.iter().enumerate().skip(COMBAT_PARTY_ACTOR_SLOTS) {
+                    for (index, actor) in st
+                        .combat_actors
+                        .iter()
+                        .enumerate()
+                        .skip(COMBAT_PARTY_ACTOR_SLOTS)
+                    {
                         if !actor.is_empty() {
-                            println!("      actor {index}: class {} at ({}, {}) hp {}", actor.owner_target_class, actor.x, actor.y, actor.hp_or_wound);
+                            println!(
+                                "      actor {index}: class {} at ({}, {}) hp {}",
+                                actor.owner_target_class, actor.x, actor.y, actor.hp_or_wound
+                            );
                         }
                     }
                 } else {
                     for (slot, object) in st.active_objects.iter().enumerate().skip(1) {
                         if !object.is_empty() {
-                            println!("      object {slot}: type {:#04x} at ({}, {})", object.type_byte, object.x, object.y);
+                            println!(
+                                "      object {slot}: type {:#04x} at ({}, {})",
+                                object.type_byte, object.x, object.y
+                            );
                         }
                     }
                 }
@@ -31427,9 +31572,17 @@ mod tests {
                             .resource_mut::<Time<bevy::prelude::Real>>()
                             .update_with_duration(frame);
                         app.update();
-                        app.world_mut().resource_mut::<ButtonInput<KeyCode>>().clear();
+                        app.world_mut()
+                            .resource_mut::<ButtonInput<KeyCode>>()
+                            .clear();
                         elapsed_ms += frame_ms;
-                        report(&mut app, "", elapsed_ms, &mut transcript_seen, &mut was_combat);
+                        report(
+                            &mut app,
+                            "",
+                            elapsed_ms,
+                            &mut transcript_seen,
+                            &mut was_combat,
+                        );
                     }
                 }
                 "key" => {
@@ -31446,27 +31599,87 @@ mod tests {
                         letter if letter.len() == 1 => {
                             let c = letter.chars().next().unwrap().to_ascii_uppercase();
                             if c.is_ascii_digit() {
-                                [KeyCode::Digit0, KeyCode::Digit1, KeyCode::Digit2, KeyCode::Digit3, KeyCode::Digit4, KeyCode::Digit5, KeyCode::Digit6, KeyCode::Digit7, KeyCode::Digit8, KeyCode::Digit9][c as usize - '0' as usize]
+                                [
+                                    KeyCode::Digit0,
+                                    KeyCode::Digit1,
+                                    KeyCode::Digit2,
+                                    KeyCode::Digit3,
+                                    KeyCode::Digit4,
+                                    KeyCode::Digit5,
+                                    KeyCode::Digit6,
+                                    KeyCode::Digit7,
+                                    KeyCode::Digit8,
+                                    KeyCode::Digit9,
+                                ][c as usize - '0' as usize]
                             } else {
-                                [KeyCode::KeyA, KeyCode::KeyB, KeyCode::KeyC, KeyCode::KeyD, KeyCode::KeyE, KeyCode::KeyF, KeyCode::KeyG, KeyCode::KeyH, KeyCode::KeyI, KeyCode::KeyJ, KeyCode::KeyK, KeyCode::KeyL, KeyCode::KeyM, KeyCode::KeyN, KeyCode::KeyO, KeyCode::KeyP, KeyCode::KeyQ, KeyCode::KeyR, KeyCode::KeyS, KeyCode::KeyT, KeyCode::KeyU, KeyCode::KeyV, KeyCode::KeyW, KeyCode::KeyX, KeyCode::KeyY, KeyCode::KeyZ][c as usize - 'A' as usize]
+                                [
+                                    KeyCode::KeyA,
+                                    KeyCode::KeyB,
+                                    KeyCode::KeyC,
+                                    KeyCode::KeyD,
+                                    KeyCode::KeyE,
+                                    KeyCode::KeyF,
+                                    KeyCode::KeyG,
+                                    KeyCode::KeyH,
+                                    KeyCode::KeyI,
+                                    KeyCode::KeyJ,
+                                    KeyCode::KeyK,
+                                    KeyCode::KeyL,
+                                    KeyCode::KeyM,
+                                    KeyCode::KeyN,
+                                    KeyCode::KeyO,
+                                    KeyCode::KeyP,
+                                    KeyCode::KeyQ,
+                                    KeyCode::KeyR,
+                                    KeyCode::KeyS,
+                                    KeyCode::KeyT,
+                                    KeyCode::KeyU,
+                                    KeyCode::KeyV,
+                                    KeyCode::KeyW,
+                                    KeyCode::KeyX,
+                                    KeyCode::KeyY,
+                                    KeyCode::KeyZ,
+                                ][c as usize - 'A' as usize]
                             }
                         }
                         other => panic!("unmapped key {other}"),
                     };
-                    println!("  [{elapsed_ms:>8.0} ms] key {} (prng {:#06x})", fields[2], app.world().resource::<VisualState>().state.prng_state);
-                    app.world_mut().resource_mut::<ButtonInput<KeyCode>>().press(code);
+                    println!(
+                        "  [{elapsed_ms:>8.0} ms] key {} (prng {:#06x})",
+                        fields[2],
+                        app.world().resource::<VisualState>().state.prng_state
+                    );
+                    app.world_mut()
+                        .resource_mut::<ButtonInput<KeyCode>>()
+                        .press(code);
                     app.world_mut().resource_mut::<Time>().advance_by(frame);
                     app.world_mut()
                         .resource_mut::<Time<bevy::prelude::Real>>()
                         .update_with_duration(frame);
                     app.update();
-                    app.world_mut().resource_mut::<ButtonInput<KeyCode>>().release(code);
-                    app.world_mut().resource_mut::<ButtonInput<KeyCode>>().clear();
+                    app.world_mut()
+                        .resource_mut::<ButtonInput<KeyCode>>()
+                        .release(code);
+                    app.world_mut()
+                        .resource_mut::<ButtonInput<KeyCode>>()
+                        .clear();
                     elapsed_ms += frame_ms;
-                    report(&mut app, "", elapsed_ms, &mut transcript_seen, &mut was_combat);
+                    report(
+                        &mut app,
+                        "",
+                        elapsed_ms,
+                        &mut transcript_seen,
+                        &mut was_combat,
+                    );
                 }
                 "shot" => {
-                    report(&mut app, fields[2], elapsed_ms, &mut transcript_seen, &mut was_combat);
+                    report(
+                        &mut app,
+                        fields[2],
+                        elapsed_ms,
+                        &mut transcript_seen,
+                        &mut was_combat,
+                    );
                 }
                 _ => {}
             }
@@ -31675,7 +31888,9 @@ mod tests {
         let mut app = speaker_test_app();
         queue_speaker_effect(
             &mut app,
-            SoundEffect::LordBritishCampEnvelope(u5_runtime::lord_british_camp::LORD_BRITISH_CAMP_STING_SHORT),
+            SoundEffect::LordBritishCampEnvelope(
+                u5_runtime::lord_british_camp::LORD_BRITISH_CAMP_STING_SHORT,
+            ),
             false,
         );
         assert_eq!(speaker_voices(&mut app).len(), 1);
@@ -31684,10 +31899,16 @@ mod tests {
         let mut app = speaker_test_app();
         queue_speaker_effect(
             &mut app,
-            SoundEffect::LordBritishCampEnvelope(u5_runtime::lord_british_camp::LORD_BRITISH_CAMP_STING_LONG),
+            SoundEffect::LordBritishCampEnvelope(
+                u5_runtime::lord_british_camp::LORD_BRITISH_CAMP_STING_LONG,
+            ),
             false,
         );
-        assert_eq!(flash_voices(&mut app), 1, "muted, the long sting still flashes");
+        assert_eq!(
+            flash_voices(&mut app),
+            1,
+            "muted, the long sting still flashes"
+        );
     }
 
     /// Playtest H12, `audio.md §6`: every shared variant inverts the whole
@@ -31791,7 +32012,14 @@ mod tests {
                 game_dir: &v.game_dir,
                 cursor_frame: v.prompt_cursor_frame,
             };
-            render_visual_play_frame_with_input_and_cursor(&mut v.state, &v.atlas, ctx, "", "", false)
+            render_visual_play_frame_with_input_and_cursor(
+                &mut v.state,
+                &v.atlas,
+                ctx,
+                "",
+                "",
+                false,
+            )
         };
         let long = SoundEffect::LordBritishCampEnvelope(
             u5_runtime::lord_british_camp::LORD_BRITISH_CAMP_STING_LONG,
@@ -31803,7 +32031,12 @@ mod tests {
             .resource_mut::<Events<SpeakerEffect>>()
             .send(SpeakerEffect::new(long, false));
         app.update();
-        assert!(app.world().resource::<VisualState>().state.presentation_camp_flash_inverted);
+        assert!(
+            app.world()
+                .resource::<VisualState>()
+                .state
+                .presentation_camp_flash_inverted
+        );
         let flashed = frame(&mut app);
         let width = VISUAL_PLAY_FRAME_WIDTH as usize;
         let index_at = |rgba: &[u8], x: usize, y: usize| {
@@ -31811,7 +32044,11 @@ mod tests {
             ega_palette_index_from_rgba(&rgba[offset..offset + 4])
         };
         for (x, y) in [(8, 8), (95, 95), (183, 183), (8, 183)] {
-            assert_eq!(index_at(&flashed, x, y), index_at(&plain, x, y) ^ 15, "({x}, {y})");
+            assert_eq!(
+                index_at(&flashed, x, y),
+                index_at(&plain, x, y) ^ 15,
+                "({x}, {y})"
+            );
         }
         // Outside the viewport square nothing changes.
         assert_eq!(index_at(&flashed, 7, 7), index_at(&plain, 7, 7));
@@ -31822,10 +32059,19 @@ mod tests {
             .advance_by(duration + Duration::from_millis(1));
         app.update();
         app.update();
-        assert!(!app.world().resource::<VisualState>().state.presentation_camp_flash_inverted);
+        assert!(
+            !app.world()
+                .resource::<VisualState>()
+                .state
+                .presentation_camp_flash_inverted
+        );
         let repainted = frame(&mut app);
         for (x, y) in [(8, 8), (95, 95), (183, 183)] {
-            assert_eq!(index_at(&repainted, x, y), index_at(&plain, x, y), "({x}, {y})");
+            assert_eq!(
+                index_at(&repainted, x, y),
+                index_at(&plain, x, y),
+                "({x}, {y})"
+            );
         }
     }
 
@@ -31947,7 +32193,10 @@ mod tests {
         }
         app.update();
         assert_eq!(
-            app.world().resource::<VisualState>().state.presentation_stats_row_flash,
+            app.world()
+                .resource::<VisualState>()
+                .state
+                .presentation_stats_row_flash,
             Some(0)
         );
         app.world_mut()
@@ -31956,7 +32205,10 @@ mod tests {
         app.update();
         app.update();
         assert_eq!(
-            app.world().resource::<VisualState>().state.presentation_stats_row_flash,
+            app.world()
+                .resource::<VisualState>()
+                .state
+                .presentation_stats_row_flash,
             None
         );
     }
@@ -32353,7 +32605,11 @@ mod tests {
         for _ in 0..5 {
             shell.tick_by(FRAME);
         }
-        assert_eq!(shell.position(), start, "no key is read while the load runs");
+        assert_eq!(
+            shell.position(),
+            start,
+            "no key is read while the load runs"
+        );
         assert_eq!(shell.visual().typed_keys.len(), 1);
         // The frame the pause ends runs the entry step; the next reads the key.
         for _ in 0..5 {
@@ -32361,7 +32617,10 @@ mod tests {
         }
         assert!(!shell.visual().state.overworld_input_helper_entry_owed);
         shell.tick_by(FRAME);
-        assert!(shell.visual().typed_keys.is_empty(), "the queued key was read");
+        assert!(
+            shell.visual().typed_keys.is_empty(),
+            "the queued key was read"
+        );
     }
 
     /// Playtest H15, `input.md §8`: the reader "accepts printable ASCII bytes
@@ -32864,7 +33123,10 @@ mod tests {
                 preset_keys: vec!['U', '\r', ' ', 'Z'],
             })
             .insert_resource(ScreenshotState::default())
-            .add_systems(Update, screenshot_system.after(present_camp_apparition_flash));
+            .add_systems(
+                Update,
+                screenshot_system.after(present_camp_apparition_flash),
+            );
 
         let started = std::time::Instant::now();
         let mut drunk_at = None;
@@ -32884,7 +33146,11 @@ mod tests {
             started.elapsed()
         );
         assert_eq!(
-            shell.app.world().resource::<ScreenshotState>().preset_key_cursor,
+            shell
+                .app
+                .world()
+                .resource::<ScreenshotState>()
+                .preset_key_cursor,
             3,
             "the key after the potion waits"
         );
@@ -32895,7 +33161,11 @@ mod tests {
         for _ in 0..240 {
             if shell.speaker_busy() {
                 assert_eq!(
-                    shell.app.world().resource::<ScreenshotState>().preset_key_cursor,
+                    shell
+                        .app
+                        .world()
+                        .resource::<ScreenshotState>()
+                        .preset_key_cursor,
                     3,
                     "no preset key runs under the voice"
                 );
@@ -32913,7 +33183,11 @@ mod tests {
         assert!(!shell.speaker_busy());
         assert!(!shell.visual().state.presentation_camp_flash_inverted);
         assert_eq!(
-            shell.app.world().resource::<ScreenshotState>().preset_key_cursor,
+            shell
+                .app
+                .world()
+                .resource::<ScreenshotState>()
+                .preset_key_cursor,
             4,
             "the waiting key runs once the voice has ended"
         );

@@ -238,7 +238,12 @@ impl StagedNarration {
 
     /// [`Self::push_ticks_with_cue`] for a hold in seconds - a blocking
     /// sound whose length is the program's own, not a tick count.
-    pub fn push_secs_with_cue(&mut self, delay_secs: f64, cue: NarrationCue, text: impl Into<String>) {
+    pub fn push_secs_with_cue(
+        &mut self,
+        delay_secs: f64,
+        cue: NarrationCue,
+        text: impl Into<String>,
+    ) {
         self.beats.push_back(NarrationBeat {
             delay_secs,
             text: text.into(),
@@ -287,9 +292,7 @@ impl StagedNarration {
             _ => now_secs,
         };
         let delay_secs = beat.delay_secs;
-        *self
-            .due_at_secs
-            .get_or_insert_with(|| anchor + delay_secs)
+        *self.due_at_secs.get_or_insert_with(|| anchor + delay_secs)
     }
 
     pub fn clear(&mut self) {

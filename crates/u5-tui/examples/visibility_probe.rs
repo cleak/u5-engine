@@ -44,9 +44,23 @@ fn main() {
         for dx in -radius..=radius {
             let (x, y) = (px + dx, py + dy);
             let visible = if town {
-                state.town_cell_visible_with_light_threshold(px, py, x, y, radius as usize, threshold)
+                state.town_cell_visible_with_light_threshold(
+                    px,
+                    py,
+                    x,
+                    y,
+                    radius as usize,
+                    threshold,
+                )
             } else {
-                state.world_cell_visible_with_light_threshold(px, py, x, y, radius as usize, threshold)
+                state.world_cell_visible_with_light_threshold(
+                    px,
+                    py,
+                    x,
+                    y,
+                    radius as usize,
+                    threshold,
+                )
             };
             if visible {
                 painted += 1;
@@ -68,16 +82,33 @@ fn main() {
             for dx in -radius..=radius {
                 let (x, y) = (px + dx, py + dy);
                 let visible = if town {
-                    state.town_cell_visible_with_light_threshold(px, py, x, y, radius as usize, probe)
+                    state.town_cell_visible_with_light_threshold(
+                        px,
+                        py,
+                        x,
+                        y,
+                        radius as usize,
+                        probe,
+                    )
                 } else {
-                    state.world_cell_visible_with_light_threshold(px, py, x, y, radius as usize, probe)
+                    state.world_cell_visible_with_light_threshold(
+                        px,
+                        py,
+                        x,
+                        y,
+                        radius as usize,
+                        probe,
+                    )
                 };
                 if visible {
                     lit += 1;
                 }
             }
         }
-        println!("  L={probe:<3} gate={:<4} painted={lit}", gate_cells(probe, radius));
+        println!(
+            "  L={probe:<3} gate={:<4} painted={lit}",
+            gate_cells(probe, radius)
+        );
     }
     println!();
     for dy in -radius..=radius {
@@ -85,9 +116,23 @@ fn main() {
         for dx in -radius..=radius {
             let (x, y) = (px + dx, py + dy);
             let visible = if town {
-                state.town_cell_visible_with_light_threshold(px, py, x, y, radius as usize, threshold)
+                state.town_cell_visible_with_light_threshold(
+                    px,
+                    py,
+                    x,
+                    y,
+                    radius as usize,
+                    threshold,
+                )
             } else {
-                state.world_cell_visible_with_light_threshold(px, py, x, y, radius as usize, threshold)
+                state.world_cell_visible_with_light_threshold(
+                    px,
+                    py,
+                    x,
+                    y,
+                    radius as usize,
+                    threshold,
+                )
             };
             row.push(if visible { '#' } else { '.' });
         }

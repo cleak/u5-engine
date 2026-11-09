@@ -568,9 +568,7 @@ impl PlayState {
         // combat and is skipped on the loss result (see
         // `apply_combat_round_loop_exit`). With no arena there is no fight to
         // lose, so the patch is made at once.
-        if !dungeon_cbt_available
-            && let Some(cell) = trigger_cell
-        {
+        if !dungeon_cbt_available && let Some(cell) = trigger_cell {
             self.grid[cell] = 0xa0 | slot;
         }
         self.mark_visibility_dirty();
@@ -1078,12 +1076,12 @@ impl PlayState {
         // onto ... a vehicle/object may route to a command-specific
         // interaction instead of an ordinary move"). Its static terrain - the
         // water under a frigate - is the vehicle's, not the walker's.
-        let onto_boardable_vehicle = self
-            .boardable_vehicle_slot_at(nx, ny)
-            .is_some_and(|candidate| {
-                !candidate.blocked_by_occupant
-                    && self.player.transport.can_board(candidate.transport)
-            });
+        let onto_boardable_vehicle =
+            self.boardable_vehicle_slot_at(nx, ny)
+                .is_some_and(|candidate| {
+                    !candidate.blocked_by_occupant
+                        && self.player.transport.can_board(candidate.transport)
+                });
         let damage_tile = if transition.is_none() && !onto_boardable_vehicle {
             if let Some(game_dir) = game_dir {
                 self.world_damage_tile_at(game_dir, plane, nx, ny, tile)?
@@ -1265,7 +1263,10 @@ impl PlayState {
         let Some(pending) = self.pending_difficult_terrain_step.take() else {
             return Ok(None);
         };
-        if self.area != (Area::World { plane: pending.plane })
+        if self.area
+            != (Area::World {
+                plane: pending.plane,
+            })
             || matches!(self.party_capability(), PartyCapability::Defeated)
         {
             return Ok(None);

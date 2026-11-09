@@ -796,7 +796,10 @@ fn play_script_idle_count_steps_the_world_at_the_arrest_offer() {
     );
 
     assert_eq!(prompted.turn, 0);
-    assert_eq!(prompted.animation.frame, 2, "two idle passes, two world steps");
+    assert_eq!(
+        prompted.animation.frame, 2,
+        "two idle passes, two world steps"
+    );
     assert!(prompted.pending_town_arrest.is_some());
     assert_eq!(prompted.message, TOWN_ARREST_SURRENDER_PROMPT);
 }
@@ -818,7 +821,10 @@ fn play_script_idle_count_steps_the_shrine_reads_and_not_the_narrative_pages() {
         handle_play_script_command(&mut shrine, "idle:3", Path::new("")).unwrap(),
         PlayInputDisposition::Continue
     );
-    assert_eq!(shrine.prng_state, expected.prng_state, "three hold-cost steps");
+    assert_eq!(
+        shrine.prng_state, expected.prng_state,
+        "three hold-cost steps"
+    );
     assert_eq!(shrine.animation.frame, expected.animation.frame);
     assert_eq!(shrine.active_shrine.as_ref().unwrap().virtue_buffer, "");
     assert_eq!(shrine.turn, 0);
@@ -1908,10 +1914,7 @@ fn play_script_runner_prints_the_codex_turn_in_attribute_lines_without_a_further
         state.flush_staged_narration();
         state.adopt_shrine_prompt_row();
     }
-    let commands: Vec<String> = ["R", "a", "return"]
-        .iter()
-        .map(|s| s.to_string())
-        .collect();
+    let commands: Vec<String> = ["R", "a", "return"].iter().map(|s| s.to_string()).collect();
 
     run_play_script_commands(&mut state, &dir, &commands, None).unwrap();
 
@@ -2091,7 +2094,10 @@ fn play_script_lone_sleeper_on_a_sleep_field_reaches_a_keyboard_turn() {
         assert!(state.combat_active, "seed {seed}");
         assert_eq!(state.pending_combat_actor_slot, Some(0), "seed {seed}");
         assert_eq!(state.party[0].status, b'G', "seed {seed}: awake");
-        assert!(state.active_objects[1].is_empty(), "seed {seed}: field gone");
+        assert!(
+            state.active_objects[1].is_empty(),
+            "seed {seed}: field gone"
+        );
     }
 }
 
@@ -2110,7 +2116,9 @@ fn play_script_stops_when_combat_reaches_no_keyboard_turn() {
         .expect_err("a fight with no reachable keyboard turn stops the script");
 
     assert!(
-        error.to_string().contains("combat reached no keyboard turn"),
+        error
+            .to_string()
+            .contains("combat reached no keyboard turn"),
         "{error}"
     );
     assert!(state.combat_active);

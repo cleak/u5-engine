@@ -76,7 +76,8 @@ impl TextHoldKind {
 
 /// Whether `text` carries any hold marker.
 pub fn text_has_hold_markers(text: &str) -> bool {
-    text.bytes().any(|byte| TextHoldKind::from_marker(byte).is_some())
+    text.bytes()
+        .any(|byte| TextHoldKind::from_marker(byte).is_some())
 }
 
 /// `text` with every hold marker removed: what the composed output reads as

@@ -34,21 +34,20 @@ use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use u5_runtime::{
-    DUNGEON_CHEST_JIMMY_NO_KEYS, DUNGEON_CHEST_JIMMY_UNLOCKED, DUNGEON_CHEST_JIMMY_WHAT,
-    AN_SANCT_CHEST_OPENED_LINE, AWAKEN_COST, AWAKEN_SPELL_INDEX, DUNGEON_CHEST_OPENED, ActiveObject, Area, ArmsShop, BLACKTHORN_CAPTIVE_CELL_SCENE,
-    BLACKTHORN_RESCUE_HANDOFF_SCENE, BLINK_COST, BLINK_SPELL_INDEX, BRIT_DAT_FILENAME,
-    BRIT_OOL_FILENAME, COMBAT_ACTOR_FLAG_FLEEING,
+    AN_SANCT_CHEST_OPENED_LINE, AWAKEN_COST, AWAKEN_SPELL_INDEX, ActiveObject, Area, ArmsShop,
+    BLACKTHORN_CAPTIVE_CELL_SCENE, BLACKTHORN_RESCUE_HANDOFF_SCENE, BLINK_COST, BLINK_SPELL_INDEX,
+    BRIT_DAT_FILENAME, BRIT_OOL_FILENAME, CODEX_SHRINE_ENTRY_TILE, COMBAT_ACTOR_FLAG_FLEEING,
     COMBAT_ACTOR_FLAG_PHASE_BLINK_FILTER, COMBAT_ACTOR_FLAG_SELECTABLE_80, COMBAT_ACTOR_SLOTS,
-    COMBAT_ARENA_SIDE, COMBAT_CLASS_GIANT_RAT,
-    COMBAT_DEFAULT_DEATH_DROP_TILE, COMBAT_GARGOYLE_DEATH_TERRAIN_TILE,
-    COMBAT_GAZER_DEATH_MARKER_TILE, COMBAT_PARTY_ACTOR_SLOTS, COMBAT_PLACEMENT_PHASE_BASE,
-    COMPLETED_LONG_CAMP_COOLDOWN_HOURS, CREATE_FOOD_COST, CREATE_FOOD_MAX_GRANT,
-    CREATE_FOOD_SPELL_INDEX, CURE_COST, CURE_SPELL_INDEX, CombatActorDescriptor,
-    CombatArenaFieldKind, DEATH_VISION_LOOK_TILE, DEATH_WIND_COST, DEATH_WIND_SPELL_INDEX,
-    DEFAULT_FOOD_STOCK, DEFAULT_KEY_STOCK, DES_POR_SPELL_INDEX, DISPEL_FIELD_COST,
-    DISPEL_FIELD_SPELL_INDEX, DUNGEON_AMBUSH_ARENA_FLAVOUR3_FLOOR_TILE,
-    DUNGEON_AMBUSH_ARENA_FLOOR_TILE, DUNGEON_AMBUSH_PARTY_ENTRY_X,
-    DUNGEON_AMBUSH_PARTY_ENTRY_Y, DUNGEON_LEVEL_SPELL_COST, DUNGEON_MONSTER_COMBAT_CLASSES,
+    COMBAT_ARENA_SIDE, COMBAT_CLASS_GIANT_RAT, COMBAT_DEFAULT_DEATH_DROP_TILE,
+    COMBAT_GARGOYLE_DEATH_TERRAIN_TILE, COMBAT_GAZER_DEATH_MARKER_TILE, COMBAT_PARTY_ACTOR_SLOTS,
+    COMBAT_PLACEMENT_PHASE_BASE, COMPLETED_LONG_CAMP_COOLDOWN_HOURS, CREATE_FOOD_COST,
+    CREATE_FOOD_MAX_GRANT, CREATE_FOOD_SPELL_INDEX, CURE_COST, CURE_SPELL_INDEX,
+    CombatActorDescriptor, CombatArenaFieldKind, DEATH_VISION_LOOK_TILE, DEATH_WIND_COST,
+    DEATH_WIND_SPELL_INDEX, DEFAULT_FOOD_STOCK, DEFAULT_KEY_STOCK, DES_POR_SPELL_INDEX,
+    DISPEL_FIELD_COST, DISPEL_FIELD_SPELL_INDEX, DUNGEON_AMBUSH_ARENA_FLAVOUR3_FLOOR_TILE,
+    DUNGEON_AMBUSH_ARENA_FLOOR_TILE, DUNGEON_AMBUSH_PARTY_ENTRY_X, DUNGEON_AMBUSH_PARTY_ENTRY_Y,
+    DUNGEON_CHEST_JIMMY_NO_KEYS, DUNGEON_CHEST_JIMMY_UNLOCKED, DUNGEON_CHEST_JIMMY_WHAT,
+    DUNGEON_CHEST_OPENED, DUNGEON_LEVEL_SPELL_COST, DUNGEON_MONSTER_COMBAT_CLASSES,
     DUNGEON_ROOM_SOURCE_COUNT, Direction, DungeonScene, ENERGY_FIELD_COST,
     ENERGY_FIELD_SPELL_INDEX, EQUIP_SLOT_RING, EQUIP_SLOT_WEAPON, EQUIPMENT_EMPTY,
     EQUIPMENT_ID_ARROWS, EQUIPMENT_ID_BOW, EQUIPMENT_ID_RING_REGENERATION, EndgameOutcome,
@@ -74,20 +73,18 @@ use u5_runtime::{
     SAVED_GAM_FILENAME, SAVED_OOL_FILENAME, SAVED_OOL_LEN, SCENE_EMPATH_ABBEY, SCENE_JHELOM,
     SCENE_MOONGLOW, SCENE_SERPENTS_HOLD, SCENE_STONEGATE, SCENE_THE_LYCAEUM,
     SHADOWLORD_COWARDICE_INDEX, SHADOWLORD_FALSEHOOD_INDEX, SHADOWLORD_HATRED_INDEX,
-    SHADOWLORD_HIDEOUT_VANQUISHED, SHADOWLORD_VANQUISHED,
-    CODEX_SHRINE_ENTRY_TILE, SHRINE_MARKER_TILE, SHRINE_RESTORATION_SUCCESS_BANNER,
-    SLEEP_COST,
-    SLEEP_FIELD_SPELL_INDEX, SLEEP_SPELL_INDEX, SPECIAL_ITEM_HMS_CAPE_PLANS_INDEX,
-    SPECIAL_ITEM_MAGIC_CARPET_INDEX, SPECIAL_ITEM_OWNED_VALUE, SPECIAL_ITEM_POCKET_WATCH_INDEX,
-    SPECIAL_ITEM_SCEPTRE_LB_INDEX, SPECIAL_ITEM_SEXTANT_INDEX, SPECIAL_ITEM_SHARD_COWARDICE_INDEX,
-    SPECIAL_ITEM_SHARD_FALSEHOOD_INDEX, SPECIAL_ITEM_SHARD_HATRED_INDEX,
-    SPECIAL_ITEM_SPYGLASS_INDEX, SPECIAL_ITEM_WOODEN_BOX_INDEX, STEADY_PHASE, SURFACE_CHASM_X,
-    SURFACE_CHASM_Y, Scene, Shipwright, ShipwrightPurchaseKind, ShrineVirtue, Stable,
-    TALK_NO_RESPONSE_MESSAGE, TALK_SLEEPING_MESSAGE, TALK_STATUS_TILE_PRAYING,
-    TALK_STATUS_TILE_SLEEPING, TAVERN_AFFORDABILITY_REFUSAL_BARK, TIME_STOP_COST,
-    TIME_STOP_DURATION, TIME_STOP_SPELL_INDEX, TOWN_ARREST_JAIL_FLOOR, TOWN_ARREST_JAIL_SCENE,
-    TOWN_ARREST_JAIL_X, TOWN_ARREST_JAIL_Y, TOWN_DOOR_MAGIC_PLAIN_TILE, TOWN_GAS_DOORWAY_RANGE_MAX,
-    TOWN_GRID_SIDE, TOWN_POISON_GAS_LIVE_TILE, TOWN_TRAPDOOR_LIVE_TILE,
+    SHADOWLORD_HIDEOUT_VANQUISHED, SHADOWLORD_VANQUISHED, SHRINE_MARKER_TILE,
+    SHRINE_RESTORATION_SUCCESS_BANNER, SLEEP_COST, SLEEP_FIELD_SPELL_INDEX, SLEEP_SPELL_INDEX,
+    SPECIAL_ITEM_HMS_CAPE_PLANS_INDEX, SPECIAL_ITEM_MAGIC_CARPET_INDEX, SPECIAL_ITEM_OWNED_VALUE,
+    SPECIAL_ITEM_POCKET_WATCH_INDEX, SPECIAL_ITEM_SCEPTRE_LB_INDEX, SPECIAL_ITEM_SEXTANT_INDEX,
+    SPECIAL_ITEM_SHARD_COWARDICE_INDEX, SPECIAL_ITEM_SHARD_FALSEHOOD_INDEX,
+    SPECIAL_ITEM_SHARD_HATRED_INDEX, SPECIAL_ITEM_SPYGLASS_INDEX, SPECIAL_ITEM_WOODEN_BOX_INDEX,
+    STEADY_PHASE, SURFACE_CHASM_X, SURFACE_CHASM_Y, Scene, Shipwright, ShipwrightPurchaseKind,
+    ShrineVirtue, Stable, TALK_NO_RESPONSE_MESSAGE, TALK_SLEEPING_MESSAGE,
+    TALK_STATUS_TILE_PRAYING, TALK_STATUS_TILE_SLEEPING, TAVERN_AFFORDABILITY_REFUSAL_BARK,
+    TIME_STOP_COST, TIME_STOP_DURATION, TIME_STOP_SPELL_INDEX, TOWN_ARREST_JAIL_FLOOR,
+    TOWN_ARREST_JAIL_SCENE, TOWN_ARREST_JAIL_X, TOWN_ARREST_JAIL_Y, TOWN_DOOR_MAGIC_PLAIN_TILE,
+    TOWN_GAS_DOORWAY_RANGE_MAX, TOWN_GRID_SIDE, TOWN_POISON_GAS_LIVE_TILE, TOWN_TRAPDOOR_LIVE_TILE,
     TRANSPORT_MARKER_SHIP_FURLED_FIRST, Tavern, TileGraphicsDepth, TransportState,
     UNDER_OOL_FILENAME, UNLOCK_MAGIC_COST, UNLOCK_MAGIC_SPELL_INDEX, UUS_POR_SPELL_INDEX,
     VANISH_CLEARED_TILE, VANISH_COST, VANISH_SPELL_INDEX, VAS_LOR_COST, VAS_LOR_SPELL_INDEX,
@@ -5821,7 +5818,9 @@ fn validate_combat_spell_route_state(state: &PlayState, case_name: &str) -> io::
             || !target.is_empty()
             || !state.active_objects[COMBAT_PARTY_ACTOR_SLOTS].is_empty()
             || state.active_cast_followup.is_some()
-            || !transcript.iter().any(|row| row.contains("Shadow Lord vanishes!"))
+            || !transcript
+                .iter()
+                .any(|row| row.contains("Shadow Lord vanishes!"))
             || transcript
                 .iter()
                 .any(|row| row.contains("killed!") || row.contains("Failed!"))
@@ -6346,25 +6345,25 @@ fn validate_route_smoke_case_state(
                 || state.player.y != 124
                 || state.spell_charges[BLINK_SPELL_INDEX] != 0
                 || state.party.first().is_none_or(|member| member.mana != 0)
-                // The `Blinked East` clause that stood here was withdrawn with
-                // the prose itself: `1828d278` stopped printing engine prose on
-                // the paths whose text the spec does not publish, and Blink's
-                // completion line was one of them. The case asserted a literal
-                // no longer produced anywhere in the tree and has failed since
-                // 2026-09-11, taking the whole route suite down with it - the
-                // suite aborts on the first case. What Blink *is* specified to
-                // do is the displacement, the spent charge and the spent mana,
-                // which is what the surviving clauses check.
-                //
-                // No message clause replaces it. `magic.md §5.1`'s In Por row
-                // says "a successful non-combat landing adds no completion
-                // line at all, so the direction word is the last row
-                // printed", and this route ends with `state.message` empty -
-                // but that field is the *current* message, not the window's
-                // last row, and the direction echo is printed earlier in the
-                // cast. Whether the row survives to the end is a message
-                // window question, which the paired harness answers and this
-                // one cannot.
+            // The `Blinked East` clause that stood here was withdrawn with
+            // the prose itself: `1828d278` stopped printing engine prose on
+            // the paths whose text the spec does not publish, and Blink's
+            // completion line was one of them. The case asserted a literal
+            // no longer produced anywhere in the tree and has failed since
+            // 2026-09-11, taking the whole route suite down with it - the
+            // suite aborts on the first case. What Blink *is* specified to
+            // do is the displacement, the spent charge and the spent mana,
+            // which is what the surviving clauses check.
+            //
+            // No message clause replaces it. `magic.md §5.1`'s In Por row
+            // says "a successful non-combat landing adds no completion
+            // line at all, so the direction word is the last row
+            // printed", and this route ends with `state.message` empty -
+            // but that field is the *current* message, not the window's
+            // last row, and the direction echo is printed earlier in the
+            // cast. Whether the row survives to the end is a message
+            // window question, which the paired harness answers and this
+            // one cannot.
             {
                 return Err(io::Error::other(format!(
                     "route smoke `{case_name}` did not apply the public Blink ray rule; \
@@ -6521,7 +6520,10 @@ fn validate_route_smoke_case_state(
                     {
                         return Err(io::Error::other(format!(
                             "route smoke `{case_name}` did not apply the directed Sleep cone; target status {:?}, message {:?}",
-                            state.party.get(target_slot).map(|member| char::from(member.status)),
+                            state
+                                .party
+                                .get(target_slot)
+                                .map(|member| char::from(member.status)),
                             state.message,
                         )));
                     }
@@ -6541,7 +6543,10 @@ fn validate_route_smoke_case_state(
                     {
                         return Err(io::Error::other(format!(
                             "route smoke `{case_name}` did not apply the directed Poison Wind cone; target status {:?}, message {:?}",
-                            state.party.get(target_slot).map(|member| char::from(member.status)),
+                            state
+                                .party
+                                .get(target_slot)
+                                .map(|member| char::from(member.status)),
                             state.message,
                         )));
                     }
@@ -7085,9 +7090,9 @@ fn validate_route_smoke_case_state(
                     .is_none_or(|equipment| equipment[EQUIP_SLOT_WEAPON] != EQUIPMENT_EMPTY)
                 || state.party.get(1).is_none_or(|member| member.slot != 2)
                 || state.party.get(2).is_none_or(|member| member.slot != 1)
-                // The `party slots 2 and 3 swapped` sentence was engine
-                // prose and is gone; the two slot clauses above are the
-                // published contract and say the same thing.
+            // The `party slots 2 and 3 swapped` sentence was engine
+            // prose and is gone; the two slot clauses above are the
+            // published contract and say the same thing.
             {
                 return Err(io::Error::other(format!(
                     "route smoke `{case_name}` did not complete mix, Ready, and New Order workflow; message {:?}",
@@ -7288,7 +7293,10 @@ fn validate_route_smoke_case_state(
         }
         "ship-broadside-fire-route" => {
             if !matches!(state.player.transport, TransportState::Ship { .. })
-                || !state.diagnostics.iter().any(|line| line.starts_with("ship broadside fired"))
+                || !state
+                    .diagnostics
+                    .iter()
+                    .any(|line| line.starts_with("ship broadside fired"))
             {
                 return Err(io::Error::other(format!(
                     "route smoke `{case_name}` did not fire the ship broadside"
@@ -7930,9 +7938,9 @@ fn validate_route_smoke_case_state(
             if state.gold >= 999
                 || state.active_shop.is_some()
                 || state.reagents.iter().all(|count| *count == 0)
-                // The exit leaves the message empty; the `Farewell` clause
-                // that stood here asserted engine prose. Leaving the shop is
-                // `active_shop.is_some()` above.
+            // The exit leaves the message empty; the `Farewell` clause
+            // that stood here asserted engine prose. Leaving the shop is
+            // `active_shop.is_some()` above.
             {
                 return Err(io::Error::other(format!(
                     "route smoke `{case_name}` did not buy reagent stock and exit; message {:?}",
@@ -8139,18 +8147,19 @@ fn validate_route_smoke_case_state(
                      shipwright coordinate; gold {} want {}, pending {:?} want {:?}, message {:?}",
                     state.gold,
                     expected_gold,
-                    state.return_world.as_ref().map(|world| world.pending_vehicle),
+                    state
+                        .return_world
+                        .as_ref()
+                        .map(|world| world.pending_vehicle),
                     expected_pending,
                     state.message,
                 )));
             }
         }
         "shop-guild-buy-route" => {
-            if state.gold >= 999
-                || state.keys == 0
-                || state.active_shop.is_some()
-                // As with the reagent route: the exit clears the message,
-                // and leaving the shop is the `active_shop` clause above.
+            if state.gold >= 999 || state.keys == 0 || state.active_shop.is_some()
+            // As with the reagent route: the exit clears the message,
+            // and leaving the shop is the `active_shop` clause above.
             {
                 return Err(io::Error::other(format!(
                     "route smoke `{case_name}` did not buy guild stock and exit; message {:?}",
@@ -8611,9 +8620,7 @@ fn validate_route_smoke_case_state(
             if !state
                 .message_entries()
                 .iter()
-                .any(|entry| {
-                    entry.text == OUTDOOR_BROADSIDE_BOOM_MESSAGE.trim_end_matches('\n')
-                })
+                .any(|entry| entry.text == OUTDOOR_BROADSIDE_BOOM_MESSAGE.trim_end_matches('\n'))
             {
                 return Err(io::Error::other(format!(
                     "route smoke `{case_name}` lost the broadside announcement before the player could see it"

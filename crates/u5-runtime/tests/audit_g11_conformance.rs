@@ -66,12 +66,18 @@ fn a060_surface_chest_rows_are_staged_as_floor_objects_for_a_later_get() {
         state.consume_surface_object_chest_at(2, 1, 0, "Opened"),
         Some(MoveOutcome::ContainerOpened)
     );
-    assert_eq!((state.food, state.torches, state.gold), (food, torches, gold));
+    assert_eq!(
+        (state.food, state.torches, state.gold),
+        (food, torches, gold)
+    );
     let staged = staged_at(&state, 2, 1);
     let lines = state.message.lines().count() - 1;
     assert_eq!(staged.len(), lines, "{:?} / {:?}", staged, state.message);
     for (_, object) in &staged {
-        assert!(matches!(object.type_byte, 0x02 | 0x09 | 0x0d | 0x0f), "{object:?}");
+        assert!(
+            matches!(object.type_byte, 0x02 | 0x09 | 0x0d | 0x0f),
+            "{object:?}"
+        );
         assert_ne!(object.aux1, 0);
     }
     // Downward scan: the first staged row takes the highest index.
@@ -97,7 +103,9 @@ fn a060_surface_chest_rows_are_staged_as_floor_objects_for_a_later_get() {
 #[test]
 fn a060_rows_beyond_the_free_slots_are_dropped_silently() {
     let mut state = town_chest_state(0x7f);
-    state.active_objects.resize(OOL_SLOTS, ActiveObject::empty());
+    state
+        .active_objects
+        .resize(OOL_SLOTS, ActiveObject::empty());
     for slot in 2..OOL_SLOTS {
         state.active_objects[slot] = ActiveObject {
             type_byte: 0x50,
@@ -187,7 +195,10 @@ fn a062_search_trap_assessment_uses_intelligence_and_the_shared_prng() {
     state.party_intelligence[0] = 30;
     let before = state.prng_state;
     assert_eq!(state.search_facing_secret(&[], None), MoveOutcome::Searched);
-    assert_eq!(state.message, format!("{SEARCH_PREAMBLE}{SEARCH_TRAP_NONE_LINE}"));
+    assert_eq!(
+        state.message,
+        format!("{SEARCH_PREAMBLE}{SEARCH_TRAP_NONE_LINE}")
+    );
     assert_eq!(state.prng_state, u5_prng_advance_state(before));
 }
 
@@ -211,7 +222,10 @@ fn a062_search_trap_assessment_prompts_for_the_acting_member() {
     );
     // Member 2's Intelligence 30 always detects: `no trap!`. Member 1's 60
     // would have wrapped the threshold and reported a phantom trap.
-    assert_eq!(state.message, format!("{SEARCH_PREAMBLE}{SEARCH_TRAP_NONE_LINE}"));
+    assert_eq!(
+        state.message,
+        format!("{SEARCH_PREAMBLE}{SEARCH_TRAP_NONE_LINE}")
+    );
 }
 
 /// `containers.md §7`: crops `0x2D` and the wall torches `0xB0`/`0xB1` are
@@ -254,7 +268,11 @@ fn a064_crops_and_wall_torches_are_tile_class_get_rules() {
     assert_eq!(state.torch_counter, 99);
 }
 
-fn combat_snapshot(state: &PlayState, exit_announced: bool, any_foe_seated: bool) -> CombatFrameSnapshot {
+fn combat_snapshot(
+    state: &PlayState,
+    exit_announced: bool,
+    any_foe_seated: bool,
+) -> CombatFrameSnapshot {
     CombatFrameSnapshot {
         area: state.area,
         player: state.player,
@@ -292,7 +310,10 @@ fn a100_combat_armour_lock_is_voiced_and_lifts_once_the_outcome_is_announced() {
 
     let mut undecided = fresh();
     undecided.combat_frame_snapshot = Some(combat_snapshot(&undecided, false, true));
-    assert_eq!(undecided.ready_equipment_from_suffix("1/10"), MoveOutcome::Blocked);
+    assert_eq!(
+        undecided.ready_equipment_from_suffix("1/10"),
+        MoveOutcome::Blocked
+    );
     assert_eq!(
         undecided.message,
         format!("\n\n{READY_COMBAT_ARMOUR_LOCK_REFUSAL}")
@@ -300,12 +321,18 @@ fn a100_combat_armour_lock_is_voiced_and_lifts_once_the_outcome_is_announced() {
 
     let mut announced = fresh();
     announced.combat_frame_snapshot = Some(combat_snapshot(&announced, true, true));
-    assert_eq!(announced.ready_equipment_from_suffix("1/10"), MoveOutcome::Used);
+    assert_eq!(
+        announced.ready_equipment_from_suffix("1/10"),
+        MoveOutcome::Used
+    );
     assert_eq!(announced.party_equipment[0][EQUIP_SLOT_ARMOUR], 10);
 
     let mut empty_arena = fresh();
     empty_arena.combat_frame_snapshot = Some(combat_snapshot(&empty_arena, false, false));
-    assert_eq!(empty_arena.ready_equipment_from_suffix("1/10"), MoveOutcome::Used);
+    assert_eq!(
+        empty_arena.ready_equipment_from_suffix("1/10"),
+        MoveOutcome::Used
+    );
 }
 
 /// `inventory.md §7.1`: in dungeon exploration the Skull Key prints
@@ -328,7 +355,10 @@ fn a103_dungeon_skull_key_refuses_without_a_direction_prompt() {
     assert!(state.active_use.is_some());
     handle_play_key_input(&mut state, '\r', "", &dir).unwrap();
 
-    assert!(state.active_use.is_none(), "no Direction- prompt is pending");
+    assert!(
+        state.active_use.is_none(),
+        "no Direction- prompt is pending"
+    );
     assert_eq!(state.special_items[SPECIAL_ITEM_SKULL_KEY_INDEX], 0);
     let transcript: Vec<String> = state
         .message_entries()
@@ -336,8 +366,14 @@ fn a103_dungeon_skull_key_refuses_without_a_direction_prompt() {
         .map(|entry| entry.text.clone())
         .chain(std::iter::once(state.message.clone()))
         .collect();
-    assert!(transcript.iter().any(|row| row.contains("Not here!")), "{transcript:?}");
-    assert!(!transcript.iter().any(|row| row.contains("Direction-")), "{transcript:?}");
+    assert!(
+        transcript.iter().any(|row| row.contains("Not here!")),
+        "{transcript:?}"
+    );
+    assert!(
+        !transcript.iter().any(|row| row.contains("Direction-")),
+        "{transcript:?}"
+    );
     let _ = std::fs::remove_dir_all(dir);
 }
 
@@ -408,7 +444,10 @@ fn a102_arena_sceptre_fallback_takes_a_direction() {
 /// any screen.
 #[test]
 fn a099_zero_jumps_to_shared_equipment_while_browsing() {
-    assert_eq!(z_stats_input_action('0'), ZStatsInputAction::SharedEquipment);
+    assert_eq!(
+        z_stats_input_action('0'),
+        ZStatsInputAction::SharedEquipment
+    );
     let mut state = test_state(open_grid(), 1, 1);
     state.active_z_stats = Some(ZStatsSession {
         selected_party_index: 0,
@@ -439,7 +478,10 @@ fn a101_ring_vanish_check_draws_from_the_shared_prng() {
         item_id: EQUIPMENT_ID_RING_REGENERATION,
     };
     assert_eq!(state.ready_equipment(request), MoveOutcome::Used);
-    assert_eq!(state.party_equipment[0][EQUIP_SLOT_RING] as usize, EQUIPMENT_ID_RING_REGENERATION);
+    assert_eq!(
+        state.party_equipment[0][EQUIP_SLOT_RING] as usize,
+        EQUIPMENT_ID_RING_REGENERATION
+    );
     // Unequip, then ready again on the same turn.
     assert_eq!(state.ready_equipment(request), MoveOutcome::Used);
     assert_eq!(state.party_equipment[0][EQUIP_SLOT_RING], EQUIPMENT_EMPTY);

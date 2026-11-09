@@ -128,8 +128,22 @@ impl PlayState {
         // handler did not (playtest J08).
         if matches!(
             key.to_ascii_lowercase(),
-            'e' | 'f' | 'g' | 'h' | 'i' | 'j' | 'l' | 'm' | 'n' | 'o' | 'r' | 's' | 't' | 'u'
-                | 'v' | 'x' | 'z'
+            'e' | 'f'
+                | 'g'
+                | 'h'
+                | 'i'
+                | 'j'
+                | 'l'
+                | 'm'
+                | 'n'
+                | 'o'
+                | 'r'
+                | 's'
+                | 't'
+                | 'u'
+                | 'v'
+                | 'x'
+                | 'z'
         ) {
             self.dungeon_acted_turn_before = Some(turn_before);
         }
@@ -240,7 +254,11 @@ impl PlayState {
             // all" (playtest S26).
             'k' => {
                 let outcome = self.klimb_command(game_dir)?;
-                self.apply_post_turn_effects_after_dungeon_level_change(turn_before, game_dir, outcome)?;
+                self.apply_post_turn_effects_after_dungeon_level_change(
+                    turn_before,
+                    game_dir,
+                    outcome,
+                )?;
                 return Ok(true);
             }
             'l' => {
@@ -627,7 +645,8 @@ impl PlayState {
                 }
                 'O' => {
                     if let Some(direction) = inline_direction {
-                        let outcome = self.open_direction_with_game_dir(direction, Some(game_dir))?;
+                        let outcome =
+                            self.open_direction_with_game_dir(direction, Some(game_dir))?;
                         self.charge_inline_tile_command_acted_exit(turn_before);
                         handled!(outcome);
                     } else {
@@ -920,8 +939,7 @@ impl PlayState {
             // tail: "this path has no failure glissando or `Failed!`
             // tail. It completes the action without opening spell
             // selection or spending a charge or MP."
-            self.message =
-                format!("{COMBAT_CAST_COMMAND_LABEL}\n{SCENE_ABSORBED_CAST_MESSAGE}\n");
+            self.message = format!("{COMBAT_CAST_COMMAND_LABEL}\n{SCENE_ABSORBED_CAST_MESSAGE}\n");
             self.emit_sound_effect(SoundEffect::MagicAbsorbed);
             return Ok(MoveOutcome::Blocked);
         }
@@ -1366,8 +1384,7 @@ impl PlayState {
                 self.cast_blink(
                     caster_index,
                     parse_inline_cast_direction(suffix),
-                    inline_explicit_pass(suffix)
-                        && parse_inline_cast_direction(suffix).is_none(),
+                    inline_explicit_pass(suffix) && parse_inline_cast_direction(suffix).is_none(),
                     game_dir,
                 )
             }
@@ -2242,11 +2259,12 @@ impl PlayState {
                         // The live `Mantra:` row is the ask's own text;
                         // `shrine_prompt_echo` keeps it off screen while
                         // the hold is pending.
-                        self.staged_narration.push_ticks_counting_world_steps_on_open_row(
-                            SHRINE_MANTRA_FIRST_HOLD_BIOS_TICKS,
-                            SHRINE_MANTRA_FIRST_WORLD_STEPS,
-                            "\n\n",
-                        );
+                        self.staged_narration
+                            .push_ticks_counting_world_steps_on_open_row(
+                                SHRINE_MANTRA_FIRST_HOLD_BIOS_TICKS,
+                                SHRINE_MANTRA_FIRST_WORLD_STEPS,
+                                "\n\n",
+                            );
                     }
                     // "Backspace or Left erases the last character"; Left
                     // is the west direction code (`input.md §5`).
@@ -2479,7 +2497,10 @@ impl PlayState {
         if self.pending_shrine_third_mantra.is_none() || self.staged_narration_active() {
             return Ok(None);
         }
-        let mut session = self.pending_shrine_third_mantra.take().expect("checked above");
+        let mut session = self
+            .pending_shrine_third_mantra
+            .take()
+            .expect("checked above");
         if !session.answers_matched {
             // "Unfocused result | If the virtue answer or any of the three
             // mantra answers was wrong, render record `30` after the third
@@ -2686,9 +2707,11 @@ impl PlayState {
                 // The page has "no key wait and no pause of its own": it
                 // rides on the end of the frames up to the first avatar
                 // frame, and the stepping frames follow.
-                let first_pose_steps = u16::from(
-                    crate::shrine_presentation::SHRINE_APPROACH_WALK_FIRST_POSE_FRAME,
-                ) * u16::from(crate::shrine_presentation::SHRINE_APPROACH_WALK_STEPS_PER_FRAME);
+                let first_pose_steps =
+                    u16::from(crate::shrine_presentation::SHRINE_APPROACH_WALK_FIRST_POSE_FRAME)
+                        * u16::from(
+                            crate::shrine_presentation::SHRINE_APPROACH_WALK_STEPS_PER_FRAME,
+                        );
                 self.staged_narration.push_ticks_counting_world_steps(
                     shrine_presentation_hold_bios_ticks(first_pose_steps),
                     first_pose_steps,
@@ -2772,10 +2795,7 @@ impl PlayState {
                     if let Some(record) = load_misc_messages(game_dir)?
                         .and_then(|messages| messages.record(index).map(str::to_owned))
                     {
-                        self.emit_message_line(format!(
-                            "\"{}\"\n\n",
-                            record.replace('\r', "\n")
-                        ));
+                        self.emit_message_line(format!("\"{}\"\n\n", record.replace('\r', "\n")));
                     }
                 }
             },
@@ -2795,7 +2815,10 @@ impl PlayState {
                         self.presentation_viewport_inverted = !self.presentation_viewport_inverted;
                         self.emit_major_flash();
                     }
-                    self.emit_shrine_misc_record(game_dir, crate::miscmsg_io::MISCMSG_CODEX_PAGE_TURN)?;
+                    self.emit_shrine_misc_record(
+                        game_dir,
+                        crate::miscmsg_io::MISCMSG_CODEX_PAGE_TURN,
+                    )?;
                 }
             }
             // "5 | Print the ordinary-font read lead-in, then runic record
@@ -2830,9 +2853,11 @@ impl PlayState {
     /// the runic font as stored - `@`, `[`, `]` and `_` are runic cells
     /// (`formats/miscmsg-dat.md §4`), not digraphs to expand.
     fn emit_codex_runic_page(&mut self, game_dir: &Path, index: usize) -> io::Result<()> {
-        let Some(record) = load_misc_messages(game_dir)?
-            .and_then(|messages| messages.record(index).map(|record| record.replace('\r', "\n")))
-        else {
+        let Some(record) = load_misc_messages(game_dir)?.and_then(|messages| {
+            messages
+                .record(index)
+                .map(|record| record.replace('\r', "\n"))
+        }) else {
             return Ok(());
         };
         // Same row rules as `emit_message_line` (a leading feed closes an
@@ -3230,7 +3255,10 @@ mod movement_magic_karma_traps_spec_tests {
         assert_eq!(lines.next(), Some(""), "the completion line opens a block");
         assert_eq!(lines.next(), Some(MMIX_COMPLETION_MESSAGE));
         assert_eq!(lines.next(), None);
-        assert_eq!(state.turn, 0, "magic.md §6: the mixer itself adds no game time");
+        assert_eq!(
+            state.turn, 0,
+            "magic.md §6: the mixer itself adds no game time"
+        );
     }
 
     /// `magic.md §6` Step 6: "Because the line precedes the recipe
@@ -3368,7 +3396,10 @@ mod movement_magic_karma_traps_spec_tests {
             assert!(state.handle_dungeon_key(key, &dir).unwrap());
 
             assert_eq!(
-                state.message_transcript.last().map(|entry| entry.text.as_str()),
+                state
+                    .message_transcript
+                    .last()
+                    .map(|entry| entry.text.as_str()),
                 Some(format!("X-it {XIT_ON_FOOT_REFUSAL}").as_str())
             );
             assert_eq!(state.turn, 1, "`{key}` reports acted");
@@ -3514,10 +3545,7 @@ mod codex_interred_scan_spec_tests {
 
         let page = codex_interred_party_page(&state.codex_interred_names()).unwrap();
 
-        let run_on = format!(
-            "ABCDEFGHI{}FGABC\n",
-            char::from(SAVE_GENDER_FEMALE_BYTE)
-        );
+        let run_on = format!("ABCDEFGHI{}FGABC\n", char::from(SAVE_GENDER_FEMALE_BYTE));
         assert!(page.ends_with(&run_on), "{page:?}");
     }
 }

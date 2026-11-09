@@ -184,7 +184,8 @@ fn drive_intro_subflow(
             }
         }
         IntroSubflow::Acknowledgements => {
-            let _ = refuse_unsupported_subflow::<()>(Err(acknowledgements_need_graphical_surface()))?;
+            let _ =
+                refuse_unsupported_subflow::<()>(Err(acknowledgements_need_graphical_surface()))?;
             dispatch.complete_subflow(subflow, IntroSubflowResult::ReturnedToMenu);
         }
         IntroSubflow::ReturnToView => {
@@ -368,7 +369,10 @@ mod tests {
     #[test]
     fn playtest_j14_terminal_menu_decodes_arrow_escape_sequences() {
         assert_eq!(menu_key_from_line("\x1b[B\n"), u5_runtime::INPUT_CODE_SOUTH);
-        assert_eq!(menu_key_from_line("\x1b[A\r\n"), u5_runtime::INPUT_CODE_NORTH);
+        assert_eq!(
+            menu_key_from_line("\x1b[A\r\n"),
+            u5_runtime::INPUT_CODE_NORTH
+        );
         assert_eq!(menu_key_from_line("\x1bOC\n"), u5_runtime::INPUT_CODE_EAST);
         assert_eq!(menu_key_from_line("c\n"), b'c');
         assert_eq!(menu_key_from_line("\n"), b'\n');

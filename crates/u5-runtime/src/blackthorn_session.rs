@@ -50,11 +50,19 @@ pub enum BlackthornChallengePhase {
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum BlackthornChallengeOutcome {
-    PromptPresented { ordinal: u8, prompt: &'static str },
+    PromptPresented {
+        ordinal: u8,
+        prompt: &'static str,
+    },
     /// The greeting page's acknowledgement was taken; the preamble follows.
     GreetingAcknowledged,
-    Correct { ordinal: u8 },
-    Wrong { ordinal: u8, expected: &'static str },
+    Correct {
+        ordinal: u8,
+    },
+    Wrong {
+        ordinal: u8,
+        expected: &'static str,
+    },
     Survived,
     AlreadyPunished,
     AlreadySurvived,
@@ -421,7 +429,10 @@ mod tests {
         c.await_greeting_acknowledgement();
         assert!(c.awaiting_acknowledgement());
         assert_eq!(c.current_prompt(), None);
-        assert_eq!(c.submit(""), BlackthornChallengeOutcome::GreetingAcknowledged);
+        assert_eq!(
+            c.submit(""),
+            BlackthornChallengeOutcome::GreetingAcknowledged
+        );
         assert!(c.awaiting_acknowledgement());
         assert_eq!(c.current_prompt(), None);
         assert!(matches!(

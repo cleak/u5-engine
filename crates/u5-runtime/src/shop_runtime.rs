@@ -21,14 +21,14 @@ use crate::shops::{
     TavernDrinkPrompt, apply_blue_boar_drink, apply_guild_purchase,
     apply_provision_purchase_at_unit_price, apply_reagent_purchase, apply_shipwright_purchase,
     apply_tavern_round_drink, arms_buy_quote_record_id_for_item, arms_shop_action,
-    arms_shop_buy_quote, arms_shop_sell_offer, arms_shop_stock_item_for_letter, guild_shop_action,
-    guild_bundle_price, herbalist_menu_entries, inn_base_room_rate,
+    arms_shop_buy_quote, arms_shop_sell_offer, arms_shop_stock_item_for_letter, guild_bundle_price,
+    guild_shop_action, herbalist_menu_entries, inn_base_room_rate,
     inn_leave_companion_deposit_for_speaker, inn_main_action, inn_pickup_bill_for_speaker,
     quote_horse_purchase_for_speaker, quote_inn_rest, quote_inn_rest_for_speaker,
-    quote_reagent_purchase,
-    quote_shipwright_purchase, shipwright_delivery_coordinate, shipwright_menu_action,
-    shop_intelligence_adjusted_price, tavern_drink_prompt, tavern_follow_up_record_id,
-    tavern_lore_menu_letter, tavern_menu_letters, tavern_provision_unit_price,
+    quote_reagent_purchase, quote_shipwright_purchase, shipwright_delivery_coordinate,
+    shipwright_menu_action, shop_intelligence_adjusted_price, tavern_drink_prompt,
+    tavern_follow_up_record_id, tavern_lore_menu_letter, tavern_menu_letters,
+    tavern_provision_unit_price,
 };
 use crate::transport::PendingVehicleAcquisition;
 
@@ -3578,7 +3578,13 @@ mod tests {
             continuation_ready: true,
         };
         let round = tavern_menu_letters(tavern).round as u8;
-        let outcome = step_tavern(&mut state, TavernInput::Key(round), ctx, &mut gold, &mut food);
+        let outcome = step_tavern(
+            &mut state,
+            TavernInput::Key(round),
+            ctx,
+            &mut gold,
+            &mut food,
+        );
         assert!(matches!(outcome, TavernOutcome::RefusedShortFunds { .. }));
         assert_eq!(state, TavernState::Exited);
 
@@ -3587,7 +3593,13 @@ mod tests {
             tavern,
             continuation_ready: false,
         };
-        let outcome = step_tavern(&mut state, TavernInput::Key(b'B'), ctx, &mut gold, &mut food);
+        let outcome = step_tavern(
+            &mut state,
+            TavernInput::Key(b'B'),
+            ctx,
+            &mut gold,
+            &mut food,
+        );
         assert!(matches!(
             outcome,
             TavernOutcome::BlueBoarRefusedShortFunds { .. }
@@ -3599,11 +3611,23 @@ mod tests {
             continuation_ready: false,
         };
         assert_eq!(
-            step_tavern(&mut state, TavernInput::Key(b'Z'), ctx, &mut gold, &mut food),
+            step_tavern(
+                &mut state,
+                TavernInput::Key(b'Z'),
+                ctx,
+                &mut gold,
+                &mut food
+            ),
             TavernOutcome::InvalidInput
         );
         assert_eq!(
-            step_tavern(&mut state, TavernInput::Key(b' '), ctx, &mut gold, &mut food),
+            step_tavern(
+                &mut state,
+                TavernInput::Key(b' '),
+                ctx,
+                &mut gold,
+                &mut food
+            ),
             TavernOutcome::BlueBoarListCancelled
         );
         assert_eq!(
@@ -4105,7 +4129,10 @@ mod tests {
             );
             assert_eq!(state, HorseTraderState::default());
         }
-        assert_eq!(key(&mut state, b' ', &mut gold), HorseTraderOutcome::Declined);
+        assert_eq!(
+            key(&mut state, b' ', &mut gold),
+            HorseTraderOutcome::Declined
+        );
         assert_eq!(state, HorseTraderState::Exited);
 
         let mut state = HorseTraderState::default();
@@ -4246,43 +4273,93 @@ mod tests {
         let mut state = ShipBrokerState::for_shipwright(Shipwright::TheRustyBucket);
         for ignored in [b'F', b'S', b'X'] {
             assert_eq!(
-                step(&mut state, ShipBrokerInput::Key(ignored), &mut gold, &mut pending),
+                step(
+                    &mut state,
+                    ShipBrokerInput::Key(ignored),
+                    &mut gold,
+                    &mut pending
+                ),
                 ShipBrokerOutcome::InvalidInput
             );
         }
         assert_eq!(
-            step(&mut state, ShipBrokerInput::Key(b'Y'), &mut gold, &mut pending),
+            step(
+                &mut state,
+                ShipBrokerInput::Key(b'Y'),
+                &mut gold,
+                &mut pending
+            ),
             ShipBrokerOutcome::EnteredMenu
         );
         // Invalid menu keys redraw record `119`.
         assert_eq!(
-            step(&mut state, ShipBrokerInput::Key(b'Q'), &mut gold, &mut pending),
+            step(
+                &mut state,
+                ShipBrokerInput::Key(b'Q'),
+                &mut gold,
+                &mut pending
+            ),
             ShipBrokerOutcome::EnteredMenu
         );
-        step(&mut state, ShipBrokerInput::Key(b'S'), &mut gold, &mut pending);
+        step(
+            &mut state,
+            ShipBrokerInput::Key(b'S'),
+            &mut gold,
+            &mut pending,
+        );
         assert!(matches!(
-            step(&mut state, ShipBrokerInput::Confirm(true), &mut gold, &mut pending),
+            step(
+                &mut state,
+                ShipBrokerInput::Confirm(true),
+                &mut gold,
+                &mut pending
+            ),
             ShipBrokerOutcome::PurchaseApplied { .. }
         ));
         assert!(matches!(state, ShipBrokerState::Continuation { .. }));
         assert_eq!(
-            step(&mut state, ShipBrokerInput::Confirm(true), &mut gold, &mut pending),
+            step(
+                &mut state,
+                ShipBrokerInput::Confirm(true),
+                &mut gold,
+                &mut pending
+            ),
             ShipBrokerOutcome::EnteredMenu
         );
         let gold_before = gold;
         let pending_before = pending;
         assert_eq!(
-            step(&mut state, ShipBrokerInput::Key(b'F'), &mut gold, &mut pending),
+            step(
+                &mut state,
+                ShipBrokerInput::Key(b'F'),
+                &mut gold,
+                &mut pending
+            ),
             ShipBrokerOutcome::QuotedDockSpace
         );
         // No reopens the menu.
         assert_eq!(
-            step(&mut state, ShipBrokerInput::Confirm(false), &mut gold, &mut pending),
+            step(
+                &mut state,
+                ShipBrokerInput::Confirm(false),
+                &mut gold,
+                &mut pending
+            ),
             ShipBrokerOutcome::EnteredMenu
         );
-        step(&mut state, ShipBrokerInput::Key(b'F'), &mut gold, &mut pending);
+        step(
+            &mut state,
+            ShipBrokerInput::Key(b'F'),
+            &mut gold,
+            &mut pending,
+        );
         assert_eq!(
-            step(&mut state, ShipBrokerInput::Confirm(true), &mut gold, &mut pending),
+            step(
+                &mut state,
+                ShipBrokerInput::Confirm(true),
+                &mut gold,
+                &mut pending
+            ),
             ShipBrokerOutcome::RefusedShortFunds {
                 available: gold_before,
                 required: 10000,
@@ -4349,7 +4426,12 @@ mod tests {
         );
         assert_eq!(counters, (0, 99, 0));
         assert_eq!(gold, 791);
-        assert_eq!(state, GuildShopState::PickItem { shop: GuildShop::TheDen });
+        assert_eq!(
+            state,
+            GuildShopState::PickItem {
+                shop: GuildShop::TheDen
+            }
+        );
 
         // Decline returns to the stock menu.
         guild_step(&mut state, b'c', &mut gold, &mut counters);
@@ -4357,7 +4439,12 @@ mod tests {
             guild_step(&mut state, b'N', &mut gold, &mut counters),
             GuildShopOutcome::Declined
         );
-        assert_eq!(state, GuildShopState::PickItem { shop: GuildShop::TheDen });
+        assert_eq!(
+            state,
+            GuildShopState::PickItem {
+                shop: GuildShop::TheDen
+            }
+        );
     }
 
     /// `shops.md §8.A`/`§8.C`: entry takes Y/N/Space, other keys re-poll; the

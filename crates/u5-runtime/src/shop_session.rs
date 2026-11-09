@@ -103,9 +103,8 @@ impl ActiveShopSession {
                     | InnkeeperState::Continuation { .. }
             ) | Self::Reagent(
                 ReagentShopState::PickReagent { .. } | ReagentShopState::ConfirmBundle { .. }
-            ) | Self::Guild(
-                GuildShopState::PickItem { .. } | GuildShopState::ConfirmBundle { .. }
-            ) | Self::HorseTrader(HorseTraderState::ConfirmPurchase { .. })
+            ) | Self::Guild(GuildShopState::PickItem { .. } | GuildShopState::ConfirmBundle { .. })
+                | Self::HorseTrader(HorseTraderState::ConfirmPurchase { .. })
         ) {
             return true;
         }
@@ -242,9 +241,7 @@ impl ActiveShopSession {
             | Self::Innkeeper(InnkeeperState::ConfirmLeaveCompanion { inn, .. })
             | Self::Innkeeper(InnkeeperState::PickUpCompanion { inn, .. })
             | Self::Innkeeper(InnkeeperState::ConfirmPickUpCompanion { inn, .. })
-            | Self::Innkeeper(InnkeeperState::Continuation { inn }) => {
-                inn.display_name()
-            }
+            | Self::Innkeeper(InnkeeperState::Continuation { inn }) => inn.display_name(),
             Self::Innkeeper(InnkeeperState::Exited) => "Innkeeper",
             Self::Reagent(ReagentShopState::Greeting { herbalist })
             | Self::Reagent(ReagentShopState::PickReagent { herbalist })

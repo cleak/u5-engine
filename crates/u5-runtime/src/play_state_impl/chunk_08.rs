@@ -852,7 +852,9 @@ impl PlayState {
                 String::new()
             }
         };
-        text.push_str(&format!("\n\"{verdict}\"{wait_key}{LORD_BRITISH_CAMP_VANISH_LINE}"));
+        text.push_str(&format!(
+            "\n\"{verdict}\"{wait_key}{LORD_BRITISH_CAMP_VANISH_LINE}"
+        ));
         self.push_diagnostic(notes.join(" "));
         self.mark_visibility_dirty();
         // §7.1 step 7: "the record is cleared to actor byte 0, then one world
@@ -1697,8 +1699,10 @@ impl PlayState {
                 return;
             }
             let (dx, dy) = direction.delta();
-            self.player.x = (self.player.x as isize + dx).rem_euclid(DUNGEON_SIDE as isize) as usize;
-            self.player.y = (self.player.y as isize + dy).rem_euclid(DUNGEON_SIDE as isize) as usize;
+            self.player.x =
+                (self.player.x as isize + dx).rem_euclid(DUNGEON_SIDE as isize) as usize;
+            self.player.y =
+                (self.player.y as isize + dy).rem_euclid(DUNGEON_SIDE as isize) as usize;
             self.player.facing = direction;
             self.sync_player_object();
             self.mark_visibility_dirty();
@@ -1788,7 +1792,8 @@ impl PlayState {
         {
             self.emit_message_line(word);
         }
-        let gear_delta = (intent == ClimbIntent::Up && self.dungeon_klimb_gear_up(tile)).then_some(-1);
+        let gear_delta =
+            (intent == ClimbIntent::Up && self.dungeon_klimb_gear_up(tile)).then_some(-1);
         let Some(delta) = dungeon_ladder_delta(tile, intent).or(gear_delta) else {
             // "an impassable destination then adds `Failed!` with the short
             // **rising** sweep ... the same recipe the spell-failure tail
@@ -3543,26 +3548,28 @@ impl PlayState {
         // Step 4: "the Strength of the first member able to act ... found
         // by re-running the party-capability scan at this moment".
         let strength = match party_capability(&self.party) {
-            PartyCapability::CanAct { member_index } => self
-                .party_strengths
-                .get(member_index)
-                .copied()
-                .unwrap_or(0),
+            PartyCapability::CanAct { member_index } => {
+                self.party_strengths.get(member_index).copied().unwrap_or(0)
+            }
             _ => 0,
         };
         let toll = troll_bridge_toll_for_strength(strength);
         self.emit_message_line(format!(
             "{TROLL_BRIDGE_CAUGHT_HEADING}{toll:>2}{TROLL_BRIDGE_TOLL_SUFFIX}{TROLL_BRIDGE_TOLL_QUESTION}"
         ));
-        self.active_yes_no_prompt = Some(YesNoPromptSession::new(
-            YesNoPromptKind::TrollBridgeToll { toll },
-        ));
+        self.active_yes_no_prompt =
+            Some(YesNoPromptSession::new(YesNoPromptKind::TrollBridgeToll {
+                toll,
+            }));
     }
 
     /// §7.1 step 1's trigger draw, "`0..7` ... any nonzero result ends the
     /// check".
     pub fn troll_bridge_trigger_roll(&mut self) -> u8 {
-        self.random_range_u8(TROLL_BRIDGE_TRIGGER_ROLL_LOW, TROLL_BRIDGE_TRIGGER_ROLL_HIGH)
+        self.random_range_u8(
+            TROLL_BRIDGE_TRIGGER_ROLL_LOW,
+            TROLL_BRIDGE_TRIGGER_ROLL_HIGH,
+        )
     }
 
     /// §7.1 step 2's per-member save, "inclusive `1..30`".

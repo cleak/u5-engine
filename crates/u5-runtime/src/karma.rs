@@ -244,7 +244,10 @@ mod codex_interred_page_spec_tests {
     /// when the count is zero.
     #[test]
     fn interred_page_literals_and_plural_split() {
-        assert_eq!(codex_interred_party_page::<[u8; crate::SAVE_CHARACTER_NAME_LEN]>(&[]), None);
+        assert_eq!(
+            codex_interred_party_page::<[u8; crate::SAVE_CHARACTER_NAME_LEN]>(&[]),
+            None
+        );
         assert_eq!(
             codex_interred_party_page(&[name("Iolo")]).as_deref(),
             Some("\n\nThou dost see\nan urn marked:\n\nIOLO\n")

@@ -340,9 +340,7 @@ impl ConversationSessionOutput {
     /// row the lone quote stood on, is that same single visible quote.
     fn continue_lone_quote_into_ask_who(&mut self) {
         const LONE_QUOTE_TAIL: &str = "\n\"\n\n";
-        if !self.text.ends_with(LONE_QUOTE_TAIL)
-            || self.rendered_glyphs.len() != self.text.len()
-        {
+        if !self.text.ends_with(LONE_QUOTE_TAIL) || self.rendered_glyphs.len() != self.text.len() {
             return;
         }
         let keep = self.text.len() - (LONE_QUOTE_TAIL.len() - 1);
@@ -706,8 +704,7 @@ impl ConversationSession {
                 out.text = rendered.text;
                 out.rendered_glyphs = rendered.glyphs;
                 out.asked_who = Some(slot);
-                let stopped =
-                    out.response_signalled_stop || out.end_stream_reached || out.ended;
+                let stopped = out.response_signalled_stop || out.end_stream_reached || out.ended;
                 if from_introduction && self.awaiting_ask_who() {
                     // A second ASK-WHO in the same Name entry: the close is
                     // still owed after it.
@@ -919,9 +916,7 @@ impl ConversationSession {
             ConversationSessionPhase::AwaitingKeyword => TLK_KEYWORD_PROMPT.to_string(),
             // `conversation.md §7.7` step 2 (u5-spec#299 Q20, R573): the
             // scoped prompt is `You respond-`, "**not** `Your interest?`".
-            ConversationSessionPhase::AwaitingScopedKeyword { .. } => {
-                TLK_SCOPED_PROMPT.to_string()
-            }
+            ConversationSessionPhase::AwaitingScopedKeyword { .. } => TLK_SCOPED_PROMPT.to_string(),
             ConversationSessionPhase::AwaitingAskWho { .. } => {
                 crate::TLK_ASK_WHO_PROMPT.to_string()
             }
@@ -1663,7 +1658,9 @@ pub fn tlk_keyword_lookup(
     match tlk_player_input_kind(&input_upper) {
         TlkPlayerInputKind::EmptyByeShortcut => TlkKeywordLookup::EmptyLine,
         TlkPlayerInputKind::ReservedRebuke { .. } => TlkKeywordLookup::Rebuke,
-        TlkPlayerInputKind::Reserved(ReservedKeywordEffect::NameEntry) => TlkKeywordLookup::Field(0),
+        TlkPlayerInputKind::Reserved(ReservedKeywordEffect::NameEntry) => {
+            TlkKeywordLookup::Field(0)
+        }
         TlkPlayerInputKind::Reserved(ReservedKeywordEffect::JobEntry) => TlkKeywordLookup::Field(3),
         TlkPlayerInputKind::Reserved(ReservedKeywordEffect::ByePath) => TlkKeywordLookup::Field(4),
         TlkPlayerInputKind::OrdinaryKeywordScan => {
@@ -2037,7 +2034,14 @@ mod tests {
         ]
         .map(str::to_string)
         .to_vec();
-        let party_names: [&[u8]; 6] = [b"AVATAR", b"IOLO", b"SHAMINO", b"DUPRE", b"MARIAH", b"GEOFFREY"];
+        let party_names: [&[u8]; 6] = [
+            b"AVATAR",
+            b"IOLO",
+            b"SHAMINO",
+            b"DUPRE",
+            b"MARIAH",
+            b"GEOFFREY",
+        ];
         let context = ConversationContext {
             party_member_names: &party_names,
             ..ctx()
@@ -2250,7 +2254,12 @@ mod tests {
         ];
         let decoded = raw
             .iter()
-            .map(|field| field.iter().map(|b| char::from(b ^ TLK_TEXT_XOR_MASK)).collect())
+            .map(|field| {
+                field
+                    .iter()
+                    .map(|b| char::from(b ^ TLK_TEXT_XOR_MASK))
+                    .collect()
+            })
             .collect();
         let mut s = ConversationSession::new(raw, decoded);
         s.set_npc_slot(Some(1));
@@ -2638,7 +2647,10 @@ mod tests {
         assert_eq!(s.phase, ConversationSessionPhase::AwaitingKeyword);
 
         let job = s.submit_keyword("job", &ctx());
-        assert_eq!(job.text, "\n\"I mend gear.\n", "no closing quote or row breaks");
+        assert_eq!(
+            job.text, "\n\"I mend gear.\n",
+            "no closing quote or row breaks"
+        );
         assert!(job.ended);
         assert!(!job.text.contains("BYE") && !job.text.contains("Farewell"));
         assert_eq!(s.phase, ConversationSessionPhase::PresentingBye);
@@ -2660,7 +2672,12 @@ mod tests {
             ];
             let decoded = raw
                 .iter()
-                .map(|field| field.iter().map(|b| char::from(b ^ TLK_TEXT_XOR_MASK)).collect())
+                .map(|field| {
+                    field
+                        .iter()
+                        .map(|b| char::from(b ^ TLK_TEXT_XOR_MASK))
+                        .collect()
+                })
                 .collect();
             ConversationSession::new(raw, decoded)
         };
@@ -2934,13 +2951,20 @@ mod tests {
         let out = s.submit_keyword("ask", &ctx());
         // §7.7 step 1: the HEAD emits its quote before the head runs.
         assert!(out.text.contains("Listen.\" Thy name?"), "{:?}", out.text);
-        assert!(matches!(s.phase, ConversationSessionPhase::AwaitingAskWho { .. }));
+        assert!(matches!(
+            s.phase,
+            ConversationSessionPhase::AwaitingAskWho { .. }
+        ));
 
         // A wrong name: the retry line, then the self-GOTO re-runs the head
         // and stops at its ASK-WHO again - no scoped prompt opens.
         let retry = s.submit_keyword("nobody", &ctx());
         assert!(retry.text.contains("Nay."), "{:?}", retry.text);
-        assert!(retry.text.contains("Thy name?"), "the block restarts: {:?}", retry.text);
+        assert!(
+            retry.text.contains("Thy name?"),
+            "the block restarts: {:?}",
+            retry.text
+        );
         assert!(
             matches!(s.phase, ConversationSessionPhase::AwaitingAskWho { .. }),
             "{:?}",
@@ -3057,7 +3081,11 @@ mod tests {
         );
         for line in ["y", "news"] {
             let out = s.submit_keyword(line, &ctx());
-            assert_eq!(out.text, framed_response(TLK_NO_KEYWORD_MATCH_MESSAGE), "{line}");
+            assert_eq!(
+                out.text,
+                framed_response(TLK_NO_KEYWORD_MATCH_MESSAGE),
+                "{line}"
+            );
             assert_eq!(s.phase, ConversationSessionPhase::AwaitingKeyword);
         }
     }
@@ -3161,7 +3189,11 @@ mod tests {
             s.submit_keyword("ask", &ctx());
             let out = s.submit_keyword(line, &ctx());
             assert!(out.ended, "{line}");
-            assert!(!out.text.contains("Farewell"), "no Bye entry: {:?}", out.text);
+            assert!(
+                !out.text.contains("Farewell"),
+                "no Bye entry: {:?}",
+                out.text
+            );
             assert_eq!(s.phase, ConversationSessionPhase::PresentingBye);
         }
     }
@@ -3214,7 +3246,12 @@ mod tests {
         ];
         let decoded = raw
             .iter()
-            .map(|field| field.iter().map(|b| char::from(b ^ TLK_TEXT_XOR_MASK)).collect())
+            .map(|field| {
+                field
+                    .iter()
+                    .map(|b| char::from(b ^ TLK_TEXT_XOR_MASK))
+                    .collect()
+            })
             .collect();
         let mut s = ConversationSession::new(raw, decoded);
         s.present_greeting(&ctx());
@@ -3239,7 +3276,10 @@ mod tests {
         let mut description = enc("a jester.");
         description.push(0x91);
         let mut head = vec![TLK_CODE_LABEL_RECORD, 0x91];
-        head.extend(enc_with_stop("Greetings again.\"", TLK_CODE_END_OF_RESPONSE));
+        head.extend(enc_with_stop(
+            "Greetings again.\"",
+            TLK_CODE_END_OF_RESPONSE,
+        ));
         let raw = vec![
             enc("Chuckles"),
             description,
@@ -3252,7 +3292,12 @@ mod tests {
         ];
         let decoded = raw
             .iter()
-            .map(|field| field.iter().map(|b| char::from(b ^ TLK_TEXT_XOR_MASK)).collect())
+            .map(|field| {
+                field
+                    .iter()
+                    .map(|b| char::from(b ^ TLK_TEXT_XOR_MASK))
+                    .collect()
+            })
             .collect();
         let mut s = ConversationSession::new(raw, decoded);
         let out = s.present_description(&ctx());
@@ -3271,7 +3316,11 @@ mod tests {
     fn a_scoped_keyword_typed_at_the_top_level_prompt_gets_the_cannot_help_line() {
         let mut s = scoped_yes_no_session();
         let out = s.submit_keyword("y", &ctx());
-        assert!(out.text.contains("I cannot help thee with that."), "{:?}", out.text);
+        assert!(
+            out.text.contains("I cannot help thee with that."),
+            "{:?}",
+            out.text
+        );
         assert!(!out.recruit_speaker, "the scoped `y` record must not run");
         assert_eq!(s.phase, ConversationSessionPhase::AwaitingKeyword);
     }
@@ -3309,7 +3358,11 @@ mod tests {
         s.decoded_fields[TLK_LEADING_ENTRY_COUNT] = "QQQ".to_string();
         for dead in ["caug", "tort"] {
             let out = s.submit_keyword(dead, &ctx());
-            assert!(out.text.contains("I cannot help thee with that."), "{dead}: {:?}", out.text);
+            assert!(
+                out.text.contains("I cannot help thee with that."),
+                "{dead}: {:?}",
+                out.text
+            );
         }
         let out = s.submit_keyword("DON'T ASK!", &ctx());
         assert!(
@@ -3329,10 +3382,7 @@ mod tests {
     fn a_default_arm_that_goes_to_its_own_block_asks_again() {
         let mut head = vec![TLK_CODE_LABEL_RECORD, 0x91];
         head.extend(enc("Well?"));
-        let mut s = label_session(
-            vec![0x91],
-            vec![head, vec![0x91], enc("y"), enc("Good.")],
-        );
+        let mut s = label_session(vec![0x91], vec![head, vec![0x91], enc("y"), enc("Good.")]);
         s.submit_keyword("ask", &ctx());
         let again = s.submit_keyword("maybe", &ctx());
         assert!(again.text.contains("Well?"), "{:?}", again.text);
@@ -3390,7 +3440,12 @@ mod tests {
         ];
         let decoded = raw
             .iter()
-            .map(|field| field.iter().map(|b| char::from(b ^ TLK_TEXT_XOR_MASK)).collect())
+            .map(|field| {
+                field
+                    .iter()
+                    .map(|b| char::from(b ^ TLK_TEXT_XOR_MASK))
+                    .collect()
+            })
             .collect();
         let mut s = ConversationSession::new(raw, decoded);
         s.present_description(&ctx());
@@ -3485,7 +3540,12 @@ mod tests {
         raw.extend(records);
         let decoded = raw
             .iter()
-            .map(|field| field.iter().map(|b| (b ^ TLK_TEXT_XOR_MASK) as char).collect())
+            .map(|field| {
+                field
+                    .iter()
+                    .map(|b| (b ^ TLK_TEXT_XOR_MASK) as char)
+                    .collect()
+            })
             .collect();
         let mut s = ConversationSession::new(raw, decoded);
         s.set_npc_slot(Some(3));
@@ -3608,7 +3668,10 @@ mod tests {
         let ConversationSessionPhase::AwaitingAskWho { field_idx, .. } = s.phase else {
             panic!("the record's ASK-WHO is reached: {:?}", s.phase);
         };
-        assert_eq!(field_idx, 9, "the prompt resumes inside the labelled record");
+        assert_eq!(
+            field_idx, 9,
+            "the prompt resumes inside the labelled record"
+        );
         let answer = s.submit_keyword("", &ctx());
         assert!(answer.text.contains("Good."), "{:?}", answer.text);
     }
@@ -3634,7 +3697,12 @@ mod tests {
         ];
         let decoded = raw
             .iter()
-            .map(|field| field.iter().map(|b| char::from(b ^ TLK_TEXT_XOR_MASK)).collect())
+            .map(|field| {
+                field
+                    .iter()
+                    .map(|b| char::from(b ^ TLK_TEXT_XOR_MASK))
+                    .collect()
+            })
             .collect();
         ConversationSession::new(raw, decoded)
     }
@@ -3752,7 +3820,14 @@ mod tests {
         let context = party_ctx(&names);
         let mut s = label_session(
             vec![0x91],
-            vec![head, enc("Later then."), enc("y"), vec![0x92], ask.clone(), enc("x")],
+            vec![
+                head,
+                enc("Later then."),
+                enc("y"),
+                vec![0x92],
+                ask.clone(),
+                enc("x"),
+            ],
         );
         s.submit_keyword("ask", &context);
         assert_eq!(
@@ -3812,7 +3887,12 @@ mod tests {
         ];
         let decoded = raw
             .iter()
-            .map(|field| field.iter().map(|b| (b ^ TLK_TEXT_XOR_MASK) as char).collect())
+            .map(|field| {
+                field
+                    .iter()
+                    .map(|b| (b ^ TLK_TEXT_XOR_MASK) as char)
+                    .collect()
+            })
             .collect();
         let mut s = ConversationSession::new(raw, decoded);
         s.set_npc_slot(Some(3));
@@ -3850,7 +3930,12 @@ mod tests {
         ];
         let decoded = raw
             .iter()
-            .map(|field| field.iter().map(|b| char::from(b ^ TLK_TEXT_XOR_MASK)).collect())
+            .map(|field| {
+                field
+                    .iter()
+                    .map(|b| char::from(b ^ TLK_TEXT_XOR_MASK))
+                    .collect()
+            })
             .collect();
         let names: [&[u8]; 1] = [b"AVATAR"];
         let context = party_ctx(&names);

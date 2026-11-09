@@ -2073,7 +2073,10 @@ pub fn herbalist_menu_entries(herbalist: Herbalist) -> Vec<ReagentMenuEntry> {
 /// `shops.md §6`: "These are base prices for the following fixed
 /// quantities, before adjustment" - the bundle quantity matrix, keyed like
 /// the price matrix.
-pub const fn herbalist_reagent_bundle_quantity(herbalist: Herbalist, reagent: Reagent) -> Option<u8> {
+pub const fn herbalist_reagent_bundle_quantity(
+    herbalist: Herbalist,
+    reagent: Reagent,
+) -> Option<u8> {
     match herbalist {
         Herbalist::TheHerbalist => match reagent {
             Reagent::Ginseng => Some(10),

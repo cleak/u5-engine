@@ -314,10 +314,9 @@ impl PlayState {
     /// input row, not a key wait, so it is live and the typed word echoes on
     /// it (playtest P12-01).
     pub fn blackthorn_guard_password_open(&self) -> bool {
-        self.active_blackthorn_guard_demand
-            .is_some_and(|demand| {
-                demand.prompt == crate::BlackthornGuardDemandPrompt::PalacePassword
-            })
+        self.active_blackthorn_guard_demand.is_some_and(|demand| {
+            demand.prompt == crate::BlackthornGuardDemandPrompt::PalacePassword
+        })
     }
 
     /// Whether the M-Mix reagent selection owns the keyboard.
@@ -596,7 +595,10 @@ impl PlayState {
                 // still owed on top of it - an explicit blank stood in for
                 // it and the lift never showed (playtest J24).
                 self.push_producer_blank_message_entry();
-            } else if let Some(open) = self.message_transcript.last().map(|entry| entry.text.clone())
+            } else if let Some(open) = self
+                .message_transcript
+                .last()
+                .map(|entry| entry.text.clone())
             {
                 let _ = self.break_open_prompt_row_for_strip_scroll(&open);
             }
@@ -1107,17 +1109,13 @@ impl PlayState {
         // `magic.md §8`/`catalogs/spell-list.md`: the three aimed attack
         // spells print the shared `Aim! ` prompt, which carries a trailing
         // space and no newline, so the arena cursor waits on that same row.
-        if self
-            .active_cast_followup
-            .as_ref()
-            .is_some_and(|session| {
-                matches!(
-                    session.kind,
-                    CastFollowupKind::CombatAimCursor { .. }
-                        | CastFollowupKind::CombatCoordinate { .. }
-                )
-            })
-        {
+        if self.active_cast_followup.as_ref().is_some_and(|session| {
+            matches!(
+                session.kind,
+                CastFollowupKind::CombatAimCursor { .. }
+                    | CastFollowupKind::CombatCoordinate { .. }
+            )
+        }) {
             return Some(crate::combat_frame::COMBAT_ATTACK_AIM_PROMPT.to_string());
         }
         // `combat.md §8.2`: each Attack attempt prints `Attack-` and then,
@@ -2035,7 +2033,9 @@ impl PlayState {
                     } else {
                         format!("{}_", session.buffer)
                     };
-                    format!("{label}? {value}\nChoose combat slot 1-{COMBAT_ACTOR_SLOTS}; Esc cancels.")
+                    format!(
+                        "{label}? {value}\nChoose combat slot 1-{COMBAT_ACTOR_SLOTS}; Esc cancels."
+                    )
                 }
                 // `magic.md §8`: the field spells use "the standard combat
                 // arena cursor", the shared `Aim! ` cursor of `combat.md
@@ -2096,8 +2096,9 @@ impl PlayState {
                             // the prompt row already carries it, so the slot
                             // must not print it a second time on a row below.
                             if completed && self.message == DIRECTION_PROMPT_LABEL_PASS {
-                                let line =
-                                    format!("{SPELL_DIRECTION_PROMPT_PREFIX}{DIRECTION_PROMPT_LABEL_PASS}");
+                                let line = format!(
+                                    "{SPELL_DIRECTION_PROMPT_PREFIX}{DIRECTION_PROMPT_LABEL_PASS}"
+                                );
                                 self.message = line.clone();
                                 self.message_flushed = line;
                             }
@@ -2340,7 +2341,8 @@ impl PlayState {
                                 // and `magic.md §8` drops only the text - "a
                                 // shot with no resolved actor and no original
                                 // aimed actor has no result line" (Q19).
-                                if let Some(spell_index) = spell_index_from_code(&session.spell_code)
+                                if let Some(spell_index) =
+                                    spell_index_from_code(&session.spell_code)
                                 {
                                     self.emit_active_target_combat_spell_effect(spell_index);
                                 }
@@ -3217,7 +3219,10 @@ impl PlayState {
         if !matches!(self.area, Area::Town { .. }) || self.player.transport.is_foot() {
             return false;
         }
-        let Some(&tile) = self.grid.get(self.player.y * TOWN_GRID_SIDE + self.player.x) else {
+        let Some(&tile) = self
+            .grid
+            .get(self.player.y * TOWN_GRID_SIDE + self.player.x)
+        else {
             return false;
         };
         if tile >= TOWN_ATTACK_WATER_TILE_LIMIT {
@@ -3593,9 +3598,7 @@ impl PlayState {
     /// dungeon this prompt is always the both-directions one. Above
     /// ground the town and overworld arms keep the plain `Klimb-`.
     pub fn open_verb_echo_for(&self, kind: DirectionPromptKind) -> Option<String> {
-        if matches!(kind, DirectionPromptKind::Klimb)
-            && matches!(self.area, Area::Dungeon { .. })
-        {
+        if matches!(kind, DirectionPromptKind::Klimb) && matches!(self.area, Area::Dungeon { .. }) {
             return Some(DUNGEON_KLIMB_PROMPT_BOTH.to_string());
         }
         // `combat.md §8` (u5-spec#298 Q1): in combat the `U/D-` form appears
@@ -3891,8 +3894,8 @@ impl PlayState {
                 // Whether that landed decides the fall-through below: a
                 // second bare `Pass` in the message slot renders a loose
                 // row of its own under the completed `Verb-Pass` one.
-                let completed_on_verb_row = self.open_verb_echo_for(session.kind)
-                    .is_some_and(|verb| {
+                let completed_on_verb_row =
+                    self.open_verb_echo_for(session.kind).is_some_and(|verb| {
                         self.complete_open_direction_echo(&verb, DIRECTION_PROMPT_LABEL_PASS)
                     });
                 if push_prompt {
@@ -4053,7 +4056,10 @@ impl PlayState {
                 let intent = match ch {
                     'U' | 'u' => Some(ClimbIntent::Up),
                     'D' | 'd' => Some(ClimbIntent::Down),
-                    _ => match u8::try_from(u32::from(ch)).ok().and_then(crate::input_code_direction) {
+                    _ => match u8::try_from(u32::from(ch))
+                        .ok()
+                        .and_then(crate::input_code_direction)
+                    {
                         Some(crate::InputDirection::North) => Some(ClimbIntent::Up),
                         Some(crate::InputDirection::South) => Some(ClimbIntent::Down),
                         _ => None,
@@ -4083,8 +4089,7 @@ impl PlayState {
             // runs, so its own output starts on the next row. Push keeps
             // its post-dispatch completion because a dungeon Push
             // refusal replaces the echo entirely (`commands.md §5.2`).
-            if !push_prompt && let Some(verb) = self.open_verb_echo_for(session.kind)
-            {
+            if !push_prompt && let Some(verb) = self.open_verb_echo_for(session.kind) {
                 let _ = self.complete_open_direction_echo(&verb, direction.name());
             }
             let outcome = match session.kind {
@@ -4357,7 +4362,11 @@ impl PlayState {
     /// test. If gold is still non-negative the toll is paid ... If gold
     /// went negative, the debit is rolled back but the request stays
     /// raised ... and the event continues exactly as a refusal."
-    pub fn resolve_troll_bridge_toll_payment(&mut self, toll: i16, game_dir: &Path) -> io::Result<()> {
+    pub fn resolve_troll_bridge_toll_payment(
+        &mut self,
+        toll: i16,
+        game_dir: &Path,
+    ) -> io::Result<()> {
         self.commit_prompt_reply(TROLL_BRIDGE_TOLL_QUESTION, "Y");
         // `overworld.md §7.1` step 3: "Echo the accepted letter and a line
         // feed." `commit_prompt_reply` leaves the row flag alone, and the
@@ -4573,12 +4582,12 @@ impl PlayState {
                 // nothing readied), the stock frame has `(None ready)` on
                 // panel row 5, same column and text, where this engine drew
                 // it on row 3 - the only panel difference in that capture.
-                let first_row = if lines.len() == 1 && lines[0].trim() == Z_STATS_NONE_READY_PLACEHOLDER
-                {
-                    Z_STATS_NONE_READY_PANEL_ROW_INDEX
-                } else {
-                    2
-                };
+                let first_row =
+                    if lines.len() == 1 && lines[0].trim() == Z_STATS_NONE_READY_PLACEHOLDER {
+                        Z_STATS_NONE_READY_PANEL_ROW_INDEX
+                    } else {
+                        2
+                    };
                 z_stats_place_panel_rows(&mut rows, first_row, &lines);
             }
             ZStatsPage::Counters => self.z_stats_counters_page_rows(&mut rows),
@@ -5178,11 +5187,9 @@ impl PlayState {
                     // row as closed, drew a blank, and lost it when a key was
                     // typed (playtest H31). Only the row is marked: the world
                     // flag stays as the next command's own echo expects.
-                    if let Some(last) = self
-                        .message_transcript
-                        .last_mut()
-                        .filter(|entry| !entry.explicit_blank && entry.text == PARTY_SELECTION_PROMPT)
-                    {
+                    if let Some(last) = self.message_transcript.last_mut().filter(|entry| {
+                        !entry.explicit_blank && entry.text == PARTY_SELECTION_PROMPT
+                    }) {
                         last.leaves_row_open = true;
                         self.message_transcript_revision =
                             self.message_transcript_revision.wrapping_add(1);
@@ -6388,9 +6395,7 @@ impl PlayState {
 
         self.party_equipment[request.party_index][slot] = item_id as u8;
         self.equipment_stock[item_id] = self.equipment_stock[item_id].saturating_sub(1);
-        if is_magic_vanish_ring(item_id)
-            && self.ready_ring_vanish_roll() == 0
-        {
+        if is_magic_vanish_ring(item_id) && self.ready_ring_vanish_roll() == 0 {
             self.party_equipment[request.party_index][slot] = EQUIPMENT_EMPTY;
             // `inventory.md` §5.2: "The ring vanish instead prints
             // `\n\nRing vanishes!\n` and closes without `Done`."
@@ -6899,7 +6904,9 @@ impl PlayState {
         // `magic.md §8` Healing effects: "In combat it also wakes the
         // matching combat descriptor for that selected member" - the same
         // wake the blue potion's combat arm performs.
-        if self.clear_combat_party_sleep_presentation(self.combat_descriptor_for_party_member(target_index)) {
+        if self.clear_combat_party_sleep_presentation(
+            self.combat_descriptor_for_party_member(target_index),
+        ) {
             self.mark_visibility_dirty();
         }
         self.advance_turn();

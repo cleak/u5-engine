@@ -144,9 +144,17 @@ pub const fn shop_vendor_name_for_scene(dialog_id: u8, scene_byte: u8) -> Option
 /// The `LOOK2.DAT` string at `index`, or the domain sentinel at
 /// `sentinel_index` when the row is missing (`formats/look2-dat.md §6`).
 /// With no table loaded there is no description to print.
-fn look2_selected_string(look_table: Option<&LookTable>, index: usize, sentinel_index: usize) -> String {
+fn look2_selected_string(
+    look_table: Option<&LookTable>,
+    index: usize,
+    sentinel_index: usize,
+) -> String {
     look_table
-        .and_then(|table| table.description(index).or_else(|| table.description(sentinel_index)))
+        .and_then(|table| {
+            table
+                .description(index)
+                .or_else(|| table.description(sentinel_index))
+        })
         .unwrap_or_default()
         .to_string()
 }
@@ -239,7 +247,11 @@ impl PlayState {
 
     /// Finish Rel Hur after the dispatcher has already consumed its charge
     /// and mana (`magic.md §5`).
-    pub fn confirm_spent_rel_hur(&mut self, direction: Option<Direction>, pass: bool) -> MoveOutcome {
+    pub fn confirm_spent_rel_hur(
+        &mut self,
+        direction: Option<Direction>,
+        pass: bool,
+    ) -> MoveOutcome {
         if pass {
             self.advance_turn();
             // Measured 2026-09-07: Space completes the scroll's own
@@ -594,7 +606,9 @@ impl PlayState {
         else {
             return;
         };
-        if self.break_open_prompt_row_for_strip_scroll(&prompt).is_some()
+        if self
+            .break_open_prompt_row_for_strip_scroll(&prompt)
+            .is_some()
             && let Some(session) = self.active_use.as_mut()
         {
             session.strip_scrolls = session.strip_scrolls.saturating_add(1);
@@ -1619,7 +1633,9 @@ impl PlayState {
         // The name is the doom line's own mixed-case set, not the
         // capitalised Yell keywords (`inventory.md §7.1`, u5-spec#298 Q34).
         let name = crate::commands::use_shard_doom_name(index).unwrap_or("The Shadowlord");
-        staged_tail.push_str(&format!("{USE_SHARD_DOOM_PREFIX}{name}{USE_SHARD_DOOM_SUFFIX}"));
+        staged_tail.push_str(&format!(
+            "{USE_SHARD_DOOM_PREFIX}{name}{USE_SHARD_DOOM_SUFFIX}"
+        ));
         self.staged_narration
             .push_secs_on_open_row(swell_secs, staged_tail);
         self.diagnostics
@@ -2569,7 +2585,9 @@ impl PlayState {
             POTION_BLUE_INDEX => {
                 if self.party[target_index].status == b'S' && self.party[target_index].hp > 0 {
                     self.party[target_index].status = b'G';
-                    if self.clear_combat_party_sleep_presentation(self.combat_descriptor_for_party_member(target_index)) {
+                    if self.clear_combat_party_sleep_presentation(
+                        self.combat_descriptor_for_party_member(target_index),
+                    ) {
                         self.mark_visibility_dirty();
                     }
                     self.advance_turn();
@@ -2625,8 +2643,9 @@ impl PlayState {
                         if matches!(
                             apply_combat_sleep_to_party_target(&mut self.party[target_index]),
                             CombatPartySleepOutcome::SleptPartyMember { .. }
-                        ) && self.apply_combat_party_sleep_presentation(self.combat_descriptor_for_party_member(target_index))
-                        {
+                        ) && self.apply_combat_party_sleep_presentation(
+                            self.combat_descriptor_for_party_member(target_index),
+                        ) {
                             self.mark_visibility_dirty();
                         }
                     } else {
@@ -2647,7 +2666,9 @@ impl PlayState {
                     self.message = POTION_RESULT_NO_NOTICEABLE_EFFECT.to_string();
                     return MoveOutcome::Blocked;
                 }
-                let applied = self.apply_combat_potion_poof_presentation(self.combat_descriptor_for_party_member(target_index));
+                let applied = self.apply_combat_potion_poof_presentation(
+                    self.combat_descriptor_for_party_member(target_index),
+                );
                 if applied {
                     self.mark_visibility_dirty();
                 }
@@ -2667,7 +2688,9 @@ impl PlayState {
                     return MoveOutcome::Blocked;
                 }
                 self.advance_turn();
-                let applied = self.apply_combat_party_invisibility_potion(self.combat_descriptor_for_party_member(target_index));
+                let applied = self.apply_combat_party_invisibility_potion(
+                    self.combat_descriptor_for_party_member(target_index),
+                );
                 // `inventory.md §7.2`: "Black in combat | `Invisible!\n`".
                 self.message = POTION_RESULT_INVISIBLE.to_string();
                 if applied {
@@ -2707,13 +2730,12 @@ impl PlayState {
     /// over `0..7`; `2..15` keep the selected colour.
     pub fn potion_effect_index_after_variation_roll(&mut self, selected_index: usize) -> usize {
         let variation_roll = self.potion_variation_roll();
-        let random_roll = if variation_roll & POTION_VARIATION_ROLL_MASK
-            == POTION_VARIATION_RANDOM_ID_ROLL
-        {
-            self.potion_random_effect_roll()
-        } else {
-            0
-        };
+        let random_roll =
+            if variation_roll & POTION_VARIATION_ROLL_MASK == POTION_VARIATION_RANDOM_ID_ROLL {
+                self.potion_random_effect_roll()
+            } else {
+                0
+            };
         potion_effect_index_after_variation(selected_index, variation_roll, random_roll)
     }
 
@@ -3339,9 +3361,11 @@ impl PlayState {
         // hook can fire. This engine's entry refresh has already stamped
         // it, so hold the hook back for that command (playtest P23-01).
         next.natural_moongate_hook_held_for_warp_arrival = !arrival_gate_carried
-            && next.current_live_natural_moongate_cell_index().is_some_and(|idx| {
-                next.grid.get(idx).copied() == Some(NATURAL_MOONGATE_TERRAIN_TILE)
-            });
+            && next
+                .current_live_natural_moongate_cell_index()
+                .is_some_and(|idx| {
+                    next.grid.get(idx).copied() == Some(NATURAL_MOONGATE_TERRAIN_TILE)
+                });
         *self = next;
         Ok(())
     }
@@ -3755,7 +3779,9 @@ impl PlayState {
     /// surface overlay up the count resets so the next view starts afresh.
     pub fn poll_view_overlay_idle(&mut self) {
         if matches!(
-            self.active_view_overlay.as_ref().map(|overlay| overlay.kind),
+            self.active_view_overlay
+                .as_ref()
+                .map(|overlay| overlay.kind),
             Some(ViewOverlayKind::Surface)
         ) {
             self.view_overlay_idle_polls = self.view_overlay_idle_polls.wrapping_add(1);
@@ -3877,14 +3903,7 @@ impl PlayState {
         for cell_y in 0..cells {
             for cell_x in 0..cells {
                 let index = cell_y * cells + cell_x;
-                draw_dungeon_view_glyph(
-                    &mut viewport,
-                    cell_x,
-                    cell_y,
-                    scale,
-                    glyphs[index],
-                    fonts,
-                );
+                draw_dungeon_view_glyph(&mut viewport, cell_x, cell_y, scale, glyphs[index], fonts);
             }
         }
         viewport
@@ -4275,8 +4294,7 @@ impl PlayState {
                 // Row 5: the sign path is selected by the live terrain tile,
                 // and only then is `SIGNS.DAT` consulted.
                 if sign_or_wanted_poster_object_class(self.grid[y * 32 + x]) {
-                    let sign =
-                        self.sign_message_at_for_current_area(game_dir, y as u8, x as u8)?;
+                    let sign = self.sign_message_at_for_current_area(game_dir, y as u8, x as u8)?;
                     // `view.md §5` (audit A012): a `0x0D` holds the rest of
                     // the sign behind a key.
                     self.present_sign_message(sign);
@@ -4341,8 +4359,7 @@ impl PlayState {
                 }
                 // `view.md §3` entry-dispatch row 5, see the town arm.
                 if sign_or_wanted_poster_object_class(self.grid[world_cell_index(x, y)]) {
-                    let sign =
-                        self.sign_message_at_for_current_area(game_dir, y as u8, x as u8)?;
+                    let sign = self.sign_message_at_for_current_area(game_dir, y as u8, x as u8)?;
                     self.present_sign_message(sign);
                     return Ok(MoveOutcome::Observed);
                 }
@@ -5318,7 +5335,8 @@ impl PlayState {
         // `no response!` where this engine opened the password demand.
         if dialog_id == BLACKTHORN_GUARD_DEMAND_DIALOG_ID {
             let consume_turn = !self.talk_entered_by_contact;
-            return match self.begin_blackthorn_guard_demand(target_x, target_y, consume_turn, None) {
+            return match self.begin_blackthorn_guard_demand(target_x, target_y, consume_turn, None)
+            {
                 Ok(outcome) => outcome,
                 Err(_) => MoveOutcome::Blocked,
             };
@@ -5457,9 +5475,7 @@ impl PlayState {
             self.message = crate::TALK_NOBODY_HERE_LINE.to_string();
             return self.consume_ordinary_town_talk();
         };
-        let conversation_npc_slot = self
-            .talk_record_at(target_x, target_y)
-            .map(|npc| npc.slot);
+        let conversation_npc_slot = self.talk_record_at(target_x, target_y).map(|npc| npc.slot);
 
         // `conversation.md §2` step 4: the status-tile gate reads the live map
         // tile at the resolved cell, the same query movement and Look use.
@@ -5732,9 +5748,8 @@ impl PlayState {
                 if let Some(output) = run_field(idx) {
                     applied_grants.extend(output.action_grants.iter().copied());
                     applied_signal_flags.extend(output.signal_flags.iter().copied());
-                    applied_alarms = applied_alarms.saturating_add(
-                        crate::conversation_session::tlk_run_alarm_count(&output),
-                    );
+                    applied_alarms = applied_alarms
+                        .saturating_add(crate::conversation_session::tlk_run_alarm_count(&output));
                     applied_payments.extend(output.events.iter().filter_map(|event| match event {
                         crate::tlk_runner::TlkRunEvent::GoldPayment { amount, accepted } => {
                             Some(crate::conversation_session::ConversationGoldPayment {
@@ -5994,7 +6009,10 @@ impl PlayState {
                 // counter letter; "Counter letters never assign a fixed final
                 // value".
                 TlkActionDispatchVerb::SetGrappleGate => {
-                    self.climbing_gear = self.climbing_gear.saturating_add(1).min(PARTY_BYTE_STOCK_CAP);
+                    self.climbing_gear = self
+                        .climbing_gear
+                        .saturating_add(1)
+                        .min(PARTY_BYTE_STOCK_CAP);
                 }
                 TlkActionDispatchVerb::RaiseCarpets => {
                     let slot = &mut self.special_items[SPECIAL_ITEM_MAGIC_CARPET_INDEX];
@@ -6109,9 +6127,8 @@ impl PlayState {
         let session =
             crate::conversation_session::ConversationSession::new(raw.clone(), fields.clone());
         self.active_conversation = Some(Box::new(session));
-        self.active_conversation_npc_slot = self
-            .talk_record_at(target_x, target_y)
-            .map(|npc| npc.slot);
+        self.active_conversation_npc_slot =
+            self.talk_record_at(target_x, target_y).map(|npc| npc.slot);
         // `conversation.md §7.6` / §10: the branch-flag bit `0x8C`
         // tests and `0x88` sets is the speaking NPC's roster slot,
         // supplied by the engine and never by the script.
@@ -6594,9 +6611,8 @@ impl PlayState {
                 self.party_names.get(index),
             );
             let defense = carried.map_or(0, |record| record.defense);
-            let inn_marker = carried.map_or(crate::INN_REGISTRY_EMPTY_MARKER, |record| {
-                record.inn_marker
-            });
+            let inn_marker =
+                carried.map_or(crate::INN_REGISTRY_EMPTY_MARKER, |record| record.inn_marker);
             roster[index] = PartyRosterRecord {
                 member,
                 // `formats/saved-gam.md §3.1`: the gender byte has no parallel
@@ -6928,8 +6944,10 @@ impl PlayState {
         for action in actions {
             match *action {
                 'F' => {
-                    self.climbing_gear =
-                        self.climbing_gear.saturating_add(1).min(PARTY_BYTE_STOCK_CAP)
+                    self.climbing_gear = self
+                        .climbing_gear
+                        .saturating_add(1)
+                        .min(PARTY_BYTE_STOCK_CAP)
                 }
                 'H' => {
                     self.special_items[SPECIAL_ITEM_SEXTANT_INDEX] =
@@ -7014,9 +7032,7 @@ impl PlayState {
         if !self.talk_entered_by_contact {
             return;
         }
-        let target_slot = self
-            .talk_record_at(target_x, target_y)
-            .map(|npc| npc.slot);
+        let target_slot = self.talk_record_at(target_x, target_y).map(|npc| npc.slot);
         if let Some(index) = self
             .npcs
             .iter()
@@ -8346,7 +8362,11 @@ pub const TLK_FALSEHOOD_STOLEN_GOODS_LINE: &str = "\nSomething was stolen!\n";
 /// conversation's last row, the stored line follows its closing feed, and the
 /// same closing blank row follows the line.
 fn append_falsehood_stolen_goods_line(rendered: &mut crate::tlk_runner::TlkRenderedText) {
-    while rendered.glyphs.last().is_some_and(|glyph| glyph.byte == b'\n') {
+    while rendered
+        .glyphs
+        .last()
+        .is_some_and(|glyph| glyph.byte == b'\n')
+    {
         rendered.glyphs.pop();
         rendered.text.pop();
     }
@@ -8578,7 +8598,10 @@ mod conversation_opening_hold_tests {
         );
         assert_eq!(
             fed.text,
-            format!("\nYou see a giant rat!\n\n\"Squeek...\"\n\n{}", crate::TLK_ASK_WHO_PROMPT)
+            format!(
+                "\nYou see a giant rat!\n\n\"Squeek...\"\n\n{}",
+                crate::TLK_ASK_WHO_PROMPT
+            )
         );
     }
 

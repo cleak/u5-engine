@@ -900,9 +900,7 @@ pub const fn blackthorn_cutscene_beat_commands(
     beat: BlackthornCutsceneBeat,
 ) -> &'static [BlackthornCutsceneCommand] {
     match beat {
-        BlackthornCutsceneBeat::AudienceExit => {
-            &BLACKTHORN_CUTSCENE_AUDIENCE_EXIT
-        }
+        BlackthornCutsceneBeat::AudienceExit => &BLACKTHORN_CUTSCENE_AUDIENCE_EXIT,
         BlackthornCutsceneBeat::FailedChallengeReaction => {
             &BLACKTHORN_CUTSCENE_FAILED_CHALLENGE_REACTION
         }
@@ -1333,7 +1331,11 @@ pub fn presentation_printed_rows(text: &str) -> u32 {
         }
         let lines = crate::text_wrap::wrap_text(segment, width, 0);
         rows += lines.len().saturating_sub(1) as u32;
-        if index + 1 == segments.len() && lines.last().is_some_and(|line| line.chars().count() == width) {
+        if index + 1 == segments.len()
+            && lines
+                .last()
+                .is_some_and(|line| line.chars().count() == width)
+        {
             rows += 1;
         }
     }
@@ -1672,7 +1674,9 @@ pub fn milliticks_secs(milliticks: u32) -> f64 {
 
 /// Seconds as thousandths of a BIOS tick, rounded.
 pub fn secs_milliticks(secs: f64) -> u32 {
-    (secs / crate::narration::BIOS_TICK_SECS * 1000.0).round().max(0.0) as u32
+    (secs / crate::narration::BIOS_TICK_SECS * 1000.0)
+        .round()
+        .max(0.0) as u32
 }
 
 /// `blackthorn.md §3` step 8 (u5-spec#298 Q8): "After the quiet 8-tick pause

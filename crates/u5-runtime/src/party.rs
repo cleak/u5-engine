@@ -134,7 +134,11 @@ impl PartyRosterRecord {
         bytes[SAVE_CHARACTER_MANA_OFFSET] = self.member.mana;
         write_u16_at(&mut bytes, SAVE_CHARACTER_HP_OFFSET, self.member.hp);
         write_u16_at(&mut bytes, SAVE_CHARACTER_MAX_HP_OFFSET, self.member.max_hp);
-        write_u16_at(&mut bytes, SAVE_CHARACTER_EXPERIENCE_OFFSET, self.experience);
+        write_u16_at(
+            &mut bytes,
+            SAVE_CHARACTER_EXPERIENCE_OFFSET,
+            self.experience,
+        );
         bytes[SAVE_CHARACTER_LEVEL_OFFSET] = self.member.level;
         bytes[SAVE_CHARACTER_STAY_COUNTER_OFFSET] = self.stay_counter;
         bytes

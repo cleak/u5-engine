@@ -42,13 +42,54 @@ pub const Z_STATS_SPELLS_SLOTS: usize = 48;
 /// rather than shortened at run time. Some cuts fall mid-word and some keep
 /// only initials; use them exactly as given."
 pub const Z_STATS_SPELL_LABELS: [&str; Z_STATS_SPELLS_SLOTS] = [
-    "In Lor", "Grav Por", "An Zu", "An Nox", "Mani", "An Ylem", "An Sanct", "An Xen Cor",
-    "Rel Hur", "In Wis", "Kal Xen", "In Xen Man", "Vas Lor", "Vas Flam", "In Flam Gr",
-    "In Nox Gr", "In Zu Grav", "In Por", "An Grav", "In Sanct", "In Sanct G", "Uus Por",
-    "Des Por", "Wis Quas", "In Bet Xen", "An Ex Por", "In Ex Por", "Vas Mani", "In Zu",
-    "Rel Tym", "In Vas P Y", "Quas An Wi", "In An", "Wis An Yle", "An Xen Ex", "Rel Xen Be",
-    "Sanct Lo", "Xen Corp", "In Quas Xe", "In Quas Wi", "In Nox Hur", "In Quas Co",
-    "In Mani Co", "Kal Xen Co", "In Vas G C", "In Flam Hu", "Vas Rel Po", "An Tym",
+    "In Lor",
+    "Grav Por",
+    "An Zu",
+    "An Nox",
+    "Mani",
+    "An Ylem",
+    "An Sanct",
+    "An Xen Cor",
+    "Rel Hur",
+    "In Wis",
+    "Kal Xen",
+    "In Xen Man",
+    "Vas Lor",
+    "Vas Flam",
+    "In Flam Gr",
+    "In Nox Gr",
+    "In Zu Grav",
+    "In Por",
+    "An Grav",
+    "In Sanct",
+    "In Sanct G",
+    "Uus Por",
+    "Des Por",
+    "Wis Quas",
+    "In Bet Xen",
+    "An Ex Por",
+    "In Ex Por",
+    "Vas Mani",
+    "In Zu",
+    "Rel Tym",
+    "In Vas P Y",
+    "Quas An Wi",
+    "In An",
+    "Wis An Yle",
+    "An Xen Ex",
+    "Rel Xen Be",
+    "Sanct Lo",
+    "Xen Corp",
+    "In Quas Xe",
+    "In Quas Wi",
+    "In Nox Hur",
+    "In Quas Co",
+    "In Mani Co",
+    "Kal Xen Co",
+    "In Vas G C",
+    "In Flam Hu",
+    "Vas Rel Po",
+    "An Tym",
 ];
 pub const Z_STATS_REAGENTS_SLOTS: usize = 8;
 pub const Z_STATS_ITEMS_SLOTS: usize = 38;
@@ -559,7 +600,9 @@ pub enum YesNoPromptKind {
     /// `overworld.md §7.1` step 3's "`Dost thou pay?`" toll demand. `toll`
     /// is the already-rolled amount (step 4), signed per the spec's "signed
     /// sixteen-bit" arithmetic.
-    TrollBridgeToll { toll: i16 },
+    TrollBridgeToll {
+        toll: i16,
+    },
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -1077,7 +1120,11 @@ pub enum ActingMemberPickerKey {
 /// - `0` "commits the explicit 'no one' answer only in the callers that
 ///   allow it ... other callers ignore `0`", and at the chest sites "the
 ///   digit `0` the reader would need is simply ignored".
-pub fn acting_member_picker_key(key: char, highlight: usize, party_len: usize) -> ActingMemberPickerKey {
+pub fn acting_member_picker_key(
+    key: char,
+    highlight: usize,
+    party_len: usize,
+) -> ActingMemberPickerKey {
     let rows = party_len.min(6);
     match key {
         '\u{1b}' => return ActingMemberPickerKey::Cancel,

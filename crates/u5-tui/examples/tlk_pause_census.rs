@@ -35,11 +35,15 @@ fn main() {
                 w += fw;
             }
         }
-        println!("{file:<13} fields {f:>5}  pause {p:>4}  wait-key {w:>4}  fields with either {e:>4}");
+        println!(
+            "{file:<13} fields {f:>5}  pause {p:>4}  wait-key {w:>4}  fields with either {e:>4}"
+        );
         pauses += p;
         waits += w;
         fields += f;
         with_either += e;
     }
-    println!("total        fields {fields:>5}  pause {pauses:>4}  wait-key {waits:>4}  fields with either {with_either:>4}");
+    println!(
+        "total        fields {fields:>5}  pause {pauses:>4}  wait-key {waits:>4}  fields with either {with_either:>4}"
+    );
 }

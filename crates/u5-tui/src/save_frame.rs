@@ -9,14 +9,14 @@ use std::path::Path;
 use image::{ImageBuffer, Rgba};
 use u5_runtime::{
     CHROME_RULE_INDEX, COMBAT_ARENA_SIDE, ChromeFonts, ChromePalette, DungeonScene, FixedCellFont,
-    MESSAGE_WINDOW_RIGHT, PlayOptions, PlayState, PlayTarget, STATS_PANEL_TEXT_LEFT, Scene,
-    TEXT_WINDOW_RENDER_HEIGHT, TEXT_WINDOW_RENDER_WIDTH, TILE_ATLAS_SIDE, TOWN_GRID_SIDE,
-    LOCAL_VIEW_OVERLAY_ORIGIN_X, LOCAL_VIEW_OVERLAY_ORIGIN_Y, TextWindowSystem, TileGraphicsDepth,
-    VIEWPORT_ORIGIN_X, VIEWPORT_ORIGIN_Y, ViewOverlayMode,
-    WorldPlane, configure_play_text_windows, gameplay_chrome_content, hash_bytes, load_ibm_ch_font,
-    load_runes_ch_font, load_tile_atlas, message_log_from_entries, paint_fixed_cell_glyph,
-    paint_gameplay_frame_chrome, paint_message_line_cap, paint_stats_panel_text_window,
-    prompt_cursor_glyph, render_text_panel_rgba,
+    LOCAL_VIEW_OVERLAY_ORIGIN_X, LOCAL_VIEW_OVERLAY_ORIGIN_Y, MESSAGE_WINDOW_RIGHT, PlayOptions,
+    PlayState, PlayTarget, STATS_PANEL_TEXT_LEFT, Scene, TEXT_WINDOW_RENDER_HEIGHT,
+    TEXT_WINDOW_RENDER_WIDTH, TILE_ATLAS_SIDE, TOWN_GRID_SIDE, TextWindowSystem, TileGraphicsDepth,
+    VIEWPORT_ORIGIN_X, VIEWPORT_ORIGIN_Y, ViewOverlayMode, WorldPlane, configure_play_text_windows,
+    gameplay_chrome_content, hash_bytes, load_ibm_ch_font, load_runes_ch_font, load_tile_atlas,
+    message_log_from_entries, paint_fixed_cell_glyph, paint_gameplay_frame_chrome,
+    paint_message_line_cap, paint_stats_panel_text_window, prompt_cursor_glyph,
+    render_text_panel_rgba,
 };
 
 use crate::{
@@ -519,17 +519,13 @@ fn seed_surface_view_class_gallery(state: &mut PlayState, mode: ViewOverlayMode)
 }
 
 fn save_frame_suite_intro_menu(out: &Path) -> io::Result<SavedFrameReport> {
-    let text = [
-        "Ultima V",
-        "",
-        "Intro Menu",
-    ]
-    .into_iter()
-    .map(str::to_string)
-    .chain(crate::intro_loop::intro_menu_text_rows())
-    .chain(["", "Selection:"].into_iter().map(str::to_string))
-    .collect::<Vec<_>>()
-    .join("\n");
+    let text = ["Ultima V", "", "Intro Menu"]
+        .into_iter()
+        .map(str::to_string)
+        .chain(crate::intro_loop::intro_menu_text_rows())
+        .chain(["", "Selection:"].into_iter().map(str::to_string))
+        .collect::<Vec<_>>()
+        .join("\n");
     save_text_window_report(out, "intro text window", &text, None)
 }
 
@@ -864,9 +860,8 @@ mod tests {
         let dir = debug_game_dir();
         let mut state = dungeon_state(open_dungeon_record(), 0, 1, 1);
         state.party_names = vec![*b"Avatar\0\0\0"];
-        state.enter_endgame_with_messages(Some(
-            u5_runtime::parse_endgame_messages(&bytes).unwrap(),
-        ));
+        state
+            .enter_endgame_with_messages(Some(u5_runtime::parse_endgame_messages(&bytes).unwrap()));
         state.endgame_entry_redraw_pending = true;
         for _ in 0..500 {
             if !state.advance_endgame_display_frame() {
@@ -920,7 +915,11 @@ mod tests {
             .find(|&(x, y)| src(x, y) != [0, 0, 0, 0xff])
             .expect("the overlay draws something");
         for (x, y) in [(0, 0), (127, 127), lit] {
-            assert_eq!(pixel(32 + x, 32 + y), src(x, y), "overlay cell at ({x}, {y})");
+            assert_eq!(
+                pixel(32 + x, 32 + y),
+                src(x, y),
+                "overlay cell at ({x}, {y})"
+            );
         }
         // The 24-pixel margin is cleared, not left with what was beneath.
         assert_eq!(pixel(8, 8), &[0, 0, 0, 0xff]);

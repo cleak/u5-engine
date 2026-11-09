@@ -71,9 +71,10 @@ impl PlayState {
         // engine drew no Avatar where the stock game (`bt-correct`, all
         // beats) draws the manacled prisoner at `(3,5)`.
         if self.blackthorn_audience_map.is_some()
-            && self.active_objects.first().is_some_and(|object| {
-                object.aux3 == crate::BLACKTHORN_CUTSCENE_AUX3_ROLE_MARKER
-            })
+            && self
+                .active_objects
+                .first()
+                .is_some_and(|object| object.aux3 == crate::BLACKTHORN_CUTSCENE_AUX3_ROLE_MARKER)
         {
             return;
         }
@@ -1749,11 +1750,9 @@ impl PlayState {
                 floor,
             ) {
                 self.npcs[npc_index].set_move_queue(route);
-                return self
-                    .advance_npc_replay_queue_step(
-                        npc_index, waypoint, target_x, target_y, target_z, floor,
-                    )
-                    == NpcScheduleStepOutcome::Moved;
+                return self.advance_npc_replay_queue_step(
+                    npc_index, waypoint, target_x, target_y, target_z, floor,
+                ) == NpcScheduleStepOutcome::Moved;
             }
             // `RETRACTIONS.md` R367: a failed floor-link search is not a
             // refused queued route step, so the counter stands.
@@ -1790,9 +1789,9 @@ impl PlayState {
                     floor,
                 )
                 .and_then(|route| {
-                    route.into_iter().try_fold(start, |cell, code| {
-                        npc_step_from_direction_code(cell, code)
-                    })
+                    route
+                        .into_iter()
+                        .try_fold(start, |cell, code| npc_step_from_direction_code(cell, code))
                 })
             else {
                 return false;

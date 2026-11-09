@@ -226,7 +226,10 @@ pub fn talk_keyword_response<'a>(fields: &'a [String], keyword: &str) -> Option<
 /// u5-spec#299 Q20: the earlier space-boundary end check is retracted (R577,
 /// R578).
 pub fn talk_keyword_matches(stored_keyword: &str, input: &str) -> bool {
-    crate::tlk_keyword_matches(stored_keyword.trim().as_bytes(), input.trim_start().as_bytes())
+    crate::tlk_keyword_matches(
+        stored_keyword.trim().as_bytes(),
+        input.trim_start().as_bytes(),
+    )
 }
 
 pub fn talk_keyword_compare_text(value: &str) -> String {

@@ -288,7 +288,10 @@ pub enum EndgameRefusalPhase {
     /// actor has actually stepped: `next_call` indexes
     /// [`ENDGAME_TABLEAU_REFUSAL_WALK_ORDER`] and `moved_this_round`
     /// remembers whether the round has stepped anyone yet.
-    Walking { next_call: u8, moved_this_round: bool },
+    Walking {
+        next_call: u8,
+        moved_this_round: bool,
+    },
     /// `§6` step 3: the terminal jitter loop.
     Jitter,
 }
@@ -425,7 +428,10 @@ const ENDGAME_TABLEAU_REFUSAL_SLOT2_TARGET: (usize, usize) = (8, 6);
 /// target.
 const ENDGAME_TABLEAU_REFUSAL_WALK_ORDER: [(usize, (usize, usize)); 3] = [
     (2, ENDGAME_TABLEAU_REFUSAL_SLOT2_TARGET),
-    (ENDGAME_TABLEAU_LORD_BRITISH_SLOT, ENDGAME_TABLEAU_REFUSAL_LORD_BRITISH_TARGET),
+    (
+        ENDGAME_TABLEAU_LORD_BRITISH_SLOT,
+        ENDGAME_TABLEAU_REFUSAL_LORD_BRITISH_TARGET,
+    ),
     (0, ENDGAME_TABLEAU_REFUSAL_SLOT0_TARGET),
 ];
 const ENDGAME_TABLEAU_REFUSAL_LORD_BRITISH_TARGET: (usize, usize) = (4, 1);
@@ -1448,10 +1454,7 @@ pub fn endgame_tableau_actor_drawn_byte(grid: &[u8], object: ActiveObject) -> Op
     }
     let terrain = |x: usize, y: usize| grid.get(y * TOWN_GRID_SIDE + x).copied();
     let current = terrain(object.x, object.y).unwrap_or(0);
-    let previous = object
-        .y
-        .checked_sub(1)
-        .and_then(|y| terrain(object.x, y));
+    let previous = object.y.checked_sub(1).and_then(|y| terrain(object.x, y));
     let next = (object.y + 1 < ENDGAME_TABLEAU_HEIGHT)
         .then(|| terrain(object.x, object.y + 1))
         .flatten();
@@ -1927,7 +1930,8 @@ impl PlayState {
                     .program(&mut crate::audio::RumbleJitter::default())
                     .duration(true)
                     .as_secs_f64();
-                self.staged_narration.push_secs(flourish_secs, String::new());
+                self.staged_narration
+                    .push_secs(flourish_secs, String::new());
                 // The ordinary status/tableau compositor performs the
                 // post-flourish redraw.
                 self.animation.tick_static_tiles();
@@ -2112,7 +2116,9 @@ impl PlayState {
             let mut object = self.active_objects[slot];
             if !matches!(
                 endgame_tableau_role_for_slot(slot, object),
-                Some(EndgameTableauActorRole::PartyMember(_) | EndgameTableauActorRole::LordBritish)
+                Some(
+                    EndgameTableauActorRole::PartyMember(_) | EndgameTableauActorRole::LordBritish
+                )
             ) {
                 continue;
             }
@@ -3026,8 +3032,8 @@ impl PlayState {
     /// next of slots 1, 3, 4 and 5 in turn ([`EndgameState::terminal_jitter_next_call`]).
     pub fn advance_endgame_terminal_tableau_jitter_call(&mut self) -> bool {
         let call = self.endgame.as_mut().map_or(0, |endgame| {
-            let call = usize::from(endgame.terminal_jitter_next_call)
-                % ENDGAME_TABLEAU_JITTER_SLOTS.len();
+            let call =
+                usize::from(endgame.terminal_jitter_next_call) % ENDGAME_TABLEAU_JITTER_SLOTS.len();
             endgame.terminal_jitter_next_call =
                 ((call + 1) % ENDGAME_TABLEAU_JITTER_SLOTS.len()) as u8;
             call
@@ -3049,10 +3055,14 @@ impl PlayState {
         self.staged_narration.push_ticks_chained(1);
         let party_slots = self.party.len().min(SAVE_PARTY_SIZE_MAX as usize);
         let occupied = slot < party_slots
-            && self.active_objects.get(slot).copied().is_some_and(|object| {
-                endgame_tableau_role_for_slot(slot, object)
-                    == Some(EndgameTableauActorRole::PartyMember(slot as u8))
-            });
+            && self
+                .active_objects
+                .get(slot)
+                .copied()
+                .is_some_and(|object| {
+                    endgame_tableau_role_for_slot(slot, object)
+                        == Some(EndgameTableauActorRole::PartyMember(slot as u8))
+                });
         if !occupied {
             self.animation.tick_static_tiles();
             return false;
@@ -3115,9 +3125,7 @@ impl PlayState {
         // first answer (which skips the sandalwood question) or the second,
         // so either one can open the victory rite and needs `END.DAT`.
         let needs_final_narrative = self.endgame.as_ref().is_some_and(|state| {
-            !state.is_terminal()
-                && answer
-                && self.special_items[SPECIAL_ITEM_WOODEN_BOX_INDEX] != 0
+            !state.is_terminal() && answer && self.special_items[SPECIAL_ITEM_WOODEN_BOX_INDEX] != 0
         });
         let final_narrative = if needs_final_narrative {
             Some(require_end_narrative(game_dir)?)

@@ -1418,9 +1418,9 @@ impl PlayState {
         // sibling in `finish_open_dungeon_chest` already routes to
         // `diagnostics` with the same reasoning.
         match trap_note {
-            Some(trap) => self.push_diagnostic(format!(
-                "{verb} object chest at ({x}, {y}); {trap}"
-            )),
+            Some(trap) => {
+                self.push_diagnostic(format!("{verb} object chest at ({x}, {y}); {trap}"))
+            }
             None => self.push_diagnostic(format!("{verb} object chest at ({x}, {y}).")),
         }
         self.message = content_note;
@@ -1532,16 +1532,44 @@ impl PlayState {
                 continue;
             }
             let (class_code, value, line) = match row {
-                0 => (INVENTORY_ADD_CLASS_CODE_FOOD, self.random_range_u8(1, 2), CHEST_TRANSCRIPT_FOOD_LINE),
-                1 => (INVENTORY_ADD_CLASS_CODE_TORCH, self.random_range_u8(1, 2), CHEST_TRANSCRIPT_TORCHES_LINE),
-                2 => (INVENTORY_ADD_CLASS_CODE_GEM, self.random_range_u8(1, 2), CHEST_TRANSCRIPT_GEMS_LINE),
-                3 => (INVENTORY_ADD_CLASS_CODE_KEY, self.random_range_u8(1, 2), CHEST_TRANSCRIPT_KEYS_LINE),
-                4 => (INVENTORY_ADD_CLASS_CODE_SCROLL, self.random_range_u8(1, 8) - 1, CHEST_TRANSCRIPT_SCROLL_LINE),
-                5 => (INVENTORY_ADD_CLASS_CODE_POTION, self.random_range_u8(1, 8) - 1, CHEST_TRANSCRIPT_POTION_LINE),
+                0 => (
+                    INVENTORY_ADD_CLASS_CODE_FOOD,
+                    self.random_range_u8(1, 2),
+                    CHEST_TRANSCRIPT_FOOD_LINE,
+                ),
+                1 => (
+                    INVENTORY_ADD_CLASS_CODE_TORCH,
+                    self.random_range_u8(1, 2),
+                    CHEST_TRANSCRIPT_TORCHES_LINE,
+                ),
+                2 => (
+                    INVENTORY_ADD_CLASS_CODE_GEM,
+                    self.random_range_u8(1, 2),
+                    CHEST_TRANSCRIPT_GEMS_LINE,
+                ),
+                3 => (
+                    INVENTORY_ADD_CLASS_CODE_KEY,
+                    self.random_range_u8(1, 2),
+                    CHEST_TRANSCRIPT_KEYS_LINE,
+                ),
+                4 => (
+                    INVENTORY_ADD_CLASS_CODE_SCROLL,
+                    self.random_range_u8(1, 8) - 1,
+                    CHEST_TRANSCRIPT_SCROLL_LINE,
+                ),
+                5 => (
+                    INVENTORY_ADD_CLASS_CODE_POTION,
+                    self.random_range_u8(1, 8) - 1,
+                    CHEST_TRANSCRIPT_POTION_LINE,
+                ),
                 6 => {
                     let _discarded = self.random_range_u8(1, CHEST_GOLD_DISCARDED_DRAW_MAX);
                     let upper = chest_class.saturating_mul(3);
-                    (INVENTORY_ADD_CLASS_CODE_GOLD, self.random_range_u8(1, upper), CHEST_TRANSCRIPT_GOLD_LINE)
+                    (
+                        INVENTORY_ADD_CLASS_CODE_GOLD,
+                        self.random_range_u8(1, upper),
+                        CHEST_TRANSCRIPT_GOLD_LINE,
+                    )
                 }
                 7 => {
                     // `§4` row 8, "Roll `1..chest_class` as the staged
@@ -1549,7 +1577,11 @@ impl PlayState {
                     // (`§8` `0x01`), which a later Get answers with
                     // `Open_it_first!`.
                     let _discarded = self.random_range_u8(1, CHEST_MARKER_DISCARDED_DRAW_MAX);
-                    (INVENTORY_ADD_CLASS_CODE_CONTAINER, self.random_range_u8(1, chest_class), CHEST_TRANSCRIPT_MARKER_LINE)
+                    (
+                        INVENTORY_ADD_CLASS_CODE_CONTAINER,
+                        self.random_range_u8(1, chest_class),
+                        CHEST_TRANSCRIPT_MARKER_LINE,
+                    )
                 }
                 _ => continue,
             };
@@ -1560,7 +1592,8 @@ impl PlayState {
 
         let attempts = chest_secondary_pool_attempts(chest_class);
         for _ in 0..attempts {
-            let row = usize::from(self.random_range_u8(0, (CHEST_SECONDARY_POOL_ROW_COUNT - 1) as u8));
+            let row =
+                usize::from(self.random_range_u8(0, (CHEST_SECONDARY_POOL_ROW_COUNT - 1) as u8));
             let Some(threshold) = chest_secondary_pool_threshold(row) else {
                 continue;
             };
@@ -1884,8 +1917,7 @@ impl PlayState {
             .unwrap_or_default();
         let trappable = stat & 0x80 != 0;
         let difficulty = stat & 0x7f;
-        let threshold =
-            search_trap_detection_threshold(trappable, difficulty, member_intelligence);
+        let threshold = search_trap_detection_threshold(trappable, difficulty, member_intelligence);
         let roll = self.random_range_u8(1, JIMMY_OBJECT_DIE_HIGH);
         let detection_bit = u16::from(roll) >= threshold;
         let visibility = search_trap_visibility(trappable, difficulty, detection_bit);
@@ -2062,20 +2094,24 @@ impl PlayState {
             // writes the no-quantity marker, not one (playtest P13-09). The
             // endgame and U-Use readers only test the flag for nonzero.
             ObjectPickupKind::SandalwoodBox => {
-                self.special_items[SPECIAL_ITEM_WOODEN_BOX_INDEX] = crate::commands::USE_PICKER_NO_QUANTITY;
+                self.special_items[SPECIAL_ITEM_WOODEN_BOX_INDEX] =
+                    crate::commands::USE_PICKER_NO_QUANTITY;
             }
             // `inventory.md §4.5`: "normal acquisition gives each of these
             // the no-quantity value instead" of one (R456) - so the U-Use
             // picker shows an uncounted Amulet/Crown/Sceptre row (playtest
             // Q12). Every reader only tests these flags for nonzero.
             ObjectPickupKind::CrownOfLordBritish => {
-                self.special_items[SPECIAL_ITEM_CROWN_LB_INDEX] = crate::commands::USE_PICKER_NO_QUANTITY;
+                self.special_items[SPECIAL_ITEM_CROWN_LB_INDEX] =
+                    crate::commands::USE_PICKER_NO_QUANTITY;
             }
             ObjectPickupKind::SceptreOfLordBritish => {
-                self.special_items[SPECIAL_ITEM_SCEPTRE_LB_INDEX] = crate::commands::USE_PICKER_NO_QUANTITY;
+                self.special_items[SPECIAL_ITEM_SCEPTRE_LB_INDEX] =
+                    crate::commands::USE_PICKER_NO_QUANTITY;
             }
             ObjectPickupKind::AmuletOfLordBritish => {
-                self.special_items[SPECIAL_ITEM_AMULET_LB_INDEX] = crate::commands::USE_PICKER_NO_QUANTITY;
+                self.special_items[SPECIAL_ITEM_AMULET_LB_INDEX] =
+                    crate::commands::USE_PICKER_NO_QUANTITY;
             }
             ObjectPickupKind::ShadowlordShard(index) => {
                 // `containers.md §8` class `0xB4`: "Writes the no-quantity
@@ -2751,7 +2787,10 @@ impl PlayState {
     /// "is diverted before the prefix choice to its own routine".
     pub fn search_preamble_at(&self, x: usize, y: usize) -> String {
         let tile = if self.combat_active {
-            self.combat_terrain.get(y).and_then(|row| row.get(x)).copied()
+            self.combat_terrain
+                .get(y)
+                .and_then(|row| row.get(x))
+                .copied()
         } else {
             match self.area {
                 Area::World { .. } => self.grid.get(y * WORLD_SIDE + x).copied(),
@@ -2837,7 +2876,10 @@ impl PlayState {
             "Found a strange rock for Moonstone phase {}.",
             slot_index + 1
         ));
-        self.message = format!("{}{SEARCH_STRANGE_ROCK_LINE}", self.search_preamble_at(x, y));
+        self.message = format!(
+            "{}{SEARCH_STRANGE_ROCK_LINE}",
+            self.search_preamble_at(x, y)
+        );
         Some(MoveOutcome::Searched)
     }
 
@@ -2937,7 +2979,11 @@ impl PlayState {
         // `commands.md §5.8`: "Fixed hidden treasure | `[blank]` then
         // `Thou dost find` then the staged object's name from the found-object
         // vocabulary in `systems/hidden-treasures.md`".
-        self.message = format!("{}{}", self.search_preamble_at(x, y), entry.pickup.narrated_row());
+        self.message = format!(
+            "{}{}",
+            self.search_preamble_at(x, y),
+            entry.pickup.narrated_row()
+        );
         Some(MoveOutcome::Searched)
     }
 
@@ -5283,7 +5329,10 @@ mod hidden_treasure_record_15_spec_tests {
             Some(MoveOutcome::Searched)
         );
         assert!(state.fixed_hidden_treasure_pickup_exists(45));
-        assert_eq!(state.search_fixed_hidden_treasure_at(target, 0, 16, 3), None);
+        assert_eq!(
+            state.search_fixed_hidden_treasure_at(target, 0, 16, 3),
+            None
+        );
 
         assert_eq!(
             state.get_fixed_hidden_treasure_pickup_at(16, 3),

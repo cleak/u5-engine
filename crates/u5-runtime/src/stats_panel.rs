@@ -583,7 +583,10 @@ impl PanelPickerRow {
             Some(0) => format!("--{selector}{}", self.name),
             Some(count) => format!("{count:>2}{selector}{}", self.name),
         };
-        format!("{:<13}", truncate_ascii_chars(&content, PANEL_PICKER_CONTENT_COLUMNS))
+        format!(
+            "{:<13}",
+            truncate_ascii_chars(&content, PANEL_PICKER_CONTENT_COLUMNS)
+        )
     }
 
     /// The display lines this entry occupies, in order.
@@ -1080,7 +1083,15 @@ impl PickerPanelCells {
             Some(code) => (code, true),
             None => (ch as u8, false),
         };
-        self.put(*column, *row, Some(PanelCell { code, runic, inverse }));
+        self.put(
+            *column,
+            *row,
+            Some(PanelCell {
+                code,
+                runic,
+                inverse,
+            }),
+        );
         *column += 1;
         if *column >= PICKER_PANEL_COLUMNS {
             *column = 0;
@@ -1773,7 +1784,10 @@ pub fn paint_stats_panel_text_window(
     let counter_row = STATS_COUNTER_TOP - STATS_PANEL_TEXT_TOP;
     let date_row = STATS_COUNTER_BOTTOM - STATS_PANEL_TEXT_TOP;
     for (row, line) in [
-        (counter_row, state.displayed_stats_panel().counter_row.clone()),
+        (
+            counter_row,
+            state.displayed_stats_panel().counter_row.clone(),
+        ),
         (date_row, state.displayed_stats_panel().date_row.clone()),
     ] {
         system.set_active_cursor(0, row);
@@ -1985,8 +1999,7 @@ fn paint_stats_panel_party_row(
         .count()
         .clamp(STATS_PANEL_WIDTH, STATS_PANEL_WIDTH + 1)
         - 1;
-    for (cell, byte) in line.bytes().take(body_cells).enumerate()
-    {
+    for (cell, byte) in line.bytes().take(body_cells).enumerate() {
         if active_marker && cell == STATS_PANEL_ACTIVE_MARKER_CELL {
             system.emit_byte(STATS_PANEL_ACTIVE_MARKER_GLYPH);
         } else {

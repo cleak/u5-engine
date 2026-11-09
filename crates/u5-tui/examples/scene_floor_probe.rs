@@ -8,7 +8,9 @@ use u5_runtime::*;
 
 fn main() {
     let mut args = std::env::args().skip(1);
-    let dir = args.next().expect("usage: scene_floor_probe <DIR> <SCENE> <X> <Y>");
+    let dir = args
+        .next()
+        .expect("usage: scene_floor_probe <DIR> <SCENE> <X> <Y>");
     let scene_byte: u8 = args.next().expect("scene byte").parse().unwrap();
     let cx: isize = args.next().expect("x").parse().unwrap();
     let cy: isize = args.next().expect("y").parse().unwrap();

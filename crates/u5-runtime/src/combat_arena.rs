@@ -478,7 +478,12 @@ impl CombatArenaRecord {
     /// class, the strip step also writes the outline wall byte at the
     /// interior cells (5,2) and (5,8); when the **west** neighbour is a wall
     /// class it writes them at (2,5) and (8,5)." Coordinates are (X, Y).
-    pub fn apply_door_cell_wall_stubs(&mut self, outline_byte: u8, north_wall: bool, west_wall: bool) {
+    pub fn apply_door_cell_wall_stubs(
+        &mut self,
+        outline_byte: u8,
+        north_wall: bool,
+        west_wall: bool,
+    ) {
         if north_wall {
             self.rows[2][5] = outline_byte;
             self.rows[8][5] = outline_byte;

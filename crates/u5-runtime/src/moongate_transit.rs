@@ -63,8 +63,7 @@ use std::io;
 use crate::{
     ACTOR_TILE_TRANSPARENT_BYTE, DissolveVisitOrder, MOONGATE_PHASE_SCRATCH_TILE,
     NATURAL_MOONGATE_RESTORED_TERRAIN_TILE, TILE_ATLAS_TILE_PIXELS,
-    TRANSPORT_MARKER_SPRITE_SUPPRESSED, moongate_phase_gate_tile,
-    with_moongate_phase_scratch_tile,
+    TRANSPORT_MARKER_SPRITE_SUPPRESSED, moongate_phase_gate_tile, with_moongate_phase_scratch_tile,
 };
 
 /// `overworld.md §9.2`: the transition is **blocking** and runs to

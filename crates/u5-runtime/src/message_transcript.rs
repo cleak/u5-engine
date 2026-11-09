@@ -762,7 +762,10 @@ impl PlayState {
     /// the transcript, rather than replaying a count at render time, keeps
     /// the gap between the prompt and whatever is written at the cursor -
     /// which is where the original puts it (`cleak/u5-engine#25`).
-    pub(crate) fn break_open_prompt_row_for_strip_scroll(&mut self, prompt: &str) -> Option<String> {
+    pub(crate) fn break_open_prompt_row_for_strip_scroll(
+        &mut self,
+        prompt: &str,
+    ) -> Option<String> {
         self.flush_message_slot();
         let indent = " ".repeat(prompt.chars().count());
         let last = self.message_transcript.last_mut()?;
@@ -933,10 +936,7 @@ impl PlayState {
     /// Play each `(page, sound)` when that page is released: page `0` is the
     /// one already printed, so its sounds play now; page `k` is the `k`th
     /// held page. A page index past the held pages plays now as well.
-    pub fn attach_sounds_to_held_pages(
-        &mut self,
-        sounds: Vec<(usize, crate::audio::SoundEffect)>,
-    ) {
+    pub fn attach_sounds_to_held_pages(&mut self, sounds: Vec<(usize, crate::audio::SoundEffect)>) {
         for (page, effect) in sounds {
             let target = page.checked_sub(1).and_then(|index| {
                 self.pending_text_hold
@@ -1241,8 +1241,8 @@ impl PlayState {
         {
             self.message_row_open_mid_line = false;
         }
-        let continues_open_row = surface_row_follows
-            || (self.combat_active && self.combat_prompt_row_opened_by_banner);
+        let continues_open_row =
+            surface_row_follows || (self.combat_active && self.combat_prompt_row_opened_by_banner);
         let text = echo.text.to_string();
         let glyphs = ordinary_glyphs_from_engine_text(&text);
         self.append_transcript_entry_on_row(text, glyphs, true, false, false, continues_open_row);
@@ -1394,7 +1394,11 @@ impl PlayState {
     /// Take back the newest [`MessageEntry::bare_marker`] row: the wind held
     /// the synthesised pass it was drawn for, so no direction was taken.
     pub(crate) fn withdraw_overworld_bare_marker_entry(&mut self) {
-        let Some(index) = self.message_transcript.iter().rposition(|entry| entry.bare_marker) else {
+        let Some(index) = self
+            .message_transcript
+            .iter()
+            .rposition(|entry| entry.bare_marker)
+        else {
             return;
         };
         let was_last = index + 1 == self.message_transcript.len();
@@ -1509,8 +1513,7 @@ impl PlayState {
             // Pushing an ordinary empty entry would let the Bevy shell's
             // `keep` filter drop the row, which is the same trap
             // [`message_log_from_entries`] guards against.
-            let closes_hyphen_echo =
-                echo_is_last && (verb.ends_with('-') || verb.ends_with(' '));
+            let closes_hyphen_echo = echo_is_last && (verb.ends_with('-') || verb.ends_with(' '));
             if !closes_hyphen_echo {
                 self.push_explicit_blank_message_entry();
             }

@@ -110,7 +110,8 @@ impl PlayState {
         if self.message_window_flash_hold.is_active() {
             return self.message_window_flash_hold.slot.as_deref();
         }
-        self.message_slot_needs_flush().then_some(self.message.as_str())
+        self.message_slot_needs_flush()
+            .then_some(self.message.as_str())
     }
 
     /// Whether a spell flash currently freezes the message window.
@@ -528,7 +529,10 @@ impl PlayState {
         // no summon yet in this game the new-game `0xFF` stands, and other
         // values are preserved byte-for-byte from the template (playtest
         // G23).
-        match self.summoned_shadowlord.and_then(|index| u8::try_from(index).ok()) {
+        match self
+            .summoned_shadowlord
+            .and_then(|index| u8::try_from(index).ok())
+        {
             Some(index) => save[SAVE_ACTIVE_SHADOWLORD_OFFSET] = index,
             None if usize::from(save[SAVE_ACTIVE_SHADOWLORD_OFFSET]) < SHADOWLORD_COUNT => {
                 save[SAVE_ACTIVE_SHADOWLORD_OFFSET] = SAVE_ACTIVE_SHADOWLORD_NONE;
@@ -1211,18 +1215,18 @@ impl PlayState {
             combat_exit_skips_world_turn: false,
             cutscene_black_viewport: false,
             blackthorn_capture: None,
-        blackthorn_rescue_reveals_shown: 0,
-        blackthorn_rescue_viewport: crate::blackthorn::BlackthornRescueViewport::Black,
-        blackthorn_rescue_spectral_actor: ActiveObject::empty(),
-        blackthorn_rescue_animation_tick: None,
-        blackthorn_audience_actor_variants: [0; 9],
-        blackthorn_audience_composite_tick: None,
-        shrine_presentation_map: None,
-        presentation_entry_chrome: None,
-        shrine_approach_walk: None,
-        presentation_viewport_inverted: false,
-        presentation_camp_flash_inverted: false,
-        presentation_stats_row_flash: None,
+            blackthorn_rescue_reveals_shown: 0,
+            blackthorn_rescue_viewport: crate::blackthorn::BlackthornRescueViewport::Black,
+            blackthorn_rescue_spectral_actor: ActiveObject::empty(),
+            blackthorn_rescue_animation_tick: None,
+            blackthorn_audience_actor_variants: [0; 9],
+            blackthorn_audience_composite_tick: None,
+            shrine_presentation_map: None,
+            presentation_entry_chrome: None,
+            shrine_approach_walk: None,
+            presentation_viewport_inverted: false,
+            presentation_camp_flash_inverted: false,
+            presentation_stats_row_flash: None,
             active_shop: None,
             arms_transaction_completed: false,
             common_word_dictionary: None,
@@ -1727,18 +1731,18 @@ impl PlayState {
             combat_exit_skips_world_turn: false,
             cutscene_black_viewport: false,
             blackthorn_capture: None,
-        blackthorn_rescue_reveals_shown: 0,
-        blackthorn_rescue_viewport: crate::blackthorn::BlackthornRescueViewport::Black,
-        blackthorn_rescue_spectral_actor: ActiveObject::empty(),
-        blackthorn_rescue_animation_tick: None,
-        blackthorn_audience_actor_variants: [0; 9],
-        blackthorn_audience_composite_tick: None,
-        shrine_presentation_map: None,
-        presentation_entry_chrome: None,
-        shrine_approach_walk: None,
-        presentation_viewport_inverted: false,
-        presentation_camp_flash_inverted: false,
-        presentation_stats_row_flash: None,
+            blackthorn_rescue_reveals_shown: 0,
+            blackthorn_rescue_viewport: crate::blackthorn::BlackthornRescueViewport::Black,
+            blackthorn_rescue_spectral_actor: ActiveObject::empty(),
+            blackthorn_rescue_animation_tick: None,
+            blackthorn_audience_actor_variants: [0; 9],
+            blackthorn_audience_composite_tick: None,
+            shrine_presentation_map: None,
+            presentation_entry_chrome: None,
+            shrine_approach_walk: None,
+            presentation_viewport_inverted: false,
+            presentation_camp_flash_inverted: false,
+            presentation_stats_row_flash: None,
             active_shop: None,
             arms_transaction_completed: false,
             common_word_dictionary: None,
@@ -2210,18 +2214,18 @@ impl PlayState {
             combat_exit_skips_world_turn: false,
             cutscene_black_viewport: false,
             blackthorn_capture: None,
-        blackthorn_rescue_reveals_shown: 0,
-        blackthorn_rescue_viewport: crate::blackthorn::BlackthornRescueViewport::Black,
-        blackthorn_rescue_spectral_actor: ActiveObject::empty(),
-        blackthorn_rescue_animation_tick: None,
-        blackthorn_audience_actor_variants: [0; 9],
-        blackthorn_audience_composite_tick: None,
-        shrine_presentation_map: None,
-        presentation_entry_chrome: None,
-        shrine_approach_walk: None,
-        presentation_viewport_inverted: false,
-        presentation_camp_flash_inverted: false,
-        presentation_stats_row_flash: None,
+            blackthorn_rescue_reveals_shown: 0,
+            blackthorn_rescue_viewport: crate::blackthorn::BlackthornRescueViewport::Black,
+            blackthorn_rescue_spectral_actor: ActiveObject::empty(),
+            blackthorn_rescue_animation_tick: None,
+            blackthorn_audience_actor_variants: [0; 9],
+            blackthorn_audience_composite_tick: None,
+            shrine_presentation_map: None,
+            presentation_entry_chrome: None,
+            shrine_approach_walk: None,
+            presentation_viewport_inverted: false,
+            presentation_camp_flash_inverted: false,
+            presentation_stats_row_flash: None,
             active_shop: None,
             arms_transaction_completed: false,
             common_word_dictionary: None,
@@ -2379,16 +2383,16 @@ impl PlayState {
         // it wears the horse frames (`npc-roster.md`: "used for stable and
         // paddock actors and for Smith at Iolo's Hut"), so a linked slot
         // keeps blocking as every other NPC does.
-        let onto_boardable_vehicle = self
-            .boardable_vehicle_slot_at(nx, ny)
-            .is_some_and(|candidate| {
-                !candidate.blocked_by_occupant
-                    && self.player.transport.can_board(candidate.transport)
-                    && !self
-                        .npcs
-                        .iter()
-                        .any(|npc| npc.active_object == Some(candidate.slot))
-            });
+        let onto_boardable_vehicle =
+            self.boardable_vehicle_slot_at(nx, ny)
+                .is_some_and(|candidate| {
+                    !candidate.blocked_by_occupant
+                        && self.player.transport.can_board(candidate.transport)
+                        && !self
+                            .npcs
+                            .iter()
+                            .any(|npc| npc.active_object == Some(candidate.slot))
+                });
         if !onto_boardable_vehicle && self.blocking_object_at(nx, ny).is_some() {
             self.message = MOVEMENT_BLOCKED_REFUSAL.to_string();
             // `audio.md §7.4`: the town object-occupancy refusal arm.

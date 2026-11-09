@@ -129,8 +129,7 @@ fn blackthorn_execution_lifts_the_record_and_parks_it_with_an_unmatchable_wherea
     // presentation reads it back (`karma.md §8`).
     assert_eq!(PlayState::BLACKTHORN_EXECUTED_WHEREABOUTS, 0x7f);
     for marker in 1u8..=0xfeu8 {
-        if Scene::new(marker).is_err()
-            && u5_runtime::shop_session::inn_for_scene(marker).is_none()
+        if Scene::new(marker).is_err() && u5_runtime::shop_session::inn_for_scene(marker).is_none()
         {
             continue;
         }
@@ -275,10 +274,7 @@ fn blackthorn_wrong_answers_run_the_published_hourglass_sequence() {
     state
         .submit_blackthorn_audience_answer("nonsense", &dir)
         .unwrap();
-    assert_eq!(
-        tile(&state, 5, 9),
-        Some(BLACKTHORN_HOURGLASS_SPENT_TILE)
-    );
+    assert_eq!(tile(&state, 5, 9), Some(BLACKTHORN_HOURGLASS_SPENT_TILE));
     // §4.1's fourth demand, record `3`, which "has an opening quotation mark
     // but **no closing quotation mark**, and its caller adds none".
     assert!(
@@ -294,10 +290,7 @@ fn blackthorn_wrong_answers_run_the_published_hourglass_sequence() {
     state
         .submit_blackthorn_audience_answer("nonsense", &dir)
         .unwrap();
-    assert_eq!(
-        tile(&state, 5, 9),
-        Some(BLACKTHORN_HOURGLASS_SPENT_TILE)
-    );
+    assert_eq!(tile(&state, 5, 9), Some(BLACKTHORN_HOURGLASS_SPENT_TILE));
     let _ = fs::remove_dir_all(dir);
 }
 
@@ -440,7 +433,11 @@ fn blackthorn_fourth_wrong_answer_executes_the_named_companion() {
         "{}",
         state.message
     );
-    assert_eq!(state.party.len(), 2, "the end of the blade hold lifts the victim");
+    assert_eq!(
+        state.party.len(),
+        2,
+        "the end of the blade hold lifts the victim"
+    );
 
     // After that single acknowledgement, record `6` and the helper's line
     // feed print and the loop leaves without another wait.
@@ -615,9 +612,7 @@ fn blackthorn_second_ask_sits_under_one_blank_row_after_the_threat() {
     state.submit_blackthorn_audience_answer("", &dir).unwrap();
     state.flush_message_slot();
 
-    let log = message_log_from_entries(state.message_entries(), |text| {
-        Some(text.to_string())
-    });
+    let log = message_log_from_entries(state.message_entries(), |text| Some(text.to_string()));
     let rows: Vec<String> = log.lines().iter().map(|line| line.text.clone()).collect();
     let threat = rows
         .iter()

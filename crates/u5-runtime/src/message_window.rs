@@ -762,7 +762,10 @@ pub fn selector_prompt_row_is_continuation(state: &crate::PlayState) -> bool {
 /// everything before it one row higher than the original.
 pub fn dungeon_fountain_prompt_row_is_continuation(state: &crate::PlayState) -> bool {
     matches!(
-        state.active_yes_no_prompt.as_ref().map(|session| session.kind),
+        state
+            .active_yes_no_prompt
+            .as_ref()
+            .map(|session| session.kind),
         Some(crate::z_stats::YesNoPromptKind::DungeonFountainDrink { .. })
     )
 }
@@ -923,9 +926,10 @@ pub fn open_row_owns_the_cursor(state: &crate::PlayState) -> bool {
 /// no command row opens under it (playtest P12-17).
 pub fn shrine_offering_chooser_row_is_open(state: &crate::PlayState) -> bool {
     !state.staged_narration_active()
-        && state.active_shrine.as_ref().is_some_and(|session| {
-            matches!(session.phase, crate::z_stats::ShrinePhase::Offering)
-        })
+        && state
+            .active_shrine
+            .as_ref()
+            .is_some_and(|session| matches!(session.phase, crate::z_stats::ShrinePhase::Offering))
 }
 
 /// `karma.md §8.2`: the Codex reader's key waits are presentation waits whose
@@ -1153,10 +1157,7 @@ fn layout_message_window_inner(
     // deriving one. See [`MessageLogLine::row_left_open`], which is the
     // per-line state this needs and which no writer sets yet - so this arm
     // is inert until one does (`cleak/u5-engine#36`).
-    let history_row_left_open = log
-        .lines()
-        .last()
-        .is_some_and(|line| line.row_left_open);
+    let history_row_left_open = log.lines().last().is_some_and(|line| line.row_left_open);
     // `combat.md §8.1`: the arena prompt's line feed was the banner's
     // own, so its marker row follows the history with no blank between.
     // A continuation row needs no separating blank either: the block it

@@ -978,8 +978,15 @@ pub const ANIMATION_SCRIPT_G: &[AnimationScriptStep] = &[
     Frame(4),
     Restart,
 ];
-pub const ANIMATION_SCRIPT_H: &[AnimationScriptStep] =
-    &[Frame(2), Frame(3), Frame(4), Frame(3), Frame(2), Snap, Restart];
+pub const ANIMATION_SCRIPT_H: &[AnimationScriptStep] = &[
+    Frame(2),
+    Frame(3),
+    Frame(4),
+    Frame(3),
+    Frame(2),
+    Snap,
+    Restart,
+];
 pub const ANIMATION_SCRIPT_I: &[AnimationScriptStep] =
     &[Frame(1), Pause(15), Frame(2), Frame(3), Frame(4), GotoTwo];
 pub const ANIMATION_SCRIPT_J: &[AnimationScriptStep] = &[
@@ -1012,7 +1019,9 @@ pub const ANIMATION_SCRIPT_CLASS_FIRST: u8 = 0x34;
 /// for "Classes below `0x34`, the field band `0xE8` and the regalia band
 /// `0xB4`", which "never reach a script". Script A is "the default for every
 /// animated class not listed in another row".
-pub const fn active_object_animation_script(type_byte: u8) -> Option<&'static [AnimationScriptStep]> {
+pub const fn active_object_animation_script(
+    type_byte: u8,
+) -> Option<&'static [AnimationScriptStep]> {
     let class = type_byte & 0xfc;
     if class < ANIMATION_SCRIPT_CLASS_FIRST || class == 0xe8 || class == 0xb4 {
         return None;
@@ -1036,7 +1045,10 @@ pub const fn active_object_animation_script(type_byte: u8) -> Option<&'static [A
 /// unconditionally, skipping the eligibility coin, are `0x5C` and the mimic
 /// `0xA8`".
 pub const fn active_object_animates_unconditionally(type_byte: u8) -> bool {
-    matches!(type_byte & 0xfc, ANIMATION_SNAP_ADVANCING_CLASS | ANIMATION_MIMIC_CLASS)
+    matches!(
+        type_byte & 0xfc,
+        ANIMATION_SNAP_ADVANCING_CLASS | ANIMATION_MIMIC_CLASS
+    )
 }
 
 pub fn is_ambient_wanderer_object(object: ActiveObject) -> bool {
@@ -1600,8 +1612,7 @@ pub const fn dungeon_search_wall_rewrite(
     let marker = tile & DUNGEON_RUNTIME_VARIANT_BIT;
     match tile >> 4 {
         0xC => match flavour {
-            crate::DungeonPresentationFlavour::Normal
-            | crate::DungeonPresentationFlavour::Mine => {
+            crate::DungeonPresentationFlavour::Normal | crate::DungeonPresentationFlavour::Mine => {
                 Some(DungeonSearchWallRewrite::NarrateOnly)
             }
             crate::DungeonPresentationFlavour::FlavourByte3 => {

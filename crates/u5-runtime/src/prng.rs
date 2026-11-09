@@ -58,7 +58,12 @@ impl HostClockTime {
         if fields.next().is_some() || hour > 23 || minute > 59 || second > 59 || hundredth > 99 {
             return None;
         }
-        Some(Self { hour, minute, second, hundredth })
+        Some(Self {
+            hour,
+            minute,
+            second,
+            hundredth,
+        })
     }
 
     /// The fixed QA time from [`FIXED_HOST_CLOCK_ENV`], when set and valid.
@@ -156,11 +161,24 @@ mod tests {
         use super::HostClockTime;
         assert_eq!(
             HostClockTime::parse("12:34:56.78"),
-            Some(HostClockTime { hour: 12, minute: 34, second: 56, hundredth: 78 })
+            Some(HostClockTime {
+                hour: 12,
+                minute: 34,
+                second: 56,
+                hundredth: 78
+            })
         );
         // The published vector for that time (`prng.md §3`).
         assert_eq!(HostClockTime::parse("12:34:56.78").unwrap().seed(), 0x93D);
-        for bad in ["24:00:00.00", "12:60:00.00", "12:00:60.00", "12:00:00.100", "12:00:00", "1:2:3:4.5", ""] {
+        for bad in [
+            "24:00:00.00",
+            "12:60:00.00",
+            "12:00:60.00",
+            "12:00:00.100",
+            "12:00:00",
+            "1:2:3:4.5",
+            "",
+        ] {
             assert_eq!(HostClockTime::parse(bad), None, "{bad}");
         }
     }

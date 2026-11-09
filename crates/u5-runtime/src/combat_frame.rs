@@ -4916,18 +4916,18 @@ impl PlayState {
         if !writes_result_line {
             // Fall through to the shared tail with the message untouched.
         } else {
-        match exit {
-            CombatRoundLoopExit::Defeat => self.message = COMBAT_DEFEAT_LINE.to_string(),
-            // `combat.md §7`/`§14`: `VICTORY!` is printed by the round loop
-            // at the moment the hostile count first reaches zero - see
-            // [`Self::announce_combat_victory_if_needed`] - and the loop
-            // then *continues*. By the time cleanup has emptied both sides
-            // and this exit runs, the one-shot announcement has already
-            // happened: "If neither side remains, it returns word `0`
-            // without another announcement."
-            CombatRoundLoopExit::Victory => self.message.clear(),
-            CombatRoundLoopExit::LeaveCombat => {}
-        }
+            match exit {
+                CombatRoundLoopExit::Defeat => self.message = COMBAT_DEFEAT_LINE.to_string(),
+                // `combat.md §7`/`§14`: `VICTORY!` is printed by the round loop
+                // at the moment the hostile count first reaches zero - see
+                // [`Self::announce_combat_victory_if_needed`] - and the loop
+                // then *continues*. By the time cleanup has emptied both sides
+                // and this exit runs, the one-shot announcement has already
+                // happened: "If neither side remains, it returns word `0`
+                // without another announcement."
+                CombatRoundLoopExit::Victory => self.message.clear(),
+                CombatRoundLoopExit::LeaveCombat => {}
+            }
         }
         let result_code = exit.result_code();
         let body_retrieval_exit =
@@ -5506,7 +5506,8 @@ impl PlayState {
             let (x, y) = loop {
                 let dx_draw = self.random_range_u8(0, 2);
                 let dy_draw = self.random_range_u8(0, 2);
-                if let Some(cell) = combat_split_candidate_cell(parent.x, parent.y, dx_draw, dy_draw)
+                if let Some(cell) =
+                    combat_split_candidate_cell(parent.x, parent.y, dx_draw, dy_draw)
                 {
                     break cell;
                 }
@@ -6165,8 +6166,10 @@ impl PlayState {
                                 self.party.get_mut(roster_slot)?,
                                 poison_damage_roll,
                             );
-                            if matches!(outcome, CombatPartyPoisonOutcome::PoisonedPartyMember { .. })
-                            {
+                            if matches!(
+                                outcome,
+                                CombatPartyPoisonOutcome::PoisonedPartyMember { .. }
+                            ) {
                                 // `stats-panel.md §2.2.1` row 15: combat
                                 // poisoning of a Good member is deferred,
                                 // unlike the non-combat poison helper.
@@ -6399,8 +6402,10 @@ impl PlayState {
                         };
                         if let Some(member) = self.party.get_mut(roster_slot) {
                             let outcome = apply_combat_poison_to_party_target(member, damage_roll);
-                            if matches!(outcome, CombatPartyPoisonOutcome::PoisonedPartyMember { .. })
-                            {
+                            if matches!(
+                                outcome,
+                                CombatPartyPoisonOutcome::PoisonedPartyMember { .. }
+                            ) {
                                 // `stats-panel.md §2.2.1` row 15: combat
                                 // poisoning of a Good member is deferred.
                                 self.stats_panel_command_refresh =
@@ -7206,8 +7211,8 @@ impl PlayState {
             | CombatWeaponAttackResolution::NoOrdinaryDamage { .. }
             | CombatWeaponAttackResolution::Miss { .. } => None,
         };
-        Some(self.apply_combat_monster_attack_narrator_gate(
-            CombatMonsterAttackApplication {
+        Some(
+            self.apply_combat_monster_attack_narrator_gate(CombatMonsterAttackApplication {
                 attacker_slot,
                 target_slot,
                 poison_status_outcome: None,
@@ -7216,8 +7221,8 @@ impl PlayState {
                 food_theft: None,
                 sleep_effect: None,
                 generic_chain_suppressed: false,
-            },
-        ))
+            }),
+        )
     }
 
     fn resolve_and_apply_combat_monster_attack_inner(
@@ -7399,7 +7404,8 @@ impl PlayState {
                     // one with a wired consumer - `request_party_stats_panel_refresh`
                     // above feeds a separate, older latch whose two readers
                     // both discard its result.
-                    self.stats_panel_command_refresh = crate::stats_panel::PanelRefreshMode::Deferred;
+                    self.stats_panel_command_refresh =
+                        crate::stats_panel::PanelRefreshMode::Deferred;
                     return Some(self.apply_combat_monster_attack_narrator_gate(
                         CombatMonsterAttackApplication {
                             attacker_slot,
@@ -7896,10 +7902,7 @@ impl PlayState {
                                 && usize::from(actor.owner_target_class) == slot
                                 && !actor.is_status_disabled()
                                 && !actor.is_marked_dead()
-                                && combat_slot_takes_player_command_path(
-                                    descriptor_slot,
-                                    *actor,
-                                )
+                                && combat_slot_takes_player_command_path(descriptor_slot, *actor)
                         }) =>
             {
                 self.active_player = Some(slot);
@@ -8482,13 +8485,11 @@ impl PlayState {
         attack: CombatWeaponAttackApplication,
     ) {
         self.combat_wound_classified_at_hit = None;
-        if !crate::input_dispatch::combat_weapon_resolution_reaches_generic_chain(
-            attack.resolution,
-        ) {
+        if !crate::input_dispatch::combat_weapon_resolution_reaches_generic_chain(attack.resolution)
+        {
             return;
         }
-        let Some(CombatWeaponDamageApplication::Monster { damage, .. }) =
-            attack.damage_application
+        let Some(CombatWeaponDamageApplication::Monster { damage, .. }) = attack.damage_application
         else {
             return;
         };
@@ -9408,8 +9409,10 @@ impl PlayState {
                     CombatActorDispatchAction::DraggedUnderTurn
                         | CombatActorDispatchAction::StatusDisabledWake { .. }
                 ));
-        if matches!(action, CombatActorDispatchAction::ActivePlayerSentinelSkipped)
-            || keyless_command_arm
+        if matches!(
+            action,
+            CombatActorDispatchAction::ActivePlayerSentinelSkipped
+        ) || keyless_command_arm
         {
             let _ = self.apply_combat_maintenance_endpoint(slot);
         }
@@ -9458,7 +9461,8 @@ impl PlayState {
         // Earlier attacks of the same walk still owe their lines too, and
         // they resolved first, so they print first.
         if let Some(attack) = owed_monster_attack {
-            self.combat_owed_monster_attack_narrations.push((slot, attack));
+            self.combat_owed_monster_attack_narrations
+                .push((slot, attack));
             if matches!(
                 self.combat_round_loop_control_census(false, false),
                 CombatRoundLoopControl::Exit(CombatRoundLoopExit::Defeat)
@@ -10900,7 +10904,9 @@ impl PlayState {
             attacker_rating,
             defender_rating,
             defence_rating,
-            inputs.map(|inputs| inputs.hit_raw_roll_0_to_60).unwrap_or(0),
+            inputs
+                .map(|inputs| inputs.hit_raw_roll_0_to_60)
+                .unwrap_or(0),
             0,
             0,
             Some(true),
@@ -11322,7 +11328,11 @@ mod combat_death_batch_tests {
         let mut state = two_member_tail_tick_state();
         let frame = state.animation.frame;
         let _ = state.apply_combat_committed_action_tail(0);
-        assert_eq!(state.animation.frame, frame.wrapping_add(1), "one tail tick");
+        assert_eq!(
+            state.animation.frame,
+            frame.wrapping_add(1),
+            "one tail tick"
+        );
 
         // Klimb's accepted Up/Down departure is "Not established" and keeps
         // no tick until the spec settles it.
@@ -11450,8 +11460,7 @@ mod combat_death_batch_tests {
             let mut probe = state.clone();
             loop {
                 let position = probe.prng_state;
-                if (probe.random_range_u8(0, u8::MAX) < COMBAT_COMMAND_ASLEEP_WAKE_BELOW) == wake
-                {
+                if (probe.random_range_u8(0, u8::MAX) < COMBAT_COMMAND_ASLEEP_WAKE_BELOW) == wake {
                     state.prng_state = position;
                     break;
                 }
@@ -11518,7 +11527,10 @@ mod combat_death_batch_tests {
         let prng = state.prng_state;
         let tick = state.advance_combat_round_counter();
         assert!(tick.wrapped);
-        assert_eq!(tick.advance_time_minutes, COMBAT_ROUND_WRAP_TIME_ADVANCE_MINUTES);
+        assert_eq!(
+            tick.advance_time_minutes,
+            COMBAT_ROUND_WRAP_TIME_ADVANCE_MINUTES
+        );
         // No world tick: no animator coin and no wind draw.
         assert_eq!(state.prng_state, prng);
     }
@@ -11613,7 +11625,9 @@ mod combat_death_batch_tests {
             ] {
                 let mut state = match area {
                     "world" => world_state(open_world_grid(), 10, 20),
-                    "town" => crate::test_fixtures::test_state(crate::test_fixtures::open_grid(), 5, 5),
+                    "town" => {
+                        crate::test_fixtures::test_state(crate::test_fixtures::open_grid(), 5, 5)
+                    }
                     _ => crate::test_fixtures::dungeon_state(
                         crate::test_fixtures::open_dungeon_record(),
                         0,
@@ -11634,7 +11648,10 @@ mod combat_death_batch_tests {
 
                 assert!(!state.combat_active, "{area} {exit:?}");
                 assert_eq!(state.turn, turn_before, "{area} {exit:?}: no turn at exit");
-                assert_eq!(state.clock, clock_before, "{area} {exit:?}: no minute at exit");
+                assert_eq!(
+                    state.clock, clock_before,
+                    "{area} {exit:?}: no minute at exit"
+                );
             }
         }
     }

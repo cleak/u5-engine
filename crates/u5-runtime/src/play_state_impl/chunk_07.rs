@@ -224,7 +224,10 @@ impl PlayState {
         // `commands.md §5.8` (u5-spec#298 Q4): combat's S "reaches the same
         // routine", so a furniture cell in the arena takes its location
         // phrase and the lower-case `thou dost find` row.
-        self.message = format!("{}{SEARCH_NOTHING_OF_NOTE_ROW}", self.search_preamble_at(x, y));
+        self.message = format!(
+            "{}{SEARCH_NOTHING_OF_NOTE_ROW}",
+            self.search_preamble_at(x, y)
+        );
         MoveOutcome::Searched
     }
 
@@ -2524,7 +2527,8 @@ impl PlayState {
             // Each notice "carries its own leading blank row": the notice
             // before it closed its own last row, so this leading feed spends
             // the blank, and this one's closing feed ends its own row.
-            self.staged_narration.push_secs(tone_secs, format!("\n{line}\n"));
+            self.staged_narration
+                .push_secs(tone_secs, format!("\n{line}\n"));
         }
     }
 
@@ -4405,10 +4409,7 @@ impl PlayState {
                 continue;
             }
 
-            if self
-                .outdoor_claimed_ranged_attack_detail(slot)
-                .is_some()
-            {
+            if self.outdoor_claimed_ranged_attack_detail(slot).is_some() {
                 reacted = true;
             }
         }
@@ -4624,8 +4625,7 @@ impl PlayState {
                     // deaths stay off until the rescue takes over. That is
                     // what the dispatcher's note asks a named hold to do.
                     self.repaint_stats_panel();
-                    self.stats_panel_command_refresh =
-                        crate::stats_panel::PanelRefreshMode::None;
+                    self.stats_panel_command_refresh = crate::stats_panel::PanelRefreshMode::None;
                     self.apply_stonegate_trapdoor_script_after(floor, step_sound_serial);
                     self.emit_town_underfoot_line(Self::TOWN_TRAPDOOR_MESSAGE);
                     // The line closes its own row. `text-output.md` §10.4
@@ -5354,7 +5354,12 @@ impl PlayState {
                 // (a guard's always is) it prints `Attacked!` with its
                 // leading line feed and enters the NPC-conflict chain, an
                 // ordinary town arena fight" (R591 recorded the omission).
-                self.start_town_arrest_refusal_conflict(scene, prompt.floor, prompt.npc_slot, game_dir)?;
+                self.start_town_arrest_refusal_conflict(
+                    scene,
+                    prompt.floor,
+                    prompt.npc_slot,
+                    game_dir,
+                )?;
                 Ok(Some(MoveOutcome::Used))
             }
             // `town-mode.md §14` prints the challenge once; an unaccepted
@@ -5705,10 +5710,8 @@ impl PlayState {
         // The map is read now so a missing asset fails at the arrest, but it
         // goes on screen only at timeline step 8 (setup steps 3 to 6).
         let map = load_miscmaps_cutscene_map(game_dir, BLACKTHORN_AUDIENCE_CUTSCENE_MAP_RECORD)?;
-        self.blackthorn_capture = Some(crate::blackthorn::BlackthornCaptureNarration {
-            map,
-            script: None,
-        });
+        self.blackthorn_capture =
+            Some(crate::blackthorn::BlackthornCaptureNarration { map, script: None });
         self.stage_blackthorn_capture_narration();
 
         // The audience's first key read is setup step 8's greeting
@@ -5736,7 +5739,8 @@ impl PlayState {
     fn emit_blackthorn_capture_first_line(&mut self) {
         let line = crate::blackthorn::BLACKTHORN_CAPTURE_SUBDUED_LINE;
         self.emit_message_line(line);
-        self.message_row_open_mid_line = crate::blackthorn::presentation_print_leaves_row_open(line);
+        self.message_row_open_mid_line =
+            crate::blackthorn::presentation_print_leaves_row_open(line);
     }
 
     /// Stage `blackthorn.md §3`'s capture narration timeline, steps 1 and 3
@@ -5776,8 +5780,9 @@ impl PlayState {
             Some(BlackthornCaptureCue::Greeting) => Some(greeting.clone()),
             _ => beat.text.map(str::to_string),
         };
-        let releases =
-            crate::blackthorn::blackthorn_capture_release_milliticks(&timeline, 0, envelope, &text_of);
+        let releases = crate::blackthorn::blackthorn_capture_release_milliticks(
+            &timeline, 0, envelope, &text_of,
+        );
         self.stage_blackthorn_capture_beats(&timeline, &releases, text_of);
     }
 
@@ -5797,9 +5802,14 @@ impl PlayState {
             let text = text_of(beat).unwrap_or_default();
             // Every capture beat carries a cue, so its release can state the
             // row a line leaves (`finish_narration_cue_after_text`).
-            let cue = beat.cue.unwrap_or(crate::blackthorn::BlackthornCaptureCue::Line);
-            self.staged_narration
-                .push_secs_with_cue(secs, NarrationCue::BlackthornCapture(cue), text);
+            let cue = beat
+                .cue
+                .unwrap_or(crate::blackthorn::BlackthornCaptureCue::Line);
+            self.staged_narration.push_secs_with_cue(
+                secs,
+                NarrationCue::BlackthornCapture(cue),
+                text,
+            );
         }
     }
 
@@ -5807,7 +5817,11 @@ impl PlayState {
     /// (`blackthorn.md §3`, §6.3 "Guard release route") on the pacing rule's
     /// lattice, anchored at the greeting's key with the release order
     /// already printed there.
-    fn stage_blackthorn_guard_release_route(&mut self, release_line: &str, preamble: Option<String>) {
+    fn stage_blackthorn_guard_release_route(
+        &mut self,
+        release_line: &str,
+        preamble: Option<String>,
+    ) {
         use crate::blackthorn::BlackthornCaptureCue;
         self.blackthorn_capture = Some(crate::blackthorn::BlackthornCaptureNarration::default());
         let route = crate::blackthorn::blackthorn_guard_release_timeline();
@@ -5817,7 +5831,8 @@ impl PlayState {
         };
         let start = crate::blackthorn::presentation_printed_rows(release_line)
             * crate::blackthorn::PRESENTATION_ROW_PRINT_MILLITICKS;
-        let releases = crate::blackthorn::blackthorn_capture_release_milliticks(&route, start, 0, &text_of);
+        let releases =
+            crate::blackthorn::blackthorn_capture_release_milliticks(&route, start, 0, &text_of);
         self.stage_blackthorn_capture_beats(&route, &releases, text_of);
     }
 
@@ -5858,7 +5873,10 @@ impl PlayState {
                         .and_then(|capture| capture.map.take())
                         .unwrap_or_else(|| MiscmapsCutsceneMap {
                             record_index: BLACKTHORN_AUDIENCE_CUTSCENE_MAP_RECORD,
-                            tiles: vec![0; MISCMAPS_CUTSCENE_ROWS * MISCMAPS_CUTSCENE_VISIBLE_COLUMNS],
+                            tiles: vec![
+                                0;
+                                MISCMAPS_CUTSCENE_ROWS * MISCMAPS_CUTSCENE_VISIBLE_COLUMNS
+                            ],
                         }),
                 );
                 self.install_blackthorn_audience_party();
@@ -6003,11 +6021,16 @@ impl PlayState {
     /// of its stings.
     fn apply_blackthorn_guard_frame(
         &mut self,
-        actors: &[Option<BlackthornCutsceneActorState>; crate::blackthorn::BLACKTHORN_CUTSCENE_ACTOR_SLOT_COUNT],
+        actors: &[Option<BlackthornCutsceneActorState>;
+             crate::blackthorn::BLACKTHORN_CUTSCENE_ACTOR_SLOT_COUNT],
     ) {
-        for guard in [BlackthornCutsceneActor::LeftGuard, BlackthornCutsceneActor::RightGuard] {
+        for guard in [
+            BlackthornCutsceneActor::LeftGuard,
+            BlackthornCutsceneActor::RightGuard,
+        ] {
             let slot = guard.slot_index() as usize;
-            let (Some(state), Some(object)) = (actors[slot], self.active_objects.get_mut(slot)) else {
+            let (Some(state), Some(object)) = (actors[slot], self.active_objects.get_mut(slot))
+            else {
                 continue;
             };
             object.x = state.x;
@@ -6598,15 +6621,12 @@ impl PlayState {
                     // the record's own wrap, not step 9's feed, which still
                     // follows the roster edit
                     // ([`Self::release_blackthorn_execution_hold`]).
-                    let fills_last_row = crate::wrap_text(
-                        &reward,
-                        crate::message_window::MESSAGE_WINDOW_WIDTH,
-                        0,
-                    )
-                    .last()
-                    .is_some_and(|row| {
-                        row.chars().count() == crate::message_window::MESSAGE_WINDOW_WIDTH
-                    });
+                    let fills_last_row =
+                        crate::wrap_text(&reward, crate::message_window::MESSAGE_WINDOW_WIDTH, 0)
+                            .last()
+                            .is_some_and(|row| {
+                                row.chars().count() == crate::message_window::MESSAGE_WINDOW_WIDTH
+                            });
                     if fills_last_row {
                         self.push_explicit_blank_message_entry();
                     }
@@ -6635,11 +6655,9 @@ impl PlayState {
                 // is assumed here.
                 // `blackthorn.md §4`: "A wrong answer, when fewer than two
                 // nondead party members remain, ends the interrogation".
-                let victim = self
-                    .blackthorn_failure_victim_index()
-                    .filter(|index| {
-                        *index != 0 && self.blackthorn_eligible_party_member_count() >= 2
-                    });
+                let victim = self.blackthorn_failure_victim_index().filter(|index| {
+                    *index != 0 && self.blackthorn_eligible_party_member_count() >= 2
+                });
                 let Some(victim) = victim else {
                     // The ordinal and the expected mantra are harness detail,
                     // not player text.
@@ -6811,8 +6829,7 @@ impl PlayState {
                         // The key wait that follows belongs to the sliced
                         // page (§5 step 8), so the session waits for its
                         // closing key from here, with record `6` behind it.
-                        let outcome =
-                            self.hold_blackthorn_closing_page(challenge, line, true)?;
+                        let outcome = self.hold_blackthorn_closing_page(challenge, line, true)?;
                         self.open_message_row();
                         // §5 step 8: "On the wrong-answer arm only: print
                         // `\n\n`, the removed member's name and ` is sliced
@@ -6932,7 +6949,9 @@ impl PlayState {
             .active_objects
             .get(slot)
             .filter(|object| !object.is_empty())
-            .map_or(crate::blackthorn::BLACKTHORN_PENDULUM_CELL, |object| (object.x, object.y));
+            .map_or(crate::blackthorn::BLACKTHORN_PENDULUM_CELL, |object| {
+                (object.x, object.y)
+            });
         // Step 6: buffered, shown on the next redraw.
         let (x, y) = crate::blackthorn::BLACKTHORN_PENDULUM_CELL;
         if let Some(index) = crate::blackthorn::blackthorn_cutscene_tile_index(x, y) {
@@ -7479,11 +7498,10 @@ impl PlayState {
 
         // Steps 10-14: the shout, then six plus four plus four ticks across
         // the two Guardian reveals, then the thunder line.
-        self.staged_narration
-            .push_ticks(
-                crate::blackthorn::BLACKTHORN_RESCUE_WAIT_ENVELOPE_SEQUENCE,
-                crate::blackthorn::BLACKTHORN_RESCUE_SHOUT,
-            );
+        self.staged_narration.push_ticks(
+            crate::blackthorn::BLACKTHORN_RESCUE_WAIT_ENVELOPE_SEQUENCE,
+            crate::blackthorn::BLACKTHORN_RESCUE_SHOUT,
+        );
         // The two Guardian reveals are blocking in the original and free
         // here. See [`crate::BLACKTHORN_RESCUE_WAIT_CELL_REVEAL`].
         self.staged_narration.push_ticks(
@@ -7659,7 +7677,7 @@ impl PlayState {
             variant,
         ) {
             ActiveObjectCompositeResult::Suppress | ActiveObjectCompositeResult::Direct(_) => {
-                return None
+                return None;
             }
             ActiveObjectCompositeResult::Companion(tile)
             | ActiveObjectCompositeResult::PreviousRowDirectAndCompanion { tile, .. } => tile,
@@ -8457,12 +8475,8 @@ impl PlayState {
         }
         self.dungeon_flourish_draw = None;
         self.dungeon_runtime_paint = true;
-        let _ = self.render_dungeon_viewport(
-            VIEWPORT_PLAYER_ROW,
-            TileGraphicsDepth::Ega16,
-            None,
-            None,
-        );
+        let _ =
+            self.render_dungeon_viewport(VIEWPORT_PLAYER_ROW, TileGraphicsDepth::Ega16, None, None);
         self.dungeon_runtime_paint = false;
     }
 

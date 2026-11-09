@@ -1527,15 +1527,18 @@ fn handle_active_direction_prompt_key_input(
             .active_direction_prompt
             .as_ref()
             .is_some_and(|session| matches!(session.kind, DirectionPromptKind::Klimb));
-    let tile_command = state.active_direction_prompt.as_ref().is_some_and(|session| {
-        matches!(
-            session.kind,
-            DirectionPromptKind::Get
-                | DirectionPromptKind::Jimmy
-                | DirectionPromptKind::Open
-                | DirectionPromptKind::Search
-        )
-    });
+    let tile_command = state
+        .active_direction_prompt
+        .as_ref()
+        .is_some_and(|session| {
+            matches!(
+                session.kind,
+                DirectionPromptKind::Get
+                    | DirectionPromptKind::Jimmy
+                    | DirectionPromptKind::Open
+                    | DirectionPromptKind::Search
+            )
+        });
     if let Some(outcome) = state.step_active_direction_prompt(key, suffix, game_dir)? {
         if tile_command {
             // `commands.md §3`/§7: G/S/O/J report "acted" on every exit.
@@ -1568,7 +1571,11 @@ fn handle_active_direction_prompt_key_input(
         } else if dungeon_klimb {
             // `dungeon-mode.md §13.1`: the up-or-down answer is a climbing
             // arm, so the post-action pass reads the landing cell.
-            state.apply_post_turn_effects_after_dungeon_level_change(turn_before, game_dir, outcome)?;
+            state.apply_post_turn_effects_after_dungeon_level_change(
+                turn_before,
+                game_dir,
+                outcome,
+            )?;
         } else {
             state.apply_post_turn_effects_after_outcome(turn_before, game_dir, outcome)?;
         }
@@ -1924,9 +1931,9 @@ fn handle_active_shop_key_input(
                                     // §8.C "Minoc free Cure/Heal |
                                     // `\n\n"Receive now the Light!"`,
                                     // followed by treatment effects".
-                                    Ok(_) => format!(
-                                        "{HEALER_RECEIVE_THE_LIGHT}{HEALER_CONTINUATION}"
-                                    ),
+                                    Ok(_) => {
+                                        format!("{HEALER_RECEIVE_THE_LIGHT}{HEALER_CONTINUATION}")
+                                    }
                                     Err(err) => format_healer_treatment_error(err, healer_name),
                                 };
                                 *s = HealerShopState::Continuation;
@@ -1966,11 +1973,10 @@ fn handle_active_shop_key_input(
                             state.arms_transaction_completed = true;
                             // §8.C (u5-spec#298 Q19): on the low-fee charity
                             // "the post-payment surcharge step does not run".
-                            let surcharge = if matches!(
-                                outcome.quote.fee,
-                                HealerTreatmentFee::Price(_)
-                            ) && !outcome.charity
-                            {
+                            let surcharge =
+                                if matches!(outcome.quote.fee, HealerTreatmentFee::Price(_))
+                                    && !outcome.charity
+                                {
                                     apply_active_shop_surcharge(state)
                                 } else {
                                     None
@@ -1980,15 +1986,16 @@ fn handle_active_shop_key_input(
                             // here: the first closes `pay?" Yes`, the second
                             // is the blank row. Playtest F47: dropping one ran
                             // `"Is there any other way` straight under it.
-                            shop_message_ignoring_surcharge(HEALER_CONTINUATION.to_string(), surcharge)
+                            shop_message_ignoring_surcharge(
+                                HEALER_CONTINUATION.to_string(),
+                                surcharge,
+                            )
                         }
                         // §8.C "Ordinary short funds | Record `173`, then the
                         // continuation question below, exactly as after a
                         // declined fee; no gold, status or HP changes"
                         // (u5-spec#298 Q19: the visit continues).
-                        Err(crate::shops::HealerTreatmentError::InsufficientGold {
-                            ..
-                        }) => {
+                        Err(crate::shops::HealerTreatmentError::InsufficientGold { .. }) => {
                             *s = HealerShopState::Continuation;
                             let record = render_shared_shoppe_record(
                                 game_dir,
@@ -2101,8 +2108,7 @@ fn handle_active_shop_key_input(
                     InnMainAction::Rest => {
                         // §8.C: "L and R echo those uppercase letters".
                         state.emit_message_line_continuing_row("R");
-                        if crate::shops::inn_lodging_full(inn, &state.inn_registry, scene_marker)
-                        {
+                        if crate::shops::inn_lodging_full(inn, &state.inn_registry, scene_marker) {
                             *s = InnkeeperState::Continuation { inn };
                             return_inn_capacity_refusal(honorific)
                         } else {
@@ -2140,8 +2146,7 @@ fn handle_active_shop_key_input(
                     }
                     InnMainAction::LeaveCompanion => {
                         state.emit_message_line_continuing_row("L");
-                        if crate::shops::inn_lodging_full(inn, &state.inn_registry, scene_marker)
-                        {
+                        if crate::shops::inn_lodging_full(inn, &state.inn_registry, scene_marker) {
                             *s = InnkeeperState::Continuation { inn };
                             return_inn_capacity_refusal(honorific)
                         } else if ctx.party_size <= 1 {
@@ -2152,8 +2157,7 @@ fn handle_active_shop_key_input(
                             // 2026-09-08 at Hotel Brittany
                             // (`qa/paired/nb-inn-refusals.tsv`).
                             *s = InnkeeperState::Exited;
-                            let record =
-                                render_shared_shoppe_record(
+                            let record = render_shared_shoppe_record(
                                 game_dir,
                                 INN_SOLO_LEAVE_RECORD,
                                 0,
@@ -2192,7 +2196,9 @@ fn handle_active_shop_key_input(
                             // `\n\nOne must first be left behind!\n\n`; this
                             // check precedes the no-guests check".
                             *s = InnkeeperState::Continuation { inn };
-                            format!("\n\nOne must first be left behind!\n\n{INN_ANYTHING_MORE_PROMPT}")
+                            format!(
+                                "\n\nOne must first be left behind!\n\n{INN_ANYTHING_MORE_PROMPT}"
+                            )
                         } else if guests.is_empty() {
                             // "Pickup with no guest at this inn |
                             // Token-expanded `\n\n"No one here is from thy
@@ -2225,7 +2231,10 @@ fn handle_active_shop_key_input(
                             // in roster-record order.
                             let mut guests = guests;
                             guests.sort_by_key(|index| {
-                                state.inn_registry.get(*index).map(|guest| guest.registry_slot)
+                                state
+                                    .inn_registry
+                                    .get(*index)
+                                    .map(|guest| guest.registry_slot)
                             });
                             let mut guest_indices = [0usize; INN_REGISTRY_CAP];
                             for (slot, registry_index) in
@@ -3112,14 +3121,13 @@ fn handle_active_shop_key_input(
             state.reagents = stock;
             // `shops.md §8.A`: the offer's answer echoes a bare `Yes`/`No`.
             match outcome {
-                ReagentShopOutcome::Bought { .. } | ReagentShopOutcome::RefusedShortFunds { .. }
+                ReagentShopOutcome::Bought { .. }
+                | ReagentShopOutcome::RefusedShortFunds { .. }
                     if confirming =>
                 {
                     state.emit_message_line_continuing_row("Yes");
                 }
-                ReagentShopOutcome::Declined { .. } => {
-                    state.emit_message_line_continuing_row("No")
-                }
+                ReagentShopOutcome::Declined { .. } => state.emit_message_line_continuing_row("No"),
                 // `shops.md §8.B`: "Space means No where accepted. Every No
                 // response echoes `No`"; Y/N take the shared entry echo.
                 // The greeting's continuation row is open whatever the slot's
@@ -3454,8 +3462,9 @@ fn handle_active_shop_key_input(
                 // `§8.C` "Affordability failure | Record `122`, then
                 // token-expanded `yells $.\n`; suppress ordinary farewell".
                 ShipBrokerOutcome::RefusedShortFunds { .. } => {
-                    let mut text = record(crate::shops::SHOPPE_RECORD_SHIPWRIGHT_SHORT_FUNDS, state)
-                        .unwrap_or_default();
+                    let mut text =
+                        record(crate::shops::SHOPPE_RECORD_SHIPWRIGHT_SHORT_FUNDS, state)
+                            .unwrap_or_default();
                     if let Some(name) = vendor_name {
                         text.push_str(&format!("\nyells {name}.\n"));
                     }
@@ -3549,12 +3558,7 @@ fn handle_active_shop_key_input(
                     vendor_name,
                     game_dir,
                 ),
-                outcome => format_guild_outcome(
-                    outcome,
-                    vendor_name,
-                    speaker_is_female,
-                    game_dir,
-                ),
+                outcome => format_guild_outcome(outcome, vendor_name, speaker_is_female, game_dir),
             };
             // `§8.C` D: record `164` prints straight after `Thy concern?" `,
             // on the row that prompt left open (the prompt waits with its row
@@ -5218,7 +5222,6 @@ const INN_WHO_WILL_STAY_PROMPT: &str = "\"Who will\nstay?\" ";
 const INN_THANKS_LINE: &str = "\"I thank thee.\"";
 const INN_ANYTHING_MORE_PROMPT: &str = "\"Is there\nanything more\nI can do for\nthee?\" ";
 
-
 /// `shops.md` §4's "Tavern count-word exception": the bill's count "is the
 /// number of nondead party members: two through six produce English number
 /// words; zero or one produce nothing. The surrounding spaces remain, so a
@@ -5534,8 +5537,6 @@ fn tavern_accepted_menu_letter(
         .then_some(upper)
 }
 
-
-
 /// The row a tavern outcome's message leaves for the next key's echo, stated
 /// from the outcome itself - never inferred from the text (the project rule
 /// for `message_row_open_mid_line`; u5-engine#46 residual).
@@ -5745,8 +5746,9 @@ fn format_tavern_outcome_with_shoppe(
         // servings": `\n\n"Thou hast\nneither gold nor\nneed! Out!"\nyells `,
         // vendor name, `.\n`; ends visit. The no-SHOPPE fallback prints the
         // bare bark without this attribution row (u5-engine#43).
-        RefusedNoNeed => tavern_vendor_name
-            .map(|name| format!("{TAVERN_NO_GOLD_NO_NEED_BARK}\nyells {name}.\n")),
+        RefusedNoNeed => {
+            tavern_vendor_name.map(|name| format!("{TAVERN_NO_GOLD_NO_NEED_BARK}\nyells {name}.\n"))
+        }
         Continued {
             tavern,
             follow_up_record_id,
@@ -5951,7 +5953,10 @@ fn format_reagent_outcome(
         // Thy interest?"
         // ```
         EnteredMenu { herbalist } => {
-            format!("{REAGENT_MENU_HEADING}\n\n{}", reagent_stock_menu(herbalist))
+            format!(
+                "{REAGENT_MENU_HEADING}\n\n{}",
+                reagent_stock_menu(herbalist)
+            )
         }
         // `shops.md §8.C` "Offer": `\n\n"`, then record `139..146` in the
         // canonical eight-reagent order, then ` Is this thy need?" `.
@@ -5971,7 +5976,11 @@ fn format_reagent_outcome(
             let quantity = crate::shops::herbalist_reagent_bundle_quantity(herbalist, reagent)
                 .map(u16::from)
                 .unwrap_or_default();
-            reagent_offer_text(&render(REAGENT_OFFER_RECORD_FIRST + ordinal, price, quantity))
+            reagent_offer_text(&render(
+                REAGENT_OFFER_RECORD_FIRST + ordinal,
+                price,
+                quantity,
+            ))
         }
         // "Already carrying 99 | `\n\n"Thou canst not carry any more!"\n\n`;
         // consume one command key, then redraw stock".
@@ -6001,10 +6010,7 @@ fn format_reagent_outcome(
         // (playtest N02).
         RefusedShortFunds { cost } => format!("\n{}", render(REAGENT_SHORT_FUNDS_RECORD, cost, 0)),
         // "Decline | `No\n\n"What else?\n\n`, then stock".
-        Declined { herbalist } => format!(
-            "\n\n\"What else?\n\n{}",
-            reagent_stock_menu(herbalist)
-        ),
+        Declined { herbalist } => format!("\n\n\"What else?\n\n{}", reagent_stock_menu(herbalist)),
         // Closing barks are rendered by the caller through the shared
         // envelope; these are the silent arms.
         DeclinedEntry | LeftMenu | Exited => String::new(),
@@ -6080,7 +6086,9 @@ fn format_horse_trader_outcome(
     match outcome {
         // Fallbacks for a run without `SHOPPE.DAT` only; the asset supplies
         // record `104` and the closing barks.
-        QuotedPrice { price } => format!("\"A fine steed costs {price} gold.{HORSE_TRADER_DEAL_PROMPT}"),
+        QuotedPrice { price } => {
+            format!("\"A fine steed costs {price} gold.{HORSE_TRADER_DEAL_PROMPT}")
+        }
         Purchased { .. } | Declined => String::new(),
         // `shops.md §8.C` "Horse traders": "Short funds then print
         // `\n\n"Thou couldst not afford to ` followed by token-expanded
@@ -6311,9 +6319,7 @@ fn format_guild_outcome(
             render(guild_offer_record(commodity), Some(shop), price)
         ),
         // "D renders record `164`, then redraws the stock menu."
-        Described { shop } => {
-            guild_described_text(&render(GUILD_DESCRIBE_RECORD, Some(shop), 0))
-        }
+        Described { shop } => guild_described_text(&render(GUILD_DESCRIBE_RECORD, Some(shop), 0)),
         // "Paid | Token-expanded `\n"Sold!"\nsays $.\n\n"What else, \n`, then
         // `m'lady` for a female speaking member or `m'lord` otherwise, then
         // `?\n\n`, then stock menu".
@@ -6323,7 +6329,11 @@ fn format_guild_outcome(
                 .unwrap_or_default();
             format!(
                 "\n\n\"Sold!\"{attribution}\n\n\"What else, \n{}?\n\n{}",
-                if speaker_is_female { "m'lady" } else { "m'lord" },
+                if speaker_is_female {
+                    "m'lady"
+                } else {
+                    "m'lord"
+                },
                 guild_stock_menu()
             )
         }
@@ -7663,10 +7673,7 @@ fn combat_player_command_input_from_key(key: char) -> CombatPlayerCommandInput {
     CombatPlayerCommandInput::Key(key.to_ascii_uppercase())
 }
 
-fn combat_player_command_message(
-    state: &PlayState,
-    action: &CombatPlayerCommandAction,
-) -> String {
+fn combat_player_command_message(state: &PlayState, action: &CombatPlayerCommandAction) -> String {
     match action {
         CombatPlayerCommandAction::QuicknessSkipped => "Quickness!".to_string(),
         // `combat.md §8.4`: the digit answers with `Set active plr:\n` and
@@ -8993,7 +9000,10 @@ mod arms_shop_resident_literal_tests {
             None,
             speech,
         );
-        assert_eq!(rendered, "\"Thou canst not carry any more!\"\nsays Kitiara.");
+        assert_eq!(
+            rendered,
+            "\"Thou canst not carry any more!\"\nsays Kitiara."
+        );
     }
 
     /// The two tails use different verbs; neither may borrow the other's.
@@ -9052,7 +9062,10 @@ mod arms_shop_resident_literal_tests {
             arms_post_item_prompt(false, false),
             "\"Anything else,\nthen?"
         );
-        assert_eq!(arms_post_item_prompt(true, false), "\"Anything else,\nthen?");
+        assert_eq!(
+            arms_post_item_prompt(true, false),
+            "\"Anything else,\nthen?"
+        );
     }
 
     /// `systems/shops.md §8.1`: a successful purchase "prints the fixed

@@ -2300,11 +2300,12 @@ impl SoundEffect {
                 SHRINE_OFFERING_SWELL_PERIOD,
                 SHRINE_OFFERING_SWELL_ITERATIONS,
             ),
-            SoundEffect::ShrineTurnInSwell => shrine_swell_program(
-                SHRINE_TURN_IN_SWELL_PERIOD,
-                SHRINE_TURN_IN_SWELL_ITERATIONS,
-            ),
-            SoundEffect::ShardSwell => shrine_swell_program(SHARD_SWELL_PERIOD, SHARD_SWELL_ITERATIONS),
+            SoundEffect::ShrineTurnInSwell => {
+                shrine_swell_program(SHRINE_TURN_IN_SWELL_PERIOD, SHRINE_TURN_IN_SWELL_ITERATIONS)
+            }
+            SoundEffect::ShardSwell => {
+                shrine_swell_program(SHARD_SWELL_PERIOD, SHARD_SWELL_ITERATIONS)
+            }
             SoundEffect::BlackthornExecutionSwell => shrine_swell_program(
                 BLACKTHORN_EXECUTION_SWELL_PERIOD,
                 BLACKTHORN_EXECUTION_SWELL_ITERATIONS,
@@ -3214,7 +3215,9 @@ mod tests {
             SoundEffect::PlayerSummon,
             SoundEffect::MoongateTransit,
             SoundEffect::ShadowlordYellSummon,
-            SoundEffect::LordBritishCampEnvelope(crate::lord_british_camp::LORD_BRITISH_CAMP_STING_LONG),
+            SoundEffect::LordBritishCampEnvelope(
+                crate::lord_british_camp::LORD_BRITISH_CAMP_STING_LONG,
+            ),
             SoundEffect::MajorFlash {
                 bands: vec![19u8, 150].into(),
             },

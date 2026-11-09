@@ -982,7 +982,10 @@ mod tests {
                 above_floor += 1;
             }
         }
-        assert!(above_floor * 50 < 4096, "{above_floor} of 4096 seeds above the floor");
+        assert!(
+            above_floor * 50 < 4096,
+            "{above_floor} of 4096 seeds above the floor"
+        );
         assert!(above_floor > 0);
     }
 

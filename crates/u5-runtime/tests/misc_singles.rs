@@ -1413,7 +1413,10 @@ fn function_key_at_the_yell_prompt_is_discarded() {
     )
     .unwrap();
 
-    let session = state.active_yell.as_ref().expect("the prompt keeps waiting");
+    let session = state
+        .active_yell
+        .as_ref()
+        .expect("the prompt keeps waiting");
     assert!(session.buffer.is_empty());
 }
 
@@ -1434,6 +1437,9 @@ fn function_key_at_the_wishing_well_wish_is_discarded() {
     )
     .unwrap();
 
-    assert!(state.active_wishing_well.is_some(), "the wish is still waiting");
+    assert!(
+        state.active_wishing_well.is_some(),
+        "the wish is still waiting"
+    );
     assert_eq!(state.message, message);
 }

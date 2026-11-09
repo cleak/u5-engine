@@ -843,8 +843,9 @@ pub const fn shrine_entry_lattice_timeline() -> (u32, u32) {
     let kneel = last_walk_edge * 1000 + SHRINE_KNEEL_POSE_REPAINT_MILLITICKS;
     // The question's ten requests: the first after the Kneel record's work,
     // the other nine one period each; the question prints on the last edge.
-    let first_question_edge =
-        shrine_lattice_request_end_tick(last_walk_edge * 1000 + SHRINE_KNEEL_RECORD_WORK_MILLITICKS);
+    let first_question_edge = shrine_lattice_request_end_tick(
+        last_walk_edge * 1000 + SHRINE_KNEEL_RECORD_WORK_MILLITICKS,
+    );
     let question = (first_question_edge + (SHRINE_VIRTUE_QUESTION_WORLD_STEPS as u32 - 1)) * 1000;
     (kneel, question)
 }
@@ -1683,7 +1684,10 @@ pub fn search_preamble_for_tile(tile: u8) -> String {
 /// `nothing_of_note.\n`." For an ordinary tile this is
 /// [`SEARCH_NOTHING_FOUND`].
 pub fn search_nothing_found_for_tile(tile: u8) -> String {
-    format!("{}{SEARCH_NOTHING_OF_NOTE_ROW}", search_preamble_for_tile(tile))
+    format!(
+        "{}{SEARCH_NOTHING_OF_NOTE_ROW}",
+        search_preamble_for_tile(tile)
+    )
 }
 /// The container-object branch: "`\nThou_dost_find\n` then `no trap!` /
 /// `a simple trap!` / `a complex trap!` / `a trap!`".

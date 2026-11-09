@@ -1247,7 +1247,12 @@ impl PlayState {
                     if lit {
                         for &(y, first, last) in DUNGEON_FLOURISH_RUNS.iter() {
                             for x in first..=last {
-                                Self::plot_dungeon_screen_pixel(viewport, x, y, DUNGEON_FLOURISH_PEN);
+                                Self::plot_dungeon_screen_pixel(
+                                    viewport,
+                                    x,
+                                    y,
+                                    DUNGEON_FLOURISH_PEN,
+                                );
                             }
                         }
                     }
@@ -2558,7 +2563,8 @@ impl PlayState {
                     let glyph = match self.combat_render_sprite_at(x, y) {
                         Some(sprite) => u8::try_from(sprite).map(render_glyph).unwrap_or('?'),
                         None => render_glyph(
-                            self.animation.resolve_static_tile(self.combat_terrain[y][x]),
+                            self.animation
+                                .resolve_static_tile(self.combat_terrain[y][x]),
                         ),
                     };
                     out.push(glyph);
@@ -5661,7 +5667,8 @@ impl PlayState {
         // Tested ahead of the coin, so a parked slot draws none.
         if matches!(
             object.tile,
-            crate::COMBAT_POTION_INVISIBLE_WAKE_DISPLAY_TILE | crate::COMBAT_POTION_SLEEP_DISPLAY_TILE
+            crate::COMBAT_POTION_INVISIBLE_WAKE_DISPLAY_TILE
+                | crate::COMBAT_POTION_SLEEP_DISPLAY_TILE
         ) {
             return;
         }
@@ -5680,7 +5687,11 @@ impl PlayState {
         // Every shipped script reaches a frame or pause step within its own
         // length after any jump, so this bound only guards malformed input.
         for _ in 0..=2 * script.len() {
-            match script.get(position).copied().unwrap_or(AnimationScriptStep::Restart) {
+            match script
+                .get(position)
+                .copied()
+                .unwrap_or(AnimationScriptStep::Restart)
+            {
                 AnimationScriptStep::Frame(n) => {
                     // "the displayed frame is class + n - 1": every frame
                     // step is at least 1, so subtract first. The Shadow Lord

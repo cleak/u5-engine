@@ -20,12 +20,16 @@ use u5_runtime::*;
 
 fn main() {
     let mut args = std::env::args().skip(1);
-    let dir = args.next().expect("usage: dungeon_class_scan <GAME_DIR> <class>");
+    let dir = args
+        .next()
+        .expect("usage: dungeon_class_scan <GAME_DIR> <class>");
     let dir = Path::new(&dir);
-    let wanted = args.next().expect("usage: dungeon_class_scan <GAME_DIR> <class>");
-    let exact = wanted.strip_prefix("byte=").map(|value| {
-        u8::from_str_radix(value, 16).expect("byte= takes two hex digits")
-    });
+    let wanted = args
+        .next()
+        .expect("usage: dungeon_class_scan <GAME_DIR> <class>");
+    let exact = wanted
+        .strip_prefix("byte=")
+        .map(|value| u8::from_str_radix(value, 16).expect("byte= takes two hex digits"));
     let class = match exact {
         Some(_) => None,
         None => Some(u8::from_str_radix(&wanted, 16).expect("class is one hex digit")),

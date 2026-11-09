@@ -382,8 +382,8 @@ impl ShrineApproachWalk {
             ShrinePose::None => None,
             ShrinePose::Walking { column, row } => Some((SHRINE_WALKING_POSE_TILE, column, row)),
             ShrinePose::Kneeling { column, row } => Some((
-                SHRINE_KNEELING_POSE_FAMILY[usize::from(self.kneel_frame)
-                    .min(SHRINE_KNEELING_POSE_FAMILY.len() - 1)],
+                SHRINE_KNEELING_POSE_FAMILY
+                    [usize::from(self.kneel_frame).min(SHRINE_KNEELING_POSE_FAMILY.len() - 1)],
                 column,
                 row,
             )),
@@ -495,7 +495,11 @@ mod tests {
             cells(&poses),
             (3..=10).rev().map(|row| (5, row)).collect::<Vec<_>>()
         );
-        assert!(poses.iter().all(|pose| !matches!(pose, ShrinePose::Kneeling { .. })));
+        assert!(
+            poses
+                .iter()
+                .all(|pose| !matches!(pose, ShrinePose::Kneeling { .. }))
+        );
         assert_eq!(
             poses
                 .iter()

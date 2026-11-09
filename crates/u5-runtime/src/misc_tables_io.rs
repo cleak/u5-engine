@@ -24,9 +24,7 @@ pub fn parse_karma_dat(bytes: &[u8]) -> io::Result<Vec<String>> {
             // `formats/karma-dat.md` Section 2 (R495): the original reads to
             // end of file and delimits by NUL, so the final record may run to
             // EOF unterminated. Earlier records still need their NUL.
-            None if record_index + 1 == KARMA_RECORD_COUNT && !remaining.is_empty() => {
-                bytes.len()
-            }
+            None if record_index + 1 == KARMA_RECORD_COUNT && !remaining.is_empty() => bytes.len(),
             None => {
                 return Err(io::Error::new(
                     io::ErrorKind::InvalidData,
