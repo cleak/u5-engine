@@ -35,7 +35,7 @@ use bevy::image::ImageSampler;
 use bevy::prelude::*;
 use bevy::render::render_asset::RenderAssetUsages;
 use bevy::render::render_resource::{Extent3d, TextureDimension, TextureFormat};
-use u5_runtime::{PlayState, TileAtlas, hash_bytes};
+use u5_runtime::{FixedCellFont, PlayState, TileAtlas, hash_bytes};
 
 use super::EnhSet;
 use super::side::SideLayout;
@@ -85,6 +85,9 @@ pub struct PresentInput<'a> {
     /// The tile atlas the faithful frame was drawn with, once play has
     /// started (the grow-left compositor paints the ring from it).
     pub atlas: Option<&'a TileAtlas>,
+    /// The runtime-loaded IBM.CH the faithful frame's text is drawn with,
+    /// once play has started (the grow-left ribbon draws from it).
+    pub font: Option<&'a FixedCellFont>,
     /// The window's physical size (zero when there is no window).
     pub window: UVec2,
     /// Physical pixels per logical pixel (1 when there is no window), so a
@@ -303,6 +306,7 @@ fn present_frame(
     let host = &mut *host;
     let state = visual.as_deref().map(|visual| &visual.state);
     let atlas = visual.as_deref().map(|visual| &visual.atlas);
+    let font = visual.as_deref().map(|visual| &visual.text_font);
     let (window, scale_factor) = windows
         .single()
         .map(|window| (window.physical_size(), window.scale_factor()))
@@ -323,6 +327,7 @@ fn present_frame(
             faithful_hash,
             state,
             atlas,
+            font,
             window,
             scale_factor,
             side,
@@ -367,6 +372,7 @@ fn present_frame(
         faithful_hash: triggers.faithful_hash,
         state,
         atlas,
+        font,
         window,
         scale_factor,
         side,

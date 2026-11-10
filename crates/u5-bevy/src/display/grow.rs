@@ -36,6 +36,11 @@
 //! [`FrameImageSize`] it places is set in `EnhSet::Layout` by
 //! [`size_grow_frame`] from the same test the step applies. Nothing here
 //! writes the game; the faithful image is never touched.
+//!
+//! **The bands** (M1-10, 2.2.3, 2.2.6, 2.3.7 steps 5-6) are drawn by
+//! [`bands`]: the ribbon, food, gold and the date on the top band, and the
+//! sky and wind tabs cropped from the frame at one shared centre. Their
+//! snapshot is retaken only when the faithful bytes change (D2.11).
 
 use std::hash::{Hash, Hasher};
 
@@ -51,6 +56,7 @@ use crate::enh::present::{
 use crate::enh::side::{FrameImageSize, layout_side_space};
 use crate::{EnhSet, VISUAL_PLAY_FRAME_HEIGHT, VISUAL_PLAY_FRAME_WIDTH, VisualState};
 
+pub mod bands;
 pub mod compose;
 
 /// Canvas rows on an ordinary window.
@@ -203,21 +209,30 @@ pub fn flash_active(state: &PlayState) -> bool {
     state.message_window_flash_hold_active() || state.presentation_camp_flash_inverted
 }
 
-/// Steps 1-4 for one state (2.3.7): the ring peek for the canvas's map
-/// window under `light`, its raster from `atlas`, and
+/// What the compositor is told besides the frame: the light policy, and
+/// for steps 5 and 6 the band snapshot, the font and the colour toggle.
+#[derive(Clone, Copy)]
+pub struct ComposeOptions<'a> {
+    pub light: PeekLightPolicy,
+    /// `None` draws steps 1-4 only.
+    pub bands: Option<compose::Bands<'a>>,
+}
+
+/// Steps 1-6 for one state (2.3.7): the ring peek for the canvas's map
+/// window under `options.light`, its raster from `atlas`, and
 /// [`compose::compose_grow_left`] over `frame`, the faithful 320x200 RGBA
-/// the shell drew from `state`. `None` when the peek returns no ring (a
-/// fixed screen). Read-only: `state` is shared and the peek draws nothing
-/// from the game's random stream.
+/// the shell drew from `state`, with the bands of `options`. `None` when
+/// the peek returns no ring (a fixed screen). Read-only: `state` is shared
+/// and the peek draws nothing from the game's random stream.
 pub fn compose_for_state(
     frame: &[u8],
     state: &PlayState,
     atlas: &TileAtlas,
     canvas: &Canvas,
-    light: PeekLightPolicy,
+    options: ComposeOptions<'_>,
 ) -> Option<Vec<u8>> {
     let window = compose::peek_window(canvas);
-    let ring = state.peek_top_down_ring(window, light)?;
+    let ring = state.peek_top_down_ring(window, options.light)?;
     let raster = state.render_peek_ring(&ring, atlas).ok()?;
     let ring_rgba = crate::tile_viewport_to_visual_rgba(&raster);
     let flash = if flash_active(state) {
@@ -226,15 +241,21 @@ pub fn compose_for_state(
         None
     };
     Some(compose::compose_grow_left(
-        frame, &ring_rgba, window, canvas, flash,
+        frame,
+        &ring_rgba,
+        window,
+        canvas,
+        flash,
+        options.bands,
     ))
 }
 
 /// The shell's own faithful play frame for `state` (the bytes the play
-/// upload sites write, with the shell's palette) and its grow-left canvas,
-/// for review shots and tests outside the crate. Renders the frame, which
-/// advances `state` exactly as one shell repaint does; the canvas itself is
-/// read-only. `None` for the canvas on a fixed screen.
+/// upload sites write, with the shell's palette) and its grow-left canvas
+/// (the column collapsed, the HP colours on), for review shots and tests
+/// outside the crate. Renders the frame, which advances `state` exactly as
+/// one shell repaint does; the canvas itself is read-only. `None` for the
+/// canvas on a fixed screen.
 pub fn render_shell_frame_and_canvas(
     state: &mut PlayState,
     atlas: &TileAtlas,
@@ -250,27 +271,68 @@ pub fn render_shell_frame_and_canvas(
         cursor_frame: 0,
     };
     let frame = crate::render_visual_play_frame(state, atlas, ctx);
-    let canvas = compose_for_state(&frame, state, atlas, canvas, light);
+    let snapshot = bands::band_snapshot(state);
+    let options = ComposeOptions {
+        light,
+        bands: Some(compose::Bands {
+            snapshot: &snapshot,
+            font: fonts.0,
+            hp_colours: true,
+            open: false,
+        }),
+    };
+    let canvas = compose_for_state(&frame, state, atlas, canvas, options);
     (frame, canvas)
+}
+
+/// The settings the `[grow-left compose]` step follows.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct GrowComposeSettings {
+    /// `display.grow_left_light`.
+    pub light: PeekLightPolicy,
+    /// `display.pixel_aspect`, which picks the canvas.
+    pub pixel_aspect: PixelAspect,
+    /// `display.ribbon_hp_colours`.
+    pub hp_colours: bool,
+}
+
+impl GrowComposeSettings {
+    pub fn of(settings: &DisplaySettings) -> Self {
+        Self {
+            light: settings.grow_left.light,
+            pixel_aspect: settings.pixel_aspect,
+            hp_colours: settings.grow_left.ribbon_hp_colours,
+        }
+    }
 }
 
 /// The `[grow-left compose]` step (2.3.5): the canvas in place of the
 /// faithful frame while the top-down view shows, the faithful frame
 /// otherwise.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug)]
 pub struct GrowLeftCompose {
-    /// `display.grow_left_light`.
-    pub light: PeekLightPolicy,
-    /// `display.pixel_aspect`, which picks the canvas.
-    pub pixel_aspect: PixelAspect,
+    pub settings: GrowComposeSettings,
+    /// The band snapshot and the faithful hash it was taken at (D2.11): it
+    /// is retaken only when the faithful bytes change, so a recompose for
+    /// the ring alone never shows a newer value than the original screen.
+    bands: Option<(u64, bands::BandSnapshot)>,
 }
 
 impl GrowLeftCompose {
     pub fn of(settings: &DisplaySettings) -> Self {
         Self {
-            light: settings.grow_left.light,
-            pixel_aspect: settings.pixel_aspect,
+            settings: GrowComposeSettings::of(settings),
+            bands: None,
         }
+    }
+
+    /// The band snapshot for this compose: the cached one while the
+    /// faithful bytes are unchanged, a new one otherwise.
+    fn bands_for(&mut self, state: &PlayState, faithful_hash: u64) -> &bands::BandSnapshot {
+        if self.bands.as_ref().map(|(hash, _)| *hash) != Some(faithful_hash) {
+            self.bands = Some((faithful_hash, bands::band_snapshot(state)));
+        }
+        &self.bands.as_ref().expect("just taken").1
     }
 }
 
@@ -299,22 +361,40 @@ impl PresentStep for GrowLeftCompose {
 
     fn revision(&mut self, input: &PresentInput) -> u64 {
         let mut hasher = std::collections::hash_map::DefaultHasher::new();
-        (self.light as u8, self.pixel_aspect as u8).hash(&mut hasher);
+        let settings = self.settings;
+        (
+            settings.light as u8,
+            settings.pixel_aspect as u8,
+            settings.hp_colours,
+        )
+            .hash(&mut hasher);
         input.state.map(ring_digest).hash(&mut hasher);
         hasher.finish()
     }
 
     fn apply(&mut self, input: &PresentInput, frame: &mut PresentedFrame) {
-        let (Some(state), Some(atlas)) = (input.state, input.atlas) else {
+        let (Some(state), Some(atlas), Some(font)) = (input.state, input.atlas, input.font) else {
             return;
         };
         if frame.size != FRAME {
             return;
         }
-        let Some(canvas) = grow_canvas(Some(state), input.window, self.pixel_aspect) else {
+        let settings = self.settings;
+        let Some(canvas) = grow_canvas(Some(state), input.window, settings.pixel_aspect) else {
             return;
         };
-        let Some(rgba) = compose_for_state(&frame.rgba, state, atlas, &canvas, self.light) else {
+        let snapshot = self.bands_for(state, input.faithful_hash);
+        let options = ComposeOptions {
+            light: settings.light,
+            bands: Some(compose::Bands {
+                snapshot,
+                font,
+                hp_colours: settings.hp_colours,
+                // The docked column is M1-13's.
+                open: false,
+            }),
+        };
+        let Some(rgba) = compose_for_state(&frame.rgba, state, atlas, &canvas, options) else {
             return;
         };
         frame.size = UVec2::new(canvas.w, canvas.h);
@@ -383,10 +463,10 @@ pub(crate) fn size_grow_frame(
 /// off.
 fn follow_grow_settings(
     display: Res<Display>,
-    mut current: Local<Option<(bool, GrowLeftCompose)>>,
+    mut current: Local<Option<(bool, GrowComposeSettings)>>,
     steps: Option<ResMut<PresentSteps>>,
 ) {
-    let wanted = (display.0.grow_left.on, GrowLeftCompose::of(&display.0));
+    let wanted = (display.0.grow_left.on, GrowComposeSettings::of(&display.0));
     let Some(previous) = current.replace(wanted) else {
         // The step `add_grow` registered came from the launch settings.
         return;
@@ -396,7 +476,7 @@ fn follow_grow_settings(
     }
     if let Some(mut steps) = steps {
         if wanted.0 {
-            steps.register(wanted.1);
+            steps.register(GrowLeftCompose::of(&display.0));
         } else {
             steps.remove(StepOrder::GROW_LEFT_COMPOSE);
         }
@@ -408,3 +488,6 @@ mod tests;
 
 #[cfg(test)]
 mod compose_tests;
+
+#[cfg(test)]
+mod bands_tests;

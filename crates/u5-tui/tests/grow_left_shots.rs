@@ -1,6 +1,11 @@
-//! Phase B M1-09 review shots: the grow-left canvas (chrome, ring and
-//! faithful core) for the approved mockup scenes, rendered by the engine's
-//! own frame renderer and compositor next to the approved c04f mockups.
+//! Phase B M1-09 and M1-10 review shots: the grow-left canvas (chrome, ring,
+//! faithful core, the ribbon and the tabs) for the approved mockup scenes,
+//! rendered by the engine's own frame renderer and compositor next to the
+//! approved c04f mockups.
+//!
+//! The G and G6 shots edit the party as the mockups do (Iolo poisoned; for
+//! G6 three more members with the mockup's names and numbers) before the
+//! frame is drawn, so the ribbon can be compared cell for cell.
 //!
 //! Review output only, never committed: the scene is rebuilt at test time
 //! from a local game-data copy (`U5_MOCKUP_PROFILE`), exactly as the
@@ -28,37 +33,81 @@ use u5_tui::{
 const UP: &str = "\x1b[A";
 const RIGHT: &str = "\x1b[C";
 
+/// How the shot edits the save's party (the mockups' G and G6 states).
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Party {
+    /// The save's own three members.
+    Save,
+    /// Iolo poisoned (G).
+    IoloPoisoned,
+    /// Iolo poisoned and three more members (G6).
+    Six,
+}
+
 struct Shot {
     name: &'static str,
     mockup: &'static str,
     window: (u32, u32),
     time: &'static str,
     torch: Option<u8>,
+    party: Party,
 }
 
-const SHOTS: [Shot; 3] = [
+const fn shot(name: &'static str, mockup: &'static str, window: (u32, u32), party: Party) -> Shot {
     Shot {
-        name: "S1-16x9",
-        mockup: "c04f-A-S1-quiet.png",
-        window: (2560, 1440),
+        name,
+        mockup,
+        window,
         time: "11:50",
         torch: None,
-    },
-    Shot {
-        name: "S1-21x9",
-        mockup: "c04f-uw-A-S1-quiet.png",
-        window: (3440, 1440),
-        time: "11:50",
-        torch: None,
-    },
+        party,
+    }
+}
+
+const W16: (u32, u32) = (2560, 1440);
+const W21: (u32, u32) = (3440, 1440);
+
+const SHOTS: [Shot; 7] = [
+    shot("S1-16x9", "c04f-A-S1-quiet.png", W16, Party::Save),
+    shot("S1-21x9", "c04f-uw-A-S1-quiet.png", W21, Party::Save),
     Shot {
         name: "S3-16x9",
         mockup: "c04f-E-S3-night.png",
-        window: (2560, 1440),
+        window: W16,
         time: "21:50",
         torch: Some(90),
+        party: Party::Save,
     },
+    shot("G-16x9", "c04f-G-status.png", W16, Party::IoloPoisoned),
+    shot("G-21x9", "c04f-uw-G-status.png", W21, Party::IoloPoisoned),
+    shot("G6-16x9", "c04f-G6-status.png", W16, Party::Six),
+    shot("G6-21x9", "c04f-uw-G6-status.png", W21, Party::Six),
 ];
+
+/// The mockups' party edits (make_c04f.py: G_PARTY, G6_PARTY).
+fn edit_party(state: &mut PlayState, party: Party) {
+    if party == Party::Save {
+        return;
+    }
+    state.party[2].status = b'P';
+    if party == Party::Six {
+        for (name, status, hp, max_hp) in [
+            (&b"Jaana"[..], b'G', 18, 90),
+            (&b"Dupre"[..], b'P', 120, 150),
+            (&b"Geoffrey"[..], b'G', 240, 240),
+        ] {
+            let mut member = state.party[1];
+            member.status = status;
+            member.hp = hp;
+            member.max_hp = max_hp;
+            state.party.push(member);
+            let mut bytes = [0; SAVE_CHARACTER_NAME_LEN];
+            bytes[..name.len()].copy_from_slice(name);
+            state.party_names.push(bytes);
+        }
+    }
+    state.repaint_stats_panel();
+}
 
 fn env_dir(name: &str) -> Option<PathBuf> {
     Some(PathBuf::from(std::env::var_os(name)?))
@@ -106,6 +155,7 @@ fn grow_left_review_shots() {
     let runes = load_runes_ch_font(&profile).unwrap();
     for shot in &SHOTS {
         let mut state = load_scene(&profile, shot, &atlas);
+        edit_party(&mut state, shot.party);
         let canvas = Canvas::for_window(shot.window.0, shot.window.1, PixelAspect::Dos).unwrap();
         // The shell's own frame and canvas: the bytes the play upload
         // sites write, in the shell's palette.
@@ -123,8 +173,9 @@ fn grow_left_review_shots() {
         assert_eq!((mockup.width(), mockup.height()), (w, h), "{}", shot.name);
         let theirs = mockup.into_raw();
 
-        // Count differing pixels per region: the chrome bands (where the
-        // ribbon and tabs of later packages go), the core, the ring.
+        // Count differing pixels per region: the chrome bands (the ribbon
+        // and the tabs), the core, the ring (where the crawl of a later
+        // package goes).
         let (cx, cy, side) = compose::core_rect(&canvas);
         let (mx0, my0, mx1, my1) = canvas.map_window();
         let mut diff = vec![0u8; (w * h * 4) as usize];

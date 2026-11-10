@@ -17774,7 +17774,7 @@ fn render_visual_play_frame_with_input_and_cursor(
     let _ = state.take_pending_combat_terrain_reveals();
     let _ = state.take_pending_stonegate_trapdoor_playback();
     #[cfg(test)]
-    grow_agreement::note(state, atlas, &rgba);
+    grow_agreement::note(state, atlas, ctx.ibm, &rgba);
     rgba
 }
 

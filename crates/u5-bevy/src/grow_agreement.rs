@@ -16,17 +16,23 @@
 //!   frame's own rounded-corner staircase (the 6x6 corner block), the one
 //!   measured off the original frame;
 //! - during a flash every ring pixel is the palette XOR of the unflashed
-//!   ring pixel.
+//!   ring pixel;
+//! - (M1-10) the sky and wind tabs on the canvas are the frame's own tab
+//!   pixels byte for byte, and the two share one centre;
+//! - (M1-10, the no-reveal rule) the ribbon shows no more members than the
+//!   party has, and every character it draws is in the faithful panel row
+//!   of the same member, or in the counters or date row, of this frame.
 //!
 //! Nothing here is compiled outside tests, and the recorder is off unless a
 //! test turns it on.
 
 use std::cell::RefCell;
 
-use u5_runtime::{PeekLightPolicy, PlayState, TileAtlas};
+use u5_runtime::{FixedCellFont, PeekLightPolicy, PlayState, TileAtlas};
 
 use crate::VISUAL_PLAY_FRAME_WIDTH;
-use crate::display::grow::{Canvas, compose, compose_for_state, flash_active};
+use crate::display::grow::bands::{self, BandSnapshot, ribbon_layout};
+use crate::display::grow::{Canvas, ComposeOptions, compose, compose_for_state, flash_active};
 
 /// The windows checked: the three named layouts, a 21:9 at 2560x1080 and
 /// a panned 16:10.
@@ -76,18 +82,118 @@ fn pixel(rgba: &[u8], width: usize, x: usize, y: usize) -> [u8; 4] {
     [rgba[at], rgba[at + 1], rgba[at + 2], rgba[at + 3]]
 }
 
+fn options<'a>(snapshot: &'a BandSnapshot, font: &'a FixedCellFont) -> ComposeOptions<'a> {
+    ComposeOptions {
+        light: PeekLightPolicy::Scaled,
+        bands: Some(compose::Bands {
+            snapshot,
+            font,
+            hp_colours: true,
+            open: false,
+        }),
+    }
+}
+
+/// The ribbon draws nothing the faithful panel of this frame does not show.
+fn check_ribbon(state: &PlayState, snapshot: &BandSnapshot, found: &mut Vec<String>) {
+    let panel = state.displayed_stats_panel();
+    let ribbon = &snapshot.ribbon;
+    if ribbon.members.len() > state.party.len() {
+        found.push(format!(
+            "the ribbon shows {} members of a party of {}",
+            ribbon.members.len(),
+            state.party.len()
+        ));
+    }
+    for (index, member) in ribbon.members.iter().enumerate() {
+        let row = panel.rows.get(index).map(String::as_str).unwrap_or("");
+        let name_ok = row.starts_with(&member.name);
+        let hp_ok = row.contains(&member.hp);
+        let status_ok = member.status == panel.statuses.get(index).copied().flatten();
+        if !(name_ok && hp_ok && status_ok) {
+            found.push(format!(
+                "ribbon member {index} {member:?} is not panel row {row:?}"
+            ));
+        }
+    }
+    for (text, row) in [
+        (&ribbon.counters, panel.counter_row.as_str()),
+        (&ribbon.date, panel.date_row.as_str()),
+    ] {
+        if text.split(' ').any(|word| !row.contains(word)) {
+            found.push(format!("ribbon text {text:?} is not panel row {row:?}"));
+        }
+    }
+}
+
+/// The tabs on `rgba` are the frame's tabs, at one shared centre.
+fn check_tabs(
+    rgba: &[u8],
+    canvas: &Canvas,
+    frame: &[u8],
+    snapshot: &BandSnapshot,
+    context: &str,
+    found: &mut Vec<String>,
+) {
+    let w = canvas.w as usize;
+    let sky = snapshot.gaps.top_rect();
+    let wind = snapshot.gaps.bottom_rect();
+    let width = sky.map_or(112, |rect| rect.width() as u32);
+    let centre = bands::tab_centre(canvas, false, width, &snapshot.ribbon);
+    let mut centres = Vec::new();
+    for (rect, y0) in [(sky, 8usize), (wind, canvas.h as usize - 8)] {
+        let Some(rect) = rect else {
+            continue;
+        };
+        let x0 = bands::tab_left(rect, centre) as usize;
+        centres.push(2 * x0 + rect.width());
+        let same = (0..8).all(|row| {
+            let at = ((y0 + row) * w + x0) * 4;
+            let from = ((rect.y0 + row) * FRAME_W + rect.x0) * 4;
+            rgba[at..at + rect.width() * 4] == frame[from..from + rect.width() * 4]
+        });
+        if !same {
+            found.push(format!("{context}: a tab is not the frame's own pixels"));
+        }
+    }
+    if centres.windows(2).any(|pair| pair[0] != pair[1]) {
+        found.push(format!(
+            "{context}: the tabs do not share a centre: {centres:?}"
+        ));
+    }
+    // Text never sits under the sky tab.
+    if let Some(rect) = sky {
+        let x0 = bands::tab_left(rect, centre);
+        let x1 = x0 + rect.width() as u32;
+        let layout = ribbon_layout(canvas, false);
+        let member_w = layout.member_cells() as u32 * 8;
+        let left = bands::counters_left(canvas, &snapshot.ribbon);
+        let clear = (0..snapshot.ribbon.members.len())
+            .map(|index| layout.place(index).0)
+            .all(|x| x + member_w <= x0 || x >= x1)
+            && left >= x1;
+        if !clear {
+            found.push(format!("{context}: text under the sky tab"));
+        }
+    }
+}
+
 /// Check one finished frame of `state`.
-pub(crate) fn note(state: &PlayState, atlas: &TileAtlas, frame: &[u8]) {
+pub(crate) fn note(state: &PlayState, atlas: &TileAtlas, font: &FixedCellFont, frame: &[u8]) {
     if !recording() {
         return;
     }
     let mut found = Vec::new();
+    let snapshot = bands::band_snapshot(state);
+    if state.top_down_world_view_active() {
+        check_ribbon(state, &snapshot, &mut found);
+    }
     let mut tally_composed = false;
     let mut flashed = false;
     for (ww, wh) in WINDOWS {
         let canvas = Canvas::for_window(ww, wh, u5_runtime::enhancements::PixelAspect::Dos)
             .expect("a canvas for every window checked");
-        let composed = compose_for_state(frame, state, atlas, &canvas, PeekLightPolicy::Scaled);
+        let composed = compose_for_state(frame, state, atlas, &canvas, options(&snapshot, font));
         let Some(rgba) = composed else {
             if state.top_down_world_view_active() {
                 found.push(format!("{ww}x{wh}: the top-down view gave no canvas"));
@@ -115,6 +221,14 @@ pub(crate) fn note(state: &PlayState, atlas: &TileAtlas, frame: &[u8]) {
         if !core_ok {
             found.push(format!("{ww}x{wh}: the core is not the faithful viewport"));
         }
+        check_tabs(
+            &rgba,
+            &canvas,
+            frame,
+            &snapshot,
+            &format!("{ww}x{wh}"),
+            &mut found,
+        );
         // The corners: the frame's 6x6 staircase blocks, top-left,
         // top-right and bottom-left of the frame's two blue frames (the
         // frame's bottom-left corner sits at row 191, above the bottom
@@ -143,7 +257,7 @@ pub(crate) fn note(state: &PlayState, atlas: &TileAtlas, frame: &[u8]) {
             calm.presentation_camp_flash_inverted = false;
             calm.message_window_flash_hold = Default::default();
             if let Some(plain) =
-                compose_for_state(frame, &calm, atlas, &canvas, PeekLightPolicy::Scaled)
+                compose_for_state(frame, &calm, atlas, &canvas, options(&snapshot, font))
             {
                 let mask = u5_runtime::potion_flash_playback(0)
                     .expect("the shared flash")

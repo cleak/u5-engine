@@ -19,6 +19,7 @@ use u5_runtime::{
     VIEWPORT_ORIGIN_Y,
 };
 
+use super::bands::{BandSnapshot, paint_bands};
 use super::{CORE_SIDE, Canvas};
 use crate::{EGA_PALETTE_RGB, VISUAL_PLAY_FRAME_HEIGHT, VISUAL_PLAY_FRAME_WIDTH};
 
@@ -165,17 +166,30 @@ pub fn flash_ring(rgba: &mut [u8], canvas: &Canvas, playback: PotionFlashPlaybac
     }
 }
 
-/// Steps 1-4 of the grow-left compositor (2.3.7): the canvas for
+/// What steps 5 and 6 draw from: the snapshot taken when the faithful
+/// frame last changed, the font, `display.ribbon_hp_colours` and the
+/// column's state.
+#[derive(Clone, Copy)]
+pub struct Bands<'a> {
+    pub snapshot: &'a BandSnapshot,
+    pub font: &'a u5_runtime::FixedCellFont,
+    pub hp_colours: bool,
+    pub open: bool,
+}
+
+/// Steps 1-6 of the grow-left compositor (2.3.7): the canvas for
 /// `canvas`, with the ring raster `ring` (RGBA of `window`'s cells) in the
 /// map window, the faithful viewport of `faithful` (the 320x200 frame,
 /// RGBA) copied to the core, and, while `flash` is set, the ring inverted
-/// as the faithful frame inverted its core.
+/// as the faithful frame inverted its core; then, with `bands`, the ribbon
+/// on the top band and the sky and wind tabs at their shared centre.
 pub fn compose_grow_left(
     faithful: &[u8],
     ring: &[u8],
     window: PeekWindow,
     canvas: &Canvas,
     flash: Option<PotionFlashPlayback>,
+    bands: Option<Bands<'_>>,
 ) -> Vec<u8> {
     let mut rgba = vec![0; canvas.w as usize * canvas.h as usize * 4];
     paint_chrome(&mut rgba, canvas);
@@ -184,5 +198,16 @@ pub fn compose_grow_left(
         flash_ring(&mut rgba, canvas, playback);
     }
     copy_core(&mut rgba, canvas, faithful);
+    if let Some(bands) = bands {
+        paint_bands(
+            &mut rgba,
+            canvas,
+            faithful,
+            bands.snapshot,
+            bands.font,
+            bands.hp_colours,
+            bands.open,
+        );
+    }
     rgba
 }
