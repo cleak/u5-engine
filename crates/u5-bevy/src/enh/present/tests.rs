@@ -173,6 +173,9 @@ fn no_host_exists_while_no_step_is_registered() {
         every,
     ] {
         let mut app = app();
+        // With every toggle on, the display chords (F11, Ctrl+P) bind, so
+        // the hotkey router runs and reads the keyboard.
+        app.init_resource::<ButtonInput<KeyCode>>();
         add_enhancements(&mut app, &launch);
         assert!(!app.world().contains_resource::<PresentSteps>());
         assert!(!app.world().contains_resource::<PresentHost>());

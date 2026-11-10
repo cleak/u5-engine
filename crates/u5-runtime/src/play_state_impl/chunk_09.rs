@@ -4,6 +4,11 @@ use std::path::Path;
 use crate::rest_camp::camp_cooldown_after_hour_rollover;
 use crate::*;
 
+/// The ring peek (Phase B design 2.3.6), a child module so it can use this
+/// chunk's private top-down helpers.
+#[path = "ring_peek.rs"]
+pub mod ring_peek;
+
 #[derive(Clone, Copy, Debug)]
 struct PreparedTopDownCell {
     terrain: u8,

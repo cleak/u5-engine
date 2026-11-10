@@ -32,10 +32,12 @@ use std::path::{Path, PathBuf};
 
 use toml_edit::{Array, Item, Value};
 use u5_host_desktop::{ConfigDocument, DesktopPaths, HostEnv};
+use u5_runtime::TileGraphicsDepth;
+use u5_runtime::enhancements::display::RASTER_WORDS;
 use u5_runtime::enhancements::{
     ApplyAt, CatalogueRow, CliSetting, HostCapabilities, LockReason, LockState, OPTIONS,
     OptionDefault, OptionKind, PRESET_KEY, PresetLabel, ResolveInput, ResolvedEnhancements,
-    SettingValue, SettingsSink, SettingsSource, resolve,
+    SettingValue, SettingsSink, SettingsSource, raster_word, resolve,
 };
 
 /// `U5_PARITY_LOCK=1` forces every enhancement off (1.3.11).
@@ -320,6 +322,21 @@ pub fn launch_enhancements(
     settings
 }
 
+/// The tile graphics a play launch draws with (design 2.4.1): the
+/// `--raster-depth` the command line gave, unless the resolved
+/// `display.raster` chose another set. `--raster-depth` is that setting's
+/// alias; both of its words load the 16-colour tiles in this build.
+pub fn launch_raster_depth(
+    command_line: TileGraphicsDepth,
+    resolved: &ResolvedEnhancements,
+) -> TileGraphicsDepth {
+    let word = raster_word(resolved);
+    if Some(word) == RASTER_WORDS.first().copied() {
+        return command_line;
+    }
+    TileGraphicsDepth::from_key(word).unwrap_or(command_line)
+}
+
 /// The shell's launch config for one play launch (design 1.3.3).
 ///
 /// Settings changed in play are stored back into the file this launch read,
@@ -494,14 +511,26 @@ impl CliAlias {
     }
 }
 
+/// Catalogue aliases that `cli.rs` parses itself: `--preset`, and the
+/// existing `--raster-depth`, which is `display.raster`'s alias and stays
+/// the 1.0.1 launch parameter (design 2.4.1).
+pub const SELF_PARSED_ALIASES: &[&str] = &["--preset", "--raster-depth"];
+
 /// The catalogue alias `flag` names, if any. Only shipped rows' aliases
-/// exist (U13), and `--preset`, which `cli.rs` parses itself, is not
-/// returned.
+/// exist (U13), and the [`SELF_PARSED_ALIASES`] are not returned.
 pub fn find_cli_alias(flag: &str) -> Option<CliAlias> {
-    for row in CatalogueRow::all().filter(|row| row.is_shipped()) {
+    find_cli_alias_in(CatalogueRow::all().filter(|row| row.is_shipped()), flag)
+}
+
+/// [`find_cli_alias`] over `rows`.
+pub fn find_cli_alias_in(
+    rows: impl IntoIterator<Item = CatalogueRow>,
+    flag: &str,
+) -> Option<CliAlias> {
+    for row in rows {
         let switch = is_switch(row);
         for alias in row.cli_aliases() {
-            if *alias == "--preset" {
+            if SELF_PARSED_ALIASES.contains(alias) {
                 continue;
             }
             if flag == *alias {
@@ -538,7 +567,7 @@ pub fn cli_alias_usage() -> String {
         for alias in row
             .cli_aliases()
             .iter()
-            .filter(|alias| **alias != "--preset")
+            .filter(|alias| !SELF_PARSED_ALIASES.contains(alias))
         {
             let usage = if switch {
                 format!("{alias}, --no-{}", alias.trim_start_matches("--"))
@@ -905,6 +934,147 @@ mod tests {
                 );
             }
         }
+    }
+
+    /// The `[display]` aliases of design 2.3.3, as they will parse once
+    /// their rows ship (they are hidden in this build, so none parses yet).
+    #[test]
+    fn display_aliases_parse_as_the_design_lists_them() {
+        let display = || CatalogueRow::all().filter(|row| row.key().starts_with("display."));
+        for (flag, alias) in [
+            (
+                "--scale-mode",
+                CliAlias::Valued {
+                    key: "display.scale_mode",
+                },
+            ),
+            (
+                "--pixel-aspect",
+                CliAlias::Valued {
+                    key: "display.pixel_aspect",
+                },
+            ),
+            (
+                "--pillar-fill",
+                CliAlias::Valued {
+                    key: "display.pillar_fill",
+                },
+            ),
+            (
+                "--bezel-image",
+                CliAlias::Valued {
+                    key: "display.bezel_image",
+                },
+            ),
+            (
+                "--fullscreen",
+                CliAlias::Switch {
+                    key: "display.fullscreen",
+                    on: true,
+                },
+            ),
+            (
+                "--no-fullscreen",
+                CliAlias::Switch {
+                    key: "display.fullscreen",
+                    on: false,
+                },
+            ),
+            (
+                "--fullscreen-key",
+                CliAlias::Switch {
+                    key: "display.fullscreen_key",
+                    on: true,
+                },
+            ),
+            (
+                "--no-fullscreen-key",
+                CliAlias::Switch {
+                    key: "display.fullscreen_key",
+                    on: false,
+                },
+            ),
+            (
+                "--grow-left",
+                CliAlias::Switch {
+                    key: "display.grow_left",
+                    on: true,
+                },
+            ),
+            (
+                "--no-grow-left",
+                CliAlias::Switch {
+                    key: "display.grow_left",
+                    on: false,
+                },
+            ),
+            (
+                "--vsync",
+                CliAlias::Switch {
+                    key: "display.vsync",
+                    on: true,
+                },
+            ),
+            (
+                "--no-vsync",
+                CliAlias::Switch {
+                    key: "display.vsync",
+                    on: false,
+                },
+            ),
+        ] {
+            assert_eq!(find_cli_alias_in(display(), flag), Some(alias), "{flag}");
+            assert_eq!(
+                find_cli_alias(flag),
+                None,
+                "{flag} is hidden until it ships"
+            );
+        }
+        // Valued keys have no `--no-` form; `--raster-depth` stays cli.rs's
+        // own flag.
+        for flag in ["--no-scale-mode", "--no-pillar-fill", "--raster-depth"] {
+            assert_eq!(find_cli_alias_in(display(), flag), None, "{flag}");
+        }
+        assert!(SELF_PARSED_ALIASES.contains(&"--raster-depth"));
+    }
+
+    #[test]
+    fn display_raster_feeds_the_launch_parameter() {
+        use u5_runtime::enhancements::{DISPLAY_P1, resolve_as_shipped};
+        let resolved = |cli: &[CliSetting]| {
+            resolve_as_shipped(
+                ResolveInput {
+                    stored: None,
+                    cli,
+                    lock: LockState::Off,
+                    caps: HostCapabilities::ALL,
+                },
+                &[DISPLAY_P1],
+            )
+        };
+        let classic = ResolvedEnhancements::classic();
+        assert_eq!(
+            launch_raster_depth(TileGraphicsDepth::Ega16, &classic),
+            TileGraphicsDepth::Ega16
+        );
+        let tandy = resolved(&[CliSetting::Set {
+            key: "display.raster".into(),
+            value: "tandy".into(),
+        }]);
+        assert!(tandy.notes.is_empty());
+        assert!(
+            tandy.is_classic(),
+            "raster is a launch parameter, not a toggle"
+        );
+        // Both words draw the 16-colour tiles in this build.
+        assert_eq!(
+            launch_raster_depth(TileGraphicsDepth::Ega16, &tandy),
+            TileGraphicsDepth::Ega16
+        );
+        assert_eq!(
+            launch_raster_depth(TileGraphicsDepth::Ega16, &resolved(&[])),
+            TileGraphicsDepth::Ega16
+        );
     }
 
     #[test]

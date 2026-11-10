@@ -179,6 +179,20 @@ pub fn resolve(input: ResolveInput<'_>) -> ResolvedEnhancements {
     Catalogue::BUILT_IN.resolve(input)
 }
 
+/// The catalogue's test override (build plan, M1): resolves against the
+/// built-in catalogue as if `also_shipped` had shipped too, so a feature's
+/// tests can reach its rows before the package that unhides them (U13).
+/// Hosts never call it.
+#[doc(hidden)]
+pub fn resolve_as_shipped(input: ResolveInput<'_>, also_shipped: &[Phase]) -> ResolvedEnhancements {
+    let shipped: Vec<Phase> = SHIPPED_PHASES.iter().chain(also_shipped).copied().collect();
+    Catalogue {
+        shipped: &shipped,
+        ..Catalogue::BUILT_IN
+    }
+    .resolve(input)
+}
+
 /// The catalogue a resolution runs against: the built-in one, or a test
 /// fixture with rows later packages add. A toggle's bit is its position in
 /// `toggles`; for the built-in catalogue that is `Toggle as u8`, which the
@@ -216,8 +230,14 @@ impl Catalogue<'static> {
 }
 
 impl<'a> Catalogue<'a> {
+    /// The row named `key`. A driven toggle is never found: its valued
+    /// setting of the same key is the row.
     fn find(&self, key: &str) -> Option<Row> {
-        if let Some(index) = self.toggles.iter().position(|spec| spec.key == key) {
+        if let Some(index) = self
+            .toggles
+            .iter()
+            .position(|spec| spec.key == key && !spec.driven)
+        {
             return Some(Row::Toggle(index));
         }
         self.options
@@ -275,7 +295,7 @@ impl<'a> Catalogue<'a> {
         let candidates = self
             .toggles
             .iter()
-            .filter(|spec| self.is_shipped(spec.ships))
+            .filter(|spec| !spec.driven && self.is_shipped(spec.ships))
             .map(|spec| spec.key)
             .chain(
                 self.options
@@ -833,6 +853,7 @@ mod tests {
             cli_aliases: &[],
             soft_deps: &[],
             needs,
+            driven: false,
         }
     }
 

@@ -271,22 +271,45 @@ fn chords_parse_without_regard_to_case_or_modifier_order() {
     assert_eq!(KeyChord::parse("Esc"), Some(KeyChord::new(KeyCode::Escape)));
 }
 
-/// Bindings follow their feature. No feature row has landed in the
-/// catalogue yet, so nothing binds in this build; the parked minimap and
-/// the contextual pair never bind through `[keys]`.
+/// Bindings follow their feature. Of the feature rows in the catalogue so
+/// far, only the display chapter's two bind a chord: F11 for
+/// `display.fullscreen_key` and Ctrl+P for `display.grow_left`. The parked
+/// minimap and the contextual pair never bind through `[keys]`.
 #[test]
 fn bindings_follow_their_features() {
     let mut every = FeatureToggles::CLASSIC;
     for spec in TOGGLES {
         every.set(spec.toggle, true);
     }
-    for action in EnhAction::ALL {
-        assert!(!action.enabled(every), "{action:?}");
-    }
+    let enabled: Vec<EnhAction> = EnhAction::ALL
+        .into_iter()
+        .filter(|action| action.enabled(every))
+        .collect();
+    assert_eq!(
+        enabled,
+        [EnhAction::ToggleFullscreen, EnhAction::ToggleColumn]
+    );
     let (map, notes) = KeyMap::for_toggles(&default_keys(), every);
-    assert!(map.is_empty());
     assert!(notes.is_empty());
     assert!(!menu_overlay_on(every));
+    // Each binding follows its own toggle only.
+    let mut one = FeatureToggles::CLASSIC;
+    one.set(Toggle::DisplayFullscreenKey, true);
+    assert!(EnhAction::ToggleFullscreen.enabled(one));
+    assert!(!EnhAction::ToggleColumn.enabled(one));
+    let mut one = FeatureToggles::CLASSIC;
+    one.set(Toggle::DisplayGrowLeft, true);
+    assert!(EnhAction::ToggleColumn.enabled(one));
+    assert!(!EnhAction::ToggleFullscreen.enabled(one));
+    assert!(!map.is_empty());
+    // Every other display toggle binds nothing.
+    let mut rest = FeatureToggles::CLASSIC;
+    for toggle in u5_runtime::enhancements::DISPLAY_TOGGLES {
+        if ![Toggle::DisplayFullscreenKey, Toggle::DisplayGrowLeft].contains(toggle) {
+            rest.set(*toggle, true);
+        }
+    }
+    assert!(KeyMap::for_toggles(&default_keys(), rest).0.is_empty());
 
     let modal: Vec<EnhAction> = EnhAction::ALL
         .into_iter()

@@ -7,6 +7,9 @@
 //! (`u5-host-desktop`, `u5-tui`, or a port's own host layer) reads stored
 //! settings and hands the engine already-resolved values.
 //!
+//! - [`display`]: the `[display]` settings' typed view,
+//!   [`ResolvedEnhancements::display`] and [`DisplaySettings`] (design
+//!   2.3.2).
 //! - [`catalogue`]: the toggle and option catalogue, effect classes, apply
 //!   points, preset tiers, shipping phases and the three presets
 //!   (design 1.3.2, 1.4.1 and 1.4.2).
@@ -35,6 +38,7 @@
 
 pub mod catalogue;
 pub mod digest;
+pub mod display;
 pub mod idle;
 pub mod matrix;
 pub mod resolve;
@@ -47,8 +51,13 @@ pub use catalogue::{
     SIDE_CLAIM_KEYS, SIDE_SPACE_KEYS, SoftDep, TOGGLE_KEYS, TOGGLES, Tag, Tier, Toggle, ToggleSpec,
     settings_table,
 };
+pub use catalogue::{DISPLAY_P1, DISPLAY_P2, DISPLAY_P8, LAUNCH_PARAMETER_KEYS};
 pub use digest::{
     DIGEST_GROUPS, SKIPPED_FIELDS, TrajectoryDigest, digest_groups, trajectory_digest,
+};
+pub use display::{
+    BezelImage, DISPLAY_TOGGLES, DisplaySettings, GROW_LEFT_SUB_KEYS, GrowLeft, PillarFill,
+    PixelAspect, REMOVED_DISPLAY_KEYS, ScaleMode, raster_word,
 };
 pub use idle::{GUARDED_DRAINS, GuardedDrain, IdleBlocker, IdlePromptKind};
 pub use matrix::{
@@ -57,7 +66,7 @@ pub use matrix::{
 };
 pub use resolve::{
     CHEATS_SWITCH, KeyBindings, PRESET_KEY, PresetLabel, ResolveInput, ResolvedEnhancements,
-    SettingValues, resolve,
+    SettingValues, resolve, resolve_as_shipped,
 };
 pub use sidecar::{
     CONTAINER_MAGIC, CONTAINER_VERSION, Container, ContainerError, Freshness,

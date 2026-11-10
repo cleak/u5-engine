@@ -460,3 +460,47 @@ fn the_settings_docs_list_every_enhancement_option() {
         );
     }
 }
+
+/// An explicit-path launch resolves with no stored source, so a
+/// `config.toml` full of `[display]` keys reaches nothing (Phase B design
+/// 2.3.3, build plan M1-01). The default launch does read it.
+#[test]
+fn an_explicit_path_launch_reads_no_display_settings() {
+    use u5_runtime::enhancements::{DisplaySettings, LockState};
+    use u5_tui::enhancement_settings::resolve_launch;
+
+    let scratch = Scratch::new("display-explicit");
+    fs::write(
+        scratch.config(),
+        "[display]\ngrow_left = true\nscale_mode = \"sharp\"\nvsync = false\ncrawl = false\n",
+    )
+    .unwrap();
+    // `run_visual` and `run_visual_intro` resolve with `SettingsFile::Ignore`
+    // (pinned by `only_the_default_launch_reads_the_file`): no file.
+    let explicit = resolve_launch(None, &[], LockState::Off);
+    assert_eq!(explicit.config, None);
+    assert!(explicit.resolved.notes.is_empty());
+    assert!(explicit.resolved.is_classic());
+    assert_eq!(explicit.resolved.display(), DisplaySettings::default());
+
+    // The default launch reads the same file. The rows are hidden in this
+    // build, so each is noted and kept at its default.
+    let default = resolve_launch(Some(&scratch.config()), &[], LockState::Off);
+    assert_eq!(default.config.as_deref(), Some(scratch.config().as_path()));
+    let notes: Vec<String> = default
+        .resolved
+        .notes
+        .iter()
+        .map(ToString::to_string)
+        .collect();
+    assert_eq!(
+        notes,
+        [
+            "display.grow_left: not available in this build",
+            "display.scale_mode: not available in this build",
+            "display.vsync: not available in this build",
+            "display.crawl: not available in this build",
+        ]
+    );
+    assert_eq!(default.resolved.display(), DisplaySettings::default());
+}

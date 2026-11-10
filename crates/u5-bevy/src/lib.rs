@@ -190,6 +190,11 @@ use u5_runtime::{TEXT_SCREEN_COLUMNS, TEXT_SCREEN_ROWS};
 /// its own commit hand-off.
 mod u4_transfer;
 
+/// The display chapter (Phase B design chapter 2): the [`display::Display`]
+/// settings and [`display::DisplayPlugin`], inside the foundation's plugin,
+/// and the window's first mode. Absent from the app under Classic.
+pub mod display;
+
 /// The enhancements foundation (Phase B design 1.3.5): the launch config,
 /// [`EnhancementsPlugin`] and the [`EnhSet`] slots. Absent from the app
 /// under Classic.
@@ -1513,12 +1518,15 @@ pub fn run_visual_loop_with(
     let preset_keys: Vec<char> = preset_keys_from_env();
     let mut app = App::new();
     app.add_plugins(DefaultPlugins.set(WindowPlugin {
-        primary_window: Some(Window {
-            title: "Ultima V".into(),
-            resolution: (display_w, display_h).into(),
-            resizable: true,
-            ..default()
-        }),
+        primary_window: Some(display::initial_window(
+            Window {
+                title: "Ultima V".into(),
+                resolution: (display_w, display_h).into(),
+                resizable: true,
+                ..default()
+            },
+            &launch,
+        )),
         ..default()
     }));
     build_visual_app(
@@ -10104,22 +10112,26 @@ fn run_visual_intro_menu_app(
     };
     let mut app = App::new();
     app.add_plugins(DefaultPlugins.set(WindowPlugin {
-        primary_window: Some(Window {
-            title: "Ultima V Intro".into(),
-            // The same 960x720 window as gameplay, so Journey Onward never
-            // resizes the window (the resize left stale compositor pixels
-            // beside the gameplay surface on the streaming display).
-            resolution: {
-                let size = aspect_corrected_display_size(
-                    INTRO_FRAMEBUFFER_WIDTH,
-                    INTRO_FRAMEBUFFER_HEIGHT,
-                    DISPLAY_SCALE,
-                );
-                (size.x, size.y).into()
+        primary_window: Some(display::initial_window(
+            Window {
+                title: "Ultima V Intro".into(),
+                // The same 960x720 window as gameplay, so Journey Onward
+                // never resizes the window (the resize left stale compositor
+                // pixels beside the gameplay surface on the streaming
+                // display).
+                resolution: {
+                    let size = aspect_corrected_display_size(
+                        INTRO_FRAMEBUFFER_WIDTH,
+                        INTRO_FRAMEBUFFER_HEIGHT,
+                        DISPLAY_SCALE,
+                    );
+                    (size.x, size.y).into()
+                },
+                resizable: true,
+                ..default()
             },
-            resizable: true,
-            ..default()
-        }),
+            launch,
+        )),
         ..default()
     }));
     build_visual_intro_app(

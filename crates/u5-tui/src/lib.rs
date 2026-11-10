@@ -25,7 +25,8 @@ pub use cli::{
 #[cfg(feature = "visual")]
 pub use enhancement_settings::visual_launch_config;
 pub use enhancement_settings::{
-    PARITY_LOCK_ENV, PARITY_LOCK_LINE, SettingsFile, launch_enhancements, run_show_settings,
+    PARITY_LOCK_ENV, PARITY_LOCK_LINE, SettingsFile, launch_enhancements, launch_raster_depth,
+    run_show_settings,
 };
 pub use equivalence::{
     FeatureHooks, MatrixRow, Mismatch, ReplayHooks, RunRecord, TerminalFeature, TokenEvent,

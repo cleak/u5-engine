@@ -34,6 +34,9 @@
 //! [`settings_table`] renders the catalogue as the table in
 //! `docs/settings.md`; a test keeps the two equal.
 
+use super::display::{
+    GROW_LEFT_LIGHT_WORDS, PILLAR_FILL_WORDS, PIXEL_ASPECT_WORDS, RASTER_WORDS, SCALE_MODE_WORDS,
+};
 use super::source::Capability;
 
 /// The three effect classes (user requirement, 2026-11-01).
@@ -117,6 +120,14 @@ const FOUNDATION_P5: Phase = Phase::new(1, "P5");
 const FOUNDATION_P6: Phase = Phase::new(1, "P6");
 /// Chapter 1, P6b: Frozen overlays, optional and later (U1).
 const FOUNDATION_P6B: Phase = Phase::new(1, "P6b");
+/// Chapter 2, P1 (T0): scaling, fullscreen and vsync (build plan M1-02,
+/// M1-03).
+pub const DISPLAY_P1: Phase = Phase::new(2, "P1");
+/// Chapter 2, P2 (T1): the side fill (build plan M1-04).
+pub const DISPLAY_P2: Phase = Phase::new(2, "P2");
+/// Chapter 2, P8: the grow-left layout and its sub-toggles, unhidden by the
+/// milestone's release package (build plan M1-16).
+pub const DISPLAY_P8: Phase = Phase::new(2, "P8");
 
 /// Every phase that has shipped in this build. Shipping a phase is adding
 /// it here, in the package that completes it; its rows then become
@@ -150,6 +161,12 @@ pub struct ToggleSpec {
     /// What the host must offer; on a host without it the resolver forces
     /// the toggle off with a note (1.3.14).
     pub needs: &'static [Capability],
+    /// The switch of the valued setting with the same key, such as
+    /// `display.scale_mode` (1.3.2): on exactly while that setting is away
+    /// from its default. It is never set by name; the valued setting is
+    /// the row every page, flag and file sees, so [`CatalogueRow`] and the
+    /// resolver skip it.
+    pub driven: bool,
 }
 
 impl ToggleSpec {
@@ -193,6 +210,94 @@ toggles! {
         cli_aliases: &[],
         soft_deps: &[],
         needs: &[],
+        driven: false,
+    },
+    // `[display]`, chapter 2 (design 2.4.1). Every row is class (a) and
+    // applies at the next frame. The four `driven` rows are the switches of
+    // valued settings, listed with those settings in `OPTIONS`.
+    DisplayScaleMode = "display.scale_mode" {
+        label: "How the picture is scaled to the window",
+        class: EffectClass::Presentation,
+        apply: ApplyAt::Frame,
+        tier: Tier::Feature,
+        ships: DISPLAY_P1,
+        tags: &[],
+        cli_aliases: &[],
+        soft_deps: &[],
+        needs: &[],
+        driven: true,
+    },
+    DisplayPixelAspect = "display.pixel_aspect" {
+        label: "Pixel shape",
+        class: EffectClass::Presentation,
+        apply: ApplyAt::Frame,
+        tier: Tier::Feature,
+        ships: DISPLAY_P1,
+        tags: &[],
+        cli_aliases: &[],
+        soft_deps: &[],
+        needs: &[],
+        driven: true,
+    },
+    DisplayFullscreen = "display.fullscreen" {
+        label: "Fullscreen (borderless)",
+        class: EffectClass::Presentation,
+        apply: ApplyAt::Frame,
+        tier: Tier::Feature,
+        ships: DISPLAY_P1,
+        tags: &[],
+        cli_aliases: &["--fullscreen"],
+        soft_deps: &[],
+        needs: &[Capability::Windowed],
+        driven: false,
+    },
+    DisplayFullscreenKey = "display.fullscreen_key" {
+        label: "Switch fullscreen with a key (F11)",
+        class: EffectClass::Presentation,
+        apply: ApplyAt::Frame,
+        tier: Tier::Feature,
+        ships: DISPLAY_P1,
+        tags: &[],
+        cli_aliases: &["--fullscreen-key"],
+        soft_deps: &[],
+        needs: &[Capability::Windowed, Capability::Keyboard],
+        driven: false,
+    },
+    DisplayPillarFill = "display.pillar_fill" {
+        label: "What fills the bars beside the picture",
+        class: EffectClass::Presentation,
+        apply: ApplyAt::Frame,
+        tier: Tier::Feature,
+        ships: DISPLAY_P2,
+        tags: &[],
+        cli_aliases: &[],
+        soft_deps: &[],
+        needs: &[],
+        driven: true,
+    },
+    DisplayGrowLeft = "display.grow_left" {
+        label: "Wider world view (shows more than the original)",
+        class: EffectClass::Presentation,
+        apply: ApplyAt::Frame,
+        tier: Tier::Deviation,
+        ships: DISPLAY_P8,
+        tags: &[Tag::WiderView],
+        cli_aliases: &["--grow-left"],
+        soft_deps: &[],
+        needs: &[],
+        driven: false,
+    },
+    DisplayVsync = "display.vsync" {
+        label: "Wait for the screen's refresh (vsync)",
+        class: EffectClass::Presentation,
+        apply: ApplyAt::Frame,
+        tier: Tier::Feature,
+        ships: DISPLAY_P1,
+        tags: &[],
+        cli_aliases: &[],
+        soft_deps: &[],
+        needs: &[],
+        driven: true,
     },
 }
 
@@ -381,6 +486,64 @@ pub const SIDE_CLAIM_KEYS: &[&str] = &["journal.side_panel", "journal.clue_scrol
 /// own.
 pub const SIDE_SPACE_KEYS: &[&str] = &["display.panel_priority", "display.panel_guard"];
 
+/// Valued settings that feed a launch parameter 1.0.1 already has, rather
+/// than an enhancement: `display.raster` is the existing `--raster-depth`
+/// (design 2.4.1), and both of its values draw the 1.0.1 tiles. They switch
+/// no toggle and are no toggle's sub-option.
+pub const LAUNCH_PARAMETER_KEYS: &[&str] = &["display.raster"];
+
+/// A `[display]` valued setting (design 2.4.1): class (a), feature tier,
+/// applied at the next frame. It switches `toggle` when away from its
+/// default, or is a sub-option of `parent`.
+#[allow(clippy::too_many_arguments)]
+const fn display_option(
+    key: &'static str,
+    label: &'static str,
+    kind: OptionKind,
+    default: OptionDefault,
+    ships: Phase,
+    cli_aliases: &'static [&'static str],
+    toggle: Option<Toggle>,
+    parent: Option<Toggle>,
+) -> OptionSpec {
+    OptionSpec {
+        key,
+        label,
+        kind,
+        default,
+        class: Some(EffectClass::Presentation),
+        apply: ApplyAt::Frame,
+        tier: Tier::Feature,
+        deviation_values: &[],
+        ships,
+        tags: &[],
+        cli_aliases,
+        toggle,
+        parent,
+        needs: &[],
+    }
+}
+
+/// A grow-left sub-option (2.3.2): inert while `display.grow_left` is off,
+/// and shipped with it.
+const fn grow_left_option(
+    key: &'static str,
+    label: &'static str,
+    kind: OptionKind,
+    default: OptionDefault,
+) -> OptionSpec {
+    display_option(
+        key,
+        label,
+        kind,
+        default,
+        DISPLAY_P8,
+        &[],
+        None,
+        Some(Toggle::DisplayGrowLeft),
+    )
+}
+
 /// Every valued setting, in catalogue order.
 pub const OPTIONS: &[OptionSpec] = &[
     OptionSpec {
@@ -433,6 +596,92 @@ pub const OPTIONS: &[OptionSpec] = &[
         "Ctrl+F",
     ),
     key_row("keys.cheats", "Open the cheats page", "Ctrl+F12"),
+    display_option(
+        "display.scale_mode",
+        "How the picture is scaled to the window",
+        OptionKind::Enum(SCALE_MODE_WORDS),
+        OptionDefault::Str("fit"),
+        DISPLAY_P1,
+        &["--scale-mode"],
+        Some(Toggle::DisplayScaleMode),
+        None,
+    ),
+    display_option(
+        "display.pixel_aspect",
+        "Pixel shape: tall like the original screen, or square",
+        OptionKind::Enum(PIXEL_ASPECT_WORDS),
+        OptionDefault::Str("dos"),
+        DISPLAY_P1,
+        &["--pixel-aspect"],
+        Some(Toggle::DisplayPixelAspect),
+        None,
+    ),
+    display_option(
+        "display.pillar_fill",
+        "What fills the bars beside the picture",
+        OptionKind::Enum(PILLAR_FILL_WORDS),
+        OptionDefault::Str("black"),
+        DISPLAY_P2,
+        &["--pillar-fill"],
+        Some(Toggle::DisplayPillarFill),
+        None,
+    ),
+    display_option(
+        "display.pillar_color",
+        "Colour of the bars, for a solid fill",
+        OptionKind::Color,
+        OptionDefault::Str("#000000"),
+        DISPLAY_P2,
+        &[],
+        None,
+        Some(Toggle::DisplayPillarFill),
+    ),
+    display_option(
+        "display.bezel_image",
+        "Picture for the bars, a PNG file",
+        OptionKind::Path,
+        OptionDefault::Str(""),
+        DISPLAY_P2,
+        &["--bezel-image"],
+        None,
+        Some(Toggle::DisplayPillarFill),
+    ),
+    grow_left_option(
+        "display.grow_left_light",
+        "Daylight reach: whole screen, or original distance",
+        OptionKind::Enum(GROW_LEFT_LIGHT_WORDS),
+        OptionDefault::Str("scaled"),
+    ),
+    grow_left_option(
+        "display.crawl",
+        "Messages over the map",
+        OptionKind::Bool,
+        OptionDefault::Bool(true),
+    ),
+    grow_left_option(
+        "display.typed_colour",
+        "Typed text in cyan",
+        OptionKind::Bool,
+        OptionDefault::Bool(true),
+    ),
+    grow_left_option(
+        "display.ribbon_hp_colours",
+        "Health colours (red when low, green when poisoned)",
+        OptionKind::Bool,
+        OptionDefault::Bool(true),
+    ),
+    grow_left_option(
+        "display.dither",
+        "Fade effects",
+        OptionKind::Bool,
+        OptionDefault::Bool(true),
+    ),
+    grow_left_option(
+        "display.centre_party",
+        "Keep the party centred when the side column is open",
+        OptionKind::Bool,
+        OptionDefault::Bool(false),
+    ),
     OptionSpec {
         key: "display.panel_priority",
         label: "Which side panel wins when two want one side",
@@ -465,6 +714,32 @@ pub const OPTIONS: &[OptionSpec] = &[
         parent: None,
         needs: &[],
     },
+    display_option(
+        "display.vsync",
+        "Wait for the screen's refresh (vsync)",
+        OptionKind::Bool,
+        OptionDefault::Bool(true),
+        DISPLAY_P1,
+        &["--vsync"],
+        Some(Toggle::DisplayVsync),
+        None,
+    ),
+    OptionSpec {
+        key: "display.raster",
+        label: "Tile graphics",
+        kind: OptionKind::Enum(RASTER_WORDS),
+        default: OptionDefault::Str("ega"),
+        class: Some(EffectClass::Presentation),
+        apply: ApplyAt::NextLaunch,
+        tier: Tier::Feature,
+        deviation_values: &[],
+        ships: DISPLAY_P1,
+        tags: &[],
+        cli_aliases: &["--raster-depth"],
+        toggle: None,
+        parent: None,
+        needs: &[],
+    },
 ];
 
 /// A catalogue row of either kind.
@@ -477,7 +752,9 @@ pub enum CatalogueRow {
 impl CatalogueRow {
     /// The row for `key`, if the catalogue has one.
     pub fn find(key: &str) -> Option<CatalogueRow> {
-        if let Some(toggle) = Toggle::from_key(key) {
+        if let Some(toggle) = Toggle::from_key(key)
+            && !toggle.spec().driven
+        {
             return Some(CatalogueRow::Toggle(toggle.spec()));
         }
         OPTIONS
@@ -486,10 +763,12 @@ impl CatalogueRow {
             .map(CatalogueRow::Option)
     }
 
-    /// Every row, toggles first, each kind in catalogue order.
+    /// Every row, toggles first, each kind in catalogue order. A driven
+    /// toggle is not a row of its own: its valued setting is.
     pub fn all() -> impl Iterator<Item = CatalogueRow> {
         TOGGLES
             .iter()
+            .filter(|spec| !spec.driven)
             .map(CatalogueRow::Toggle)
             .chain(OPTIONS.iter().map(CatalogueRow::Option))
     }
@@ -989,7 +1268,50 @@ mod tests {
                 assert!(aliases.insert(*alias), "duplicate alias {alias}");
             }
         }
-        assert_eq!(keys.len(), TOGGLES.len() + OPTIONS.len());
+        assert_eq!(keys.len(), row_count());
+    }
+
+    /// The rows [`CatalogueRow::all`] lists: every option and every toggle
+    /// that is not driven.
+    fn row_count() -> usize {
+        TOGGLES.iter().filter(|spec| !spec.driven).count() + OPTIONS.len()
+    }
+
+    #[test]
+    fn each_driven_toggle_is_the_switch_of_one_valued_setting() {
+        for spec in TOGGLES.iter().filter(|spec| spec.driven) {
+            let owners: Vec<&OptionSpec> = OPTIONS
+                .iter()
+                .filter(|option| option.toggle == Some(spec.toggle))
+                .collect();
+            assert_eq!(owners.len(), 1, "{} has one valued setting", spec.key);
+            let option = owners[0];
+            assert_eq!(option.key, spec.key, "a driven toggle shares its key");
+            assert_eq!(Some(spec.class), option.class, "{}", spec.key);
+            assert_eq!(spec.ships, option.ships, "{}", spec.key);
+            assert_eq!(spec.tier, option.tier, "{}", spec.key);
+            assert!(spec.cli_aliases.is_empty(), "{}", spec.key);
+            // The valued setting is the row: find and all never see the
+            // switch.
+            assert_eq!(
+                CatalogueRow::find(spec.key),
+                Some(CatalogueRow::Option(option))
+            );
+            assert!(
+                CatalogueRow::all().all(|row| row != CatalogueRow::Toggle(spec)),
+                "{}",
+                spec.key
+            );
+            // The switch is still a toggle bit the shell can test.
+            assert_eq!(Toggle::from_key(spec.key), Some(spec.toggle));
+        }
+        // Every option that switches a toggle switches a driven one of the
+        // same key, so a toggle is never set both by name and by value.
+        for option in OPTIONS.iter().filter(|option| option.toggle.is_some()) {
+            let toggle = option.toggle.unwrap().spec();
+            assert!(toggle.driven, "{} switches a named toggle", option.key);
+            assert_eq!(toggle.key, option.key);
+        }
     }
 
     #[test]
@@ -1122,9 +1444,10 @@ mod tests {
         // Classic and the feature's plugin out (1.3.5). Foundation rows
         // (no effect class) change nothing by themselves.
         for spec in OPTIONS.iter().filter(|spec| spec.class.is_some()) {
-            if SIDE_SPACE_KEYS.contains(&spec.key) {
+            if SIDE_SPACE_KEYS.contains(&spec.key) || LAUNCH_PARAMETER_KEYS.contains(&spec.key) {
                 // The arbiter's settings: inert while no side-claiming
-                // toggle is on.
+                // toggle is on. A launch parameter changes nothing 1.0.1
+                // does not already offer.
                 assert_eq!((spec.toggle, spec.parent), (None, None), "{}", spec.key);
                 continue;
             }
@@ -1143,7 +1466,7 @@ mod tests {
     fn the_settings_table_has_one_line_per_row() {
         let table = settings_table();
         let lines: Vec<&str> = table.lines().collect();
-        assert_eq!(lines.len(), 2 + TOGGLES.len() + OPTIONS.len());
+        assert_eq!(lines.len(), 2 + row_count());
         for (line, row) in lines[2..].iter().zip(CatalogueRow::all()) {
             assert!(line.starts_with(&format!("| {} | ", row.key())), "{line}");
             assert_eq!(line.ends_with("| yes |"), row.is_shipped(), "{line}");

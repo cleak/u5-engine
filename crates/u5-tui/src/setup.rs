@@ -765,7 +765,12 @@ pub fn run_default_launch(
         false,
     );
     let launch = crate::enhancement_settings::visual_launch_config(settings, &game_dir);
-    u5_bevy::run_visual_intro_loop_with(&game_dir, u5_runtime::TileGraphicsDepth::Ega16, launch)
+    // `display.raster` feeds the 1.0.1 launch parameter (design 2.4.1).
+    let depth = crate::enhancement_settings::launch_raster_depth(
+        u5_runtime::TileGraphicsDepth::Ega16,
+        &launch.enhancements,
+    );
+    u5_bevy::run_visual_intro_loop_with(&game_dir, depth, launch)
         .map(|_exit| ())
         .map_err(|error| describe_failure(&error, Some(&ready)))
 }

@@ -111,6 +111,7 @@ pub mod play_state_struct;
 pub mod text_hold;
 pub use play_state_impl::CombatKlimbCurrentCell;
 pub use play_state_impl::ExplorationTurnGateOutcome;
+pub use play_state_impl::PeekLightPolicy;
 pub use play_state_impl::TownRestBurstOutcome;
 pub mod predicates;
 pub mod prng;

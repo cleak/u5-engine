@@ -542,7 +542,7 @@ pub(super) fn is_modifier(key: KeyCode) -> bool {
 
 /// Whether the features in force want the router even with nothing bound:
 /// the menu overlay binds F12 itself (1.3.6).
-fn menu_overlay_on(toggles: FeatureToggles) -> bool {
+pub(crate) fn menu_overlay_on(toggles: FeatureToggles) -> bool {
     Toggle::from_key("menu.overlay").is_some_and(|toggle| toggles.on(toggle))
 }
 

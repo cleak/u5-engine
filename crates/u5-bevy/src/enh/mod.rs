@@ -33,6 +33,8 @@
 //! - The save watcher (`sidecar_io`) is added only while a feature that
 //!   keeps a per-save sidecar is on and the host gave a save folder, and
 //!   runs only while such a feature is on.
+//! - The display chapter's plugin ([`crate::display`]) is added only while
+//!   a display toggle or the menu overlay is on.
 //!
 //! The Bevy half of the trajectory-equivalence harness (`equivalence`,
 //! test-only) runs the real `--visual` app headless, feature on against
@@ -218,6 +220,7 @@ impl Plugin for EnhancementsPlugin {
             self.launch.enhancements.toggles,
             self.launch.save_dir.as_deref(),
         );
+        crate::display::add_display(app, &self.launch);
     }
 }
 

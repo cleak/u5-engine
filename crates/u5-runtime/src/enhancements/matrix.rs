@@ -13,7 +13,8 @@
 //!   (each at its default and its alternates), so every pair of values of
 //!   two such keys appears in some row.
 //! - **all on except cheats**: every toggle on except the cheats section,
-//!   deviation-tier toggles included.
+//!   deviation-tier toggles included. A driven toggle (the switch of a
+//!   valued setting) is reached through that setting, never by name.
 //!
 //! Classic itself is not a row: the suite always runs it (and compares it
 //! with the 1.0.1 route-smoke manifest).
@@ -128,7 +129,7 @@ fn spare_chord(key: &str) -> String {
 pub fn pairwise_factors() -> Vec<PairwiseFactor> {
     let toggles = TOGGLES
         .iter()
-        .filter(|spec| !is_cheat(CatalogueRow::Toggle(spec)))
+        .filter(|spec| !spec.driven && !is_cheat(CatalogueRow::Toggle(spec)))
         .map(|spec: &ToggleSpec| PairwiseFactor {
             key: spec.key,
             values: vec!["false".to_string(), "true".to_string()],
@@ -282,7 +283,7 @@ pub fn toggle_matrix() -> Vec<MatrixRow> {
         name: ALL_ON_EXCEPT_CHEATS.to_string(),
         settings: TOGGLES
             .iter()
-            .filter(|spec| !is_cheat(CatalogueRow::Toggle(spec)))
+            .filter(|spec| !spec.driven && !is_cheat(CatalogueRow::Toggle(spec)))
             .map(|spec| set(spec.key, "true"))
             .collect(),
     });
@@ -438,7 +439,7 @@ mod tests {
             .iter()
             .find(|row| row.name == ALL_ON_EXCEPT_CHEATS)
             .unwrap();
-        for spec in TOGGLES {
+        for spec in TOGGLES.iter().filter(|spec| !spec.driven) {
             let listed = all_on.settings.contains(&set(spec.key, "true"));
             assert_eq!(
                 listed,

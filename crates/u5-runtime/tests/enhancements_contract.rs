@@ -85,6 +85,8 @@ const ENGINE_CRATES: &[&str] = &["u5-runtime", "u5-bevy", "u5-bevy-setup", "u5-a
 const ENHANCEMENT_MODULES: &[&str] = &[
     "crates/u5-runtime/src/enhancements",
     "crates/u5-bevy/src/enh",
+    "crates/u5-bevy/src/display.rs",
+    "crates/u5-bevy/src/display",
     "crates/u5-automap/src",
 ];
 
@@ -110,6 +112,10 @@ fn host_names_in(source: &str) -> Vec<&'static str> {
 }
 
 fn rust_files(dir: &Path, out: &mut Vec<PathBuf>) {
+    if dir.is_file() {
+        out.push(dir.to_path_buf());
+        return;
+    }
     let Ok(entries) = fs::read_dir(dir) else {
         return;
     };
@@ -133,6 +139,12 @@ fn engine_enhancement_modules_hold_no_host_code() {
     assert!(
         files.iter().any(|path| path.ends_with("resolve.rs")),
         "the scan must at least see u5-runtime's enhancement module"
+    );
+    assert!(
+        files
+            .iter()
+            .any(|path| path.ends_with("u5-bevy/src/display.rs")),
+        "the scan must see the shell's display module"
     );
     for path in files {
         let source = fs::read_to_string(&path).unwrap();

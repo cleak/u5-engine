@@ -116,6 +116,9 @@ one that types keys must change it exactly as typing those keys would:
 | Key | Setting | Type = default | Cls, When | Tier | Alias | Needs | Available |
 |---|---|---|---|---|---|---|---|
 | enhancements.freeze_overlays | Pause the world while a menu or map is open | bool = false | a, F | deviation | - | - | later (chapter 1 P6b) |
+| display.fullscreen | Fullscreen (borderless) | bool = false | a, F | feature | --fullscreen | a window | later (chapter 2 P1) |
+| display.fullscreen_key | Switch fullscreen with a key (F11) | bool = false | a, F | feature | --fullscreen-key | a window, a keyboard | later (chapter 2 P1) |
+| display.grow_left | Wider world view (shows more than the original) | bool = false | a, F | deviation, wider view | --grow-left | - | later (chapter 2 P8) |
 | enhancements.schema | Settings file format version | int 1..1 = 1 | -, L | feature | - | - | yes |
 | enhancements.preset | Preset | enum classic\|recommended\|everything = classic | -, P | feature | --preset | - | yes |
 | keys.menu | Open the menu | chord = F12 | -, F | feature | - | a keyboard | later (chapter 1 P5) |
@@ -128,6 +131,19 @@ one that types keys must change it exactly as typing those keys would:
 | keys.auto_party | Auto-combat for the party | chord = Ctrl+Shift+A | -, F | feature | - | a keyboard | later (chapter 1 P5) |
 | keys.auto_until_done | Auto-combat until the fight ends | chord = Ctrl+F | -, F | feature | - | a keyboard | later (chapter 1 P5) |
 | keys.cheats | Open the cheats page | chord = Ctrl+F12 | -, F | feature | - | a keyboard | later (chapter 1 P5) |
+| display.scale_mode | How the picture is scaled to the window | enum fit\|sharp\|integer-square\|integer-hybrid\|stretch = fit | a, F | feature | --scale-mode | - | later (chapter 2 P1) |
+| display.pixel_aspect | Pixel shape: tall like the original screen, or square | enum dos\|square = dos | a, F | feature | --pixel-aspect | - | later (chapter 2 P1) |
+| display.pillar_fill | What fills the bars beside the picture | enum black\|solid\|ribbon\|bezel = black | a, F | feature | --pillar-fill | - | later (chapter 2 P2) |
+| display.pillar_color | Colour of the bars, for a solid fill | color = #000000 | a, F | feature | - | - | later (chapter 2 P2) |
+| display.bezel_image | Picture for the bars, a PNG file | path = "" | a, F | feature | --bezel-image | - | later (chapter 2 P2) |
+| display.grow_left_light | Daylight reach: whole screen, or original distance | enum scaled\|faithful = scaled | a, F | feature | - | - | later (chapter 2 P8) |
+| display.crawl | Messages over the map | bool = true | a, F | feature | - | - | later (chapter 2 P8) |
+| display.typed_colour | Typed text in cyan | bool = true | a, F | feature | - | - | later (chapter 2 P8) |
+| display.ribbon_hp_colours | Health colours (red when low, green when poisoned) | bool = true | a, F | feature | - | - | later (chapter 2 P8) |
+| display.dither | Fade effects | bool = true | a, F | feature | - | - | later (chapter 2 P8) |
+| display.centre_party | Keep the party centred when the side column is open | bool = false | a, F | feature | - | - | later (chapter 2 P8) |
 | display.panel_priority | Which side panel wins when two want one side | list of journal\|conversation = [journal, conversation] | a, F | feature | - | - | later (chapter 1 P6) |
 | display.panel_guard | Smallest game picture a side panel may leave, in percent | int 50..100 = 80 | a, F | feature | - | - | later (chapter 1 P6) |
+| display.vsync | Wait for the screen's refresh (vsync) | bool = true | a, F | feature | --vsync | - | later (chapter 2 P1) |
+| display.raster | Tile graphics | enum ega\|tandy = ega | a, L | feature | --raster-depth | - | later (chapter 2 P1) |
 <!-- END GENERATED -->

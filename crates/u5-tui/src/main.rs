@@ -305,14 +305,15 @@ fn run_location_audit(game_dir: &Path, out: &Path) -> io::Result<()> {
 #[cfg(feature = "visual")]
 fn run_visual(args: CliArgs) -> io::Result<()> {
     let launch = launch_config(&args);
-    u5_bevy::run_visual_loop_with(&args.game_dir, args.play_options, args.raster_depth, launch)
-        .map(|_exit| ())
+    let depth = u5_tui::launch_raster_depth(args.raster_depth, &launch.enhancements);
+    u5_bevy::run_visual_loop_with(&args.game_dir, args.play_options, depth, launch).map(|_exit| ())
 }
 
 #[cfg(feature = "visual")]
 fn run_visual_intro(args: CliArgs) -> io::Result<()> {
     let launch = launch_config(&args);
-    u5_bevy::run_visual_intro_loop_with(&args.game_dir, args.raster_depth, launch).map(|_exit| ())
+    let depth = u5_tui::launch_raster_depth(args.raster_depth, &launch.enhancements);
+    u5_bevy::run_visual_intro_loop_with(&args.game_dir, depth, launch).map(|_exit| ())
 }
 
 /// This play launch's launch config, with the startup line printed. QA

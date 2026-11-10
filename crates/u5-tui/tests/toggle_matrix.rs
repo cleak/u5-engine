@@ -117,7 +117,8 @@ fn the_all_on_row_turns_on_every_toggle_but_the_cheats() {
         .find(|row| row.name == ALL_ON_EXCEPT_CHEATS)
         .expect("the all-on row");
     let values = row_values(all_on);
-    for spec in TOGGLES {
+    // A driven toggle is the switch of a valued setting, never set by name.
+    for spec in TOGGLES.iter().filter(|spec| !spec.driven) {
         let on = values.get(spec.key).map(String::as_str) == Some("true");
         assert_eq!(on, !spec.key.starts_with(CHEATS_SECTION), "{}", spec.key);
     }
