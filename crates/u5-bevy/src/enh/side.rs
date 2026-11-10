@@ -15,7 +15,8 @@
 //!   the frame, through its one run condition, [`faithful_fit_owns_frame`].
 //!   Otherwise [`SideLayout`] owns it and `fit_frame_to_side_layout` sizes
 //!   and places the frame sprite. The frame size is unchanged unless a
-//!   panel is granted.
+//!   panel is granted or a [`FramePolicy`] other than the 1.0.1 Fit is in
+//!   force (chapter 2's scale modes, [`solve_frame`]).
 //! - The generic cell-panel renderer draws [`PanelContent::Cells`] into a
 //!   136x200 image (an 8-pixel gutter on the frame side, then 16 cells of
 //!   the frame's own font, a title and 24 rows), repainting only when the
@@ -242,7 +243,7 @@ pub struct PanelClaim {
 
 /// Where everything goes, in logical window pixels from the top-left
 /// corner. `frame` is `Some` exactly while the arbiter owns the frame
-/// sprite, which is while a panel is granted.
+/// sprite, which is while a panel is granted or a scale policy places it.
 #[derive(Resource, Clone, Debug, Default, PartialEq)]
 pub struct SideLayout {
     /// The bars beside the frame, where there are any.
@@ -335,6 +336,49 @@ pub struct SideSolution {
     pub hidden: Vec<PanelKind>,
 }
 
+/// The window as the frame fit sees it: its size in physical pixels and
+/// the display scale (physical pixels per logical pixel).
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct WindowPixels {
+    pub physical: UVec2,
+    pub scale_factor: f32,
+}
+
+impl WindowPixels {
+    pub fn of(window: &Window) -> Self {
+        Self {
+            physical: window.resolution.physical_size(),
+            scale_factor: window.resolution.scale_factor(),
+        }
+    }
+
+    /// A window of `logical` pixels at a display scale of 1.
+    pub fn logical_at_one(logical: Vec2) -> Self {
+        Self {
+            physical: logical.as_uvec2(),
+            scale_factor: 1.0,
+        }
+    }
+
+    pub fn logical(self) -> Vec2 {
+        self.physical.as_vec2() / self.scale_factor
+    }
+}
+
+/// A frame scale policy other than the foundation's Fit: chapter 2's sharp,
+/// integer and stretch modes (2.3.5) supply one.
+pub trait FrameFit: Send + Sync + 'static {
+    /// Where an `image`-sized frame goes in `window`, in logical pixels from
+    /// the top-left corner. `None` leaves the frame to the 1.0.1 fit.
+    fn place(&self, window: WindowPixels, image: UVec2) -> Option<Rect>;
+}
+
+/// The frame scale policy in force. Absent (every run but one with a
+/// non-Fit `display.scale_mode` or `display.pixel_aspect`) is the 1.0.1
+/// Fit.
+#[derive(Resource)]
+pub struct FramePolicy(pub Box<dyn FrameFit>);
+
 /// The layout solver (1.3.8). `window` is the window's logical size,
 /// `image` the presented image's (the 320x200 frame in the foundation),
 /// both under the Fit policy and the 1.20 pixel aspect.
@@ -363,45 +407,7 @@ pub fn solve_side_space(
         // A minimised window: nothing to arrange, nothing to report.
         return SideSolution::default();
     }
-    let mut cells: Vec<PanelClaim> = Vec::new();
-    for claim in claims.iter().filter(|claim| claim.kind.is_cell_panel()) {
-        if !cells.iter().any(|c| c.kind == claim.kind) {
-            cells.push(*claim);
-        }
-    }
-    cells.sort_by_key(|claim| settings.rank(claim.kind));
-
-    // 2. Sides.
-    let mut placed: Vec<(PanelKind, PanelSide)> = Vec::new();
-    let mut hidden: Vec<PanelKind> = Vec::new();
-    let free = |placed: &[(PanelKind, PanelSide)], side: PanelSide| {
-        placed.iter().all(|(_, taken)| *taken != side)
-    };
-    for claim in &cells {
-        let wanted = match claim.side {
-            SidePreference::Left => PanelSide::Left,
-            SidePreference::Right => PanelSide::Right,
-            SidePreference::Auto => continue,
-        };
-        if free(&placed, wanted) {
-            placed.push((claim.kind, wanted));
-        }
-    }
-    for claim in &cells {
-        if placed.iter().any(|(kind, _)| *kind == claim.kind) {
-            continue;
-        }
-        let order: &[PanelSide] = match claim.side {
-            SidePreference::Auto => &[PanelSide::Right, PanelSide::Left],
-            SidePreference::Left => &[PanelSide::Right],
-            SidePreference::Right => &[PanelSide::Left],
-        };
-        match order.iter().copied().find(|side| free(&placed, *side)) {
-            Some(side) => placed.push((claim.kind, side)),
-            None => hidden.push(claim.kind),
-        }
-    }
-    placed.sort_by_key(|(kind, _)| settings.rank(*kind));
+    let (mut placed, mut hidden) = assign_sides(claims, settings);
 
     // 3. The guard.
     let image_size = Vec2::new(image.x as f32, image.y as f32 * DISPLAY_PIXEL_ASPECT);
@@ -455,6 +461,129 @@ pub fn solve_side_space(
         Vec2::new(frame_left, top),
         Vec2::new(frame_left + frame_size.x, top + frame_size.y),
     );
+    SideSolution {
+        layout: framed_layout(window, frame, panel_size, &placed),
+        hidden,
+    }
+}
+
+/// [`solve_side_space`] under a scale policy (2.3.5). With no policy, or
+/// one that leaves this window to the 1.0.1 fit, it is
+/// [`solve_side_space`] exactly. Otherwise the policy places the frame,
+/// which the arbiter then owns even with no panel; with panels, the policy
+/// places the frame and its panels as one image `PANEL_WIDTH` wider per
+/// panel, so an integer mode keeps whole factors for both, and the guard
+/// compares the frame's horizontal scale with and without them.
+pub fn solve_frame(
+    window: WindowPixels,
+    image: UVec2,
+    claims: &[PanelClaim],
+    settings: &SideSpaceSettings,
+    policy: Option<&dyn FrameFit>,
+) -> SideSolution {
+    let logical = window.logical();
+    let alone = policy.and_then(|policy| policy.place(window, image));
+    let (Some(policy), Some(alone)) = (policy, alone) else {
+        return solve_side_space(logical, image, claims, settings);
+    };
+    if logical.x <= 0.0 || logical.y <= 0.0 || image.x == 0 || image.y == 0 {
+        return SideSolution::default();
+    }
+    let (mut placed, mut hidden) = assign_sides(claims, settings);
+    let group = |panels: usize| {
+        let width = image.x + panels as u32 * PANEL_WIDTH;
+        let size = UVec2::new(width, image.y);
+        let rect = policy.place(window, size).unwrap_or_else(|| {
+            let fitted = fitted_display_size(size.x, size.y, logical);
+            let min = (logical - fitted) / 2.0;
+            Rect::from_corners(min, min + fitted)
+        });
+        (rect, rect.width() / width as f32)
+    };
+    let u0 = alone.width() / image.x as f32;
+    let guard = f32::from(settings.guard_percent) / 100.0;
+    let (mut rect, mut u) = group(placed.len());
+    while !placed.is_empty() && u < guard * u0 {
+        let (dropped, _) = placed.pop().expect("not empty");
+        hidden.push(dropped);
+        (rect, u) = group(placed.len());
+    }
+    hidden.sort_by_key(|kind| settings.rank(*kind));
+    if placed.is_empty() {
+        return SideSolution {
+            layout: framed_layout(logical, alone, Vec2::ZERO, &placed),
+            hidden,
+        };
+    }
+    let panel_size = Vec2::new(PANEL_WIDTH as f32 * u, rect.height());
+    let left = if placed.iter().any(|(_, side)| *side == PanelSide::Left) {
+        panel_size.x
+    } else {
+        0.0
+    };
+    let min = Vec2::new(rect.min.x + left, rect.min.y);
+    let frame = Rect::from_corners(min, min + Vec2::new(image.x as f32 * u, rect.height()));
+    SideSolution {
+        layout: framed_layout(logical, frame, panel_size, &placed),
+        hidden,
+    }
+}
+
+/// Step 2 of [`solve_side_space`]: the cell panels that got a side, in
+/// priority order, and those that got none.
+fn assign_sides(
+    claims: &[PanelClaim],
+    settings: &SideSpaceSettings,
+) -> (Vec<(PanelKind, PanelSide)>, Vec<PanelKind>) {
+    let mut cells: Vec<PanelClaim> = Vec::new();
+    for claim in claims.iter().filter(|claim| claim.kind.is_cell_panel()) {
+        if !cells.iter().any(|c| c.kind == claim.kind) {
+            cells.push(*claim);
+        }
+    }
+    cells.sort_by_key(|claim| settings.rank(claim.kind));
+
+    let mut placed: Vec<(PanelKind, PanelSide)> = Vec::new();
+    let mut hidden: Vec<PanelKind> = Vec::new();
+    let free = |placed: &[(PanelKind, PanelSide)], side: PanelSide| {
+        placed.iter().all(|(_, taken)| *taken != side)
+    };
+    for claim in &cells {
+        let wanted = match claim.side {
+            SidePreference::Left => PanelSide::Left,
+            SidePreference::Right => PanelSide::Right,
+            SidePreference::Auto => continue,
+        };
+        if free(&placed, wanted) {
+            placed.push((claim.kind, wanted));
+        }
+    }
+    for claim in &cells {
+        if placed.iter().any(|(kind, _)| *kind == claim.kind) {
+            continue;
+        }
+        let order: &[PanelSide] = match claim.side {
+            SidePreference::Auto => &[PanelSide::Right, PanelSide::Left],
+            SidePreference::Left => &[PanelSide::Right],
+            SidePreference::Right => &[PanelSide::Left],
+        };
+        match order.iter().copied().find(|side| free(&placed, *side)) {
+            Some(side) => placed.push((claim.kind, side)),
+            None => hidden.push(claim.kind),
+        }
+    }
+    placed.sort_by_key(|(kind, _)| settings.rank(*kind));
+    (placed, hidden)
+}
+
+/// The layout for a placed frame: its panels against it and the bars
+/// beside it.
+fn framed_layout(
+    window: Vec2,
+    frame: Rect,
+    panel_size: Vec2,
+    placed: &[(PanelKind, PanelSide)],
+) -> SideLayout {
     let granted = placed
         .iter()
         .map(|(kind, side)| {
@@ -462,7 +591,7 @@ pub fn solve_side_space(
                 PanelSide::Left => frame.min.x - panel_size.x,
                 PanelSide::Right => frame.max.x,
             };
-            let min = Vec2::new(x, top);
+            let min = Vec2::new(x, frame.min.y);
             (*kind, Rect::from_corners(min, min + panel_size))
         })
         .collect();
@@ -470,14 +599,11 @@ pub fn solve_side_space(
         .then(|| Rect::from_corners(Vec2::ZERO, Vec2::new(frame.min.x, window.y)));
     let right =
         (frame.max.x < window.x).then(|| Rect::from_corners(Vec2::new(frame.max.x, 0.0), window));
-    SideSolution {
-        layout: SideLayout {
-            left,
-            right,
-            frame: Some(frame),
-            granted,
-        },
-        hidden,
+    SideLayout {
+        left,
+        right,
+        frame: Some(frame),
+        granted,
     }
 }
 
@@ -526,9 +652,13 @@ pub fn install_side_space(app: &mut App, settings: SideSpaceSettings) {
         .add_systems(Update, draw_side_panels.in_set(EnhSet::Present));
 }
 
-/// A claim to place, or a granted layout to release.
-fn side_space_active(registry: Res<PanelRegistry>, layout: Res<SideLayout>) -> bool {
-    !registry.is_empty() || layout.owns_frame()
+/// A claim to place, a granted layout to release, or a scale policy.
+fn side_space_active(
+    registry: Res<PanelRegistry>,
+    layout: Res<SideLayout>,
+    policy: Option<Res<FramePolicy>>,
+) -> bool {
+    !registry.is_empty() || layout.owns_frame() || policy.is_some()
 }
 
 /// The kinds already told they found no room, so the toast shows once a
@@ -536,12 +666,13 @@ fn side_space_active(registry: Res<PanelRegistry>, layout: Res<SideLayout>) -> b
 #[derive(Resource, Debug, Default)]
 struct HiddenPanelsToasted(Vec<PanelKind>);
 
-/// Runs [`solve_side_space`] for the window and the registry's claims, in
-/// `EnhSet::Layout`, and stores the result when it changed.
+/// Runs [`solve_frame`] for the window, the registry's claims and the scale
+/// policy, in `EnhSet::Layout`, and stores the result when it changed.
 fn layout_side_space(
     windows: Query<&Window>,
     registry: Res<PanelRegistry>,
     settings: Res<SideSpaceSettings>,
+    policy: Option<Res<FramePolicy>>,
     mut layout: ResMut<SideLayout>,
     mut toasted: ResMut<HiddenPanelsToasted>,
     toasts: Option<ResMut<Toasts>>,
@@ -549,12 +680,12 @@ fn layout_side_space(
     let Ok(window) = windows.single() else {
         return;
     };
-    let size = Vec2::new(window.resolution.width(), window.resolution.height());
-    let solution = solve_side_space(
-        size,
+    let solution = solve_frame(
+        WindowPixels::of(window),
         UVec2::new(VISUAL_PLAY_FRAME_WIDTH, VISUAL_PLAY_FRAME_HEIGHT),
         &registry.claims(),
         &settings,
+        policy.as_deref().map(|policy| policy.0.as_ref()),
     );
     if *layout != solution.layout {
         *layout = solution.layout;

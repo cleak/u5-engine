@@ -4,12 +4,14 @@
 //! This module is the seam the later packages fill. For now it holds:
 //!
 //! - [`Display`], the resolved `[display]` settings as a resource;
+//! - the scale policies ([`scale`], M1-02), in the foundation's frame fit;
 //! - [`DisplayPlugin`], added inside the foundation's
 //!   [`EnhancementsPlugin`](crate::EnhancementsPlugin) only when a display
 //!   toggle is on at launch or the menu overlay is on (so the menu could
-//!   switch one on later). It registers no system yet; every system later
-//!   packages add carries a run condition and sits in one of the
-//!   foundation's [`EnhSet`](crate::EnhSet)s;
+//!   switch one on later). With every key at its default it registers no
+//!   system; each system a package adds is added only when its setting
+//!   asks for it and sits in one of the foundation's
+//!   [`EnhSet`](crate::EnhSet)s;
 //! - [`initial_window`], which sets the window's first mode and present
 //!   mode from the settings in both `WindowPlugin` blocks. With every key at
 //!   its default it returns the window it was given, so the 1.0.1 window is
@@ -25,6 +27,8 @@ use bevy::window::{MonitorSelection, PresentMode, WindowMode};
 use u5_runtime::enhancements::{DISPLAY_TOGGLES, DisplaySettings, FeatureToggles, LockState};
 
 use crate::enh::VisualLaunchConfig;
+
+pub mod scale;
 
 /// The resolved `[display]` settings (2.3.2). Exists only while
 /// [`DisplayPlugin`] is in the app.
@@ -47,8 +51,9 @@ impl Plugin for DisplayPlugin {
     fn build(&self, app: &mut App) {
         app.insert_resource(Display(self.settings.clone()));
         // Scaling, fullscreen, the side fill and the grow-left compositor
-        // register here, each with `run_if(toggle_on(..))` and in an
+        // register here, each only when its setting asks for it and in an
         // `EnhSet`, as their packages land (2.3.4).
+        scale::add_scale(app, &self.settings);
     }
 }
 
@@ -64,7 +69,16 @@ pub fn display_wanted(toggles: FeatureToggles) -> bool {
 /// foundation's plugin, which is itself absent under Classic and the lock.
 pub(crate) fn add_display(app: &mut App, launch: &VisualLaunchConfig) {
     if display_wanted(launch.enhancements.toggles) {
-        app.add_plugins(DisplayPlugin::new(launch.enhancements.display()));
+        let settings = launch.enhancements.display();
+        if !scale::ScalePolicy::of(&settings).is_faithful() {
+            // The frame fit belongs to the arbiter; with no side panel at
+            // launch it is installed here, with the file's arbiter settings.
+            crate::enh::side::install_side_space(
+                app,
+                crate::enh::side::SideSpaceSettings::from_values(&launch.enhancements.values),
+            );
+        }
+        app.add_plugins(DisplayPlugin::new(settings));
     }
 }
 
