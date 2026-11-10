@@ -158,7 +158,7 @@ fn the_roster_and_counters_are_the_frames_own_windows() {
     for (ww, wh) in [(2560, 1440), (3440, 1440), (1920, 1080)] {
         let c = canvas(ww, wh);
         let mut rgba = chrome(&c);
-        paint_column(&mut rgba, &c, &faithful, None);
+        paint_column(&mut rgba, &c, &faithful, None, false);
         for (rect, y0) in [(ROSTER_CROP, ROSTER_Y.0), (COUNTERS_CROP, COUNTERS_Y.0)] {
             for row in 0..rect.h {
                 let at = (((y0 + row) * c.w + CROP_X) * 4) as usize;
@@ -200,25 +200,28 @@ fn the_column_never_covers_the_core() {
         (1920, 1440),
         (1600, 1200),
     ] {
-        let c = canvas(ww, wh);
-        let mut rgba = chrome(&c);
-        let before = rgba.clone();
-        paint_column(
-            &mut rgba,
-            &c,
-            &faithful,
-            Some(ColumnText {
-                rows: &walk_rows(),
-                typed_colour: true,
-            }),
-        );
-        let (cx, _, _) = core_rect(&c);
-        assert!(cx as u32 > COLUMN_RULE_X, "{ww}x{wh}");
-        // Nothing right of the column's rule is touched.
-        for y in 0..c.h {
-            for x in COLUMN_RULE_X + 1..c.w {
-                let i = ((y * c.w + x) * 4) as usize;
-                assert_eq!(rgba[i..i + 4], before[i..i + 4], "{ww}x{wh} ({x}, {y})");
+        for page_mode in [false, true] {
+            let c = canvas(ww, wh);
+            let mut rgba = chrome(&c);
+            let before = rgba.clone();
+            paint_column(
+                &mut rgba,
+                &c,
+                &faithful,
+                Some(ColumnText {
+                    rows: &walk_rows(),
+                    typed_colour: true,
+                }),
+                page_mode,
+            );
+            let (cx, _, _) = core_rect(&c);
+            assert!(cx as u32 > COLUMN_RULE_X, "{ww}x{wh}");
+            // Nothing right of the column's rule is touched.
+            for y in 0..c.h {
+                for x in COLUMN_RULE_X + 1..c.w {
+                    let i = ((y * c.w + x) * 4) as usize;
+                    assert_eq!(rgba[i..i + 4], before[i..i + 4], "{ww}x{wh} ({x}, {y})");
+                }
             }
         }
     }

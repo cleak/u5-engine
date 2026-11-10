@@ -54,6 +54,17 @@
 //! on) flips it in `EnhSet::Apply`. Its message window shows the crawl's
 //! rows with the history above them; `sync_crawl` builds those older rows
 //! only while the column is open.
+//!
+//! **Page mode** (M1-14, 2.2.5, D2.20): while the original's right column
+//! shows a page ([`column::page_mode_active`]), [`compose_for_state`] shows
+//! the column whatever the player's state, with the original's message
+//! window in its message window; the player's state is untouched, so the
+//! column returns to it when the page goes.
+//!
+//! **Keep the party centred** (`display.centre_party`, off by default,
+//! 2.2.7): while the column is shown the map is panned right so the party
+//! sits mid-view, [`CENTRE_PARTY_TILES`] tiles right of the canvas centre
+//! in all ([`Canvas::for_column`]). Off, the map never moves.
 
 use std::hash::{Hash, Hasher};
 
@@ -107,6 +118,12 @@ pub const NARROW_BELOW: u32 = 480;
 pub const CLASSIC_BELOW: u32 = 384;
 /// The smallest window with a canvas: the frame at scale 1 (2.2.11).
 pub const MIN_WINDOW: (u32, u32) = (320, 240);
+/// `centre_party`: the party's tile sits this many whole tiles right of the
+/// canvas centre while the column is shown, the most that keeps it at or
+/// left of the visible map's centre (the column takes 152 pixels on the
+/// left where the border took 8, so the centre moves 72): 4 tiles, 64
+/// pixels, on every canvas.
+pub const CENTRE_PARTY_TILES: u8 = ((COLUMN_CLEAR_X - SIDE_BORDER) / 2 / TILE) as u8;
 
 /// The grow-left canvas for one window size (2.3.7).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -192,6 +209,27 @@ impl Canvas {
         )
     }
 
+    /// The canvas panned `tiles` more whole tiles right.
+    pub fn panned(self, tiles: u8) -> Self {
+        Self {
+            party_x: self.party_x + u32::from(tiles) * TILE,
+            pan_tiles: self.pan_tiles + tiles,
+            ..self
+        }
+    }
+
+    /// The canvas the map is drawn on with the column in `column`'s state:
+    /// with `centre_party` on and the column shown, panned so the party
+    /// sits [`CENTRE_PARTY_TILES`] tiles right of the canvas centre (a
+    /// narrow canvas's own pan counts toward it); otherwise this canvas.
+    pub fn for_column(self, column: ColumnView, centre_party: bool) -> Self {
+        if centre_party && column.shown() {
+            self.panned(CENTRE_PARTY_TILES.saturating_sub(self.pan_tiles))
+        } else {
+            self
+        }
+    }
+
     /// Whether the party tile is exactly mid-canvas horizontally and
     /// mid-map-window vertically (every canvas without a pan).
     pub fn party_centred(&self) -> bool {
@@ -236,16 +274,21 @@ pub struct ComposeOptions<'a> {
     pub bands: Option<compose::Bands<'a>>,
     /// Step 7, the message crawl; `None` draws no crawl.
     pub crawl: Option<crawl_paint::CrawlPaint<'a>>,
-    /// Step 8: the docked column, drawn while open.
+    /// Step 8: the docked column, drawn while open or in page mode (which
+    /// [`compose_for_state`] takes from the state, whatever this says).
     pub column: ColumnView,
+    /// `display.centre_party`: pan the map while the column is shown.
+    pub centre_party: bool,
 }
 
-/// Steps 1-6 for one state (2.3.7): the ring peek for the canvas's map
-/// window under `options.light`, its raster from `atlas`, and
+/// Steps 1-8 for one state (2.3.7): page mode from `state`, the canvas
+/// panned for the column ([`Canvas::for_column`]), the ring peek for its
+/// map window under `options.light`, its raster from `atlas`, and
 /// [`compose::compose_grow_left`] over `frame`, the faithful 320x200 RGBA
-/// the shell drew from `state`, with the bands of `options`. `None` when
-/// the peek returns no ring (a fixed screen). Read-only: `state` is shared
-/// and the peek draws nothing from the game's random stream.
+/// the shell drew from `state`, with the bands, crawl and column of
+/// `options`. `None` when the peek returns no ring (a fixed screen).
+/// Read-only: `state` is shared and the peek draws nothing from the game's
+/// random stream.
 pub fn compose_for_state(
     frame: &[u8],
     state: &PlayState,
@@ -253,6 +296,11 @@ pub fn compose_for_state(
     canvas: &Canvas,
     options: ComposeOptions<'_>,
 ) -> Option<Vec<u8>> {
+    let view = ColumnView {
+        page_mode: column::page_mode_active(state),
+        ..options.column
+    };
+    let canvas = &canvas.for_column(view, options.centre_party);
     let window = compose::peek_window(canvas);
     let ring = state.peek_top_down_ring(window, options.light)?;
     let raster = state.render_peek_ring(&ring, atlas).ok()?;
@@ -270,7 +318,7 @@ pub fn compose_for_state(
         flash,
         options.bands,
         options.crawl,
-        options.column,
+        view,
     ))
 }
 
@@ -305,6 +353,7 @@ pub fn render_shell_frame_and_canvas(
         }),
         crawl: None,
         column: ColumnView::default(),
+        centre_party: false,
     };
     let canvas = compose_for_state(&frame, state, atlas, canvas, options);
     (frame, canvas)
@@ -339,12 +388,14 @@ pub fn render_shell_frame_and_canvas_with_crawl(
         crawl_on,
         input_line,
         ColumnView::default(),
+        false,
     )
 }
 
 /// [`render_shell_frame_and_canvas_with_crawl`] with the docked column in
-/// `column`'s state: the crawl is told whether the column wants its older
-/// rows, as `sync_crawl` tells it, before it syncs.
+/// `column`'s state and `display.centre_party` as `centre_party`: the crawl
+/// is told whether the column wants its older rows, as `sync_crawl` tells
+/// it, before it syncs.
 #[allow(clippy::too_many_arguments)]
 pub fn render_shell_frame_and_canvas_with_column(
     state: &mut PlayState,
@@ -357,6 +408,7 @@ pub fn render_shell_frame_and_canvas_with_column(
     crawl_on: bool,
     input_line: &str,
     column: ColumnView,
+    centre_party: bool,
 ) -> (Vec<u8>, Option<Vec<u8>>) {
     let ctx = crate::PlayFrameContext {
         ibm: fonts.0,
@@ -396,6 +448,7 @@ pub fn render_shell_frame_and_canvas_with_column(
             typed_colour: true,
         }),
         column,
+        centre_party,
     };
     let canvas = compose_for_state(&frame, state, atlas, canvas, options);
     (frame, canvas)
@@ -414,6 +467,8 @@ pub struct GrowComposeSettings {
     pub crawl: bool,
     /// `display.typed_colour`.
     pub typed_colour: bool,
+    /// `display.centre_party`.
+    pub centre_party: bool,
 }
 
 impl GrowComposeSettings {
@@ -424,6 +479,7 @@ impl GrowComposeSettings {
             hp_colours: settings.grow_left.ribbon_hp_colours,
             crawl: settings.grow_left.crawl,
             typed_colour: settings.grow_left.typed_colour,
+            centre_party: settings.grow_left.centre_party,
         }
     }
 }
@@ -515,9 +571,11 @@ impl PresentStep for GrowLeftCompose {
             settings.hp_colours,
             settings.crawl,
             settings.typed_colour,
+            settings.centre_party,
         )
             .hash(&mut hasher);
         input.state.map(ring_digest).hash(&mut hasher);
+        input.state.map(column::page_mode_active).hash(&mut hasher);
         self.crawl
             .as_ref()
             .map(|feed| feed.rows().revision)
@@ -553,6 +611,7 @@ impl PresentStep for GrowLeftCompose {
                 typed_colour: settings.typed_colour,
             }),
             column,
+            centre_party: settings.centre_party,
         };
         let Some(rgba) = compose_for_state(&frame.rgba, state, atlas, &canvas, options) else {
             return;
@@ -684,3 +743,6 @@ mod compose_tests;
 
 #[cfg(test)]
 mod bands_tests;
+
+#[cfg(test)]
+mod page_tests;

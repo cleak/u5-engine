@@ -38,7 +38,7 @@ use std::path::{Path, PathBuf};
 
 use u5_bevy::display::crawl::layer::{CrawlCell, CrawlLine, LineKind};
 use u5_bevy::display::crawl::sync::{CrawlState, glyph_mask};
-use u5_bevy::display::grow::column::{ColumnText, ColumnView, paint_open_window};
+use u5_bevy::display::grow::column::{ColumnText, ColumnView, page_mode_active, paint_open_window};
 use u5_bevy::display::grow::crawl_paint::{CrawlPaint, paint_crawl};
 use u5_bevy::display::grow::{
     Canvas, ComposeOptions, bands, compose, compose_for_state, render_shell_frame_and_canvas,
@@ -91,6 +91,8 @@ struct Shot {
     town: bool,
     /// The docked column open (Ctrl+P).
     column: bool,
+    /// `display.centre_party` (M1-14).
+    centre: bool,
 }
 
 const fn shot(name: &'static str, mockup: &'static str, window: (u32, u32), party: Party) -> Shot {
@@ -105,6 +107,7 @@ const fn shot(name: &'static str, mockup: &'static str, window: (u32, u32), part
         typing: "",
         town: false,
         column: false,
+        centre: false,
     }
 }
 
@@ -125,7 +128,7 @@ const fn open(name: &'static str, mockup: &'static str, window: (u32, u32)) -> S
     }
 }
 
-const SHOTS: [Shot; 12] = [
+const SHOTS: [Shot; 13] = [
     shot("S1-16x9", "c04f-A-S1-quiet.png", W16, Party::Save),
     shot("S1-21x9", "c04f-uw-A-S1-quiet.png", W21, Party::Save),
     walk("B-16x9", "c04f-B-S1-crawl.png", W16),
@@ -141,6 +144,7 @@ const SHOTS: [Shot; 12] = [
         typing: "",
         town: false,
         column: false,
+        centre: false,
     },
     Shot {
         name: "C-16x9",
@@ -153,6 +157,7 @@ const SHOTS: [Shot; 12] = [
         typing: "JO",
         town: true,
         column: false,
+        centre: false,
     },
     shot("G-16x9", "c04f-G-status.png", W16, Party::IoloPoisoned),
     shot("G-21x9", "c04f-uw-G-status.png", W21, Party::IoloPoisoned),
@@ -160,6 +165,10 @@ const SHOTS: [Shot; 12] = [
     shot("G6-21x9", "c04f-uw-G6-status.png", W21, Party::Six),
     open("D-16x9", "c04f-D-S1-open.png", W16),
     open("D-21x9", "c04f-uw-D-S1-open.png", W21),
+    Shot {
+        centre: true,
+        ..open("D-centred-16x9", "c04f-D-centred.png", W16)
+    },
 ];
 
 /// The mockups' party edits (make_c04f.py: G_PARTY, G6_PARTY).
@@ -235,7 +244,7 @@ fn mockup_script(name: &str) -> Option<&'static [(&'static str, bool, u64)]> {
         ("North", true, 0),
     ];
     match name {
-        "D-16x9" | "D-21x9" => Some(D),
+        "D-16x9" | "D-21x9" | "D-centred-16x9" => Some(D),
         "B-16x9" | "B-21x9" => Some(B),
         "S3-16x9" => Some(E),
         "C-16x9" => Some(C),
@@ -406,6 +415,7 @@ fn grow_left_review_shots() {
             shot.crawl != Crawl::Quiet,
             shot.typing,
             column,
+            shot.centre,
         );
         if let (true, Some(script)) = (shot.column, mockup_script(shot.name)) {
             // The mockup's own rows through the engine's open-window paint,
@@ -420,6 +430,7 @@ fn grow_left_review_shots() {
                 }),
                 crawl: None,
                 column,
+                centre_party: shot.centre,
             };
             let mut scripted = compose_for_state(&frame, &state, &atlas, &canvas, options)
                 .expect("the top-down view");
@@ -536,7 +547,7 @@ fn grow_left_review_shots() {
         // Count differing pixels per region: the chrome bands (the ribbon
         // and the tabs), the core, the ring (where the crawl of a later
         // package goes).
-        let (cx, cy, side) = compose::core_rect(&canvas);
+        let (cx, cy, side) = compose::core_rect(&canvas.for_column(column, shot.centre));
         let (mx0, my0, mx1, my1) = canvas.map_window();
         let mut diff = vec![0u8; (w * h * 4) as usize];
         let (mut bands, mut core, mut ring) = (0, 0, 0);
@@ -600,5 +611,164 @@ fn grow_left_review_shots() {
         strip
             .save(out.join(format!("{}-side-by-side.png", shot.name)))
             .unwrap();
+    }
+}
+
+/// The pages of M1-14's render check (2.2.5, D2.20).
+#[derive(Clone, Copy, Debug)]
+enum Page {
+    ZStats,
+    Picker,
+    ArmsSell,
+    InnRegister,
+}
+
+/// Put the original's right column on `page`, as the command that opens
+/// it would. The shop pages are set on the session directly (the scene
+/// stands on the road, not in a shop), so their text is what the panel
+/// paints for that session state.
+fn open_page(state: &mut PlayState, page: Page) {
+    use u5_runtime::shop_runtime::{ArmsSellBrowser, ArmsShopState, InnkeeperState};
+    use u5_runtime::shop_session::ActiveShopSession;
+    match page {
+        Page::ZStats => {
+            state.emit_command_echo_line("Ztats");
+            state.z_stats_for_party(0);
+        }
+        Page::Picker => {
+            state.emit_command_echo_line("Use item");
+            state.start_use_item();
+        }
+        Page::ArmsSell => {
+            state.active_shop = Some(ActiveShopSession::Arms(ArmsShopState::SellPickItem(
+                ArmsSellBrowser {
+                    selected: 0,
+                    page_start: 0,
+                },
+            )));
+        }
+        Page::InnRegister => {
+            let mut guest_indices = [0; u5_runtime::shops::INN_REGISTRY_CAP];
+            guest_indices[1] = 1;
+            state.active_shop = Some(ActiveShopSession::Innkeeper(
+                InnkeeperState::PickUpCompanion {
+                    inn: u5_runtime::shops::Inn::TheWayfarerInn,
+                    guest_indices,
+                    guest_count: 2,
+                    base_lodging_charge: 20,
+                    highlight: 0,
+                },
+            ));
+        }
+    }
+    state.repaint_stats_panel();
+}
+
+/// `rgba` (w x h) at 2x over the faithful frame at 2x, for review.
+fn save_with_frame(path: &Path, (w, h): (u32, u32), rgba: &[u8], frame: &[u8]) {
+    let mut strip = image::RgbaImage::from_pixel(
+        w.max(320) * 2,
+        h * 2 + 8 + 200 * 2,
+        image::Rgba([0x40, 0x40, 0x40, 0xff]),
+    );
+    for (top, (iw, ih), bytes) in [(0, (w, h), rgba), (h * 2 + 8, (320, 200), frame)] {
+        for y in 0..ih * 2 {
+            for x in 0..iw * 2 {
+                let i = (((y / 2) * iw + x / 2) * 4) as usize;
+                strip.put_pixel(
+                    x,
+                    top + y,
+                    image::Rgba([bytes[i], bytes[i + 1], bytes[i + 2], 0xff]),
+                );
+            }
+        }
+    }
+    strip.save(path).unwrap();
+}
+
+/// M1-14's render check (not mocked): the walk of the B mockup on the
+/// named layouts and the narrow ones, the column collapsed, open, and open
+/// with `display.centre_party`; then each page over the same walk with the
+/// player's column collapsed. Each render is written at 2x over the
+/// faithful frame it was composed from (`render-<layout>-<state>.png`).
+#[test]
+fn grow_left_page_mode_and_layout_renders() {
+    let (Some(profile), Some(_), Some(out)) = (
+        env_dir("U5_MOCKUP_PROFILE"),
+        env_dir("U5_GROW_MOCKUPS"),
+        env_dir("U5_GROW_SHOTS"),
+    ) else {
+        eprintln!("skipped: set U5_MOCKUP_PROFILE, U5_GROW_MOCKUPS and U5_GROW_SHOTS");
+        return;
+    };
+    std::fs::create_dir_all(&out).unwrap();
+    let atlas = load_tile_atlas(&profile, TileGraphicsDepth::Ega16).unwrap();
+    let fonts = Fonts {
+        ibm: load_ibm_ch_font(&profile).unwrap(),
+        runes: load_runes_ch_font(&profile).unwrap(),
+    };
+    let layouts = [
+        ("16x9", W16),
+        ("21x9", W21),
+        ("1080", (1920, 1080)),
+        ("16x10", (1920, 1200)),
+        ("4x3", (1600, 1200)),
+    ];
+    for (layout, window) in layouts {
+        let canvas = Canvas::for_window(window.0, window.1, PixelAspect::Dos).unwrap();
+        let shot = walk("render", "", window);
+        let mut crawl = CrawlState::default();
+        let state = load_scene(&profile, &shot, &atlas, Some((&mut crawl, &fonts, &canvas)));
+        let mut render = |name: String, mut state: PlayState, open: bool, centre: bool| {
+            let (frame, ours) = render_shell_frame_and_canvas_with_column(
+                &mut state,
+                &atlas,
+                (&fonts.ibm, &fonts.runes),
+                &profile,
+                &canvas,
+                PeekLightPolicy::Scaled,
+                &mut crawl,
+                true,
+                "",
+                ColumnView {
+                    open,
+                    ..ColumnView::default()
+                },
+                centre,
+            );
+            let ours = ours.expect("the top-down view");
+            eprintln!(
+                "{name}: {}x{} canvas, pan {} tiles, page {}",
+                canvas.w,
+                canvas.h,
+                canvas.pan_tiles,
+                page_mode_active(&state)
+            );
+            save_with_frame(
+                &out.join(format!("render-{name}.png")),
+                (canvas.w, canvas.h),
+                &ours,
+                &frame,
+            );
+        };
+        for (name, open, centre) in [
+            ("collapsed", false, false),
+            ("open", true, false),
+            ("centred", true, true),
+        ] {
+            render(format!("{layout}-{name}"), state.clone(), open, centre);
+        }
+        for page in [
+            Page::ZStats,
+            Page::Picker,
+            Page::ArmsSell,
+            Page::InnRegister,
+        ] {
+            let mut paged = state.clone();
+            open_page(&mut paged, page);
+            complete_headless_blocking_presentations(&mut paged, Some(&atlas)).unwrap();
+            assert!(page_mode_active(&paged), "{page:?}");
+            render(format!("{layout}-page-{page:?}"), paged, false, false);
+        }
     }
 }

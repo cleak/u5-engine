@@ -21,7 +21,11 @@
 //!   pixels byte for byte, and the two share one centre;
 //! - (M1-10, the no-reveal rule) the ribbon shows no more members than the
 //!   party has, and every character it draws is in the faithful panel row
-//!   of the same member, or in the counters or date row, of this frame.
+//!   of the same member, or in the counters or date row, of this frame;
+//! - (M1-14) while a page is up the column is shown with the column closed
+//!   (the tabs at the open centre), its panel is the frame's own right panel
+//!   (frame x 192..311, y 8..80) byte for byte, and its message window is
+//!   the frame's own message window byte for byte.
 //!
 //! Nothing here is compiled outside tests, and the recorder is off unless a
 //! test turns it on.
@@ -33,7 +37,8 @@ use u5_runtime::{FixedCellFont, PeekLightPolicy, PlayState, TileAtlas};
 use crate::VISUAL_PLAY_FRAME_WIDTH;
 use crate::display::grow::bands::{self, BandSnapshot, ribbon_layout};
 use crate::display::grow::column::{
-    COUNTERS_CROP, COUNTERS_Y, CROP_X, ColumnView, FrameRect, ROSTER_CROP, ROSTER_Y,
+    COUNTERS_CROP, COUNTERS_Y, CROP_X, ColumnView, FrameRect, MESSAGE_CROP, PAGE_PANEL, PANEL_DROP,
+    ROSTER_CROP, ROSTER_Y, message_crop_origin, page_mode_active,
 };
 use crate::display::grow::{Canvas, ComposeOptions, compose, compose_for_state, flash_active};
 
@@ -57,6 +62,8 @@ pub(crate) struct Tally {
     pub passed: usize,
     /// Composed frames with the flash on.
     pub flashed: usize,
+    /// Composed frames with a page up (M1-14).
+    pub paged: usize,
     pub mismatches: Vec<String>,
 }
 
@@ -71,7 +78,9 @@ pub(crate) fn start() {
 
 /// Stop recording and return the tally.
 pub(crate) fn finish() -> Tally {
-    RECORDER.with(|cell| cell.borrow_mut().take().unwrap_or_default())
+    let tally = RECORDER.with(|cell| cell.borrow_mut().take().unwrap_or_default());
+    eprintln!("grow-left compose: {} frames with a page up", tally.paged);
+    tally
 }
 
 pub(crate) fn recording() -> bool {
@@ -102,6 +111,7 @@ fn options<'a>(
             open,
             ..ColumnView::default()
         },
+        centre_party: false,
     }
 }
 
@@ -226,6 +236,18 @@ fn check_column(
             "{context}: food, gold and the date are not the frame's own window"
         ));
     }
+    if page_mode_active(state) {
+        if !crop_is_frame(PAGE_PANEL, PAGE_PANEL.y + PANEL_DROP) {
+            found.push(format!(
+                "{context}: the page's panel is not the frame's own panel"
+            ));
+        }
+        if !crop_is_frame(MESSAGE_CROP, message_crop_origin(canvas).1) {
+            found.push(format!(
+                "{context}: the page's message window is not the frame's own window"
+            ));
+        }
+    }
     let (cx, cy, side) = compose::core_rect(canvas);
     let core_ok = (0..side).all(|row| {
         let at = ((cy + row) * w + cx) * 4;
@@ -251,6 +273,7 @@ pub(crate) fn note(state: &PlayState, atlas: &TileAtlas, font: &FixedCellFont, f
     }
     let mut tally_composed = false;
     let mut flashed = false;
+    let mut pages_seen = false;
     for (ww, wh) in WINDOWS {
         let canvas = Canvas::for_window(ww, wh, u5_runtime::enhancements::PixelAspect::Dos)
             .expect("a canvas for every window checked");
@@ -288,12 +311,17 @@ pub(crate) fn note(state: &PlayState, atlas: &TileAtlas, font: &FixedCellFont, f
         if !core_ok {
             found.push(format!("{ww}x{wh}: the core is not the faithful viewport"));
         }
+        // A page shows the column with the player's column closed.
+        let page = page_mode_active(state);
+        if page {
+            pages_seen = true;
+        }
         check_tabs(
             &rgba,
             &canvas,
             frame,
             &snapshot,
-            false,
+            page,
             &format!("{ww}x{wh}"),
             &mut found,
         );
@@ -371,6 +399,9 @@ pub(crate) fn note(state: &PlayState, atlas: &TileAtlas, font: &FixedCellFont, f
             }
             if flashed {
                 tally.flashed += 1;
+            }
+            if pages_seen {
+                tally.paged += 1;
             }
             tally.mismatches.extend(found);
         }

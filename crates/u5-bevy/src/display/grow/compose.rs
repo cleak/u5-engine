@@ -178,16 +178,19 @@ pub struct Bands<'a> {
     pub hp_colours: bool,
 }
 
-/// Steps 1-6 of the grow-left compositor (2.3.7): the canvas for
+/// Steps 1-8 of the grow-left compositor (2.3.7): the canvas for
 /// `canvas`, with the ring raster `ring` (RGBA of `window`'s cells) in the
 /// map window, the faithful viewport of `faithful` (the 320x200 frame,
 /// RGBA) copied to the core, and, while `flash` is set, the ring inverted
 /// as the faithful frame inverted its core; then, with `bands`, the ribbon
 /// on the top band and the sky and wind tabs at their shared centre; then,
 /// with `crawl`, the message crawl over the map (step 7); then, while
-/// `column` is open, the docked column (step 8), whose message window
-/// shows the crawl's rows in place of the crawl. The bands follow the
-/// column: an open column re-centres the tabs over the visible map.
+/// `column` is shown (open, or a page is up), the docked column (step 8),
+/// whose message window shows the crawl's rows in place of the crawl, or
+/// in page mode the original's message window. The bands follow the
+/// column: a shown column re-centres the tabs over the visible map. The
+/// map is drawn where `canvas` puts the party; the `centre_party` pan is
+/// the caller's ([`super::Canvas::for_column`]).
 #[allow(clippy::too_many_arguments)]
 pub fn compose_grow_left(
     faithful: &[u8],
@@ -206,6 +209,7 @@ pub fn compose_grow_left(
         flash_ring(&mut rgba, canvas, playback);
     }
     copy_core(&mut rgba, canvas, faithful);
+    let shown = column.shown();
     if let Some(bands) = bands {
         paint_bands(
             &mut rgba,
@@ -214,15 +218,15 @@ pub fn compose_grow_left(
             bands.snapshot,
             bands.font,
             bands.hp_colours,
-            column.open,
+            shown,
         );
     }
-    if column.open {
+    if shown {
         let text = crawl.map(|crawl| ColumnText {
             rows: crawl.rows,
             typed_colour: crawl.typed_colour,
         });
-        paint_column(&mut rgba, canvas, faithful, text);
+        paint_column(&mut rgba, canvas, faithful, text, column.page_mode);
     } else if let Some(crawl) = crawl {
         paint_crawl(&mut rgba, canvas, crawl);
     }
