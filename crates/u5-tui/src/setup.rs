@@ -418,6 +418,12 @@ fn wizard_rows(
                 if spec.class.is_none() && spec.key != CHEATS_SWITCH {
                     continue;
                 }
+                // `display.raster` has no row while both of its values draw
+                // the same tiles (Phase B design 2.4.1); it stays in the file
+                // and `--raster-depth`.
+                if spec.key == u5_runtime::enhancements::RASTER_KEY {
+                    continue;
+                }
                 let kind = match spec.kind {
                     OptionKind::Bool => RowKind::Switch,
                     OptionKind::Enum(words) => RowKind::Choice(

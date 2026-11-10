@@ -474,3 +474,298 @@ fn a_resize_refits_the_frame() {
     shell.step(&[]);
     assert!(close(sprites(&mut shell)[0].0, Vec2::new(2240.0, 1400.0)));
 }
+
+// --- Sharp-bilinear: the `[prescale]` step (M1-03). ---------------------
+
+/// The canvas rule's width for a window (2.2.11): 240 rows at 1.2, or 216
+/// at 1.25 on a height that is a multiple of 1080.
+fn named_canvas(window: UVec2) -> UVec2 {
+    let (rows, aspect) = if window.y.is_multiple_of(1080) {
+        (216.0, 1.25)
+    } else {
+        (240.0, 1.2)
+    };
+    let width = 16.0 * (rows * aspect * window.x as f32 / window.y as f32 / 16.0).floor();
+    UVec2::new(width as u32, rows as u32)
+}
+
+#[test]
+fn the_prescale_factors_are_exact_on_the_named_canvases() {
+    for (window, canvas, factors) in [
+        (
+            UVec2::new(2560, 1440),
+            UVec2::new(512, 240),
+            UVec2::new(5, 6),
+        ),
+        (
+            UVec2::new(1920, 1080),
+            UVec2::new(480, 216),
+            UVec2::new(4, 5),
+        ),
+        (
+            UVec2::new(3440, 1440),
+            UVec2::new(688, 240),
+            UVec2::new(5, 6),
+        ),
+        (
+            UVec2::new(2560, 1080),
+            UVec2::new(640, 216),
+            UVec2::new(4, 5),
+        ),
+    ] {
+        assert_eq!(named_canvas(window), canvas, "{window}");
+        let found = prescale_factors(window.as_vec2(), canvas);
+        assert_eq!(found, factors, "{window}");
+        assert_eq!(canvas * found, window, "{window}: exact, so sharp is Fit");
+    }
+    // 2160 rows would be 8x10; the cap holds both axes at 8.
+    let window = UVec2::new(3840, 2160);
+    assert_eq!(named_canvas(window), UVec2::new(480, 216));
+    assert_eq!(
+        prescale_factors(window.as_vec2(), UVec2::new(480, 216)),
+        UVec2::new(8, 8)
+    );
+}
+
+#[test]
+fn the_prescale_factors_of_the_frame_follow_the_sharp_size() {
+    for (wx, wy, sizes) in TABLE {
+        for (aspect, row) in ASPECTS.into_iter().zip(sizes) {
+            let (w, h, _) = row[1];
+            let factors = prescale_factors(Vec2::new(w as f32, h as f32), FRAME);
+            let expect = UVec2::new(
+                (w / FRAME.x).clamp(1, PRESCALE_CAP),
+                (h / FRAME.y).clamp(1, PRESCALE_CAP),
+            );
+            assert_eq!(factors, expect, "{wx}x{wy} {aspect:?}");
+        }
+    }
+    // A hair under a whole multiple is that multiple; under the image, 1.
+    assert_eq!(
+        prescale_factors(Vec2::new(1279.9999, 999.9999), FRAME),
+        UVec2::new(4, 5)
+    );
+    assert_eq!(prescale_factors(Vec2::new(200.0, 100.0), FRAME), UVec2::ONE);
+    assert_eq!(prescale_factors(Vec2::ZERO, FRAME), UVec2::ONE);
+    assert_eq!(
+        prescale_factors(Vec2::new(f32::NAN, 9000.0), FRAME),
+        UVec2::new(1, 8)
+    );
+}
+
+/// A small image whose every pixel differs.
+fn pattern(size: UVec2) -> Vec<u8> {
+    (0..size.x * size.y)
+        .flat_map(|i| [(i * 37) as u8, (i * 11 + 3) as u8, (i * 5 + 7) as u8, 0xff])
+        .collect()
+}
+
+/// Nearest-neighbour resampling the long way: each output pixel samples the
+/// source pixel it falls in.
+fn nearest_resample(rgba: &[u8], size: UVec2, out: UVec2) -> Vec<u8> {
+    let mut pixels = Vec::new();
+    for y in 0..out.y {
+        for x in 0..out.x {
+            let sx = (x as f32 + 0.5) * size.x as f32 / out.x as f32;
+            let sy = (y as f32 + 0.5) * size.y as f32 / out.y as f32;
+            let offset = ((sy as u32 * size.x + sx as u32) * 4) as usize;
+            pixels.extend_from_slice(&rgba[offset..offset + 4]);
+        }
+    }
+    pixels
+}
+
+#[test]
+fn prescale_pixels_equal_nearest_expansion() {
+    let size = UVec2::new(7, 5);
+    let source = pattern(size);
+    let mut out = Vec::new();
+    for factors in [
+        UVec2::ONE,
+        UVec2::new(3, 2),
+        UVec2::new(4, 5),
+        UVec2::new(5, 6),
+        UVec2::new(8, 8),
+    ] {
+        prescale_nearest(&source, size, factors, &mut out);
+        let expanded = size * factors;
+        assert_eq!(out.len(), (expanded.x * expanded.y * 4) as usize);
+        for y in 0..expanded.y {
+            for x in 0..expanded.x {
+                let at = ((y * expanded.x + x) * 4) as usize;
+                let from = (((y / factors.y) * size.x + x / factors.x) * 4) as usize;
+                assert_eq!(out[at..at + 4], source[from..from + 4], "{factors} {x},{y}");
+            }
+        }
+        assert_eq!(out, nearest_resample(&source, size, expanded), "{factors}");
+    }
+}
+
+fn sharp_shell(physical: UVec2, sf: f32) -> Shell {
+    shell(&launch(&[("display.scale_mode", "sharp")]), physical, sf)
+}
+
+/// The frame sprite's image and the faithful one: sizes, samplers, bytes.
+fn presented(shell: &mut Shell) -> (UVec2, String, Vec<u8>, UVec2, String, Vec<u8>) {
+    let faithful = shell.visual().image_handle.clone();
+    let world = shell.app.world_mut();
+    let shown = world
+        .query::<&Sprite>()
+        .single(world)
+        .unwrap()
+        .image
+        .clone();
+    let images = world.resource::<Assets<Image>>();
+    let shown = images.get(&shown).unwrap();
+    let faithful = images.get(&faithful).unwrap();
+    (
+        shown.size(),
+        format!("{:?}", shown.sampler),
+        shown.data.clone().unwrap(),
+        faithful.size(),
+        format!("{:?}", faithful.sampler),
+        faithful.data.clone().unwrap(),
+    )
+}
+
+#[test]
+fn sharp_registers_the_prescale_and_no_other_mode_does() {
+    for mode in MODES {
+        let launch = launch(&[("display.scale_mode", mode.key())]);
+        let shell = shell(&launch, UVec2::new(1920, 1080), 1.0);
+        let steps = shell
+            .app
+            .world()
+            .get_resource::<PresentSteps>()
+            .map(PresentSteps::orders);
+        let expect = (mode == ScaleMode::Sharp).then(|| vec![StepOrder::PRESCALE]);
+        assert_eq!(steps, expect, "{mode:?}");
+    }
+}
+
+#[test]
+fn sharp_shows_a_nearest_expansion_with_a_linear_sampler() {
+    let nearest = format!("{:?}", bevy::image::ImageSampler::nearest());
+    let linear = format!("{:?}", bevy::image::ImageSampler::linear());
+    // 1920x1080 at every display scale: the frame is 1440x1080 physical,
+    // so 4x5. 1280x800 sharp is 1066x800 physical: 3x4.
+    for (window, sf, factors) in [
+        (UVec2::new(1920, 1080), 1.0, UVec2::new(4, 5)),
+        (UVec2::new(1920, 1080), 1.25, UVec2::new(4, 5)),
+        (UVec2::new(1920, 1080), 1.5, UVec2::new(4, 5)),
+        (UVec2::new(1280, 800), 1.0, UVec2::new(3, 4)),
+        (UVec2::new(3840, 2160), 1.0, UVec2::new(8, 8)),
+    ] {
+        let mut shell = sharp_shell(window, sf);
+        shell.step(&[]);
+        shell.step(&[]);
+        let (size, sampler, bytes, faithful_size, faithful_sampler, faithful) =
+            presented(&mut shell);
+        assert_eq!(faithful_size, FRAME);
+        assert_eq!(
+            faithful_sampler, nearest,
+            "the faithful image keeps nearest"
+        );
+        assert_eq!(size, FRAME * factors, "{window} @{sf}");
+        assert_eq!(sampler, linear, "{window} @{sf}");
+        let mut expect = Vec::new();
+        prescale_nearest(&faithful, FRAME, factors, &mut expect);
+        assert!(bytes == expect, "{window} @{sf}: not the nearest expansion");
+    }
+}
+
+#[test]
+fn the_prescale_follows_the_game_a_resize_and_a_mode_change() {
+    let mut shell = sharp_shell(UVec2::new(1920, 1080), 1.0);
+    shell.step(&[]);
+    let (_, _, before, ..) = presented(&mut shell);
+    // The player walks: the presented copy follows the faithful frame.
+    let mut moved = false;
+    for frame in 0..30 {
+        let events = if frame == 2 {
+            vec![crate::enh::equivalence::TimedKey {
+                key: KeyCode::ArrowUp,
+                state: bevy::input::ButtonState::Pressed,
+                repeat: false,
+                owner: crate::enh::equivalence::Owner::Game,
+            }]
+        } else if frame == 3 {
+            vec![crate::enh::equivalence::TimedKey {
+                key: KeyCode::ArrowUp,
+                state: bevy::input::ButtonState::Released,
+                repeat: false,
+                owner: crate::enh::equivalence::Owner::Game,
+            }]
+        } else {
+            Vec::new()
+        };
+        shell.step(&events);
+        let (size, _, bytes, _, _, faithful) = presented(&mut shell);
+        let mut expect = Vec::new();
+        prescale_nearest(&faithful, FRAME, size / FRAME, &mut expect);
+        assert!(bytes == expect, "frame {frame}");
+        moved |= bytes != before;
+    }
+    assert!(moved, "the walk must change the frame");
+
+    // A resize: new factors.
+    let world = shell.app.world_mut();
+    let mut windows = world.query::<&mut Window>();
+    windows
+        .single_mut(world)
+        .unwrap()
+        .resolution
+        .set_physical_resolution(2560, 1440);
+    shell.step(&[]);
+    shell.step(&[]);
+    // 2560x1440 sharp: 1920x1440, 6x7.
+    assert_eq!(presented(&mut shell).0, FRAME * UVec2::new(6, 7));
+
+    // Integer-square: the step goes and the sprite shows the faithful image.
+    let mut settings = shell.app.world().resource::<Display>().0.clone();
+    settings.scale_mode = ScaleMode::IntegerSquare;
+    shell
+        .app
+        .world_mut()
+        .insert_resource(Display(settings.clone()));
+    shell.step(&[]);
+    shell.step(&[]);
+    assert!(shell.app.world().resource::<PresentSteps>().is_empty());
+    let faithful = shell.visual().image_handle.clone();
+    let world = shell.app.world_mut();
+    assert_eq!(
+        world.query::<&Sprite>().single(world).unwrap().image,
+        faithful
+    );
+
+    // And back to sharp.
+    settings.scale_mode = ScaleMode::Sharp;
+    shell.app.world_mut().insert_resource(Display(settings));
+    shell.step(&[]);
+    shell.step(&[]);
+    assert_eq!(presented(&mut shell).0, FRAME * UVec2::new(6, 7));
+}
+
+#[test]
+fn sharp_leaves_the_game_alone() {
+    use crate::enh::equivalence::{Timeline, check_shell_equivalence};
+    let launch = launch(&[("display.scale_mode", "sharp")]);
+    let mut timeline = Timeline::new(60);
+    timeline
+        .game_tap(5, KeyCode::ArrowUp)
+        .game_tap(20, KeyCode::ArrowLeft)
+        .game_tap(35, KeyCode::ArrowDown);
+    let mismatches = check_shell_equivalence(
+        &test_state(open_grid(), 5, 5),
+        &Scene::synthetic(),
+        &timeline,
+        &launch,
+        |app: &mut App| {
+            app.world_mut().spawn(Window {
+                resolution: WindowResolution::new(1920.0, 1080.0),
+                ..default()
+            });
+        },
+    );
+    assert_eq!(mismatches, []);
+}

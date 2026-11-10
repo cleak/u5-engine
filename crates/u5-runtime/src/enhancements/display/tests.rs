@@ -250,8 +250,11 @@ fn every_display_row_matches_the_design() {
         let row = CatalogueRow::find(expected.key)
             .unwrap_or_else(|| panic!("{} is in the catalogue", expected.key));
         assert_eq!(row.ships(), expected.ships, "{}", expected.key);
-        assert!(
-            !row.is_shipped(),
+        // P1 (scaling, fullscreen, vsync, raster) shipped in M1-03; the
+        // fill (P2) and the wider view (P8) stay hidden until theirs.
+        assert_eq!(
+            row.is_shipped(),
+            expected.ships == DISPLAY_P1,
             "{} is hidden until it ships",
             expected.key
         );
@@ -364,14 +367,27 @@ fn display_options_switch_or_belong_to_a_toggle() {
 }
 
 #[test]
-fn no_preset_sets_a_display_row_in_this_build() {
-    // Everything names `scale_mode = sharp` and `fullscreen_key`; both are
-    // hidden until P1 ships, so every preset is still Classic here.
-    for preset in [Preset::Recommended, Preset::Everything] {
-        for toggle in DISPLAY_TOGGLES {
-            assert!(!preset.toggles().on(*toggle), "{preset:?} {toggle:?}");
-        }
+fn presets_set_only_the_shipped_display_rows() {
+    // Everything names `scale_mode = sharp` and `fullscreen_key` (2.2.1),
+    // which ship with P1; Recommended names no display row.
+    for toggle in DISPLAY_TOGGLES {
+        assert!(
+            !Preset::Recommended.toggles().on(*toggle),
+            "Recommended {toggle:?}"
+        );
+        let everything = [Toggle::DisplayScaleMode, Toggle::DisplayFullscreenKey];
+        assert_eq!(
+            Preset::Everything.toggles().on(*toggle),
+            everything.contains(toggle),
+            "Everything {toggle:?}"
+        );
     }
+    let everything = resolve(input(None, &[CliSetting::Preset(Preset::Everything)]));
+    let settings = everything.display();
+    assert_eq!(settings.scale_mode, ScaleMode::Sharp);
+    assert!(settings.fullscreen_key);
+    assert!(!settings.fullscreen, "borderless stays off (2.2.1)");
+    assert_eq!(settings.pillar_fill, PillarFill::Black, "the fill is P2");
     // The wider view is in no preset at all (D2.19).
     for preset in [Preset::Classic, Preset::Recommended, Preset::Everything] {
         assert!(
@@ -600,21 +616,27 @@ fn a_sub_key_of_an_off_feature_stays_classic() {
 
 #[test]
 fn hidden_display_rows_resolve_to_their_defaults() {
-    // The real build: nothing in `[display]` has shipped yet.
+    // The real build: P1 has shipped, the fill and the wider view have not.
     let stored = Stored::default()
         .with("display.grow_left", SettingValue::Bool(true))
-        .with("display.scale_mode", text("sharp"));
-    let resolved = resolve(input(Some(&stored), &[set("display.vsync", "false")]));
+        .with("display.pillar_fill", text("solid"));
+    let resolved = resolve(input(Some(&stored), &[set("display.crawl", "false")]));
     assert!(resolved.is_classic());
     assert_eq!(resolved.display(), DisplaySettings::default());
     assert_eq!(
         note_lines(&resolved),
         [
             "display.grow_left: not available in this build",
-            "display.scale_mode: not available in this build",
-            "display.vsync: not available in this build",
+            "display.pillar_fill: not available in this build",
+            "display.crawl: not available in this build",
         ]
     );
+    // The shipped P1 rows resolve with no note.
+    let stored = Stored::default().with("display.scale_mode", text("sharp"));
+    let resolved = resolve(input(Some(&stored), &[set("display.vsync", "false")]));
+    assert_eq!(note_lines(&resolved), Vec::<String>::new());
+    assert_eq!(resolved.display().scale_mode, ScaleMode::Sharp);
+    assert!(!resolved.display().vsync);
 }
 
 #[test]

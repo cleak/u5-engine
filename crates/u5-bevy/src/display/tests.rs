@@ -7,7 +7,8 @@
 use bevy::window::{MonitorSelection, PresentMode, WindowMode, WindowResolution};
 use u5_runtime::enhancements::{
     CliSetting, DISPLAY_P1, DISPLAY_P2, DISPLAY_P8, DISPLAY_TOGGLES, HostCapabilities, LockReason,
-    LockState, ResolveInput, ResolvedEnhancements, Toggle, resolve_as_shipped,
+    LockState, PixelAspect, ResolveInput, ResolvedEnhancements, ScaleMode, Toggle,
+    resolve_as_shipped,
 };
 use u5_runtime::test_fixtures::{open_grid, test_state};
 
@@ -154,8 +155,14 @@ fn each_display_toggle_adds_the_plugin_with_its_settings() {
             launch.enhancements.display(),
             "{toggle:?}"
         );
-        // The seam registers no system yet.
-        assert_eq!(display_systems(&app), Vec::<String>::new(), "{toggle:?}");
+        // Only the window keys add systems, through their settings; a
+        // driven toggle on with its value at the default adds none.
+        let settings = launch.enhancements.display();
+        assert_eq!(
+            display_systems(&app).is_empty(),
+            !window_keys_on(&settings),
+            "{toggle:?}"
+        );
     }
     // Resolved as a host would: the wider view and its settings.
     let launch = resolved_launch(&[
@@ -330,4 +337,281 @@ fn fullscreen_and_vsync_set_the_first_window() {
     );
     assert_eq!(window.mode, WindowMode::Windowed);
     assert_eq!(window.present_mode, PresentMode::AutoNoVsync);
+}
+
+// --- Fullscreen and F11 (M1-03). ----------------------------------------
+
+/// A launch resolved with the shipped catalogue only, as a host resolves it
+/// in this build.
+fn shipped_launch(cli: &[CliSetting]) -> VisualLaunchConfig {
+    VisualLaunchConfig {
+        enhancements: u5_runtime::enhancements::resolve(ResolveInput {
+            stored: None,
+            cli,
+            lock: LockState::Off,
+            caps: HostCapabilities::ALL,
+        }),
+        ..VisualLaunchConfig::classic()
+    }
+}
+
+/// The shell for `launch` with the 1.0.1 window, as the builder opens it.
+fn windowed_shell(launch: &VisualLaunchConfig) -> Shell {
+    let mut shell = shell(launch, |_| {});
+    shell
+        .app
+        .world_mut()
+        .spawn(initial_window(window_1_0_1(), launch));
+    shell
+}
+
+fn window_mode(shell: &mut Shell) -> (WindowMode, PresentMode) {
+    let world = shell.app.world_mut();
+    let mut windows = world.query::<&Window>();
+    let window = windows.single(world).unwrap();
+    (window.mode, window.present_mode)
+}
+
+const BORDERLESS: WindowMode = WindowMode::BorderlessFullscreen(MonitorSelection::Current);
+
+#[test]
+fn the_scale_and_fullscreen_rows_are_shipped() {
+    for key in [
+        "display.scale_mode",
+        "display.pixel_aspect",
+        "display.fullscreen",
+        "display.fullscreen_key",
+        "display.vsync",
+    ] {
+        let row = u5_runtime::enhancements::CatalogueRow::find(key).expect(key);
+        assert!(row.is_shipped(), "{key}");
+    }
+    // The fill and the wider view stay hidden until their packages.
+    for key in ["display.pillar_fill", "display.grow_left", "display.crawl"] {
+        let row = u5_runtime::enhancements::CatalogueRow::find(key).expect(key);
+        assert!(!row.is_shipped(), "{key}");
+    }
+    // A host resolving with the shipped catalogue reaches them with no note.
+    let launch = shipped_launch(&[
+        set("display.scale_mode", "sharp"),
+        set("display.pixel_aspect", "square"),
+        CliSetting::Enable("display.fullscreen".into()),
+        CliSetting::Enable("display.fullscreen_key".into()),
+    ]);
+    assert_eq!(launch.enhancements.notes, []);
+    let settings = launch.enhancements.display();
+    assert_eq!(settings.scale_mode, ScaleMode::Sharp);
+    assert_eq!(settings.pixel_aspect, PixelAspect::Square);
+    assert!(settings.fullscreen && settings.fullscreen_key);
+}
+
+#[test]
+fn f11_is_bound_only_by_the_fullscreen_key() {
+    let f11 = crate::enh::input::KeyChord::new(KeyCode::F11);
+    for (cli, bound) in [
+        (vec![], false),
+        (vec![CliSetting::Enable("display.fullscreen".into())], false),
+        (vec![set("display.scale_mode", "sharp")], false),
+        (
+            vec![CliSetting::Enable("display.fullscreen_key".into())],
+            true,
+        ),
+    ] {
+        let launch = shipped_launch(&cli);
+        let (map, notes) = crate::enh::input::KeyMap::for_toggles(
+            &launch.enhancements.keys,
+            launch.enhancements.toggles,
+        );
+        assert_eq!(notes, [], "{cli:?}");
+        assert_eq!(
+            map.action(f11),
+            bound.then_some(EnhAction::ToggleFullscreen),
+            "{cli:?}"
+        );
+        // Alt+Enter is never taken: it is the game's Enter (U3, D2.10).
+        let alt_enter = crate::enh::input::KeyChord::parse("Alt+Enter").unwrap();
+        assert!(alt_enter.reserved());
+        assert_eq!(map.action(alt_enter), None, "{cli:?}");
+    }
+}
+
+#[test]
+fn f11_gives_no_game_input_byte_and_alt_enter_is_still_enter() {
+    use bevy::input::ButtonState;
+
+    use crate::enh::equivalence::Owner;
+    // The game's own mapping: F11 is no byte, Enter is 0x0D whatever Alt
+    // does (the mapping has no Alt input at all).
+    assert_eq!(
+        crate::key_code_to_input_byte(KeyCode::F11, false, false),
+        None
+    );
+    assert_eq!(
+        crate::key_code_to_input_byte(KeyCode::F11, true, false),
+        None
+    );
+    assert_eq!(
+        crate::key_code_to_input_byte(KeyCode::F11, false, true),
+        None
+    );
+    assert_eq!(
+        crate::key_code_to_input_byte(KeyCode::Enter, false, false),
+        Some(0x0D)
+    );
+
+    // Through the real shell, with F11 bound: the player's F11 taps and an
+    // Alt+Enter leave the game, its frame and its key queue as Classic
+    // leaves them, frame by frame. Classic queues F11 and drops it at the
+    // read; the router takes it first. Both deliver Alt+Enter as Enter.
+    let launch = shipped_launch(&[CliSetting::Enable("display.fullscreen_key".into())]);
+    let mut timeline = walk(90);
+    timeline
+        .game_tap(10, KeyCode::F11)
+        .game_tap(25, KeyCode::F11)
+        .event(
+            60,
+            KeyCode::AltLeft,
+            ButtonState::Pressed,
+            false,
+            Owner::Game,
+        )
+        .game_tap(62, KeyCode::Enter)
+        .event(
+            66,
+            KeyCode::AltLeft,
+            ButtonState::Released,
+            false,
+            Owner::Game,
+        )
+        .game_tap(70, KeyCode::F11);
+    let start = test_state(open_grid(), 5, 5);
+    let mismatches = check_shell_equivalence(
+        &start,
+        &Scene::synthetic(),
+        &timeline,
+        &launch,
+        |app: &mut App| {
+            app.world_mut()
+                .spawn(initial_window(window_1_0_1(), &launch));
+        },
+    );
+    assert_eq!(mismatches, []);
+}
+
+#[test]
+fn f11_toggles_borderless_fullscreen_for_the_session() {
+    let launch = shipped_launch(&[CliSetting::Enable("display.fullscreen_key".into())]);
+    let mut shell = windowed_shell(&launch);
+    assert!(shell.app.world().contains_resource::<WindowWish>());
+    shell.step(&[]);
+    assert_eq!(
+        window_mode(&mut shell),
+        (WindowMode::Windowed, PresentMode::Fifo),
+        "the first frame keeps the window it opened with"
+    );
+
+    let mut timeline = Timeline::new(12);
+    timeline.game_tap(2, KeyCode::F11).game_tap(8, KeyCode::F11);
+    let mut modes = Vec::new();
+    for frame in 0..timeline.len() {
+        shell.step(timeline.frame(frame));
+        modes.push(window_mode(&mut shell).0);
+    }
+    assert_eq!(modes[1], WindowMode::Windowed);
+    assert_eq!(modes[2], BORDERLESS, "F11 goes fullscreen at once");
+    assert_eq!(modes[7], BORDERLESS, "and stays there");
+    assert_eq!(modes[8], WindowMode::Windowed, "F11 again goes back");
+    assert_eq!(modes[11], WindowMode::Windowed);
+    // F11 writes no setting.
+    assert!(!shell.app.world().resource::<Display>().0.fullscreen);
+}
+
+#[test]
+fn the_fullscreen_setting_opens_fullscreen_and_f11_leaves_it() {
+    let launch = shipped_launch(&[
+        CliSetting::Enable("display.fullscreen".into()),
+        CliSetting::Enable("display.fullscreen_key".into()),
+    ]);
+    let mut shell = windowed_shell(&launch);
+    shell.step(&[]);
+    assert_eq!(window_mode(&mut shell).0, BORDERLESS);
+    let mut timeline = Timeline::new(4);
+    timeline.game_tap(1, KeyCode::F11);
+    for frame in 0..timeline.len() {
+        shell.step(timeline.frame(frame));
+    }
+    assert_eq!(window_mode(&mut shell).0, WindowMode::Windowed);
+    assert!(shell.app.world().resource::<Display>().0.fullscreen);
+}
+
+#[test]
+fn a_changed_display_resource_follows_fullscreen_and_vsync() {
+    // No F11: the window systems are there for `display.fullscreen` alone.
+    let launch = shipped_launch(&[CliSetting::Disable("display.vsync".into())]);
+    let mut shell = windowed_shell(&launch);
+    shell.step(&[]);
+    assert_eq!(
+        window_mode(&mut shell),
+        (WindowMode::Windowed, PresentMode::AutoNoVsync)
+    );
+    let mut settings = shell.app.world().resource::<Display>().0.clone();
+    settings.fullscreen = true;
+    shell
+        .app
+        .world_mut()
+        .insert_resource(Display(settings.clone()));
+    shell.step(&[]);
+    assert_eq!(
+        window_mode(&mut shell),
+        (BORDERLESS, PresentMode::AutoNoVsync)
+    );
+    settings.vsync = true;
+    settings.fullscreen = false;
+    shell.app.world_mut().insert_resource(Display(settings));
+    shell.step(&[]);
+    assert_eq!(
+        window_mode(&mut shell),
+        (WindowMode::Windowed, PresentMode::Fifo)
+    );
+}
+
+#[test]
+fn another_display_change_keeps_an_f11_choice() {
+    let launch = shipped_launch(&[
+        CliSetting::Enable("display.fullscreen_key".into()),
+        set("display.scale_mode", "integer-square"),
+    ]);
+    let mut shell = windowed_shell(&launch);
+    let mut timeline = Timeline::new(4);
+    timeline.game_tap(1, KeyCode::F11);
+    for frame in 0..timeline.len() {
+        shell.step(timeline.frame(frame));
+    }
+    assert_eq!(window_mode(&mut shell).0, BORDERLESS);
+    let mut settings = shell.app.world().resource::<Display>().0.clone();
+    settings.scale_mode = ScaleMode::Stretch;
+    shell.app.world_mut().insert_resource(Display(settings));
+    shell.step(&[]);
+    shell.step(&[]);
+    assert_eq!(window_mode(&mut shell).0, BORDERLESS);
+}
+
+#[test]
+fn window_systems_are_absent_while_the_window_keys_are_default() {
+    for cli in [
+        vec![set("display.scale_mode", "sharp")],
+        vec![set("display.pixel_aspect", "square")],
+    ] {
+        let launch = shipped_launch(&cli);
+        let shell = shell(&launch, |_| {});
+        assert!(shell.app.is_plugin_added::<DisplayPlugin>(), "{cli:?}");
+        assert!(!shell.app.world().contains_resource::<WindowWish>());
+        let systems = display_systems(&shell.app);
+        assert!(
+            systems
+                .iter()
+                .all(|line| !line.contains("window") && !line.contains("display_actions")),
+            "{cli:?}: {systems:?}"
+        );
+    }
 }

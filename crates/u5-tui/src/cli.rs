@@ -1300,9 +1300,10 @@ pub fn cli_usage() -> String {
     if aliases.is_empty() {
         return CLI_USAGE.to_string();
     }
+    // Inside the section: before its closing blank line.
     CLI_USAGE.replacen(
-        "\nSMOKE COMMANDS:",
-        &format!("{aliases}\nSMOKE COMMANDS:"),
+        "\n\nSMOKE COMMANDS:",
+        &format!("\n{aliases}\nSMOKE COMMANDS:"),
         1,
     )
 }

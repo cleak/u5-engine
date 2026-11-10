@@ -132,7 +132,7 @@ pub const DISPLAY_P8: Phase = Phase::new(2, "P8");
 /// Every phase that has shipped in this build. Shipping a phase is adding
 /// it here, in the package that completes it; its rows then become
 /// visible and presets start to set them.
-pub const SHIPPED_PHASES: &[Phase] = &[FOUNDATION_P2];
+pub const SHIPPED_PHASES: &[Phase] = &[FOUNDATION_P2, DISPLAY_P1];
 
 /// A soft dependency (design 1.4.5): what a feature prefers to have, and
 /// what it does when that is absent. No feature requires another.

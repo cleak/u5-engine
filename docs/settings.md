@@ -37,8 +37,10 @@ settings page, a stored value is kept but not used, and presets skip it.
 - **Everything**: every feature-tier setting, and Recommended's list.
 
 No preset turns on a cheat, and the only deviation a preset sets is
-`combat.fast_forward`. A preset sets only what is available in this build,
-so in this build every preset still gives the Classic game.
+`combat.fast_forward`. A preset sets only what is available in this build.
+In this build Recommended still gives the Classic game, and Everything adds
+only sharp scaling (`display.scale_mode = "sharp"`) and the F11 fullscreen
+key (`display.fullscreen_key`), neither of which changes the game.
 
 ## Changing settings
 
@@ -57,10 +59,29 @@ so in this build every preset still gives the Classic game.
 | `--parity-lock` | Force every enhancement off for this launch. |
 | `--settings` | Open the Enhancements page in the setup window, then start the game. |
 | `--show-settings` | Print the settings a launch would use, then exit. |
+| `--scale-mode MODE` | `--set display.scale_mode=MODE`: `fit`, `sharp`, `integer-square`, `integer-hybrid` or `stretch`. |
+| `--pixel-aspect ASPECT` | `--set display.pixel_aspect=ASPECT`: `dos` (tall, as the original screen) or `square`. |
+| `--fullscreen`, `--no-fullscreen` | `--enable` / `--disable display.fullscreen`: start in borderless fullscreen. |
+| `--fullscreen-key`, `--no-fullscreen-key` | `--enable` / `--disable display.fullscreen_key`: F11 switches fullscreen. |
+| `--vsync`, `--no-vsync` | `--enable` / `--disable display.vsync`: wait for the screen's refresh. |
 
 `config.toml` applies to the default launch (no game folder or mode on the
 command line); other launches use the command line alone. An unknown key on
 the command line is an error, as for any unknown option.
+
+## Scaling and fullscreen
+
+- `display.scale_mode`: `fit` (the default) fills the window as the 1.0.1
+  game does. `sharp` keeps the same shape but scales the picture up by whole
+  steps first and smooths only the last fraction, so pixels stay crisp at
+  any size. `integer-square` and `integer-hybrid` use whole steps only and
+  leave a border; `stretch` fills the whole window.
+- `display.pixel_aspect`: `dos` draws each pixel a little taller than wide,
+  as the original screen did; `square` draws square pixels.
+- `display.fullscreen` starts in borderless fullscreen. With
+  `display.fullscreen_key` on, F11 switches fullscreen on and off for the
+  session without changing the setting. F11 is a key the game never reads,
+  and Alt+Enter is still the game's Enter.
 
 ## The parity lock
 
@@ -116,8 +137,8 @@ one that types keys must change it exactly as typing those keys would:
 | Key | Setting | Type = default | Cls, When | Tier | Alias | Needs | Available |
 |---|---|---|---|---|---|---|---|
 | enhancements.freeze_overlays | Pause the world while a menu or map is open | bool = false | a, F | deviation | - | - | later (chapter 1 P6b) |
-| display.fullscreen | Fullscreen (borderless) | bool = false | a, F | feature | --fullscreen | a window | later (chapter 2 P1) |
-| display.fullscreen_key | Switch fullscreen with a key (F11) | bool = false | a, F | feature | --fullscreen-key | a window, a keyboard | later (chapter 2 P1) |
+| display.fullscreen | Fullscreen (borderless) | bool = false | a, F | feature | --fullscreen | a window | yes |
+| display.fullscreen_key | Switch fullscreen with a key (F11) | bool = false | a, F | feature | --fullscreen-key | a window, a keyboard | yes |
 | display.grow_left | Wider world view (shows more than the original) | bool = false | a, F | deviation, wider view | --grow-left | - | later (chapter 2 P8) |
 | enhancements.schema | Settings file format version | int 1..1 = 1 | -, L | feature | - | - | yes |
 | enhancements.preset | Preset | enum classic\|recommended\|everything = classic | -, P | feature | --preset | - | yes |
@@ -131,8 +152,8 @@ one that types keys must change it exactly as typing those keys would:
 | keys.auto_party | Auto-combat for the party | chord = Ctrl+Shift+A | -, F | feature | - | a keyboard | later (chapter 1 P5) |
 | keys.auto_until_done | Auto-combat until the fight ends | chord = Ctrl+F | -, F | feature | - | a keyboard | later (chapter 1 P5) |
 | keys.cheats | Open the cheats page | chord = Ctrl+F12 | -, F | feature | - | a keyboard | later (chapter 1 P5) |
-| display.scale_mode | How the picture is scaled to the window | enum fit\|sharp\|integer-square\|integer-hybrid\|stretch = fit | a, F | feature | --scale-mode | - | later (chapter 2 P1) |
-| display.pixel_aspect | Pixel shape: tall like the original screen, or square | enum dos\|square = dos | a, F | feature | --pixel-aspect | - | later (chapter 2 P1) |
+| display.scale_mode | How the picture is scaled to the window | enum fit\|sharp\|integer-square\|integer-hybrid\|stretch = fit | a, F | feature | --scale-mode | - | yes |
+| display.pixel_aspect | Pixel shape: tall like the original screen, or square | enum dos\|square = dos | a, F | feature | --pixel-aspect | - | yes |
 | display.pillar_fill | What fills the bars beside the picture | enum black\|solid\|ribbon\|bezel = black | a, F | feature | --pillar-fill | - | later (chapter 2 P2) |
 | display.pillar_color | Colour of the bars, for a solid fill | color = #000000 | a, F | feature | - | - | later (chapter 2 P2) |
 | display.bezel_image | Picture for the bars, a PNG file | path = "" | a, F | feature | --bezel-image | - | later (chapter 2 P2) |
@@ -144,6 +165,6 @@ one that types keys must change it exactly as typing those keys would:
 | display.centre_party | Keep the party centred when the side column is open | bool = false | a, F | feature | - | - | later (chapter 2 P8) |
 | display.panel_priority | Which side panel wins when two want one side | list of journal\|conversation = [journal, conversation] | a, F | feature | - | - | later (chapter 1 P6) |
 | display.panel_guard | Smallest game picture a side panel may leave, in percent | int 50..100 = 80 | a, F | feature | - | - | later (chapter 1 P6) |
-| display.vsync | Wait for the screen's refresh (vsync) | bool = true | a, F | feature | --vsync | - | later (chapter 2 P1) |
-| display.raster | Tile graphics | enum ega\|tandy = ega | a, L | feature | --raster-depth | - | later (chapter 2 P1) |
+| display.vsync | Wait for the screen's refresh (vsync) | bool = true | a, F | feature | --vsync | - | yes |
+| display.raster | Tile graphics | enum ega\|tandy = ega | a, L | feature | --raster-depth | - | yes |
 <!-- END GENERATED -->

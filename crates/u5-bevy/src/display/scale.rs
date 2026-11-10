@@ -23,6 +23,16 @@
 //! Only a policy other than Fit at the DOS aspect adds anything to the app
 //! ([`add_scale`]): the foundation's frame fit with a [`FramePolicy`] that
 //! follows [`Display`]. Under Fit the app is the 1.0.1 app.
+//!
+//! **Sharp-bilinear** (2.3.5, D2.13, M1-03). Under `sharp` the presented
+//! image also goes through the `[prescale]` step of the foundation's
+//! pipeline ([`Prescale`]): each axis gets its own whole factor,
+//! `clamp(floor(shown / image), 1, 8)`, the image is expanded by those
+//! factors with nearest-neighbour, and the copy is shown with a linear
+//! sampler, so pixels stay crisp and only their last fraction is blended.
+//! The work is done on the CPU on plain RGBA, and only when the frame is
+//! recomposed. The faithful image and its nearest sampler are never
+//! touched.
 
 use std::sync::atomic::{AtomicBool, Ordering};
 
@@ -30,10 +40,13 @@ use bevy::prelude::*;
 use u5_runtime::enhancements::{DisplaySettings, PixelAspect, ScaleMode};
 
 use super::Display;
-use crate::EnhSet;
+use crate::enh::present::{
+    PresentInput, PresentStep, PresentSteps, PresentedFrame, StepOrder, register_present_step,
+};
 use crate::enh::side::{
     FrameFit, FramePolicy, SideSpaceSettings, WindowPixels, install_side_space,
 };
+use crate::{EnhSet, fitted_display_size};
 
 /// The logged line for an integer mode that found no whole factor.
 pub const NO_INTEGER_FACTOR: &str =
@@ -278,14 +291,26 @@ pub(super) fn add_scale(app: &mut App, settings: &DisplaySettings) {
                 .run_if(resource_changed::<Display>)
                 .in_set(EnhSet::Apply),
         );
+    if policy.prescales() {
+        register_present_step(app, Prescale::default());
+    }
+}
+
+impl ScalePolicy {
+    /// Whether the mode is sharp-bilinear, so the `[prescale]` step runs.
+    pub fn prescales(self) -> bool {
+        self.mode == ScaleMode::Sharp
+    }
 }
 
 /// A changed [`Display`] (the menu overlay or a hotkey) re-sets the policy,
-/// so the frame fit picks it up on this frame's layout.
+/// so the frame fit picks it up on this frame's layout, and adds or removes
+/// the `[prescale]` step while the pipeline is in the app.
 fn follow_scale_settings(
     display: Res<Display>,
     mut current: Local<Option<ScalePolicy>>,
     mut policy: ResMut<FramePolicy>,
+    steps: Option<ResMut<PresentSteps>>,
 ) {
     let wanted = ScalePolicy::of(&display.0);
     if current.is_none() {
@@ -296,6 +321,95 @@ fn follow_scale_settings(
     if *current != Some(wanted) {
         *current = Some(wanted);
         policy.0 = Box::new(ScaleFit::new(wanted));
+        if let Some(mut steps) = steps {
+            if wanted.prescales() {
+                steps.register(Prescale::default());
+            } else {
+                steps.remove(StepOrder::PRESCALE);
+            }
+        }
+    }
+}
+
+/// The largest whole factor the prescale uses on an axis (D2.13).
+pub const PRESCALE_CAP: u32 = 8;
+
+/// The prescale's whole factor on each axis for an `image` shown at
+/// `shown` physical pixels: `clamp(floor(shown / image), 1, 8)` (2.3.5).
+pub fn prescale_factors(shown: Vec2, image: UVec2) -> UVec2 {
+    let axis = |shown: f32, image: u32| {
+        if image == 0 || !shown.is_finite() || shown <= 0.0 {
+            return 1;
+        }
+        // A shown size a rounding hair under a whole multiple (1599.9998 for
+        // 8 x 200) still counts as that multiple.
+        let factor = ((shown + 1.0e-3) / image as f32).floor() as u32;
+        factor.clamp(1, PRESCALE_CAP)
+    };
+    UVec2::new(axis(shown.x, image.x), axis(shown.y, image.y))
+}
+
+/// `rgba`, `size` pixels, expanded `factors` times on each axis by
+/// nearest-neighbour into `out`: every source pixel becomes a
+/// `factors.x x factors.y` block of itself.
+pub fn prescale_nearest(rgba: &[u8], size: UVec2, factors: UVec2, out: &mut Vec<u8>) {
+    let (width, height) = (size.x as usize, size.y as usize);
+    let (kx, ky) = (factors.x.max(1) as usize, factors.y.max(1) as usize);
+    let row_bytes = width * kx * 4;
+    out.clear();
+    out.reserve(row_bytes * height * ky);
+    let mut row = Vec::with_capacity(row_bytes);
+    for source in rgba.chunks_exact(width * 4).take(height) {
+        row.clear();
+        for pixel in source.as_chunks::<4>().0 {
+            for _ in 0..kx {
+                row.extend_from_slice(pixel);
+            }
+        }
+        for _ in 0..ky {
+            out.extend_from_slice(&row);
+        }
+    }
+}
+
+/// The physical size the presented image is shown at: the arbiter's frame
+/// while it places the frame, otherwise the 1.0.1 fit of the window.
+fn shown_size(input: &PresentInput, image: UVec2) -> Vec2 {
+    match input.side.and_then(|side| side.frame) {
+        Some(frame) => frame.size() * input.scale_factor,
+        None => fitted_display_size(image.x, image.y, input.window.as_vec2()),
+    }
+}
+
+/// The `[prescale]` step (2.3.5): last in the pipeline, it expands whatever
+/// the earlier steps made (the 320x200 frame, or the grow-left canvas) by
+/// [`prescale_factors`] and asks for the linear sampler.
+#[derive(Debug, Default)]
+pub struct Prescale {
+    scratch: Vec<u8>,
+}
+
+impl PresentStep for Prescale {
+    fn order(&self) -> StepOrder {
+        StepOrder::PRESCALE
+    }
+
+    fn revision(&mut self, input: &PresentInput) -> u64 {
+        // The window and the layout are triggers of their own; the shown
+        // size covers a display-scale change that moves neither.
+        let shown = shown_size(input, input.size);
+        (u64::from(shown.x.to_bits()) << 32) | u64::from(shown.y.to_bits())
+    }
+
+    fn apply(&mut self, input: &PresentInput, frame: &mut PresentedFrame) {
+        let factors = prescale_factors(shown_size(input, frame.size), frame.size);
+        frame.smooth = true;
+        if factors == UVec2::ONE {
+            return;
+        }
+        prescale_nearest(&frame.rgba, frame.size, factors, &mut self.scratch);
+        std::mem::swap(&mut frame.rgba, &mut self.scratch);
+        frame.size *= factors;
     }
 }
 

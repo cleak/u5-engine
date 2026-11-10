@@ -84,6 +84,9 @@ pub struct PresentInput<'a> {
     pub state: Option<&'a PlayState>,
     /// The window's physical size (zero when there is no window).
     pub window: UVec2,
+    /// Physical pixels per logical pixel (1 when there is no window), so a
+    /// step can turn the side layout's logical rects into physical pixels.
+    pub scale_factor: f32,
     /// The side-space arbiter's layout, while the arbiter is in the app.
     pub side: Option<&'a SideLayout>,
 }
@@ -296,10 +299,10 @@ fn present_frame(
 
     let host = &mut *host;
     let state = visual.as_deref().map(|visual| &visual.state);
-    let window = windows
+    let (window, scale_factor) = windows
         .single()
-        .map(|window| window.physical_size())
-        .unwrap_or(UVec2::ZERO);
+        .map(|window| (window.physical_size(), window.scale_factor()))
+        .unwrap_or((UVec2::ZERO, 1.0));
     let side = side.as_deref();
     let triggers = {
         let Some(image) = images.get(&faithful) else {
@@ -316,6 +319,7 @@ fn present_frame(
             faithful_hash,
             state,
             window,
+            scale_factor,
             side,
         };
         let revisions = steps
@@ -358,6 +362,7 @@ fn present_frame(
         faithful_hash: triggers.faithful_hash,
         state,
         window,
+        scale_factor,
         side,
     };
     host.frame.size = triggers.size;

@@ -82,20 +82,60 @@ fn rows_and_presets_come_from_the_catalogue_and_the_file() {
     assert!(settings.notes.is_empty());
     // Hidden rows are never listed (U13), and neither are the
     // foundation's own keys: the file format, the preset (the page's
-    // preset row) and the `[keys]` chords. In this build every row is one
-    // of those, so the page has only its preset row.
-    assert!(TOGGLES.iter().all(|spec| !spec.is_shipped()));
+    // preset row) and the `[keys]` chords. In this build the shipped rows
+    // with a page row are chapter 2 P1's: scaling, fullscreen and vsync
+    // (`display.raster` has none while both its values draw the same).
     for row in &settings.rows {
         assert!(!row.key.starts_with("keys."), "{}", row.key);
         assert_ne!(row.key, "enhancements.schema");
         assert_ne!(row.key, "enhancements.preset");
     }
-    assert!(settings.rows.is_empty());
     assert!(
-        settings
+        TOGGLES
+            .iter()
+            .filter(|spec| spec.is_shipped() && !spec.driven)
+            .all(|spec| spec.key.starts_with("display."))
+    );
+    let keys: Vec<&str> = settings.rows.iter().map(|row| row.key.as_str()).collect();
+    assert_eq!(
+        keys,
+        [
+            "display.fullscreen",
+            "display.fullscreen_key",
+            "display.scale_mode",
+            "display.pixel_aspect",
+            "display.vsync",
+        ]
+    );
+    // Recommended names no shipped row; Everything sets sharp scaling and
+    // the F11 key (2.2.1).
+    let values = |key: &str| {
+        let choice = settings
             .presets
             .iter()
-            .all(|choice| choice.values.is_empty())
+            .find(|choice| choice.key == key)
+            .unwrap();
+        let mut values: Vec<String> = choice
+            .values
+            .iter()
+            .map(|value| format!("{value:?}"))
+            .collect();
+        values.sort();
+        values
+    };
+    // Each preset sets the keys any preset names, at its own values.
+    let at_default = [
+        "(\"display.fullscreen_key\", Switch(false))",
+        "(\"display.scale_mode\", Choice(\"fit\"))",
+    ];
+    assert_eq!(values("classic"), at_default);
+    assert_eq!(values("recommended"), at_default);
+    assert_eq!(
+        values("everything"),
+        [
+            "(\"display.fullscreen_key\", Switch(true))",
+            "(\"display.scale_mode\", Choice(\"sharp\"))",
+        ]
     );
 
     // The lock reaches the page.

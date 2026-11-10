@@ -214,8 +214,25 @@ fn usage_lists_the_generic_flags() {
     ] {
         assert!(CLI_USAGE.contains(flag), "{flag}");
     }
-    // No shipped row has an alias besides `--preset` yet.
-    assert_eq!(cli_usage(), CLI_USAGE);
+    // The shipped rows' aliases (chapter 2 P1) are listed inside the
+    // ENHANCEMENTS section, after the generic flags.
+    let usage = cli_usage();
+    let section = &usage[usage.find("ENHANCEMENTS").unwrap()..];
+    let section = &section[..section.find("\n\n").unwrap()];
+    for line in [
+        "--scale-mode <VALUE>   --set display.scale_mode=VALUE",
+        "--pixel-aspect <VALUE> --set display.pixel_aspect=VALUE",
+        "--fullscreen, --no-fullscreen --enable display.fullscreen (--no- form: --disable)",
+        "--fullscreen-key, --no-fullscreen-key --enable display.fullscreen_key (--no- form: --disable)",
+        "--vsync, --no-vsync    --enable display.vsync (--no- form: --disable)",
+    ] {
+        assert!(section.contains(line), "{line}\n{section}");
+    }
+    assert!(!usage.contains("--pillar-fill"), "the fill ships with P2");
+    assert!(
+        !usage.contains("--grow-left"),
+        "the wider view ships with P8"
+    );
 }
 
 #[test]
@@ -448,6 +465,7 @@ fn the_settings_docs_list_every_enhancement_option() {
         .lines()
         .filter_map(|line| line.trim_start().strip_prefix("--"))
         .filter_map(|line| line.split_whitespace().next())
+        .map(|flag| flag.trim_end_matches(','))
         .collect();
     assert!(flags.contains(&"preset") && flags.contains(&"parity-lock"));
     let docs =
@@ -483,8 +501,9 @@ fn an_explicit_path_launch_reads_no_display_settings() {
     assert!(explicit.resolved.is_classic());
     assert_eq!(explicit.resolved.display(), DisplaySettings::default());
 
-    // The default launch reads the same file. The rows are hidden in this
-    // build, so each is noted and kept at its default.
+    // The default launch reads the same file. The wider view's rows are
+    // hidden in this build, so each is noted and kept at its default; the
+    // scale and vsync rows shipped with chapter 2 P1 and apply.
     let default = resolve_launch(Some(&scratch.config()), &[], LockState::Off);
     assert_eq!(default.config.as_deref(), Some(scratch.config().as_path()));
     let notes: Vec<String> = default
@@ -497,10 +516,16 @@ fn an_explicit_path_launch_reads_no_display_settings() {
         notes,
         [
             "display.grow_left: not available in this build",
-            "display.scale_mode: not available in this build",
-            "display.vsync: not available in this build",
             "display.crawl: not available in this build",
         ]
     );
-    assert_eq!(default.resolved.display(), DisplaySettings::default());
+    let display = default.resolved.display();
+    assert_eq!(
+        display,
+        DisplaySettings {
+            scale_mode: u5_runtime::enhancements::ScaleMode::Sharp,
+            vsync: false,
+            ..DisplaySettings::default()
+        }
+    );
 }

@@ -912,14 +912,34 @@ mod tests {
 
     #[test]
     fn aliases_come_from_shipped_rows_only() {
-        // `--preset` is parsed by `cli.rs` itself, and no other shipped row
-        // has an alias yet.
+        // `--preset` is parsed by `cli.rs` itself; the display rows of
+        // chapter 2 P1 are the only shipped rows with aliases so far.
         assert_eq!(find_cli_alias("--preset"), None);
         assert_eq!(find_cli_alias("--no-preset"), None);
         assert_eq!(find_cli_alias("--quest-journal"), None);
-        assert_eq!(cli_alias_usage(), "");
+        assert_eq!(find_cli_alias("--pillar-fill"), None);
+        assert_eq!(find_cli_alias("--grow-left"), None);
+        assert_eq!(
+            cli_alias_usage()
+                .lines()
+                .map(|line| line.split_whitespace().next().unwrap())
+                .collect::<Vec<_>>(),
+            // Toggles first, then valued settings, each in catalogue order.
+            [
+                "--fullscreen,",
+                "--fullscreen-key,",
+                "--scale-mode",
+                "--pixel-aspect",
+                "--vsync,"
+            ]
+        );
         for row in CatalogueRow::all().filter(|row| row.is_shipped()) {
-            for alias in row.cli_aliases().iter().filter(|a| **a != "--preset") {
+            // `--preset` and `--raster-depth` are parsed by `cli.rs` itself.
+            for alias in row
+                .cli_aliases()
+                .iter()
+                .filter(|a| !SELF_PARSED_ALIASES.contains(a) && **a != "--preset")
+            {
                 let found = find_cli_alias(alias).unwrap();
                 assert_eq!(
                     found,
@@ -936,8 +956,9 @@ mod tests {
         }
     }
 
-    /// The `[display]` aliases of design 2.3.3, as they will parse once
-    /// their rows ship (they are hidden in this build, so none parses yet).
+    /// The `[display]` aliases of design 2.3.3. The P1 rows (scale,
+    /// fullscreen, vsync) shipped in M1-03 and parse; the fill and the wider
+    /// view are hidden until theirs ship.
     #[test]
     fn display_aliases_parse_as_the_design_lists_them() {
         let display = || CatalogueRow::all().filter(|row| row.key().starts_with("display."));
@@ -1024,10 +1045,14 @@ mod tests {
             ),
         ] {
             assert_eq!(find_cli_alias_in(display(), flag), Some(alias), "{flag}");
+            let key = match alias {
+                CliAlias::Valued { key } | CliAlias::Switch { key, .. } => key,
+            };
+            let shipped = CatalogueRow::find(key).unwrap().is_shipped();
             assert_eq!(
                 find_cli_alias(flag),
-                None,
-                "{flag} is hidden until it ships"
+                shipped.then_some(alias),
+                "{flag} parses exactly when its row has shipped"
             );
         }
         // Valued keys have no `--no-` form; `--raster-depth` stays cli.rs's
