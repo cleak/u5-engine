@@ -47,6 +47,13 @@
 //! message window: `sync_crawl` rebuilds them before the pipeline host on a
 //! frame whose faithful bytes or input line changed, and hands them to the
 //! step through a shared [`CrawlFeed`].
+//!
+//! **The docked column** (M1-13, 2.2.2, 2.2.5, 2.2.7, 2.3.7 step 8) is
+//! drawn by [`column`] while the session's [`ColumnState`] is open: Ctrl+P
+//! (the router's `ToggleColumn`, bound only while `display.grow_left` is
+//! on) flips it in `EnhSet::Apply`. Its message window shows the crawl's
+//! rows with the history above them; `sync_crawl` builds those older rows
+//! only while the column is open.
 
 use std::hash::{Hash, Hasher};
 
@@ -57,13 +64,16 @@ use u5_runtime::{PeekLightPolicy, PlayState, TileAtlas};
 use super::Display;
 use super::crawl::sync::{CrawlFeed, CrawlInputs, CrawlState, sync_crawl};
 use super::scale::Aspect;
+use crate::enh::input::EnhActionEvent;
 use crate::enh::present::{
     PresentInput, PresentStep, PresentSteps, PresentedFrame, StepOrder, register_present_step,
 };
 use crate::enh::side::{FrameImageSize, layout_side_space};
 use crate::{EnhSet, VISUAL_PLAY_FRAME_HEIGHT, VISUAL_PLAY_FRAME_WIDTH, VisualState};
+use column::{ColumnState, ColumnView, column_actions};
 
 pub mod bands;
+pub mod column;
 pub mod compose;
 pub mod crawl_paint;
 
@@ -226,6 +236,8 @@ pub struct ComposeOptions<'a> {
     pub bands: Option<compose::Bands<'a>>,
     /// Step 7, the message crawl; `None` draws no crawl.
     pub crawl: Option<crawl_paint::CrawlPaint<'a>>,
+    /// Step 8: the docked column, drawn while open.
+    pub column: ColumnView,
 }
 
 /// Steps 1-6 for one state (2.3.7): the ring peek for the canvas's map
@@ -258,6 +270,7 @@ pub fn compose_for_state(
         flash,
         options.bands,
         options.crawl,
+        options.column,
     ))
 }
 
@@ -289,9 +302,9 @@ pub fn render_shell_frame_and_canvas(
             snapshot: &snapshot,
             font: fonts.0,
             hp_colours: true,
-            open: false,
         }),
         crawl: None,
+        column: ColumnView::default(),
     };
     let canvas = compose_for_state(&frame, state, atlas, canvas, options);
     (frame, canvas)
@@ -315,6 +328,36 @@ pub fn render_shell_frame_and_canvas_with_crawl(
     crawl_on: bool,
     input_line: &str,
 ) -> (Vec<u8>, Option<Vec<u8>>) {
+    render_shell_frame_and_canvas_with_column(
+        state,
+        atlas,
+        fonts,
+        game_dir,
+        canvas,
+        light,
+        crawl,
+        crawl_on,
+        input_line,
+        ColumnView::default(),
+    )
+}
+
+/// [`render_shell_frame_and_canvas_with_crawl`] with the docked column in
+/// `column`'s state: the crawl is told whether the column wants its older
+/// rows, as `sync_crawl` tells it, before it syncs.
+#[allow(clippy::too_many_arguments)]
+pub fn render_shell_frame_and_canvas_with_column(
+    state: &mut PlayState,
+    atlas: &TileAtlas,
+    fonts: (&u5_runtime::FixedCellFont, &u5_runtime::FixedCellFont),
+    game_dir: &std::path::Path,
+    canvas: &Canvas,
+    light: PeekLightPolicy,
+    crawl: &mut CrawlState,
+    crawl_on: bool,
+    input_line: &str,
+    column: ColumnView,
+) -> (Vec<u8>, Option<Vec<u8>>) {
     let ctx = crate::PlayFrameContext {
         ibm: fonts.0,
         runes: fonts.1,
@@ -325,6 +368,7 @@ pub fn render_shell_frame_and_canvas_with_crawl(
         state, atlas, ctx, input_line, "", true,
     );
     crawl.observe_input(input_line);
+    crawl.set_history_wanted(column.open);
     crawl.sync(
         state,
         &frame,
@@ -345,13 +389,13 @@ pub fn render_shell_frame_and_canvas_with_crawl(
             snapshot: &snapshot,
             font: fonts.0,
             hp_colours: true,
-            open: false,
         }),
         crawl: Some(crawl_paint::CrawlPaint {
             rows: &rows,
             crawl: crawl_on,
             typed_colour: true,
         }),
+        column,
     };
     let canvas = compose_for_state(&frame, state, atlas, canvas, options);
     (frame, canvas)
@@ -396,6 +440,8 @@ pub struct GrowLeftCompose {
     bands: Option<(u64, bands::BandSnapshot)>,
     /// The crawl rows `sync_crawl` keeps; `None` draws no crawl.
     crawl: Option<CrawlFeed>,
+    /// The session's column; `None` keeps it closed.
+    column: Option<ColumnState>,
 }
 
 impl GrowLeftCompose {
@@ -404,6 +450,7 @@ impl GrowLeftCompose {
             settings: GrowComposeSettings::of(settings),
             bands: None,
             crawl: None,
+            column: None,
         }
     }
 
@@ -411,6 +458,19 @@ impl GrowLeftCompose {
     pub fn with_crawl(mut self, feed: CrawlFeed) -> Self {
         self.crawl = Some(feed);
         self
+    }
+
+    /// The step drawing the docked column in `column`'s state (step 8).
+    pub fn with_column(mut self, column: ColumnState) -> Self {
+        self.column = Some(column);
+        self
+    }
+
+    fn column_view(&self) -> ColumnView {
+        self.column
+            .as_ref()
+            .map(ColumnState::view)
+            .unwrap_or_default()
     }
 
     /// The band snapshot for this compose: the cached one while the
@@ -462,6 +522,7 @@ impl PresentStep for GrowLeftCompose {
             .as_ref()
             .map(|feed| feed.rows().revision)
             .hash(&mut hasher);
+        self.column_view().hash(&mut hasher);
         hasher.finish()
     }
 
@@ -477,6 +538,7 @@ impl PresentStep for GrowLeftCompose {
             return;
         };
         let crawl_rows = self.crawl.as_ref().map(|feed| feed.rows().clone());
+        let column = self.column_view();
         let snapshot = self.bands_for(state, input.faithful_hash);
         let options = ComposeOptions {
             light: settings.light,
@@ -484,14 +546,13 @@ impl PresentStep for GrowLeftCompose {
                 snapshot,
                 font,
                 hp_colours: settings.hp_colours,
-                // The docked column is M1-13's.
-                open: false,
             }),
             crawl: crawl_rows.as_ref().map(|rows| crawl_paint::CrawlPaint {
                 rows,
                 crawl: settings.crawl,
                 typed_colour: settings.typed_colour,
             }),
+            column,
         };
         let Some(rgba) = compose_for_state(&frame.rgba, state, atlas, &canvas, options) else {
             return;
@@ -513,7 +574,26 @@ pub(super) fn add_grow(app: &mut App, settings: &DisplaySettings) {
     app.init_resource::<FrameImageSize>();
     let feed = CrawlFeed::new();
     app.insert_resource(CrawlState::new(feed.clone()));
-    register_present_step(app, GrowLeftCompose::of(settings).with_crawl(feed));
+    let column = ColumnState::new(ColumnView::at_launch(settings.grow_left.crawl));
+    app.insert_resource(column.clone());
+    register_present_step(
+        app,
+        GrowLeftCompose::of(settings)
+            .with_crawl(feed)
+            .with_column(column),
+    );
+    // Ctrl+P reaches this plugin only as the router's `ToggleColumn`. The
+    // router is in the app exactly while a binding is active; when the
+    // `[keys]` chord was refused there is none, and the column stays as it
+    // started.
+    if app.world().contains_resource::<Events<EnhActionEvent>>() {
+        app.add_systems(
+            Update,
+            column_actions
+                .run_if(on_event::<EnhActionEvent>)
+                .in_set(EnhSet::Apply),
+        );
+    }
     app.add_systems(
         Update,
         (
@@ -570,6 +650,7 @@ fn follow_grow_settings(
     mut current: Local<Option<(bool, GrowComposeSettings)>>,
     steps: Option<ResMut<PresentSteps>>,
     crawl: Option<Res<CrawlState>>,
+    column: Option<Res<ColumnState>>,
 ) {
     let wanted = (display.0.grow_left.on, GrowComposeSettings::of(&display.0));
     let Some(previous) = current.replace(wanted) else {
@@ -581,11 +662,14 @@ fn follow_grow_settings(
     }
     if let Some(mut steps) = steps {
         if wanted.0 {
-            let step = GrowLeftCompose::of(&display.0);
-            steps.register(match crawl {
-                Some(crawl) => step.with_crawl(crawl.feed().clone()),
-                None => step,
-            });
+            let mut step = GrowLeftCompose::of(&display.0);
+            if let Some(crawl) = crawl {
+                step = step.with_crawl(crawl.feed().clone());
+            }
+            if let Some(column) = column {
+                step = step.with_column(column.clone());
+            }
+            steps.register(step);
         } else {
             steps.remove(StepOrder::GROW_LEFT_COMPOSE);
         }

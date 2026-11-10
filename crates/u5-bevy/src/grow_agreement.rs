@@ -32,6 +32,9 @@ use u5_runtime::{FixedCellFont, PeekLightPolicy, PlayState, TileAtlas};
 
 use crate::VISUAL_PLAY_FRAME_WIDTH;
 use crate::display::grow::bands::{self, BandSnapshot, ribbon_layout};
+use crate::display::grow::column::{
+    COUNTERS_CROP, COUNTERS_Y, CROP_X, ColumnView, FrameRect, ROSTER_CROP, ROSTER_Y,
+};
 use crate::display::grow::{Canvas, ComposeOptions, compose, compose_for_state, flash_active};
 
 /// The windows checked: the three named layouts, a 21:9 at 2560x1080 and
@@ -82,16 +85,23 @@ fn pixel(rgba: &[u8], width: usize, x: usize, y: usize) -> [u8; 4] {
     [rgba[at], rgba[at + 1], rgba[at + 2], rgba[at + 3]]
 }
 
-fn options<'a>(snapshot: &'a BandSnapshot, font: &'a FixedCellFont) -> ComposeOptions<'a> {
+fn options<'a>(
+    snapshot: &'a BandSnapshot,
+    font: &'a FixedCellFont,
+    open: bool,
+) -> ComposeOptions<'a> {
     ComposeOptions {
         light: PeekLightPolicy::Scaled,
         bands: Some(compose::Bands {
             snapshot,
             font,
             hp_colours: true,
-            open: false,
         }),
         crawl: None,
+        column: ColumnView {
+            open,
+            ..ColumnView::default()
+        },
     }
 }
 
@@ -133,6 +143,7 @@ fn check_tabs(
     canvas: &Canvas,
     frame: &[u8],
     snapshot: &BandSnapshot,
+    open: bool,
     context: &str,
     found: &mut Vec<String>,
 ) {
@@ -140,7 +151,7 @@ fn check_tabs(
     let sky = snapshot.gaps.top_rect();
     let wind = snapshot.gaps.bottom_rect();
     let width = sky.map_or(112, |rect| rect.width() as u32);
-    let centre = bands::tab_centre(canvas, false, width, &snapshot.ribbon);
+    let centre = bands::tab_centre(canvas, open, width, &snapshot.ribbon);
     let mut centres = Vec::new();
     for (rect, y0) in [(sky, 8usize), (wind, canvas.h as usize - 8)] {
         let Some(rect) = rect else {
@@ -166,7 +177,7 @@ fn check_tabs(
     if let Some(rect) = sky {
         let x0 = bands::tab_left(rect, centre);
         let x1 = x0 + rect.width() as u32;
-        let layout = ribbon_layout(canvas, false);
+        let layout = ribbon_layout(canvas, open);
         let member_w = layout.member_cells() as u32 * 8;
         let left = bands::counters_left(canvas, &snapshot.ribbon);
         let clear = (0..snapshot.ribbon.members.len())
@@ -177,6 +188,55 @@ fn check_tabs(
             found.push(format!("{context}: text under the sky tab"));
         }
     }
+}
+
+/// (M1-13) With the column open: its roster and food/gold/date windows are
+/// the frame's own windows byte for byte, the core is still the faithful
+/// viewport (the column never covers it), and the tabs are the frame's own
+/// pixels at the open centre.
+fn check_column(
+    frame: &[u8],
+    state: &PlayState,
+    atlas: &TileAtlas,
+    canvas: &Canvas,
+    options: ComposeOptions<'_>,
+    context: &str,
+    found: &mut Vec<String>,
+) {
+    let Some(rgba) = compose_for_state(frame, state, atlas, canvas, options) else {
+        found.push(format!("{context}: no canvas"));
+        return;
+    };
+    let w = canvas.w as usize;
+    let crop_is_frame = |rect: FrameRect, y0: u32| {
+        (0..rect.h as usize).all(|row| {
+            let at = ((y0 as usize + row) * w + CROP_X as usize) * 4;
+            let from = ((rect.y as usize + row) * FRAME_W + rect.x as usize) * 4;
+            let width = rect.w as usize * 4;
+            rgba[at..at + width] == frame[from..from + width]
+        })
+    };
+    if !crop_is_frame(ROSTER_CROP, ROSTER_Y.0) {
+        found.push(format!(
+            "{context}: the roster is not the frame's own window"
+        ));
+    }
+    if !crop_is_frame(COUNTERS_CROP, COUNTERS_Y.0) {
+        found.push(format!(
+            "{context}: food, gold and the date are not the frame's own window"
+        ));
+    }
+    let (cx, cy, side) = compose::core_rect(canvas);
+    let core_ok = (0..side).all(|row| {
+        let at = ((cy + row) * w + cx) * 4;
+        let from = ((8 + row) * FRAME_W + 8) * 4;
+        rgba[at..at + side * 4] == frame[from..from + side * 4]
+    });
+    if !core_ok {
+        found.push(format!("{context}: the column covers the core"));
+    }
+    let snapshot = options.bands.expect("the bands").snapshot;
+    check_tabs(&rgba, canvas, frame, snapshot, true, context, found);
 }
 
 /// Check one finished frame of `state`.
@@ -194,7 +254,13 @@ pub(crate) fn note(state: &PlayState, atlas: &TileAtlas, font: &FixedCellFont, f
     for (ww, wh) in WINDOWS {
         let canvas = Canvas::for_window(ww, wh, u5_runtime::enhancements::PixelAspect::Dos)
             .expect("a canvas for every window checked");
-        let composed = compose_for_state(frame, state, atlas, &canvas, options(&snapshot, font));
+        let composed = compose_for_state(
+            frame,
+            state,
+            atlas,
+            &canvas,
+            options(&snapshot, font, false),
+        );
         let Some(rgba) = composed else {
             if state.top_down_world_view_active() {
                 found.push(format!("{ww}x{wh}: the top-down view gave no canvas"));
@@ -227,7 +293,17 @@ pub(crate) fn note(state: &PlayState, atlas: &TileAtlas, font: &FixedCellFont, f
             &canvas,
             frame,
             &snapshot,
+            false,
             &format!("{ww}x{wh}"),
+            &mut found,
+        );
+        check_column(
+            frame,
+            state,
+            atlas,
+            &canvas,
+            options(&snapshot, font, true),
+            &format!("{ww}x{wh} open"),
             &mut found,
         );
         // The corners: the frame's 6x6 staircase blocks, top-left,
@@ -257,9 +333,13 @@ pub(crate) fn note(state: &PlayState, atlas: &TileAtlas, font: &FixedCellFont, f
             let mut calm = state.clone();
             calm.presentation_camp_flash_inverted = false;
             calm.message_window_flash_hold = Default::default();
-            if let Some(plain) =
-                compose_for_state(frame, &calm, atlas, &canvas, options(&snapshot, font))
-            {
+            if let Some(plain) = compose_for_state(
+                frame,
+                &calm,
+                atlas,
+                &canvas,
+                options(&snapshot, font, false),
+            ) {
                 let mask = u5_runtime::potion_flash_playback(0)
                     .expect("the shared flash")
                     .palette_xor_mask;

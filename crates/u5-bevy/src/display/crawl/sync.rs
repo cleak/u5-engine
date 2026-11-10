@@ -28,14 +28,15 @@ use bevy::prelude::*;
 use u5_runtime::enhancements::fnv1a64;
 use u5_runtime::{
     CH_CELL_SIDE, CHROME_RULE_INDEX, FixedCellFont, MESSAGE_WINDOW_BOTTOM, MESSAGE_WINDOW_LEFT,
-    MESSAGE_WINDOW_RIGHT, MESSAGE_WINDOW_TOP, MessageWindowRow, PlayState, TlkGlyphFont,
-    prompt_cursor_glyph,
+    MESSAGE_WINDOW_RIGHT, MESSAGE_WINDOW_TOP, MessageEntry, MessageWindowRow, PlayState,
+    TlkGlyphFont, prompt_cursor_glyph,
 };
 
 use super::ages::CrawlAges;
-use super::layer::{CapSprite, CrawlRows, PlacedRows, crawl_lines};
+use super::layer::{CapSprite, CrawlLine, CrawlRows, LineKind, PlacedRows, crawl_lines};
 use super::{
-    TypedLog, classify_rows, echo_row_flags, entry_log, render_outputs, row_lines, tagged_outputs,
+    MessageHistory, OPEN_WINDOW_ROWS_MAX, RowClass, TypedLog, classify_rows, echo_row_flags,
+    entry_log, project_history_rows, render_outputs, row_lines, tagged_outputs,
 };
 use crate::{EGA_PALETTE_RGB, VISUAL_PLAY_FRAME_HEIGHT, VISUAL_PLAY_FRAME_WIDTH, VisualState};
 
@@ -85,6 +86,16 @@ pub struct CrawlState {
     feed: CrawlFeed,
     /// Rows left out so far because the faithful frame did not show them.
     unshown: usize,
+    /// The transcript entries the transcript has dropped (2.3.8).
+    history: MessageHistory,
+    /// Whether the open column is showing, so the rows carry its older
+    /// rows ([`CrawlRows::older`]).
+    history_wanted: bool,
+    /// Bumped whenever the transcript (and so perhaps the history) changed.
+    history_revision: u64,
+    /// Syncs whose older rows could not be lined up with the placed rows,
+    /// so the open window showed the placed rows alone.
+    unaligned: usize,
 }
 
 impl CrawlState {
@@ -110,6 +121,23 @@ impl CrawlState {
         self.unshown
     }
 
+    /// The history buffer.
+    pub fn history(&self) -> &MessageHistory {
+        &self.history
+    }
+
+    /// Ask for the open column's older rows (the column is open) or stop
+    /// building them (closed). Takes effect on the next [`Self::sync`].
+    pub fn set_history_wanted(&mut self, wanted: bool) {
+        self.history_wanted = wanted;
+    }
+
+    /// Syncs so far whose older rows could not be lined up with the placed
+    /// rows (the open window then shows the placed rows alone).
+    pub fn unaligned_syncs(&self) -> usize {
+        self.unaligned
+    }
+
     /// The typed-line log.
     pub fn typed(&self) -> &TypedLog {
         &self.typed
@@ -133,6 +161,12 @@ impl CrawlState {
         if faithful.len() != FRAME_W * FRAME_H * 4 {
             return false;
         }
+        // The history follows the transcript itself (not the copy a flash
+        // hold freezes for the window), on every call.
+        if self.history.live() != state.message_entries() {
+            self.history.sync(state.message_entries());
+            self.history_revision = self.history_revision.wrapping_add(1);
+        }
         let key = {
             let mut hasher = std::collections::hash_map::DefaultHasher::new();
             fnv1a64(faithful).hash(&mut hasher);
@@ -141,6 +175,10 @@ impl CrawlState {
             inputs.cursor_frame.hash(&mut hasher);
             state.turn.hash(&mut hasher);
             state.active_conversation.is_some().hash(&mut hasher);
+            self.history_wanted.hash(&mut hasher);
+            if self.history_wanted {
+                self.history_revision.hash(&mut hasher);
+            }
             hasher.finish()
         };
         if self.key == Some(key) {
@@ -148,8 +186,17 @@ impl CrawlState {
         }
         self.key = Some(key);
         self.typed.observe(inputs.input_line);
-        let built = build_rows(state, faithful, inputs, &mut self.ages, &self.typed);
+        let history = self.history_wanted.then_some(&self.history);
+        let built = build_rows(
+            state,
+            faithful,
+            inputs,
+            &mut self.ages,
+            &self.typed,
+            history,
+        );
         self.unshown += built.unshown;
+        self.unaligned += usize::from(built.unaligned);
         let mut rows = self.feed.rows();
         let mut next = built.rows;
         next.revision = rows.revision;
@@ -297,6 +344,8 @@ pub fn cap_sprite(ibm: &FixedCellFont) -> CapSprite {
 struct Built {
     rows: CrawlRows,
     unshown: usize,
+    /// The older rows were wanted and could not be lined up.
+    unaligned: bool,
 }
 
 /// Steps 1-4 of a sync: the placed rows, their ages and classes, checked
@@ -307,6 +356,7 @@ fn build_rows(
     inputs: CrawlInputs<'_>,
     ages: &mut CrawlAges,
     typed: &TypedLog,
+    history: Option<&MessageHistory>,
 ) -> Built {
     let mut placed = placed_rows(state, inputs);
 
@@ -381,14 +431,132 @@ fn build_rows(
         |row, at| row_mask(row, at, inputs),
         (prompt_cursor_glyph(inputs.cursor_frame), cursor_mask),
     );
+    let (older, unaligned) = match history {
+        Some(history) => {
+            let mut all: Vec<MessageEntry> = history.committed().iter().cloned().collect();
+            all.extend_from_slice(entries);
+            match older_lines(&all, typed, &lines, keep, inputs) {
+                Some(older) => (older, false),
+                None => (Vec::new(), true),
+            }
+        }
+        None => (Vec::new(), false),
+    };
     Built {
         rows: CrawlRows {
             lines,
             cursor,
             cap: Some(cap_sprite(inputs.ibm)),
+            older,
             revision: 0,
         },
         unshown,
+        unaligned,
+    }
+}
+
+/// The open column's older rows (2.2.5, 2.3.8): the rows above `placed`
+/// (the crawl's lines this frame), oldest first, at most
+/// [`OPEN_WINDOW_ROWS_MAX`].
+///
+/// `entries` is the history buffer's committed entries followed by the
+/// transcript the window projects. They are projected with the runtime's
+/// own `message_log_from_entries` at the window's width
+/// ([`project_history_rows`]: no blank rows, no prompt row, since a prompt
+/// in history is never live), turned into lines exactly as the placed rows
+/// are ([`crawl_lines`]: a committed `:word` keeps only the word, a bare
+/// `:` is left out), and lined up with the placed lines: the projection's
+/// tail must be the start of the placed committed lines. What comes before
+/// that tail is older. Rows still in the transcript but scrolled out of
+/// the original's window are found this way too, not only the entries the
+/// transcript has dropped.
+///
+/// `None` when the projection cannot be lined up with the placed lines (a
+/// row the frame does not show yet, or text the window composes that no
+/// entry holds): the open window then shows the placed rows alone rather
+/// than guess.
+pub fn older_lines(
+    entries: &[MessageEntry],
+    typed: &TypedLog,
+    placed: &[CrawlLine],
+    render: impl FnMut(&str) -> Option<String>,
+    inputs: CrawlInputs<'_>,
+) -> Option<Vec<CrawlLine>> {
+    let committed: Vec<String> = placed
+        .iter()
+        .filter(|line| line.kind == LineKind::Text)
+        .map(CrawlLine::text)
+        .collect();
+    let rows = project_history_rows(
+        entries,
+        typed,
+        OPEN_WINDOW_ROWS_MAX + committed.len(),
+        render,
+    );
+    let window_rows: Vec<MessageWindowRow> = rows
+        .iter()
+        .enumerate()
+        .map(|(index, row)| MessageWindowRow {
+            row: (index % 256) as u8,
+            column: MESSAGE_WINDOW_LEFT + u8::from(row.prefixed),
+            text: row.text.clone(),
+            glyphs: row.glyphs.clone(),
+            prefixed: row.prefixed,
+            trailing_spaces: 0,
+        })
+        .collect();
+    let classes: Vec<RowClass> = rows.iter().map(|row| row.class).collect();
+    let ages = vec![0; window_rows.len()];
+    let projected = PlacedRows {
+        rows: window_rows,
+        live_row_placed: false,
+        cursor: None,
+    };
+    let (lines, _) = crawl_lines(
+        &projected,
+        &classes,
+        &ages,
+        "",
+        |row, at| row_mask(row, at, inputs),
+        (0, [0; 8]),
+    );
+    let texts: Vec<String> = lines.iter().map(CrawlLine::text).collect();
+    let cut = if committed.is_empty() {
+        Some(lines.len())
+    } else {
+        line_up(&texts, &committed)
+    }?;
+    let mut older = lines;
+    older.truncate(cut);
+    let excess = older.len().saturating_sub(OPEN_WINDOW_ROWS_MAX);
+    older.drain(..excess);
+    Some(older)
+}
+
+/// Rows of the projection that may follow the placed committed lines: the
+/// row the live line shows (a prompt such as `Save game?` waiting for its
+/// answer, which the crawl draws as the live line, not as committed text),
+/// or a row the window is still completing in place.
+pub const OLDER_TRAILING_ROWS: usize = 2;
+
+/// Where the placed committed lines `placed` start in the projection
+/// `projected` (both as text, top to bottom), so that everything before is
+/// older: either the projection's tail is the start of `placed` (the window
+/// shows text no entry holds yet below it), or `placed` sits whole in the
+/// projection with at most [`OLDER_TRAILING_ROWS`] rows after it (the live
+/// line's own row). The longest overlap wins; `None` when neither holds.
+pub fn line_up(projected: &[String], placed: &[String]) -> Option<usize> {
+    let ends_within = (0..projected.len()).find(|&start| {
+        let overlap = projected.len() - start;
+        overlap <= placed.len() && projected[start..] == placed[..overlap]
+    });
+    let contains = (1..=OLDER_TRAILING_ROWS).find_map(|trailing| {
+        let start = projected.len().checked_sub(placed.len() + trailing)?;
+        (projected[start..start + placed.len()] == *placed).then_some(start)
+    });
+    match (ends_within, contains) {
+        (Some(a), Some(b)) => Some(a.min(b)),
+        (a, b) => a.or(b),
     }
 }
 
@@ -399,10 +567,15 @@ pub(crate) fn sync_crawl(
     visual: Option<Res<VisualState>>,
     images: Res<Assets<Image>>,
     mut crawl: ResMut<CrawlState>,
+    column: Option<Res<crate::display::grow::column::ColumnState>>,
 ) {
     let Some(visual) = visual else {
         return;
     };
+    let open = column.is_some_and(|column| column.view().open);
+    if crawl.history_wanted != open {
+        crawl.set_history_wanted(open);
+    }
     crawl.observe_input(&visual.input_line);
     let Some(bytes) = images
         .get(&visual.image_handle)

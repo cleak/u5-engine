@@ -1,4 +1,4 @@
-//! Phase B M1-09, M1-10 and M1-12 review shots: the grow-left canvas
+//! Phase B M1-09, M1-10, M1-12 and M1-13 review shots: the grow-left canvas
 //! (chrome, ring, faithful core, the ribbon, the tabs and the message
 //! crawl) for the approved mockup scenes, rendered by the engine's own frame
 //! renderer and compositor next to the approved c04f mockups.
@@ -9,6 +9,13 @@
 //! after each as the shell does, so the rows age turn by turn. The rows are
 //! the engine's own transcript of that walk (the mockups' rows are a
 //! script of their own), so their text and ages are live data.
+//!
+//! The docked column (M1-13): the D mockups are the B walk with the column
+//! open (Ctrl+P). The engine's open window shows the walk's rows on the
+//! crawl's pixels and the transcript's older rows above them (live data);
+//! the mockup's own seventeen rows (`HISTORY_B + SCRIPT_B`) are also drawn
+//! through the engine's open-window paint over the engine's open canvas
+//! for a pixel comparison.
 //!
 //! The G and G6 shots edit the party as the mockups do (Iolo poisoned; for
 //! G6 three more members with the mockup's names and numbers) before the
@@ -31,9 +38,11 @@ use std::path::{Path, PathBuf};
 
 use u5_bevy::display::crawl::layer::{CrawlCell, CrawlLine, LineKind};
 use u5_bevy::display::crawl::sync::{CrawlState, glyph_mask};
+use u5_bevy::display::grow::column::{ColumnText, ColumnView, paint_open_window};
 use u5_bevy::display::grow::crawl_paint::{CrawlPaint, paint_crawl};
 use u5_bevy::display::grow::{
-    Canvas, compose, render_shell_frame_and_canvas, render_shell_frame_and_canvas_with_crawl,
+    Canvas, ComposeOptions, bands, compose, compose_for_state, render_shell_frame_and_canvas,
+    render_shell_frame_and_canvas_with_column, render_shell_frame_and_canvas_with_crawl,
 };
 use u5_runtime::enhancements::PixelAspect;
 use u5_runtime::*;
@@ -80,6 +89,8 @@ struct Shot {
     typing: &'static str,
     /// The scene: `true` for S2, inside Britain.
     town: bool,
+    /// The docked column open (Ctrl+P).
+    column: bool,
 }
 
 const fn shot(name: &'static str, mockup: &'static str, window: (u32, u32), party: Party) -> Shot {
@@ -93,6 +104,7 @@ const fn shot(name: &'static str, mockup: &'static str, window: (u32, u32), part
         crawl: Crawl::Quiet,
         typing: "",
         town: false,
+        column: false,
     }
 }
 
@@ -106,7 +118,14 @@ const fn walk(name: &'static str, mockup: &'static str, window: (u32, u32)) -> S
 const W16: (u32, u32) = (2560, 1440);
 const W21: (u32, u32) = (3440, 1440);
 
-const SHOTS: [Shot; 10] = [
+const fn open(name: &'static str, mockup: &'static str, window: (u32, u32)) -> Shot {
+    Shot {
+        column: true,
+        ..walk(name, mockup, window)
+    }
+}
+
+const SHOTS: [Shot; 12] = [
     shot("S1-16x9", "c04f-A-S1-quiet.png", W16, Party::Save),
     shot("S1-21x9", "c04f-uw-A-S1-quiet.png", W21, Party::Save),
     walk("B-16x9", "c04f-B-S1-crawl.png", W16),
@@ -121,6 +140,7 @@ const SHOTS: [Shot; 10] = [
         crawl: Crawl::Walk,
         typing: "",
         town: false,
+        column: false,
     },
     Shot {
         name: "C-16x9",
@@ -132,11 +152,14 @@ const SHOTS: [Shot; 10] = [
         crawl: Crawl::Talk,
         typing: "JO",
         town: true,
+        column: false,
     },
     shot("G-16x9", "c04f-G-status.png", W16, Party::IoloPoisoned),
     shot("G-21x9", "c04f-uw-G-status.png", W21, Party::IoloPoisoned),
     shot("G6-16x9", "c04f-G6-status.png", W16, Party::Six),
     shot("G6-21x9", "c04f-uw-G6-status.png", W21, Party::Six),
+    open("D-16x9", "c04f-D-S1-open.png", W16),
+    open("D-21x9", "c04f-uw-D-S1-open.png", W21),
 ];
 
 /// The mockups' party edits (make_c04f.py: G_PARTY, G6_PARTY).
@@ -190,7 +213,29 @@ fn mockup_script(name: &str) -> Option<&'static [(&'static str, bool, u64)]> {
         ("\"Rye and honey!\"", false, 0),
         ("Your interest?", false, 0),
     ];
+    // make_c04f.py `rows_of(HISTORY_B + SCRIPT_B, None)`: the open window's
+    // seventeen rows, all fresh (the ages do not matter in the open window).
+    const D: &[(&str, bool, u64)] = &[
+        ("North", true, 0),
+        ("North", true, 0),
+        ("West", true, 0),
+        ("Slow progress!", false, 0),
+        ("North", true, 0),
+        ("West", true, 0),
+        ("West", true, 0),
+        ("Slow progress!", false, 0),
+        ("North", true, 0),
+        ("North", true, 0),
+        ("Slow progress!", false, 0),
+        ("West", true, 0),
+        ("North", true, 0),
+        ("East", true, 0),
+        ("East", true, 0),
+        ("Slow progress!", false, 0),
+        ("North", true, 0),
+    ];
     match name {
+        "D-16x9" | "D-21x9" => Some(D),
         "B-16x9" | "B-21x9" => Some(B),
         "S3-16x9" => Some(E),
         "C-16x9" => Some(C),
@@ -346,7 +391,11 @@ fn grow_left_review_shots() {
         // The shell's own frame and canvas: the bytes the play upload
         // sites write, in the shell's palette, with the crawl (or only the
         // live row, for the quiet mockups).
-        let (_, ours) = render_shell_frame_and_canvas_with_crawl(
+        let column = ColumnView {
+            open: shot.column,
+            ..ColumnView::default()
+        };
+        let (frame, ours) = render_shell_frame_and_canvas_with_column(
             &mut state,
             &atlas,
             (ibm, runes),
@@ -356,8 +405,57 @@ fn grow_left_review_shots() {
             &mut crawl,
             shot.crawl != Crawl::Quiet,
             shot.typing,
+            column,
         );
-        if let Some(script) = mockup_script(shot.name) {
+        if let (true, Some(script)) = (shot.column, mockup_script(shot.name)) {
+            // The mockup's own rows through the engine's open-window paint,
+            // over the engine's open canvas of the same frame without text.
+            let snapshot = bands::band_snapshot(&state);
+            let options = ComposeOptions {
+                light: PeekLightPolicy::Scaled,
+                bands: Some(compose::Bands {
+                    snapshot: &snapshot,
+                    font: ibm,
+                    hp_colours: true,
+                }),
+                crawl: None,
+                column,
+            };
+            let mut scripted = compose_for_state(&frame, &state, &atlas, &canvas, options)
+                .expect("the top-down view");
+            let mut rows = crawl.rows();
+            let live = rows.lines.pop().expect("the live row");
+            rows.older.clear();
+            rows.lines = script
+                .iter()
+                .map(|(text, typed, age)| scripted_line(ibm, text, *typed, *age))
+                .collect();
+            rows.lines.push(live);
+            paint_open_window(
+                &mut scripted,
+                &canvas,
+                ColumnText {
+                    rows: &rows,
+                    typed_colour: true,
+                },
+            );
+            let mockup = image::open(mockups.join(shot.mockup)).unwrap().to_rgba8();
+            let differing = scripted
+                .chunks(4)
+                .zip(mockup.as_raw().chunks(4))
+                .filter(|(a, b)| a[..3] != b[..3])
+                .count();
+            eprintln!(
+                "{}: the mockup's rows through the engine's open column: {differing} differing pixels",
+                shot.name
+            );
+            save(
+                &out.join(format!("{}-script-engine.png", shot.name)),
+                canvas.w,
+                canvas.h,
+                scripted,
+            );
+        } else if let Some(script) = mockup_script(shot.name) {
             // The mockup's own rows, drawn by the engine's step 7 over the
             // engine's quiet canvas of the same scene: the paint itself,
             // compared pixel for pixel.
@@ -415,7 +513,11 @@ fn grow_left_review_shots() {
             );
         }
         if shot.crawl != Crawl::Quiet {
-            for line in &crawl.rows().lines {
+            let rows = crawl.rows();
+            for line in &rows.older {
+                eprintln!("{}: older {:?}", shot.name, line.text());
+            }
+            for line in &rows.lines {
                 eprintln!(
                     "{}: crawl {:?} age {} {:?}",
                     shot.name,

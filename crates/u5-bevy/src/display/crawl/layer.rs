@@ -85,6 +85,11 @@ pub struct CrawlRows {
     pub cursor: Option<CrawlCell>,
     /// The end cap the live line carries at x 8..15.
     pub cap: Option<CapSprite>,
+    /// The open column's older rows (2.2.5), oldest first: what the
+    /// transcript and the history buffer held above `lines`, projected at
+    /// the window's width. Built only while the column wants them
+    /// ([`super::sync::CrawlState::set_history_wanted`]); empty otherwise.
+    pub older: Vec<CrawlLine>,
     /// Bumped on every rebuild that changed something.
     pub revision: u64,
 }

@@ -27645,6 +27645,17 @@ mod tests {
         );
         assert!(crawl.mismatches.is_empty(), "{:#?}", crawl.mismatches);
 
+        // Phase B M1-13 (design 2.2.5, 2.2.9): with the column open, the
+        // open window's older rows are only text the transcript once held,
+        // and the open window never covers the core; the roster and
+        // food/gold/date crops are the frame's own windows (checked above
+        // with the grow-left compose).
+        println!(
+            "open column: {} frames with older rows, {} older rows checked, {} syncs not lined up",
+            crawl.with_older, crawl.older_rows, crawl.unaligned
+        );
+        assert!(crawl.with_older > 0, "{crawl:?}");
+
         assert_peek_predicate_agrees(&filed);
 
         // Phase B M1-08 (design 2.3.1): on every suite frame that painted

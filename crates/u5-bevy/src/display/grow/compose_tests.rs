@@ -143,7 +143,16 @@ fn the_ring_sits_on_the_party_tile_and_the_core_is_the_faithful_viewport() {
         let window = peek_window(&c);
         let ring = ring_pattern(window);
         let faithful = faithful_pattern(ww as usize);
-        let rgba = compose_grow_left(&faithful, &ring, window, &c, None, None, None);
+        let rgba = compose_grow_left(
+            &faithful,
+            &ring,
+            window,
+            &c,
+            None,
+            None,
+            None,
+            ColumnView::default(),
+        );
         assert_eq!(rgba.len(), (c.w * c.h * 4) as usize);
         let ring_w = (window.columns() * 16) as u32;
         let (ox, oy) = (
@@ -190,8 +199,26 @@ fn the_flash_inverts_the_ring_and_leaves_the_core_to_the_frame() {
     let window = peek_window(&c);
     let ring = ring_pattern(window);
     let faithful = faithful_pattern(3);
-    let plain = compose_grow_left(&faithful, &ring, window, &c, None, None, None);
-    let flashed = compose_grow_left(&faithful, &ring, window, &c, Some(playback), None, None);
+    let plain = compose_grow_left(
+        &faithful,
+        &ring,
+        window,
+        &c,
+        None,
+        None,
+        None,
+        ColumnView::default(),
+    );
+    let flashed = compose_grow_left(
+        &faithful,
+        &ring,
+        window,
+        &c,
+        Some(playback),
+        None,
+        None,
+        ColumnView::default(),
+    );
     let (cx, cy, side) = core_rect(&c);
     let (mx0, my0, mx1, my1) = c.map_window();
     let index = |px: [u8; 3]| EGA_PALETTE_RGB.iter().position(|e| *e == px).unwrap() as u8;

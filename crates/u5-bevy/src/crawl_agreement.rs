@@ -13,7 +13,11 @@
 //!   placed rows, in order (the no-reveal rule);
 //! - a prompt row is drawn only above the live `:` row;
 //! - the crawl, drawn on every named layout and a panned narrow one, never
-//!   touches the faithful core.
+//!   touches the faithful core;
+//! - (M1-13) with the column open, every older row of its message window is
+//!   text the transcript once held (an entry's own text or the text the
+//!   window renders for it), and the open window, like the crawl, never
+//!   touches the core.
 //!
 //! Nothing here is compiled outside tests, and the recorder is off unless a
 //! test turns it on.
@@ -26,6 +30,7 @@ use u5_runtime::{FixedCellFont, MessageWindowRow, PlayState};
 use crate::display::crawl::layer::LineKind;
 use crate::display::crawl::sync::{CrawlInputs, CrawlState, placed_rows};
 use crate::display::grow::Canvas;
+use crate::display::grow::column::{ColumnText, paint_open_window};
 use crate::display::grow::compose::core_rect;
 use crate::display::grow::crawl_paint::{CrawlPaint, paint_crawl};
 use crate::grow_agreement::WINDOWS;
@@ -40,6 +45,12 @@ pub(crate) struct Tally {
     pub with_live: usize,
     /// Frames whose crawl drew a prompt row.
     pub with_prompt: usize,
+    /// Frames whose open window showed older rows.
+    pub with_older: usize,
+    /// Older rows checked against the transcript.
+    pub older_rows: usize,
+    /// Syncs whose older rows could not be lined up with the placed rows.
+    pub unaligned: usize,
     pub mismatches: Vec<String>,
 }
 
@@ -48,6 +59,9 @@ struct Recorder {
     tally: Tally,
     painted: Option<Vec<MessageWindowRow>>,
     crawl: CrawlState,
+    /// Every transcript entry's text seen so far, as stored and as the
+    /// window renders it.
+    held: std::collections::HashSet<String>,
 }
 
 thread_local! {
@@ -116,6 +130,21 @@ pub(crate) fn note(state: &PlayState, drawn: Drawn<'_>, frame: &[u8]) {
             ));
         }
         let unshown = recorder.crawl.unshown_rows();
+        let mut display = state.clone();
+        if !display.message.is_empty() {
+            display.message = crate::visual_display_message(&display);
+        }
+        for entry in state
+            .message_entries()
+            .iter()
+            .chain(state.displayed_message_entries())
+        {
+            recorder.held.insert(entry.text.clone());
+            recorder
+                .held
+                .insert(crate::visual_display_line(&display, &entry.text));
+        }
+        recorder.crawl.set_history_wanted(true);
         recorder.crawl.observe_input(drawn.input_line);
         recorder.crawl.sync(state, frame, inputs);
         if recorder.crawl.unshown_rows() != unshown {
@@ -148,6 +177,20 @@ pub(crate) fn note(state: &PlayState, drawn: Drawn<'_>, frame: &[u8]) {
                 ));
             }
         }
+        // The open window's older rows: only text the transcript held.
+        for line in &rows.older {
+            let text = line.text();
+            let text = text.trim();
+            if text.is_empty() {
+                found.push("an empty older row".to_string());
+                continue;
+            }
+            if !recorder.held.iter().any(|held| held.contains(text)) {
+                found.push(format!(
+                    "the older row {text:?} is no text the transcript held"
+                ));
+            }
+        }
         // The crawl never covers the core.
         for (ww, wh) in WINDOWS.iter().copied().chain([(1920, 1440)]) {
             let canvas = Canvas::for_window(ww, wh, u5_runtime::enhancements::PixelAspect::Dos)
@@ -172,6 +215,22 @@ pub(crate) fn note(state: &PlayState, drawn: Drawn<'_>, frame: &[u8]) {
             if covered {
                 found.push(format!("{ww}x{wh}: the crawl covers the core"));
             }
+            let mut open = before.clone();
+            paint_open_window(
+                &mut open,
+                &canvas,
+                ColumnText {
+                    rows: &rows,
+                    typed_colour: true,
+                },
+            );
+            let covered = (cy..cy + side).any(|y| {
+                let at = (y * w + cx) * 4;
+                open[at..at + side * 4] != before[at..at + side * 4]
+            });
+            if covered {
+                found.push(format!("{ww}x{wh}: the open window covers the core"));
+            }
         }
         let tally = &mut recorder.tally;
         tally.frames += 1;
@@ -184,6 +243,11 @@ pub(crate) fn note(state: &PlayState, drawn: Drawn<'_>, frame: &[u8]) {
         if rows.lines.iter().any(|line| line.kind == LineKind::Prompt) {
             tally.with_prompt += 1;
         }
+        if !rows.older.is_empty() {
+            tally.with_older += 1;
+        }
+        tally.older_rows += rows.older.len();
+        tally.unaligned = recorder.crawl.unaligned_syncs();
         tally.mismatches.extend(found);
     });
 }

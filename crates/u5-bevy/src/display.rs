@@ -29,6 +29,11 @@
 //!   `sync_crawl`, which reads the faithful window's placed rows before the
 //!   pipeline host; the compositor draws them (step 7). Present only while
 //!   `display.grow_left` is on;
+//! - the docked left column ([`grow::column`], M1-13): Ctrl+P (the
+//!   router's `ToggleColumn`, bound only while `display.grow_left` is on)
+//!   opens it for the session; the compositor draws its chrome, the
+//!   faithful roster and food/gold/date crops and the message window with
+//!   the history (step 8). Present only while `display.grow_left` is on;
 //! - [`initial_window`], which sets the window's first mode and present
 //!   mode from the settings in both `WindowPlugin` blocks. With every key at
 //!   its default it returns the window it was given, so the 1.0.1 window is

@@ -80,18 +80,59 @@ pub fn shown_lines(rows: &CrawlRows, crawl: bool) -> Vec<&CrawlLine> {
 }
 
 /// One pixel of glyph ink on the canvas.
-struct Ink {
-    x: u32,
-    y: u32,
-    colour: u8,
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Ink {
+    pub x: u32,
+    pub y: u32,
+    pub colour: u8,
+}
+
+/// The rectangle a text block's outline is clipped to, `(x0, y0, x1, y1)`
+/// inclusive: the map window for the crawl, the column's message window
+/// for the open column.
+pub type Clip = (u32, u32, u32, u32);
+
+/// What [`paint_lines`] drew: the y of each line, top to bottom, and every
+/// glyph pixel (the cursor's included; the end cap's not).
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct Painted {
+    pub ys: Vec<u32>,
+    pub ink: Vec<Ink>,
 }
 
 /// Step 7: the crawl (see the module text). Returns the y of each line
 /// drawn, top to bottom.
 pub fn paint_crawl(rgba: &mut [u8], canvas: &Canvas, paint: CrawlPaint<'_>) -> Vec<u32> {
     let lines = shown_lines(paint.rows, paint.crawl);
+    let typed_colour = paint.typed_colour;
+    paint_lines(
+        rgba,
+        canvas,
+        &lines,
+        paint.rows,
+        canvas.map_window(),
+        |line, typed| cell_colour(line, typed, typed_colour),
+    )
+    .ys
+}
+
+/// Draw `lines` (top to bottom) so that the last one sits on
+/// [`crawl_bottom_y`], text from x 16, each glyph with a 1 px black
+/// outline clipped to `clip`, in the colour `colour(line, typed)` gives
+/// (`None`: the cell is not drawn). The live line, when it is among them,
+/// carries the cursor of `rows` and the end cap at x 8..15, merged into the
+/// border at x 7. Shared by the crawl (step 7) and the open column's
+/// message window (step 8), so a row is on the same pixels in both.
+pub fn paint_lines(
+    rgba: &mut [u8],
+    canvas: &Canvas,
+    lines: &[&CrawlLine],
+    rows: &CrawlRows,
+    clip: Clip,
+    colour: impl Fn(&CrawlLine, bool) -> Option<u8>,
+) -> Painted {
     if lines.is_empty() {
-        return Vec::new();
+        return Painted::default();
     }
     let bottom = crawl_bottom_y(canvas);
     let top = bottom - CELL * (lines.len() as u32 - 1);
@@ -105,14 +146,11 @@ pub fn paint_crawl(rgba: &mut [u8], canvas: &Canvas, paint: CrawlPaint<'_>) -> V
         let mut cells: Vec<(u8, [u8; 8], u8)> = line
             .cells
             .iter()
-            .filter_map(|cell| {
-                let colour = cell_colour(line, cell.typed, paint.typed_colour)?;
-                Some((cell.cell, cell.mask, colour))
-            })
+            .filter_map(|cell| Some((cell.cell, cell.mask, colour(line, cell.typed)?)))
             .collect();
         if line.kind == LineKind::Live {
             live_y = Some(y);
-            if let Some(cursor) = &paint.rows.cursor {
+            if let Some(cursor) = &rows.cursor {
                 cells.push((cursor.cell, cursor.mask, CURSOR_COLOUR));
             }
         }
@@ -132,17 +170,17 @@ pub fn paint_crawl(rgba: &mut [u8], canvas: &Canvas, paint: CrawlPaint<'_>) -> V
         }
     }
     // The outline: every ink pixel's eight neighbours (and itself), black,
-    // clipped to the map window.
-    let (mx0, my0, mx1, my1) = canvas.map_window();
+    // clipped.
+    let (cx0, cy0, cx1, cy1) = clip;
     let black = rgb(0);
     for pixel in &ink {
         for dy in -1i64..=1 {
             for dx in -1i64..=1 {
                 let (x, y) = (i64::from(pixel.x) + dx, i64::from(pixel.y) + dy);
-                if x < i64::from(mx0)
-                    || x > i64::from(mx1)
-                    || y < i64::from(my0)
-                    || y > i64::from(my1)
+                if x < i64::from(cx0)
+                    || x > i64::from(cx1)
+                    || y < i64::from(cy0)
+                    || y > i64::from(cy1)
                 {
                     continue;
                 }
@@ -153,7 +191,7 @@ pub fn paint_crawl(rgba: &mut [u8], canvas: &Canvas, paint: CrawlPaint<'_>) -> V
     for pixel in &ink {
         put(rgba, w, pixel.x, pixel.y, rgb(pixel.colour));
     }
-    if let (Some(y), Some(cap)) = (live_y, paint.rows.cap.as_ref()) {
+    if let (Some(y), Some(cap)) = (live_y, rows.cap.as_ref()) {
         for (row, pixels) in cap.iter().enumerate() {
             let py = y + row as u32;
             for (col, pixel) in pixels.iter().enumerate() {
@@ -167,7 +205,7 @@ pub fn paint_crawl(rgba: &mut [u8], canvas: &Canvas, paint: CrawlPaint<'_>) -> V
             }
         }
     }
-    ys
+    Painted { ys, ink }
 }
 
 fn rgb(index: u8) -> [u8; 3] {

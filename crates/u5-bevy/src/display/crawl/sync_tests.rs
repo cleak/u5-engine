@@ -341,3 +341,43 @@ fn the_transcript_is_unchanged_after_a_long_run_with_the_crawl_on() {
             .any(|line| line.kind == LineKind::Text)
     );
 }
+
+fn strings(texts: &[&str]) -> Vec<String> {
+    texts.iter().map(|text| text.to_string()).collect()
+}
+
+/// The open column's older rows line up with the placed rows (M1-13,
+/// 2.3.8): the projection's tail runs into the placed rows, or the placed
+/// rows sit whole in it with the live line's own row after them.
+#[test]
+fn older_rows_line_up_with_the_placed_rows() {
+    let projected = strings(&["North", "Slow progress!", "North", "East", "North"]);
+    // The tail is the start of the placed rows (more placed below it).
+    assert_eq!(
+        line_up(&projected, &strings(&["East", "North", "Looking..."])),
+        Some(3)
+    );
+    // The longest overlap wins over a repeated row.
+    assert_eq!(
+        line_up(&projected, &strings(&["North", "East", "North"])),
+        Some(2)
+    );
+    // The placed rows end above the projection's last row: the prompt the
+    // live line shows (`Save game?`), or a row being completed.
+    let quit = strings(&["East", "Pass", "Quit:", "Save game?"]);
+    assert_eq!(line_up(&quit, &strings(&["Quit:"])), Some(2));
+    let camp = strings(&[
+        "Save game?",
+        "Hole up & camp!",
+        "For how many",
+        "hours? (1-9)",
+    ]);
+    assert_eq!(
+        line_up(&camp, &strings(&["Hole up & camp!", "For how many"])),
+        Some(1)
+    );
+    // No more than two rows may follow.
+    assert_eq!(line_up(&quit, &strings(&["East"])), None);
+    // Nothing in common: no older rows rather than a guess.
+    assert_eq!(line_up(&quit, &strings(&["Looking..."])), None);
+}

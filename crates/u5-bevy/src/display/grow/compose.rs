@@ -20,6 +20,7 @@ use u5_runtime::{
 };
 
 use super::bands::{BandSnapshot, paint_bands};
+use super::column::{ColumnText, ColumnView, paint_column};
 use super::crawl_paint::{CrawlPaint, paint_crawl};
 use super::{CORE_SIDE, Canvas};
 use crate::{EGA_PALETTE_RGB, VISUAL_PLAY_FRAME_HEIGHT, VISUAL_PLAY_FRAME_WIDTH};
@@ -168,14 +169,13 @@ pub fn flash_ring(rgba: &mut [u8], canvas: &Canvas, playback: PotionFlashPlaybac
 }
 
 /// What steps 5 and 6 draw from: the snapshot taken when the faithful
-/// frame last changed, the font, `display.ribbon_hp_colours` and the
-/// column's state.
+/// frame last changed, the font and `display.ribbon_hp_colours`. Whether
+/// the column is open comes from the compositor's [`ColumnView`].
 #[derive(Clone, Copy)]
 pub struct Bands<'a> {
     pub snapshot: &'a BandSnapshot,
     pub font: &'a u5_runtime::FixedCellFont,
     pub hp_colours: bool,
-    pub open: bool,
 }
 
 /// Steps 1-6 of the grow-left compositor (2.3.7): the canvas for
@@ -184,7 +184,11 @@ pub struct Bands<'a> {
 /// RGBA) copied to the core, and, while `flash` is set, the ring inverted
 /// as the faithful frame inverted its core; then, with `bands`, the ribbon
 /// on the top band and the sky and wind tabs at their shared centre; then,
-/// with `crawl`, the message crawl over the map (step 7).
+/// with `crawl`, the message crawl over the map (step 7); then, while
+/// `column` is open, the docked column (step 8), whose message window
+/// shows the crawl's rows in place of the crawl. The bands follow the
+/// column: an open column re-centres the tabs over the visible map.
+#[allow(clippy::too_many_arguments)]
 pub fn compose_grow_left(
     faithful: &[u8],
     ring: &[u8],
@@ -193,6 +197,7 @@ pub fn compose_grow_left(
     flash: Option<PotionFlashPlayback>,
     bands: Option<Bands<'_>>,
     crawl: Option<CrawlPaint<'_>>,
+    column: ColumnView,
 ) -> Vec<u8> {
     let mut rgba = vec![0; canvas.w as usize * canvas.h as usize * 4];
     paint_chrome(&mut rgba, canvas);
@@ -209,10 +214,16 @@ pub fn compose_grow_left(
             bands.snapshot,
             bands.font,
             bands.hp_colours,
-            bands.open,
+            column.open,
         );
     }
-    if let Some(crawl) = crawl {
+    if column.open {
+        let text = crawl.map(|crawl| ColumnText {
+            rows: crawl.rows,
+            typed_colour: crawl.typed_colour,
+        });
+        paint_column(&mut rgba, canvas, faithful, text);
+    } else if let Some(crawl) = crawl {
         paint_crawl(&mut rgba, canvas, crawl);
     }
     rgba
