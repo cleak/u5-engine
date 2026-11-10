@@ -45,6 +45,7 @@ use u5_runtime::{
     load_ibm_ch_font, load_runes_ch_font, load_tile_atlas, parse_ch_font,
 };
 
+use super::input::is_modifier;
 use super::synthetic::SyntheticInputOwner;
 use super::{EnhSet, VisualLaunchConfig};
 use crate::{
@@ -197,7 +198,11 @@ pub(crate) struct FrameRecord {
     pub(crate) digest: TrajectoryDigest,
     /// FNV-1a-64 of the original frame's pixels.
     pub(crate) frame: u64,
-    /// FNV-1a-64 of the game's key queue: keys typed and not yet read.
+    /// FNV-1a-64 of the game's key queue: keys typed and not yet read. A
+    /// lone modifier (Ctrl, Shift, Alt) is left out: it maps to no byte in
+    /// either input mode and every read drops it, so it is no key the game
+    /// sees (the router's own rule). The Ctrl of a display chord such as
+    /// Ctrl+P is queued this way while the game is busy.
     pub(crate) queue: u64,
 }
 
@@ -339,6 +344,7 @@ impl Shell {
         let queue: Vec<u8> = visual
             .typed_keys
             .iter()
+            .filter(|typed| !is_modifier(typed.key))
             .flat_map(|typed| {
                 format!("{:?}{}{};", typed.key, typed.shift, typed.control).into_bytes()
             })

@@ -282,3 +282,15 @@ pub fn initial_window(mut window: Window, launch: &VisualLaunchConfig) -> Window
 
 #[cfg(test)]
 mod tests;
+
+#[cfg(test)]
+mod matrix_tests;
+
+#[cfg(test)]
+mod spoiler_tests;
+
+#[cfg(test)]
+mod timing_tests;
+
+#[cfg(test)]
+mod shell_shots_tests;

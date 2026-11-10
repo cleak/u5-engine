@@ -40,7 +40,8 @@ No preset turns on a cheat, and the only deviation a preset sets is
 `combat.fast_forward`. A preset sets only what is available in this build.
 In this build Recommended still gives the Classic game, and Everything adds
 only sharp scaling (`display.scale_mode = "sharp"`) and the F11 fullscreen
-key (`display.fullscreen_key`), neither of which changes the game.
+key (`display.fullscreen_key`), neither of which changes the game. The wider
+world view is a deviation, so no preset turns it on.
 
 ## Changing settings
 
@@ -66,6 +67,7 @@ key (`display.fullscreen_key`), neither of which changes the game.
 | `--vsync`, `--no-vsync` | `--enable` / `--disable display.vsync`: wait for the screen's refresh. |
 | `--pillar-fill FILL` | `--set display.pillar_fill=FILL`: `black`, `solid`, `ribbon` or `bezel`. |
 | `--bezel-image PATH` | `--set display.bezel_image=PATH`: a PNG for the `bezel` fill. |
+| `--grow-left`, `--no-grow-left` | `--enable` / `--disable display.grow_left`: the wider world view (shows more than the original). |
 
 `config.toml` applies to the default launch (no game folder or mode on the
 command line); other launches use the command line alone. An unknown key on
@@ -101,6 +103,57 @@ changes:
   a PNG, or larger than 8192 pixels on a side leaves the bars black, with a
   warning.
 
+## The wider world view
+
+`display.grow_left`, **"Wider world view (shows more than the original)"**,
+is off by default and in no preset, because it shows more of the world than
+the original screen did: every setting that does is marked **wider view**.
+Turn it on with `--grow-left`, `--enable display.grow_left`, the
+Enhancements page, or `grow_left = true` under `[display]` in `config.toml`.
+
+On a window wider than 4:3 the screen grows to the left instead of leaving
+black bars. The original 11x11 view stays exactly as the game draws it, in
+the middle of a wider map:
+
+- **The map** shows the cells round the original view that the party can
+  see from where it stands, with the same light rules. Nothing outside the
+  party's sight is drawn: it stays black, as an unseen cell in the original
+  view does. What the wider map shows is never counted as seen by any other
+  feature.
+- **Messages over the map.** The message window's lines are written over
+  the bottom of the map in outlined letters and fade from white to grey to
+  dark grey as newer lines arrive. Only what the original message window
+  has already shown is written there, and a keyword prompt is never kept
+  once it is answered.
+- **The top band** carries the party, food, gold and the date, in the
+  original's order and spacing, with the sky tab; the wind tab sits on the
+  bottom band below it.
+- **The side column.** Ctrl+P docks the original's right-hand column (the
+  party, the counters and a taller message window that also shows older
+  lines) on the left, and Ctrl+P again puts it away. Ctrl+P is no key the
+  game reads. Screens that need the column, such as a character page, show
+  it by themselves and give it back when they close.
+- Fixed screens (combat, dungeons, the intro, shrines and other full
+  pictures) are shown as the original draws them, with the bars beside
+  them.
+
+Each part is its own setting, listed under the wider world view on the
+Enhancements page, and works with any mix of the others:
+
+| Setting | Label | Default | Off means |
+|---|---|---|---|
+| `display.grow_left_light` | Daylight reach: whole screen, or original distance | `scaled` | `faithful` keeps the original's light distance |
+| `display.crawl` | Messages over the map | on | only the line being typed is shown; the column starts open |
+| `display.typed_colour` | Typed text in cyan | on | typed text in the game's colours |
+| `display.ribbon_hp_colours` | Health colours (red when low, green when poisoned) | on | health in white |
+| `display.dither` | Fade effects | on | the column and tabs switch in one frame |
+| `display.centre_party` | Keep the party centred when the side column is open | off | the map never moves |
+
+Nothing here changes the game. The wider view only reads what the game has
+already drawn and decided: with it on, the game's state, random numbers,
+timing and save files are exactly those of the same play with it off
+(see [How a setting is checked](#how-a-setting-is-checked)).
+
 ## The parity lock
 
 `--parity-lock`, or `U5_PARITY_LOCK=1` in the environment, turns every
@@ -125,7 +178,15 @@ one that types keys must change it exactly as typing those keys would:
 
 - `cargo test` runs the equivalence tests on synthetic games, in the
   terminal and in the windowed shell, including every row of the toggle
-  matrix.
+  matrix. The display settings have their own matrix in the windowed
+  shell: each setting alone, every pair, and the side column opened and
+  closed with Ctrl+P every fifth key, over a walk in town and on the
+  overworld by day and night, a conversation, a dungeon, the camp flash and
+  a potion's sweep, compared frame by frame and on the world ticks and the
+  saved files (and on the real game files, with combat and Britain at
+  night, when `U5_TEST_ASSET_DIR` names a copy). A fresh game with every
+  display setting on is checked to draw no letter the original screen has
+  not shown and no map cell out of the party's sight.
 - `qa/enhancements/matrix.tsv` is the toggle matrix: every key alone, a
   pairwise covering of the toggles and classed values, and everything on
   except the cheats. It is generated from the catalogue, and a test keeps
@@ -157,7 +218,7 @@ one that types keys must change it exactly as typing those keys would:
 | enhancements.freeze_overlays | Pause the world while a menu or map is open | bool = false | a, F | deviation | - | - | later (chapter 1 P6b) |
 | display.fullscreen | Fullscreen (borderless) | bool = false | a, F | feature | --fullscreen | a window | yes |
 | display.fullscreen_key | Switch fullscreen with a key (F11) | bool = false | a, F | feature | --fullscreen-key | a window, a keyboard | yes |
-| display.grow_left | Wider world view (shows more than the original) | bool = false | a, F | deviation, wider view | --grow-left | - | later (chapter 2 P8) |
+| display.grow_left | Wider world view (shows more than the original) | bool = false | a, F | deviation, wider view | --grow-left | - | yes |
 | enhancements.schema | Settings file format version | int 1..1 = 1 | -, L | feature | - | - | yes |
 | enhancements.preset | Preset | enum classic\|recommended\|everything = classic | -, P | feature | --preset | - | yes |
 | keys.menu | Open the menu | chord = F12 | -, F | feature | - | a keyboard | later (chapter 1 P5) |
@@ -175,12 +236,12 @@ one that types keys must change it exactly as typing those keys would:
 | display.pillar_fill | What fills the bars beside the picture | enum black\|solid\|ribbon\|bezel = black | a, F | feature | --pillar-fill | - | yes |
 | display.pillar_color | Colour of the bars, for a solid fill | color = #000000 | a, F | feature | - | - | yes |
 | display.bezel_image | Picture for the bars, a PNG file | path = "" | a, F | feature | --bezel-image | - | yes |
-| display.grow_left_light | Daylight reach: whole screen, or original distance | enum scaled\|faithful = scaled | a, F | feature | - | - | later (chapter 2 P8) |
-| display.crawl | Messages over the map | bool = true | a, F | feature | - | - | later (chapter 2 P8) |
-| display.typed_colour | Typed text in cyan | bool = true | a, F | feature | - | - | later (chapter 2 P8) |
-| display.ribbon_hp_colours | Health colours (red when low, green when poisoned) | bool = true | a, F | feature | - | - | later (chapter 2 P8) |
-| display.dither | Fade effects | bool = true | a, F | feature | - | - | later (chapter 2 P8) |
-| display.centre_party | Keep the party centred when the side column is open | bool = false | a, F | feature | - | - | later (chapter 2 P8) |
+| display.grow_left_light | Daylight reach: whole screen, or original distance | enum scaled\|faithful = scaled | a, F | feature | - | - | yes |
+| display.crawl | Messages over the map | bool = true | a, F | feature | - | - | yes |
+| display.typed_colour | Typed text in cyan | bool = true | a, F | feature | - | - | yes |
+| display.ribbon_hp_colours | Health colours (red when low, green when poisoned) | bool = true | a, F | feature | - | - | yes |
+| display.dither | Fade effects | bool = true | a, F | feature | - | - | yes |
+| display.centre_party | Keep the party centred when the side column is open | bool = false | a, F | feature | - | - | yes |
 | display.panel_priority | Which side panel wins when two want one side | list of journal\|conversation = [journal, conversation] | a, F | feature | - | - | later (chapter 1 P6) |
 | display.panel_guard | Smallest game picture a side panel may leave, in percent | int 50..100 = 80 | a, F | feature | - | - | later (chapter 1 P6) |
 | display.vsync | Wait for the screen's refresh (vsync) | bool = true | a, F | feature | --vsync | - | yes |

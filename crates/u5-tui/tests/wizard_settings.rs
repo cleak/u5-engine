@@ -83,9 +83,10 @@ fn rows_and_presets_come_from_the_catalogue_and_the_file() {
     // Hidden rows are never listed (U13), and neither are the
     // foundation's own keys: the file format, the preset (the page's
     // preset row) and the `[keys]` chords. In this build the shipped rows
-    // with a page row are chapter 2 P1's and P2's: scaling, fullscreen,
-    // vsync and the fill (`display.raster` has none while both its values
-    // draw the same; the fill's colour and bezel path stay in the file).
+    // with a page row are chapter 2's: scaling, fullscreen, vsync, the fill
+    // (P1, P2) and the wider view with its sub-options indented under it
+    // (P8). `display.raster` has none while both its values draw the same;
+    // the fill's colour and bezel path stay in the file.
     for row in &settings.rows {
         assert!(!row.key.starts_with("keys."), "{}", row.key);
         assert_ne!(row.key, "enhancements.schema");
@@ -103,12 +104,34 @@ fn rows_and_presets_come_from_the_catalogue_and_the_file() {
         [
             "display.fullscreen",
             "display.fullscreen_key",
+            "display.grow_left",
+            "display.grow_left_light",
+            "display.crawl",
+            "display.typed_colour",
+            "display.ribbon_hp_colours",
+            "display.dither",
+            "display.centre_party",
             "display.scale_mode",
             "display.pixel_aspect",
             "display.pillar_fill",
             "display.vsync",
         ]
     );
+    // The wider view's row carries its plain label and tag; its six
+    // sub-options, and only they, are indented under it.
+    let grow = &settings.rows[2];
+    assert_eq!(
+        grow.label,
+        "Wider world view (shows more than the original)"
+    );
+    assert_eq!(grow.tags, ["wider view"]);
+    let indented: Vec<&str> = settings
+        .rows
+        .iter()
+        .filter(|row| row.indent)
+        .map(|row| row.key.as_str())
+        .collect();
+    assert_eq!(indented, keys[3..9]);
     // Recommended names no shipped row; Everything sets sharp scaling and
     // the F11 key (2.2.1).
     let values = |key: &str| {

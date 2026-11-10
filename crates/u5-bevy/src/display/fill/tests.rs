@@ -388,11 +388,6 @@ fn the_fill_rows_are_shipped_and_reach_the_settings() {
         let row = u5_runtime::enhancements::CatalogueRow::find(key).expect(key);
         assert!(row.is_shipped(), "{key}");
     }
-    // The wider view stays hidden until its package.
-    for key in ["display.grow_left", "display.crawl"] {
-        let row = u5_runtime::enhancements::CatalogueRow::find(key).expect(key);
-        assert!(!row.is_shipped(), "{key}");
-    }
     let launch = resolved(&[
         set("display.pillar_fill", "solid"),
         set("display.pillar_color", "#AA5500"),

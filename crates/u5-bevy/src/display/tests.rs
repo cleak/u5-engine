@@ -387,11 +387,10 @@ fn the_scale_and_fullscreen_rows_are_shipped() {
         let row = u5_runtime::enhancements::CatalogueRow::find(key).expect(key);
         assert!(row.is_shipped(), "{key}");
     }
-    // The wider view stays hidden until its package (the fill shipped in
-    // M1-04).
-    for key in ["display.grow_left", "display.crawl"] {
+    // The fill shipped in M1-04 and the wider view in M1-16.
+    for key in ["display.grow_left", "display.crawl", "display.dither"] {
         let row = u5_runtime::enhancements::CatalogueRow::find(key).expect(key);
-        assert!(!row.is_shipped(), "{key}");
+        assert!(row.is_shipped(), "{key}");
     }
     // A host resolving with the shipped catalogue reaches them with no note.
     let launch = shipped_launch(&[

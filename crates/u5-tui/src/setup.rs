@@ -405,7 +405,8 @@ fn wizard_rows(
     /// Small number ranges become a choice; larger ones stay in the file.
     const MAX_NUMBER_CHOICES: i64 = 10;
 
-    let mut rows: Vec<(usize, SettingRow)> = Vec::new();
+    // (group, parent row key for a sub-option, row)
+    let mut rows: Vec<(usize, Option<&'static str>, SettingRow)> = Vec::new();
     for row in CatalogueRow::all().filter(|row| row.is_shipped()) {
         let (kind, value, default, tier) = match row {
             CatalogueRow::Toggle(spec) => (
@@ -470,8 +471,19 @@ fn wizard_rows(
             RowRole::Setting
         };
         let group = setting_group(key);
+        // A sub-option whose parent toggle has a row of its own (the
+        // grow-left rows under `display.grow_left`) sits indented under it.
+        let parent = match row {
+            CatalogueRow::Option(spec) => spec
+                .parent
+                .map(|toggle| toggle.spec())
+                .filter(|parent| !parent.driven && parent.is_shipped())
+                .map(|parent| parent.key),
+            CatalogueRow::Toggle(_) => None,
+        };
         rows.push((
             group,
+            parent,
             SettingRow {
                 key: key.to_string(),
                 label: row.label().to_string(),
@@ -485,11 +497,24 @@ fn wizard_rows(
                 role,
                 value,
                 default,
+                indent: parent.is_some(),
             },
         ));
     }
-    rows.sort_by_key(|(group, _)| *group);
-    rows.into_iter().map(|(_, row)| row).collect()
+    rows.sort_by_key(|(group, _, _)| *group);
+    // Each sub-option moves to just under its parent, in catalogue order.
+    let (subs, tops): (Vec<_>, Vec<_>) = rows.into_iter().partition(|(_, p, _)| p.is_some());
+    let mut ordered = Vec::with_capacity(tops.len() + subs.len());
+    for (_, _, row) in tops {
+        let key = row.key.clone();
+        ordered.push(row);
+        ordered.extend(
+            subs.iter()
+                .filter(|(_, parent, _)| *parent == Some(key.as_str()))
+                .map(|(_, _, sub)| sub.clone()),
+        );
+    }
+    ordered
 }
 
 /// A preset as the page sees it: the value it gives every page row any

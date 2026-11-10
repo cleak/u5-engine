@@ -1041,11 +1041,18 @@ mod tests {
     #[test]
     fn aliases_come_from_shipped_rows_only() {
         // `--preset` is parsed by `cli.rs` itself; the display rows of
-        // chapter 2 P1 and P2 are the only shipped rows with aliases so far.
+        // chapter 2 P1, P2 and P8 are the only shipped rows with aliases so
+        // far.
         assert_eq!(find_cli_alias("--preset"), None);
         assert_eq!(find_cli_alias("--no-preset"), None);
         assert_eq!(find_cli_alias("--quest-journal"), None);
-        assert_eq!(find_cli_alias("--grow-left"), None);
+        assert_eq!(
+            find_cli_alias("--grow-left"),
+            Some(CliAlias::Switch {
+                key: "display.grow_left",
+                on: true
+            })
+        );
         assert_eq!(
             cli_alias_usage()
                 .lines()
@@ -1055,6 +1062,7 @@ mod tests {
             [
                 "--fullscreen,",
                 "--fullscreen-key,",
+                "--grow-left,",
                 "--scale-mode",
                 "--pixel-aspect",
                 "--pillar-fill",
@@ -1086,8 +1094,8 @@ mod tests {
     }
 
     /// The `[display]` aliases of design 2.3.3. The P1 rows (scale,
-    /// fullscreen, vsync) shipped in M1-03 and parse; the fill and the wider
-    /// view are hidden until theirs ship.
+    /// fullscreen, vsync) shipped in M1-03, the fill in M1-04 and the wider
+    /// view in M1-16; each parses exactly when its row has shipped.
     #[test]
     fn display_aliases_parse_as_the_design_lists_them() {
         let display = || CatalogueRow::all().filter(|row| row.key().starts_with("display."));

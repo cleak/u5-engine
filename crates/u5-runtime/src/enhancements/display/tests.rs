@@ -250,14 +250,9 @@ fn every_display_row_matches_the_design() {
         let row = CatalogueRow::find(expected.key)
             .unwrap_or_else(|| panic!("{} is in the catalogue", expected.key));
         assert_eq!(row.ships(), expected.ships, "{}", expected.key);
-        // P1 (scaling, fullscreen, vsync, raster) shipped in M1-03 and the
-        // fill (P2) in M1-04; the wider view (P8) stays hidden until M1-16.
-        assert_eq!(
-            row.is_shipped(),
-            expected.ships != DISPLAY_P8,
-            "{} is hidden until it ships",
-            expected.key
-        );
+        // P1 (scaling, fullscreen, vsync, raster) shipped in M1-03, the
+        // fill (P2) in M1-04 and the wider view (P8) in M1-16.
+        assert!(row.is_shipped(), "{} has shipped", expected.key);
         assert_eq!(
             row.cli_aliases(),
             expected.alias.as_slice(),
@@ -615,19 +610,18 @@ fn a_sub_key_of_an_off_feature_stays_classic() {
 }
 
 #[test]
-fn hidden_display_rows_resolve_to_their_defaults() {
-    // The real build: P1 and the fill (P2) have shipped, the wider view
-    // has not.
+fn the_wider_view_rows_resolve_now_they_have_shipped() {
+    // The real build (M1-16): P1, the fill (P2) and the wider view (P8)
+    // have all shipped, so a stored `grow_left` and a command-line sub-option
+    // resolve with no note.
     let stored = Stored::default().with("display.grow_left", SettingValue::Bool(true));
     let resolved = resolve(input(Some(&stored), &[set("display.crawl", "false")]));
-    assert!(resolved.is_classic());
-    assert_eq!(resolved.display(), DisplaySettings::default());
+    assert_eq!(note_lines(&resolved), Vec::<String>::new());
+    assert!(resolved.display().grow_left.on);
+    assert!(!resolved.display().grow_left.crawl);
     assert_eq!(
-        note_lines(&resolved),
-        [
-            "display.grow_left: not available in this build",
-            "display.crawl: not available in this build",
-        ]
+        resolved.toggles.iter_on().collect::<Vec<_>>(),
+        [Toggle::DisplayGrowLeft]
     );
     // The shipped P1 and P2 rows resolve with no note.
     let stored = Stored::default()

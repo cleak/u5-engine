@@ -48,7 +48,9 @@ uncertain, read the spec and the focused runtime tests before editing.
 The optional enhancements ([settings.md](settings.md)) add their own keys.
 Each key exists only while its feature is on, so with every enhancement off
 (Classic, the default) no key below does anything the 1.0.1 game does not.
-In this build no feature that binds a key has shipped yet.
+In this build F11 (`display.fullscreen_key`) and Ctrl+P (`display.grow_left`,
+see [settings.md](settings.md#the-wider-world-view)) are available; the
+others arrive with their features.
 
 | Default | `[keys]` setting | Action | Bound while |
 |---|---|---|---|

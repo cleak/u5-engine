@@ -227,13 +227,10 @@ fn usage_lists_the_generic_flags() {
         "--vsync, --no-vsync    --enable display.vsync (--no- form: --disable)",
         "--pillar-fill <VALUE>  --set display.pillar_fill=VALUE",
         "--bezel-image <VALUE>  --set display.bezel_image=VALUE",
+        "--grow-left, --no-grow-left --enable display.grow_left (--no- form: --disable)",
     ] {
         assert!(section.contains(line), "{line}\n{section}");
     }
-    assert!(
-        !usage.contains("--grow-left"),
-        "the wider view ships with P8"
-    );
 }
 
 #[test]
@@ -502,23 +499,15 @@ fn an_explicit_path_launch_reads_no_display_settings() {
     assert!(explicit.resolved.is_classic());
     assert_eq!(explicit.resolved.display(), DisplaySettings::default());
 
-    // The default launch reads the same file. The wider view's rows are
-    // hidden in this build, so each is noted and kept at its default; the
-    // scale and vsync rows shipped with chapter 2 P1 and apply.
+    // The default launch reads the same file, and every row in it has
+    // shipped (chapter 2 P1 in M1-03, the wider view P8 in M1-16), so each
+    // applies with no note.
     let default = resolve_launch(Some(&scratch.config()), &[], LockState::Off);
     assert_eq!(default.config.as_deref(), Some(scratch.config().as_path()));
-    let notes: Vec<String> = default
-        .resolved
-        .notes
-        .iter()
-        .map(ToString::to_string)
-        .collect();
-    assert_eq!(
-        notes,
-        [
-            "display.grow_left: not available in this build",
-            "display.crawl: not available in this build",
-        ]
+    assert!(
+        default.resolved.notes.is_empty(),
+        "{:?}",
+        default.resolved.notes
     );
     let display = default.resolved.display();
     assert_eq!(
@@ -526,6 +515,11 @@ fn an_explicit_path_launch_reads_no_display_settings() {
         DisplaySettings {
             scale_mode: u5_runtime::enhancements::ScaleMode::Sharp,
             vsync: false,
+            grow_left: u5_runtime::enhancements::GrowLeft {
+                on: true,
+                crawl: false,
+                ..Default::default()
+            },
             ..DisplaySettings::default()
         }
     );

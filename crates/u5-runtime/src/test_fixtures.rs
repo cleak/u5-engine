@@ -1015,6 +1015,27 @@ pub fn configured_original_asset_dir() -> Option<PathBuf> {
     Some(path)
 }
 
+/// The folder a test-only environment variable names, if it is set: the
+/// review-shot tests' `U5_MOCKUP_PROFILE`, `U5_GROW_MOCKUPS` and
+/// `U5_GROW_SHOTS`. Keeps the environment read out of the shell's own
+/// modules.
+pub fn configured_test_dir(variable: &str) -> Option<PathBuf> {
+    std::env::var_os(variable).map(PathBuf::from)
+}
+
+/// A new, empty, uniquely named folder under the system's temporary
+/// folder, for a test's scratch files. The caller removes it.
+pub fn unique_scratch_dir(label: &str) -> PathBuf {
+    let unique = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_nanos();
+    let dir =
+        std::env::temp_dir().join(format!("u5-engine-{label}-{}-{unique}", std::process::id()));
+    fs::create_dir_all(&dir).unwrap();
+    dir
+}
+
 pub fn debug_game_dir() -> PathBuf {
     let unique = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)

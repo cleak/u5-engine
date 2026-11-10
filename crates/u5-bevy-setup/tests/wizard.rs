@@ -335,6 +335,8 @@ struct SettingsHost {
     locked: bool,
     preset: usize,
     fail_save: bool,
+    /// Adds an indented sub-option under the Display row.
+    sub_row: bool,
     saved: Mutex<Vec<SettingsChanges>>,
 }
 
@@ -344,6 +346,7 @@ impl SettingsHost {
             locked: false,
             preset: 0,
             fail_save: false,
+            sub_row: false,
             saved: Mutex::new(Vec::new()),
         }
     }
@@ -359,10 +362,11 @@ fn switch(key: &str, label: &str, group: &str, role: RowRole, on: bool) -> Setti
         role,
         value: RowValue::Switch(on),
         default: RowValue::Switch(false),
+        indent: false,
     }
 }
 
-fn settings_fixture(locked: bool, preset: usize) -> SettingsRows {
+fn settings_fixture(locked: bool, preset: usize, sub_row: bool) -> SettingsRows {
     let recommended = preset == 1;
     let mut tier = switch(
         "journal.tier",
@@ -385,41 +389,55 @@ fn settings_fixture(locked: bool, preset: usize) -> SettingsRows {
         recommended,
     );
     sharp.tags = vec!["wider view".to_string()];
+    let mut crawl = switch(
+        "display.crawl",
+        "Messages over the map",
+        "Display",
+        RowRole::Setting,
+        true,
+    );
+    crawl.indent = true;
+    crawl.default = RowValue::Switch(true);
+    let subs = if sub_row { vec![crawl] } else { Vec::new() };
     SettingsRows {
-        rows: vec![
-            sharp,
-            switch(
-                "combat.auto",
-                "Auto-combat",
-                "Combat",
-                RowRole::Setting,
-                recommended,
-            ),
-            tier,
-            // Deliberately out of order: the page puts "Allow cheats"
-            // first and "Watch game state" last.
-            switch(
-                "cheats.state_watch",
-                "Watch game state",
-                "Cheats",
-                RowRole::WatchState,
-                false,
-            ),
-            switch(
-                "cheats.heal",
-                "Heal the party",
-                "Cheats",
-                RowRole::Cheat,
-                false,
-            ),
-            switch(
-                "cheats.enabled",
-                "Allow cheats",
-                "Cheats",
-                RowRole::AllowCheats,
-                false,
-            ),
-        ],
+        rows: [
+            vec![sharp],
+            subs,
+            vec![
+                switch(
+                    "combat.auto",
+                    "Auto-combat",
+                    "Combat",
+                    RowRole::Setting,
+                    recommended,
+                ),
+                tier,
+                // Deliberately out of order: the page puts "Allow cheats"
+                // first and "Watch game state" last.
+                switch(
+                    "cheats.state_watch",
+                    "Watch game state",
+                    "Cheats",
+                    RowRole::WatchState,
+                    false,
+                ),
+                switch(
+                    "cheats.heal",
+                    "Heal the party",
+                    "Cheats",
+                    RowRole::Cheat,
+                    false,
+                ),
+                switch(
+                    "cheats.enabled",
+                    "Allow cheats",
+                    "Cheats",
+                    RowRole::AllowCheats,
+                    false,
+                ),
+            ],
+        ]
+        .concat(),
         presets: vec![
             PresetChoice {
                 key: "classic".to_string(),
@@ -471,7 +489,7 @@ impl WizardHost for SettingsHost {
         String::new()
     }
     fn settings_rows(&self) -> Option<SettingsRows> {
-        let mut rows = settings_fixture(self.locked, self.preset);
+        let mut rows = settings_fixture(self.locked, self.preset, self.sub_row);
         if self.preset == 1 {
             // Recommended as stored has display.sharp off.
             rows.rows[0].value = RowValue::Switch(false);
@@ -641,6 +659,29 @@ fn presets_set_their_rows_and_changes_show_custom() {
     assert_eq!(page(&model).confirm, None);
     assert_eq!(model.screen, Screen::Enhancements);
     assert_eq!(page(&model).base, 1);
+}
+
+/// A sub-option (the grow-left rows, design 2.4.1) is drawn indented under
+/// the row before it, and toggles like any row.
+#[test]
+fn a_sub_option_is_indented_under_its_parent() {
+    let mut host = SettingsHost::new();
+    host.sub_row = true;
+    let mut model = WizardModel::settings_only(&host);
+    let texts = row_texts(&model, &host);
+    let sharp_at = texts
+        .iter()
+        .position(|text| text == "[ ] Sharp scaling (wider view)")
+        .unwrap();
+    assert_eq!(texts[sharp_at + 1], "    [x] Messages over the map");
+    assert_eq!(
+        texts.iter().filter(|text| text.starts_with("    ")).count(),
+        1
+    );
+    let crawl = row_of(&model, "display.crawl");
+    assert!(model.apply(Action::ToggleSetting(crawl), &host));
+    assert_eq!(value_of(&model, "display.crawl"), RowValue::Switch(false));
+    assert!(row_texts(&model, &host).contains(&"    [ ] Messages over the map".to_string()));
 }
 
 #[test]

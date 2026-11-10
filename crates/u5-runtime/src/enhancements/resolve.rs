@@ -1592,6 +1592,15 @@ mod tests {
             Catalogue::BUILT_IN.hint("enhancements.shema"),
             Some("enhancements.schema")
         );
-        assert_eq!(Catalogue::BUILT_IN.hint("display.grow_left"), None);
+        // The wider view shipped in M1-16, so its key is offered; a hidden
+        // key (the optional P6b's) never is.
+        assert_eq!(
+            Catalogue::BUILT_IN.hint("display.growleft"),
+            Some("display.grow_left")
+        );
+        assert_eq!(
+            Catalogue::BUILT_IN.hint("enhancements.freeze_overlay"),
+            None
+        );
     }
 }

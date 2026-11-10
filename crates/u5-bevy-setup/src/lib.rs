@@ -649,6 +649,9 @@ fn heading(text: &str) -> PageRow {
     }
 }
 
+/// What a sub-option's row starts with, under its parent row.
+const SUB_ROW_INDENT: &str = "    ";
+
 fn setting_row(page: &SettingsPage, index: usize, focused: Option<FocusItem>) -> PageRow {
     let row = &page.rows[index];
     let value = match (&row.kind, &row.value) {
@@ -662,7 +665,8 @@ fn setting_row(page: &SettingsPage, index: usize, focused: Option<FocusItem>) ->
         }
         (RowKind::Switch, RowValue::Choice(value)) => format!("[{value}]"),
     };
-    let mut text = format!("{value} {}", row.label);
+    let indent = if row.indent { SUB_ROW_INDENT } else { "" };
+    let mut text = format!("{indent}{value} {}", row.label);
     for tag in &row.tags {
         text.push_str(&format!(" ({tag})"));
     }

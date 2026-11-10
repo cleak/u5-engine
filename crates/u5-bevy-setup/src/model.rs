@@ -151,6 +151,9 @@ pub struct SettingRow {
     pub value: RowValue,
     /// The value "Defaults" puts back.
     pub default: RowValue,
+    /// A sub-option, drawn indented under the row before it (the grow-left
+    /// rows under "Wider world view", design 2.4.1).
+    pub indent: bool,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]

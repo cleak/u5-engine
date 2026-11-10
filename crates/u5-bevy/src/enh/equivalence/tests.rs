@@ -14,6 +14,7 @@ use u5_runtime::test_fixtures::{configured_original_asset_dir, open_grid, test_s
 use u5_runtime::{GameClock, PlayOptions, PlayTarget, WorldPlane};
 
 use super::*;
+use crate::enh::input::is_modifier;
 use crate::enh::input::{EnhAction, EnhActionEvent, KeyMap, OverlayKey, install_input_router};
 use crate::enh::overlay::{
     OverlayId, OverlayRequest, OverlayState, apply_overlay_requests, install_overlay_model,
@@ -459,4 +460,71 @@ fn a_live_overlay_equals_the_off_run_on_real_files() {
         app.add_systems(Update, sneaky_state_writer.in_set(EnhSet::Observe));
     });
     assert!(caught.iter().any(|m| m.what == "digest" && m.frame == 40));
+}
+
+/// The queue compared leaves out lone modifiers, because the game never
+/// reads one: in both input modes a modifier maps to no byte, whatever
+/// Shift and Ctrl say, so every read drops it and goes on.
+#[test]
+fn a_lone_modifier_is_no_key_the_game_reads() {
+    use crate::{key_code_to_command_char, key_code_to_input_byte, key_code_to_line_input_byte};
+    for key in [
+        KeyCode::ShiftLeft,
+        KeyCode::ShiftRight,
+        KeyCode::ControlLeft,
+        KeyCode::ControlRight,
+        KeyCode::AltLeft,
+        KeyCode::AltRight,
+        KeyCode::SuperLeft,
+        KeyCode::SuperRight,
+    ] {
+        assert!(is_modifier(key));
+        for shift in [false, true] {
+            for control in [false, true] {
+                assert_eq!(
+                    key_code_to_command_char(key, shift, control),
+                    None,
+                    "{key:?}"
+                );
+                assert_eq!(key_code_to_input_byte(key, shift, control), None, "{key:?}");
+                assert_eq!(
+                    key_code_to_line_input_byte(key, shift, control),
+                    None,
+                    "{key:?}"
+                );
+            }
+        }
+    }
+    // A queued modifier changes the compared queue no more than an empty
+    // one; a real key does.
+    let mut shell = Shell::new(
+        town(),
+        &Scene::synthetic(),
+        &VisualLaunchConfig::classic(),
+        |_| {},
+    );
+    shell.step(&[]);
+    let empty = shell.record().queue;
+    let modifier = TypedKey {
+        key: KeyCode::ControlLeft,
+        shift: false,
+        control: true,
+    };
+    shell
+        .app
+        .world_mut()
+        .resource_mut::<VisualState>()
+        .typed_keys
+        .push_back(modifier);
+    assert_eq!(shell.record().queue, empty);
+    shell
+        .app
+        .world_mut()
+        .resource_mut::<VisualState>()
+        .typed_keys
+        .push_back(TypedKey {
+            key: KeyCode::KeyP,
+            ..modifier
+        });
+    assert_ne!(shell.record().queue, empty);
 }
