@@ -200,3 +200,41 @@ fn keys_wait_while_there_is_no_play_state() {
     app.update();
     assert_eq!(app.world().resource::<SyntheticInputOwner>().queued(), 1);
 }
+
+/// A feed held behind an open overlay does not mark `VisualState` changed,
+/// so a change-driven reader such as the save watcher sees nothing new.
+#[test]
+fn a_held_feed_leaves_the_play_state_unmarked() {
+    let mut images = Assets::<Image>::default();
+    let visual = crate::enh::overlay::tests::idle_visual_state(&mut images);
+    let mut app = App::new();
+    configure_enh_sets(&mut app);
+    install_synthetic_input(&mut app);
+    app.insert_resource(visual)
+        .insert_resource(OverlayState::opened(OverlayId::Map));
+    let mut token = app.world_mut().resource_mut::<SyntheticInputOwner>();
+    token.take(SyntheticOwner::AutoCombat).unwrap();
+    token.queue(SyntheticOwner::AutoCombat, [UP]).unwrap();
+    app.update();
+    let changed = |app: &App| {
+        app.world()
+            .get_resource_change_ticks::<VisualState>()
+            .expect("VisualState is in the app")
+            .changed
+    };
+    let before = changed(&app);
+    for _ in 0..5 {
+        app.update();
+    }
+    assert_eq!(changed(&app), before, "nothing was fed");
+    assert_eq!(app.world().resource::<SyntheticInputOwner>().queued(), 1);
+
+    app.world_mut().insert_resource(OverlayState::default());
+    app.update();
+    assert_ne!(
+        changed(&app),
+        before,
+        "the feed marks it once it moves keys"
+    );
+    assert_eq!(app.world().resource::<VisualState>().typed_keys.len(), 1);
+}

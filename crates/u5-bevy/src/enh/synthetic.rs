@@ -197,6 +197,11 @@ fn feed_synthetic_keys(
     };
     let overlay_open = overlay.is_some_and(|overlay| overlay.is_open());
     let keys = owner.drain_for_feed(overlay_open);
+    if keys.is_empty() {
+        // Held behind an overlay: leave `VisualState` unmarked, so a
+        // change-driven reader (the save watcher) sees no change.
+        return;
+    }
     visual
         .typed_keys
         .extend(keys.into_iter().map(SyntheticKey::typed));

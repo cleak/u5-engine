@@ -121,6 +121,15 @@ impl OverlayState {
     pub fn frozen(&self) -> bool {
         self.is_open() && self.mode == PauseMode::Frozen
     }
+
+    /// A registry with `id` open, for tests outside this module.
+    #[cfg(test)]
+    pub(crate) fn opened(id: OverlayId) -> Self {
+        Self {
+            open: Some(id),
+            mode: PauseMode::Live,
+        }
+    }
 }
 
 /// What a feature asks of the overlay model.

@@ -55,7 +55,7 @@ In this build no feature that binds a key has shipped yet.
 | F12 | `keys.menu` | Open the menu | `menu.overlay` is on |
 | F11 | `keys.fullscreen` | Switch fullscreen | `display.fullscreen_key` is on |
 | Tab | `keys.map` | Open the map | `automap.fullscreen_map` is on |
-| Ctrl+M | `keys.minimap` | Show or hide the minimap | `automap.minimap` is on |
+| Ctrl+M | `keys.minimap` | Show or hide the minimap | never: the minimap is set aside, so the key is kept free |
 | Ctrl+J | `keys.journal` | Open the journal | `journal.page`, `journal.clues` or `journal.quest_tracker` is on |
 | Ctrl+P | `keys.column` | Show or hide the side column | `display.grow_left` is on |
 | Ctrl+A | `keys.auto_member` | Auto-combat for this member | `combat.auto` is on |

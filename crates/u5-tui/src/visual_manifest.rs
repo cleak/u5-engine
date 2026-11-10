@@ -96,15 +96,18 @@ fn parse_manifest(text: &str) -> io::Result<ParsedManifest> {
         }
         let fields: Vec<&str> = line.split('\t').collect();
         if fields.first() == Some(&"coverage") {
-            if fields.len() != 3 {
+            // `coverage NAME VALUE`, optionally followed by notes such as
+            // `source=BRIT.CBT`; the notes are compared as part of the
+            // value.
+            if fields.len() < 3 {
                 return Err(parse_error(
                     line_index,
-                    "coverage row must have three columns",
+                    "coverage row must have at least three columns",
                 ));
             }
             parsed
                 .coverage
-                .insert(fields[1].to_string(), fields[2].to_string());
+                .insert(fields[1].to_string(), fields[2..].join("\t"));
             continue;
         }
         if fields.len() < 5 {
@@ -349,5 +352,34 @@ route-dungeon-dark\t176x176\tdungeon first-person viewport\thash 000000000000000
 ";
         let report = compare_manifest_text(baseline, baseline).unwrap();
         assert!(report.is_clean(), "{:?}", report.differences);
+    }
+
+    /// The frame suite writes notes after a coverage value
+    /// (`coverage NAME 16/16 source=...`); they parse, and a changed note
+    /// is a difference.
+    #[test]
+    fn compare_manifest_text_accepts_coverage_notes() {
+        let baseline = "\
+coverage\ttotal-frames\t1
+coverage\tcombat-outdoor-arena-gallery\t16/16\tsource=arena
+world-play\t320x200\tvisual frame\thash 1111111111111111\tnonblack 42
+";
+        let report = compare_manifest_text(baseline, baseline).unwrap();
+        assert!(report.is_clean(), "{:?}", report.differences);
+        assert_eq!(report.baseline_coverage, 2);
+
+        let candidate = baseline.replace("source=arena", "source=other");
+        let report = compare_manifest_text(baseline, &candidate).unwrap();
+        assert!(
+            report
+                .differences
+                .iter()
+                .any(|diff| diff.contains("coverage `combat-outdoor-arena-gallery` changed")),
+            "{:?}",
+            report.differences
+        );
+
+        let short = "coverage\tonly-a-name\n";
+        assert!(compare_manifest_text(short, short).is_err());
     }
 }
