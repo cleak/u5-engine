@@ -91,6 +91,7 @@ fn options<'a>(snapshot: &'a BandSnapshot, font: &'a FixedCellFont) -> ComposeOp
             hp_colours: true,
             open: false,
         }),
+        crawl: None,
     }
 }
 

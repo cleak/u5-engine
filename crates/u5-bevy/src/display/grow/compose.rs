@@ -1,5 +1,5 @@
 //! The grow-left compositor, steps 1-4 (Phase B design 2.3.7; build plan
-//! M1-09): the canvas chrome, the map (the ring from the tile atlas and the
+//! M1-09, M1-12): the canvas chrome, the map (the ring from the tile atlas and the
 //! faithful core copied byte for byte), and the flashes on the ring.
 //!
 //! [`compose_grow_left`] is a pure function of the faithful frame, the
@@ -20,6 +20,7 @@ use u5_runtime::{
 };
 
 use super::bands::{BandSnapshot, paint_bands};
+use super::crawl_paint::{CrawlPaint, paint_crawl};
 use super::{CORE_SIDE, Canvas};
 use crate::{EGA_PALETTE_RGB, VISUAL_PLAY_FRAME_HEIGHT, VISUAL_PLAY_FRAME_WIDTH};
 
@@ -182,7 +183,8 @@ pub struct Bands<'a> {
 /// map window, the faithful viewport of `faithful` (the 320x200 frame,
 /// RGBA) copied to the core, and, while `flash` is set, the ring inverted
 /// as the faithful frame inverted its core; then, with `bands`, the ribbon
-/// on the top band and the sky and wind tabs at their shared centre.
+/// on the top band and the sky and wind tabs at their shared centre; then,
+/// with `crawl`, the message crawl over the map (step 7).
 pub fn compose_grow_left(
     faithful: &[u8],
     ring: &[u8],
@@ -190,6 +192,7 @@ pub fn compose_grow_left(
     canvas: &Canvas,
     flash: Option<PotionFlashPlayback>,
     bands: Option<Bands<'_>>,
+    crawl: Option<CrawlPaint<'_>>,
 ) -> Vec<u8> {
     let mut rgba = vec![0; canvas.w as usize * canvas.h as usize * 4];
     paint_chrome(&mut rgba, canvas);
@@ -208,6 +211,9 @@ pub fn compose_grow_left(
             bands.hp_colours,
             bands.open,
         );
+    }
+    if let Some(crawl) = crawl {
+        paint_crawl(&mut rgba, canvas, crawl);
     }
     rgba
 }

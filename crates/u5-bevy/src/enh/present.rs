@@ -273,7 +273,7 @@ fn retarget_sprites(sprites: &mut Query<&mut Sprite>, from: &Handle<Image>, to: 
 /// the presented copy on the frame sprite. With no step left it shows the
 /// faithful image again and drops the copy.
 #[allow(clippy::too_many_arguments)]
-fn present_frame(
+pub(crate) fn present_frame(
     mut host: ResMut<PresentHost>,
     mut steps: ResMut<PresentSteps>,
     visual: Option<Res<VisualState>>,

@@ -194,6 +194,10 @@ mod u4_transfer;
 /// design 2.3.1).
 #[cfg(test)]
 mod accessor_agreement;
+/// Test-only recorder for the message crawl's rows (Phase B design 2.2.4,
+/// 2.3.8).
+#[cfg(test)]
+mod crawl_agreement;
 /// Test-only recorder for the grow-left compositor's crop-back identity
 /// (Phase B design 2.3.7).
 #[cfg(test)]
@@ -17775,6 +17779,19 @@ fn render_visual_play_frame_with_input_and_cursor(
     let _ = state.take_pending_stonegate_trapdoor_playback();
     #[cfg(test)]
     grow_agreement::note(state, atlas, ctx.ibm, &rgba);
+    #[cfg(test)]
+    crawl_agreement::note(
+        state,
+        crawl_agreement::Drawn {
+            ibm: ctx.ibm,
+            runes: ctx.runes,
+            game_dir: ctx.game_dir,
+            cursor_frame: ctx.cursor_frame,
+            input_line,
+            prompt_cursor_visible,
+        },
+        &rgba,
+    );
     rgba
 }
 
@@ -17895,6 +17912,8 @@ fn render_visual_play_frame_over_viewport(
         rgba[at..at + 4].copy_from_slice(&pixel);
     }
     paint_message_window_rows(&mut rgba, width, height, ctx, &surface.message_rows);
+    #[cfg(test)]
+    crawl_agreement::painted(&surface.message_rows);
 
     blit_rgba(
         &mut rgba,
@@ -27462,6 +27481,69 @@ mod tests {
         assert!(tally.mismatches.is_empty(), "{:#?}", tally.mismatches);
     }
 
+    /// A font whose every glyph is distinct and has ink: each row is the
+    /// code, its complement and the code again, so a glyph check against
+    /// the frame means something.
+    fn patterned_font() -> FixedCellFont {
+        let mut bytes = vec![0u8; CH_FONT_LEN];
+        for code in 0..CH_FONT_LEN / 8 {
+            let c = code as u8;
+            let rows = [c | 1, !c, c | 0x80, c, !c | 1, c ^ 0x55, c | 0x10, 0x81];
+            bytes[code * 8..code * 8 + 8].copy_from_slice(&rows);
+        }
+        parse_ch_font(&bytes, IBM_CH_FILE).unwrap()
+    }
+
+    /// Phase B M1-12 (design 2.2.4, 2.2.9, 2.3.8): the crawl reads the rows
+    /// the frame painted, finds each on the frame, draws only text the frame
+    /// shows and never covers the core - for a walk's echoes and messages, a
+    /// line being typed, a keyword exchange and a cleared window.
+    #[test]
+    fn message_crawl_agrees_with_the_painted_rows_on_synthetic_frames() {
+        let atlas = synthetic_tile_atlas(TileGraphicsDepth::Ega16);
+        let font = patterned_font();
+        let mut walk = test_state(open_grid(), 5, 5);
+        for (echo, text) in [
+            (true, "North"),
+            (true, "East"),
+            (false, "Slow progress!"),
+            (true, "North"),
+            (false, "A long message that wraps over two rows."),
+        ] {
+            if echo {
+                walk.emit_command_echo_line(text);
+            } else {
+                walk.emit_message_line(text);
+            }
+        }
+        let mut talk = test_state(open_grid(), 5, 5);
+        seed_visual_key_route_conversation(&mut talk);
+        let mut cleared = walk.clone();
+        cleared.clear_message_window();
+
+        crawl_agreement::start();
+        for (mut state, input) in [
+            (walk.clone(), ""),
+            (walk, "jo"),
+            (talk.clone(), ""),
+            (talk, "bre"),
+            (cleared, ""),
+        ] {
+            let _ = render_visual_play_frame_with_input_and_cursor(
+                &mut state,
+                &atlas,
+                play_ctx_at_frame(&font, 1),
+                input,
+                "",
+                true,
+            );
+        }
+        let tally = crawl_agreement::finish();
+        assert_eq!(tally.frames, 5, "{tally:?}");
+        assert!(tally.with_text >= 2 && tally.with_live >= 1, "{tally:?}");
+        assert!(tally.mismatches.is_empty(), "{:#?}", tally.mismatches);
+    }
+
     #[test]
     fn stats_row_accessors_agree_with_the_composed_panel() {
         let atlas = synthetic_tile_atlas(TileGraphicsDepth::Ega16);
@@ -27524,6 +27606,7 @@ mod tests {
         peek_agreement::start();
         accessor_agreement::start();
         grow_agreement::start();
+        crawl_agreement::start();
         let frames_dir = temp_output_dir("peek-frames");
         visual_frame_suite(&writable_game_dir, TileGraphicsDepth::Ega16, &frames_dir).unwrap();
         let routes_dir = temp_output_dir("peek-routes");
@@ -27531,6 +27614,7 @@ mod tests {
         let filed = peek_agreement::finish();
         let (rows_checked, row_mismatches) = accessor_agreement::finish();
         let grow = grow_agreement::finish();
+        let crawl = crawl_agreement::finish();
         for dir in [&writable_game_dir, &frames_dir, &routes_dir] {
             let _ = fs::remove_dir_all(dir);
         }
@@ -27545,6 +27629,21 @@ mod tests {
         );
         assert!(grow.composed > 0 && grow.passed > 0, "{grow:?}");
         assert!(grow.mismatches.is_empty(), "{:#?}", grow.mismatches);
+
+        // Phase B M1-12 (design 2.2.4, 2.2.9, 2.3.8): on every suite frame,
+        // the crawl reads the rows the frame painted, every one of them is
+        // on the frame, every crawl character is in the painted rows, a
+        // prompt row is drawn only above the live row, and the crawl never
+        // covers the core.
+        println!(
+            "message crawl: {} frames, {} with text, {} with a live row, {} with a prompt row",
+            crawl.frames, crawl.with_text, crawl.with_live, crawl.with_prompt
+        );
+        assert!(
+            crawl.frames > 0 && crawl.with_text > 0 && crawl.with_live > 0,
+            "{crawl:?}"
+        );
+        assert!(crawl.mismatches.is_empty(), "{:#?}", crawl.mismatches);
 
         assert_peek_predicate_agrees(&filed);
 

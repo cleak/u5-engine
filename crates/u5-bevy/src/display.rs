@@ -24,8 +24,11 @@
 //!   first steps (M1-09): the `[grow-left compose]` pipeline step draws the
 //!   canvas chrome, the ring and the faithful core, present only while
 //!   `display.grow_left` is on;
-//! - the message crawl's pure parts ([`crawl`], M1-11): the row classes,
-//!   the typed-line log and the history buffer, with no system yet;
+//! - the message crawl ([`crawl`], M1-11 and M1-12): the row classes, the
+//!   typed-line log and the history buffer, the rows' ages, and
+//!   `sync_crawl`, which reads the faithful window's placed rows before the
+//!   pipeline host; the compositor draws them (step 7). Present only while
+//!   `display.grow_left` is on;
 //! - [`initial_window`], which sets the window's first mode and present
 //!   mode from the settings in both `WindowPlugin` blocks. With every key at
 //!   its default it returns the window it was given, so the 1.0.1 window is

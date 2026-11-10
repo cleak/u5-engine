@@ -41,6 +41,12 @@
 //! [`bands`]: the ribbon, food, gold and the date on the top band, and the
 //! sky and wind tabs cropped from the frame at one shared centre. Their
 //! snapshot is retaken only when the faithful bytes change (D2.11).
+//!
+//! **The crawl** (M1-12, 2.2.4, 2.3.7 step 7, 2.3.8) is drawn by
+//! [`crawl_paint`] from the rows [`CrawlState`] took from the faithful
+//! message window: `sync_crawl` rebuilds them before the pipeline host on a
+//! frame whose faithful bytes or input line changed, and hands them to the
+//! step through a shared [`CrawlFeed`].
 
 use std::hash::{Hash, Hasher};
 
@@ -49,6 +55,7 @@ use u5_runtime::enhancements::{DisplaySettings, PixelAspect};
 use u5_runtime::{PeekLightPolicy, PlayState, TileAtlas};
 
 use super::Display;
+use super::crawl::sync::{CrawlFeed, CrawlInputs, CrawlState, sync_crawl};
 use super::scale::Aspect;
 use crate::enh::present::{
     PresentInput, PresentStep, PresentSteps, PresentedFrame, StepOrder, register_present_step,
@@ -58,6 +65,7 @@ use crate::{EnhSet, VISUAL_PLAY_FRAME_HEIGHT, VISUAL_PLAY_FRAME_WIDTH, VisualSta
 
 pub mod bands;
 pub mod compose;
+pub mod crawl_paint;
 
 /// Canvas rows on an ordinary window.
 pub const CANVAS_ROWS: u32 = 240;
@@ -216,6 +224,8 @@ pub struct ComposeOptions<'a> {
     pub light: PeekLightPolicy,
     /// `None` draws steps 1-4 only.
     pub bands: Option<compose::Bands<'a>>,
+    /// Step 7, the message crawl; `None` draws no crawl.
+    pub crawl: Option<crawl_paint::CrawlPaint<'a>>,
 }
 
 /// Steps 1-6 for one state (2.3.7): the ring peek for the canvas's map
@@ -247,6 +257,7 @@ pub fn compose_for_state(
         canvas,
         flash,
         options.bands,
+        options.crawl,
     ))
 }
 
@@ -280,6 +291,67 @@ pub fn render_shell_frame_and_canvas(
             hp_colours: true,
             open: false,
         }),
+        crawl: None,
+    };
+    let canvas = compose_for_state(&frame, state, atlas, canvas, options);
+    (frame, canvas)
+}
+
+/// [`render_shell_frame_and_canvas`] with the message crawl: the frame is
+/// drawn with `input_line` as the shell's input line (the cursor's first
+/// frame), `crawl` is synced from it as `sync_crawl` syncs it after a shell
+/// repaint, and the canvas draws its rows with `crawl_on` (`display.crawl`)
+/// and the typed colours on. Call it after every command of a scripted walk
+/// so the rows age as they would in the shell.
+#[allow(clippy::too_many_arguments)]
+pub fn render_shell_frame_and_canvas_with_crawl(
+    state: &mut PlayState,
+    atlas: &TileAtlas,
+    fonts: (&u5_runtime::FixedCellFont, &u5_runtime::FixedCellFont),
+    game_dir: &std::path::Path,
+    canvas: &Canvas,
+    light: PeekLightPolicy,
+    crawl: &mut CrawlState,
+    crawl_on: bool,
+    input_line: &str,
+) -> (Vec<u8>, Option<Vec<u8>>) {
+    let ctx = crate::PlayFrameContext {
+        ibm: fonts.0,
+        runes: fonts.1,
+        game_dir,
+        cursor_frame: 0,
+    };
+    let frame = crate::render_visual_play_frame_with_input_and_cursor(
+        state, atlas, ctx, input_line, "", true,
+    );
+    crawl.observe_input(input_line);
+    crawl.sync(
+        state,
+        &frame,
+        CrawlInputs {
+            ibm: fonts.0,
+            runes: fonts.1,
+            game_dir,
+            cursor_frame: 0,
+            input_line,
+            prompt_cursor_visible: true,
+        },
+    );
+    let snapshot = bands::band_snapshot(state);
+    let rows = crawl.rows();
+    let options = ComposeOptions {
+        light,
+        bands: Some(compose::Bands {
+            snapshot: &snapshot,
+            font: fonts.0,
+            hp_colours: true,
+            open: false,
+        }),
+        crawl: Some(crawl_paint::CrawlPaint {
+            rows: &rows,
+            crawl: crawl_on,
+            typed_colour: true,
+        }),
     };
     let canvas = compose_for_state(&frame, state, atlas, canvas, options);
     (frame, canvas)
@@ -294,6 +366,10 @@ pub struct GrowComposeSettings {
     pub pixel_aspect: PixelAspect,
     /// `display.ribbon_hp_colours`.
     pub hp_colours: bool,
+    /// `display.crawl`.
+    pub crawl: bool,
+    /// `display.typed_colour`.
+    pub typed_colour: bool,
 }
 
 impl GrowComposeSettings {
@@ -302,6 +378,8 @@ impl GrowComposeSettings {
             light: settings.grow_left.light,
             pixel_aspect: settings.pixel_aspect,
             hp_colours: settings.grow_left.ribbon_hp_colours,
+            crawl: settings.grow_left.crawl,
+            typed_colour: settings.grow_left.typed_colour,
         }
     }
 }
@@ -316,6 +394,8 @@ pub struct GrowLeftCompose {
     /// is retaken only when the faithful bytes change, so a recompose for
     /// the ring alone never shows a newer value than the original screen.
     bands: Option<(u64, bands::BandSnapshot)>,
+    /// The crawl rows `sync_crawl` keeps; `None` draws no crawl.
+    crawl: Option<CrawlFeed>,
 }
 
 impl GrowLeftCompose {
@@ -323,7 +403,14 @@ impl GrowLeftCompose {
         Self {
             settings: GrowComposeSettings::of(settings),
             bands: None,
+            crawl: None,
         }
+    }
+
+    /// The step drawing the crawl rows of `feed` (step 7).
+    pub fn with_crawl(mut self, feed: CrawlFeed) -> Self {
+        self.crawl = Some(feed);
+        self
     }
 
     /// The band snapshot for this compose: the cached one while the
@@ -366,9 +453,15 @@ impl PresentStep for GrowLeftCompose {
             settings.light as u8,
             settings.pixel_aspect as u8,
             settings.hp_colours,
+            settings.crawl,
+            settings.typed_colour,
         )
             .hash(&mut hasher);
         input.state.map(ring_digest).hash(&mut hasher);
+        self.crawl
+            .as_ref()
+            .map(|feed| feed.rows().revision)
+            .hash(&mut hasher);
         hasher.finish()
     }
 
@@ -383,6 +476,7 @@ impl PresentStep for GrowLeftCompose {
         let Some(canvas) = grow_canvas(Some(state), input.window, settings.pixel_aspect) else {
             return;
         };
+        let crawl_rows = self.crawl.as_ref().map(|feed| feed.rows().clone());
         let snapshot = self.bands_for(state, input.faithful_hash);
         let options = ComposeOptions {
             light: settings.light,
@@ -392,6 +486,11 @@ impl PresentStep for GrowLeftCompose {
                 hp_colours: settings.hp_colours,
                 // The docked column is M1-13's.
                 open: false,
+            }),
+            crawl: crawl_rows.as_ref().map(|rows| crawl_paint::CrawlPaint {
+                rows,
+                crawl: settings.crawl,
+                typed_colour: settings.typed_colour,
             }),
         };
         let Some(rgba) = compose_for_state(&frame.rgba, state, atlas, &canvas, options) else {
@@ -403,8 +502,8 @@ impl PresentStep for GrowLeftCompose {
 }
 
 /// Adds the compositor while `display.grow_left` is on at launch: the
-/// step, the [`FrameImageSize`] the frame fit places and the two systems
-/// that keep them. Adds nothing while it is off. The frame fit itself (the
+/// step, the [`FrameImageSize`] the frame fit places, the [`CrawlState`]
+/// and the three systems that keep them. Adds nothing while it is off. The frame fit itself (the
 /// arbiter and a canvas-aware [`super::scale::ScaleFit`]) comes from
 /// [`super::scale::add_scale`].
 pub(super) fn add_grow(app: &mut App, settings: &DisplaySettings) {
@@ -412,7 +511,9 @@ pub(super) fn add_grow(app: &mut App, settings: &DisplaySettings) {
         return;
     }
     app.init_resource::<FrameImageSize>();
-    register_present_step(app, GrowLeftCompose::of(settings));
+    let feed = CrawlFeed::new();
+    app.insert_resource(CrawlState::new(feed.clone()));
+    register_present_step(app, GrowLeftCompose::of(settings).with_crawl(feed));
     app.add_systems(
         Update,
         (
@@ -422,6 +523,9 @@ pub(super) fn add_grow(app: &mut App, settings: &DisplaySettings) {
             size_grow_frame
                 .before(layout_side_space)
                 .in_set(EnhSet::Layout),
+            sync_crawl
+                .before(crate::enh::present::present_frame)
+                .in_set(EnhSet::Present),
         ),
     );
 }
@@ -465,6 +569,7 @@ fn follow_grow_settings(
     display: Res<Display>,
     mut current: Local<Option<(bool, GrowComposeSettings)>>,
     steps: Option<ResMut<PresentSteps>>,
+    crawl: Option<Res<CrawlState>>,
 ) {
     let wanted = (display.0.grow_left.on, GrowComposeSettings::of(&display.0));
     let Some(previous) = current.replace(wanted) else {
@@ -476,7 +581,11 @@ fn follow_grow_settings(
     }
     if let Some(mut steps) = steps {
         if wanted.0 {
-            steps.register(GrowLeftCompose::of(&display.0));
+            let step = GrowLeftCompose::of(&display.0);
+            steps.register(match crawl {
+                Some(crawl) => step.with_crawl(crawl.feed().clone()),
+                None => step,
+            });
         } else {
             steps.remove(StepOrder::GROW_LEFT_COMPOSE);
         }

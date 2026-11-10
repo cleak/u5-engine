@@ -1,10 +1,14 @@
 //! The message crawl's row classes, the typed-line log and the history
-//! buffer (Phase B design 2.2.4, 2.2.5, 2.3.8; build plan M1-11).
+//! buffer (Phase B design 2.2.4, 2.2.5, 2.3.8; build plan M1-11), and the
+//! crawl itself (M1-12).
 //!
-//! Everything here is a pure function or a plain value: no Bevy system, no
-//! resource registration and no read of the game's state beyond the slices
-//! it is handed. The crawl (M1-12) and the docked column (M1-13) build on
-//! it.
+//! The functions in this file are pure: no Bevy system and no read of the
+//! game's state beyond the slices they are handed. The crawl's own parts
+//! are in the submodules: [`ages`] (each row's age in turns), [`layer`]
+//! (the drawable rows) and [`sync`] (the shell's `CrawlState` and the
+//! `sync_crawl` system, which reads the rows the faithful window placed).
+//! The compositor's step 7 draws them (`display::grow::crawl_paint`). The
+//! docked column (M1-13) builds on the history.
 //!
 //! - [`RowClass`] and [`classify_rows`] sort the rows the faithful window
 //!   placed into game text, typed text, a prompt row that is drawn only
@@ -29,6 +33,10 @@
 //! at the window's sixteen cells.
 
 use std::collections::VecDeque;
+
+pub mod ages;
+pub mod layer;
+pub mod sync;
 
 use u5_runtime::tlk_control_codes::TLK_SCOPED_PROMPT;
 use u5_runtime::{
@@ -322,22 +330,116 @@ fn reaches_render(entry: &MessageEntry) -> bool {
 pub fn tagged_log(
     entries: &[MessageEntry],
     unflushed: Option<&str>,
-    mut render: impl FnMut(&str) -> Option<String>,
+    render: impl FnMut(&str) -> Option<String>,
 ) -> Option<(Vec<MessageLogLine>, Vec<bool>)> {
-    let mut real_outputs = VecDeque::new();
+    let outputs = render_outputs(entries, render);
+    tagged_outputs(entries, &outputs, unflushed)
+}
+
+/// [`tagged_log`] over the entries' [`render_outputs`].
+pub fn tagged_outputs(
+    entries: &[MessageEntry],
+    outputs: &[Option<String>],
+    unflushed: Option<&str>,
+) -> Option<(Vec<MessageLogLine>, Vec<bool>)> {
+    let (lines, marks) = marked_log(
+        entries,
+        outputs,
+        unflushed,
+        |index| {
+            if entries[index].is_command_echo {
+                TYPED_MARK
+            } else {
+                GAME_MARK
+            }
+        },
+        GAME_MARK,
+    )?;
+    let typed = marks
+        .iter()
+        .map(|cells| cells.contains(&TYPED_MARK))
+        .collect();
+    Some((lines, typed))
+}
+
+/// The `render` output of every entry that reaches it, in order, so that
+/// several masked projections of one transcript call the renderer once.
+pub fn render_outputs(
+    entries: &[MessageEntry],
+    mut render: impl FnMut(&str) -> Option<String>,
+) -> Vec<Option<String>> {
+    entries
+        .iter()
+        .filter(|entry| reaches_render(entry))
+        .map(|entry| render(&entry.text))
+        .collect()
+}
+
+/// The marks [`entry_log`] gives the entries, newest first. Letters and
+/// digits only, which the window's wrap treats as ordinary cells.
+const ENTRY_MARKS: &[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz012345678";
+/// The mark of the line still being composed (no transcript entry yet).
+const UNFLUSHED_MARK: u8 = b'9';
+
+/// The window's log for `entries` (as [`tagged_log`] projects it) and, for
+/// each logged line, the newest transcript entry that wrote a cell of it:
+/// `Some(index into entries)`, or `None` for a line only the unflushed text
+/// wrote (or an empty line).
+///
+/// The crawl ages a row by that entry (2.3.8). Entries more than
+/// [`ENTRY_MARKS`] back share the oldest mark and are reported as the oldest
+/// of them; such rows are far past the window's thirteen rows. `None` when
+/// the masked projection does not have the real one's shape.
+pub fn entry_log(
+    entries: &[MessageEntry],
+    outputs: &[Option<String>],
+    unflushed: Option<&str>,
+) -> Option<(Vec<MessageLogLine>, Vec<Option<usize>>)> {
+    let len = entries.len();
+    let back_of = |index: usize| (len - 1 - index).min(ENTRY_MARKS.len() - 1);
+    let (lines, marks) = marked_log(
+        entries,
+        outputs,
+        unflushed,
+        |index| ENTRY_MARKS[back_of(index)],
+        UNFLUSHED_MARK,
+    )?;
+    let sources = marks
+        .iter()
+        .map(|cells| {
+            cells
+                .iter()
+                .filter_map(|mark| ENTRY_MARKS.iter().position(|m| m == mark))
+                .min()
+                .map(|back| len - 1 - back)
+        })
+        .collect();
+    Some((lines, sources))
+}
+
+/// The log of `entries` and of the same entries with every cell replaced by
+/// `mark(entry index)` (`unflushed_mark` for the unflushed text), checked to
+/// have the same shape; for each line, its masked cells.
+///
+/// `outputs` is [`render_outputs`] of the same entries.
+fn marked_log(
+    entries: &[MessageEntry],
+    outputs: &[Option<String>],
+    unflushed: Option<&str>,
+    mark: impl Fn(usize) -> u8,
+    unflushed_mark: u8,
+) -> Option<(Vec<MessageLogLine>, Vec<Vec<u8>>)> {
+    let mut real_outputs: VecDeque<Option<String>> = outputs.iter().cloned().collect();
     let mut masked_outputs = VecDeque::new();
     let mut masked = Vec::with_capacity(entries.len());
-    for entry in entries {
-        let mark = if entry.is_command_echo {
-            TYPED_MARK
-        } else {
-            GAME_MARK
-        };
+    let mut rendered = outputs.iter();
+    for (index, entry) in entries.iter().enumerate() {
+        let mark = mark(index);
         let mut copy = entry.clone();
         copy.text = mask_text(&entry.text, mark);
         copy.glyphs = mask_glyphs(&entry.glyphs, mark);
         if reaches_render(entry) {
-            let output = render(&entry.text);
+            let output = rendered.next()?;
             // Unchanged text keeps the font-preserving (or centred) branch,
             // which compares the output with the entry's own text; changed
             // text takes the plain branch. The masked copy must take the
@@ -349,7 +451,6 @@ pub fn tagged_log(
                     mask_text(text, mark)
                 }
             }));
-            real_outputs.push_back(output);
         }
         masked.push(copy);
     }
@@ -365,7 +466,7 @@ pub fn tagged_log(
     });
     if let Some(text) = unflushed {
         real.push_output(text);
-        mask.push_output(&mask_text(text, GAME_MARK));
+        mask.push_output(&mask_text(text, unflushed_mark));
     }
     let same_shape = real_calls == masked_calls
         && real.lines().len() == mask.lines().len()
@@ -381,12 +482,12 @@ pub fn tagged_log(
     if !same_shape {
         return None;
     }
-    let typed = mask
+    let marks = mask
         .lines()
         .iter()
-        .map(|line| line.glyphs.iter().any(|glyph| glyph.byte == TYPED_MARK))
+        .map(|line| line.glyphs.iter().map(|glyph| glyph.byte).collect())
         .collect();
-    Some((real.lines().to_vec(), typed))
+    Some((real.lines().to_vec(), marks))
 }
 
 /// For each placed row, whether a command echo wrote it, wrapped
@@ -414,7 +515,25 @@ pub fn echo_row_flags(
     if lines.len() != typed.len() {
         return fallback();
     }
-    let mut flags = vec![false; rows.len()];
+    match row_lines(rows, lines, live_row_placed) {
+        Some(matched) => matched
+            .iter()
+            .map(|line| line.is_some_and(|line| typed[line]))
+            .collect(),
+        None => fallback(),
+    }
+}
+
+/// For each placed row, the index of the logged line that placed it
+/// (`None` for the layout's own live row), matched from the bottom up as
+/// [`echo_row_flags`] describes; `None` when the rows did not come from
+/// these lines.
+pub fn row_lines(
+    rows: &[MessageWindowRow],
+    lines: &[MessageLogLine],
+    live_row_placed: bool,
+) -> Option<Vec<Option<usize>>> {
+    let mut matched = vec![None; rows.len()];
     let mut line_index = lines.len();
     let mut row_index = rows.len();
     if live_row_placed {
@@ -432,21 +551,19 @@ pub fn echo_row_flags(
         {
             line_index -= 1;
         }
-        let Some(line) = line_index.checked_sub(1).map(|index| &lines[index]) else {
-            return fallback();
-        };
+        let line = &lines[line_index.checked_sub(1)?];
         let open_prompt_row = row_index == open_row && !live_row_placed;
         if row.text == line.text || (open_prompt_row && row.text.starts_with(&line.text)) {
-            flags[row_index - 1] = typed[line_index - 1];
+            matched[row_index - 1] = Some(line_index - 1);
             row_index -= 1;
             line_index -= 1;
         } else if line.text.is_empty() {
             line_index -= 1;
         } else {
-            return fallback();
+            return None;
         }
     }
-    flags
+    Some(matched)
 }
 
 /// One older row for the open window (2.2.5).
