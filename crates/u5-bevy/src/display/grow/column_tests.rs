@@ -595,7 +595,12 @@ fn the_column_exists_only_with_grow_left() {
 
 #[test]
 fn ctrl_p_opens_and_closes_the_presented_column() {
-    let mut shell = shell(&grow_on(), test_state(open_grid(), 5, 5));
+    // In one frame: `display.dither` off (the effect is M1-15's tests).
+    let one_frame = launch(&[
+        CliSetting::Enable("display.grow_left".into()),
+        CliSetting::Disable("display.dither".into()),
+    ]);
+    let mut shell = shell(&one_frame, test_state(open_grid(), 5, 5));
     let mut timeline = Timeline::new(60);
     timeline.game_tap(3, KeyCode::ArrowUp);
     ctrl_p(&mut timeline, 20);

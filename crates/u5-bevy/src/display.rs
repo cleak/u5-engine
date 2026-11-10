@@ -55,6 +55,7 @@ use crate::enh::VisualLaunchConfig;
 use crate::enh::input::{EnhAction, EnhActionEvent};
 
 pub mod crawl;
+pub mod effects;
 pub mod fill;
 pub mod grow;
 pub mod scale;

@@ -347,9 +347,27 @@ pub fn paint_ribbon(
     hp_colours: bool,
     open: bool,
 ) {
+    paint_ribbon_members(rgba, canvas, ribbon, font, hp_colours, open, false);
+}
+
+/// [`paint_ribbon`], leaving out with `still_only` the members whose column
+/// moves when the column opens or closes (the 21:9 third column).
+fn paint_ribbon_members(
+    rgba: &mut [u8],
+    canvas: &Canvas,
+    ribbon: &RibbonSnapshot,
+    font: &FixedCellFont,
+    hp_colours: bool,
+    open: bool,
+    still_only: bool,
+) {
     let layout = ribbon_layout(canvas, open);
+    let other = ribbon_layout(canvas, !open);
     for (index, member) in ribbon.members.iter().take(RIBBON_MEMBERS).enumerate() {
         let (x, y) = layout.place(index);
+        if still_only && other.place(index) != (x, y) {
+            continue;
+        }
         let hp_colour = ribbon_hp_colour(member, hp_colours);
         for (i, (code, part)) in member_cells(member, &layout).into_iter().enumerate() {
             let colour = if part == CellPart::Hp {
@@ -486,4 +504,19 @@ pub fn paint_bands(
         .map_or(TAB_STRIP - 2 * CELL, |rect| rect.width() as u32);
     let centre = tab_centre(canvas, open, sky_width, &bands.ribbon);
     paint_tabs(rgba, canvas, faithful, &bands.gaps, centre);
+}
+
+/// The neutral bands of the open and close effect (2.2.6, 2.3.10): the
+/// collapsed column's ribbon, food, gold and date with no sky or wind tab
+/// (the band and its unbroken rule show where they were) and without the
+/// ribbon members whose column moves. The tabs and the moving members
+/// dither out to this and dither in from it.
+pub fn paint_neutral_bands(
+    rgba: &mut [u8],
+    canvas: &Canvas,
+    bands: &BandSnapshot,
+    font: &FixedCellFont,
+    hp_colours: bool,
+) {
+    paint_ribbon_members(rgba, canvas, &bands.ribbon, font, hp_colours, false, true);
 }

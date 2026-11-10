@@ -35,8 +35,9 @@
 //! **State.** [`ColumnView`] is the session's state, in memory only (D2.9):
 //! Ctrl+P flips it and never writes the file. With `display.crawl` off the
 //! column starts open, since the open window is then where messages are
-//! read. The open and close effect (`display.dither`, M1-15) builds on
-//! this; until it lands, open and close take one frame.
+//! read. With `display.dither` on, opening and closing run the dither
+//! effect ([`crate::display::effects`]): [`ColumnView::step`] counts its
+//! steps on the shell's frame clock. With it off they take one frame.
 //!
 //! **Page mode** (M1-14, 2.2.5, D2.20). While the original uses its right
 //! column for more than the roster ([`page_mode_active`]: a Z-stats page, a
@@ -62,6 +63,7 @@
 //! font or the flat chrome geometry.
 
 use std::sync::{Arc, Mutex, MutexGuard};
+use std::time::Duration;
 
 use bevy::prelude::*;
 use u5_runtime::PlayState;
@@ -69,9 +71,11 @@ use u5_runtime::PlayState;
 use super::Canvas;
 use super::compose::{BAND_BLUE, RULE_WHITE};
 use super::crawl_paint::{Painted, paint_lines};
+use crate::display::Display;
 use crate::display::crawl::layer::{CrawlLine, CrawlRows, GAME_COLOURS, TYPED_COLOURS};
+use crate::display::effects;
 use crate::enh::input::{EnhAction, EnhActionEvent};
-use crate::{EGA_PALETTE_RGB, VISUAL_PLAY_FRAME_WIDTH};
+use crate::{EGA_PALETTE_RGB, VISUAL_PLAY_FRAME_WIDTH, VisualState};
 
 /// The column's blue starts on the screen's left rule.
 pub const COLUMN_X0: u32 = 7;
@@ -141,8 +145,9 @@ pub struct FrameRect {
 pub struct ColumnView {
     /// Open (Ctrl+P), for the session.
     pub open: bool,
-    /// Dither step 0..=8 while an open or close effect runs (M1-15);
-    /// `None` here, where open and close take one frame.
+    /// The step (1..=7) of the opening sequence an open or close effect is
+    /// showing (`display.dither`, M1-15); `None` when no effect runs, and
+    /// always with `display.dither` off.
     pub step: Option<u8>,
     /// The original's right column is showing a page
     /// ([`page_mode_active`]): the column is shown whatever `open` says.
@@ -164,6 +169,12 @@ impl ColumnView {
     pub fn shown(&self) -> bool {
         self.open || self.page_mode
     }
+
+    /// Whether the open window's older rows are wanted: the column is open,
+    /// or an effect is drawing the open image.
+    pub fn wants_history(&self) -> bool {
+        self.open || self.step.is_some()
+    }
 }
 
 /// Whether the original is using its right column for a page (2.2.5,
@@ -180,14 +191,25 @@ pub fn page_mode_active(state: &PlayState) -> bool {
 /// and the `[grow-left compose]` step that draws it. No threads: the lock is
 /// never contended. Exists only while `display.grow_left` is on.
 #[derive(Resource, Clone, Debug, Default)]
-pub struct ColumnState(Arc<Mutex<ColumnView>>);
+pub struct ColumnState(Arc<Mutex<ColumnClock>>);
+
+/// The view and the effect's step clock.
+#[derive(Debug, Default)]
+struct ColumnClock {
+    view: ColumnView,
+    /// Frame time since the effect's last step.
+    elapsed: Duration,
+}
 
 impl ColumnState {
     pub fn new(view: ColumnView) -> Self {
-        Self(Arc::new(Mutex::new(view)))
+        Self(Arc::new(Mutex::new(ColumnClock {
+            view,
+            elapsed: Duration::ZERO,
+        })))
     }
 
-    fn lock(&self) -> MutexGuard<'_, ColumnView> {
+    fn lock(&self) -> MutexGuard<'_, ColumnClock> {
         self.0
             .lock()
             .unwrap_or_else(|poisoned| poisoned.into_inner())
@@ -195,31 +217,76 @@ impl ColumnState {
 
     /// The view as it stands.
     pub fn view(&self) -> ColumnView {
-        *self.lock()
+        self.lock().view
     }
 
-    /// Open or close the column.
+    /// Open or close the column, at once.
     pub fn set_open(&self, open: bool) {
-        self.lock().open = open;
+        let mut clock = self.lock();
+        clock.view.open = open;
+        clock.view.step = None;
+        clock.elapsed = Duration::ZERO;
     }
 
     /// Ctrl+P: flip the player's column state (during a page too, where it
-    /// shows once the page goes).
+    /// shows once the page goes), in one frame.
     pub fn toggle(&self) {
-        let mut view = self.lock();
-        view.open = !view.open;
+        self.toggle_with(false);
+    }
+
+    /// Ctrl+P with `display.dither` as `dither`: with it on, the open or
+    /// close effect starts, or a running one reverses from its step.
+    pub fn toggle_with(&self, dither: bool) {
+        let mut clock = self.lock();
+        effects::toggle(&mut clock.view, dither);
+        clock.elapsed = Duration::ZERO;
+    }
+
+    /// `dt` of shell frame time passed (the effect's clock).
+    pub fn tick(&self, dt: Duration, dither: bool) {
+        let clock = &mut *self.lock();
+        effects::tick(&mut clock.view, &mut clock.elapsed, dt, dither);
     }
 }
 
 /// `ToggleColumn` (Ctrl+P) opens or closes the column for the session. It
 /// writes no setting and sends the game nothing: the router consumed the
 /// key before the input driver saw it.
-pub(crate) fn column_actions(mut actions: EventReader<EnhActionEvent>, column: Res<ColumnState>) {
+pub(crate) fn column_actions(
+    mut actions: EventReader<EnhActionEvent>,
+    column: Res<ColumnState>,
+    display: Res<Display>,
+    visual: Option<Res<VisualState>>,
+) {
+    let dither = effect_allowed(&display, visual.as_deref());
     for action in actions.read() {
         if action.0 == EnhAction::ToggleColumn {
-            column.toggle();
+            column.toggle_with(dither);
         }
     }
+}
+
+/// Whether an open or close effect may run: `display.dither` is on and no
+/// page is up (a page shows the column whatever the player's state, so the
+/// player's change is not seen until it goes).
+fn effect_allowed(display: &Display, visual: Option<&VisualState>) -> bool {
+    display.0.grow_left.dither && !visual.is_some_and(|visual| page_mode_active(&visual.state))
+}
+
+/// The effect's clock, on the shell's frame time, before this frame's
+/// Ctrl+P: a step started this frame shows for its whole 50 ms. A page
+/// coming up ends a running effect. Draws nothing and feeds the game
+/// nothing.
+pub(crate) fn tick_column_effect(
+    column: Res<ColumnState>,
+    display: Res<Display>,
+    visual: Option<Res<VisualState>>,
+    time: Res<Time>,
+) {
+    if column.view().step.is_none() {
+        return;
+    }
+    column.tick(time.delta(), effect_allowed(&display, visual.as_deref()));
 }
 
 /// The message window's rows, `(y0, y1)` inclusive: y 96 to the bottom of

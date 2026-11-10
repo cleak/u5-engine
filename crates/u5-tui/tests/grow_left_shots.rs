@@ -1,4 +1,4 @@
-//! Phase B M1-09, M1-10, M1-12 and M1-13 review shots: the grow-left canvas
+//! Phase B M1-09, M1-10, M1-12, M1-13 and M1-15 review shots: the grow-left canvas
 //! (chrome, ring, faithful core, the ribbon, the tabs and the message
 //! crawl) for the approved mockup scenes, rendered by the engine's own frame
 //! renderer and compositor next to the approved c04f mockups.
@@ -771,4 +771,349 @@ fn grow_left_page_mode_and_layout_renders() {
             render(format!("{layout}-page-{page:?}"), paged, false, false);
         }
     }
+}
+
+/// The mockup scripts' rows (`script`) in place of the crawl's own, the
+/// crawl's live row kept last.
+fn scripted_rows(
+    crawl: &CrawlState,
+    ibm: &FixedCellFont,
+    script: &[(&str, bool, u64)],
+) -> u5_bevy::display::crawl::layer::CrawlRows {
+    let mut rows = crawl.rows();
+    let live = rows.lines.pop().expect("the live row");
+    rows.older.clear();
+    rows.lines = script
+        .iter()
+        .map(|(text, typed, age)| scripted_line(ibm, text, *typed, *age))
+        .collect();
+    rows.lines.push(live);
+    rows
+}
+
+/// M1-15's review shots: the open effect (16:9 and 21:9) and the close
+/// effect (16:9), every frame. The mockup's own rows (B collapsed, D open)
+/// are drawn by the engine's crawl and open-window paint over the engine's
+/// canvases of the walked scene, blended by the engine's step 9, and
+/// compared pixel for pixel with the mockup script's frames
+/// (`U5_GROW_MOCKUP_FRAMES`, the c04f run's `frames` folder). The live
+/// frames (the walk's own rows through `compose_for_state` with the step
+/// set) are written beside them. Output: `effect-<gif>-NN-{engine,mockup,
+/// live}.png` and one `effect-<gif>-sheet.png` (mockup left, engine
+/// middle, live right, one row per frame, 2x).
+#[test]
+fn grow_left_effect_shots() {
+    let (Some(profile), Some(out), Some(frames_dir)) = (
+        env_dir("U5_MOCKUP_PROFILE"),
+        env_dir("U5_GROW_SHOTS"),
+        env_dir("U5_GROW_MOCKUP_FRAMES"),
+    ) else {
+        eprintln!("skipped: set U5_MOCKUP_PROFILE, U5_GROW_SHOTS and U5_GROW_MOCKUP_FRAMES");
+        return;
+    };
+    use u5_bevy::display::effects::{self, EffectImages, SWEEP_STEPS, TextMask};
+    use u5_bevy::display::grow::compose_neutral_for_state;
+    std::fs::create_dir_all(&out).unwrap();
+    let atlas = load_tile_atlas(&profile, TileGraphicsDepth::Ega16).unwrap();
+    let fonts = Fonts {
+        ibm: load_ibm_ch_font(&profile).unwrap(),
+        runes: load_runes_ch_font(&profile).unwrap(),
+    };
+    let (ibm, runes) = (&fonts.ibm, &fonts.runes);
+    let b_script = mockup_script("B-16x9").unwrap();
+    let d_script = mockup_script("D-16x9").unwrap();
+    let mut total = 0;
+    for (window, opening, closing) in [
+        (W16, "c04f-O-c-open", Some("c04f-X-c-close")),
+        (W21, "c04f-uw-O-c-open", None),
+    ] {
+        let canvas = Canvas::for_window(window.0, window.1, PixelAspect::Dos).unwrap();
+        let shot = walk("effect", "", window);
+        let mut crawl = CrawlState::default();
+        let mut state = load_scene(&profile, &shot, &atlas, Some((&mut crawl, &fonts, &canvas)));
+        let (frame, _) = render_shell_frame_and_canvas_with_column(
+            &mut state,
+            &atlas,
+            (ibm, runes),
+            &profile,
+            &canvas,
+            PeekLightPolicy::Scaled,
+            &mut crawl,
+            true,
+            "",
+            ColumnView {
+                open: true,
+                ..ColumnView::default()
+            },
+            false,
+        );
+        let snapshot = bands::band_snapshot(&state);
+        let options = |column: ColumnView| ComposeOptions {
+            light: PeekLightPolicy::Scaled,
+            bands: Some(compose::Bands {
+                snapshot: &snapshot,
+                font: ibm,
+                hp_colours: true,
+            }),
+            crawl: None,
+            column,
+            centre_party: false,
+        };
+        // The scripted ends: B's rows on the collapsed canvas, D's in the
+        // open window.
+        let b_rows = scripted_rows(&crawl, ibm, b_script);
+        let b_paint = CrawlPaint {
+            rows: &b_rows,
+            crawl: true,
+            typed_colour: true,
+        };
+        let mut closed = compose_for_state(
+            &frame,
+            &state,
+            &atlas,
+            &canvas,
+            options(ColumnView::default()),
+        )
+        .expect("the top-down view");
+        paint_crawl(&mut closed, &canvas, b_paint);
+        let text = TextMask::of_crawl(&canvas, b_paint);
+        let open_view = ColumnView {
+            open: true,
+            ..ColumnView::default()
+        };
+        let mut opened = compose_for_state(&frame, &state, &atlas, &canvas, options(open_view))
+            .expect("the top-down view");
+        let d_rows = scripted_rows(&crawl, ibm, d_script);
+        paint_open_window(
+            &mut opened,
+            &canvas,
+            ColumnText {
+                rows: &d_rows,
+                typed_colour: true,
+            },
+        );
+        let neutral = compose_neutral_for_state(
+            &frame,
+            &state,
+            &atlas,
+            &canvas,
+            options(ColumnView::default()),
+        )
+        .expect("the top-down view");
+        let images = EffectImages {
+            closed: &closed,
+            opened: &opened,
+            neutral: &neutral,
+        };
+        let mut ours = vec![closed.clone()];
+        ours.extend((1..SWEEP_STEPS).map(|k| effects::blend(images, &canvas, k, &text)));
+        ours.push(opened.clone());
+        // The live frames: the walk's own rows through the step.
+        let rows = crawl.rows();
+        let live: Vec<Vec<u8>> = (0..=SWEEP_STEPS)
+            .map(|k| {
+                let column = ColumnView {
+                    open: k == SWEEP_STEPS,
+                    step: (1..SWEEP_STEPS).contains(&k).then_some(k),
+                    page_mode: false,
+                };
+                compose_for_state(
+                    &frame,
+                    &state,
+                    &atlas,
+                    &canvas,
+                    ComposeOptions {
+                        crawl: Some(CrawlPaint {
+                            rows: &rows,
+                            crawl: true,
+                            typed_colour: true,
+                        }),
+                        ..options(column)
+                    },
+                )
+                .expect("the top-down view")
+            })
+            .collect();
+        eprintln!(
+            "{opening}: text swap step {}",
+            effects::swap_step(&text, &canvas)
+        );
+        let mut runs = vec![(opening, ours.clone(), live.clone())];
+        if let Some(closing) = closing {
+            let mut back = ours.clone();
+            back.reverse();
+            let mut live_back = live.clone();
+            live_back.reverse();
+            runs.push((closing, back, live_back));
+        }
+        for (gif, frames, live) in runs {
+            let (w, h) = (canvas.w, canvas.h);
+            let mut sheet = image::RgbaImage::from_pixel(
+                w * 2 * 3 + 16,
+                (h * 2 + 8) * frames.len() as u32,
+                image::Rgba([0x40, 0x40, 0x40, 0xff]),
+            );
+            for (index, (engine, live)) in frames.iter().zip(&live).enumerate() {
+                let path = frames_dir.join(gif).join(format!("{index:02}.png"));
+                let mockup = image::open(&path).unwrap().to_rgba8();
+                assert_eq!((mockup.width(), mockup.height()), (w, h), "{gif} {index}");
+                let theirs = mockup.into_raw();
+                let differing: Vec<(u32, u32)> = (0..w * h)
+                    .filter(|i| {
+                        let at = (*i * 4) as usize;
+                        engine[at..at + 3] != theirs[at..at + 3]
+                    })
+                    .map(|i| (i % w, i / w))
+                    .collect();
+                eprintln!(
+                    "{gif} frame {index:02}: {} differing pixels {:?}",
+                    differing.len(),
+                    &differing[..differing.len().min(8)]
+                );
+                total += differing.len();
+                for (name, rgba) in [("engine", engine), ("mockup", &theirs), ("live", live)] {
+                    save(
+                        &out.join(format!("effect-{gif}-{index:02}-{name}.png")),
+                        w,
+                        h,
+                        rgba.clone(),
+                    );
+                }
+                for (column, rgba) in [&theirs, engine, live].into_iter().enumerate() {
+                    for y in 0..h * 2 {
+                        for x in 0..w * 2 {
+                            let at = (((y / 2) * w + x / 2) * 4) as usize;
+                            sheet.put_pixel(
+                                x + column as u32 * (w * 2 + 8),
+                                y + index as u32 * (h * 2 + 8),
+                                image::Rgba([rgba[at], rgba[at + 1], rgba[at + 2], 0xff]),
+                            );
+                        }
+                    }
+                }
+            }
+            sheet
+                .save(out.join(format!("effect-{gif}-sheet.png")))
+                .unwrap();
+        }
+    }
+    eprintln!("effect frames: {total} differing pixels in all");
+}
+
+/// The approved mockup script (`U5_C04F_SCRIPT` or the artifacts copy).
+fn mockup_script_path() -> Option<PathBuf> {
+    let path = std::env::var_os("U5_C04F_SCRIPT").map_or_else(
+        || PathBuf::from("/home/gamedev/artifacts/u5/mockups/crawl/c04f/make_c04f.py"),
+        PathBuf::from,
+    );
+    path.exists().then_some(path)
+}
+
+/// Runs the mockup's own `sweep_t`, `tab_t`, `BAYER4`, `REGION`, `SWEEP_N`,
+/// `TAB_OUT` and `TAB_IN` (lifted out of the script by its syntax tree, so
+/// nothing else in it runs) and prints: the region as `x0 y0 x1 y1`; each
+/// region pixel's first open step, row by row; for each step 1..=7 each
+/// band-row pixel of a 688-wide canvas as `c`, `n` or `o` (the closed,
+/// neutral or open image, as `sweep_frames` picks); and the text swap step
+/// for text on rows 183..231.
+const MOCKUP_PROBE: &str = r#"
+import ast, sys
+path = sys.argv[1]
+tree = ast.parse(open(path).read())
+names = {'BAYER4', 'REGION', 'SWEEP_N', 'TAB_OUT', 'TAB_IN'}
+keep = [n for n in tree.body
+        if (isinstance(n, ast.Assign) and any(getattr(t, 'id', None) in names for t in n.targets))
+        or (isinstance(n, ast.FunctionDef) and n.name in ('sweep_t', 'tab_t'))]
+ns = {}
+exec(compile(ast.Module(body=keep, type_ignores=[]), path, 'exec'), ns)
+sweep_t, tab_t, N = ns['sweep_t'], ns['tab_t'], ns['SWEEP_N']
+x0, y0, x1, y1 = ns['REGION']
+print(x0, y0, x1, y1)
+for y in range(y0, y1):
+    print(''.join(str(next((k for k in range(1, N) if sweep_t(x, y) < k / N), N)) for x in range(x0, x1)))
+for k in range(1, N):
+    rows = []
+    for y in list(range(0, 16)) + list(range(232, 240)):
+        out = []
+        for x in range(688):
+            if k in ns['TAB_OUT']:
+                out.append('n' if tab_t(x, y) < ns['TAB_OUT'][k] else 'c')
+            elif k in ns['TAB_IN']:
+                out.append('o' if tab_t(x, y) < ns['TAB_IN'][k] else 'n')
+            else:
+                out.append('o')
+        rows.append(''.join(out))
+    print(' '.join(rows))
+latest = max(sweep_t(x, y) for y in range(183, 232) for x in range(8, 12))
+print(next((k for k in range(1, N) if latest < k / N), N))
+"#;
+
+#[test]
+fn every_pixels_effect_step_equals_the_mockup_scripts() {
+    use u5_bevy::display::effects::*;
+    let canvas = |w, h| Canvas::for_window(w, h, PixelAspect::Dos).unwrap();
+    let Some(script) = mockup_script_path() else {
+        eprintln!("skipped: make_c04f.py not found (set U5_C04F_SCRIPT)");
+        return;
+    };
+    let output = match std::process::Command::new("python3")
+        .arg("-c")
+        .arg(MOCKUP_PROBE)
+        .arg(&script)
+        .output()
+    {
+        Ok(output) if output.status.success() => output,
+        other => {
+            eprintln!("skipped: python3 could not run the probe: {other:?}");
+            return;
+        }
+    };
+    let text = String::from_utf8(output.stdout).unwrap();
+    let mut lines = text.lines();
+    let region: Vec<u32> = lines
+        .next()
+        .unwrap()
+        .split(' ')
+        .map(|v| v.parse().unwrap())
+        .collect();
+    for (w, h) in [(2560, 1440), (3440, 1440)] {
+        let c = canvas(w, h);
+        assert_eq!(
+            (SWEEP_X0, sweep_rows(&c).0, SWEEP_X1, sweep_rows(&c).1),
+            (region[0], region[1], region[2], region[3]),
+            "the sweep's box is the mockup's REGION"
+        );
+    }
+    let (top, bottom) = (region[1], region[3]);
+    for y in top..bottom {
+        let row = lines.next().unwrap().as_bytes();
+        for x in SWEEP_X0..SWEEP_X1 {
+            let theirs = row[(x - SWEEP_X0) as usize] - b'0';
+            assert_eq!(sweep_step(x, y, top, bottom), theirs, "({x}, {y})");
+        }
+    }
+    let band_rows: Vec<u32> = (0..16).chain(232..240).collect();
+    for k in 1..SWEEP_STEPS {
+        let rows: Vec<&str> = lines.next().unwrap().split(' ').collect();
+        for (row, y) in rows.iter().zip(&band_rows) {
+            for (x, theirs) in row.bytes().enumerate() {
+                let ours = match band_pick(x as u32, *y, k) {
+                    BandPick::Closed => b'c',
+                    BandPick::Neutral => b'n',
+                    BandPick::Opened => b'o',
+                };
+                assert_eq!(ours, theirs, "step {k} ({x}, {y})");
+            }
+        }
+    }
+    // The mockup's six crawl rows at 16:9 (glyphs and outlines on y
+    // 183..231) switch on step 4, the caption's frame 04.
+    let swap: u8 = lines.next().unwrap().parse().unwrap();
+    let c = canvas(2560, 1440);
+    let mut mask = TextMask::empty(&c);
+    for y in 183..232 {
+        mask.set(20, y);
+    }
+    assert_eq!(swap_step(&mask, &c), swap);
+    assert_eq!(swap, 4);
 }

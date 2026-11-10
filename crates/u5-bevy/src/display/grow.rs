@@ -74,6 +74,7 @@ use u5_runtime::{PeekLightPolicy, PlayState, TileAtlas};
 
 use super::Display;
 use super::crawl::sync::{CrawlFeed, CrawlInputs, CrawlState, sync_crawl};
+use super::effects;
 use super::scale::Aspect;
 use crate::enh::input::EnhActionEvent;
 use crate::enh::present::{
@@ -81,7 +82,8 @@ use crate::enh::present::{
 };
 use crate::enh::side::{FrameImageSize, layout_side_space};
 use crate::{EnhSet, VISUAL_PLAY_FRAME_HEIGHT, VISUAL_PLAY_FRAME_WIDTH, VisualState};
-use column::{ColumnState, ColumnView, column_actions};
+use column::{ColumnState, ColumnView, column_actions, tick_column_effect};
+use compose::BandMode;
 
 pub mod bands;
 pub mod column;
@@ -281,14 +283,16 @@ pub struct ComposeOptions<'a> {
     pub centre_party: bool,
 }
 
-/// Steps 1-8 for one state (2.3.7): page mode from `state`, the canvas
+/// Steps 1-9 for one state (2.3.7): page mode from `state`, the canvas
 /// panned for the column ([`Canvas::for_column`]), the ring peek for its
 /// map window under `options.light`, its raster from `atlas`, and
 /// [`compose::compose_grow_left`] over `frame`, the faithful 320x200 RGBA
 /// the shell drew from `state`, with the bands, crawl and column of
-/// `options`. `None` when the peek returns no ring (a fixed screen).
-/// Read-only: `state` is shared and the peek draws nothing from the game's
-/// random stream.
+/// `options`. While an open or close effect runs (`options.column.step`)
+/// and no page is up, step 9 blends the collapsed, open and neutral
+/// images, each drawn from this frame ([`effects::blend`]). `None` when the
+/// peek returns no ring (a fixed screen). Read-only: `state` is shared and
+/// the peek draws nothing from the game's random stream.
 pub fn compose_for_state(
     frame: &[u8],
     state: &PlayState,
@@ -300,6 +304,101 @@ pub fn compose_for_state(
         page_mode: column::page_mode_active(state),
         ..options.column
     };
+    let Some(k) = view.step.filter(|_| !view.page_mode) else {
+        let view = ColumnView { step: None, ..view };
+        return compose_view(frame, state, atlas, canvas, options, view, BandMode::Follow);
+    };
+    let closed = ColumnView {
+        open: false,
+        step: None,
+        page_mode: false,
+    };
+    let opened = ColumnView {
+        open: true,
+        ..closed
+    };
+    let collapsed = compose_view(
+        frame,
+        state,
+        atlas,
+        canvas,
+        options,
+        closed,
+        BandMode::Follow,
+    )?;
+    let open = compose_view(
+        frame,
+        state,
+        atlas,
+        canvas,
+        options,
+        opened,
+        BandMode::Follow,
+    )?;
+    let neutral = compose_view(
+        frame,
+        state,
+        atlas,
+        canvas,
+        ComposeOptions {
+            crawl: None,
+            ..options
+        },
+        closed,
+        BandMode::Neutral,
+    )?;
+    let text = options.crawl.map_or_else(
+        || effects::TextMask::empty(canvas),
+        |crawl| effects::TextMask::of_crawl(canvas, crawl),
+    );
+    Some(effects::blend(
+        effects::EffectImages {
+            closed: &collapsed,
+            opened: &open,
+            neutral: &neutral,
+        },
+        canvas,
+        k,
+        &text,
+    ))
+}
+
+/// The neutral image of the open and close effect for `state`: the
+/// collapsed canvas with no tabs and no moving ribbon members, no crawl.
+/// For review shots and tests; the step draws it itself.
+pub fn compose_neutral_for_state(
+    frame: &[u8],
+    state: &PlayState,
+    atlas: &TileAtlas,
+    canvas: &Canvas,
+    options: ComposeOptions<'_>,
+) -> Option<Vec<u8>> {
+    let view = ColumnView::default();
+    let options = ComposeOptions {
+        crawl: None,
+        ..options
+    };
+    compose_view(
+        frame,
+        state,
+        atlas,
+        canvas,
+        options,
+        view,
+        BandMode::Neutral,
+    )
+}
+
+/// Steps 1-8 for `view` (its `page_mode` already taken from `state`).
+fn compose_view(
+    frame: &[u8],
+    state: &PlayState,
+    atlas: &TileAtlas,
+    canvas: &Canvas,
+    options: ComposeOptions<'_>,
+    view: ColumnView,
+    mode: BandMode,
+) -> Option<Vec<u8>> {
     let canvas = &canvas.for_column(view, options.centre_party);
     let window = compose::peek_window(canvas);
     let ring = state.peek_top_down_ring(window, options.light)?;
@@ -310,7 +409,7 @@ pub fn compose_for_state(
     } else {
         None
     };
-    Some(compose::compose_grow_left(
+    Some(compose::compose_grow_left_with(
         frame,
         &ring_rgba,
         window,
@@ -319,6 +418,7 @@ pub fn compose_for_state(
         options.bands,
         options.crawl,
         view,
+        mode,
     ))
 }
 
@@ -648,9 +748,13 @@ pub(super) fn add_grow(app: &mut App, settings: &DisplaySettings) {
     if app.world().contains_resource::<Events<EnhActionEvent>>() {
         app.add_systems(
             Update,
-            column_actions
-                .run_if(on_event::<EnhActionEvent>)
-                .in_set(EnhSet::Apply),
+            (
+                tick_column_effect.in_set(EnhSet::Apply),
+                column_actions
+                    .run_if(on_event::<EnhActionEvent>)
+                    .after(tick_column_effect)
+                    .in_set(EnhSet::Apply),
+            ),
         );
     }
     app.add_systems(

@@ -103,6 +103,12 @@ pub struct Painted {
 /// Step 7: the crawl (see the module text). Returns the y of each line
 /// drawn, top to bottom.
 pub fn paint_crawl(rgba: &mut [u8], canvas: &Canvas, paint: CrawlPaint<'_>) -> Vec<u32> {
+    paint_crawl_painted(rgba, canvas, paint).ys
+}
+
+/// [`paint_crawl`], returning everything it drew (the dither effect's text
+/// mask is its glyphs and their outlines).
+pub fn paint_crawl_painted(rgba: &mut [u8], canvas: &Canvas, paint: CrawlPaint<'_>) -> Painted {
     let lines = shown_lines(paint.rows, paint.crawl);
     let typed_colour = paint.typed_colour;
     paint_lines(
@@ -113,7 +119,6 @@ pub fn paint_crawl(rgba: &mut [u8], canvas: &Canvas, paint: CrawlPaint<'_>) -> V
         canvas.map_window(),
         |line, typed| cell_colour(line, typed, typed_colour),
     )
-    .ys
 }
 
 /// Draw `lines` (top to bottom) so that the last one sits on

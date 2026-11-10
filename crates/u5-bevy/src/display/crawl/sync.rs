@@ -572,7 +572,9 @@ pub(crate) fn sync_crawl(
     let Some(visual) = visual else {
         return;
     };
-    let open = column.is_some_and(|column| column.view().open);
+    // The open window shows the history, also while an open or close
+    // effect draws it.
+    let open = column.is_some_and(|column| column.view().wants_history());
     if crawl.history_wanted != open {
         crawl.set_history_wanted(open);
     }

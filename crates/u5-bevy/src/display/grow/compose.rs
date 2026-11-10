@@ -19,7 +19,7 @@ use u5_runtime::{
     VIEWPORT_ORIGIN_Y,
 };
 
-use super::bands::{BandSnapshot, paint_bands};
+use super::bands::{BandSnapshot, paint_bands, paint_neutral_bands};
 use super::column::{ColumnText, ColumnView, paint_column};
 use super::crawl_paint::{CrawlPaint, paint_crawl};
 use super::{CORE_SIDE, Canvas};
@@ -202,6 +202,42 @@ pub fn compose_grow_left(
     crawl: Option<CrawlPaint<'_>>,
     column: ColumnView,
 ) -> Vec<u8> {
+    compose_grow_left_with(
+        faithful,
+        ring,
+        window,
+        canvas,
+        flash,
+        bands,
+        crawl,
+        column,
+        BandMode::Follow,
+    )
+}
+
+/// How step 5 and 6 draw the bands.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum BandMode {
+    /// The ribbon and the tabs for the column's state.
+    Follow,
+    /// The open and close effect's neutral bands
+    /// ([`paint_neutral_bands`]): no tabs, no moving ribbon members.
+    Neutral,
+}
+
+/// [`compose_grow_left`] with the bands drawn as `mode` says.
+#[allow(clippy::too_many_arguments)]
+pub fn compose_grow_left_with(
+    faithful: &[u8],
+    ring: &[u8],
+    window: PeekWindow,
+    canvas: &Canvas,
+    flash: Option<PotionFlashPlayback>,
+    bands: Option<Bands<'_>>,
+    crawl: Option<CrawlPaint<'_>>,
+    column: ColumnView,
+    mode: BandMode,
+) -> Vec<u8> {
     let mut rgba = vec![0; canvas.w as usize * canvas.h as usize * 4];
     paint_chrome(&mut rgba, canvas);
     paint_ring(&mut rgba, canvas, window, ring);
@@ -210,7 +246,15 @@ pub fn compose_grow_left(
     }
     copy_core(&mut rgba, canvas, faithful);
     let shown = column.shown();
-    if let Some(bands) = bands {
+    if let (Some(bands), BandMode::Neutral) = (bands, mode) {
+        paint_neutral_bands(
+            &mut rgba,
+            canvas,
+            bands.snapshot,
+            bands.font,
+            bands.hp_colours,
+        );
+    } else if let Some(bands) = bands {
         paint_bands(
             &mut rgba,
             canvas,
