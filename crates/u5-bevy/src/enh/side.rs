@@ -379,6 +379,25 @@ pub trait FrameFit: Send + Sync + 'static {
 #[derive(Resource)]
 pub struct FramePolicy(pub Box<dyn FrameFit>);
 
+/// The size of the image the frame fit places, when a presentation step
+/// shows something other than the 320x200 frame: chapter 2's grow-left
+/// canvas (2.3.5, "the frame fit sizes the canvas"). The step's feature
+/// sets it in `EnhSet::Layout`, before the layout is solved, from the same
+/// test the step applies, so the sprite is sized for the image it shows on
+/// the same frame. Absent, or `None`, is the 320x200 frame.
+#[derive(Resource, Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct FrameImageSize(pub Option<UVec2>);
+
+impl FrameImageSize {
+    /// The image the frame fit places.
+    pub fn image(size: Option<&FrameImageSize>) -> UVec2 {
+        size.and_then(|size| size.0).unwrap_or(UVec2::new(
+            VISUAL_PLAY_FRAME_WIDTH,
+            VISUAL_PLAY_FRAME_HEIGHT,
+        ))
+    }
+}
+
 /// The layout solver (1.3.8). `window` is the window's logical size,
 /// `image` the presented image's (the 320x200 frame in the foundation),
 /// both under the Fit policy and the 1.20 pixel aspect.
@@ -664,15 +683,17 @@ fn side_space_active(
 /// The kinds already told they found no room, so the toast shows once a
 /// run.
 #[derive(Resource, Debug, Default)]
-struct HiddenPanelsToasted(Vec<PanelKind>);
+pub(crate) struct HiddenPanelsToasted(Vec<PanelKind>);
 
 /// Runs [`solve_frame`] for the window, the registry's claims and the scale
 /// policy, in `EnhSet::Layout`, and stores the result when it changed.
-fn layout_side_space(
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn layout_side_space(
     windows: Query<&Window>,
     registry: Res<PanelRegistry>,
     settings: Res<SideSpaceSettings>,
     policy: Option<Res<FramePolicy>>,
+    image: Option<Res<FrameImageSize>>,
     mut layout: ResMut<SideLayout>,
     mut toasted: ResMut<HiddenPanelsToasted>,
     toasts: Option<ResMut<Toasts>>,
@@ -682,7 +703,7 @@ fn layout_side_space(
     };
     let solution = solve_frame(
         WindowPixels::of(window),
-        UVec2::new(VISUAL_PLAY_FRAME_WIDTH, VISUAL_PLAY_FRAME_HEIGHT),
+        FrameImageSize::image(image.as_deref()),
         &registry.claims(),
         &settings,
         policy.as_deref().map(|policy| policy.0.as_ref()),

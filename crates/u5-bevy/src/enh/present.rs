@@ -35,7 +35,7 @@ use bevy::image::ImageSampler;
 use bevy::prelude::*;
 use bevy::render::render_asset::RenderAssetUsages;
 use bevy::render::render_resource::{Extent3d, TextureDimension, TextureFormat};
-use u5_runtime::{PlayState, hash_bytes};
+use u5_runtime::{PlayState, TileAtlas, hash_bytes};
 
 use super::EnhSet;
 use super::side::SideLayout;
@@ -82,6 +82,9 @@ pub struct PresentInput<'a> {
     pub faithful_hash: u64,
     /// The game, once play has started (`None` in the intro).
     pub state: Option<&'a PlayState>,
+    /// The tile atlas the faithful frame was drawn with, once play has
+    /// started (the grow-left compositor paints the ring from it).
+    pub atlas: Option<&'a TileAtlas>,
     /// The window's physical size (zero when there is no window).
     pub window: UVec2,
     /// Physical pixels per logical pixel (1 when there is no window), so a
@@ -299,6 +302,7 @@ fn present_frame(
 
     let host = &mut *host;
     let state = visual.as_deref().map(|visual| &visual.state);
+    let atlas = visual.as_deref().map(|visual| &visual.atlas);
     let (window, scale_factor) = windows
         .single()
         .map(|window| (window.physical_size(), window.scale_factor()))
@@ -318,6 +322,7 @@ fn present_frame(
             size,
             faithful_hash,
             state,
+            atlas,
             window,
             scale_factor,
             side,
@@ -361,6 +366,7 @@ fn present_frame(
         size: triggers.size,
         faithful_hash: triggers.faithful_hash,
         state,
+        atlas,
         window,
         scale_factor,
         side,

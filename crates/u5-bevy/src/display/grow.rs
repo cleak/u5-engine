@@ -24,12 +24,34 @@
 //!   there is no grow-left canvas and the classic frame is shown, as it is
 //!   on a window smaller than the frame at scale 1 (320x240).
 //!
-//! The canvas is plain geometry: nothing here reads the play state, and
-//! nothing is drawn yet (the compositor is M1-09).
+//! **The compositor** (M1-09, 2.3.5 and 2.3.7 steps 1-4) is the
+//! `[grow-left compose]` step of the foundation's presentation pipeline,
+//! [`GrowLeftCompose`]. While the frame shows the plain top-down view
+//! (the ring peek's predicate) and the window has a canvas, it replaces
+//! the presented 320x200 copy with the canvas: the chrome, the ring
+//! painted from the tile atlas, the faithful viewport copied byte for byte
+//! to the core ([`compose`]), and the flash on the ring only. On a fixed
+//! screen, in the intro or on a window too small for a canvas it leaves
+//! the faithful frame as it is. The frame fit sizes the canvas: the
+//! [`FrameImageSize`] it places is set in `EnhSet::Layout` by
+//! [`size_grow_frame`] from the same test the step applies. Nothing here
+//! writes the game; the faithful image is never touched.
 
-use u5_runtime::enhancements::PixelAspect;
+use std::hash::{Hash, Hasher};
 
+use bevy::prelude::*;
+use u5_runtime::enhancements::{DisplaySettings, PixelAspect};
+use u5_runtime::{PeekLightPolicy, PlayState, TileAtlas};
+
+use super::Display;
 use super::scale::Aspect;
+use crate::enh::present::{
+    PresentInput, PresentStep, PresentSteps, PresentedFrame, StepOrder, register_present_step,
+};
+use crate::enh::side::{FrameImageSize, layout_side_space};
+use crate::{EnhSet, VISUAL_PLAY_FRAME_HEIGHT, VISUAL_PLAY_FRAME_WIDTH, VisualState};
+
+pub mod compose;
 
 /// Canvas rows on an ordinary window.
 pub const CANVAS_ROWS: u32 = 240;
@@ -156,5 +178,233 @@ impl Canvas {
     }
 }
 
+/// The 320x200 faithful frame.
+const FRAME: UVec2 = UVec2::new(VISUAL_PLAY_FRAME_WIDTH, VISUAL_PLAY_FRAME_HEIGHT);
+
+/// The canvas the grow-left layout shows for `state` in a window of
+/// `window` physical pixels: `None` in the intro (no state), on a fixed
+/// screen (2.2.8: exactly when the ring peek would return `None`), and on a
+/// window with no canvas (2.2.11).
+pub fn grow_canvas(
+    state: Option<&PlayState>,
+    window: UVec2,
+    pixel_aspect: PixelAspect,
+) -> Option<Canvas> {
+    if !state?.top_down_world_view_active() {
+        return None;
+    }
+    Canvas::for_window(window.x, window.y, pixel_aspect)
+}
+
+/// Whether the flash inverts the faithful viewport on this frame: the
+/// shared spell or potion flash hold, or the camp apparition (the test the
+/// faithful render applies before its XOR).
+pub fn flash_active(state: &PlayState) -> bool {
+    state.message_window_flash_hold_active() || state.presentation_camp_flash_inverted
+}
+
+/// Steps 1-4 for one state (2.3.7): the ring peek for the canvas's map
+/// window under `light`, its raster from `atlas`, and
+/// [`compose::compose_grow_left`] over `frame`, the faithful 320x200 RGBA
+/// the shell drew from `state`. `None` when the peek returns no ring (a
+/// fixed screen). Read-only: `state` is shared and the peek draws nothing
+/// from the game's random stream.
+pub fn compose_for_state(
+    frame: &[u8],
+    state: &PlayState,
+    atlas: &TileAtlas,
+    canvas: &Canvas,
+    light: PeekLightPolicy,
+) -> Option<Vec<u8>> {
+    let window = compose::peek_window(canvas);
+    let ring = state.peek_top_down_ring(window, light)?;
+    let raster = state.render_peek_ring(&ring, atlas).ok()?;
+    let ring_rgba = crate::tile_viewport_to_visual_rgba(&raster);
+    let flash = if flash_active(state) {
+        u5_runtime::potion_flash_playback(0)
+    } else {
+        None
+    };
+    Some(compose::compose_grow_left(
+        frame, &ring_rgba, window, canvas, flash,
+    ))
+}
+
+/// The shell's own faithful play frame for `state` (the bytes the play
+/// upload sites write, with the shell's palette) and its grow-left canvas,
+/// for review shots and tests outside the crate. Renders the frame, which
+/// advances `state` exactly as one shell repaint does; the canvas itself is
+/// read-only. `None` for the canvas on a fixed screen.
+pub fn render_shell_frame_and_canvas(
+    state: &mut PlayState,
+    atlas: &TileAtlas,
+    fonts: (&u5_runtime::FixedCellFont, &u5_runtime::FixedCellFont),
+    game_dir: &std::path::Path,
+    canvas: &Canvas,
+    light: PeekLightPolicy,
+) -> (Vec<u8>, Option<Vec<u8>>) {
+    let ctx = crate::PlayFrameContext {
+        ibm: fonts.0,
+        runes: fonts.1,
+        game_dir,
+        cursor_frame: 0,
+    };
+    let frame = crate::render_visual_play_frame(state, atlas, ctx);
+    let canvas = compose_for_state(&frame, state, atlas, canvas, light);
+    (frame, canvas)
+}
+
+/// The `[grow-left compose]` step (2.3.5): the canvas in place of the
+/// faithful frame while the top-down view shows, the faithful frame
+/// otherwise.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct GrowLeftCompose {
+    /// `display.grow_left_light`.
+    pub light: PeekLightPolicy,
+    /// `display.pixel_aspect`, which picks the canvas.
+    pub pixel_aspect: PixelAspect,
+}
+
+impl GrowLeftCompose {
+    pub fn of(settings: &DisplaySettings) -> Self {
+        Self {
+            light: settings.grow_left.light,
+            pixel_aspect: settings.pixel_aspect,
+        }
+    }
+}
+
+/// What the ring shows beyond the faithful frame's own bytes: the party's
+/// place, the objects, the light and the clocks the ring's water and fire
+/// animate by. The host recomposes on the faithful hash and the shared
+/// animation phase already; this catches a change only the ring shows (a
+/// townsman moving outside the core while the core stands still).
+fn ring_digest(state: &PlayState) -> u64 {
+    let mut hasher = std::collections::hash_map::DefaultHasher::new();
+    state.top_down_world_view_active().hash(&mut hasher);
+    (state.player.x, state.player.y, state.current_floor()).hash(&mut hasher);
+    state.active_objects.hash(&mut hasher);
+    (state.ambient_light, state.turn).hash(&mut hasher);
+    state.local_light_mask.hash(&mut hasher);
+    state.water_scroll.hash(&mut hasher);
+    state.fire_flicker.hash(&mut hasher);
+    flash_active(state).hash(&mut hasher);
+    hasher.finish()
+}
+
+impl PresentStep for GrowLeftCompose {
+    fn order(&self) -> StepOrder {
+        StepOrder::GROW_LEFT_COMPOSE
+    }
+
+    fn revision(&mut self, input: &PresentInput) -> u64 {
+        let mut hasher = std::collections::hash_map::DefaultHasher::new();
+        (self.light as u8, self.pixel_aspect as u8).hash(&mut hasher);
+        input.state.map(ring_digest).hash(&mut hasher);
+        hasher.finish()
+    }
+
+    fn apply(&mut self, input: &PresentInput, frame: &mut PresentedFrame) {
+        let (Some(state), Some(atlas)) = (input.state, input.atlas) else {
+            return;
+        };
+        if frame.size != FRAME {
+            return;
+        }
+        let Some(canvas) = grow_canvas(Some(state), input.window, self.pixel_aspect) else {
+            return;
+        };
+        let Some(rgba) = compose_for_state(&frame.rgba, state, atlas, &canvas, self.light) else {
+            return;
+        };
+        frame.size = UVec2::new(canvas.w, canvas.h);
+        frame.rgba = rgba;
+    }
+}
+
+/// Adds the compositor while `display.grow_left` is on at launch: the
+/// step, the [`FrameImageSize`] the frame fit places and the two systems
+/// that keep them. Adds nothing while it is off. The frame fit itself (the
+/// arbiter and a canvas-aware [`super::scale::ScaleFit`]) comes from
+/// [`super::scale::add_scale`].
+pub(super) fn add_grow(app: &mut App, settings: &DisplaySettings) {
+    if !settings.grow_left.on {
+        return;
+    }
+    app.init_resource::<FrameImageSize>();
+    register_present_step(app, GrowLeftCompose::of(settings));
+    app.add_systems(
+        Update,
+        (
+            follow_grow_settings
+                .run_if(resource_changed::<Display>)
+                .in_set(EnhSet::Apply),
+            size_grow_frame
+                .before(layout_side_space)
+                .in_set(EnhSet::Layout),
+        ),
+    );
+}
+
+/// The image the frame fit places this frame: the canvas when the step
+/// will show it, otherwise the 320x200 frame. Runs in `EnhSet::Layout`
+/// before the layout is solved; nothing between it and the pipeline in
+/// `EnhSet::Present` changes what [`grow_canvas`] tests.
+pub(crate) fn size_grow_frame(
+    display: Res<Display>,
+    visual: Option<Res<VisualState>>,
+    windows: Query<&Window>,
+    mut size: ResMut<FrameImageSize>,
+) {
+    let window = windows
+        .single()
+        .map(|window| window.physical_size())
+        .unwrap_or(UVec2::ZERO);
+    let wanted = display
+        .0
+        .grow_left
+        .on
+        .then(|| {
+            grow_canvas(
+                visual.as_deref().map(|visual| &visual.state),
+                window,
+                display.0.pixel_aspect,
+            )
+        })
+        .flatten()
+        .map(|canvas| UVec2::new(canvas.w, canvas.h));
+    if size.0 != wanted {
+        size.0 = wanted;
+    }
+}
+
+/// A changed [`Display`] (the menu overlay) re-registers the step with the
+/// new light policy and pixel aspect, or removes it when `grow_left` went
+/// off.
+fn follow_grow_settings(
+    display: Res<Display>,
+    mut current: Local<Option<(bool, GrowLeftCompose)>>,
+    steps: Option<ResMut<PresentSteps>>,
+) {
+    let wanted = (display.0.grow_left.on, GrowLeftCompose::of(&display.0));
+    let Some(previous) = current.replace(wanted) else {
+        // The step `add_grow` registered came from the launch settings.
+        return;
+    };
+    if previous == wanted {
+        return;
+    }
+    if let Some(mut steps) = steps {
+        if wanted.0 {
+            steps.register(wanted.1);
+        } else {
+            steps.remove(StepOrder::GROW_LEFT_COMPOSE);
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests;
+
+#[cfg(test)]
+mod compose_tests;

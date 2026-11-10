@@ -5,7 +5,7 @@
 use std::sync::{Arc, Mutex};
 
 use u5_runtime::enhancements::{
-    LockReason, ResolvedEnhancements, SettingValue, SettingValues, TOGGLES,
+    LockReason, ResolvedEnhancements, SettingValue, SettingValues, TOGGLES, Toggle,
 };
 use u5_runtime::{CH_FONT_LEN, IBM_CH_FILE, parse_ch_font};
 
@@ -132,7 +132,12 @@ fn no_side_space_while_no_side_feature_is_on() {
     }
     // Every catalogue toggle on: none of them claims side space yet.
     let mut launch = VisualLaunchConfig::classic();
-    for spec in TOGGLES {
+    // ...except the grow-left layout, whose `[grow-left compose]` step,
+    // frame fit and canvas size are its own (M1-09, display/grow tests).
+    for spec in TOGGLES
+        .iter()
+        .filter(|spec| spec.toggle != Toggle::DisplayGrowLeft)
+    {
         launch.enhancements.toggles.set(spec.toggle, true);
     }
     assert!(!side_claim_on(launch.enhancements.toggles));

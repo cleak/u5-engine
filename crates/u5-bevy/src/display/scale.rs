@@ -40,6 +40,7 @@ use bevy::prelude::*;
 use u5_runtime::enhancements::{DisplaySettings, PixelAspect, ScaleMode};
 
 use super::Display;
+use super::grow::Canvas;
 use crate::enh::present::{
     PresentInput, PresentStep, PresentSteps, PresentedFrame, StepOrder, register_present_step,
 };
@@ -108,9 +109,15 @@ impl ScalePolicy {
     /// The pixel aspect the mode draws with: `integer-square` ignores the
     /// setting.
     pub fn pixel_aspect(self) -> Aspect {
+        self.pixel_aspect_for(Aspect::of(self.aspect))
+    }
+
+    /// The pixel aspect the mode draws an image of pixel aspect `image`
+    /// with: `image` itself, except under `integer-square`.
+    pub fn pixel_aspect_for(self, image: Aspect) -> Aspect {
         match self.mode {
             ScaleMode::IntegerSquare => Aspect::SQUARE,
-            _ => Aspect::of(self.aspect),
+            _ => image,
         }
     }
 
@@ -120,11 +127,17 @@ impl ScalePolicy {
     /// The small-window rule measures the image at the chosen aspect too
     /// (320x240 for the DOS frame, whatever the mode).
     pub fn scale(self, window: UVec2, image: UVec2) -> ScaledFrame {
-        let chosen = Aspect::of(self.aspect);
+        self.scale_at(window, image, Aspect::of(self.aspect))
+    }
+
+    /// [`ScalePolicy::scale`] for an image whose pixels are `chosen` high
+    /// over wide, in place of the setting's: the grow-left canvas on a
+    /// 1080-line window has 1.25 (2.2.11).
+    pub fn scale_at(self, window: UVec2, image: UVec2, chosen: Aspect) -> ScaledFrame {
         if !fits_at_one(window, image, chosen) {
             return fit(window, image, chosen);
         }
-        let scaled = scale_frame(self.mode, self.pixel_aspect(), window, image);
+        let scaled = scale_frame(self.mode, self.pixel_aspect_for(chosen), window, image);
         if scaled.mode == ScaleMode::Fit && self.mode != ScaleMode::Fit {
             return fit(window, image, chosen);
         }
@@ -239,6 +252,8 @@ fn fit(window: UVec2, image: UVec2, aspect: Aspect) -> ScaledFrame {
 #[derive(Debug, Default)]
 pub struct ScaleFit {
     policy: ScalePolicy,
+    /// The grow-left layout is on, so the image may be its canvas.
+    canvas: bool,
     warned: AtomicBool,
 }
 
@@ -246,13 +261,36 @@ impl ScaleFit {
     pub fn new(policy: ScalePolicy) -> Self {
         Self {
             policy,
+            canvas: false,
             warned: AtomicBool::new(false),
         }
+    }
+
+    /// The same policy, also placing the grow-left canvas (2.3.5): an image
+    /// the size of [`Canvas::for_window`] is placed at the canvas's own
+    /// pixel aspect under every mode, Fit included, since the faithful fit
+    /// knows only the 320x200 frame.
+    pub fn with_canvas(mut self, canvas: bool) -> Self {
+        self.canvas = canvas;
+        self
+    }
+
+    /// The canvas `image` is, in this window.
+    fn canvas_of(&self, window: WindowPixels, image: UVec2) -> Option<Canvas> {
+        if !self.canvas {
+            return None;
+        }
+        Canvas::for_window(window.physical.x, window.physical.y, self.policy.aspect)
+            .filter(|canvas| UVec2::new(canvas.w, canvas.h) == image)
     }
 }
 
 impl FrameFit for ScaleFit {
     fn place(&self, window: WindowPixels, image: UVec2) -> Option<Rect> {
+        if let Some(canvas) = self.canvas_of(window, image) {
+            let scaled = self.policy.scale_at(window.physical, image, canvas.aspect);
+            return Some(scaled.logical(window.scale_factor));
+        }
         if self.policy.is_faithful() {
             return None;
         }
@@ -278,19 +316,22 @@ impl FrameFit for ScaleFit {
 /// under Fit at the DOS aspect. Called from [`super::DisplayPlugin`].
 pub(super) fn add_scale(app: &mut App, settings: &DisplaySettings) {
     let policy = ScalePolicy::of(settings);
-    if policy.is_faithful() {
+    let canvas = settings.grow_left.on;
+    if policy.is_faithful() && !canvas {
         return;
     }
     // A no-op when the launch already installed it with the file's
     // `panel_priority` and `panel_guard` (see `super::add_display`).
     install_side_space(app, SideSpaceSettings::default());
-    app.insert_resource(FramePolicy(Box::new(ScaleFit::new(policy))))
-        .add_systems(
-            Update,
-            follow_scale_settings
-                .run_if(resource_changed::<Display>)
-                .in_set(EnhSet::Apply),
-        );
+    app.insert_resource(FramePolicy(Box::new(
+        ScaleFit::new(policy).with_canvas(canvas),
+    )))
+    .add_systems(
+        Update,
+        follow_scale_settings
+            .run_if(resource_changed::<Display>)
+            .in_set(EnhSet::Apply),
+    );
     if policy.prescales() {
         register_present_step(app, Prescale::default());
     }
@@ -308,19 +349,23 @@ impl ScalePolicy {
 /// the `[prescale]` step while the pipeline is in the app.
 fn follow_scale_settings(
     display: Res<Display>,
-    mut current: Local<Option<ScalePolicy>>,
+    mut current: Local<Option<(ScalePolicy, bool)>>,
     mut policy: ResMut<FramePolicy>,
     steps: Option<ResMut<PresentSteps>>,
 ) {
-    let wanted = ScalePolicy::of(&display.0);
+    let wanted = (ScalePolicy::of(&display.0), display.0.grow_left.on);
     if current.is_none() {
         // The policy `add_scale` installed came from the launch settings.
-        *current = Some(ScalePolicy::of(&display.0));
+        *current = Some(wanted);
         return;
     }
     if *current != Some(wanted) {
-        *current = Some(wanted);
-        policy.0 = Box::new(ScaleFit::new(wanted));
+        let previous = current.replace(wanted).map(|(policy, _)| policy);
+        let (wanted, canvas) = wanted;
+        policy.0 = Box::new(ScaleFit::new(wanted).with_canvas(canvas));
+        if previous == Some(wanted) {
+            return;
+        }
         if let Some(mut steps) = steps {
             if wanted.prescales() {
                 steps.register(Prescale::default());

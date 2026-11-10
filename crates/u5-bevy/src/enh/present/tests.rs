@@ -6,7 +6,7 @@
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 
-use u5_runtime::enhancements::{LockReason, ResolvedEnhancements, TOGGLES};
+use u5_runtime::enhancements::{LockReason, ResolvedEnhancements, TOGGLES, Toggle};
 
 use super::*;
 use crate::enh::overlay::tests::idle_visual_state;
@@ -161,7 +161,12 @@ fn presented(app: &App) -> Option<Handle<Image>> {
 #[test]
 fn no_host_exists_while_no_step_is_registered() {
     let mut every = VisualLaunchConfig::classic();
-    for spec in TOGGLES {
+    // ...except the grow-left layout, whose `[grow-left compose]` step,
+    // frame fit and canvas size are its own (M1-09, display/grow tests).
+    for spec in TOGGLES
+        .iter()
+        .filter(|spec| spec.toggle != Toggle::DisplayGrowLeft)
+    {
         every.enhancements.toggles.set(spec.toggle, true);
     }
     for launch in [

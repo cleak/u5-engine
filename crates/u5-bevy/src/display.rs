@@ -20,8 +20,10 @@
 //! - the side fill ([`fill`], M1-04): solid, ribbon or bezel nodes in the
 //!   bars beside the 4:3 frame, present only while a fill is chosen (or the
 //!   menu overlay could choose one);
-//! - the grow-left canvas rule ([`grow`], M1-08): plain geometry, nothing
-//!   registered or drawn yet;
+//! - the grow-left canvas rule ([`grow`], M1-08) and its compositor's
+//!   first steps (M1-09): the `[grow-left compose]` pipeline step draws the
+//!   canvas chrome, the ring and the faithful core, present only while
+//!   `display.grow_left` is on;
 //! - [`initial_window`], which sets the window's first mode and present
 //!   mode from the settings in both `WindowPlugin` blocks. With every key at
 //!   its default it returns the window it was given, so the 1.0.1 window is
@@ -82,6 +84,7 @@ impl Plugin for DisplayPlugin {
         scale::add_scale(app, &self.settings);
         add_window_mode(app, &self.settings);
         fill::add_fill(app, &self.settings, self.bezel_updates.clone());
+        grow::add_grow(app, &self.settings);
     }
 }
 
@@ -222,7 +225,7 @@ pub fn display_wanted(toggles: FeatureToggles) -> bool {
 pub(crate) fn add_display(app: &mut App, launch: &VisualLaunchConfig) {
     if display_wanted(launch.enhancements.toggles) {
         let settings = launch_display(launch);
-        if !scale::ScalePolicy::of(&settings).is_faithful() {
+        if !scale::ScalePolicy::of(&settings).is_faithful() || settings.grow_left.on {
             // The frame fit belongs to the arbiter; with no side panel at
             // launch it is installed here, with the file's arbiter settings.
             crate::enh::side::install_side_space(

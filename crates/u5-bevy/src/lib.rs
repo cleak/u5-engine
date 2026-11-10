@@ -194,6 +194,10 @@ mod u4_transfer;
 /// design 2.3.1).
 #[cfg(test)]
 mod accessor_agreement;
+/// Test-only recorder for the grow-left compositor's crop-back identity
+/// (Phase B design 2.3.7).
+#[cfg(test)]
+mod grow_agreement;
 /// Test-only recorder for the ring peek's fixed-screen agreement test
 /// (Phase B design 2.3.6).
 #[cfg(test)]
@@ -17769,6 +17773,8 @@ fn render_visual_play_frame_with_input_and_cursor(
     let _ = state.take_pending_blackthorn_rescue_playbacks();
     let _ = state.take_pending_combat_terrain_reveals();
     let _ = state.take_pending_stonegate_trapdoor_playback();
+    #[cfg(test)]
+    grow_agreement::note(state, atlas, &rgba);
     rgba
 }
 
@@ -27406,6 +27412,56 @@ mod tests {
         assert_peek_predicate_agrees(&filed);
     }
 
+    /// A font whose three corner glyphs are the frame's rounded-corner
+    /// staircase (`CHROME_CORNER_PROFILE`), so a synthetic frame has the
+    /// shipped corners.
+    fn staircase_corner_font() -> FixedCellFont {
+        let mut bytes = vec![0xff; CH_FONT_LEN];
+        let mut bevel = [0xffu8; 8];
+        for (row, first) in u5_runtime::CHROME_CORNER_PROFILE.iter().enumerate() {
+            bevel[row] = 0xffu8 >> first;
+        }
+        let mut flipped = bevel;
+        flipped.reverse();
+        for (code, rows) in [
+            (0x7bu8, bevel),
+            (0x7c, bevel.map(u8::reverse_bits)),
+            (0x7d, flipped),
+        ] {
+            bytes[usize::from(code) * 8..usize::from(code) * 8 + 8].copy_from_slice(&rows);
+        }
+        parse_ch_font(&bytes, IBM_CH_FILE).unwrap()
+    }
+
+    /// Phase B M1-09 (design 2.3.7): the grow-left canvas core is the
+    /// faithful viewport, a fixed screen passes through, the corners are the
+    /// frame's own, and the camp flash inverts the ring once and the core
+    /// never twice.
+    #[test]
+    fn grow_left_crop_back_identity_on_synthetic_frames() {
+        let atlas = synthetic_tile_atlas(TileGraphicsDepth::Ega16);
+        let font = staircase_corner_font();
+        let plain = test_state(open_grid(), 5, 5);
+        assert!(plain.top_down_world_view_active());
+        let mut flash = plain.clone();
+        flash.presentation_camp_flash_inverted = true;
+        let mut fixed = plain.clone();
+        fixed.cutscene_black_viewport = true;
+        assert!(!fixed.top_down_world_view_active());
+
+        grow_agreement::start();
+        for mut state in [plain, flash, fixed] {
+            let _ = render_visual_play_frame(&mut state, &atlas, play_ctx(&font));
+        }
+        let tally = grow_agreement::finish();
+        assert_eq!(
+            (tally.frames, tally.composed, tally.passed, tally.flashed),
+            (3, 2, 1, 1),
+            "{tally:?}"
+        );
+        assert!(tally.mismatches.is_empty(), "{:#?}", tally.mismatches);
+    }
+
     #[test]
     fn stats_row_accessors_agree_with_the_composed_panel() {
         let atlas = synthetic_tile_atlas(TileGraphicsDepth::Ega16);
@@ -27467,15 +27523,28 @@ mod tests {
 
         peek_agreement::start();
         accessor_agreement::start();
+        grow_agreement::start();
         let frames_dir = temp_output_dir("peek-frames");
         visual_frame_suite(&writable_game_dir, TileGraphicsDepth::Ega16, &frames_dir).unwrap();
         let routes_dir = temp_output_dir("peek-routes");
         visual_route_suite(&writable_game_dir, TileGraphicsDepth::Ega16, &routes_dir).unwrap();
         let filed = peek_agreement::finish();
         let (rows_checked, row_mismatches) = accessor_agreement::finish();
+        let grow = grow_agreement::finish();
         for dir in [&writable_game_dir, &frames_dir, &routes_dir] {
             let _ = fs::remove_dir_all(dir);
         }
+
+        // Phase B M1-09 (design 2.3.7): on every suite frame, the
+        // grow-left canvas core is the faithful viewport byte for byte, a
+        // fixed screen passes through, the corners are the frame's own and
+        // a flash inverts the ring once and the core never twice.
+        println!(
+            "grow-left compose: {} frames, {} composed, {} passed through, {} flashed",
+            grow.frames, grow.composed, grow.passed, grow.flashed
+        );
+        assert!(grow.composed > 0 && grow.passed > 0, "{grow:?}");
+        assert!(grow.mismatches.is_empty(), "{:#?}", grow.mismatches);
 
         assert_peek_predicate_agrees(&filed);
 

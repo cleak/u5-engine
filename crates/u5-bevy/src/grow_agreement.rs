@@ -1,0 +1,183 @@
+//! Test-only recorder for the grow-left compositor's crop-back identity
+//! (Phase B M1-09, design 2.3.7 and 2.6).
+//!
+//! The canvas core must be the faithful viewport byte for byte, on every
+//! frame the shell composes. While recording is on, the headless play-frame
+//! compositor hands each finished frame (after the flash and the dissolve
+//! drain, exactly the bytes an upload site writes) and its state here; the
+//! recorder composes the canvas for the named layouts and a panned narrow
+//! one and checks:
+//!
+//! - a fixed screen (the peek's predicate false) gives no canvas, so the
+//!   faithful frame passes through;
+//! - otherwise the core equals frame x and y 8..183, so a flash inverts it
+//!   once (the frame's own inversion) and never twice;
+//! - the canvas's top-left, top-right and bottom-left corners carry the
+//!   frame's own rounded-corner staircase (the 6x6 corner block), the one
+//!   measured off the original frame;
+//! - during a flash every ring pixel is the palette XOR of the unflashed
+//!   ring pixel.
+//!
+//! Nothing here is compiled outside tests, and the recorder is off unless a
+//! test turns it on.
+
+use std::cell::RefCell;
+
+use u5_runtime::{PeekLightPolicy, PlayState, TileAtlas};
+
+use crate::VISUAL_PLAY_FRAME_WIDTH;
+use crate::display::grow::{Canvas, compose, compose_for_state, flash_active};
+
+/// The windows checked: the three named layouts, a 21:9 at 2560x1080 and
+/// a panned 16:10.
+pub(crate) const WINDOWS: [(u32, u32); 5] = [
+    (2560, 1440),
+    (3440, 1440),
+    (1920, 1080),
+    (2560, 1080),
+    (1920, 1200),
+];
+
+#[derive(Default, Debug)]
+pub(crate) struct Tally {
+    /// Frames handed to the recorder.
+    pub frames: usize,
+    /// Frames that showed the top-down view and got a canvas.
+    pub composed: usize,
+    /// Frames passed through (fixed screens).
+    pub passed: usize,
+    /// Composed frames with the flash on.
+    pub flashed: usize,
+    pub mismatches: Vec<String>,
+}
+
+thread_local! {
+    static RECORDER: RefCell<Option<Tally>> = const { RefCell::new(None) };
+}
+
+/// Start recording on this thread, dropping anything recorded before.
+pub(crate) fn start() {
+    RECORDER.with(|cell| *cell.borrow_mut() = Some(Tally::default()));
+}
+
+/// Stop recording and return the tally.
+pub(crate) fn finish() -> Tally {
+    RECORDER.with(|cell| cell.borrow_mut().take().unwrap_or_default())
+}
+
+pub(crate) fn recording() -> bool {
+    RECORDER.with(|cell| cell.borrow().is_some())
+}
+
+const FRAME_W: usize = VISUAL_PLAY_FRAME_WIDTH as usize;
+
+fn pixel(rgba: &[u8], width: usize, x: usize, y: usize) -> [u8; 4] {
+    let at = (y * width + x) * 4;
+    [rgba[at], rgba[at + 1], rgba[at + 2], rgba[at + 3]]
+}
+
+/// Check one finished frame of `state`.
+pub(crate) fn note(state: &PlayState, atlas: &TileAtlas, frame: &[u8]) {
+    if !recording() {
+        return;
+    }
+    let mut found = Vec::new();
+    let mut tally_composed = false;
+    let mut flashed = false;
+    for (ww, wh) in WINDOWS {
+        let canvas = Canvas::for_window(ww, wh, u5_runtime::enhancements::PixelAspect::Dos)
+            .expect("a canvas for every window checked");
+        let composed = compose_for_state(frame, state, atlas, &canvas, PeekLightPolicy::Scaled);
+        let Some(rgba) = composed else {
+            if state.top_down_world_view_active() {
+                found.push(format!("{ww}x{wh}: the top-down view gave no canvas"));
+            }
+            continue;
+        };
+        if !state.top_down_world_view_active() {
+            found.push(format!("{ww}x{wh}: a fixed screen gave a canvas"));
+        }
+        tally_composed = true;
+        let w = canvas.w as usize;
+        let h = canvas.h as usize;
+        assert_eq!(rgba.len(), w * h * 4);
+        // Crop-back identity.
+        let (cx, cy, side) = compose::core_rect(&canvas);
+        let mut core_ok = true;
+        for row in 0..side {
+            let at = ((cy + row) * w + cx) * 4;
+            let from = ((8 + row) * FRAME_W + 8) * 4;
+            if rgba[at..at + side * 4] != frame[from..from + side * 4] {
+                core_ok = false;
+                break;
+            }
+        }
+        if !core_ok {
+            found.push(format!("{ww}x{wh}: the core is not the faithful viewport"));
+        }
+        // The corners: the frame's 6x6 staircase blocks, top-left,
+        // top-right and bottom-left of the frame's two blue frames (the
+        // frame's bottom-left corner sits at row 191, above the bottom
+        // text rows).
+        let frame_bottom = 191;
+        for (name, fx, fy, kx, ky) in [
+            ("top-left", 0, 0, 0, 0),
+            ("top-right", FRAME_W - 6, 0, w - 6, 0),
+            ("bottom-left", 0, frame_bottom - 5, 0, h - 6),
+        ] {
+            let same = (0..6).all(|dy| {
+                (0..6).all(|dx| {
+                    pixel(frame, FRAME_W, fx + dx, fy + dy) == pixel(&rgba, w, kx + dx, ky + dy)
+                })
+            });
+            if !same {
+                found.push(format!(
+                    "{ww}x{wh}: the {name} corner differs from the frame"
+                ));
+            }
+        }
+        // The flash: the ring is the unflashed ring, inverted.
+        if flash_active(state) {
+            flashed = true;
+            let mut calm = state.clone();
+            calm.presentation_camp_flash_inverted = false;
+            calm.message_window_flash_hold = Default::default();
+            if let Some(plain) =
+                compose_for_state(frame, &calm, atlas, &canvas, PeekLightPolicy::Scaled)
+            {
+                let mask = u5_runtime::potion_flash_playback(0)
+                    .expect("the shared flash")
+                    .palette_xor_mask;
+                let (mx0, my0, mx1, my1) = canvas.map_window();
+                let bad = (my0 as usize..=my1 as usize).any(|y| {
+                    (mx0 as usize..=mx1 as usize).any(|x| {
+                        if (cy..cy + side).contains(&y) && (cx..cx + side).contains(&x) {
+                            return false;
+                        }
+                        let at = (y * w + x) * 4;
+                        let plain = crate::ega_palette_index_from_rgba(&plain[at..at + 4]);
+                        let lit = crate::ega_palette_index_from_rgba(&rgba[at..at + 4]);
+                        plain ^ mask != lit
+                    })
+                });
+                if bad {
+                    found.push(format!("{ww}x{wh}: the ring is not inverted once"));
+                }
+            }
+        }
+    }
+    RECORDER.with(|cell| {
+        if let Some(tally) = cell.borrow_mut().as_mut() {
+            tally.frames += 1;
+            if tally_composed {
+                tally.composed += 1;
+            } else {
+                tally.passed += 1;
+            }
+            if flashed {
+                tally.flashed += 1;
+            }
+            tally.mismatches.extend(found);
+        }
+    });
+}

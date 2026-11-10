@@ -1,7 +1,7 @@
 //! Toasts and badges: replacement, timing under manual time, and the strip
 //! (design 1.3.7, plan M0-13).
 
-use u5_runtime::enhancements::TOGGLES;
+use u5_runtime::enhancements::{TOGGLES, Toggle};
 use u5_runtime::{CH_FONT_LEN, IBM_CH_FILE, parse_ch_font};
 
 use super::*;
@@ -72,7 +72,12 @@ fn strips(app: &mut App) -> Vec<(&'static str, Node)> {
 #[test]
 fn no_toast_or_badge_unless_a_feature_installs_them() {
     let mut launch = VisualLaunchConfig::classic();
-    for spec in TOGGLES {
+    // ...except the grow-left layout, whose `[grow-left compose]` step,
+    // frame fit and canvas size are its own (M1-09, display/grow tests).
+    for spec in TOGGLES
+        .iter()
+        .filter(|spec| spec.toggle != Toggle::DisplayGrowLeft)
+    {
         launch.enhancements.toggles.set(spec.toggle, true);
     }
     for launch in [VisualLaunchConfig::classic(), launch] {

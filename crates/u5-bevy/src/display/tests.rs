@@ -155,12 +155,13 @@ fn each_display_toggle_adds_the_plugin_with_its_settings() {
             launch.enhancements.display(),
             "{toggle:?}"
         );
-        // Only the window keys add systems, through their settings; a
-        // driven toggle on with its value at the default adds none.
+        // Only the window keys and the grow-left layout add systems,
+        // through their settings; a driven toggle on with its value at the
+        // default adds none.
         let settings = launch.enhancements.display();
         assert_eq!(
             display_systems(&app).is_empty(),
-            !window_keys_on(&settings),
+            !window_keys_on(&settings) && !settings.grow_left.on,
             "{toggle:?}"
         );
     }
