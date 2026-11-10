@@ -729,6 +729,72 @@ pub fn bottom_gap(content: &ChromeGap) -> Option<ResolvedGap> {
     })
 }
 
+/// The two viewport tabs the chrome pass punches through the ribbon: the
+/// row-0 gap (sky strip or dungeon level label) and the row-23 gap (wind
+/// banner or dungeon facing label).
+///
+/// Phase B (widescreen design 2.3.1, 2.3.7 step 6): the grow-left
+/// compositor crops both tabs, caps included, out of the faithful frame
+/// and re-centres them on the wider canvas. These are exactly the extents
+/// [`paint_gameplay_frame_chrome`] blacks out and caps for the same
+/// content; nothing here changes what the 320x200 frame shows.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct ChromeGapExtents {
+    /// The row-0 gap, from [`top_gap`].
+    pub top: Option<ResolvedGap>,
+    /// The row-23 gap, from [`bottom_gap`].
+    pub bottom: Option<ResolvedGap>,
+}
+
+/// A gap's pixel rectangle in the 320x200 frame, both ends inclusive.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct GapPixelRect {
+    pub x0: usize,
+    pub y0: usize,
+    pub x1: usize,
+    pub y1: usize,
+}
+
+impl GapPixelRect {
+    fn of(gap: ResolvedGap, band_row: u8) -> Self {
+        let y0 = usize::from(band_row) * CH_CELL_SIDE;
+        Self {
+            x0: gap.first_pixel_x(),
+            y0,
+            x1: gap.last_pixel_x(),
+            y1: y0 + CH_CELL_SIDE - 1,
+        }
+    }
+
+    /// Width in pixels.
+    pub const fn width(&self) -> usize {
+        self.x1 + 1 - self.x0
+    }
+}
+
+impl ChromeGapExtents {
+    /// The sky tab (row 0) as frame pixels, caps included.
+    pub fn top_rect(&self) -> Option<GapPixelRect> {
+        self.top.map(|gap| GapPixelRect::of(gap, SKY_STRIP_ROW))
+    }
+
+    /// The wind tab (row 23) as frame pixels, caps included.
+    pub fn bottom_rect(&self) -> Option<GapPixelRect> {
+        self.bottom
+            .map(|gap| GapPixelRect::of(gap, WIND_BANNER_ROW))
+    }
+}
+
+/// Read-only: the tab extents the chrome pass computes for `content`
+/// (widescreen design 2.3.1). Pass the same content the frame was painted
+/// from, normally [`gameplay_chrome_content`] of the presented state.
+pub fn gameplay_chrome_gap_extents(content: &GameplayChromeContent) -> ChromeGapExtents {
+    ChromeGapExtents {
+        top: top_gap(&content.top),
+        bottom: bottom_gap(&content.bottom),
+    }
+}
+
 /// Resolve the divider row-7 timing-glyph gap, if the tag byte is
 /// nonzero. A zero byte leaves the band plain — no caps, no
 /// placeholder.

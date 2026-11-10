@@ -2085,6 +2085,28 @@ pub const STATS_PANEL_SHIP_HULL_LABEL: &str = "Ship:";
 /// 32..38 for every hull value 0..99.
 pub const STATS_PANEL_SHIP_HULL_PAD_BELOW: u8 = 10;
 
+/// Read-only: the food/gold (or food/hull) row as the panel paints it,
+/// screen row 8 from column 24 (widescreen design 2.3.1).
+///
+/// This is the text [`render_stats_panel_counter_row`] produced at the
+/// panel's last refresh, held in the displayed snapshot, not a fresh
+/// render: the panel is often stale on purpose (see
+/// [`StatsPanelSnapshot`]), and a fresh render would show the grow-left
+/// ribbon a value the original has not drawn yet. The row keeps the
+/// panel's fixed width (fifteen cells, sixteen when a value runs into
+/// column 39); the painter trims its trailing blanks.
+pub fn stats_panel_counter_text(state: &PlayState) -> &str {
+    &state.displayed_stats_panel().counter_row
+}
+
+/// Read-only: the date row as the panel paints it, screen row 9 from
+/// column 24, leading spaces included (widescreen design 2.3.1). Like
+/// [`stats_panel_counter_text`], this is the
+/// [`render_stats_panel_date_row`] text of the panel's last refresh.
+pub fn stats_panel_date_text(state: &PlayState) -> &str {
+    &state.displayed_stats_panel().date_row
+}
+
 /// Screen row 8 (`stats-panel.md §6`): the food group is written left
 /// to right from column 24 and padded out to column 32, then the
 /// middle counter fills columns 32..38.

@@ -190,6 +190,10 @@ use u5_runtime::{TEXT_SCREEN_COLUMNS, TEXT_SCREEN_ROWS};
 /// its own commit hand-off.
 mod u4_transfer;
 
+/// Test-only recorder for the grow-left stats-row accessors (Phase B
+/// design 2.3.1).
+#[cfg(test)]
+mod accessor_agreement;
 /// Test-only recorder for the ring peek's fixed-screen agreement test
 /// (Phase B design 2.3.6).
 #[cfg(test)]
@@ -19217,6 +19221,27 @@ fn render_integrated_status_framebuffer(
         message_rows = layout.rows;
     }
     paint_stats_panel_text_window(&mut system, &display_state, active_cursor);
+    #[cfg(test)]
+    if accessor_agreement::recording()
+        && u5_runtime::active_panel_picker(&display_state).is_none()
+        && u5_runtime::stats_panel::z_stats_page_panel_rows(&display_state).is_none()
+    {
+        let accessor = [
+            u5_runtime::stats_panel_counter_text(&display_state),
+            u5_runtime::stats_panel_date_text(&display_state),
+        ];
+        // Column 39 belongs to the row only when the row runs into it; a
+        // picker's leftover glyph may sit there otherwise.
+        let painted = [8u8, 9].map(|row| {
+            let width = accessor[usize::from(row - 8)]
+                .len()
+                .max(u5_runtime::STATS_PANEL_WIDTH) as u8;
+            system
+                .region_rows(24, row, 24 + width - 1, row, b' ')
+                .remove(0)
+        });
+        accessor_agreement::note([&painted[0], &painted[1]], accessor);
+    }
     if display_state.active_shop.is_some() {
         paint_arms_sell_browser_text_window(&mut system, &display_state);
         paint_inn_pickup_register_text_window(&mut system, &display_state);
@@ -27382,6 +27407,37 @@ mod tests {
     }
 
     #[test]
+    fn stats_row_accessors_agree_with_the_composed_panel() {
+        let atlas = synthetic_tile_atlas(TileGraphicsDepth::Ega16);
+        let font = parse_ch_font(&vec![0xff; CH_FONT_LEN], IBM_CH_FILE).unwrap();
+        let mut plain = test_state(open_grid(), 5, 5);
+        plain.food = 63;
+        plain.gold = 150;
+        plain.repaint_stats_panel();
+        let mut stale = plain.clone();
+        stale.gold = 9;
+        let mut ship = plain.clone();
+        ship.player.transport = u5_runtime::TransportState::Ship {
+            type_byte: u5_runtime::TRANSPORT_MARKER_SHIP_FURLED_FIRST,
+            tile: u5_runtime::FIRST_PLAYABLE_FRIGATE_TILE,
+            sails_hoisted: false,
+            hull: 150,
+            skiffs: 1,
+        };
+        ship.repaint_stats_panel();
+        let mut inverse = plain.clone();
+        inverse.stats_panel_window_inverse = true;
+
+        accessor_agreement::start();
+        for mut state in [plain, stale, ship, inverse] {
+            let _ = render_visual_play_frame(&mut state, &atlas, play_ctx(&font));
+        }
+        let (checked, mismatches) = accessor_agreement::finish();
+        assert_eq!(checked, 4);
+        assert!(mismatches.is_empty(), "{mismatches:#?}");
+    }
+
+    #[test]
     #[cfg(feature = "original-asset-tests")]
     fn peek_predicate_agrees_with_the_render_branch_on_every_suite_state_when_present() {
         let game_dir = original_asset_dir();
@@ -27410,16 +27466,25 @@ mod tests {
         }
 
         peek_agreement::start();
+        accessor_agreement::start();
         let frames_dir = temp_output_dir("peek-frames");
         visual_frame_suite(&writable_game_dir, TileGraphicsDepth::Ega16, &frames_dir).unwrap();
         let routes_dir = temp_output_dir("peek-routes");
         visual_route_suite(&writable_game_dir, TileGraphicsDepth::Ega16, &routes_dir).unwrap();
         let filed = peek_agreement::finish();
+        let (rows_checked, row_mismatches) = accessor_agreement::finish();
         for dir in [&writable_game_dir, &frames_dir, &routes_dir] {
             let _ = fs::remove_dir_all(dir);
         }
 
         assert_peek_predicate_agrees(&filed);
+
+        // Phase B M1-08 (design 2.3.1): on every suite frame that painted
+        // the ordinary panel rows, the stats-row accessors return the text
+        // the panel painted.
+        println!("stats-row accessors: {rows_checked} frames compared");
+        assert!(rows_checked > 0, "the suites never painted the panel rows");
+        assert!(row_mismatches.is_empty(), "{row_mismatches:#?}");
 
         // The screens with no play state at all (the intro, character
         // creation, the U4 transfer, the acknowledgements) never reach the

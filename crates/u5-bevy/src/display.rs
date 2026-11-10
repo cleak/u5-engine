@@ -20,6 +20,8 @@
 //! - the side fill ([`fill`], M1-04): solid, ribbon or bezel nodes in the
 //!   bars beside the 4:3 frame, present only while a fill is chosen (or the
 //!   menu overlay could choose one);
+//! - the grow-left canvas rule ([`grow`], M1-08): plain geometry, nothing
+//!   registered or drawn yet;
 //! - [`initial_window`], which sets the window's first mode and present
 //!   mode from the settings in both `WindowPlugin` blocks. With every key at
 //!   its default it returns the window it was given, so the 1.0.1 window is
@@ -41,6 +43,7 @@ use crate::enh::VisualLaunchConfig;
 use crate::enh::input::{EnhAction, EnhActionEvent};
 
 pub mod fill;
+pub mod grow;
 pub mod scale;
 
 /// The resolved `[display]` settings (2.3.2). Exists only while

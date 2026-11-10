@@ -909,8 +909,8 @@ pub use stats_panel::{
     paint_talk_shop_text_window, picker_panel_opaque_cells, picker_residue_cell_chrome_columns,
     render_play_text_window_ascii, render_play_text_window_system, render_stats_panel,
     stats_panel_active_cursor_resets, stats_panel_active_cursor_visible,
-    stats_panel_combat_row_overlay, stats_panel_opaque_effect_cap_cells,
-    stats_panel_opaque_effect_cell,
+    stats_panel_combat_row_overlay, stats_panel_counter_text, stats_panel_date_text,
+    stats_panel_opaque_effect_cap_cells, stats_panel_opaque_effect_cell,
 };
 pub use stonegate_trapdoor::*;
 pub use story_io::{
@@ -1311,4 +1311,5 @@ mod tests {
     include!("tests_inline/ring_peek_predicate.rs");
     include!("tests_inline/ring_peek_flood.rs");
     include!("tests_inline/ring_peek_objects.rs");
+    include!("tests_inline/grow_accessors.rs");
 }
