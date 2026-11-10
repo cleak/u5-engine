@@ -152,6 +152,48 @@ pub struct BezelImage {
     pub rgba: std::sync::Arc<[u8]>,
 }
 
+/// The largest bezel the host accepts, in pixels on a side (2.2.11).
+pub const BEZEL_MAX_SIDE: u32 = 8192;
+
+/// What the host made of `display.bezel_image` (2.3.3): the decoded picture,
+/// or why it could not be used, in words for the player. The engine shows
+/// black bars for a failure.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum BezelDecode {
+    Image(BezelImage),
+    Failed(String),
+}
+
+/// The handoff for a bezel chosen while the game runs (2.3.3): the host's
+/// settings sink decodes the file and posts the result here, and the
+/// engine takes it on its next frame. The engine never sees the path.
+/// Only the latest post is kept.
+#[derive(Clone, Debug, Default)]
+pub struct BezelMailbox(std::sync::Arc<std::sync::Mutex<Option<BezelDecode>>>);
+
+impl BezelMailbox {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Posts a decode, replacing one the engine has not taken yet.
+    pub fn post(&self, decode: BezelDecode) {
+        let mut slot = self
+            .0
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        *slot = Some(decode);
+    }
+
+    /// Takes the latest post, if there is one.
+    pub fn take(&self) -> Option<BezelDecode> {
+        self.0
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .take()
+    }
+}
+
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub enum PillarFill {
     #[default]

@@ -386,8 +386,9 @@ fn the_scale_and_fullscreen_rows_are_shipped() {
         let row = u5_runtime::enhancements::CatalogueRow::find(key).expect(key);
         assert!(row.is_shipped(), "{key}");
     }
-    // The fill and the wider view stay hidden until their packages.
-    for key in ["display.pillar_fill", "display.grow_left", "display.crawl"] {
+    // The wider view stays hidden until its package (the fill shipped in
+    // M1-04).
+    for key in ["display.grow_left", "display.crawl"] {
         let row = u5_runtime::enhancements::CatalogueRow::find(key).expect(key);
         assert!(!row.is_shipped(), "{key}");
     }

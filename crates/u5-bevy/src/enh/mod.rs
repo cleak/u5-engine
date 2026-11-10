@@ -64,8 +64,8 @@ use std::sync::Arc;
 use bevy::input::InputSystem;
 use bevy::prelude::*;
 use u5_runtime::enhancements::{
-    ApplyAt, FeatureToggles, IdlePromptKind, LockState, ResolvedEnhancements, SettingValue,
-    SettingsSink, Toggle,
+    ApplyAt, BezelImage, BezelMailbox, FeatureToggles, IdlePromptKind, LockState,
+    ResolvedEnhancements, SettingValue, SettingsSink, Toggle,
 };
 
 use self::idle::IdleProbe;
@@ -91,6 +91,13 @@ pub struct VisualLaunchConfig {
     /// The folder the host chose for the save files. The engine never
     /// derives OS paths itself.
     pub save_dir: Option<PathBuf>,
+    /// `display.bezel_image`, decoded by the host at launch (design 2.3.3).
+    /// `None` when the fill is not a bezel or the file could not be used;
+    /// the engine then shows black bars.
+    pub bezel: Option<BezelImage>,
+    /// Where the host's settings sink posts a bezel chosen while the game
+    /// runs (2.3.3). `None`: no sink decodes bezels.
+    pub bezel_updates: Option<BezelMailbox>,
 }
 
 impl VisualLaunchConfig {
@@ -101,6 +108,8 @@ impl VisualLaunchConfig {
             enhancements: ResolvedEnhancements::classic(),
             settings_sink: None,
             save_dir: None,
+            bezel: None,
+            bezel_updates: None,
         }
     }
 
@@ -124,6 +133,11 @@ impl fmt::Debug for VisualLaunchConfig {
             .field("enhancements", &self.enhancements)
             .field("settings_sink", &self.settings_sink.is_some())
             .field("save_dir", &self.save_dir)
+            .field(
+                "bezel",
+                &self.bezel.as_ref().map(|bezel| (bezel.width, bezel.height)),
+            )
+            .field("bezel_updates", &self.bezel_updates.is_some())
             .finish()
     }
 }

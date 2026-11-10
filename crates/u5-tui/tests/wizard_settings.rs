@@ -83,8 +83,9 @@ fn rows_and_presets_come_from_the_catalogue_and_the_file() {
     // Hidden rows are never listed (U13), and neither are the
     // foundation's own keys: the file format, the preset (the page's
     // preset row) and the `[keys]` chords. In this build the shipped rows
-    // with a page row are chapter 2 P1's: scaling, fullscreen and vsync
-    // (`display.raster` has none while both its values draw the same).
+    // with a page row are chapter 2 P1's and P2's: scaling, fullscreen,
+    // vsync and the fill (`display.raster` has none while both its values
+    // draw the same; the fill's colour and bezel path stay in the file).
     for row in &settings.rows {
         assert!(!row.key.starts_with("keys."), "{}", row.key);
         assert_ne!(row.key, "enhancements.schema");
@@ -104,6 +105,7 @@ fn rows_and_presets_come_from_the_catalogue_and_the_file() {
             "display.fullscreen_key",
             "display.scale_mode",
             "display.pixel_aspect",
+            "display.pillar_fill",
             "display.vsync",
         ]
     );

@@ -214,7 +214,7 @@ fn usage_lists_the_generic_flags() {
     ] {
         assert!(CLI_USAGE.contains(flag), "{flag}");
     }
-    // The shipped rows' aliases (chapter 2 P1) are listed inside the
+    // The shipped rows' aliases (chapter 2 P1 and P2) are listed inside the
     // ENHANCEMENTS section, after the generic flags.
     let usage = cli_usage();
     let section = &usage[usage.find("ENHANCEMENTS").unwrap()..];
@@ -225,10 +225,11 @@ fn usage_lists_the_generic_flags() {
         "--fullscreen, --no-fullscreen --enable display.fullscreen (--no- form: --disable)",
         "--fullscreen-key, --no-fullscreen-key --enable display.fullscreen_key (--no- form: --disable)",
         "--vsync, --no-vsync    --enable display.vsync (--no- form: --disable)",
+        "--pillar-fill <VALUE>  --set display.pillar_fill=VALUE",
+        "--bezel-image <VALUE>  --set display.bezel_image=VALUE",
     ] {
         assert!(section.contains(line), "{line}\n{section}");
     }
-    assert!(!usage.contains("--pillar-fill"), "the fill ships with P2");
     assert!(
         !usage.contains("--grow-left"),
         "the wider view ships with P8"

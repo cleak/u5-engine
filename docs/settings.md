@@ -64,6 +64,8 @@ key (`display.fullscreen_key`), neither of which changes the game.
 | `--fullscreen`, `--no-fullscreen` | `--enable` / `--disable display.fullscreen`: start in borderless fullscreen. |
 | `--fullscreen-key`, `--no-fullscreen-key` | `--enable` / `--disable display.fullscreen_key`: F11 switches fullscreen. |
 | `--vsync`, `--no-vsync` | `--enable` / `--disable display.vsync`: wait for the screen's refresh. |
+| `--pillar-fill FILL` | `--set display.pillar_fill=FILL`: `black`, `solid`, `ribbon` or `bezel`. |
+| `--bezel-image PATH` | `--set display.bezel_image=PATH`: a PNG for the `bezel` fill. |
 
 `config.toml` applies to the default launch (no game folder or mode on the
 command line); other launches use the command line alone. An unknown key on
@@ -82,6 +84,22 @@ the command line is an error, as for any unknown option.
   `display.fullscreen_key` on, F11 switches fullscreen on and off for the
   session without changing the setting. F11 is a key the game never reads,
   and Alt+Enter is still the game's Enter.
+
+## The bars beside the picture
+
+A window wider than the 4:3 picture leaves bars at its sides, black as in
+the 1.0.1 game. `display.pillar_fill` can fill them; the game itself never
+changes:
+
+- `black` (the default): plain black bars.
+- `solid`: the colour in `display.pillar_color`, as `#rrggbb`.
+- `ribbon`: the screen's own blue ribbon, traced round each bar and drawn
+  from your game's `IBM.CH` font.
+- `bezel`: a PNG picture of your own, named by `display.bezel_image`. It is
+  scaled to cover the window and shows through the bars. A relative path is
+  taken from the folder `config.toml` is in. A picture that is missing, not
+  a PNG, or larger than 8192 pixels on a side leaves the bars black, with a
+  warning.
 
 ## The parity lock
 
@@ -154,9 +172,9 @@ one that types keys must change it exactly as typing those keys would:
 | keys.cheats | Open the cheats page | chord = Ctrl+F12 | -, F | feature | - | a keyboard | later (chapter 1 P5) |
 | display.scale_mode | How the picture is scaled to the window | enum fit\|sharp\|integer-square\|integer-hybrid\|stretch = fit | a, F | feature | --scale-mode | - | yes |
 | display.pixel_aspect | Pixel shape: tall like the original screen, or square | enum dos\|square = dos | a, F | feature | --pixel-aspect | - | yes |
-| display.pillar_fill | What fills the bars beside the picture | enum black\|solid\|ribbon\|bezel = black | a, F | feature | --pillar-fill | - | later (chapter 2 P2) |
-| display.pillar_color | Colour of the bars, for a solid fill | color = #000000 | a, F | feature | - | - | later (chapter 2 P2) |
-| display.bezel_image | Picture for the bars, a PNG file | path = "" | a, F | feature | --bezel-image | - | later (chapter 2 P2) |
+| display.pillar_fill | What fills the bars beside the picture | enum black\|solid\|ribbon\|bezel = black | a, F | feature | --pillar-fill | - | yes |
+| display.pillar_color | Colour of the bars, for a solid fill | color = #000000 | a, F | feature | - | - | yes |
+| display.bezel_image | Picture for the bars, a PNG file | path = "" | a, F | feature | --bezel-image | - | yes |
 | display.grow_left_light | Daylight reach: whole screen, or original distance | enum scaled\|faithful = scaled | a, F | feature | - | - | later (chapter 2 P8) |
 | display.crawl | Messages over the map | bool = true | a, F | feature | - | - | later (chapter 2 P8) |
 | display.typed_colour | Typed text in cyan | bool = true | a, F | feature | - | - | later (chapter 2 P8) |

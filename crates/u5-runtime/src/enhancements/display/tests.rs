@@ -250,11 +250,11 @@ fn every_display_row_matches_the_design() {
         let row = CatalogueRow::find(expected.key)
             .unwrap_or_else(|| panic!("{} is in the catalogue", expected.key));
         assert_eq!(row.ships(), expected.ships, "{}", expected.key);
-        // P1 (scaling, fullscreen, vsync, raster) shipped in M1-03; the
-        // fill (P2) and the wider view (P8) stay hidden until theirs.
+        // P1 (scaling, fullscreen, vsync, raster) shipped in M1-03 and the
+        // fill (P2) in M1-04; the wider view (P8) stays hidden until M1-16.
         assert_eq!(
             row.is_shipped(),
-            expected.ships == DISPLAY_P1,
+            expected.ships != DISPLAY_P8,
             "{} is hidden until it ships",
             expected.key
         );
@@ -616,10 +616,9 @@ fn a_sub_key_of_an_off_feature_stays_classic() {
 
 #[test]
 fn hidden_display_rows_resolve_to_their_defaults() {
-    // The real build: P1 has shipped, the fill and the wider view have not.
-    let stored = Stored::default()
-        .with("display.grow_left", SettingValue::Bool(true))
-        .with("display.pillar_fill", text("solid"));
+    // The real build: P1 and the fill (P2) have shipped, the wider view
+    // has not.
+    let stored = Stored::default().with("display.grow_left", SettingValue::Bool(true));
     let resolved = resolve(input(Some(&stored), &[set("display.crawl", "false")]));
     assert!(resolved.is_classic());
     assert_eq!(resolved.display(), DisplaySettings::default());
@@ -627,15 +626,21 @@ fn hidden_display_rows_resolve_to_their_defaults() {
         note_lines(&resolved),
         [
             "display.grow_left: not available in this build",
-            "display.pillar_fill: not available in this build",
             "display.crawl: not available in this build",
         ]
     );
-    // The shipped P1 rows resolve with no note.
-    let stored = Stored::default().with("display.scale_mode", text("sharp"));
+    // The shipped P1 and P2 rows resolve with no note.
+    let stored = Stored::default()
+        .with("display.scale_mode", text("sharp"))
+        .with("display.pillar_fill", text("solid"))
+        .with("display.pillar_color", text("#AA5500"));
     let resolved = resolve(input(Some(&stored), &[set("display.vsync", "false")]));
     assert_eq!(note_lines(&resolved), Vec::<String>::new());
     assert_eq!(resolved.display().scale_mode, ScaleMode::Sharp);
+    assert_eq!(
+        resolved.display().pillar_fill,
+        PillarFill::Solid([0xaa, 0x55, 0x00])
+    );
     assert!(!resolved.display().vsync);
 }
 
@@ -680,4 +685,20 @@ fn word_lists_round_trip() {
     assert_eq!(parse_colour("#aa5500"), Some([0xAA, 0x55, 0x00]));
     assert_eq!(parse_colour("#aa55"), None);
     assert_eq!(parse_colour("aa5500"), None);
+}
+
+#[test]
+fn the_bezel_mailbox_keeps_only_the_latest_post() {
+    let mailbox = BezelMailbox::new();
+    let engine = mailbox.clone();
+    assert_eq!(engine.take(), None);
+    mailbox.post(BezelDecode::Failed("first".into()));
+    let image = BezelImage {
+        width: 1,
+        height: 1,
+        rgba: vec![1, 2, 3, 4].into(),
+    };
+    mailbox.post(BezelDecode::Image(image.clone()));
+    assert_eq!(engine.take(), Some(BezelDecode::Image(image)));
+    assert_eq!(engine.take(), None);
 }

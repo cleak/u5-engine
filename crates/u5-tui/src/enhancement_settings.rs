@@ -33,11 +33,12 @@ use std::path::{Path, PathBuf};
 use toml_edit::{Array, Item, Value};
 use u5_host_desktop::{ConfigDocument, DesktopPaths, HostEnv};
 use u5_runtime::TileGraphicsDepth;
-use u5_runtime::enhancements::display::RASTER_WORDS;
+use u5_runtime::enhancements::display::{BEZEL_IMAGE_KEY, PILLAR_FILL_KEY, RASTER_WORDS};
 use u5_runtime::enhancements::{
-    ApplyAt, CatalogueRow, CliSetting, HostCapabilities, LockReason, LockState, OPTIONS,
-    OptionDefault, OptionKind, PRESET_KEY, PresetLabel, ResolveInput, ResolvedEnhancements,
-    SettingValue, SettingsSink, SettingsSource, raster_word, resolve,
+    ApplyAt, BEZEL_MAX_SIDE, BezelDecode, BezelImage, BezelMailbox, CatalogueRow, CliSetting,
+    HostCapabilities, LockReason, LockState, OPTIONS, OptionDefault, OptionKind, PRESET_KEY,
+    PresetLabel, ResolveInput, ResolvedEnhancements, SettingValue, SettingsSink, SettingsSource,
+    raster_word, resolve,
 };
 
 /// `U5_PARITY_LOCK=1` forces every enhancement off (1.3.11).
@@ -152,15 +153,50 @@ pub fn toml_value(value: &SettingValue) -> Value {
 #[derive(Clone, Debug)]
 pub struct ConfigSink {
     path: PathBuf,
+    bezel_updates: Option<BezelMailbox>,
 }
 
 impl ConfigSink {
     pub fn new(path: impl Into<PathBuf>) -> Self {
-        Self { path: path.into() }
+        Self {
+            path: path.into(),
+            bezel_updates: None,
+        }
+    }
+
+    /// Also decodes a bezel chosen in play and posts it to `updates`
+    /// (design 2.3.3), so the engine never opens the file.
+    pub fn with_bezel_updates(mut self, updates: BezelMailbox) -> Self {
+        self.bezel_updates = Some(updates);
+        self
     }
 
     pub fn path(&self) -> &Path {
         &self.path
+    }
+
+    /// After a change to the fill or the bezel path: when the fill is a
+    /// bezel, decode the stored path and post the picture, or why it could
+    /// not be used.
+    fn post_bezel(&self, doc: &ConfigDocument, changes: &[(String, SettingValue)]) {
+        let Some(updates) = &self.bezel_updates else {
+            return;
+        };
+        let touched = changes
+            .iter()
+            .any(|(key, _)| key == PILLAR_FILL_KEY || key == BEZEL_IMAGE_KEY);
+        let text = |key: &str| match doc.get(key).and_then(setting_value) {
+            Some(SettingValue::Str(text)) => text,
+            _ => String::new(),
+        };
+        if !touched || text(PILLAR_FILL_KEY) != "bezel" {
+            return;
+        }
+        let path = bezel_path(&text(BEZEL_IMAGE_KEY), self.path.parent());
+        updates.post(match decode_bezel_file(&path) {
+            Ok(image) => BezelDecode::Image(image),
+            Err(reason) => BezelDecode::Failed(reason),
+        });
     }
 }
 
@@ -177,6 +213,7 @@ impl SettingsSink for ConfigSink {
         for (key, value) in changes {
             doc.set(key, toml_value(value));
         }
+        self.post_bezel(&doc, changes);
         doc.save_if_changed().map(|_| ()).map_err(failed)
     }
 }
@@ -337,6 +374,87 @@ pub fn launch_raster_depth(
     TileGraphicsDepth::from_key(word).unwrap_or(command_line)
 }
 
+/// A bezel picture's path as stored: an empty path is no picture, and a
+/// relative one is taken from the folder of the file that stores it (the
+/// current folder when the launch read no file).
+fn bezel_path(stored: &str, base: Option<&Path>) -> PathBuf {
+    let path = PathBuf::from(stored.trim());
+    match base {
+        Some(base) if path.is_relative() && !stored.trim().is_empty() => base.join(path),
+        _ => path,
+    }
+}
+
+/// Decodes `display.bezel_image` (design 2.2.11, 2.3.3): PNG only, at most
+/// [`BEZEL_MAX_SIDE`] pixels on a side, into straight RGBA. The error is a
+/// sentence for the player's log.
+pub fn decode_bezel(bytes: &[u8]) -> Result<BezelImage, String> {
+    use image::ImageDecoder;
+    let decoder = image::codecs::png::PngDecoder::new(io::Cursor::new(bytes))
+        .map_err(|_| "the bezel picture is not a PNG file".to_string())?;
+    let (width, height) = decoder.dimensions();
+    if width == 0 || height == 0 {
+        return Err("the bezel picture is empty".to_string());
+    }
+    if width > BEZEL_MAX_SIDE || height > BEZEL_MAX_SIDE {
+        return Err(format!(
+            "the bezel picture is {width}x{height}; at most {BEZEL_MAX_SIDE} pixels on a side \
+             can be used"
+        ));
+    }
+    let image = image::DynamicImage::from_decoder(decoder)
+        .map_err(|error| format!("the bezel picture could not be decoded ({error})"))?;
+    let rgba = image.into_rgba8().into_raw();
+    Ok(BezelImage {
+        width,
+        height,
+        rgba: rgba.into(),
+    })
+}
+
+/// [`decode_bezel`] for a file.
+pub fn decode_bezel_file(path: &Path) -> Result<BezelImage, String> {
+    if path.as_os_str().is_empty() {
+        return Err("no bezel picture is set (display.bezel_image)".to_string());
+    }
+    let bytes = std::fs::read(path).map_err(|error| {
+        format!(
+            "the bezel picture {} could not be read ({})",
+            path.display(),
+            u5_gamedata::friendly_io_error(&error)
+        )
+    })?;
+    decode_bezel(&bytes)
+}
+
+/// The bezel a launch shows (design 2.3.3): decoded when the fill is a
+/// bezel, `None` otherwise. A picture that cannot be used gives `None`,
+/// which the engine shows as black bars, and a warning.
+pub fn launch_bezel(resolved: &ResolvedEnhancements, config: Option<&Path>) -> LaunchBezel {
+    if resolved.values.str(PILLAR_FILL_KEY) != Some("bezel") {
+        return LaunchBezel::default();
+    }
+    let stored = resolved.values.str(BEZEL_IMAGE_KEY).unwrap_or_default();
+    match decode_bezel_file(&bezel_path(stored, config.and_then(Path::parent))) {
+        Ok(image) => LaunchBezel {
+            image: Some(image),
+            warning: None,
+        },
+        Err(reason) => LaunchBezel {
+            image: None,
+            warning: Some(format!("{STARTUP_PREFIX} {reason}; the bars stay black")),
+        },
+    }
+}
+
+/// What [`launch_bezel`] made of the bezel setting.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct LaunchBezel {
+    pub image: Option<BezelImage>,
+    /// The line to print when the picture could not be used.
+    pub warning: Option<String>,
+}
+
 /// The shell's launch config for one play launch (design 1.3.3).
 ///
 /// Settings changed in play are stored back into the file this launch read,
@@ -349,14 +467,24 @@ pub fn visual_launch_config(
     settings: LaunchSettings,
     save_dir: &Path,
 ) -> u5_bevy::VisualLaunchConfig {
+    let bezel = launch_bezel(&settings.resolved, settings.config.as_deref());
+    if let Some(warning) = &bezel.warning {
+        eprintln!("{warning}");
+    }
+    let bezel_updates = BezelMailbox::new();
     let settings_sink = settings
         .config
         .filter(|_| settings.warnings.is_empty() && settings.resolved.lock == LockState::Off)
-        .map(|path| std::sync::Arc::new(ConfigSink::new(path)) as std::sync::Arc<dyn SettingsSink>);
+        .map(|path| {
+            std::sync::Arc::new(ConfigSink::new(path).with_bezel_updates(bezel_updates.clone()))
+                as std::sync::Arc<dyn SettingsSink>
+        });
     u5_bevy::VisualLaunchConfig {
+        bezel_updates: settings_sink.as_ref().map(|_| bezel_updates),
         enhancements: settings.resolved,
         settings_sink,
         save_dir: Some(save_dir.to_path_buf()),
+        bezel: bezel.image,
     }
 }
 
@@ -913,11 +1041,10 @@ mod tests {
     #[test]
     fn aliases_come_from_shipped_rows_only() {
         // `--preset` is parsed by `cli.rs` itself; the display rows of
-        // chapter 2 P1 are the only shipped rows with aliases so far.
+        // chapter 2 P1 and P2 are the only shipped rows with aliases so far.
         assert_eq!(find_cli_alias("--preset"), None);
         assert_eq!(find_cli_alias("--no-preset"), None);
         assert_eq!(find_cli_alias("--quest-journal"), None);
-        assert_eq!(find_cli_alias("--pillar-fill"), None);
         assert_eq!(find_cli_alias("--grow-left"), None);
         assert_eq!(
             cli_alias_usage()
@@ -930,6 +1057,8 @@ mod tests {
                 "--fullscreen-key,",
                 "--scale-mode",
                 "--pixel-aspect",
+                "--pillar-fill",
+                "--bezel-image",
                 "--vsync,"
             ]
         );
@@ -1202,5 +1331,154 @@ mod tests {
         assert!(launch.enhancements.is_classic());
         assert_eq!(fs::read_to_string(&path).unwrap(), "this is [not toml");
         fs::remove_dir_all(&dir).unwrap();
+    }
+
+    // --- The bezel (design 2.2.11, 2.3.3; build plan M1-04). -------------
+
+    fn png(width: u32, height: u32) -> Vec<u8> {
+        let mut pixels = image::RgbaImage::new(width, height);
+        for (x, y, pixel) in pixels.enumerate_pixels_mut() {
+            *pixel = image::Rgba([x as u8, y as u8, 0x40, 0xff]);
+        }
+        let mut bytes = Vec::new();
+        image::DynamicImage::ImageRgba8(pixels)
+            .write_to(&mut io::Cursor::new(&mut bytes), image::ImageFormat::Png)
+            .unwrap();
+        bytes
+    }
+
+    #[test]
+    fn a_png_bezel_decodes_to_rgba() {
+        let image = decode_bezel(&png(3, 2)).unwrap();
+        assert_eq!((image.width, image.height), (3, 2));
+        assert_eq!(image.rgba.len(), 3 * 2 * 4);
+        // Pixel (2, 1).
+        assert_eq!(
+            &image.rgba[(3 + 2) * 4..(3 + 2) * 4 + 4],
+            &[2, 1, 0x40, 0xff]
+        );
+    }
+
+    #[test]
+    fn a_bezel_that_cannot_be_used_is_refused() {
+        // Not a PNG.
+        assert!(decode_bezel(b"GIF89a not a png").is_err());
+        assert!(decode_bezel(&[]).is_err());
+        // Larger than 8192 on a side, either way.
+        for (width, height) in [(BEZEL_MAX_SIDE + 1, 1), (1, BEZEL_MAX_SIDE + 1)] {
+            let error = decode_bezel(&png(width, height)).unwrap_err();
+            assert!(error.contains("8192"), "{error}");
+        }
+        assert!(decode_bezel(&png(BEZEL_MAX_SIDE, 1)).is_ok());
+        // A missing file, and no file at all.
+        let dir = temp_dir("bezel-missing");
+        assert!(decode_bezel_file(&dir.join("nope.png")).is_err());
+        assert!(decode_bezel_file(Path::new("")).is_err());
+    }
+
+    fn bezel_launch(cli: &[CliSetting]) -> ResolvedEnhancements {
+        resolve_launch(None, cli, LockState::Off).resolved
+    }
+
+    fn set(key: &str, value: &str) -> CliSetting {
+        CliSetting::Set {
+            key: key.to_string(),
+            value: value.to_string(),
+        }
+    }
+
+    #[test]
+    fn the_launch_decodes_the_bezel_only_for_a_bezel_fill() {
+        let dir = temp_dir("bezel-launch");
+        let path = dir.join("bezel.png");
+        fs::write(&path, png(4, 4)).unwrap();
+        let path_text = path.to_string_lossy().into_owned();
+
+        // Another fill never opens the file.
+        let resolved = bezel_launch(&[
+            set("display.pillar_fill", "ribbon"),
+            set("display.bezel_image", &path_text),
+        ]);
+        assert_eq!(launch_bezel(&resolved, None), LaunchBezel::default());
+
+        let resolved = bezel_launch(&[
+            set("display.pillar_fill", "bezel"),
+            set("display.bezel_image", &path_text),
+        ]);
+        let bezel = launch_bezel(&resolved, None);
+        assert_eq!(bezel.warning, None);
+        assert_eq!(
+            bezel.image.map(|image| (image.width, image.height)),
+            Some((4, 4))
+        );
+
+        // A relative path is taken from the settings file's folder.
+        let config = dir.join("config.toml");
+        let resolved = bezel_launch(&[
+            set("display.pillar_fill", "bezel"),
+            set("display.bezel_image", "bezel.png"),
+        ]);
+        assert!(launch_bezel(&resolved, Some(&config)).image.is_some());
+
+        // Missing, not a PNG, or no path: black, with a warning.
+        fs::write(dir.join("text.png"), "plain text").unwrap();
+        for stored in ["missing.png", "text.png", ""] {
+            let resolved = bezel_launch(&[
+                set("display.pillar_fill", "bezel"),
+                set("display.bezel_image", stored),
+            ]);
+            let bezel = launch_bezel(&resolved, Some(&config));
+            assert_eq!(bezel.image, None, "{stored}");
+            let warning = bezel.warning.unwrap();
+            assert!(warning.starts_with("enhancements: "), "{warning}");
+            assert!(warning.ends_with("the bars stay black"), "{warning}");
+        }
+    }
+
+    #[test]
+    fn the_sink_decodes_a_bezel_chosen_in_play() {
+        let dir = temp_dir("bezel-sink");
+        fs::write(dir.join("frame.png"), png(8, 2)).unwrap();
+        let config = dir.join("config.toml");
+        fs::write(&config, "[display]\npillar_fill = \"bezel\"\n").unwrap();
+        let mailbox = BezelMailbox::new();
+        let sink = ConfigSink::new(&config).with_bezel_updates(mailbox.clone());
+
+        // A change that touches neither key posts nothing.
+        sink.store(&[("display.vsync".into(), SettingValue::Bool(false))])
+            .unwrap();
+        assert_eq!(mailbox.take(), None);
+
+        sink.store(&[(
+            "display.bezel_image".into(),
+            SettingValue::Str("frame.png".into()),
+        )])
+        .unwrap();
+        match mailbox.take() {
+            Some(BezelDecode::Image(image)) => assert_eq!((image.width, image.height), (8, 2)),
+            other => panic!("{other:?}"),
+        }
+        sink.store(&[(
+            "display.bezel_image".into(),
+            SettingValue::Str("gone.png".into()),
+        )])
+        .unwrap();
+        assert!(matches!(mailbox.take(), Some(BezelDecode::Failed(_))));
+
+        // With another fill chosen, the path is only stored.
+        sink.store(&[
+            (
+                "display.pillar_fill".into(),
+                SettingValue::Str("ribbon".into()),
+            ),
+            (
+                "display.bezel_image".into(),
+                SettingValue::Str("frame.png".into()),
+            ),
+        ])
+        .unwrap();
+        assert_eq!(mailbox.take(), None);
+        let stored = fs::read_to_string(&config).unwrap();
+        assert!(stored.contains("bezel_image = \"frame.png\""), "{stored}");
     }
 }

@@ -56,8 +56,9 @@ pub use digest::{
     DIGEST_GROUPS, SKIPPED_FIELDS, TrajectoryDigest, digest_groups, trajectory_digest,
 };
 pub use display::{
-    BezelImage, DISPLAY_TOGGLES, DisplaySettings, GROW_LEFT_SUB_KEYS, GrowLeft, PillarFill,
-    PixelAspect, RASTER_KEY, REMOVED_DISPLAY_KEYS, ScaleMode, raster_word,
+    BEZEL_MAX_SIDE, BezelDecode, BezelImage, BezelMailbox, DISPLAY_TOGGLES, DisplaySettings,
+    GROW_LEFT_SUB_KEYS, GrowLeft, PillarFill, PixelAspect, RASTER_KEY, REMOVED_DISPLAY_KEYS,
+    ScaleMode, raster_word,
 };
 pub use idle::{GUARDED_DRAINS, GuardedDrain, IdleBlocker, IdlePromptKind};
 pub use matrix::{

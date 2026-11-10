@@ -17,6 +17,9 @@
 //!   system; each system a package adds is added only when its setting
 //!   asks for it and sits in one of the foundation's
 //!   [`EnhSet`](crate::EnhSet)s;
+//! - the side fill ([`fill`], M1-04): solid, ribbon or bezel nodes in the
+//!   bars beside the 4:3 frame, present only while a fill is chosen (or the
+//!   menu overlay could choose one);
 //! - [`initial_window`], which sets the window's first mode and present
 //!   mode from the settings in both `WindowPlugin` blocks. With every key at
 //!   its default it returns the window it was given, so the 1.0.1 window is
@@ -29,12 +32,15 @@
 
 use bevy::prelude::*;
 use bevy::window::{MonitorSelection, PresentMode, WindowMode};
-use u5_runtime::enhancements::{DISPLAY_TOGGLES, DisplaySettings, FeatureToggles, LockState};
+use u5_runtime::enhancements::{
+    BezelMailbox, DISPLAY_TOGGLES, DisplaySettings, FeatureToggles, LockState, PillarFill,
+};
 
 use crate::EnhSet;
 use crate::enh::VisualLaunchConfig;
 use crate::enh::input::{EnhAction, EnhActionEvent};
 
+pub mod fill;
 pub mod scale;
 
 /// The resolved `[display]` settings (2.3.2). Exists only while
@@ -46,11 +52,21 @@ pub struct Display(pub DisplaySettings);
 /// leaves it out unless a display toggle (or the menu overlay) is on.
 pub struct DisplayPlugin {
     settings: DisplaySettings,
+    bezel_updates: Option<BezelMailbox>,
 }
 
 impl DisplayPlugin {
     pub fn new(settings: DisplaySettings) -> Self {
-        Self { settings }
+        Self {
+            settings,
+            bezel_updates: None,
+        }
+    }
+
+    /// Where the host posts a bezel chosen while the game runs (2.3.3).
+    pub fn with_bezel_updates(mut self, updates: Option<BezelMailbox>) -> Self {
+        self.bezel_updates = updates;
+        self
     }
 }
 
@@ -62,6 +78,7 @@ impl Plugin for DisplayPlugin {
         // `EnhSet`, as their packages land (2.3.4).
         scale::add_scale(app, &self.settings);
         add_window_mode(app, &self.settings);
+        fill::add_fill(app, &self.settings, self.bezel_updates.clone());
     }
 }
 
@@ -201,7 +218,7 @@ pub fn display_wanted(toggles: FeatureToggles) -> bool {
 /// foundation's plugin, which is itself absent under Classic and the lock.
 pub(crate) fn add_display(app: &mut App, launch: &VisualLaunchConfig) {
     if display_wanted(launch.enhancements.toggles) {
-        let settings = launch.enhancements.display();
+        let settings = launch_display(launch);
         if !scale::ScalePolicy::of(&settings).is_faithful() {
             // The frame fit belongs to the arbiter; with no side panel at
             // launch it is installed here, with the file's arbiter settings.
@@ -210,8 +227,20 @@ pub(crate) fn add_display(app: &mut App, launch: &VisualLaunchConfig) {
                 crate::enh::side::SideSpaceSettings::from_values(&launch.enhancements.values),
             );
         }
-        app.add_plugins(DisplayPlugin::new(settings));
+        app.add_plugins(
+            DisplayPlugin::new(settings).with_bezel_updates(launch.bezel_updates.clone()),
+        );
     }
+}
+
+/// The launch's `[display]` settings with the bezel the host decoded
+/// (2.3.3). Without one a bezel fill shows black bars.
+pub fn launch_display(launch: &VisualLaunchConfig) -> DisplaySettings {
+    let mut settings = launch.enhancements.display();
+    if let PillarFill::Bezel(image) = &mut settings.pillar_fill {
+        image.clone_from(&launch.bezel);
+    }
+    settings
 }
 
 /// The window a visual launch opens: `window`, the 1.0.1 window, with the
