@@ -111,8 +111,11 @@ pub mod play_state_struct;
 pub mod text_hold;
 pub use play_state_impl::CombatKlimbCurrentCell;
 pub use play_state_impl::ExplorationTurnGateOutcome;
-pub use play_state_impl::PeekLightPolicy;
 pub use play_state_impl::TownRestBurstOutcome;
+pub use play_state_impl::{
+    PEEK_CORE_REACH, PEEK_MAX_REACH, PeekCell, PeekLightPolicy, PeekShade, PeekWindow,
+    TopDownPeekRing,
+};
 pub mod predicates;
 pub mod prng;
 pub mod pth;
@@ -1305,4 +1308,5 @@ mod tests {
     include!("tests_inline/audit_rules_g9.rs");
     include!("tests_inline/auditfix3_ticks.rs");
     include!("tests_inline/auditfix3_a3_bt.rs");
+    include!("tests_inline/ring_peek_predicate.rs");
 }

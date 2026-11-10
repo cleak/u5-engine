@@ -13,7 +13,10 @@ mod chunk_08;
 mod chunk_09;
 mod chunk_10;
 pub use chunk_07::{CombatKlimbCurrentCell, TownRestBurstOutcome};
-pub use chunk_09::ring_peek::PeekLightPolicy;
+pub use chunk_09::ring_peek::{
+    PEEK_CORE_REACH, PEEK_MAX_REACH, PeekCell, PeekLightPolicy, PeekShade, PeekWindow,
+    TopDownPeekRing,
+};
 pub use chunk_11::ExplorationTurnGateOutcome;
 mod chunk_11;
 mod chunk_12;

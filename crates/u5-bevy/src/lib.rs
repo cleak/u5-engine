@@ -190,6 +190,11 @@ use u5_runtime::{TEXT_SCREEN_COLUMNS, TEXT_SCREEN_ROWS};
 /// its own commit hand-off.
 mod u4_transfer;
 
+/// Test-only recorder for the ring peek's fixed-screen agreement test
+/// (Phase B design 2.3.6).
+#[cfg(test)]
+mod peek_agreement;
+
 /// The display chapter (Phase B design chapter 2): the [`display::Display`]
 /// settings and [`display::DisplayPlugin`], inside the foundation's plugin,
 /// and the window's first mode. Absent from the app under Classic.
@@ -17791,6 +17796,12 @@ fn render_visual_play_frame_over_viewport(
 ) -> Vec<u8> {
     let width = VISUAL_PLAY_FRAME_WIDTH as usize;
     let height = VISUAL_PLAY_FRAME_HEIGHT as usize;
+    #[cfg(test)]
+    let peek_predicate = state.top_down_world_view_active();
+    #[cfg(test)]
+    let peek_endgame = state.endgame.is_some();
+    #[cfg(test)]
+    peek_agreement::begin_frame();
 
     let mut chrome_state = state.clone();
     chrome_state.refresh_cached_moon_glyphs();
@@ -17895,6 +17906,14 @@ fn render_visual_play_frame_over_viewport(
             text: ctx.ibm,
             runic: ctx.runes,
         }),
+    );
+    #[cfg(test)]
+    peek_agreement::note_frame(
+        peek_predicate,
+        state.top_down_world_view_active(),
+        which == EndgameViewport::World,
+        state.render_active_view_overlay(atlas.depth).is_some(),
+        peek_endgame,
     );
     rgba
 }
@@ -18440,6 +18459,8 @@ fn write_visual_report(
         .iter()
         .filter(|pixel| pixel[0] != 0 || pixel[1] != 0 || pixel[2] != 0)
         .count();
+    #[cfg(test)]
+    peek_agreement::note_report(label);
     let path = out_dir.join(format!("{label}.png"));
     write_rgba_png(&path, width, height, rgba)?;
     Ok(VisualFrameReport {
@@ -18738,20 +18759,41 @@ fn render_base_framebuffer(state: &mut PlayState, atlas: &TileAtlas) -> Vec<u8> 
     if let Some(viewport) = render_pending_blackthorn_rescue_viewport(state, atlas)
         .unwrap_or_else(|err| panic!("Blackthorn rescue render failed: {err}"))
     {
+        #[cfg(test)]
+        peek_agreement::note_branch(peek_agreement::BaseBranch::BlackthornRescue);
         return tile_viewport_to_visual_rgba(&viewport);
     }
     if let Some(viewport) = render_blackthorn_audience_viewport(state, atlas)
         .unwrap_or_else(|err| panic!("Blackthorn audience render failed: {err}"))
     {
+        #[cfg(test)]
+        peek_agreement::note_branch(peek_agreement::BaseBranch::BlackthornAudience);
         return tile_viewport_to_visual_rgba(&viewport);
     }
     if let Some(viewport) = render_shrine_presentation_viewport(state, atlas)
         .unwrap_or_else(|err| panic!("shrine presentation render failed: {err}"))
     {
+        #[cfg(test)]
+        peek_agreement::note_branch(peek_agreement::BaseBranch::ShrinePresentation);
         return tile_viewport_to_visual_rgba(&viewport);
     }
+    #[cfg(test)]
+    let (combat, sweep) = (state.combat_active, state.visibility_sweep.is_some());
     let mut rgba = match state.render_top_down_base_frame(VIEWPORT_RADIUS, atlas) {
         Ok(Some(viewport)) => {
+            // `render_top_down_viewport` keeps the frame it drew as the
+            // previous one for combat and the map, and clears it for the
+            // dungeon.
+            #[cfg(test)]
+            peek_agreement::note_branch(if combat {
+                peek_agreement::BaseBranch::Combat
+            } else if state.top_down_previous_viewport.is_none() {
+                peek_agreement::BaseBranch::Dungeon
+            } else if sweep {
+                peek_agreement::BaseBranch::VisibilitySweep
+            } else {
+                peek_agreement::BaseBranch::Map
+            });
             let rgba = tile_viewport_to_visual_rgba(&viewport);
             if viewport.width as u32 == VIEWPORT_SIZE_PX
                 && viewport.height as u32 == VIEWPORT_SIZE_PX
@@ -18761,12 +18803,16 @@ fn render_base_framebuffer(state: &mut PlayState, atlas: &TileAtlas) -> Vec<u8> 
                 require_exact_viewport_rgba(rgba, viewport.width, viewport.height)
             }
         }
-        Ok(None) => render_text_panel_rgba(
-            &state.render_text_view(VIEWPORT_RADIUS),
-            VIEWPORT_SIZE_PX as usize,
-            VIEWPORT_SIZE_PX as usize,
-        )
-        .unwrap_or_else(|err| panic!("visual base text panel render failed: {err}")),
+        Ok(None) => {
+            #[cfg(test)]
+            peek_agreement::note_branch(peek_agreement::BaseBranch::TextPanel);
+            render_text_panel_rgba(
+                &state.render_text_view(VIEWPORT_RADIUS),
+                VIEWPORT_SIZE_PX as usize,
+                VIEWPORT_SIZE_PX as usize,
+            )
+            .unwrap_or_else(|err| panic!("visual base text panel render failed: {err}"))
+        }
         Err(err) => panic!("visual base top-down frame render failed: {err}"),
     };
     paint_combat_overlays_rgba(&mut rgba, state);
@@ -27229,6 +27275,202 @@ mod tests {
 
         assert!(input_line.is_empty());
         assert!(transcript_contains(&state, "mend"));
+    }
+
+    /// Phase B M1-05 (design 2.3.6, 2.2.8): every composed play frame's
+    /// fixed-screen predicate against the branch that drew it.
+    fn assert_peek_predicate_agrees(filed: &[(String, Vec<peek_agreement::FrameNote>)]) {
+        for (label, frames) in filed {
+            for (index, frame) in frames.iter().enumerate() {
+                assert_eq!(
+                    frame.predicate,
+                    frame.showed_top_down_view(),
+                    "{label} frame {index}: {frame:?}"
+                );
+                // The render advances a visibility sweep; on its last frame
+                // the state after the render no longer has one. Nothing
+                // else the render does may move the predicate.
+                assert!(
+                    frame.predicate_after == frame.predicate
+                        || frame.branch == Some(peek_agreement::BaseBranch::VisibilitySweep),
+                    "{label} frame {index}: the render moved the predicate: {frame:?}"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn peek_predicate_agrees_with_the_render_branch_on_synthetic_screens() {
+        use u5_runtime::blackthorn::{BlackthornRescuePhase, BlackthornRescueViewport};
+        let atlas = synthetic_tile_atlas(TileGraphicsDepth::Ega16);
+        let font = parse_ch_font(&vec![0xff; CH_FONT_LEN], IBM_CH_FILE).unwrap();
+
+        let mut cases: Vec<(&str, PlayState, bool)> = vec![
+            ("town", test_state(open_grid(), 5, 5), true),
+            ("world", world_state(open_world_grid(), 10, 20), true),
+            (
+                "dungeon",
+                dungeon_state(open_dungeon_record(), 0, 1, 1),
+                false,
+            ),
+        ];
+        let mut combat = world_state(open_world_grid(), 10, 20);
+        seed_visual_combat_marker_gallery(&mut combat).unwrap();
+        cases.push(("combat", combat, false));
+        let mut gem = test_state(open_grid(), 5, 5);
+        gem.gems = 1;
+        let _ = gem.view_gem();
+        assert!(gem.active_view_overlay.is_some());
+        cases.push(("gem view", gem, false));
+        let mut sweep = world_state(open_world_grid(), 10, 20);
+        sweep.visibility_sweep = Some(u5_runtime::VisibilitySweep {
+            frames_remaining: 1,
+            pause_bios_ticks_per_frame: 1,
+            center_x: 10,
+            center_y: 20,
+            visible_cells: [true; u5_runtime::VIEWPORT_SIDE * u5_runtime::VIEWPORT_SIDE],
+        });
+        cases.push(("last sweep frame", sweep, false));
+        let mut held_black = test_state(open_grid(), 5, 5);
+        held_black.cutscene_black_viewport = true;
+        cases.push(("held black field", held_black, false));
+        for (label, viewport, expected) in [
+            (
+                "rescue, live grid",
+                BlackthornRescueViewport::LiveGrid,
+                true,
+            ),
+            ("rescue, black", BlackthornRescueViewport::Black, false),
+            (
+                "rescue, party on black",
+                BlackthornRescueViewport::PartyOnBlack,
+                false,
+            ),
+        ] {
+            let mut state = test_state(open_grid(), 5, 5);
+            state.pending_blackthorn_rescue = Some(BlackthornRescuePhase::Narration);
+            state.blackthorn_rescue_viewport = viewport;
+            cases.push((label, state, expected));
+        }
+        let cutscene_map = || u5_runtime::MiscmapsCutsceneMap {
+            record_index: 0,
+            tiles: vec![
+                0x44;
+                u5_runtime::MISCMAPS_CUTSCENE_ROWS
+                    * u5_runtime::MISCMAPS_CUTSCENE_VISIBLE_COLUMNS
+            ],
+        };
+        let mut audience = test_state(open_grid(), 5, 5);
+        audience.blackthorn_audience_map = Some(cutscene_map());
+        cases.push(("audience", audience, false));
+        let mut shrine = world_state(open_world_grid(), 10, 20);
+        shrine.shrine_presentation_map = Some(cutscene_map());
+        cases.push(("shrine", shrine, false));
+
+        peek_agreement::start();
+        for (label, mut state, _) in cases.clone() {
+            let _ = render_visual_play_frame(&mut state, &atlas, play_ctx(&font));
+            peek_agreement::note_report(label);
+        }
+        let filed = peek_agreement::finish();
+        assert_eq!(filed.len(), cases.len());
+        for ((label, frames), (_, _, expected)) in filed.iter().zip(&cases) {
+            assert_eq!(frames.len(), 1, "{label}");
+            assert_eq!(frames[0].predicate, *expected, "{label}: {:?}", frames[0]);
+        }
+        assert_peek_predicate_agrees(&filed);
+    }
+
+    #[test]
+    #[cfg(feature = "original-asset-tests")]
+    fn peek_predicate_agrees_with_the_render_branch_on_every_suite_state_when_present() {
+        let game_dir = original_asset_dir();
+        if !game_dir.join("CASTLE.DAT").exists()
+            || !game_dir.join(TILES_EGA_FILE).exists()
+            || !game_dir.join(IBM_CH_FILE).exists()
+            || !game_dir.join(STORY_DAT_FILE).exists()
+            || !game_dir.join(MISCMAPS_DAT_FILE).exists()
+            || !game_dir.join("ENDMSG.DAT").exists()
+            || !game_dir.join("END.DAT").exists()
+        {
+            return;
+        }
+        // The route suite writes the `.OOL` mirrors; use a writable copy.
+        let writable_game_dir = temp_output_dir("peek-assets");
+        fs::create_dir_all(&writable_game_dir).unwrap();
+        for entry in fs::read_dir(game_dir).unwrap() {
+            let entry = entry.unwrap();
+            if entry.file_type().unwrap().is_file() {
+                u5_runtime::test_fixtures::copy_asset_writable(
+                    &entry.path(),
+                    &writable_game_dir.join(entry.file_name()),
+                )
+                .unwrap();
+            }
+        }
+
+        peek_agreement::start();
+        let frames_dir = temp_output_dir("peek-frames");
+        visual_frame_suite(&writable_game_dir, TileGraphicsDepth::Ega16, &frames_dir).unwrap();
+        let routes_dir = temp_output_dir("peek-routes");
+        visual_route_suite(&writable_game_dir, TileGraphicsDepth::Ega16, &routes_dir).unwrap();
+        let filed = peek_agreement::finish();
+        for dir in [&writable_game_dir, &frames_dir, &routes_dir] {
+            let _ = fs::remove_dir_all(dir);
+        }
+
+        assert_peek_predicate_agrees(&filed);
+
+        // The screens with no play state at all (the intro, character
+        // creation, the U4 transfer, the acknowledgements) never reach the
+        // play compositor, so the grow-left layout cannot claim them.
+        for (label, frames) in &filed {
+            if label.starts_with("intro-") {
+                assert!(frames.is_empty(), "{label} composed a play frame");
+            }
+        }
+
+        // The suites must reach every kind of screen the predicate sorts.
+        let frames: Vec<_> = filed.iter().flat_map(|(_, f)| f.iter().copied()).collect();
+        let count = |pick: &dyn Fn(&peek_agreement::FrameNote) -> bool| {
+            frames.iter().filter(|frame| pick(frame)).count()
+        };
+        use peek_agreement::BaseBranch as B;
+        let top_down = count(&|f| f.predicate);
+        let combat = count(&|f| f.branch == Some(B::Combat));
+        let dungeon = count(&|f| f.branch == Some(B::Dungeon));
+        let cutscene = count(&|f| {
+            matches!(
+                f.branch,
+                Some(B::BlackthornRescue | B::BlackthornAudience | B::ShrinePresentation)
+            )
+        });
+        let overlay = count(&|f| f.overlay);
+        let endgame = count(&|f| f.endgame);
+        let sweep = count(&|f| f.branch == Some(B::VisibilitySweep));
+        let sweep_end = count(&|f| f.predicate_after != f.predicate);
+        let intro = filed
+            .iter()
+            .filter(|(label, frames)| label.starts_with("intro-") && frames.is_empty())
+            .count();
+        println!(
+            "peek agreement: {} reports, {} play frames: top-down {top_down}, combat {combat}, \
+             dungeon {dungeon}, cutscene {cutscene}, overlay {overlay}, endgame {endgame}, \
+             sweep {sweep} (ending {sweep_end}), intro reports {intro}",
+            filed.len(),
+            frames.len()
+        );
+        for (name, seen) in [
+            ("top-down", top_down),
+            ("combat", combat),
+            ("dungeon", dungeon),
+            ("cutscene", cutscene),
+            ("view overlay", overlay),
+            ("endgame", endgame),
+            ("intro", intro),
+        ] {
+            assert!(seen > 0, "the suites never reached a {name} frame");
+        }
     }
 
     #[test]
