@@ -78,10 +78,7 @@ mod ring_peek_flood {
         for (dx, dy) in ring_offsets(WIDE) {
             assert_eq!(
                 cell(&scaled, dx, dy),
-                PeekCell {
-                    tile: open,
-                    shade: PeekShade::Lit
-                },
+                PeekCell::lit_terrain(open),
                 "scaled ({dx}, {dy})"
             );
         }
@@ -419,10 +416,7 @@ mod ring_peek_flood {
             let expected = if off_floor { corner } else { open };
             assert_eq!(
                 cell(&ring, dx, dy),
-                PeekCell {
-                    tile: expected,
-                    shade: PeekShade::Lit
-                },
+                PeekCell::lit_terrain(expected),
                 "({dx}, {dy})"
             );
         }
@@ -458,10 +452,7 @@ mod ring_peek_flood {
                     let expected = if world_x >= 248 { seam } else { open };
                     assert_eq!(
                         peeked,
-                        PeekCell {
-                            tile: expected,
-                            shade: PeekShade::Lit
-                        },
+                        PeekCell::lit_terrain(expected),
                         "({dx}, {dy})"
                     );
                 }

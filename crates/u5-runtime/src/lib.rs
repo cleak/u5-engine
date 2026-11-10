@@ -1310,4 +1310,5 @@ mod tests {
     include!("tests_inline/auditfix3_a3_bt.rs");
     include!("tests_inline/ring_peek_predicate.rs");
     include!("tests_inline/ring_peek_flood.rs");
+    include!("tests_inline/ring_peek_objects.rs");
 }

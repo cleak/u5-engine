@@ -10,18 +10,27 @@
 //! sight flood with the light test (design 2.3.6, 2.2.9). The flood is
 //! seeded from the faithful visibility buffer the render just filled, so
 //! the core is never recomputed and the ring never shows a cell the party
-//! could not see from where it stands. Objects arrive with the next
-//! ring-peek package; until then a lit ring cell carries its plain
-//! terrain. Nothing calls the peek yet.
+//! could not see from where it stands. The active objects of the current
+//! floor are then composited onto the lit ring cells with the faithful
+//! compositor, always at variant 0, so the peek never draws from the shared
+//! gameplay stream. [`PlayState::render_peek_ring`] rasterises a ring the
+//! way the faithful viewport blit does. Nothing in the game calls the peek
+//! yet.
 
 use std::collections::VecDeque;
+use std::io;
 
 use crate::{
-    FULL_DAYLIGHT, PlayState, TopDownRenderArea, VISIBILITY_CARVE_NEIGHBOR_ORDER,
-    VISIBILITY_HIDDEN, visibility_grid_active_index, visibility_in_radius,
+    ActiveObject, ActiveObjectCompositeResult, FULL_DAYLIGHT, NATURAL_MOONGATE_LIVE_TILE,
+    PlayState, TILE_ATLAS_SIDE, TileAtlas, TileViewport, TopDownRenderArea,
+    VISIBILITY_CARVE_NEIGHBOR_ORDER, VISIBILITY_CLEAR, VISIBILITY_DIM_PERIPHERY, VISIBILITY_HIDDEN,
+    VISIBILITY_USE_COMPANION, blit_terrain_tile_to_viewport, composite_active_object_slot,
+    fire_fixture_spec, fire_pass_refreshes_field_tile, static_tile_animation_family,
+    visibility_grid_active_index, visibility_in_radius, water_composite_mask,
+    water_pass_rotates_tile,
 };
 
-use super::surface_tile_propagates_visibility;
+use super::{PreparedTopDownCell, surface_tile_propagates_visibility, wrapped_world_axis_delta};
 
 /// How far daylight reaches in the wider ring (2.2.11, D2.5).
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -120,6 +129,11 @@ pub struct PeekCell {
     /// Final composed tile id, as `PreparedTopDownCell::tile()`.
     pub tile: u8,
     pub shade: PeekShade,
+    /// The 512-tile atlas id the faithful blit draws for this cell, as
+    /// `PreparedTopDownCell::tile_id()`: a terrain id, or an actor stamp
+    /// in the actor half (byte + 256), which `tile` alone cannot tell
+    /// apart. `None` exactly when the cell is hidden.
+    pub atlas: Option<u16>,
 }
 
 impl PeekCell {
@@ -128,7 +142,17 @@ impl PeekCell {
     pub const HIDDEN: PeekCell = PeekCell {
         tile: VISIBILITY_HIDDEN,
         shade: PeekShade::Hidden,
+        atlas: None,
     };
+
+    /// A lit cell showing the terrain id `tile` with nothing over it.
+    pub const fn lit_terrain(tile: u8) -> PeekCell {
+        PeekCell {
+            tile,
+            shade: PeekShade::Lit,
+            atlas: Some(tile as u16),
+        }
+    }
 }
 
 /// The cells around the faithful core, for one window.
@@ -138,7 +162,11 @@ pub struct TopDownPeekRing {
     /// Row-major over the whole window; `None` inside the 11x11
     /// core, which the shell copies from the faithful frame.
     pub cells: Vec<Option<PeekCell>>,
-    /// True if any cell holds an animated static tile.
+    /// True if any cell holds an animated static tile: a lit cell whose
+    /// picture moves with the animation clocks alone (a `§6` static-tile
+    /// family, the water and lava rotation, a fire fixture, a field tile or
+    /// a live moon gate). The shell peeks again on an animation tick while
+    /// this is set, since the faithful frame need not change then.
     pub animated: bool,
 }
 
@@ -223,12 +251,31 @@ impl PlayState {
         }
         let area = self.top_down_render_area()?;
         let mut ring = TopDownPeekRing::all_hidden(window);
-        self.flood_peek_ring(area, light, &mut ring);
+        let mut prepared = self.flood_peek_ring(area, light, window);
+        self.composite_peek_ring_objects(area, window, &mut prepared);
+        for (index, cell) in prepared.into_iter().enumerate() {
+            let Some(cell) = cell else {
+                continue;
+            };
+            let (tile, atlas) = (cell.tile(), cell.tile_id());
+            // A lit cell always has an atlas id: the compositor below
+            // never keeps a stamp that would leave it without one.
+            let Some(atlas) = atlas.and_then(|id| u16::try_from(id).ok()) else {
+                continue;
+            };
+            let (dx, dy) = window.offset_of(index)?;
+            ring.animated |= self.peek_cell_animates(area, tile, atlas, dx, dy);
+            ring.cells[index] = Some(PeekCell {
+                tile,
+                shade: PeekShade::Lit,
+                atlas: Some(atlas),
+            });
+        }
         Some(ring)
     }
 
     /// The second-stage flood of design 2.3.6 over the ring cells of
-    /// `ring.window`, painting what it reaches into `ring.cells`.
+    /// `window`.
     ///
     /// It is the faithful centre-out carve
     /// ([`PlayState::surface_visibility_carve_with_light_threshold`])
@@ -237,13 +284,17 @@ impl PlayState {
     /// the town off-floor substitution, the same light mask with the
     /// beacon stamp, and the same three-way verdict. Only the "in range"
     /// test changes with the light policy.
+    ///
+    /// Returns the window row-major, with each painted ring cell as the
+    /// buffer path prepares a lit cell (its live terrain in the band under
+    /// the clear marker) and `None` everywhere else, the core included.
     fn flood_peek_ring(
         &self,
         area: TopDownRenderArea,
         light: PeekLightPolicy,
-        ring: &mut TopDownPeekRing,
-    ) {
-        let window = ring.window;
+        window: PeekWindow,
+    ) -> Vec<Option<PreparedTopDownCell>> {
+        let mut prepared = vec![None; window.cell_count()];
         let wrap_world = matches!(area, TopDownRenderArea::World(_));
         let (pitch_dark, threshold) = match area {
             TopDownRenderArea::Town => (
@@ -260,7 +311,7 @@ impl PlayState {
         // so nothing in the ring can be seen either. A buffer that was
         // never filled has no seeds to trust.
         if pitch_dark || !self.visibility_buffers_ready {
-            return;
+            return prepared;
         }
         let in_range = |squared_distance: u32| match light {
             // Full daylight reaches the whole window, as it reaches the
@@ -365,9 +416,9 @@ impl PlayState {
                         continue;
                     };
                     painted[index] = true;
-                    ring.cells[index] = Some(PeekCell {
-                        tile: terrain,
-                        shade: PeekShade::Lit,
+                    prepared[index] = Some(PreparedTopDownCell {
+                        terrain,
+                        grid: VISIBILITY_CLEAR,
                     });
                 }
                 if expand {
@@ -375,5 +426,240 @@ impl PlayState {
                 }
             }
         }
+        prepared
+    }
+
+    /// The object pass of design 2.3.6 over the painted ring cells.
+    ///
+    /// Every active object of the current floor is placed by the wrapped
+    /// world delta or the town delta, as
+    /// [`PlayState::top_down_object_viewport_cell`] places it, generalised
+    /// to the window, and composited with [`composite_active_object_slot`]
+    /// over the live map read [`PlayState::top_down_live_terrain_at`], in
+    /// the faithful slot order (thirty-one down to one, so a lower slot
+    /// paints over a higher one). Slot zero, the party, is always in the
+    /// core and is left to the faithful frame.
+    ///
+    /// The variant is always 0, as the query-path compositor
+    /// ([`PlayState::composite_top_down_object`]) takes it: the peek never
+    /// calls [`PlayState::draw_active_object_composite_variant`], which
+    /// draws from the shared gameplay stream (`visibility.md §8.1`), so a
+    /// seated actor in the ring shows the first entry of its range.
+    ///
+    /// Objects show only on painted ring cells, and a stamp never writes
+    /// into the core (the previous-row marker of the trapped-soul row is
+    /// dropped when the row above is a core or an unpainted cell). A stamp
+    /// that would leave the cell with no atlas tile (the draw-nothing actor
+    /// byte, which the faithful blit answers with the previous frame's
+    /// pixels) is not applied, so the ring shows what is under it.
+    fn composite_peek_ring_objects(
+        &self,
+        area: TopDownRenderArea,
+        window: PeekWindow,
+        prepared: &mut [Option<PreparedTopDownCell>],
+    ) {
+        let Some(floor) = self.current_floor() else {
+            return;
+        };
+        let columns = window.columns();
+        for slot in (1..self.active_objects.len()).rev() {
+            let object = self.active_objects[slot];
+            if object.is_empty() || object.z != floor {
+                continue;
+            }
+            let Some((dx, dy)) = self.peek_object_offset(area, object) else {
+                continue;
+            };
+            if PeekWindow::is_core(dx, dy) {
+                continue;
+            }
+            let Some(index) = window.index_of(dx, dy) else {
+                continue;
+            };
+            let Some(cell) = prepared[index] else {
+                continue;
+            };
+            let current_grid_byte = match cell.grid {
+                VISIBILITY_CLEAR | VISIBILITY_DIM_PERIPHERY => cell.terrain,
+                byte => byte,
+            };
+            let object_x = object.x as isize;
+            let object_y = object.y as isize;
+            let current_terrain = self
+                .top_down_live_terrain_at(area, object_x, object_y)
+                .unwrap_or(cell.terrain);
+            let previous_row_terrain = self.top_down_live_terrain_at(area, object_x, object_y - 1);
+            let next_row_terrain = self.top_down_live_terrain_at(area, object_x, object_y + 1);
+            let row = index / columns;
+            let previous_index = (row > 0)
+                .then(|| index - columns)
+                .filter(|_| !PeekWindow::is_core(dx, dy - 1));
+            let stamped = match composite_active_object_slot(
+                false,
+                object.type_byte,
+                object.tile,
+                current_grid_byte,
+                current_terrain,
+                previous_row_terrain,
+                next_row_terrain,
+                row,
+                0,
+            ) {
+                ActiveObjectCompositeResult::Suppress => continue,
+                ActiveObjectCompositeResult::Companion(tile) => PreparedTopDownCell {
+                    terrain: tile,
+                    grid: VISIBILITY_USE_COMPANION,
+                },
+                ActiveObjectCompositeResult::Direct(tile) => PreparedTopDownCell {
+                    terrain: cell.terrain,
+                    grid: tile,
+                },
+                ActiveObjectCompositeResult::PreviousRowDirectAndCompanion {
+                    previous_marker,
+                    tile,
+                } => {
+                    let marked = previous_index
+                        .and_then(|previous| prepared[previous].map(|cell| (previous, cell)))
+                        .map(|(previous, cell)| {
+                            (
+                                previous,
+                                PreparedTopDownCell {
+                                    terrain: cell.terrain,
+                                    grid: previous_marker,
+                                },
+                            )
+                        });
+                    if let Some((previous, marked)) = marked
+                        && marked.tile_id().is_some()
+                    {
+                        prepared[previous] = Some(marked);
+                    }
+                    PreparedTopDownCell {
+                        terrain: tile,
+                        grid: VISIBILITY_USE_COMPANION,
+                    }
+                }
+            };
+            if stamped.tile_id().is_some() && stamped.tile() != VISIBILITY_HIDDEN {
+                prepared[index] = Some(stamped);
+            }
+        }
+    }
+
+    /// An object's offset from the party: the town delta, or the wrapped
+    /// world delta on the overworld (as the faithful projection takes it).
+    fn peek_object_offset(
+        &self,
+        area: TopDownRenderArea,
+        object: ActiveObject,
+    ) -> Option<(isize, isize)> {
+        let (dx, dy) = match area {
+            TopDownRenderArea::Town => (
+                object.x as isize - self.player.x as isize,
+                object.y as isize - self.player.y as isize,
+            ),
+            TopDownRenderArea::World(_) => (
+                wrapped_world_axis_delta(self.player.x, object.x) as isize,
+                wrapped_world_axis_delta(self.player.y, object.y) as isize,
+            ),
+        };
+        let reach = isize::from(PEEK_MAX_REACH);
+        ((-reach..=reach).contains(&dx) && (-reach..=reach).contains(&dy)).then_some((dx, dy))
+    }
+
+    /// Whether a lit ring cell's picture moves with the animation clocks
+    /// alone, with no change to the game state.
+    fn peek_cell_animates(
+        &self,
+        area: TopDownRenderArea,
+        tile: u8,
+        atlas: u16,
+        dx: isize,
+        dy: isize,
+    ) -> bool {
+        let atlas = usize::from(atlas);
+        if let Ok(terrain) = u8::try_from(atlas) {
+            static_tile_animation_family(terrain).is_some()
+                || water_pass_rotates_tile(terrain)
+                || water_composite_mask(terrain).is_some()
+                || fire_fixture_spec(terrain).is_some()
+                || (tile == NATURAL_MOONGATE_LIVE_TILE
+                    && self.live_natural_moongate_terrain_at(
+                        area,
+                        self.player.x as isize + dx,
+                        self.player.y as isize + dy,
+                    ))
+        } else {
+            fire_pass_refreshes_field_tile(atlas)
+        }
+    }
+
+    /// Rasterise `ring` as the faithful viewport blit draws its cells: one
+    /// 16-pixel atlas tile per lit ring cell, through the water, lava and
+    /// fire animators and the live moon-gate phase, at the state's current
+    /// clocks. Core and hidden cells stay at palette index 0 (black); the
+    /// shell copies the core from the faithful frame.
+    ///
+    /// Read-only, like the peek. Call it with the ring the peek just
+    /// returned for this state.
+    pub fn render_peek_ring(
+        &self,
+        ring: &TopDownPeekRing,
+        atlas: &TileAtlas,
+    ) -> io::Result<TileViewport> {
+        let window = ring.window;
+        if ring.cells.len() != window.cell_count() {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "peek ring cell count does not match its window",
+            ));
+        }
+        let width = window.columns() * TILE_ATLAS_SIDE;
+        let height = window.rows() * TILE_ATLAS_SIDE;
+        let mut viewport = TileViewport {
+            depth: atlas.depth,
+            cells_wide: window.columns(),
+            cells_high: window.rows(),
+            width,
+            height,
+            pixels: vec![0; width * height],
+        };
+        let area = self.top_down_render_area();
+        for (index, cell) in ring.cells.iter().enumerate() {
+            let Some(PeekCell {
+                tile,
+                shade: PeekShade::Lit,
+                atlas: Some(atlas_id),
+            }) = *cell
+            else {
+                continue;
+            };
+            let (dx, dy) = window
+                .offset_of(index)
+                .expect("the index is inside the window");
+            let cell_x = index % window.columns();
+            let cell_y = index / window.columns();
+            if tile == NATURAL_MOONGATE_LIVE_TILE
+                && let Some(area) = area
+                && self.live_natural_moongate_terrain_at(
+                    area,
+                    self.player.x as isize + dx,
+                    self.player.y as isize + dy,
+                )
+                && self.blit_natural_moongate_phase_cell(&mut viewport, atlas, cell_x, cell_y)?
+            {
+                continue;
+            }
+            blit_terrain_tile_to_viewport(
+                &mut viewport,
+                atlas,
+                usize::from(atlas_id),
+                cell_x,
+                cell_y,
+                self.water_scroll,
+                &self.fire_flicker,
+            )?;
+        }
+        Ok(viewport)
     }
 }
