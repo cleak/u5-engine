@@ -220,8 +220,10 @@ mod ring_peek_predicate {
         }
     }
 
+    /// The fixtures never ran a render, so the visibility buffer the flood
+    /// is seeded from was never filled and the whole ring stays hidden.
     #[test]
-    fn the_peek_follows_the_predicate_and_reveals_nothing_yet() {
+    fn the_peek_follows_the_predicate_and_shows_nothing_before_a_render() {
         for (label, state, expected) in predicate_cases() {
             for light in [PeekLightPolicy::Scaled, PeekLightPolicy::Faithful] {
                 let ring = state.peek_top_down_ring(WIDE, light);

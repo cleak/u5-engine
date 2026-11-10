@@ -5,14 +5,23 @@
 //! chunk's private top-down helpers with no visibility change.
 //!
 //! This file holds the peek's types, the fixed-screen predicate
-//! [`PlayState::top_down_world_view_active`] (design 2.2.8) and the
-//! [`PlayState::peek_top_down_ring`] entry point. The sight flood, the
-//! light test and the objects arrive with the later ring-peek packages;
-//! until then every ring cell is [`PeekShade::Hidden`], which is the
-//! conservative side of the no-reveal rule (2.2.9): the ring never shows
-//! more than the faithful core does. Nothing calls the peek yet.
+//! [`PlayState::top_down_world_view_active`] (design 2.2.8), the
+//! [`PlayState::peek_top_down_ring`] entry point and its second-stage
+//! sight flood with the light test (design 2.3.6, 2.2.9). The flood is
+//! seeded from the faithful visibility buffer the render just filled, so
+//! the core is never recomputed and the ring never shows a cell the party
+//! could not see from where it stands. Objects arrive with the next
+//! ring-peek package; until then a lit ring cell carries its plain
+//! terrain. Nothing calls the peek yet.
 
-use crate::{PlayState, VISIBILITY_HIDDEN};
+use std::collections::VecDeque;
+
+use crate::{
+    FULL_DAYLIGHT, PlayState, TopDownRenderArea, VISIBILITY_CARVE_NEIGHBOR_ORDER,
+    VISIBILITY_HIDDEN, visibility_grid_active_index, visibility_in_radius,
+};
+
+use super::surface_tile_propagates_visibility;
 
 /// How far daylight reaches in the wider ring (2.2.11, D2.5).
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -197,19 +206,174 @@ impl PlayState {
     /// Returns `None` whenever [`PlayState::top_down_world_view_active`]
     /// is false, and for a window that does not hold the whole core or
     /// reaches past [`PEEK_MAX_REACH`] on a side. Core cells are always
-    /// `None`. Until the sight flood lands every ring cell is hidden, so
-    /// the peek never shows more than the faithful core.
+    /// `None`; the shell copies them from the faithful frame. A ring cell
+    /// is [`PeekShade::Lit`] only when the second-stage flood reaches and
+    /// paints it (design 2.3.6), and is [`PeekCell::HIDDEN`] otherwise.
+    ///
+    /// Call it after the faithful render, which leaves the visibility
+    /// buffer the flood is seeded from. Before the buffer has ever been
+    /// filled the ring is all hidden.
     pub fn peek_top_down_ring(
         &self,
         window: PeekWindow,
         light: PeekLightPolicy,
     ) -> Option<TopDownPeekRing> {
-        // The light policy only changes the flood's in-range test, which
-        // arrives with the sight flood.
-        let _ = light;
         if !window.is_valid() || !self.top_down_world_view_active() {
             return None;
         }
-        Some(TopDownPeekRing::all_hidden(window))
+        let area = self.top_down_render_area()?;
+        let mut ring = TopDownPeekRing::all_hidden(window);
+        self.flood_peek_ring(area, light, &mut ring);
+        Some(ring)
+    }
+
+    /// The second-stage flood of design 2.3.6 over the ring cells of
+    /// `ring.window`, painting what it reaches into `ring.cells`.
+    ///
+    /// It is the faithful centre-out carve
+    /// ([`PlayState::surface_visibility_carve_with_light_threshold`])
+    /// continued past the core: the same neighbour order, the same
+    /// propagation classifier, the same terrain read with world wrap and
+    /// the town off-floor substitution, the same light mask with the
+    /// beacon stamp, and the same three-way verdict. Only the "in range"
+    /// test changes with the light policy.
+    fn flood_peek_ring(
+        &self,
+        area: TopDownRenderArea,
+        light: PeekLightPolicy,
+        ring: &mut TopDownPeekRing,
+    ) {
+        let window = ring.window;
+        let wrap_world = matches!(area, TopDownRenderArea::World(_));
+        let (pitch_dark, threshold) = match area {
+            TopDownRenderArea::Town => (
+                self.surface_visibility_pitch_dark(),
+                self.surface_visibility_light_threshold(),
+            ),
+            TopDownRenderArea::World(_) => (
+                self.world_visibility_pitch_dark(),
+                self.world_visibility_light_threshold(),
+            ),
+        };
+        // Pitch dark (and the overworld underfoot blackout, which is pitch
+        // dark by another road) leaves the faithful grid fully obscured,
+        // so nothing in the ring can be seen either. A buffer that was
+        // never filled has no seeds to trust.
+        if pitch_dark || !self.visibility_buffers_ready {
+            return;
+        }
+        let in_range = |squared_distance: u32| match light {
+            // Full daylight reaches the whole window, as it reaches the
+            // whole 11x11 screen; below it the true squared distance, so
+            // dusk, night and a torch stay radii in world cells.
+            PeekLightPolicy::Scaled if threshold >= u32::from(FULL_DAYLIGHT) => true,
+            PeekLightPolicy::Scaled | PeekLightPolicy::Faithful => {
+                visibility_in_radius(squared_distance, threshold)
+            }
+        };
+
+        let px = self.player.x as isize;
+        let py = self.player.y as isize;
+
+        // The light mask exactly as the carve builds it: the persistent
+        // disc-shaped sources, then the beacon stamp.
+        let mut mask = self.local_light_mask.to_vec();
+        let (mask_origin_x, mask_origin_y) =
+            super::surface_local_light_mask_origin(px, py, wrap_world);
+        self.stamp_light_beacon(&mut mask, mask_origin_x, mask_origin_y, wrap_world);
+        let lit = |dx: isize, dy: isize| {
+            Self::surface_local_light_mask_is_lit(
+                &mask,
+                mask_origin_x,
+                mask_origin_y,
+                px + dx,
+                py + dy,
+                wrap_world,
+            )
+        };
+        let squared = |dx: isize, dy: isize| {
+            let (ax, ay) = (dx.unsigned_abs() as u32, dy.unsigned_abs() as u32);
+            ax.saturating_mul(ax).saturating_add(ay.saturating_mul(ay))
+        };
+
+        let mut considered = vec![false; window.cell_count()];
+        let mut painted = vec![false; window.cell_count()];
+        let mut queue: VecDeque<(isize, isize)> = VecDeque::new();
+
+        // 1. Seeds: the visible core-edge cells whose terrain propagates
+        // sight, read from the faithful buffer in row-major order. A
+        // visible blocker at the edge is painted in the core but never
+        // expands, as in the faithful carve.
+        let reach = isize::from(PEEK_CORE_REACH);
+        for dy in -reach..=reach {
+            for dx in -reach..=reach {
+                if dx.abs() != reach && dy.abs() != reach {
+                    continue;
+                }
+                let row = (dy + reach) as usize;
+                let col = (dx + reach) as usize;
+                let Some(grid_index) = visibility_grid_active_index(row, col) else {
+                    continue;
+                };
+                if self.visibility_grid[grid_index] == VISIBILITY_HIDDEN {
+                    continue;
+                }
+                let Some(tile) = self.surface_viewport_tile(px + dx, py + dy, wrap_world) else {
+                    continue;
+                };
+                if surface_tile_propagates_visibility(tile, squared(dx, dy)) {
+                    queue.push_back((dx, dy));
+                }
+            }
+        }
+
+        // 2-4. The flood over the ring only.
+        while let Some((cx, cy)) = queue.pop_front() {
+            // Seeds are visible core cells; a ring cell carries its paint.
+            let parent_painted = PeekWindow::is_core(cx, cy)
+                || window.index_of(cx, cy).is_some_and(|index| painted[index]);
+            for (ndx, ndy) in VISIBILITY_CARVE_NEIGHBOR_ORDER {
+                let x = cx + isize::from(ndx);
+                let y = cy + isize::from(ndy);
+                // A flood never re-enters the core, nor leaves the window.
+                if PeekWindow::is_core(x, y) {
+                    continue;
+                }
+                let Some(index) = window.index_of(x, y) else {
+                    continue;
+                };
+                if considered[index] {
+                    continue;
+                }
+                considered[index] = true;
+
+                let Some(tile) = self.surface_viewport_tile(px + x, py + y, wrap_world) else {
+                    continue;
+                };
+                let squared_distance = squared(x, y);
+                let propagates = surface_tile_propagates_visibility(tile, squared_distance);
+                let (paint, expand) = if in_range(squared_distance) {
+                    (true, propagates)
+                } else if propagates {
+                    (lit(x, y), true)
+                } else {
+                    (parent_painted && lit(cx, cy) && lit(x, y), false)
+                };
+
+                if paint {
+                    let Some(terrain) = self.top_down_live_terrain_at(area, px + x, py + y) else {
+                        continue;
+                    };
+                    painted[index] = true;
+                    ring.cells[index] = Some(PeekCell {
+                        tile: terrain,
+                        shade: PeekShade::Lit,
+                    });
+                }
+                if expand {
+                    queue.push_back((x, y));
+                }
+            }
+        }
     }
 }
