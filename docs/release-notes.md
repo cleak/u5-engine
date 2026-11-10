@@ -31,6 +31,8 @@ available yet; the first ones arrive in later releases.
   ([sidecars.md](sidecars.md#player-sidecars)). `SAVED.GAM` itself never
   changes, and with every enhancement off the folder is never created.
 
-Checks behind it: the route-smoke manifest, both visual-suite manifests and
-the full paired DOSBox sweep are unchanged from 1.0.1, and every enhancement
-configuration in the toggle matrix plays exactly as the original.
+Checks behind it: the route-smoke manifest and both visual-suite manifests
+are unchanged from 1.0.1, two full paired DOSBox sweeps found no real
+difference from it (every non-match was a random draw or capture timing that
+1.0.1 shows too), and every enhancement configuration in the toggle matrix
+plays exactly as the original.
