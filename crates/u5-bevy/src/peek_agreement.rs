@@ -14,10 +14,19 @@
 //! Phase B M2-02 (design 9.3.7) pins `PlayState::map_view_kind` the same
 //! way: each frame notes the kind, and [`FrameNote::kind_shown`] maps the
 //! branch that drew the viewport to the kind it showed.
+//!
+//! Phase B M2-05 (design 9.3.7) checks the object-cell peek the same way:
+//! after each map or combat render, every cell the peek names must hold
+//! exactly the atlas tile it says the render drew there
+//! ([`note_object_cells`]).
 
 use std::cell::RefCell;
 
-use u5_runtime::MapViewKind;
+use u5_runtime::enhancements::SpriteMasks;
+use u5_runtime::{
+    MapViewKind, PlayState, TILE_ATLAS_SIDE, TILE_ATLAS_TILE_PIXELS, TileAtlas, TileViewport,
+    blit_terrain_tile_to_viewport,
+};
 
 /// The branch `render_base_framebuffer` took for the viewport.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -90,11 +99,29 @@ impl FrameNote {
     }
 }
 
+/// The object-cell peek checked against the frames (M2-05).
+#[derive(Clone, Debug, Default)]
+pub(crate) struct ObjectCellTally {
+    /// Map and combat frames peeked.
+    pub frames: usize,
+    /// Frames whose peek named at least one cell.
+    pub with_cells: usize,
+    /// Cells compared with the frame.
+    pub cells: usize,
+    /// Cells whose `under` animates.
+    pub animated: usize,
+    /// One line per cell whose pixels were not the `drawn` tile's.
+    pub mismatches: Vec<String>,
+}
+
 #[derive(Default)]
 struct Recorder {
     branch: Option<BaseBranch>,
     pending: Vec<FrameNote>,
     filed: Vec<(String, Vec<FrameNote>)>,
+    object_cells: ObjectCellTally,
+    /// The masks of the last atlas seen, by its pixel buffer's address.
+    masks: Option<(usize, SpriteMasks)>,
 }
 
 thread_local! {
@@ -114,6 +141,84 @@ pub(crate) fn finish() -> Vec<(String, Vec<FrameNote>)> {
             .map(|r| r.filed)
             .unwrap_or_default()
     })
+}
+
+/// The object-cell tally since [`start`].
+pub(crate) fn object_cell_tally() -> ObjectCellTally {
+    RECORDER.with(|cell| {
+        cell.borrow()
+            .as_ref()
+            .map(|recorder| recorder.object_cells.clone())
+            .unwrap_or_default()
+    })
+}
+
+/// Peek the object cells of the frame `viewport` just drawn from `state`
+/// and compare each named cell with the atlas tile it says was drawn
+/// (design 9.3.7: `drawn` is the faithful render's cell). Only for frames
+/// the map or combat branch drew; the cursor's white ring, painted over a
+/// combat cell after the sprite, is not compared.
+pub(crate) fn note_object_cells(state: &PlayState, atlas: &TileAtlas, viewport: &TileViewport) {
+    RECORDER.with(|cell| {
+        let mut borrow = cell.borrow_mut();
+        let Some(recorder) = borrow.as_mut() else {
+            return;
+        };
+        let key = atlas.pixels.as_ptr() as usize;
+        if recorder.masks.as_ref().is_none_or(|(seen, _)| *seen != key) {
+            recorder.masks = Some((key, SpriteMasks::from_atlas(atlas)));
+        }
+        let masks = &recorder.masks.as_ref().expect("built above").1;
+        let tally = &mut recorder.object_cells;
+        let Some(peek) = state.peek_object_cells(atlas, masks) else {
+            return;
+        };
+        tally.frames += 1;
+        tally.with_cells += usize::from(!peek.cells.is_empty());
+        let cursor = state.combat_overlay_draw_cells().cursor_draw_cell;
+        for object in &peek.cells {
+            tally.cells += 1;
+            tally.animated += usize::from(peek.animated_under);
+            let mut tile = TileViewport {
+                depth: atlas.depth,
+                cells_wide: 1,
+                cells_high: 1,
+                width: TILE_ATLAS_SIDE,
+                height: TILE_ATLAS_SIDE,
+                pixels: vec![0; TILE_ATLAS_TILE_PIXELS],
+            };
+            if let Err(err) = blit_terrain_tile_to_viewport(
+                &mut tile,
+                atlas,
+                usize::from(object.drawn),
+                0,
+                0,
+                state.water_scroll,
+                &state.fire_flicker,
+            ) {
+                tally.mismatches.push(format!("{object:?}: {err}"));
+                continue;
+            }
+            let ring = [0, 1, 14, 15];
+            let on_cursor = cursor == Some((object.col, object.row));
+            let differ = (0..TILE_ATLAS_SIDE)
+                .flat_map(|y| (0..TILE_ATLAS_SIDE).map(move |x| (x, y)))
+                .filter(|&(x, y)| !(on_cursor && (ring.contains(&x) || ring.contains(&y))))
+                .filter(|&(x, y)| {
+                    let at = (usize::from(object.row) * TILE_ATLAS_SIDE + y) * viewport.width
+                        + usize::from(object.col) * TILE_ATLAS_SIDE
+                        + x;
+                    viewport.pixels.get(at) != Some(&tile.pixels[y * TILE_ATLAS_SIDE + x])
+                })
+                .count();
+            if differ > 0 {
+                tally.mismatches.push(format!(
+                    "cell ({}, {}) drawn {} under {:#04x}: {differ} pixels differ",
+                    object.col, object.row, object.drawn, object.under
+                ));
+            }
+        }
+    });
 }
 
 /// Note the branch the base render took.

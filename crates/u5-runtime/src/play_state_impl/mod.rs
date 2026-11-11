@@ -13,7 +13,7 @@ mod chunk_08;
 mod chunk_09;
 mod chunk_10;
 pub use chunk_07::{CombatKlimbCurrentCell, TownRestBurstOutcome};
-pub use chunk_09::object_cells::MapViewKind;
+pub use chunk_09::object_cells::{MapViewKind, ObjectCell, ObjectCellPeek};
 pub use chunk_09::ring_peek::{
     PEEK_CORE_REACH, PEEK_MAX_REACH, PeekCell, PeekLightPolicy, PeekShade, PeekWindow,
     TopDownPeekRing,

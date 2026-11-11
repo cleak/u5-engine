@@ -32,6 +32,17 @@ use crate::{
 
 use super::{PreparedTopDownCell, surface_tile_propagates_visibility, wrapped_world_axis_delta};
 
+/// Whether terrain id `terrain` moves with the animation clocks alone: a
+/// `§6` static-tile family, the water and lava rotation or a fire fixture.
+/// The live moon gate is a property of the cell, not the id, and is tested
+/// by the caller.
+pub(super) fn terrain_tile_animates(terrain: u8) -> bool {
+    static_tile_animation_family(terrain).is_some()
+        || water_pass_rotates_tile(terrain)
+        || water_composite_mask(terrain).is_some()
+        || fire_fixture_spec(terrain).is_some()
+}
+
 /// How far daylight reaches in the wider ring (2.2.11, D2.5).
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum PeekLightPolicy {
@@ -544,7 +555,7 @@ impl PlayState {
 
     /// Whether a lit ring cell's picture moves with the animation clocks
     /// alone, with no change to the game state.
-    fn peek_cell_animates(
+    pub(super) fn peek_cell_animates(
         &self,
         area: TopDownRenderArea,
         tile: u8,
@@ -554,10 +565,7 @@ impl PlayState {
     ) -> bool {
         let atlas = usize::from(atlas);
         if let Ok(terrain) = u8::try_from(atlas) {
-            static_tile_animation_family(terrain).is_some()
-                || water_pass_rotates_tile(terrain)
-                || water_composite_mask(terrain).is_some()
-                || fire_fixture_spec(terrain).is_some()
+            terrain_tile_animates(terrain)
                 || (tile == NATURAL_MOONGATE_LIVE_TILE
                     && self.live_natural_moongate_terrain_at(
                         area,

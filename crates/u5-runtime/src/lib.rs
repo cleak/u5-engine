@@ -111,8 +111,8 @@ pub mod play_state_struct;
 pub mod text_hold;
 pub use play_state_impl::CombatKlimbCurrentCell;
 pub use play_state_impl::ExplorationTurnGateOutcome;
-pub use play_state_impl::MapViewKind;
 pub use play_state_impl::TownRestBurstOutcome;
+pub use play_state_impl::{MapViewKind, ObjectCell, ObjectCellPeek};
 pub use play_state_impl::{
     PEEK_CORE_REACH, PEEK_MAX_REACH, PeekCell, PeekLightPolicy, PeekShade, PeekWindow,
     TopDownPeekRing,
@@ -1314,4 +1314,5 @@ mod tests {
     include!("tests_inline/ring_peek_objects.rs");
     include!("tests_inline/grow_accessors.rs");
     include!("tests_inline/map_view_kind.rs");
+    include!("tests_inline/object_cells.rs");
 }

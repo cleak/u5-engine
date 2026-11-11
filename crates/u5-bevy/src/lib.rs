@@ -18827,15 +18827,24 @@ fn render_base_framebuffer(state: &mut PlayState, atlas: &TileAtlas) -> Vec<u8> 
             // previous one for combat and the map, and clears it for the
             // dungeon.
             #[cfg(test)]
-            peek_agreement::note_branch(if combat {
-                peek_agreement::BaseBranch::Combat
-            } else if state.top_down_previous_viewport.is_none() {
-                peek_agreement::BaseBranch::Dungeon
-            } else if sweep {
-                peek_agreement::BaseBranch::VisibilitySweep
-            } else {
-                peek_agreement::BaseBranch::Map
-            });
+            {
+                let branch = if combat {
+                    peek_agreement::BaseBranch::Combat
+                } else if state.top_down_previous_viewport.is_none() {
+                    peek_agreement::BaseBranch::Dungeon
+                } else if sweep {
+                    peek_agreement::BaseBranch::VisibilitySweep
+                } else {
+                    peek_agreement::BaseBranch::Map
+                };
+                peek_agreement::note_branch(branch);
+                if matches!(
+                    branch,
+                    peek_agreement::BaseBranch::Combat | peek_agreement::BaseBranch::Map
+                ) {
+                    peek_agreement::note_object_cells(state, atlas, &viewport);
+                }
+            }
             let rgba = tile_viewport_to_visual_rgba(&viewport);
             if viewport.width as u32 == VIEWPORT_SIZE_PX
                 && viewport.height as u32 == VIEWPORT_SIZE_PX
@@ -27536,6 +27545,51 @@ mod tests {
         assert!(tally.mismatches.is_empty(), "{:#?}", tally.mismatches);
     }
 
+    /// Phase B M2-05 (design 9.3.7): the object-cell peek names only cells
+    /// that hold the tile it says was drawn, on synthetic town, world and
+    /// combat frames. Actor tiles get a black box so they are eligible.
+    #[test]
+    fn object_cell_peek_agrees_with_synthetic_frames() {
+        let mut atlas = synthetic_tile_atlas(TileGraphicsDepth::Ega16);
+        for tile in u5_runtime::ACTOR_TILE_BANK_BASE..u5_runtime::TILE_ATLAS_TILE_COUNT {
+            let base = tile * u5_runtime::TILE_ATLAS_TILE_PIXELS;
+            for at in 0..u5_runtime::TILE_ATLAS_TILE_PIXELS {
+                let (x, y) = (at % 16, at / 16);
+                let inside = (4..12).contains(&x) && (4..12).contains(&y);
+                atlas.pixels[base + at] = if inside { (tile % 15) as u8 + 1 } else { 0 };
+            }
+        }
+        let font = staircase_corner_font();
+        let mut town = test_state(open_grid(), 16, 16);
+        town.ambient_light = u5_runtime::FULL_DAYLIGHT;
+        town.active_objects.truncate(1);
+        town.active_objects.push(u5_runtime::ActiveObject {
+            type_byte: 0x5A,
+            tile: 0x5A,
+            x: 18,
+            y: 15,
+            z: 0,
+            ..u5_runtime::ActiveObject::empty()
+        });
+        let mut world = world_state(open_world_grid(), 10, 20);
+        world.ambient_light = u5_runtime::FULL_DAYLIGHT;
+        let mut combat = town.clone();
+        combat.combat_active = true;
+        combat.combat_cursor_blink = true;
+        let mut fixed = town.clone();
+        fixed.cutscene_black_viewport = true;
+
+        peek_agreement::start();
+        for mut state in [town, world, combat, fixed] {
+            let _ = render_visual_play_frame(&mut state, &atlas, play_ctx(&font));
+        }
+        let tally = peek_agreement::object_cell_tally();
+        let _ = peek_agreement::finish();
+        assert_eq!(tally.frames, 3, "{tally:?}");
+        assert!(tally.cells >= 3, "{tally:?}");
+        assert!(tally.mismatches.is_empty(), "{:#?}", tally.mismatches);
+    }
+
     /// A font whose every glyph is distinct and has ink: each row is the
     /// code, its complement and the code again, so a glyph check against
     /// the frame means something.
@@ -27667,6 +27721,7 @@ mod tests {
         visual_frame_suite(&writable_game_dir, TileGraphicsDepth::Ega16, &frames_dir).unwrap();
         let routes_dir = temp_output_dir("peek-routes");
         visual_route_suite(&writable_game_dir, TileGraphicsDepth::Ega16, &routes_dir).unwrap();
+        let object_cells = peek_agreement::object_cell_tally();
         let filed = peek_agreement::finish();
         let (rows_checked, row_mismatches) = accessor_agreement::finish();
         let grow = grow_agreement::finish();
@@ -27733,6 +27788,20 @@ mod tests {
         assert!(light.kinds.iter().all(|count| *count > 0), "{light:?}");
         assert!(light.canvases > 0, "{light:?}");
         assert!(light.mismatches.is_empty(), "{:#?}", light.mismatches);
+
+        // Phase B M2-05 (design 9.3.7): on every map and combat frame of the
+        // suites, each cell the object-cell peek names holds exactly the
+        // atlas tile it says the faithful render drew there.
+        println!(
+            "object cells: {} frames peeked, {} with cells, {} cells compared, {} over animated terrain",
+            object_cells.frames, object_cells.with_cells, object_cells.cells, object_cells.animated
+        );
+        assert!(object_cells.cells > 0, "{object_cells:?}");
+        assert!(
+            object_cells.mismatches.is_empty(),
+            "{:#?}",
+            object_cells.mismatches
+        );
 
         // Phase B M1-08 (design 2.3.1): on every suite frame that painted
         // the ordinary panel rows, the stats-row accessors return the text
