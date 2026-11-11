@@ -85,7 +85,8 @@ fn rows_and_presets_come_from_the_catalogue_and_the_file() {
     // preset row) and the `[keys]` chords. In this build the shipped rows
     // with a page row are chapter 2's: scaling, fullscreen, vsync, the fill
     // (P1, P2) and the wider view with its sub-options indented under it
-    // (P8). `display.raster` has none while both its values draw the same;
+    // (P8), plus chapter 9's brightness (P1) and sprite compositing with
+    // its halo (P5). `display.raster` has none while both its values draw the same;
     // the fill's colour and bezel path stay in the file.
     for row in &settings.rows {
         assert!(!row.key.starts_with("keys."), "{}", row.key);
@@ -111,6 +112,8 @@ fn rows_and_presets_come_from_the_catalogue_and_the_file() {
             "display.ribbon_hp_colours",
             "display.dither",
             "display.centre_party",
+            "display.sprite_composite",
+            "display.composite_halo",
             "display.scale_mode",
             "display.pixel_aspect",
             "display.pillar_fill",
@@ -134,10 +137,14 @@ fn rows_and_presets_come_from_the_catalogue_and_the_file() {
         .map(|row| row.key.as_str())
         .collect();
     assert_eq!(indented[..6], keys[3..9]);
-    // Chapter 9 (P1): the scope sits under the brightness row.
-    assert_eq!(indented[6..], ["display.brightness_scope"]);
-    // Recommended names no shipped row; Everything sets sharp scaling and
-    // the F11 key (2.2.1).
+    // Chapter 9: the halo sits under compositing (P5) and the scope under
+    // the brightness row (P1).
+    assert_eq!(
+        indented[6..],
+        ["display.composite_halo", "display.brightness_scope"]
+    );
+    // Recommended turns compositing on (P5); Everything also sets sharp
+    // scaling and the F11 key (2.2.1).
     let values = |key: &str| {
         let choice = settings
             .presets
@@ -153,17 +160,28 @@ fn rows_and_presets_come_from_the_catalogue_and_the_file() {
         values
     };
     // Each preset sets the keys any preset names, at its own values.
-    let at_default = [
-        "(\"display.fullscreen_key\", Switch(false))",
-        "(\"display.scale_mode\", Choice(\"fit\"))",
-    ];
-    assert_eq!(values("classic"), at_default);
-    assert_eq!(values("recommended"), at_default);
+    assert_eq!(
+        values("classic"),
+        [
+            "(\"display.fullscreen_key\", Switch(false))",
+            "(\"display.scale_mode\", Choice(\"fit\"))",
+            "(\"display.sprite_composite\", Switch(false))",
+        ]
+    );
+    assert_eq!(
+        values("recommended"),
+        [
+            "(\"display.fullscreen_key\", Switch(false))",
+            "(\"display.scale_mode\", Choice(\"fit\"))",
+            "(\"display.sprite_composite\", Switch(true))",
+        ]
+    );
     assert_eq!(
         values("everything"),
         [
             "(\"display.fullscreen_key\", Switch(true))",
             "(\"display.scale_mode\", Choice(\"sharp\"))",
+            "(\"display.sprite_composite\", Switch(true))",
         ]
     );
 
@@ -310,7 +328,8 @@ fn desktop_host_feeds_the_settings_only_wizard() {
     assert_eq!(rows.preset, 0);
     let mut model = WizardModel::settings_only(&host);
     assert!(model.outcome.is_none());
-    // Choose Recommended and save: only the preset is written.
+    // Choose Recommended and save: the preset and the rows it changed
+    // (sprite compositing, which Recommended turns on) are written.
     assert!(model.apply(u5_bevy_setup::Action::SelectPreset(1), &host));
     assert!(model.apply(u5_bevy_setup::Action::SaveSettings, &host));
     assert_eq!(
@@ -318,6 +337,9 @@ fn desktop_host_feeds_the_settings_only_wizard() {
         Some(u5_bevy_setup::WizardOutcome::SettingsClosed { saved: true })
     );
     let text = fs::read_to_string(scratch.config()).unwrap();
-    assert_eq!(text, "[enhancements]\npreset = \"recommended\"\n");
+    assert_eq!(
+        text,
+        "[enhancements]\npreset = \"recommended\"\n\n[display]\nsprite_composite = true\n"
+    );
     assert_eq!(host.settings_rows().unwrap().preset, 1);
 }
