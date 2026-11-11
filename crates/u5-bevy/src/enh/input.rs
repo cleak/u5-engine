@@ -576,6 +576,39 @@ struct FrameKeys {
     repeated: HashSet<KeyCode>,
     /// Keys pressed while latched; they stay away from the game.
     ignored: HashSet<KeyCode>,
+    /// The modifiers down when each key of this frame was first pressed,
+    /// in event order. A chord typed faster than a frame (Ctrl down, P
+    /// down, both up again before the next frame) leaves Ctrl released on
+    /// `ButtonInput` by the time the router runs; the event stream still
+    /// says Ctrl was down when P went down.
+    mods_at_press: HashMap<KeyCode, Mods>,
+}
+
+/// Ctrl, Shift and Alt, left or right.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+struct Mods {
+    ctrl: bool,
+    shift: bool,
+    alt: bool,
+}
+
+impl Mods {
+    fn of_down(down: &HashSet<KeyCode>) -> Self {
+        let any = |keys: [KeyCode; 2]| keys.iter().any(|key| down.contains(key));
+        Self {
+            ctrl: any([KeyCode::ControlLeft, KeyCode::ControlRight]),
+            shift: any([KeyCode::ShiftLeft, KeyCode::ShiftRight]),
+            alt: any([KeyCode::AltLeft, KeyCode::AltRight]),
+        }
+    }
+
+    fn or(self, other: Self) -> Self {
+        Self {
+            ctrl: self.ctrl || other.ctrl,
+            shift: self.shift || other.shift,
+            alt: self.alt || other.alt,
+        }
+    }
 }
 
 /// The hotkey router (1.3.6). See the module notes.
@@ -620,6 +653,10 @@ pub(crate) fn enh_input_router(
             let key = event.key_code;
             match event.state {
                 ButtonState::Pressed => {
+                    frame
+                        .mods_at_press
+                        .entry(key)
+                        .or_insert_with(|| Mods::of_down(&latch.down));
                     latch.down.insert(key);
                     if latch.held.contains(&key) {
                         frame.ignored.insert(key);
@@ -664,9 +701,11 @@ pub(crate) fn enh_input_router(
     if keymap.is_empty() {
         return;
     }
-    let ctrl = keyboard.any_pressed([KeyCode::ControlLeft, KeyCode::ControlRight]);
-    let shift = keyboard.any_pressed([KeyCode::ShiftLeft, KeyCode::ShiftRight]);
-    let alt = keyboard.any_pressed([KeyCode::AltLeft, KeyCode::AltRight]);
+    let held = Mods {
+        ctrl: keyboard.any_pressed([KeyCode::ControlLeft, KeyCode::ControlRight]),
+        shift: keyboard.any_pressed([KeyCode::ShiftLeft, KeyCode::ShiftRight]),
+        alt: keyboard.any_pressed([KeyCode::AltLeft, KeyCode::AltRight]),
+    };
     // A modifier maps to no byte and is dropped at the read, so it is not
     // a key "ahead" of the hotkey.
     let queue_empty =
@@ -677,11 +716,16 @@ pub(crate) fn enh_input_router(
             continue;
         }
         let first_of_frame = std::mem::replace(&mut first, false);
+        // The modifiers held now, or down when the key went down this frame.
+        let mods = frame
+            .mods_at_press
+            .get(&key)
+            .map_or(held, |at_press| held.or(*at_press));
         let Some(action) = keymap.action(KeyChord {
             key,
-            ctrl,
-            shift,
-            alt,
+            ctrl: mods.ctrl,
+            shift: mods.shift,
+            alt: mods.alt,
         }) else {
             continue;
         };

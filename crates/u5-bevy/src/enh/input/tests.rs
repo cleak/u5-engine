@@ -515,6 +515,34 @@ fn a_bound_chord_is_consumed_and_an_unbound_key_left_alone() {
     assert_eq!(keys.actions(), []);
 }
 
+/// A chord typed inside one frame (Ctrl down, P down, P up, Ctrl up, all
+/// before the router runs, as a fast tap at a low frame rate or a synthetic
+/// key does) is still the chord: the modifiers are the ones down when the
+/// key went down, from the event stream. Found by the M1 gate's live Xvfb
+/// run, where `xdotool key ctrl+p` reached the game as P (Push).
+#[test]
+fn a_chord_typed_within_one_frame_is_still_the_chord() {
+    let mut keys = Keys::new(all_defaults_bound());
+    keys.press(KeyCode::ControlLeft);
+    keys.press(KeyCode::KeyP);
+    keys.release(KeyCode::KeyP);
+    keys.release(KeyCode::ControlLeft);
+    assert_eq!(
+        keys.frame(),
+        [KeyCode::ControlLeft],
+        "P never reaches the game"
+    );
+    assert_eq!(keys.actions(), [EnhAction::ToggleColumn]);
+
+    // Ctrl let go before the letter: a plain P, as the game reads it.
+    keys.press(KeyCode::ControlLeft);
+    keys.release(KeyCode::ControlLeft);
+    keys.press(KeyCode::KeyP);
+    keys.release(KeyCode::KeyP);
+    assert_eq!(keys.frame(), [KeyCode::ControlLeft, KeyCode::KeyP]);
+    assert_eq!(keys.actions(), []);
+}
+
 #[test]
 fn a_modal_hotkey_must_be_the_first_key_of_the_frame() {
     let mut keys = Keys::new(all_defaults_bound());
