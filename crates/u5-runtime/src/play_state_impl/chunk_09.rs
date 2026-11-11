@@ -9,6 +9,11 @@ use crate::*;
 #[path = "ring_peek.rs"]
 pub mod ring_peek;
 
+/// The object-cell peek and the map-view kind (Phase B design 9.3.7), a
+/// child module for the same reason.
+#[path = "object_cells.rs"]
+pub mod object_cells;
+
 #[derive(Clone, Copy, Debug)]
 struct PreparedTopDownCell {
     terrain: u8,

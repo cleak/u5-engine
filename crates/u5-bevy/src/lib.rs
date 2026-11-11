@@ -17828,6 +17828,10 @@ fn render_visual_play_frame_over_viewport(
     #[cfg(test)]
     let peek_endgame = state.endgame.is_some();
     #[cfg(test)]
+    let peek_kind = state.map_view_kind();
+    #[cfg(test)]
+    let peek_town = matches!(state.area, u5_runtime::Area::Town { .. });
+    #[cfg(test)]
     peek_agreement::begin_frame();
 
     let mut chrome_state = state.clone();
@@ -17937,13 +17941,16 @@ fn render_visual_play_frame_over_viewport(
         }),
     );
     #[cfg(test)]
-    peek_agreement::note_frame(
-        peek_predicate,
-        state.top_down_world_view_active(),
-        which == EndgameViewport::World,
-        state.render_active_view_overlay(atlas.depth).is_some(),
-        peek_endgame,
-    );
+    peek_agreement::note_frame(peek_agreement::FrameState {
+        predicate: peek_predicate,
+        predicate_after: state.top_down_world_view_active(),
+        world_viewport: which == EndgameViewport::World,
+        overlay: state.render_active_view_overlay(atlas.depth).is_some(),
+        endgame: peek_endgame,
+        kind: peek_kind,
+        kind_after: state.map_view_kind(),
+        town_area: peek_town,
+    });
     rgba
 }
 
@@ -27345,6 +27352,24 @@ mod tests {
                         || frame.branch == Some(peek_agreement::BaseBranch::VisibilitySweep),
                     "{label} frame {index}: the render moved the predicate: {frame:?}"
                 );
+                // Phase B M2-02 (design 9.3.7): the map-view kind names the
+                // map the frame showed, and the fixed-screen predicate is
+                // its world and town kinds.
+                assert_eq!(
+                    frame.kind,
+                    frame.kind_shown(),
+                    "{label} frame {index}: map_view_kind: {frame:?}"
+                );
+                assert_eq!(
+                    frame.predicate,
+                    frame.kind.is_some_and(u5_runtime::MapViewKind::is_top_down),
+                    "{label} frame {index}: {frame:?}"
+                );
+                assert!(
+                    frame.kind_after == frame.kind
+                        || frame.branch == Some(peek_agreement::BaseBranch::VisibilitySweep),
+                    "{label} frame {index}: the render moved the kind: {frame:?}"
+                );
             }
         }
     }
@@ -27704,6 +27729,17 @@ mod tests {
             filed.len(),
             frames.len()
         );
+        // Phase B M2-02: every map-view kind is reached.
+        for kind in [
+            u5_runtime::MapViewKind::World,
+            u5_runtime::MapViewKind::Town,
+            u5_runtime::MapViewKind::Combat,
+            u5_runtime::MapViewKind::Dungeon,
+        ] {
+            let seen = count(&|f| f.kind == Some(kind));
+            println!("map_view_kind {kind:?}: {seen} frames");
+            assert!(seen > 0, "the suites never reached a {kind:?} frame");
+        }
         for (name, seen) in [
             ("top-down", top_down),
             ("combat", combat),

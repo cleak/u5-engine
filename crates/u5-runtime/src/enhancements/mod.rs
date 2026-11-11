@@ -24,6 +24,8 @@
 //! - [`matrix`]: the toggle matrix the equivalence harness runs, derived
 //!   from the catalogue: each key alone, a pairwise covering array and all
 //!   on except cheats (design 1.3.12).
+//! - [`light`]: chapter 9's colour transforms, the sRGB transfer pair,
+//!   the maps' coverage curve and the [`BrightnessLut`] (design 9.3.2).
 //! - [`idle`]: the idle-prompt predicate's runtime half,
 //!   [`PlayState::idle_command_prompt`](crate::PlayState::idle_command_prompt)
 //!   (design 1.3.7).
@@ -41,6 +43,7 @@ pub mod catalogue;
 pub mod digest;
 pub mod display;
 pub mod idle;
+pub mod light;
 pub mod matrix;
 pub mod resolve;
 pub mod sidecar;
@@ -66,6 +69,10 @@ pub use display::{
     raster_word,
 };
 pub use idle::{GUARDED_DRAINS, GuardedDrain, IdleBlocker, IdlePromptKind};
+pub use light::{
+    BRIGHTNESS_CURVE_EXPONENT, BrightnessLut, coverage_scale, linear_to_srgb, scale_channel,
+    srgb_to_linear,
+};
 pub use matrix::{
     ALL_ON_EXCEPT_CHEATS, CHEATS_SECTION, MATRIX_FILE, MatrixRow, PairwiseFactor, alternate_values,
     covering_array, matrix_tsv, pairwise_factors, toggle_matrix,

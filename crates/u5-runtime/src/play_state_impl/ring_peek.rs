@@ -192,41 +192,16 @@ impl TopDownPeekRing {
 impl PlayState {
     /// The plain top-down world or town view is what the frame shows.
     ///
-    /// This is the fixed-screen test of design 2.2.8. It mirrors the
-    /// branch order of the shell's base-frame render: the pending
-    /// Blackthorn rescue, then the audience, then the shrine presentation,
-    /// then [`PlayState::render_top_down_base_frame`], which hands combat
-    /// and the dungeon to their own renderers. It is also false while a
-    /// view overlay (the gem view and its kin), the endgame or a
-    /// visibility sweep is present, since those keep the faithful frame.
+    /// This is the fixed-screen test of design 2.2.8: exactly the
+    /// [`MapViewKind::World`] and [`MapViewKind::Town`] answers of
+    /// [`PlayState::map_view_kind`], which mirrors the shell's base-frame
+    /// render (design 9.3.7). Combat, the dungeon, the cutscene screens, a
+    /// view overlay, the endgame and a visibility sweep are all false.
     pub fn top_down_world_view_active(&self) -> bool {
-        // The rescue's own render. During its live-grid stretch it draws
-        // nothing and the ordinary map shows, so the switch to the fixed
-        // screen comes on the first frame the rescue paints (2.2.8);
-        // otherwise the held black field, a queued playback or the
-        // running cinematic owns the viewport.
-        let rescue_live_grid = self.blackthorn_rescue_active()
-            && self.blackthorn_rescue_viewport
-                == crate::blackthorn::BlackthornRescueViewport::LiveGrid;
-        if !rescue_live_grid
-            && (!self.pending_blackthorn_rescue_playbacks.is_empty()
-                || self.blackthorn_rescue_active()
-                || self.cutscene_black_viewport)
-        {
-            return false;
-        }
-        if self.blackthorn_audience_map.is_some() || self.shrine_presentation_map.is_some() {
-            return false;
-        }
-        if self.active_view_overlay.is_some()
-            || self.endgame.is_some()
-            || self.visibility_sweep.is_some()
-        {
-            return false;
-        }
-        // `render_top_down_viewport`: combat first, then the dungeon when
-        // there is no top-down render area.
-        !self.combat_active && self.top_down_render_area().is_some()
+        // One predicate (design 9.3.7): the world and town kinds of
+        // [`PlayState::map_view_kind`].
+        self.map_view_kind()
+            .is_some_and(super::object_cells::MapViewKind::is_top_down)
     }
 
     /// Read-only. Takes `&self`; draws nothing from the RNG.
