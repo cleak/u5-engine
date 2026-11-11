@@ -369,13 +369,19 @@ fn display_options_switch_or_belong_to_a_toggle() {
 #[test]
 fn presets_set_only_the_shipped_display_rows() {
     // Everything names `scale_mode = sharp` and `fullscreen_key` (2.2.1),
-    // which ship with P1; Recommended names no display row.
+    // which ship with P1; both name `sprite_composite` (U16), which ships
+    // with chapter 9's P5 (M2-06).
     for toggle in DISPLAY_TOGGLES {
-        assert!(
-            !Preset::Recommended.toggles().on(*toggle),
+        assert_eq!(
+            Preset::Recommended.toggles().on(*toggle),
+            *toggle == Toggle::DisplaySpriteComposite,
             "Recommended {toggle:?}"
         );
-        let everything = [Toggle::DisplayScaleMode, Toggle::DisplayFullscreenKey];
+        let everything = [
+            Toggle::DisplayScaleMode,
+            Toggle::DisplayFullscreenKey,
+            Toggle::DisplaySpriteComposite,
+        ];
         assert_eq!(
             Preset::Everything.toggles().on(*toggle),
             everything.contains(toggle),

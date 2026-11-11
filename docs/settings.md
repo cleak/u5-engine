@@ -38,10 +38,12 @@ settings page, a stored value is kept but not used, and presets skip it.
 
 No preset turns on a cheat, and the only deviation a preset sets is
 `combat.fast_forward`. A preset sets only what is available in this build.
-In this build Recommended still gives the Classic game, and Everything adds
-only sharp scaling (`display.scale_mode = "sharp"`) and the F11 fullscreen
-key (`display.fullscreen_key`), neither of which changes the game. The wider
-world view is a deviation, so no preset turns it on.
+In this build Recommended turns on only sprites over terrain
+(`display.sprite_composite`), and Everything adds sharp scaling
+(`display.scale_mode = "sharp"`) and the F11 fullscreen key
+(`display.fullscreen_key`); none of them changes the game. The wider world
+view is a deviation, so no preset turns it on. No preset sets brightness or
+the sprite outline (`display.composite_halo`): they are preferences.
 
 ## Changing settings
 
@@ -68,6 +70,7 @@ world view is a deviation, so no preset turns it on.
 | `--pillar-fill FILL` | `--set display.pillar_fill=FILL`: `black`, `solid`, `ribbon` or `bezel`. |
 | `--bezel-image PATH` | `--set display.bezel_image=PATH`: a PNG for the `bezel` fill. |
 | `--grow-left`, `--no-grow-left` | `--enable` / `--disable display.grow_left`: the wider world view (shows more than the original). |
+| `--sprite-composite`, `--no-sprite-composite` | `--enable` / `--disable display.sprite_composite`: draw people, monsters, ships and items over the terrain instead of in black boxes. `display.composite_halo` (on by default) keeps a thin black outline round each sprite. |
 | `--brightness PERCENT` | `--set display.brightness=PERCENT`: dim the map view, 25 to 100 (100 is the original colours; `--enable display.brightness` sets the suggested 70). `display.brightness_scope` chooses the map view (`map`) or the whole screen (`frame`). |
 
 `config.toml` applies to the default launch (no game folder or mode on the
@@ -220,7 +223,7 @@ one that types keys must change it exactly as typing those keys would:
 | display.fullscreen | Fullscreen (borderless) | bool = false | a, F | feature | --fullscreen | a window | yes |
 | display.fullscreen_key | Switch fullscreen with a key (F11) | bool = false | a, F | feature | --fullscreen-key | a window, a keyboard | yes |
 | display.grow_left | Wider world view (shows more than the original) | bool = false | a, F | deviation, wider view | --grow-left | - | yes |
-| display.sprite_composite | Sprites over terrain (no black boxes) | bool = false | a, F | feature | --sprite-composite | - | later (chapter 9 P5) |
+| display.sprite_composite | Sprites over terrain (no black boxes) | bool = false | a, F | feature | --sprite-composite | - | yes |
 | enhancements.schema | Settings file format version | int 1..1 = 1 | -, L | feature | - | - | yes |
 | enhancements.preset | Preset | enum classic\|recommended\|everything = classic | -, P | feature | --preset | - | yes |
 | keys.menu | Open the menu | chord = F12 | -, F | feature | - | a keyboard | later (chapter 1 P5) |
@@ -252,5 +255,5 @@ one that types keys must change it exactly as typing those keys would:
 | display.brightness_scope | Brightness applies to: the map view, or the whole screen | enum map\|frame = map | a, F | feature | - | - | yes |
 | display.map_brightness | Map brightness (full map, gem map) | int 25..100 = 100 | a, F | feature | - | - | later (chapter 9 P2) |
 | display.vignette | Edge darkening | int 0..50 = 0 | a, F | feature | --vignette | - | later (chapter 9 P3) |
-| display.composite_halo | Keep a thin black outline around sprites | bool = true | a, F | feature | - | - | later (chapter 9 P5) |
+| display.composite_halo | Keep a thin black outline around sprites | bool = true | a, F | feature | - | - | yes |
 <!-- END GENERATED -->

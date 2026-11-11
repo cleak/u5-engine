@@ -194,6 +194,10 @@ mod u4_transfer;
 /// design 2.3.1).
 #[cfg(test)]
 mod accessor_agreement;
+/// Test-only recorder for the sprite composite on every suite state (Phase
+/// B design 9.3.8, M2-06).
+#[cfg(test)]
+mod composite_agreement;
 /// Test-only recorder for the message crawl's rows (Phase B design 2.2.4,
 /// 2.3.8).
 #[cfg(test)]
@@ -17786,6 +17790,8 @@ fn render_visual_play_frame_with_input_and_cursor(
     #[cfg(test)]
     light_agreement::note(state, atlas, ctx.ibm, &rgba);
     #[cfg(test)]
+    composite_agreement::note(state, atlas, &rgba);
+    #[cfg(test)]
     crawl_agreement::note(
         state,
         crawl_agreement::Drawn {
@@ -18969,11 +18975,18 @@ fn paint_combat_overlays_rgba(rgba: &mut [u8], state: &PlayState) {
 /// `combat.md §7`'s overlay cell is the ordinary sixteen-pixel screen cell.
 const COMBAT_OVERLAY_CELL_PX: usize = 16;
 
-fn tile_viewport_to_visual_rgba(viewport: &TileViewport) -> Vec<u8> {
-    let palette: &[[u8; 3]] = match viewport.depth {
+/// The palette the faithful frame draws a `depth` viewport with: the period
+/// 200-line EGA palette (slot 6 brown) or the CGA one. Chapter 9's sprite
+/// composite paints terrain through the same table (design 9.3.8).
+pub(crate) fn visual_palette(depth: TileGraphicsDepth) -> &'static [[u8; 3]] {
+    match depth {
         TileGraphicsDepth::Ega16 => &EGA_PALETTE_RGB,
         TileGraphicsDepth::Cga4 => &CGA_PALETTE_RGB,
-    };
+    }
+}
+
+fn tile_viewport_to_visual_rgba(viewport: &TileViewport) -> Vec<u8> {
+    let palette = visual_palette(viewport.depth);
     let mut rgba = Vec::with_capacity(viewport.pixels.len() * 4);
     for &index in &viewport.pixels {
         let rgb = palette[usize::from(index) % palette.len()];
@@ -27580,14 +27593,32 @@ mod tests {
         fixed.cutscene_black_viewport = true;
 
         peek_agreement::start();
-        for mut state in [town, world, combat, fixed] {
+        composite_agreement::start();
+        let mut flashed = town.clone();
+        flashed.presentation_camp_flash_inverted = true;
+        for mut state in [town, world, combat, fixed, flashed] {
             let _ = render_visual_play_frame(&mut state, &atlas, play_ctx(&font));
         }
         let tally = peek_agreement::object_cell_tally();
         let _ = peek_agreement::finish();
-        assert_eq!(tally.frames, 3, "{tally:?}");
+        let composite = composite_agreement::finish();
+        assert_eq!(tally.frames, 4, "{tally:?}");
         assert!(tally.cells >= 3, "{tally:?}");
         assert!(tally.mismatches.is_empty(), "{:#?}", tally.mismatches);
+        // Phase B M2-06 (design 9.3.8): the composite rule on the same
+        // frames; the flashed town changes nothing.
+        assert_eq!(
+            (composite.peeked, composite.flashed),
+            (4, 1),
+            "{composite:?}"
+        );
+        assert!(composite.changed_halo > 0, "{composite:?}");
+        assert!(composite.canvases >= 2, "{composite:?}");
+        assert!(
+            composite.mismatches.is_empty(),
+            "{:#?}",
+            composite.mismatches
+        );
     }
 
     /// A font whose every glyph is distinct and has ink: each row is the
@@ -27717,6 +27748,7 @@ mod tests {
         grow_agreement::start();
         crawl_agreement::start();
         light_agreement::start();
+        composite_agreement::start();
         let frames_dir = temp_output_dir("peek-frames");
         visual_frame_suite(&writable_game_dir, TileGraphicsDepth::Ega16, &frames_dir).unwrap();
         let routes_dir = temp_output_dir("peek-routes");
@@ -27727,6 +27759,7 @@ mod tests {
         let grow = grow_agreement::finish();
         let crawl = crawl_agreement::finish();
         let light = light_agreement::finish();
+        let composite = composite_agreement::finish();
         for dir in [&writable_game_dir, &frames_dir, &routes_dir] {
             let _ = fs::remove_dir_all(dir);
         }
@@ -27801,6 +27834,37 @@ mod tests {
             object_cells.mismatches.is_empty(),
             "{:#?}",
             object_cells.mismatches
+        );
+
+        // Phase B M2-06 (design 9.3.8): on every map and combat frame of the
+        // suites, the composite changes only black mask pixels of peeked
+        // cells, to the terrain's colour; boxed tiles are never peeked; a
+        // flash shows unchanged; and the grow-left core carries the
+        // composited viewport.
+        println!(
+            "sprite composite: {} frames, {} peeked, {} cells, {} pixels with the halo, {} \
+             without, {} flashed, {} animated, {} canvases",
+            composite.frames,
+            composite.peeked,
+            composite.cells,
+            composite.changed_halo,
+            composite.changed_flood,
+            composite.flashed,
+            composite.animated,
+            composite.canvases
+        );
+        assert!(
+            composite.cells > 0 && composite.changed_halo > 0 && composite.canvases > 0,
+            "{composite:?}"
+        );
+        assert!(
+            composite.changed_flood > composite.changed_halo,
+            "{composite:?}"
+        );
+        assert!(
+            composite.mismatches.is_empty(),
+            "{:#?}",
+            composite.mismatches
         );
 
         // Phase B M1-08 (design 2.3.1): on every suite frame that painted

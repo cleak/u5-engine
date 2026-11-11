@@ -7,7 +7,7 @@
 use bevy::window::{MonitorSelection, PresentMode, WindowMode, WindowResolution};
 use u5_runtime::enhancements::{
     CliSetting, DISPLAY_P1, DISPLAY_P2, DISPLAY_P8, DISPLAY_TOGGLES, HostCapabilities, LockReason,
-    LockState, PixelAspect, ResolveInput, ResolvedEnhancements, ScaleMode, Toggle,
+    LockState, PixelAspect, ResolveInput, ResolvedEnhancements, ScaleMode, Toggle, resolve,
     resolve_as_shipped,
 };
 use u5_runtime::test_fixtures::{open_grid, test_state};
@@ -155,13 +155,13 @@ fn each_display_toggle_adds_the_plugin_with_its_settings() {
             launch.enhancements.display(),
             "{toggle:?}"
         );
-        // Only the window keys and the grow-left layout add systems,
-        // through their settings; a driven toggle on with its value at the
-        // default adds none.
+        // Only the window keys, the grow-left layout and sprite compositing
+        // add systems, through their settings; a driven toggle on with its
+        // value at the default adds none.
         let settings = launch.enhancements.display();
         assert_eq!(
             display_systems(&app).is_empty(),
-            !window_keys_on(&settings) && !settings.grow_left.on,
+            !window_keys_on(&settings) && !settings.grow_left.on && !settings.light.composite,
             "{toggle:?}"
         );
     }
@@ -204,22 +204,18 @@ fn a_sub_key_of_an_off_feature_adds_no_plugin() {
 
 /// Chapter 9 (M2-01): brightness below 100 or compositing on brings the
 /// plugin in, with the light settings in `Display`; brightness adds its
-/// follower (M2-03), compositing nothing yet. The sub-options alone add
-/// nothing. Resolved as if P1 and P5 had shipped (P5 is hidden in this
-/// build).
+/// follower (M2-03) and compositing its own (M2-06), each with its step and
+/// nothing else. The sub-options alone add nothing. P1 and P5 have shipped.
 #[test]
 fn chapter_9_switches_add_the_plugin_and_sub_options_do_not() {
-    use u5_runtime::enhancements::{BrightnessScope, LIGHT_P1, LIGHT_P5};
+    use u5_runtime::enhancements::BrightnessScope;
     let light_launch = |cli: &[CliSetting]| VisualLaunchConfig {
-        enhancements: resolve_as_shipped(
-            ResolveInput {
-                stored: None,
-                cli,
-                lock: LockState::Off,
-                caps: HostCapabilities::ALL,
-            },
-            &[LIGHT_P1, LIGHT_P5],
-        ),
+        enhancements: resolve(ResolveInput {
+            stored: None,
+            cli,
+            lock: LockState::Off,
+            caps: HostCapabilities::ALL,
+        }),
         ..VisualLaunchConfig::classic()
     };
     for cli in [
@@ -244,14 +240,25 @@ fn chapter_9_switches_add_the_plugin_and_sub_options_do_not() {
         assert_eq!(light, launch.enhancements.display_light(), "{cli:?}");
         assert!(!light.is_off(), "{cli:?}");
         // M2-03: brightness below 100 brings the step and the system that
-        // follows a menu change; compositing adds nothing yet (M2-06).
-        let follows = display_systems(&app)
-            .iter()
-            .any(|system| system.contains("follow_light_settings"));
-        assert_eq!(follows, light.brightness_on(), "{cli:?}");
-        if !light.brightness_on() {
-            assert_eq!(display_systems(&app), Vec::<String>::new(), "{cli:?}");
-        }
+        // follows a menu change; M2-06: compositing the same.
+        let systems = display_systems(&app);
+        let follows = |name: &str| systems.iter().any(|system| system.contains(name));
+        assert_eq!(
+            follows("follow_light_settings"),
+            light.brightness_on(),
+            "{cli:?}"
+        );
+        assert_eq!(
+            follows("follow_composite_settings"),
+            light.composite,
+            "{cli:?}"
+        );
+        assert_eq!(
+            app.world()
+                .contains_resource::<super::composite::CompositeMasks>(),
+            light.composite,
+            "{cli:?}"
+        );
     }
     let launch = light_launch(&[set("display.brightness", "55")]);
     let mut app = App::new();

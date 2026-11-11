@@ -162,11 +162,12 @@ fn presented(app: &App) -> Option<Handle<Image>> {
 fn no_host_exists_while_no_step_is_registered() {
     let mut every = VisualLaunchConfig::classic();
     // ...except the grow-left layout, whose `[grow-left compose]` step,
-    // frame fit and canvas size are its own (M1-09, display/grow tests).
-    for spec in TOGGLES
-        .iter()
-        .filter(|spec| spec.toggle != Toggle::DisplayGrowLeft)
-    {
+    // frame fit and canvas size are its own (M1-09, display/grow tests), and
+    // sprite compositing, whose `[composite]` step is its own (M2-06,
+    // display/composite tests).
+    for spec in TOGGLES.iter().filter(|spec| {
+        spec.toggle != Toggle::DisplayGrowLeft && spec.toggle != Toggle::DisplaySpriteComposite
+    }) {
         every.enhancements.toggles.set(spec.toggle, true);
     }
     for launch in [

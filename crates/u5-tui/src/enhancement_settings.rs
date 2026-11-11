@@ -755,7 +755,7 @@ mod tests {
     use super::*;
     use std::collections::HashMap;
     use std::fs;
-    use u5_runtime::enhancements::{Preset, SettingNote};
+    use u5_runtime::enhancements::{Preset, SettingNote, Toggle};
 
     fn temp_dir(label: &str) -> PathBuf {
         let unique = std::time::SystemTime::now()
@@ -911,8 +911,12 @@ mod tests {
         let settings = resolve_launch(Some(&path), &[], LockState::Off);
         assert_eq!(settings.config.as_deref(), Some(path.as_path()));
         assert!(settings.warnings.is_empty());
-        // No feature row has shipped, so Recommended turns nothing on yet.
-        assert!(settings.resolved.is_classic());
+        // Of Recommended's rows only `display.sprite_composite` (chapter 9
+        // P5) has shipped, so it is the one toggle the preset turns on.
+        assert_eq!(
+            settings.resolved.toggles.iter_on().collect::<Vec<_>>(),
+            [Toggle::DisplaySpriteComposite]
+        );
         assert_eq!(
             settings.resolved.preset,
             PresetLabel::Preset(Preset::Recommended)
@@ -1055,8 +1059,8 @@ mod tests {
     #[test]
     fn aliases_come_from_shipped_rows_only() {
         // `--preset` is parsed by `cli.rs` itself; the display rows of
-        // chapter 2 P1, P2 and P8 and chapter 9 P1's `--brightness` are the
-        // only shipped rows with aliases so far.
+        // chapter 2 P1, P2 and P8, chapter 9 P1's `--brightness` and P5's
+        // `--sprite-composite` are the only shipped rows with aliases so far.
         assert_eq!(find_cli_alias("--preset"), None);
         assert_eq!(find_cli_alias("--no-preset"), None);
         assert_eq!(find_cli_alias("--quest-journal"), None);
@@ -1077,6 +1081,7 @@ mod tests {
                 "--fullscreen,",
                 "--fullscreen-key,",
                 "--grow-left,",
+                "--sprite-composite,",
                 "--scale-mode",
                 "--pixel-aspect",
                 "--pillar-fill",

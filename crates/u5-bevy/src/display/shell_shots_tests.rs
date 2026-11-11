@@ -521,3 +521,337 @@ fn brightness_shell_review_shots() {
     }
     let _ = fs::remove_dir_all(&game);
 }
+
+/// One sprite-compositing review scene of the display mockups
+/// (make_display.py, part C): the light scene's target, start, clock and
+/// walk, the transport, and the demo objects placed after the walk as
+/// `(actor byte, x, y)`.
+struct CompositeScene {
+    name: &'static str,
+    target: &'static str,
+    at: (usize, usize),
+    clock: (u8, u8),
+    torch: Option<u8>,
+    ship: bool,
+    walk: &'static [KeyCode],
+    place: &'static [(u8, usize, usize)],
+}
+
+const COMPOSITE_SCENES: [CompositeScene; 4] = [
+    CompositeScene {
+        name: "S1m",
+        target: "BRITANNIA",
+        at: (74, 111),
+        clock: (11, 50),
+        torch: None,
+        ship: false,
+        walk: &S1_WALK,
+        place: &[
+            (196, 68, 112),
+            (204, 71, 113),
+            (200, 70, 110),
+            (216, 64, 106),
+            (164, 76, 111),
+            (28, 78, 108),
+            (128, 84, 112),
+            (132, 88, 114),
+            (140, 90, 111),
+            (208, 73, 103),
+            (236, 83, 110),
+            (232, 66, 114),
+        ],
+    },
+    CompositeScene {
+        name: "S2m",
+        target: "TOWNE:1",
+        at: (15, 19),
+        clock: (12, 0),
+        torch: None,
+        ship: false,
+        walk: &[KeyCode::ArrowUp, KeyCode::ArrowUp],
+        place: &[
+            (1, 8, 21),
+            (2, 10, 21),
+            (3, 12, 22),
+            (5, 14, 22),
+            (6, 6, 22),
+            (144, 20, 19),
+            (196, 25, 19),
+            (148, 22, 13),
+            (7, 19, 20),
+        ],
+    },
+    CompositeScene {
+        name: "S3m",
+        target: "BRITANNIA",
+        at: (74, 111),
+        clock: (21, 50),
+        torch: Some(90),
+        ship: false,
+        walk: &S1_WALK,
+        place: &[
+            (196, 74, 108),
+            (204, 77, 110),
+            (200, 75, 106),
+            (148, 78, 107),
+        ],
+    },
+    CompositeScene {
+        name: "S4m",
+        target: "BRITANNIA",
+        at: (86, 113),
+        clock: (12, 0),
+        torch: None,
+        ship: true,
+        walk: &[KeyCode::ArrowLeft, KeyCode::ArrowLeft],
+        place: &[
+            (128, 89, 111),
+            (132, 84, 116),
+            (140, 93, 113),
+            (236, 86, 110),
+        ],
+    },
+];
+
+/// The mockup renderer's `--place`: each object goes into an empty slot,
+/// else the slot farthest from the party (or on another floor), on the
+/// current floor, standing still.
+fn place_objects(state: &mut PlayState, place: &[(u8, usize, usize)]) {
+    let z = state.current_floor().unwrap_or(0);
+    let mut used: Vec<usize> = Vec::new();
+    for &(byte, x, y) in place {
+        let (px, py) = (state.player.x as isize, state.player.y as isize);
+        let slot = (1..state.active_objects.len())
+            .find(|&i| state.active_objects[i].is_empty())
+            .or_else(|| {
+                (1..state.active_objects.len())
+                    .filter(|i| !used.contains(i))
+                    .max_by_key(|&i| {
+                        let o = state.active_objects[i];
+                        if o.z != z {
+                            return isize::MAX;
+                        }
+                        let (dx, dy) = (o.x as isize - px, o.y as isize - py);
+                        dx * dx + dy * dy
+                    })
+            })
+            .expect("an object slot");
+        used.push(slot);
+        state.active_objects[slot] = u5_runtime::ActiveObject {
+            type_byte: byte,
+            tile: byte,
+            x,
+            y,
+            z,
+            phase: u5_runtime::STEADY_PHASE,
+            aux1: 0,
+            aux3: 0,
+        };
+    }
+}
+
+/// Build plan M2-06: the composite step through the whole shell, in the
+/// display mockups' part C scenes (S1 by day, S2 Britain, S3 at night with
+/// a torch, S4 the ship, each with the mockups' placed demo objects) on the
+/// 16:9 grow-left canvas, with compositing off, on without the halo and on
+/// with it, against `display-C-<scene>-off.png`, `-flood.png` and
+/// `-halo.png`. The step composites the core (the 11x11 view); the ring
+/// keeps its boxes until P5b (M2-07), so the core is compared with the
+/// variant's mockup and the ring with the `off` mockup. Review output only:
+/// skipped unless `U5_MOCKUP_PROFILE`, `U5_DISPLAY_MOCKUPS` and
+/// `U5_COMPOSITE_SHOTS` (the output folder) are set. Writes
+/// `composite-<scene>-<variant>.png` and `-side-by-side.png` (mockup above,
+/// shell below, 2x), and reports the differing pixels per region.
+#[test]
+fn composite_shell_review_shots() {
+    let (Some(profile), Some(mockups), Some(out)) = (
+        configured_test_dir("U5_MOCKUP_PROFILE"),
+        configured_test_dir("U5_DISPLAY_MOCKUPS"),
+        configured_test_dir("U5_COMPOSITE_SHOTS"),
+    ) else {
+        eprintln!("skipped: set U5_MOCKUP_PROFILE, U5_DISPLAY_MOCKUPS and U5_COMPOSITE_SHOTS");
+        return;
+    };
+    fs::create_dir_all(&out).unwrap();
+    let game = unique_scratch_dir("display-composite-shots");
+    for entry in fs::read_dir(&profile).unwrap() {
+        let entry = entry.unwrap();
+        if entry.file_type().unwrap().is_file() {
+            copy_asset_writable(&entry.path(), &game.join(entry.file_name())).unwrap();
+        }
+    }
+    let scene = Scene::from_game_dir(&game).unwrap();
+    let canvas = Canvas::for_window(W16.0, W16.1, PixelAspect::Dos).unwrap();
+    let (w, h) = (canvas.w, canvas.h);
+    let launch = {
+        let cli = vec![
+            CliSetting::Enable("display.grow_left".into()),
+            CliSetting::Enable("display.sprite_composite".into()),
+        ];
+        let enhancements = resolve(ResolveInput {
+            stored: None,
+            cli: &cli,
+            lock: LockState::Off,
+            caps: HostCapabilities::ALL,
+        });
+        assert!(enhancements.notes.is_empty(), "{:?}", enhancements.notes);
+        VisualLaunchConfig {
+            enhancements,
+            ..VisualLaunchConfig::classic()
+        }
+    };
+    for composite in &COMPOSITE_SCENES {
+        let mut options = load_play_options_from_save(&game).unwrap();
+        options.target = PlayTarget::from_key(composite.target).unwrap();
+        options.saved_active_objects = None;
+        options.start = Some(composite.at);
+        options.clock = GameClock::new(composite.clock.0, composite.clock.1).unwrap();
+        if let Some(torch) = composite.torch {
+            options.torch_counter = torch;
+        }
+        if composite.ship {
+            options.transport = u5_runtime::TransportState::Ship {
+                type_byte: u5_runtime::FIRST_PLAYABLE_FRIGATE_TILE,
+                tile: u5_runtime::FIRST_PLAYABLE_FRIGATE_TILE,
+                sails_hoisted: false,
+                hull: u5_runtime::FIRST_PLAYABLE_FULL_SHIP_HULL,
+                skiffs: 2,
+            };
+        }
+        let state = PlayState::load_scene(&game, options).unwrap();
+        let mut timeline = Timeline::new(10 + composite.walk.len() * 30 + 40);
+        for (index, key) in composite.walk.iter().enumerate() {
+            timeline.game_tap(10 + index * 30, *key);
+        }
+        let mut shell = Shell::new(state, &scene, &launch, |_| {});
+        shell.app.world_mut().spawn(Window {
+            resolution: WindowResolution::new(W16.0 as f32, W16.1 as f32),
+            ..default()
+        });
+        for index in 0..timeline.len() {
+            shell.step(timeline.frame(index));
+        }
+        // Stop the clock, place the demo objects and repaint, so the three
+        // images show one game state with the objects standing still.
+        shell
+            .app
+            .insert_resource(bevy::time::TimeUpdateStrategy::ManualDuration(
+                std::time::Duration::ZERO,
+            ));
+        shell.step(&[]);
+        shell
+            .app
+            .world_mut()
+            .resource_scope(|world, mut images: Mut<Assets<Image>>| {
+                let mut visual = world.resource_mut::<crate::VisualState>();
+                place_objects(&mut visual.state, composite.place);
+                crate::repaint_visual_frame(&mut visual, &mut images, "review placement");
+            });
+        let mut ours_off: Option<Vec<u8>> = None;
+        for (variant, on, halo) in [
+            ("off", false, true),
+            ("flood", true, false),
+            ("halo", true, true),
+        ] {
+            {
+                let mut display = shell.app.world_mut().resource_mut::<super::Display>();
+                if display.0.light.composite != on || display.0.light.halo != halo {
+                    display.0.light.composite = on;
+                    display.0.light.halo = halo;
+                }
+            }
+            shell.step(&[]);
+            shell.step(&[]);
+            let world = shell.app.world();
+            let view = world.resource::<ColumnState>().view();
+            let (cx, cy, side) = compose::core_rect(&canvas.for_column(view, false));
+            let handle = world
+                .resource::<PresentHost>()
+                .presented()
+                .expect("the canvas is presented")
+                .clone();
+            let image = world.resource::<Assets<Image>>().get(&handle).unwrap();
+            assert_eq!(
+                (image.size().x, image.size().y),
+                (w, h),
+                "{}",
+                composite.name
+            );
+            let ours = image.data.clone().unwrap();
+            let load = |variant: &str| {
+                let name = format!("display-C-{}-{variant}.png", composite.name);
+                let image = image::open(mockups.join(&name)).unwrap().to_rgba8();
+                assert_eq!((image.width(), image.height()), (w, h), "{name}");
+                image.into_raw()
+            };
+            let theirs = load(variant);
+            let off = load("off");
+            let (mx0, my0, mx1, my1) = canvas.map_window();
+            let base = ours_off.get_or_insert_with(|| ours.clone()).clone();
+            // Where our `off` image equals the `off` mockup (the water's
+            // scroll phase and the crawl's rows aside), the variant must
+            // equal the variant's mockup too.
+            let (mut same_base, mut step_differs) = (0, 0);
+            let (mut core, mut ring, mut chrome) = (0, 0, 0);
+            for y in 0..h {
+                for x in 0..w {
+                    let i = ((y * w + x) * 4) as usize;
+                    let in_core = (cx..cx + side).contains(&(x as usize))
+                        && (cy..cy + side).contains(&(y as usize));
+                    let in_map = (mx0..=mx1).contains(&x) && (my0..=my1).contains(&y);
+                    // The ring keeps its boxes until M2-07: compare it with
+                    // the `off` mockup.
+                    if in_core && base[i..i + 3] == off[i..i + 3] {
+                        same_base += 1;
+                        if ours[i..i + 3] != theirs[i..i + 3] {
+                            step_differs += 1;
+                        }
+                    }
+                    let expected = if in_core { &theirs } else { &off };
+                    if ours[i..i + 3] == expected[i..i + 3] {
+                        continue;
+                    }
+                    if in_core {
+                        core += 1;
+                    } else if in_map {
+                        ring += 1;
+                    } else {
+                        chrome += 1;
+                    }
+                }
+            }
+            eprintln!(
+                "composite {} {variant}: core against the {variant} mockup {core}, ring against \
+                 the off mockup {ring}, chrome {chrome}; in the core where the two off images \
+                 agree ({same_base}), {step_differs} differ",
+                composite.name
+            );
+            save_png(
+                &out.join(format!("composite-{}-{variant}.png", composite.name)),
+                w,
+                h,
+                ours.clone(),
+            );
+            let mut strip = image::RgbaImage::new(w * 2, h * 4 + 8);
+            for (row, rgba) in [(0, &theirs), (1, &ours)] {
+                for y in 0..h * 2 {
+                    for x in 0..w * 2 {
+                        let i = (((y / 2) * w + x / 2) * 4) as usize;
+                        strip.put_pixel(
+                            x,
+                            y + row * (h * 2 + 8),
+                            image::Rgba([rgba[i], rgba[i + 1], rgba[i + 2], 0xff]),
+                        );
+                    }
+                }
+            }
+            strip
+                .save(out.join(format!(
+                    "composite-{}-{variant}-side-by-side.png",
+                    composite.name
+                )))
+                .unwrap();
+        }
+    }
+    let _ = fs::remove_dir_all(&game);
+}

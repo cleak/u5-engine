@@ -215,31 +215,45 @@ fn every_chapter_9_row_matches_the_design() {
 }
 
 #[test]
-fn only_p1_of_chapter_9_ships_in_this_build() {
+fn p1_and_p5_of_chapter_9_ship_in_this_build() {
     // M2-01 added the rows; M2-03 ships P1 (`brightness` and
-    // `brightness_scope`) and M2-08 ships P5. P2 is M3's and P3 is
-    // optional (L3).
-    assert!(SHIPPED_PHASES.contains(&LIGHT_P1));
-    for phase in [LIGHT_P2, LIGHT_P3, LIGHT_P5] {
+    // `brightness_scope`) and M2-06 ships P5 (`sprite_composite` and
+    // `composite_halo`). P2 is M3's and P3 is optional (L3).
+    for phase in [LIGHT_P1, LIGHT_P5] {
+        assert!(SHIPPED_PHASES.contains(&phase), "{phase:?}");
+    }
+    for phase in [LIGHT_P2, LIGHT_P3] {
         assert!(!SHIPPED_PHASES.contains(&phase), "{phase:?}");
     }
     for row in CatalogueRow::all().filter(|row| row.ships().chapter == 9) {
-        let p1 = matches!(row.key(), "display.brightness" | "display.brightness_scope");
-        assert_eq!(row.is_shipped(), p1, "{}", row.key());
+        let shipped = matches!(
+            row.key(),
+            "display.brightness"
+                | "display.brightness_scope"
+                | "display.sprite_composite"
+                | "display.composite_halo"
+        );
+        assert_eq!(row.is_shipped(), shipped, "{}", row.key());
     }
-    // The shipped rows resolve with no note.
+    // The shipped rows resolve with no note; the switches leave Classic.
     for cli in [
         enable("display.brightness"),
         set("display.brightness", "70"),
+        enable("display.sprite_composite"),
     ] {
         let resolved = resolve(input(None, std::slice::from_ref(&cli)));
         assert!(!resolved.is_classic(), "{cli:?}");
         assert_eq!(note_lines(&resolved), Vec::<String>::new(), "{cli:?}");
     }
+    // The halo alone is a sub-option of an off feature: no note, still
+    // Classic.
+    let resolved = resolve(input(None, &[set("display.composite_halo", "false")]));
+    assert!(resolved.is_classic());
+    assert_eq!(note_lines(&resolved), Vec::<String>::new());
     // The hidden ones are refused with a note and leave the game Classic.
     for cli in [
-        enable("display.sprite_composite"),
-        set("display.composite_halo", "false"),
+        set("display.map_brightness", "70"),
+        set("display.vignette", "20"),
     ] {
         let resolved = resolve(input(None, std::slice::from_ref(&cli)));
         assert!(resolved.is_classic(), "{cli:?}");
@@ -480,9 +494,9 @@ fn the_view_reads_file_and_command_line_values() {
 }
 
 #[test]
-fn presets_skip_the_hidden_rows_and_never_set_brightness() {
-    // Recommended and Everything name `sprite_composite` (U16), but its row
-    // is hidden, so neither turns it on in this build.
+fn presets_set_compositing_and_never_set_brightness() {
+    // Recommended and Everything name `sprite_composite` (U16), and P5 has
+    // shipped (M2-06), so both turn it on; the halo keeps its default.
     for preset in [Preset::Recommended, Preset::Everything] {
         assert!(
             preset
@@ -491,17 +505,15 @@ fn presets_skip_the_hidden_rows_and_never_set_brightness() {
                 .any(|entry| entry.key == SPRITE_COMPOSITE_KEY),
             "{preset:?}"
         );
-        assert!(!preset.toggles().on(Toggle::DisplaySpriteComposite));
+        assert!(preset.toggles().on(Toggle::DisplaySpriteComposite));
         let resolved = resolve(input(None, &[CliSetting::Preset(preset)]));
-        assert!(!resolved.display_light().composite, "{preset:?}");
-    }
-    // Once P5 ships, they do; the halo keeps its default.
-    for preset in [Preset::Recommended, Preset::Everything] {
-        let resolved = resolve_as_shipped(input(None, &[CliSetting::Preset(preset)]), &[LIGHT_P5]);
         let light = resolved.display_light();
         assert!(light.composite, "{preset:?}");
         assert!(light.halo, "{preset:?}");
     }
+    // Classic does not.
+    let resolved = resolve(input(None, &[CliSetting::Preset(Preset::Classic)]));
+    assert!(!resolved.display_light().composite);
     // No preset names brightness, its scope, map brightness, the vignette
     // or the halo (D9.4, D9.5, D9.6), even with every phase shipped.
     for preset in [Preset::Classic, Preset::Recommended, Preset::Everything] {

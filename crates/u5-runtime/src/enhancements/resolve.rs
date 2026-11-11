@@ -1149,12 +1149,16 @@ mod tests {
     }
 
     #[test]
-    fn a_stored_preset_with_nothing_shipped_is_still_that_preset() {
-        // No preset row has shipped yet, so every preset is Classic's
-        // toggles; the stored name is kept as the label.
+    fn a_stored_preset_sets_only_its_shipped_rows() {
+        // Of Recommended's rows only `display.sprite_composite` has shipped
+        // (chapter 9 P5), so it is the one toggle on; the stored name is
+        // kept as the label.
         let stored = Stored::default().with(PRESET_KEY, text("recommended"));
         let resolved = resolve(input(Some(&stored), &[]));
-        assert!(resolved.is_classic());
+        assert_eq!(
+            resolved.toggles.iter_on().collect::<Vec<_>>(),
+            [Toggle::DisplaySpriteComposite]
+        );
         assert_eq!(resolved.preset, PresetLabel::Preset(Preset::Recommended));
         assert_eq!(resolved.values.str(PRESET_KEY), Some("recommended"));
         assert!(resolved.notes.is_empty());
