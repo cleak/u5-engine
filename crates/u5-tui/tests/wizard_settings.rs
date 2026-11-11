@@ -115,6 +115,8 @@ fn rows_and_presets_come_from_the_catalogue_and_the_file() {
             "display.pixel_aspect",
             "display.pillar_fill",
             "display.vsync",
+            "display.brightness",
+            "display.brightness_scope",
         ]
     );
     // The wider view's row carries its plain label and tag; its six
@@ -131,7 +133,9 @@ fn rows_and_presets_come_from_the_catalogue_and_the_file() {
         .filter(|row| row.indent)
         .map(|row| row.key.as_str())
         .collect();
-    assert_eq!(indented, keys[3..9]);
+    assert_eq!(indented[..6], keys[3..9]);
+    // Chapter 9 (P1): the scope sits under the brightness row.
+    assert_eq!(indented[6..], ["display.brightness_scope"]);
     // Recommended names no shipped row; Everything sets sharp scaling and
     // the F11 key (2.2.1).
     let values = |key: &str| {
@@ -169,6 +173,48 @@ fn rows_and_presets_come_from_the_catalogue_and_the_file() {
     let empty = Scratch::new("empty");
     assert_eq!(wizard_settings(&empty.config(), false).preset, 0);
     assert!(!empty.config().exists());
+}
+
+/// The brightness row (build plan D-M2.4): its 25..100 range is too long
+/// for a list, so the page offers the named stops, 100 (off) first, and
+/// the stored value when it is not a stop. Its default is 100.
+#[test]
+fn the_brightness_row_offers_the_named_stops() {
+    use u5_bevy_setup::RowKind;
+
+    let choices = |text: &str| {
+        let scratch = Scratch::new("stops");
+        fs::write(scratch.config(), text).unwrap();
+        let settings = wizard_settings(&scratch.config(), false);
+        let row = settings
+            .rows
+            .iter()
+            .find(|row| row.key == "display.brightness")
+            .expect("a brightness row")
+            .clone();
+        let RowKind::Choice(choices) = &row.kind else {
+            panic!("the brightness row is a choice: {:?}", row.kind);
+        };
+        let choices: Vec<(String, String)> = choices.clone();
+        (choices, row.value, row.default)
+    };
+    let stops = |extra: &[&str]| {
+        ["100", "85", "70", "55", "40", "25"]
+            .iter()
+            .chain(extra)
+            .map(|n| (n.to_string(), format!("{n}%")))
+            .collect::<Vec<_>>()
+    };
+    let (offered, value, default) = choices("game_dir = \"/g\"\n");
+    assert_eq!(offered, stops(&[]));
+    assert_eq!(value, RowValue::Choice("100".into()));
+    assert_eq!(default, RowValue::Choice("100".into()));
+    let (offered, value, _) = choices("game_dir = \"/g\"\n[display]\nbrightness = 70\n");
+    assert_eq!(offered, stops(&[]));
+    assert_eq!(value, RowValue::Choice("70".into()));
+    let (offered, value, _) = choices("game_dir = \"/g\"\n[display]\nbrightness = 65\n");
+    assert_eq!(offered, stops(&["65"]));
+    assert_eq!(value, RowValue::Choice("65".into()));
 }
 
 #[test]

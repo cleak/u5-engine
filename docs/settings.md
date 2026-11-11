@@ -68,6 +68,7 @@ world view is a deviation, so no preset turns it on.
 | `--pillar-fill FILL` | `--set display.pillar_fill=FILL`: `black`, `solid`, `ribbon` or `bezel`. |
 | `--bezel-image PATH` | `--set display.bezel_image=PATH`: a PNG for the `bezel` fill. |
 | `--grow-left`, `--no-grow-left` | `--enable` / `--disable display.grow_left`: the wider world view (shows more than the original). |
+| `--brightness PERCENT` | `--set display.brightness=PERCENT`: dim the map view, 25 to 100 (100 is the original colours; `--enable display.brightness` sets the suggested 70). `display.brightness_scope` chooses the map view (`map`) or the whole screen (`frame`). |
 
 `config.toml` applies to the default launch (no game folder or mode on the
 command line); other launches use the command line alone. An unknown key on
@@ -247,8 +248,8 @@ one that types keys must change it exactly as typing those keys would:
 | display.panel_guard | Smallest game picture a side panel may leave, in percent | int 50..100 = 80 | a, F | feature | - | - | later (chapter 1 P6) |
 | display.vsync | Wait for the screen's refresh (vsync) | bool = true | a, F | feature | --vsync | - | yes |
 | display.raster | Tile graphics | enum ega\|tandy = ega | a, L | feature | --raster-depth | - | yes |
-| display.brightness | Map view brightness (100% is the original colours) | int 25..100 = 100 | a, F | feature | --brightness | - | later (chapter 9 P1) |
-| display.brightness_scope | Brightness applies to: the map view, or the whole screen | enum map\|frame = map | a, F | feature | - | - | later (chapter 9 P1) |
+| display.brightness | Map view brightness (100% is the original colours) | int 25..100 = 100 | a, F | feature | --brightness | - | yes |
+| display.brightness_scope | Brightness applies to: the map view, or the whole screen | enum map\|frame = map | a, F | feature | - | - | yes |
 | display.map_brightness | Map brightness (full map, gem map) | int 25..100 = 100 | a, F | feature | - | - | later (chapter 9 P2) |
 | display.vignette | Edge darkening | int 0..50 = 0 | a, F | feature | --vignette | - | later (chapter 9 P3) |
 | display.composite_halo | Keep a thin black outline around sprites | bool = true | a, F | feature | - | - | later (chapter 9 P5) |

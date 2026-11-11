@@ -399,7 +399,7 @@ fn wizard_rows(
 ) -> Vec<u5_bevy_setup::SettingRow> {
     use u5_bevy_setup::{RowKind, RowRole, RowValue, SettingRow};
     use u5_runtime::enhancements::{
-        CHEATS_SWITCH, CatalogueRow, OptionDefault, OptionKind, SettingValue, Tier,
+        CHEATS_SWITCH, CatalogueRow, OptionDefault, OptionKind, SettingValue, Tier, named_stops,
     };
 
     /// Small number ranges become a choice; larger ones stay in the file.
@@ -440,6 +440,26 @@ fn wizard_rows(
                                 .collect(),
                         )
                     }
+                    // A longer range offers its named stops (build plan
+                    // D-M2.4), and the stored value when it is not one.
+                    // The stops are percents (design 9.2.1).
+                    OptionKind::Int { .. } => {
+                        let Some(stops) = named_stops(spec.key) else {
+                            continue;
+                        };
+                        let mut numbers = stops.to_vec();
+                        if let Some(SettingValue::Int(stored)) = resolved.values.get(spec.key)
+                            && !numbers.contains(stored)
+                        {
+                            numbers.push(*stored);
+                        }
+                        RowKind::Choice(
+                            numbers
+                                .iter()
+                                .map(|number| (number.to_string(), format!("{number}%")))
+                                .collect(),
+                        )
+                    }
                     _ => continue,
                 };
                 let as_row = |value: &SettingValue| match value {
@@ -471,13 +491,16 @@ fn wizard_rows(
             RowRole::Setting
         };
         let group = setting_group(key);
-        // A sub-option whose parent toggle has a row of its own (the
-        // grow-left rows under `display.grow_left`) sits indented under it.
+        // A sub-option whose parent has a row of its own (the grow-left
+        // rows under `display.grow_left`; `display.brightness_scope` under
+        // the valued `display.brightness`, whose driven switch shares its
+        // key) sits indented under it. One whose parent has no row stays
+        // where it is, unindented (below).
         let parent = match row {
             CatalogueRow::Option(spec) => spec
                 .parent
                 .map(|toggle| toggle.spec())
-                .filter(|parent| !parent.driven && parent.is_shipped())
+                .filter(|parent| parent.is_shipped())
                 .map(|parent| parent.key),
             CatalogueRow::Toggle(_) => None,
         };
@@ -502,6 +525,15 @@ fn wizard_rows(
         ));
     }
     rows.sort_by_key(|(group, _, _)| *group);
+    // A parent without a row of its own leaves its sub-options at the top
+    // level.
+    let keys: Vec<String> = rows.iter().map(|(_, _, row)| row.key.clone()).collect();
+    for (_, parent, row) in rows.iter_mut() {
+        if parent.is_some_and(|parent| !keys.iter().any(|key| key == parent)) {
+            *parent = None;
+            row.indent = false;
+        }
+    }
     // Each sub-option moves to just under its parent, in catalogue order.
     let (subs, tops): (Vec<_>, Vec<_>) = rows.into_iter().partition(|(_, p, _)| p.is_some());
     let mut ordered = Vec::with_capacity(tops.len() + subs.len());

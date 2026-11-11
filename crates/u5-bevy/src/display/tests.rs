@@ -203,9 +203,10 @@ fn a_sub_key_of_an_off_feature_adds_no_plugin() {
 }
 
 /// Chapter 9 (M2-01): brightness below 100 or compositing on brings the
-/// plugin in, with the light settings in `Display`; the two seams add no
-/// system yet. The sub-options alone add nothing. Resolved as if P1 and P5
-/// had shipped: both are hidden in this build.
+/// plugin in, with the light settings in `Display`; brightness adds its
+/// follower (M2-03), compositing nothing yet. The sub-options alone add
+/// nothing. Resolved as if P1 and P5 had shipped (P5 is hidden in this
+/// build).
 #[test]
 fn chapter_9_switches_add_the_plugin_and_sub_options_do_not() {
     use u5_runtime::enhancements::{BrightnessScope, LIGHT_P1, LIGHT_P5};
@@ -242,7 +243,15 @@ fn chapter_9_switches_add_the_plugin_and_sub_options_do_not() {
         let light = app.world().resource::<Display>().0.light;
         assert_eq!(light, launch.enhancements.display_light(), "{cli:?}");
         assert!(!light.is_off(), "{cli:?}");
-        assert_eq!(display_systems(&app), Vec::<String>::new(), "{cli:?}");
+        // M2-03: brightness below 100 brings the step and the system that
+        // follows a menu change; compositing adds nothing yet (M2-06).
+        let follows = display_systems(&app)
+            .iter()
+            .any(|system| system.contains("follow_light_settings"));
+        assert_eq!(follows, light.brightness_on(), "{cli:?}");
+        if !light.brightness_on() {
+            assert_eq!(display_systems(&app), Vec::<String>::new(), "{cli:?}");
+        }
     }
     let launch = light_launch(&[set("display.brightness", "55")]);
     let mut app = App::new();

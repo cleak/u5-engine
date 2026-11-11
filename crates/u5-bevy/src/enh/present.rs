@@ -106,11 +106,108 @@ pub struct PresentedFrame {
     pub rgba: Vec<u8>,
     /// Shown with a linear sampler instead of the faithful nearest one.
     pub smooth: bool,
+    /// Where the map is on the copy, when a step that moved it said so
+    /// (the grow-left canvas, build plan D-M2.5). The host clears it before
+    /// the steps run; without it a later step takes the 320x200 viewport.
+    pub map_region: Option<MapRegion>,
+}
+
+/// The map on a presented copy (design 9.3.3, build plan D-M2.5): the map
+/// rectangles, less the pixels inside them that are text drawn over the
+/// map (the grow-left crawl's glyphs, outlines and end cap). A step that
+/// treats the map alone (the brightness step's scope `map`) reads it.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct MapRegion {
+    /// The copy's size the region was made for.
+    pub size: UVec2,
+    /// The map rectangles, `(x0, y0, x1, y1)` inclusive, not overlapping.
+    pub rects: Vec<(u32, u32, u32, u32)>,
+    /// One flag per pixel of `size`, set where the pixel is not map; empty
+    /// while no pixel is excluded.
+    excluded: Vec<bool>,
+}
+
+impl MapRegion {
+    /// The rectangle `rect` of a `size` copy.
+    pub fn rect(size: UVec2, rect: (u32, u32, u32, u32)) -> Self {
+        Self {
+            size,
+            rects: vec![rect],
+            excluded: Vec::new(),
+        }
+    }
+
+    /// Leave pixel `(x, y)` out (outside the copy: ignored).
+    pub fn exclude(&mut self, x: u32, y: u32) {
+        if x >= self.size.x || y >= self.size.y {
+            return;
+        }
+        if self.excluded.is_empty() {
+            self.excluded = vec![false; (self.size.x * self.size.y) as usize];
+        }
+        self.excluded[(y * self.size.x + x) as usize] = true;
+    }
+
+    /// Whether `(x, y)` was left out.
+    pub fn excludes(&self, x: u32, y: u32) -> bool {
+        !self.excluded.is_empty()
+            && x < self.size.x
+            && y < self.size.y
+            && self.excluded[(y * self.size.x + x) as usize]
+    }
+
+    /// Whether `(x, y)` is map: in a rectangle and not left out.
+    pub fn contains(&self, x: u32, y: u32) -> bool {
+        self.rects
+            .iter()
+            .any(|&(x0, y0, x1, y1)| (x0..=x1).contains(&x) && (y0..=y1).contains(&y))
+            && !self.excludes(x, y)
+    }
+
+    /// How many pixels of the copy are map.
+    pub fn count(&self) -> usize {
+        let mut count = 0;
+        self.for_each_run(|_, x0, x1| count += (x1 - x0) as usize);
+        count
+    }
+
+    /// Calls `f` with each run of map pixels, `(y, x0, x1)` with `x1`
+    /// exclusive, row by row, clipped to the copy.
+    pub fn for_each_run(&self, mut f: impl FnMut(u32, u32, u32)) {
+        let (w, h) = (self.size.x, self.size.y);
+        for &(x0, y0, x1, y1) in &self.rects {
+            if x0 >= w || y0 >= h || x0 > x1 || y0 > y1 {
+                continue;
+            }
+            let (x1, y1) = (x1.min(w - 1), y1.min(h - 1));
+            for y in y0..=y1 {
+                if self.excluded.is_empty() {
+                    f(y, x0, x1 + 1);
+                    continue;
+                }
+                let row = &self.excluded[(y * w) as usize..((y + 1) * w) as usize];
+                let mut x = x0;
+                while x <= x1 {
+                    if row[x as usize] {
+                        x += 1;
+                        continue;
+                    }
+                    let start = x;
+                    while x <= x1 && !row[x as usize] {
+                        x += 1;
+                    }
+                    f(y, start, x);
+                }
+            }
+        }
+    }
 }
 
 impl PresentedFrame {
-    /// Resizes to `size`, black and opaque.
+    /// Resizes to `size`, black and opaque. A map region set before no
+    /// longer fits and is dropped.
     pub fn resize(&mut self, size: UVec2) {
+        self.map_region = None;
         self.size = size;
         self.rgba.clear();
         self.rgba
@@ -379,6 +476,7 @@ pub(crate) fn present_frame(
     };
     host.frame.size = triggers.size;
     host.frame.smooth = false;
+    host.frame.map_region = None;
     host.frame.rgba.clear();
     host.frame.rgba.extend_from_slice(&host.source);
     for step in steps.0.iter_mut() {

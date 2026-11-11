@@ -268,9 +268,23 @@ fn the_faithful_image_is_never_written() {
 /// and one without, as an upload site would, and checks that the faithful
 /// bytes and hash stay those of the frame and the copy is the step's.
 fn assert_frames_pass_untouched(frames: impl Iterator<Item = (String, u64, Vec<u8>)>) {
+    assert_frames_pass_untouched_by(
+        frames,
+        || TestStep::new(StepOrder::HIGHLIGHT),
+        |rgba| stepped(rgba, 0x5a),
+    );
+}
+
+/// [`assert_frames_pass_untouched`] with `make`'s step, whose copy of a
+/// frame is `expect` of it.
+fn assert_frames_pass_untouched_by<S: PresentStep>(
+    frames: impl Iterator<Item = (String, u64, Vec<u8>)>,
+    make: impl Fn() -> S,
+    expect: impl Fn(&[u8]) -> Vec<u8>,
+) {
     let mut off = app();
     let mut on = app();
-    register_present_step(&mut on, TestStep::new(StepOrder::HIGHLIGHT));
+    register_present_step(&mut on, make());
     let mut count = 0;
     for (label, hash, rgba) in frames {
         assert_eq!(hash_bytes(&rgba), hash, "{label}: the suite's own hash");
@@ -289,12 +303,30 @@ fn assert_frames_pass_untouched(frames: impl Iterator<Item = (String, u64, Vec<u
         let presented = presented(&on).expect("a presented copy");
         assert_eq!(
             image_bytes(&on, &presented),
-            stepped(&rgba, 0x5a),
+            expect(&rgba),
             "{label}: the copy"
         );
         count += 1;
     }
     assert!(count > 0, "no frame was checked");
+}
+
+/// The brightness step (M2-03) at 70% over the whole copy, and what it
+/// makes of a frame.
+fn brightness_step() -> crate::display::light::BrightnessStep {
+    use u5_runtime::enhancements::{BrightnessScope, DisplayLight};
+    crate::display::light::BrightnessStep::of(&DisplayLight {
+        brightness: 70,
+        scope: BrightnessScope::Frame,
+        ..DisplayLight::default()
+    })
+    .expect("a step at 70")
+}
+
+fn brightened(rgba: &[u8]) -> Vec<u8> {
+    let mut out = rgba.to_vec();
+    u5_runtime::enhancements::BrightnessLut::for_percent(70).apply_rgba(&mut out);
+    out
 }
 
 #[test]
@@ -306,6 +338,11 @@ fn synthetic_frames_pass_untouched() {
         (format!("pattern-{seed}"), hash_bytes(&rgba), rgba)
     });
     assert_frames_pass_untouched(frames);
+    let frames = (0..4u8).map(|seed| {
+        let rgba = pattern(seed.wrapping_mul(37));
+        (format!("pattern-{seed}"), hash_bytes(&rgba), rgba)
+    });
+    assert_frames_pass_untouched_by(frames, brightness_step, brightened);
 }
 
 // ---------------------------------------------------------------------------
@@ -595,6 +632,13 @@ fn suites_pass_untouched() {
         assert_frames_pass_untouched(
             play.iter()
                 .map(|report| (report.label.clone(), report.byte_hash, read(&report.path))),
+        );
+        // M2-03: the brightness step leaves every faithful frame alone too.
+        assert_frames_pass_untouched_by(
+            play.iter()
+                .map(|report| (report.label.clone(), report.byte_hash, read(&report.path))),
+            brightness_step,
+            brightened,
         );
         let _ = std::fs::remove_dir_all(out);
     }

@@ -1055,8 +1055,8 @@ mod tests {
     #[test]
     fn aliases_come_from_shipped_rows_only() {
         // `--preset` is parsed by `cli.rs` itself; the display rows of
-        // chapter 2 P1, P2 and P8 are the only shipped rows with aliases so
-        // far.
+        // chapter 2 P1, P2 and P8 and chapter 9 P1's `--brightness` are the
+        // only shipped rows with aliases so far.
         assert_eq!(find_cli_alias("--preset"), None);
         assert_eq!(find_cli_alias("--no-preset"), None);
         assert_eq!(find_cli_alias("--quest-journal"), None);
@@ -1081,7 +1081,8 @@ mod tests {
                 "--pixel-aspect",
                 "--pillar-fill",
                 "--bezel-image",
-                "--vsync,"
+                "--vsync,",
+                "--brightness"
             ]
         );
         for row in CatalogueRow::all().filter(|row| row.is_shipped()) {

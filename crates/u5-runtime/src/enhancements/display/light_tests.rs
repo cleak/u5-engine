@@ -215,19 +215,29 @@ fn every_chapter_9_row_matches_the_design() {
 }
 
 #[test]
-fn every_chapter_9_row_is_hidden_in_this_build() {
-    // M2-01 adds the rows; M2-03 ships P1 and M2-08 ships P5. P2 is M3's
-    // and P3 is optional (L3).
-    for phase in ALL_LIGHT {
-        assert!(!SHIPPED_PHASES.contains(phase), "{phase:?}");
+fn only_p1_of_chapter_9_ships_in_this_build() {
+    // M2-01 added the rows; M2-03 ships P1 (`brightness` and
+    // `brightness_scope`) and M2-08 ships P5. P2 is M3's and P3 is
+    // optional (L3).
+    assert!(SHIPPED_PHASES.contains(&LIGHT_P1));
+    for phase in [LIGHT_P2, LIGHT_P3, LIGHT_P5] {
+        assert!(!SHIPPED_PHASES.contains(&phase), "{phase:?}");
     }
     for row in CatalogueRow::all().filter(|row| row.ships().chapter == 9) {
-        assert!(!row.is_shipped(), "{}", row.key());
+        let p1 = matches!(row.key(), "display.brightness" | "display.brightness_scope");
+        assert_eq!(row.is_shipped(), p1, "{}", row.key());
     }
-    // So the real resolver refuses each with a note and stays Classic.
+    // The shipped rows resolve with no note.
     for cli in [
         enable("display.brightness"),
         set("display.brightness", "70"),
+    ] {
+        let resolved = resolve(input(None, std::slice::from_ref(&cli)));
+        assert!(!resolved.is_classic(), "{cli:?}");
+        assert_eq!(note_lines(&resolved), Vec::<String>::new(), "{cli:?}");
+    }
+    // The hidden ones are refused with a note and leave the game Classic.
+    for cli in [
         enable("display.sprite_composite"),
         set("display.composite_halo", "false"),
     ] {

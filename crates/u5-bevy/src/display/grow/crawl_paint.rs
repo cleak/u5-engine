@@ -92,12 +92,14 @@ pub struct Ink {
 /// for the open column.
 pub type Clip = (u32, u32, u32, u32);
 
-/// What [`paint_lines`] drew: the y of each line, top to bottom, and every
-/// glyph pixel (the cursor's included; the end cap's not).
+/// What [`paint_lines`] drew: the y of each line, top to bottom, every
+/// glyph pixel (the cursor's included; the end cap's not), and the end
+/// cap's pixels, its join with the border included.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct Painted {
     pub ys: Vec<u32>,
     pub ink: Vec<Ink>,
+    pub cap: Vec<(u32, u32)>,
 }
 
 /// Step 7: the crawl (see the module text). Returns the y of each line
@@ -143,6 +145,7 @@ pub fn paint_lines(
     let top = bottom - CELL * (lines.len() as u32 - 1);
     let w = canvas.w;
     let mut ink = Vec::new();
+    let mut cap_pixels = Vec::new();
     let mut ys = Vec::with_capacity(lines.len());
     let mut live_y = None;
     for (index, line) in lines.iter().enumerate() {
@@ -202,15 +205,21 @@ pub fn paint_lines(
             for (col, pixel) in pixels.iter().enumerate() {
                 if let Some(index) = pixel {
                     put(rgba, w, CAP_X + col as u32, py, rgb(*index));
+                    cap_pixels.push((CAP_X + col as u32, py));
                 }
             }
             // The border's blue flows into the cap.
             if pixels[0] == Some(BAND_BLUE) {
                 put(rgba, w, CAP_X - 1, py, rgb(BAND_BLUE));
+                cap_pixels.push((CAP_X - 1, py));
             }
         }
     }
-    Painted { ys, ink }
+    Painted {
+        ys,
+        ink,
+        cap: cap_pixels,
+    }
 }
 
 fn rgb(index: u8) -> [u8; 3] {

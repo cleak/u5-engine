@@ -38,9 +38,12 @@
 
 use std::time::Duration;
 
+use bevy::math::UVec2;
+
 use super::grow::column::{COLUMN_X0, ColumnView};
 use super::grow::crawl_paint::{CrawlPaint, paint_crawl_painted};
 use super::grow::{BOTTOM_BAND, Canvas, TOP_BAND};
+use crate::enh::present::MapRegion;
 
 /// The 4x4 ordered-dither matrix.
 pub const BAYER4: [[u8; 4]; 4] = [[0, 8, 2, 10], [12, 4, 14, 6], [3, 11, 1, 9], [15, 7, 13, 5]];
@@ -237,45 +240,109 @@ pub struct EffectImages<'a> {
     pub neutral: &'a [u8],
 }
 
+/// Which of the three images a canvas pixel shows at one step of the
+/// effect.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Pick {
+    Closed,
+    Opened,
+    Neutral,
+}
+
+/// The per-pixel choice of step `k` (1..=7): shared by the picture
+/// ([`blend`]) and its map region ([`blend_regions`]), so the two always
+/// agree.
+struct Picker<'a> {
+    k: u8,
+    top: u32,
+    bottom: u32,
+    h: u32,
+    text_open: bool,
+    text: &'a TextMask,
+}
+
+impl<'a> Picker<'a> {
+    fn new(canvas: &Canvas, k: u8, text: &'a TextMask) -> Self {
+        let (top, bottom) = sweep_rows(canvas);
+        Self {
+            k,
+            top,
+            bottom,
+            h: canvas.h,
+            text_open: k >= swap_step(text, canvas),
+            text,
+        }
+    }
+
+    fn at(&self, x: u32, y: u32) -> Pick {
+        let open = |open: bool| if open { Pick::Opened } else { Pick::Closed };
+        let in_band = y < TOP_BAND || y >= self.h - BOTTOM_BAND;
+        let in_sweep = (SWEEP_X0..SWEEP_X1).contains(&x) && (self.top..self.bottom).contains(&y);
+        if in_sweep {
+            if self.text.contains(x, y) {
+                open(self.text_open)
+            } else {
+                open(sweep_step(x, y, self.top, self.bottom) <= self.k)
+            }
+        } else if in_band {
+            match band_pick(x, y, self.k) {
+                BandPick::Closed => Pick::Closed,
+                BandPick::Opened => Pick::Opened,
+                BandPick::Neutral => Pick::Neutral,
+            }
+        } else if self.text.contains(x, y) {
+            open(self.text_open)
+        } else {
+            open(self.k >= PAN_STEP)
+        }
+    }
+}
+
 /// Compose step 9 (2.3.7, 2.3.10): step `k` (1..=7) of the opening
 /// sequence. Closing shows the same steps from 7 down to 1.
 pub fn blend(images: EffectImages<'_>, canvas: &Canvas, k: u8, text: &TextMask) -> Vec<u8> {
     let (w, h) = (canvas.w, canvas.h);
-    let (top, bottom) = sweep_rows(canvas);
-    let swap = swap_step(text, canvas);
-    let text_open = k >= swap;
+    let picker = Picker::new(canvas, k, text);
     let mut out = images.closed.to_vec();
     for y in 0..h {
-        let in_band = y < TOP_BAND || y >= h - BOTTOM_BAND;
         for x in 0..w {
-            let in_sweep = (SWEEP_X0..SWEEP_X1).contains(&x) && (top..bottom).contains(&y);
-            let open = if in_sweep {
-                if text.contains(x, y) {
-                    Some(text_open)
-                } else {
-                    Some(sweep_step(x, y, top, bottom) <= k)
-                }
-            } else if in_band {
-                match band_pick(x, y, k) {
-                    BandPick::Closed => Some(false),
-                    BandPick::Opened => Some(true),
-                    BandPick::Neutral => None,
-                }
-            } else if text.contains(x, y) {
-                Some(text_open)
-            } else {
-                Some(k >= PAN_STEP)
-            };
-            let source = match open {
-                Some(false) => continue,
-                Some(true) => images.opened,
-                None => images.neutral,
+            let source = match picker.at(x, y) {
+                Pick::Closed => continue,
+                Pick::Opened => images.opened,
+                Pick::Neutral => images.neutral,
             };
             let at = ((y * w + x) * 4) as usize;
             out[at..at + 4].copy_from_slice(&source[at..at + 4]);
         }
     }
     out
+}
+
+/// The map region of [`blend`]'s picture (build plan D-M2.5): each pixel
+/// is map where the image it shows has map there. `regions` are the
+/// closed, opened and neutral images' regions, in that order.
+pub fn blend_regions(
+    regions: [&MapRegion; 3],
+    canvas: &Canvas,
+    k: u8,
+    text: &TextMask,
+) -> MapRegion {
+    let picker = Picker::new(canvas, k, text);
+    let mut region = MapRegion::rect(UVec2::new(canvas.w, canvas.h), canvas.map_window());
+    let (x0, y0, x1, y1) = canvas.map_window();
+    for y in y0..=y1 {
+        for x in x0..=x1 {
+            let source = match picker.at(x, y) {
+                Pick::Closed => regions[0],
+                Pick::Opened => regions[1],
+                Pick::Neutral => regions[2],
+            };
+            if !source.contains(x, y) {
+                region.exclude(x, y);
+            }
+        }
+    }
+    region
 }
 
 /// Ctrl+P: flip the player's column state; with `dither` on, start the

@@ -202,6 +202,10 @@ mod crawl_agreement;
 /// (Phase B design 2.3.7).
 #[cfg(test)]
 mod grow_agreement;
+/// Test-only recorder for the brightness step on every suite state (Phase B
+/// design 9.3.3, M2-03).
+#[cfg(test)]
+mod light_agreement;
 /// Test-only recorder for the ring peek's fixed-screen agreement test
 /// (Phase B design 2.3.6).
 #[cfg(test)]
@@ -17780,6 +17784,8 @@ fn render_visual_play_frame_with_input_and_cursor(
     #[cfg(test)]
     grow_agreement::note(state, atlas, ctx.ibm, &rgba);
     #[cfg(test)]
+    light_agreement::note(state, atlas, ctx.ibm, &rgba);
+    #[cfg(test)]
     crawl_agreement::note(
         state,
         crawl_agreement::Drawn {
@@ -27506,6 +27512,30 @@ mod tests {
         assert!(tally.mismatches.is_empty(), "{:#?}", tally.mismatches);
     }
 
+    /// Phase B M2-03 (design 9.3.3): the brightness recorder's checks on
+    /// synthetic frames: the top-down view (with its canvas), combat and a
+    /// fixed screen.
+    #[test]
+    fn brightness_region_rules_on_synthetic_frames() {
+        let atlas = synthetic_tile_atlas(TileGraphicsDepth::Ega16);
+        let font = staircase_corner_font();
+        let plain = test_state(open_grid(), 5, 5);
+        let mut combat = plain.clone();
+        combat.combat_active = true;
+        let mut fixed = plain.clone();
+        fixed.cutscene_black_viewport = true;
+
+        light_agreement::start();
+        for mut state in [plain, combat, fixed] {
+            let _ = render_visual_play_frame(&mut state, &atlas, play_ctx(&font));
+        }
+        let tally = light_agreement::finish();
+        assert_eq!(tally.frames, 3, "{tally:?}");
+        assert_eq!(tally.kinds[2] + tally.kinds[4], 2, "{tally:?}");
+        assert_eq!(tally.canvases, 1, "{tally:?}");
+        assert!(tally.mismatches.is_empty(), "{:#?}", tally.mismatches);
+    }
+
     /// A font whose every glyph is distinct and has ink: each row is the
     /// code, its complement and the code again, so a glyph check against
     /// the frame means something.
@@ -27632,6 +27662,7 @@ mod tests {
         accessor_agreement::start();
         grow_agreement::start();
         crawl_agreement::start();
+        light_agreement::start();
         let frames_dir = temp_output_dir("peek-frames");
         visual_frame_suite(&writable_game_dir, TileGraphicsDepth::Ega16, &frames_dir).unwrap();
         let routes_dir = temp_output_dir("peek-routes");
@@ -27640,6 +27671,7 @@ mod tests {
         let (rows_checked, row_mismatches) = accessor_agreement::finish();
         let grow = grow_agreement::finish();
         let crawl = crawl_agreement::finish();
+        let light = light_agreement::finish();
         for dir in [&writable_game_dir, &frames_dir, &routes_dir] {
             let _ = fs::remove_dir_all(dir);
         }
@@ -27682,6 +27714,25 @@ mod tests {
         assert!(crawl.with_older > 0, "{crawl:?}");
 
         assert_peek_predicate_agrees(&filed);
+
+        // Phase B M2-03 (design 9.3.3): on every suite frame, scope `map`
+        // scales exactly the viewport when a map shows and nothing
+        // otherwise, scope `frame` scales every pixel, and on the top-down
+        // view the grow-left canvas scales only its map, with the dimmed
+        // core equal to the dimmed viewport and the column untouched.
+        println!(
+            "brightness: {} frames (world {}, town {}, combat {}, dungeon {}, no map {}), {} canvases",
+            light.frames,
+            light.kinds[0],
+            light.kinds[1],
+            light.kinds[2],
+            light.kinds[3],
+            light.kinds[4],
+            light.canvases
+        );
+        assert!(light.kinds.iter().all(|count| *count > 0), "{light:?}");
+        assert!(light.canvases > 0, "{light:?}");
+        assert!(light.mismatches.is_empty(), "{:#?}", light.mismatches);
 
         // Phase B M1-08 (design 2.3.1): on every suite frame that painted
         // the ordinary panel rows, the stats-row accessors return the text

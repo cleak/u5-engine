@@ -20,9 +20,12 @@ use u5_runtime::{
 };
 
 use super::bands::{BandSnapshot, paint_bands, paint_neutral_bands};
-use super::column::{ColumnText, ColumnView, paint_column};
-use super::crawl_paint::{CrawlPaint, paint_crawl};
+use bevy::math::UVec2;
+
+use super::column::{COLUMN_RULE_X, ColumnText, ColumnView, paint_column};
+use super::crawl_paint::{CrawlPaint, Painted, paint_crawl_painted};
 use super::{CORE_SIDE, Canvas};
+use crate::enh::present::MapRegion;
 use crate::{EGA_PALETTE_RGB, VISUAL_PLAY_FRAME_HEIGHT, VISUAL_PLAY_FRAME_WIDTH};
 
 /// The band blue, EGA 1.
@@ -238,6 +241,57 @@ pub fn compose_grow_left_with(
     column: ColumnView,
     mode: BandMode,
 ) -> Vec<u8> {
+    compose_grow_left_mapped(
+        faithful, ring, window, canvas, flash, bands, crawl, column, mode,
+    )
+    .0
+}
+
+/// The map region of a composed canvas (build plan D-M2.5): the map
+/// window, less the docked column while it is `shown` (x up to its rule,
+/// [`COLUMN_RULE_X`]), and less the crawl's glyphs, their outlines (the
+/// eight neighbours clipped to the map window, as drawn) and its end cap,
+/// from what the crawl `painted`. The ribbon and tabs are on the bands,
+/// outside the map window.
+pub fn view_map_region(canvas: &Canvas, shown: bool, painted: Option<&Painted>) -> MapRegion {
+    let (x0, y0, x1, y1) = canvas.map_window();
+    let left = if shown { COLUMN_RULE_X + 1 } else { x0 };
+    let mut region = MapRegion::rect(UVec2::new(canvas.w, canvas.h), (left, y0, x1, y1));
+    let Some(painted) = painted else {
+        return region;
+    };
+    for ink in &painted.ink {
+        for dy in -1i64..=1 {
+            for dx in -1i64..=1 {
+                let (x, y) = (i64::from(ink.x) + dx, i64::from(ink.y) + dy);
+                if (i64::from(x0)..=i64::from(x1)).contains(&x)
+                    && (i64::from(y0)..=i64::from(y1)).contains(&y)
+                {
+                    region.exclude(x as u32, y as u32);
+                }
+            }
+        }
+    }
+    for &(x, y) in &painted.cap {
+        region.exclude(x, y);
+    }
+    region
+}
+
+/// [`compose_grow_left_with`], with the canvas's map region
+/// ([`view_map_region`]).
+#[allow(clippy::too_many_arguments)]
+pub fn compose_grow_left_mapped(
+    faithful: &[u8],
+    ring: &[u8],
+    window: PeekWindow,
+    canvas: &Canvas,
+    flash: Option<PotionFlashPlayback>,
+    bands: Option<Bands<'_>>,
+    crawl: Option<CrawlPaint<'_>>,
+    column: ColumnView,
+    mode: BandMode,
+) -> (Vec<u8>, MapRegion) {
     let mut rgba = vec![0; canvas.w as usize * canvas.h as usize * 4];
     paint_chrome(&mut rgba, canvas);
     paint_ring(&mut rgba, canvas, window, ring);
@@ -271,8 +325,12 @@ pub fn compose_grow_left_with(
             typed_colour: crawl.typed_colour,
         });
         paint_column(&mut rgba, canvas, faithful, text, column.page_mode);
+        (rgba, view_map_region(canvas, true, None))
     } else if let Some(crawl) = crawl {
-        paint_crawl(&mut rgba, canvas, crawl);
+        let painted = paint_crawl_painted(&mut rgba, canvas, crawl);
+        let region = view_map_region(canvas, false, Some(&painted));
+        (rgba, region)
+    } else {
+        (rgba, view_map_region(canvas, false, None))
     }
-    rgba
 }

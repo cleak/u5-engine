@@ -78,7 +78,8 @@ use super::effects;
 use super::scale::Aspect;
 use crate::enh::input::EnhActionEvent;
 use crate::enh::present::{
-    PresentInput, PresentStep, PresentSteps, PresentedFrame, StepOrder, register_present_step,
+    MapRegion, PresentInput, PresentStep, PresentSteps, PresentedFrame, StepOrder,
+    register_present_step,
 };
 use crate::enh::side::{FrameImageSize, layout_side_space};
 use crate::{EnhSet, VISUAL_PLAY_FRAME_HEIGHT, VISUAL_PLAY_FRAME_WIDTH, VisualState};
@@ -300,6 +301,20 @@ pub fn compose_for_state(
     canvas: &Canvas,
     options: ComposeOptions<'_>,
 ) -> Option<Vec<u8>> {
+    compose_for_state_mapped(frame, state, atlas, canvas, options).map(|(rgba, _)| rgba)
+}
+
+/// [`compose_for_state`], with the canvas's map region (build plan
+/// D-M2.5): the map window less the shown column and the crawl's text
+/// ([`compose::view_map_region`]); during the effect, each pixel's region
+/// follows the image it shows ([`effects::blend_regions`]).
+pub fn compose_for_state_mapped(
+    frame: &[u8],
+    state: &PlayState,
+    atlas: &TileAtlas,
+    canvas: &Canvas,
+    options: ComposeOptions<'_>,
+) -> Option<(Vec<u8>, MapRegion)> {
     let view = ColumnView {
         page_mode: column::page_mode_active(state),
         ..options.column
@@ -317,7 +332,7 @@ pub fn compose_for_state(
         open: true,
         ..closed
     };
-    let collapsed = compose_view(
+    let (collapsed, collapsed_region) = compose_view(
         frame,
         state,
         atlas,
@@ -326,7 +341,7 @@ pub fn compose_for_state(
         closed,
         BandMode::Follow,
     )?;
-    let open = compose_view(
+    let (open, open_region) = compose_view(
         frame,
         state,
         atlas,
@@ -335,7 +350,7 @@ pub fn compose_for_state(
         opened,
         BandMode::Follow,
     )?;
-    let neutral = compose_view(
+    let (neutral, neutral_region) = compose_view(
         frame,
         state,
         atlas,
@@ -351,7 +366,13 @@ pub fn compose_for_state(
         || effects::TextMask::empty(canvas),
         |crawl| effects::TextMask::of_crawl(canvas, crawl),
     );
-    Some(effects::blend(
+    let region = effects::blend_regions(
+        [&collapsed_region, &open_region, &neutral_region],
+        canvas,
+        k,
+        &text,
+    );
+    let rgba = effects::blend(
         effects::EffectImages {
             closed: &collapsed,
             opened: &open,
@@ -360,7 +381,8 @@ pub fn compose_for_state(
         canvas,
         k,
         &text,
-    ))
+    );
+    Some((rgba, region))
 }
 
 /// The neutral image of the open and close effect for `state`: the
@@ -387,6 +409,7 @@ pub fn compose_neutral_for_state(
         view,
         BandMode::Neutral,
     )
+    .map(|(rgba, _)| rgba)
 }
 
 /// Steps 1-8 for `view` (its `page_mode` already taken from `state`).
@@ -398,7 +421,7 @@ fn compose_view(
     options: ComposeOptions<'_>,
     view: ColumnView,
     mode: BandMode,
-) -> Option<Vec<u8>> {
+) -> Option<(Vec<u8>, MapRegion)> {
     let canvas = &canvas.for_column(view, options.centre_party);
     let window = compose::peek_window(canvas);
     let ring = state.peek_top_down_ring(window, options.light)?;
@@ -409,7 +432,7 @@ fn compose_view(
     } else {
         None
     };
-    Some(compose::compose_grow_left_with(
+    Some(compose::compose_grow_left_mapped(
         frame,
         &ring_rgba,
         window,
@@ -713,11 +736,16 @@ impl PresentStep for GrowLeftCompose {
             column,
             centre_party: settings.centre_party,
         };
-        let Some(rgba) = compose_for_state(&frame.rgba, state, atlas, &canvas, options) else {
+        let Some((rgba, region)) =
+            compose_for_state_mapped(&frame.rgba, state, atlas, &canvas, options)
+        else {
             return;
         };
         frame.size = UVec2::new(canvas.w, canvas.h);
         frame.rgba = rgba;
+        // Where the map is on the canvas, for `[brightness]` (D-M2.5): the
+        // crawl and the column stay at full colour.
+        frame.map_region = Some(region);
     }
 }
 
