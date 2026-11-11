@@ -26,6 +26,9 @@
 //!   on except cheats (design 1.3.12).
 //! - [`light`]: chapter 9's colour transforms, the sRGB transfer pair,
 //!   the maps' coverage curve and the [`BrightnessLut`] (design 9.3.2).
+//! - [`sprite_mask`]: chapter 9's sprite background masks and halo, and
+//!   [`composite_eligible`], the rule for which object cells composite
+//!   (design 9.3.6, 9.3.9).
 //! - [`idle`]: the idle-prompt predicate's runtime half,
 //!   [`PlayState::idle_command_prompt`](crate::PlayState::idle_command_prompt)
 //!   (design 1.3.7).
@@ -48,6 +51,7 @@ pub mod matrix;
 pub mod resolve;
 pub mod sidecar;
 pub mod source;
+pub mod sprite_mask;
 
 pub use catalogue::{
     ApplyAt, CatalogueRow, EffectClass, FeatureToggles, OPTIONS, OptionDefault, OptionKind,
@@ -91,4 +95,9 @@ pub use sidecar::{
 pub use source::{
     Capability, CliSetting, HostCapabilities, LockReason, LockState, SettingNote, SettingValue,
     SettingsSink, SettingsSource, ValueProblem,
+};
+pub use sprite_mask::{
+    ACTOR_HALF_TILES, COMBAT_FIELDS, DARK_BODY, FURNITURE_UNDER, KEEP_THE_BOX, NEAR_EMPTY_PIXELS,
+    SpriteMasks, TileMask, composite_eligible, flood_mask, halo_of, keeps_box, mask_bit,
+    mask_count,
 };
