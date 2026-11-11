@@ -35,7 +35,8 @@
 //! `docs/settings.md`; a test keeps the two equal.
 
 use super::display::{
-    GROW_LEFT_LIGHT_WORDS, PILLAR_FILL_WORDS, PIXEL_ASPECT_WORDS, RASTER_WORDS, SCALE_MODE_WORDS,
+    BRIGHTNESS_SCOPE_WORDS, GROW_LEFT_LIGHT_WORDS, PILLAR_FILL_WORDS, PIXEL_ASPECT_WORDS,
+    RASTER_WORDS, SCALE_MODE_WORDS,
 };
 use super::source::Capability;
 
@@ -128,6 +129,17 @@ pub const DISPLAY_P2: Phase = Phase::new(2, "P2");
 /// Chapter 2, P8: the grow-left layout and its sub-toggles, unhidden by the
 /// milestone's release package (build plan M1-16).
 pub const DISPLAY_P8: Phase = Phase::new(2, "P8");
+/// Chapter 9, P1: brightness on the map view (`display.brightness` and
+/// `display.brightness_scope`; build plan M2-03).
+pub const LIGHT_P1: Phase = Phase::new(9, "P1");
+/// Chapter 9, P2: map brightness for the full map and gem map
+/// (`display.map_brightness`; build plan M3).
+pub const LIGHT_P2: Phase = Phase::new(9, "P2");
+/// Chapter 9, P3 (optional): the vignette (`display.vignette`).
+pub const LIGHT_P3: Phase = Phase::new(9, "P3");
+/// Chapter 9, P5: sprite compositing (`display.sprite_composite` and
+/// `display.composite_halo`; build plan M2).
+pub const LIGHT_P5: Phase = Phase::new(9, "P5");
 
 /// Every phase that has shipped in this build. Shipping a phase is adding
 /// it here, in the package that completes it; its rows then become
@@ -299,6 +311,59 @@ toggles! {
         needs: &[],
         driven: true,
     },
+    // `[display]`, chapter 9 (design 9.4.1). Every row is class (a),
+    // applied at the next frame, and hidden until its phase ships (U13).
+    // `brightness`, `map_brightness` and `vignette` are valued settings
+    // whose switches are driven: on while the value is away from its
+    // default (100, 100 and 0).
+    DisplayBrightness = "display.brightness" {
+        label: "Map view brightness",
+        class: EffectClass::Presentation,
+        apply: ApplyAt::Frame,
+        tier: Tier::Feature,
+        ships: LIGHT_P1,
+        tags: &[],
+        cli_aliases: &[],
+        soft_deps: &[],
+        needs: &[],
+        driven: true,
+    },
+    DisplayMapBrightness = "display.map_brightness" {
+        label: "Map brightness (full map, gem map)",
+        class: EffectClass::Presentation,
+        apply: ApplyAt::Frame,
+        tier: Tier::Feature,
+        ships: LIGHT_P2,
+        tags: &[],
+        cli_aliases: &[],
+        soft_deps: &[],
+        needs: &[],
+        driven: true,
+    },
+    DisplayVignette = "display.vignette" {
+        label: "Edge darkening",
+        class: EffectClass::Presentation,
+        apply: ApplyAt::Frame,
+        tier: Tier::Feature,
+        ships: LIGHT_P3,
+        tags: &[],
+        cli_aliases: &[],
+        soft_deps: &[],
+        needs: &[],
+        driven: true,
+    },
+    DisplaySpriteComposite = "display.sprite_composite" {
+        label: "Sprites over terrain (no black boxes)",
+        class: EffectClass::Presentation,
+        apply: ApplyAt::Frame,
+        tier: Tier::Feature,
+        ships: LIGHT_P5,
+        tags: &[],
+        cli_aliases: &["--sprite-composite"],
+        soft_deps: &[],
+        needs: &[],
+        driven: false,
+    },
 }
 
 // One bit per toggle in a `u128`.
@@ -428,6 +493,12 @@ pub struct OptionSpec {
     /// the default with a note (1.3.14). A chord naming an F-key also
     /// needs [`Capability::FunctionKeys`], whatever this lists.
     pub needs: &'static [Capability],
+    /// For an `Int` row that is a valued toggle: the values `--enable` and
+    /// `--disable` set, in that order (build plan D-M2.3). For
+    /// `display.brightness` that is (70, 100): the suggested level, and
+    /// off. `None` for every other row; `--enable` on a non-`Bool` row
+    /// without one is a `NotASwitch` note.
+    pub switch: Option<(i64, i64)>,
 }
 
 impl OptionSpec {
@@ -467,6 +538,7 @@ const fn key_row(key: &'static str, label: &'static str, chord: &'static str) ->
         toggle: None,
         parent: None,
         needs: &[Capability::Keyboard],
+        switch: None,
     }
 }
 
@@ -521,6 +593,7 @@ const fn display_option(
         toggle,
         parent,
         needs: &[],
+        switch: None,
     }
 }
 
@@ -561,6 +634,7 @@ pub const OPTIONS: &[OptionSpec] = &[
         toggle: None,
         parent: None,
         needs: &[],
+        switch: None,
     },
     OptionSpec {
         key: "enhancements.preset",
@@ -577,6 +651,7 @@ pub const OPTIONS: &[OptionSpec] = &[
         toggle: None,
         parent: None,
         needs: &[],
+        switch: None,
     },
     key_row("keys.menu", "Open the menu", "F12"),
     key_row("keys.fullscreen", "Switch fullscreen", "F11"),
@@ -697,6 +772,7 @@ pub const OPTIONS: &[OptionSpec] = &[
         toggle: None,
         parent: None,
         needs: &[],
+        switch: None,
     },
     OptionSpec {
         key: "display.panel_guard",
@@ -713,6 +789,7 @@ pub const OPTIONS: &[OptionSpec] = &[
         toggle: None,
         parent: None,
         needs: &[],
+        switch: None,
     },
     display_option(
         "display.vsync",
@@ -739,8 +816,88 @@ pub const OPTIONS: &[OptionSpec] = &[
         toggle: None,
         parent: None,
         needs: &[],
+        switch: None,
     },
+    // Chapter 9 (design 9.4.1), each hidden until its phase ships.
+    OptionSpec {
+        // A valued toggle: 100 is off, and `--enable` / `--disable` set the
+        // suggested 70 and 100 (D-M2.3). A preference for preset purposes,
+        // like `audio.volume`: no preset sets it (D9.4).
+        switch: Some((70, 100)),
+        ..display_option(
+            "display.brightness",
+            "Map view brightness (100% is the original colours)",
+            OptionKind::Int { min: 25, max: 100 },
+            OptionDefault::Int(100),
+            LIGHT_P1,
+            &["--brightness"],
+            Some(Toggle::DisplayBrightness),
+            None,
+        )
+    },
+    // A sub-option of `brightness` (and of `vignette`, once it ships),
+    // inert while both are off.
+    display_option(
+        "display.brightness_scope",
+        "Brightness applies to: the map view, or the whole screen",
+        OptionKind::Enum(BRIGHTNESS_SCOPE_WORDS),
+        OptionDefault::Str("map"),
+        LIGHT_P1,
+        &[],
+        None,
+        Some(Toggle::DisplayBrightness),
+    ),
+    // Its own valued toggle (100 = off), for the full map and the gem map
+    // (M3).
+    display_option(
+        "display.map_brightness",
+        "Map brightness (full map, gem map)",
+        OptionKind::Int { min: 25, max: 100 },
+        OptionDefault::Int(100),
+        LIGHT_P2,
+        &[],
+        Some(Toggle::DisplayMapBrightness),
+        None,
+    ),
+    // Its own valued toggle (0 = off), in no preset (D9.5).
+    display_option(
+        "display.vignette",
+        "Edge darkening",
+        OptionKind::Int { min: 0, max: 50 },
+        OptionDefault::Int(0),
+        LIGHT_P3,
+        &["--vignette"],
+        Some(Toggle::DisplayVignette),
+        None,
+    ),
+    // A preference, default on (D9.6), inert while compositing is off. No
+    // preset sets it.
+    display_option(
+        "display.composite_halo",
+        "Keep a thin black outline around sprites",
+        OptionKind::Bool,
+        OptionDefault::Bool(true),
+        LIGHT_P5,
+        &[],
+        None,
+        Some(Toggle::DisplaySpriteComposite),
+    ),
 ];
+
+/// The named stops of a long `Int` row (build plan D-M2.4): the values a
+/// settings page with a short list of choices offers, such as the setup
+/// wizard, in the order it lists them. A page shows the stored value too
+/// when it is not a stop. `None` for a row without stops; a row of fewer
+/// than ten values lists every value instead.
+pub fn named_stops(key: &str) -> Option<&'static [i64]> {
+    match key {
+        // 9.2.1: 100 (off) first, then the suggested 70 among the steps.
+        "display.brightness" => Some(&[100, 85, 70, 55, 40, 25]),
+        "display.map_brightness" => Some(&[100, 85, 70]),
+        "display.vignette" => Some(&[0, 15, 30, 45]),
+        _ => None,
+    }
+}
 
 /// A catalogue row of either kind.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

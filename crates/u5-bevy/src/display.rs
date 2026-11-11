@@ -34,6 +34,9 @@
 //!   opens it for the session; the compositor draws its chrome, the
 //!   faithful roster and food/gold/date crops and the message window with
 //!   the history (step 8). Present only while `display.grow_left` is on;
+//! - chapter 9's seams ([`light`] and [`composite`], M2-01): the
+//!   brightness and sprite-compositing steps register there, each only
+//!   while its setting is on. They add nothing yet;
 //! - [`initial_window`], which sets the window's first mode and present
 //!   mode from the settings in both `WindowPlugin` blocks. With every key at
 //!   its default it returns the window it was given, so the 1.0.1 window is
@@ -54,10 +57,12 @@ use crate::EnhSet;
 use crate::enh::VisualLaunchConfig;
 use crate::enh::input::{EnhAction, EnhActionEvent};
 
+pub mod composite;
 pub mod crawl;
 pub mod effects;
 pub mod fill;
 pub mod grow;
+pub mod light;
 pub mod scale;
 
 /// The resolved `[display]` settings (2.3.2). Exists only while
@@ -97,6 +102,9 @@ impl Plugin for DisplayPlugin {
         add_window_mode(app, &self.settings);
         fill::add_fill(app, &self.settings, self.bezel_updates.clone());
         grow::add_grow(app, &self.settings);
+        // Chapter 9 (D-M2.2): the `[brightness]` and `[composite]` steps.
+        light::add_light(app, &self.settings);
+        composite::add_composite(app, &self.settings);
     }
 }
 

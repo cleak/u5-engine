@@ -713,6 +713,13 @@ pub fn cli_alias_usage() -> String {
     text
 }
 
+/// A valued row that `--enable` and `--disable` still accept, because the
+/// catalogue gives it the values they set (D-M2.3), such as
+/// `display.brightness`. Its alias stays valued (`--brightness 70`).
+fn has_switch_value(row: CatalogueRow) -> bool {
+    matches!(row, CatalogueRow::Option(spec) if spec.switch.is_some())
+}
+
 fn is_switch(row: CatalogueRow) -> bool {
     match row {
         CatalogueRow::Toggle(_) => true,
@@ -734,7 +741,7 @@ pub fn check_cli_key(flag: &str, key: &str, switch: bool) -> io::Result<()> {
             format!("{flag}: unknown setting `{key}` (see --show-settings and docs/settings.md)"),
         ));
     };
-    if switch && !is_switch(row) {
+    if switch && !is_switch(row) && !has_switch_value(row) {
         return Err(io::Error::new(
             io::ErrorKind::InvalidInput,
             format!("{flag}: `{key}` is not an on/off setting; use --set {key}=VALUE"),
@@ -1035,6 +1042,13 @@ mod tests {
         );
         let valued = check_cli_key("--enable", "keys.menu", true).unwrap_err();
         assert!(valued.to_string().contains("use --set keys.menu=VALUE"));
+        // A valued toggle with a switch value takes `--enable` and
+        // `--disable` (D-M2.3); one without still refuses.
+        assert!(check_cli_key("--enable", "display.brightness", true).is_ok());
+        assert!(check_cli_key("--disable", "display.brightness", true).is_ok());
+        assert!(check_cli_key("--set", "display.brightness", false).is_ok());
+        assert!(check_cli_key("--enable", "display.vignette", true).is_err());
+        assert!(check_cli_key("--enable", "display.brightness_scope", true).is_err());
         assert!(check_cli_key("--disable", "enhancements.preset", true).is_err());
     }
 
@@ -1180,6 +1194,33 @@ mod tests {
                     on: false,
                 },
             ),
+            // Chapter 9 (9.4.1), hidden until their phases ship.
+            (
+                "--brightness",
+                CliAlias::Valued {
+                    key: "display.brightness",
+                },
+            ),
+            (
+                "--vignette",
+                CliAlias::Valued {
+                    key: "display.vignette",
+                },
+            ),
+            (
+                "--sprite-composite",
+                CliAlias::Switch {
+                    key: "display.sprite_composite",
+                    on: true,
+                },
+            ),
+            (
+                "--no-sprite-composite",
+                CliAlias::Switch {
+                    key: "display.sprite_composite",
+                    on: false,
+                },
+            ),
         ] {
             assert_eq!(find_cli_alias_in(display(), flag), Some(alias), "{flag}");
             let key = match alias {
@@ -1194,7 +1235,13 @@ mod tests {
         }
         // Valued keys have no `--no-` form; `--raster-depth` stays cli.rs's
         // own flag.
-        for flag in ["--no-scale-mode", "--no-pillar-fill", "--raster-depth"] {
+        for flag in [
+            "--no-scale-mode",
+            "--no-pillar-fill",
+            "--raster-depth",
+            "--no-brightness",
+            "--no-vignette",
+        ] {
             assert_eq!(find_cli_alias_in(display(), flag), None, "{flag}");
         }
         assert!(SELF_PARSED_ALIASES.contains(&"--raster-depth"));

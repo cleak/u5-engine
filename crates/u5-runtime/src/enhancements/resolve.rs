@@ -398,6 +398,14 @@ impl<'a> State<'a> {
                     Row::Option(index) if self.cat.options[index].kind == OptionKind::Bool => {
                         self.options[index] = SettingValue::Bool(on);
                     }
+                    // A valued toggle with a switch (D-M2.3), such as
+                    // `display.brightness`: enable sets the suggested value
+                    // and disable the off value, both checked like any other.
+                    Row::Option(index) if self.cat.options[index].switch.is_some() => {
+                        let (enable, disable) = self.cat.options[index].switch.unwrap_or_default();
+                        let value = if on { enable } else { disable };
+                        self.set_value(row, SettingValue::Int(value));
+                    }
                     Row::Option(index) => self.notes.push(SettingNote::NotASwitch {
                         key: self.cat.options[index].key,
                     }),
@@ -960,6 +968,7 @@ mod tests {
             },
             toggle,
             needs,
+            switch: None,
         }
     }
 

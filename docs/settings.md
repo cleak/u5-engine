@@ -219,6 +219,7 @@ one that types keys must change it exactly as typing those keys would:
 | display.fullscreen | Fullscreen (borderless) | bool = false | a, F | feature | --fullscreen | a window | yes |
 | display.fullscreen_key | Switch fullscreen with a key (F11) | bool = false | a, F | feature | --fullscreen-key | a window, a keyboard | yes |
 | display.grow_left | Wider world view (shows more than the original) | bool = false | a, F | deviation, wider view | --grow-left | - | yes |
+| display.sprite_composite | Sprites over terrain (no black boxes) | bool = false | a, F | feature | --sprite-composite | - | later (chapter 9 P5) |
 | enhancements.schema | Settings file format version | int 1..1 = 1 | -, L | feature | - | - | yes |
 | enhancements.preset | Preset | enum classic\|recommended\|everything = classic | -, P | feature | --preset | - | yes |
 | keys.menu | Open the menu | chord = F12 | -, F | feature | - | a keyboard | later (chapter 1 P5) |
@@ -246,4 +247,9 @@ one that types keys must change it exactly as typing those keys would:
 | display.panel_guard | Smallest game picture a side panel may leave, in percent | int 50..100 = 80 | a, F | feature | - | - | later (chapter 1 P6) |
 | display.vsync | Wait for the screen's refresh (vsync) | bool = true | a, F | feature | --vsync | - | yes |
 | display.raster | Tile graphics | enum ega\|tandy = ega | a, L | feature | --raster-depth | - | yes |
+| display.brightness | Map view brightness (100% is the original colours) | int 25..100 = 100 | a, F | feature | --brightness | - | later (chapter 9 P1) |
+| display.brightness_scope | Brightness applies to: the map view, or the whole screen | enum map\|frame = map | a, F | feature | - | - | later (chapter 9 P1) |
+| display.map_brightness | Map brightness (full map, gem map) | int 25..100 = 100 | a, F | feature | - | - | later (chapter 9 P2) |
+| display.vignette | Edge darkening | int 0..50 = 0 | a, F | feature | --vignette | - | later (chapter 9 P3) |
+| display.composite_halo | Keep a thin black outline around sprites | bool = true | a, F | feature | - | - | later (chapter 9 P5) |
 <!-- END GENERATED -->

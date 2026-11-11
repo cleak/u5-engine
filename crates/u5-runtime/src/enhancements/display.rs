@@ -1,5 +1,7 @@
 //! The `[display]` settings as the engine sees them (Phase B design 2.3.2,
-//! 2.4.1): scaling, fullscreen, side fill, the grow-left layout and vsync.
+//! 2.4.1): scaling, fullscreen, side fill, the grow-left layout and vsync;
+//! and chapter 9's brightness and sprite compositing (9.4.1), in their own
+//! typed view [`ResolvedEnhancements::display_light`].
 //!
 //! The rows themselves are in the catalogue ([`super::catalogue`]), which
 //! stays the single list of keys. This module holds their word lists and
@@ -36,6 +38,12 @@ pub const DITHER_KEY: &str = "display.dither";
 pub const CENTRE_PARTY_KEY: &str = "display.centre_party";
 pub const VSYNC_KEY: &str = "display.vsync";
 pub const RASTER_KEY: &str = "display.raster";
+pub const BRIGHTNESS_KEY: &str = "display.brightness";
+pub const BRIGHTNESS_SCOPE_KEY: &str = "display.brightness_scope";
+pub const MAP_BRIGHTNESS_KEY: &str = "display.map_brightness";
+pub const VIGNETTE_KEY: &str = "display.vignette";
+pub const SPRITE_COMPOSITE_KEY: &str = "display.sprite_composite";
+pub const COMPOSITE_HALO_KEY: &str = "display.composite_halo";
 
 /// `display.scale_mode`, in [`ScaleMode`] order.
 pub const SCALE_MODE_WORDS: &[&str] = &[
@@ -51,6 +59,8 @@ pub const PIXEL_ASPECT_WORDS: &[&str] = &["dos", "square"];
 pub const PILLAR_FILL_WORDS: &[&str] = &["black", "solid", "ribbon", "bezel"];
 /// `display.grow_left_light`, in [`PeekLightPolicy`] order.
 pub const GROW_LEFT_LIGHT_WORDS: &[&str] = &["scaled", "faithful"];
+/// `display.brightness_scope`, in [`BrightnessScope`] order.
+pub const BRIGHTNESS_SCOPE_WORDS: &[&str] = &["map", "frame"];
 /// `display.raster`: both render the 16-colour EGA tiles (2.4.1).
 pub const RASTER_WORDS: &[&str] = &["ega", "tandy"];
 
@@ -66,10 +76,15 @@ pub const GROW_LEFT_SUB_KEYS: &[&str] = &[
     CENTRE_PARTY_KEY,
 ];
 
-/// Every toggle of the `[display]` section: the three on/off keys and the
-/// switches of the four valued keys that are features in their own right
-/// (on while the value differs from its default). The shell's display
-/// plugin is added while one of them is on (2.3.4).
+/// The toggles that bring in the shell's display plugin (2.3.4, 9.3.1):
+/// chapter 2's on/off keys and the switches of its valued keys that are
+/// features in their own right (on while the value differs from its
+/// default), plus chapter 9's brightness switch and sprite compositing.
+/// The plugin is added while one of them is on.
+///
+/// Chapter 9's other two switches are not here: `display.map_brightness`
+/// acts only on the map views (chapter 4's raster and the gem map, M3), and
+/// `display.vignette` (P3, optional) joins when its phase is built.
 pub const DISPLAY_TOGGLES: &[Toggle] = &[
     Toggle::DisplayScaleMode,
     Toggle::DisplayPixelAspect,
@@ -78,7 +93,14 @@ pub const DISPLAY_TOGGLES: &[Toggle] = &[
     Toggle::DisplayPillarFill,
     Toggle::DisplayGrowLeft,
     Toggle::DisplayVsync,
+    Toggle::DisplayBrightness,
+    Toggle::DisplaySpriteComposite,
 ];
+
+/// Chapter 9's sub-options (9.4.1): `brightness_scope` under `brightness`
+/// and `composite_halo` under `sprite_composite`. Changing one alone leaves
+/// the game Classic.
+pub const LIGHT_SUB_KEYS: &[&str] = &[BRIGHTNESS_SCOPE_KEY, COMPOSITE_HALO_KEY];
 
 /// Keys that removed designs used. A stored value for one resolves to
 /// "unknown key" with a note and is otherwise ignored (2.4.1).
@@ -246,6 +268,77 @@ impl Default for GrowLeft {
     }
 }
 
+/// `display.brightness` at 100: off, the exact EGA colours (9.4.1).
+pub const BRIGHTNESS_OFF: u8 = 100;
+/// The value `--enable display.brightness` sets (9.4.1, D-M2.3).
+pub const BRIGHTNESS_SUGGESTED: u8 = 70;
+/// The lowest `display.brightness` (9.4.1).
+pub const BRIGHTNESS_MIN: u8 = 25;
+
+/// What `display.brightness` dims (9.4.1): the map view alone, the
+/// default, or the whole 320x200 frame.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
+pub enum BrightnessScope {
+    #[default]
+    Map,
+    Frame,
+}
+
+impl BrightnessScope {
+    /// The word `display.brightness_scope` stores.
+    pub fn key(self) -> &'static str {
+        BRIGHTNESS_SCOPE_WORDS[self as usize]
+    }
+
+    pub fn from_key(word: &str) -> Option<Self> {
+        [BrightnessScope::Map, BrightnessScope::Frame]
+            .into_iter()
+            .find(|scope| scope.key() == word)
+    }
+}
+
+/// Chapter 9's typed view (9.3, 9.4.1): brightness on the main view and
+/// sprite compositing. With every key at its default it is off: brightness
+/// 100, scope `map`, compositing off, halo on (inert).
+///
+/// `brightness` and `composite` are the switches; `scope` and `halo` are
+/// sub-options, inert while their switch is off. `map_brightness` and the
+/// vignette are not here: they belong to the map views (M3) and to the
+/// optional P3.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub struct DisplayLight {
+    /// Percent, 25..=100; 100 is off.
+    pub brightness: u8,
+    pub scope: BrightnessScope,
+    /// `display.sprite_composite`.
+    pub composite: bool,
+    /// `display.composite_halo`: keep a 1-px black outline.
+    pub halo: bool,
+}
+
+impl Default for DisplayLight {
+    fn default() -> Self {
+        Self {
+            brightness: BRIGHTNESS_OFF,
+            scope: BrightnessScope::Map,
+            composite: false,
+            halo: true,
+        }
+    }
+}
+
+impl DisplayLight {
+    /// Whether the brightness step is wanted: the value is below 100.
+    pub fn brightness_on(&self) -> bool {
+        self.brightness < BRIGHTNESS_OFF
+    }
+
+    /// Whether anything of chapter 9's main-view features is on.
+    pub fn is_off(&self) -> bool {
+        !self.brightness_on() && !self.composite
+    }
+}
+
 /// The typed `[display]` view the shell receives (2.3.2).
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct DisplaySettings {
@@ -257,6 +350,9 @@ pub struct DisplaySettings {
     pub grow_left: GrowLeft,
     /// True is the 1.0.1 present mode.
     pub vsync: bool,
+    /// Chapter 9: brightness and sprite compositing
+    /// ([`ResolvedEnhancements::display_light`]).
+    pub light: DisplayLight,
 }
 
 impl Default for DisplaySettings {
@@ -269,6 +365,7 @@ impl Default for DisplaySettings {
             pillar_fill: PillarFill::default(),
             grow_left: GrowLeft::default(),
             vsync: true,
+            light: DisplayLight::default(),
         }
     }
 }
@@ -345,6 +442,29 @@ impl ResolvedEnhancements {
                 centre_party: flag(CENTRE_PARTY_KEY, defaults.centre_party),
             },
             vsync: flag(VSYNC_KEY, true),
+            light: self.display_light(),
+        }
+    }
+
+    /// Chapter 9's keys as [`DisplayLight`] (9.4.1). As for
+    /// [`display`](Self::display), a missing or unexpected value reads as
+    /// the key's default; a brightness outside 25..=100 is clamped.
+    pub fn display_light(&self) -> DisplayLight {
+        let values = &self.values;
+        let defaults = DisplayLight::default();
+        let brightness = values
+            .int(BRIGHTNESS_KEY)
+            .map_or(defaults.brightness, |value| {
+                value.clamp(i64::from(BRIGHTNESS_MIN), i64::from(BRIGHTNESS_OFF)) as u8
+            });
+        DisplayLight {
+            brightness,
+            scope: values
+                .str(BRIGHTNESS_SCOPE_KEY)
+                .and_then(BrightnessScope::from_key)
+                .unwrap_or_default(),
+            composite: self.toggles.on(Toggle::DisplaySpriteComposite),
+            halo: values.bool(COMPOSITE_HALO_KEY).unwrap_or(defaults.halo),
         }
     }
 }
@@ -359,5 +479,7 @@ pub fn raster_word(resolved: &ResolvedEnhancements) -> &str {
         .unwrap_or(RASTER_WORDS[0])
 }
 
+#[cfg(test)]
+mod light_tests;
 #[cfg(test)]
 mod tests;

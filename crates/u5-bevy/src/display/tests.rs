@@ -202,6 +202,69 @@ fn a_sub_key_of_an_off_feature_adds_no_plugin() {
     }
 }
 
+/// Chapter 9 (M2-01): brightness below 100 or compositing on brings the
+/// plugin in, with the light settings in `Display`; the two seams add no
+/// system yet. The sub-options alone add nothing. Resolved as if P1 and P5
+/// had shipped: both are hidden in this build.
+#[test]
+fn chapter_9_switches_add_the_plugin_and_sub_options_do_not() {
+    use u5_runtime::enhancements::{BrightnessScope, LIGHT_P1, LIGHT_P5};
+    let light_launch = |cli: &[CliSetting]| VisualLaunchConfig {
+        enhancements: resolve_as_shipped(
+            ResolveInput {
+                stored: None,
+                cli,
+                lock: LockState::Off,
+                caps: HostCapabilities::ALL,
+            },
+            &[LIGHT_P1, LIGHT_P5],
+        ),
+        ..VisualLaunchConfig::classic()
+    };
+    for cli in [
+        vec![CliSetting::Enable("display.brightness".into())],
+        vec![
+            set("display.brightness", "55"),
+            set("display.brightness_scope", "frame"),
+        ],
+        vec![CliSetting::Enable("display.sprite_composite".into())],
+        vec![
+            CliSetting::Enable("display.sprite_composite".into()),
+            set("display.composite_halo", "false"),
+        ],
+    ] {
+        let launch = light_launch(&cli);
+        assert!(launch.enhancements.notes.is_empty(), "{cli:?}");
+        assert!(display_wanted(launch.enhancements.toggles), "{cli:?}");
+        let mut app = App::new();
+        crate::enh::add_enhancements(&mut app, &launch);
+        assert!(app.is_plugin_added::<DisplayPlugin>(), "{cli:?}");
+        let light = app.world().resource::<Display>().0.light;
+        assert_eq!(light, launch.enhancements.display_light(), "{cli:?}");
+        assert!(!light.is_off(), "{cli:?}");
+        assert_eq!(display_systems(&app), Vec::<String>::new(), "{cli:?}");
+    }
+    let launch = light_launch(&[set("display.brightness", "55")]);
+    let mut app = App::new();
+    crate::enh::add_enhancements(&mut app, &launch);
+    let light = app.world().resource::<Display>().0.light;
+    assert_eq!(light.brightness, 55);
+    assert_eq!(light.scope, BrightnessScope::Map);
+
+    for cli in [
+        vec![set("display.brightness_scope", "frame")],
+        vec![set("display.composite_halo", "false")],
+        vec![set("display.brightness", "100")],
+        vec![CliSetting::Disable("display.brightness".into())],
+    ] {
+        let launch = light_launch(&cli);
+        assert!(launch.enhancements.notes.is_empty(), "{cli:?}");
+        assert!(!launch.wants_enhancements(), "{cli:?}");
+        let shell = shell(&launch, |_| {});
+        assert!(!shell.app.is_plugin_added::<DisplayPlugin>(), "{cli:?}");
+    }
+}
+
 // --- The default-mode baseline (2.6). -----------------------------------
 
 #[test]

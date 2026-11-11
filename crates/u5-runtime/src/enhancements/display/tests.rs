@@ -240,6 +240,8 @@ fn every_display_row_matches_the_design() {
     let display_rows: Vec<CatalogueRow> = CatalogueRow::all()
         .filter(|row| row.key().starts_with("display."))
         .filter(|row| !["display.panel_priority", "display.panel_guard"].contains(&row.key()))
+        // Chapter 9's rows are checked in `light_tests`.
+        .filter(|row| row.ships().chapter == 2)
         .collect();
     assert_eq!(
         display_rows.len(),
@@ -352,11 +354,14 @@ fn display_options_switch_or_belong_to_a_toggle() {
         assert!(!toggle.spec().driven);
         assert!(DISPLAY_TOGGLES.contains(&toggle));
     }
+    // Every display toggle but chapter 9's two map-view switches, which
+    // do not need the display plugin (see `DISPLAY_TOGGLES`).
     assert_eq!(
         DISPLAY_TOGGLES.len(),
         crate::enhancements::TOGGLES
             .iter()
             .filter(|spec| spec.key.starts_with("display."))
+            .filter(|spec| ![MAP_BRIGHTNESS_KEY, VIGNETTE_KEY].contains(&spec.key))
             .count()
     );
 }
@@ -465,10 +470,14 @@ fn the_view_reads_file_values() {
                 centre_party: true,
             },
             vsync: false,
+            light: DisplayLight::default(),
         }
     );
     assert_eq!(raster_word(&resolved), "tandy");
-    for toggle in DISPLAY_TOGGLES {
+    for toggle in DISPLAY_TOGGLES
+        .iter()
+        .filter(|toggle| toggle.spec().ships.chapter == 2)
+    {
         assert!(resolved.toggles.on(*toggle), "{toggle:?}");
     }
     // Ribbon and bezel fills; the bezel waits for the host to decode it.
