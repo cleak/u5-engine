@@ -27861,6 +27861,16 @@ mod tests {
             composite.changed_flood > composite.changed_halo,
             "{composite:?}"
         );
+        // Phase B M2-07 (P5b, 9.4.4): the ring composite on every top-down
+        // frame, against the ring drawn with its object cells empty.
+        println!(
+            "ring composite: {} rings, {} cells, {} pixels with the halo",
+            composite.rings, composite.ring_cells, composite.ring_changed_halo
+        );
+        assert!(
+            composite.rings > 0 && composite.ring_cells > 0 && composite.ring_changed_halo > 0,
+            "{composite:?}"
+        );
         assert!(
             composite.mismatches.is_empty(),
             "{:#?}",

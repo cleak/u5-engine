@@ -17,7 +17,12 @@
 //! - while a camp or potion flash inverts the view, nothing changes;
 //! - with no map kind (no peek), nothing changes;
 //! - on the top-down view, the grow-left canvas made from the composited
-//!   frame carries the composited viewport as its core, byte for byte.
+//!   frame carries the composited viewport as its core, byte for byte;
+//! - on the top-down view (M2-07, P5b), the composited ring raster is the
+//!   plain ring raster with, in each eligible ring cell that carries an
+//!   `under`, every mask pixel that is still palette 0 taken from the ring
+//!   drawn with that cell empty (`PeekCell::lit_terrain(under)`), halo on
+//!   and off; hidden cells and every other cell are unchanged.
 //!
 //! The frame itself is only ever read. Nothing here is compiled outside
 //! tests, and the recorder is off unless a test turns it on.
@@ -25,9 +30,10 @@
 use std::cell::RefCell;
 
 use u5_runtime::enhancements::{
-    COMBAT_FIELDS, DARK_BODY, KEEP_THE_BOX, NEAR_EMPTY_PIXELS, PixelAspect, SpriteMasks, mask_bit,
+    COMBAT_FIELDS, DARK_BODY, KEEP_THE_BOX, NEAR_EMPTY_PIXELS, PixelAspect, SpriteMasks,
+    composite_eligible, mask_bit,
 };
-use u5_runtime::{PeekLightPolicy, PlayState, TILE_ATLAS_SIDE, TileAtlas};
+use u5_runtime::{PeekCell, PeekLightPolicy, PlayState, TILE_ATLAS_SIDE, TileAtlas};
 
 use crate::display::composite::{FRAME, VIEWPORT_ORIGIN, composite_cells};
 use crate::display::grow::column::ColumnView;
@@ -51,6 +57,11 @@ pub(crate) struct Tally {
     pub animated: usize,
     /// Top-down frames whose grow-left core was checked.
     pub canvases: usize,
+    /// M2-07 (P5b): top-down frames whose ring raster was checked, the
+    /// ring cells composited and the pixels changed with the halo.
+    pub rings: usize,
+    pub ring_cells: usize,
+    pub ring_changed_halo: usize,
     pub mismatches: Vec<String>,
 }
 
@@ -198,6 +209,7 @@ pub(crate) fn note(state: &PlayState, atlas: &TileAtlas, frame: &[u8]) {
                 crawl: None,
                 column: ColumnView::default(),
                 centre_party: true,
+                composite: None,
             };
             match compose_for_state_mapped(&composited, state, atlas, &canvas, options) {
                 Some((rgba, _)) => {
@@ -222,10 +234,103 @@ pub(crate) fn note(state: &PlayState, atlas: &TileAtlas, frame: &[u8]) {
                 None => found.push("the top-down view gave no canvas".to_string()),
             }
         }
+        if state.top_down_world_view_active() {
+            let canvas = Canvas::for_window(3440, 1440, PixelAspect::Dos).expect("the canvas");
+            check_ring(state, atlas, masks, &canvas, tally, &mut found);
+        }
         tally.mismatches.extend(
             found
                 .into_iter()
                 .map(|line| format!("frame {at_frame}: {line}")),
         );
     });
+}
+
+/// The M2-07 ring check (P5b, 9.4.4) for one top-down frame.
+fn check_ring(
+    state: &PlayState,
+    atlas: &TileAtlas,
+    masks: &SpriteMasks,
+    canvas: &Canvas,
+    tally: &mut Tally,
+    found: &mut Vec<String>,
+) {
+    let window = compose::peek_window(canvas);
+    let Some(ring) = state.peek_top_down_ring(window, PeekLightPolicy::Scaled) else {
+        found.push("the top-down view gave no ring".to_string());
+        return;
+    };
+    let (Ok(plain), Ok(off)) = (
+        state.render_peek_ring(&ring, atlas),
+        state.render_peek_ring_composited(&ring, atlas, None),
+    ) else {
+        found.push("the ring did not render".to_string());
+        return;
+    };
+    if off != plain {
+        found.push("the ring with compositing off is not the plain ring".to_string());
+    }
+    // The ring with each object cell empty: what compositing may show.
+    let mut bare = ring.clone();
+    for cell in bare.cells.iter_mut().flatten() {
+        if let Some(under) = cell.under {
+            *cell = PeekCell::lit_terrain(under);
+        }
+    }
+    let Ok(empty) = state.render_peek_ring(&bare, atlas) else {
+        found.push("the empty ring did not render".to_string());
+        return;
+    };
+    tally.rings += 1;
+    let columns = window.columns();
+    for halo in [true, false] {
+        let mut expected = plain.clone();
+        let mut cells = 0;
+        let mut changed = 0;
+        for (index, cell) in ring.cells.iter().enumerate() {
+            let Some(PeekCell {
+                atlas: Some(id),
+                under: Some(under),
+                ..
+            }) = *cell
+            else {
+                continue;
+            };
+            if !composite_eligible(masks, Some(usize::from(id)), Some(under)) {
+                continue;
+            }
+            cells += 1;
+            let mask = masks.background(usize::from(id), halo);
+            let (x0, y0) = (
+                (index % columns) * TILE_ATLAS_SIDE,
+                (index / columns) * TILE_ATLAS_SIDE,
+            );
+            for y in 0..TILE_ATLAS_SIDE {
+                for x in 0..TILE_ATLAS_SIDE {
+                    let at = (y0 + y) * plain.width + x0 + x;
+                    if mask_bit(mask, x, y) && plain.pixels[at] == 0 {
+                        expected.pixels[at] = empty.pixels[at];
+                        changed += usize::from(empty.pixels[at] != 0);
+                    }
+                }
+            }
+        }
+        match state.render_peek_ring_composited(&ring, atlas, Some((masks, halo))) {
+            Ok(raster) if raster == expected => {}
+            Ok(raster) => {
+                let wrong = raster
+                    .pixels
+                    .iter()
+                    .zip(&expected.pixels)
+                    .filter(|(a, b)| a != b)
+                    .count();
+                found.push(format!("halo {halo}: {wrong} ring pixels off the rule"));
+            }
+            Err(error) => found.push(format!("the composited ring did not render: {error}")),
+        }
+        if halo {
+            tally.ring_cells += cells;
+            tally.ring_changed_halo += changed;
+        }
+    }
 }

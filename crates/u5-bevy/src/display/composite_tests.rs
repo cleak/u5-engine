@@ -2,8 +2,10 @@
 //! pixels of object cells change, the listed and near-empty tiles keep
 //! their box, a flash and anything painted over a sprite are kept, water
 //! under a ship repaints on its own clock, the halo on and off, the
-//! grow-left core carries the composite while the ring stays boxed, the
-//! menu's changes, and with the key off no step and no masks.
+//! grow-left core carries the composite, the menu's changes, and with the
+//! key off no step and no masks. M2-07 (P5b, 9.4.4): a sprite in the ring
+//! equals the same sprite on the same terrain in the core, the ring flash
+//! comes after the composite, and with the key off the ring is boxed.
 
 use bevy::window::WindowResolution;
 use u5_runtime::enhancements::{
@@ -22,7 +24,7 @@ use u5_runtime::{
 use super::*;
 use crate::VisualState;
 use crate::display::grow::column::ColumnView;
-use crate::display::grow::{Canvas, compose};
+use crate::display::grow::{Canvas, GrowLeftCompose, compose};
 use crate::enh::VisualLaunchConfig;
 use crate::enh::equivalence::{Scene, Shell, Timeline, check_shell_equivalence};
 
@@ -713,11 +715,12 @@ fn the_game_runs_the_same_with_the_step_on() {
     }
 }
 
-/// Under grow-left the compositor copies the composited core (9.3.10); the
-/// ring's objects stay boxed until P5b (M2-07), so everything outside the
-/// core is the canvas grow-left alone draws.
+/// Under grow-left the compositor copies the composited core (9.3.10).
+/// Every object of the busy town is in the core, so everything outside it
+/// is the canvas grow-left alone draws (the ring's own objects are M2-07's
+/// tests below).
 #[test]
-fn under_grow_left_the_core_carries_the_composite_and_the_ring_stays_boxed() {
+fn under_grow_left_the_core_carries_the_composite() {
     let grow = CliSetting::Enable("display.grow_left".into());
     let mut both = shell_with(busy_town(), &launch(&[grow.clone(), on()]), 1920.0, 1080.0);
     let mut alone = shell_with(busy_town(), &launch(&[grow]), 1920.0, 1080.0);
@@ -801,4 +804,187 @@ fn the_menus_changes_are_followed() {
     // The masks were built once and kept.
     let now = shell.app.world().resource::<CompositeMasks>().clone();
     assert_eq!(now.get().map(|masks| masks as *const SpriteMasks), built);
+}
+
+// --- The ring (P5b, 9.4.4; build plan M2-07). --------------------------------
+
+/// The canvas at 1920x1080 (480x216) and its party tile.
+fn canvas_1080() -> Canvas {
+    Canvas::for_window(1920, 1080, u5_runtime::enhancements::PixelAspect::Dos).unwrap()
+}
+
+/// The 16x16 cell at offset `(dx, dy)` from the party on a canvas image.
+fn canvas_cell(rgba: &[u8], canvas: &Canvas, dx: isize, dy: isize) -> Vec<[u8; 3]> {
+    let x0 = canvas.party_x as isize + 16 * dx;
+    let y0 = canvas.party_y as isize + 16 * dy;
+    (0..TILE_ATLAS_TILE_PIXELS)
+        .map(|i| {
+            let (x, y) = (x0 as usize + i % 16, y0 as usize + i / 16);
+            let at = (y * canvas.w as usize + x) * 4;
+            [rgba[at], rgba[at + 1], rgba[at + 2]]
+        })
+        .collect()
+}
+
+/// A person two cells east of the party, in the core, and one eight cells
+/// east, in the ring, both on the open floor.
+fn twin_town() -> PlayState {
+    town_with(&[object(PERSON, 5 + 2, 5), object(PERSON, 5 + 8, 5 - 2)])
+}
+
+fn grow() -> CliSetting {
+    CliSetting::Enable("display.grow_left".into())
+}
+
+#[test]
+fn a_ring_sprite_equals_the_same_sprite_on_the_same_terrain_in_the_core() {
+    let canvas = canvas_1080();
+    for halo in [true, false] {
+        let mut cli = vec![grow(), on()];
+        if !halo {
+            cli.push(set("display.composite_halo", "false"));
+        }
+        let mut both = shell_with(twin_town(), &launch(&cli), 1920.0, 1080.0);
+        let mut alone = shell_with(twin_town(), &launch(&[grow()]), 1920.0, 1080.0);
+        for _ in 0..2 {
+            both.step(&[]);
+            alone.step(&[]);
+        }
+        let objects = &both
+            .app
+            .world()
+            .resource::<VisualState>()
+            .state
+            .active_objects;
+        assert_eq!((objects[1].x, objects[1].y), (7, 5));
+        assert_eq!((objects[2].x, objects[2].y), (13, 3));
+        let (_, shown, size, _) = images(&mut both);
+        let (_, plain, _, _) = images(&mut alone);
+        assert_eq!(size, UVec2::new(canvas.w, canvas.h));
+        let core = canvas_cell(&shown, &canvas, 2, 0);
+        let ring = canvas_cell(&shown, &canvas, 8, -2);
+        assert_eq!(ring, core, "halo {halo}: the ring sprite is the core's");
+        assert_ne!(
+            ring,
+            canvas_cell(&plain, &canvas, 8, -2),
+            "the ring composites"
+        );
+        assert_ne!(
+            core,
+            canvas_cell(&plain, &canvas, 2, 0),
+            "the core composites"
+        );
+    }
+}
+
+/// With the key off the ring draws its objects boxed, exactly as M1: the
+/// grow-left step has no composite and the ring cell is the atlas tile.
+#[test]
+fn with_the_key_off_the_ring_objects_keep_their_box() {
+    let launch = launch(&[grow()]);
+    let step = GrowLeftCompose::of(&crate::display::launch_display(&launch));
+    assert_eq!(step.composite_halo(), None);
+    let mut shell = shell_with(twin_town(), &launch, 1920.0, 1080.0);
+    shell.step(&[]);
+    assert!(!shell.app.world().contains_resource::<CompositeMasks>());
+    let (_, shown, _, _) = images(&mut shell);
+    let visual = shell.app.world().resource::<VisualState>();
+    let palette = crate::visual_palette(visual.atlas.depth);
+    let tile = visual
+        .atlas
+        .tile_pixels(ACTOR_TILE_BANK_BASE + usize::from(PERSON))
+        .unwrap();
+    let boxed: Vec<[u8; 3]> = tile.iter().map(|&i| palette[usize::from(i)]).collect();
+    assert_eq!(canvas_cell(&shown, &canvas_1080(), 8, -2), boxed);
+}
+
+/// The ring flash (compose.rs `flash_ring`) inverts the composited ring:
+/// with the flash on, every ring pixel is the palette XOR of the same pixel
+/// with it off, composited sprites included.
+#[test]
+fn the_ring_flash_applies_after_the_composite() {
+    let atlas = boxed_atlas(TileGraphicsDepth::Ega16);
+    let masks = SpriteMasks::from_atlas(&atlas);
+    let mut state = twin_town();
+    state
+        .render_top_down_base_frame(VIEWPORT_PLAYER_ROW, &atlas)
+        .unwrap();
+    let canvas = canvas_1080();
+    let frame = vec![0u8; (FRAME.x * FRAME.y * 4) as usize];
+    let compose = |state: &PlayState, composite: Option<(&SpriteMasks, bool)>| {
+        crate::display::grow::compose_for_state(
+            &frame,
+            state,
+            &atlas,
+            &canvas,
+            crate::display::grow::ComposeOptions {
+                light: u5_runtime::PeekLightPolicy::Scaled,
+                bands: None,
+                crawl: None,
+                column: ColumnView::default(),
+                centre_party: false,
+                composite,
+            },
+        )
+        .unwrap()
+    };
+    let plain = compose(&state, None);
+    let still = compose(&state, Some((&masks, true)));
+    assert_ne!(
+        canvas_cell(&still, &canvas, 8, -2),
+        canvas_cell(&plain, &canvas, 8, -2),
+        "the ring sprite composites"
+    );
+    let mut flashing = state.clone();
+    flashing.presentation_camp_flash_inverted = true;
+    assert!(crate::display::grow::flash_active(&flashing));
+    let flashed = compose(&flashing, Some((&masks, true)));
+    let playback = u5_runtime::potion_flash_playback(0).expect("the flash playback");
+    let (mx0, my0, mx1, my1) = canvas.map_window();
+    let (cx, cy, side) = compose::core_rect(&canvas);
+    let w = canvas.w as usize;
+    for y in my0 as usize..=my1 as usize {
+        for x in mx0 as usize..=mx1 as usize {
+            if (cx..cx + side).contains(&x) && (cy..cy + side).contains(&y) {
+                continue;
+            }
+            let at = (y * w + x) * 4;
+            let index = crate::ega_palette_index_from_rgba(&still[at..at + 4]);
+            let inverted = crate::EGA_PALETTE_RGB[usize::from(index ^ playback.palette_xor_mask)];
+            assert_eq!(flashed[at..at + 3], inverted, "({x}, {y})");
+        }
+    }
+}
+
+/// The menu switching compositing on and off in play re-registers the
+/// grow-left step with or without the ring composite.
+#[test]
+fn the_menu_turns_the_ring_composite_on_and_off() {
+    let canvas = canvas_1080();
+    let mut shell = shell_with(twin_town(), &launch(&[grow(), on()]), 1920.0, 1080.0);
+    let mut alone = shell_with(twin_town(), &launch(&[grow()]), 1920.0, 1080.0);
+    alone.step(&[]);
+    let (_, plain, _, _) = images(&mut alone);
+    let boxed = canvas_cell(&plain, &canvas, 8, -2);
+    let ring = |shell: &mut Shell| {
+        shell.step(&[]);
+        shell.step(&[]);
+        let (_, shown, _, _) = images(shell);
+        canvas_cell(&shown, &canvas, 8, -2)
+    };
+    let composited = ring(&mut shell);
+    assert_ne!(composited, boxed);
+    let set_composite = |shell: &mut Shell, on: bool| {
+        let mut display = shell.app.world_mut().resource_mut::<Display>();
+        display.0.light.composite = on;
+    };
+    set_composite(&mut shell, false);
+    assert_eq!(ring(&mut shell), boxed, "off: boxed as M1");
+    set_composite(&mut shell, true);
+    assert_eq!(ring(&mut shell), composited, "on again");
+    // A grow-left session started without compositing gains it from the
+    // menu too (the step builds its own masks if the shared ones are not
+    // there yet).
+    set_composite(&mut alone, true);
+    assert_eq!(ring(&mut alone), composited, "switched on in play");
 }

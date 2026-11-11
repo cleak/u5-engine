@@ -69,7 +69,9 @@
 use std::hash::{Hash, Hasher};
 
 use bevy::prelude::*;
-use u5_runtime::enhancements::{DisplaySettings, PixelAspect};
+use std::sync::{Arc, OnceLock};
+
+use u5_runtime::enhancements::{DisplaySettings, PixelAspect, SpriteMasks};
 use u5_runtime::{PeekLightPolicy, PlayState, TileAtlas};
 
 use super::Display;
@@ -282,6 +284,10 @@ pub struct ComposeOptions<'a> {
     pub column: ColumnView,
     /// `display.centre_party`: pan the map while the column is shown.
     pub centre_party: bool,
+    /// Sprite compositing on the ring (design 9.4.4, P5b): the masks and
+    /// `display.composite_halo`, while the `[composite]` step is
+    /// registered. `None` draws the ring exactly as M1 did.
+    pub composite: Option<(&'a SpriteMasks, bool)>,
 }
 
 /// Steps 1-9 for one state (2.3.7): page mode from `state`, the canvas
@@ -425,7 +431,9 @@ fn compose_view(
     let canvas = &canvas.for_column(view, options.centre_party);
     let window = compose::peek_window(canvas);
     let ring = state.peek_top_down_ring(window, options.light)?;
-    let raster = state.render_peek_ring(&ring, atlas).ok()?;
+    let raster = state
+        .render_peek_ring_composited(&ring, atlas, options.composite)
+        .ok()?;
     let ring_rgba = crate::tile_viewport_to_visual_rgba(&raster);
     let flash = if flash_active(state) {
         u5_runtime::potion_flash_playback(0)
@@ -477,6 +485,7 @@ pub fn render_shell_frame_and_canvas(
         crawl: None,
         column: ColumnView::default(),
         centre_party: false,
+        composite: None,
     };
     let canvas = compose_for_state(&frame, state, atlas, canvas, options);
     (frame, canvas)
@@ -572,6 +581,7 @@ pub fn render_shell_frame_and_canvas_with_column(
         }),
         column,
         centre_party,
+        composite: None,
     };
     let canvas = compose_for_state(&frame, state, atlas, canvas, options);
     (frame, canvas)
@@ -621,6 +631,9 @@ pub struct GrowLeftCompose {
     crawl: Option<CrawlFeed>,
     /// The session's column; `None` keeps it closed.
     column: Option<ColumnState>,
+    /// The `[composite]` step's masks and halo flag while that step is
+    /// registered (P5b); `None` draws the ring boxed, as M1 did.
+    composite: Option<(Arc<OnceLock<SpriteMasks>>, bool)>,
 }
 
 impl GrowLeftCompose {
@@ -630,7 +643,21 @@ impl GrowLeftCompose {
             bands: None,
             crawl: None,
             column: None,
+            composite: None,
         }
+    }
+
+    /// The step compositing the ring's objects with `masks` (shared with
+    /// the `[composite]` step, which fills them on the first play frame),
+    /// with or without the 1-px halo (design 9.4.4, P5b).
+    pub fn with_composite(mut self, masks: Arc<OnceLock<SpriteMasks>>, halo: bool) -> Self {
+        self.composite = Some((masks, halo));
+        self
+    }
+
+    /// Whether the ring is composited, and with the halo.
+    pub fn composite_halo(&self) -> Option<bool> {
+        self.composite.as_ref().map(|(_, halo)| *halo)
     }
 
     /// The step drawing the crawl rows of `feed` (step 7).
@@ -704,6 +731,11 @@ impl PresentStep for GrowLeftCompose {
             .map(|feed| feed.rows().revision)
             .hash(&mut hasher);
         self.column_view().hash(&mut hasher);
+        // Hashed only while compositing, so the revision with it off is
+        // M1's.
+        if let Some(halo) = self.composite_halo() {
+            (true, halo).hash(&mut hasher);
+        }
         hasher.finish()
     }
 
@@ -720,6 +752,12 @@ impl PresentStep for GrowLeftCompose {
         };
         let crawl_rows = self.crawl.as_ref().map(|feed| feed.rows().clone());
         let column = self.column_view();
+        // The `[composite]` step fills the shared masks first; a step
+        // registered before them builds them here.
+        let composite_masks = self.composite.clone();
+        let composite = composite_masks
+            .as_ref()
+            .map(|(masks, halo)| (masks.get_or_init(|| SpriteMasks::from_atlas(atlas)), *halo));
         let snapshot = self.bands_for(state, input.faithful_hash);
         let options = ComposeOptions {
             light: settings.light,
@@ -735,6 +773,7 @@ impl PresentStep for GrowLeftCompose {
             }),
             column,
             centre_party: settings.centre_party,
+            composite,
         };
         let Some((rgba, region)) =
             compose_for_state_mapped(&frame.rgba, state, atlas, &canvas, options)
@@ -763,12 +802,14 @@ pub(super) fn add_grow(app: &mut App, settings: &DisplaySettings) {
     app.insert_resource(CrawlState::new(feed.clone()));
     let column = ColumnState::new(ColumnView::at_launch(settings.grow_left.crawl));
     app.insert_resource(column.clone());
-    register_present_step(
-        app,
-        GrowLeftCompose::of(settings)
-            .with_crawl(feed)
-            .with_column(column),
-    );
+    let mut step = GrowLeftCompose::of(settings)
+        .with_crawl(feed)
+        .with_column(column);
+    if settings.light.composite {
+        let masks = super::composite::shared_masks(app);
+        step = step.with_composite(masks.0, settings.light.halo);
+    }
+    register_present_step(app, step);
     // Ctrl+P reaches this plugin only as the router's `ToggleColumn`. The
     // router is in the app exactly while a binding is active; when the
     // `[keys]` chord was refused there is none, and the column stays as it
@@ -836,14 +877,25 @@ pub(crate) fn size_grow_frame(
 /// A changed [`Display`] (the menu overlay) re-registers the step with the
 /// new light policy and pixel aspect, or removes it when `grow_left` went
 /// off.
+///
+/// The ring is composited exactly while `display.sprite_composite` is on,
+/// with the [`super::composite::CompositeMasks`] the `[composite]` step
+/// shares when they exist; on the frame compositing is first switched on
+/// they may not yet, and the step builds its own from the atlas.
 fn follow_grow_settings(
     display: Res<Display>,
-    mut current: Local<Option<(bool, GrowComposeSettings)>>,
+    mut current: Local<Option<(bool, GrowComposeSettings, Option<bool>)>>,
     steps: Option<ResMut<PresentSteps>>,
     crawl: Option<Res<CrawlState>>,
     column: Option<Res<ColumnState>>,
+    masks: Option<Res<super::composite::CompositeMasks>>,
 ) {
-    let wanted = (display.0.grow_left.on, GrowComposeSettings::of(&display.0));
+    let light = display.0.light;
+    let wanted = (
+        display.0.grow_left.on,
+        GrowComposeSettings::of(&display.0),
+        light.composite.then_some(light.halo),
+    );
     let Some(previous) = current.replace(wanted) else {
         // The step `add_grow` registered came from the launch settings.
         return;
@@ -859,6 +911,10 @@ fn follow_grow_settings(
             }
             if let Some(column) = column {
                 step = step.with_column(column.clone());
+            }
+            if let Some(halo) = wanted.2 {
+                let masks = masks.map(|masks| masks.0.clone()).unwrap_or_default();
+                step = step.with_composite(masks, halo);
             }
             steps.register(step);
         } else {

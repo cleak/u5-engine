@@ -1315,4 +1315,5 @@ mod tests {
     include!("tests_inline/grow_accessors.rs");
     include!("tests_inline/map_view_kind.rs");
     include!("tests_inline/object_cells.rs");
+    include!("tests_inline/ring_composite.rs");
 }

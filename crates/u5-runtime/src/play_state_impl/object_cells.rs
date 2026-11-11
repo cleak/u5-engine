@@ -281,7 +281,7 @@ impl PlayState {
     /// one-cell scratch viewport: the live gate's phase frame, else the
     /// ordinary tile path with the water, lava and fire animators, then the
     /// plane swap when `swapped`. `None` if the atlas lacks a tile.
-    fn object_cell_under_pixels(
+    pub(super) fn object_cell_under_pixels(
         &self,
         atlas: &TileAtlas,
         under: u8,

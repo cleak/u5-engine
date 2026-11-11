@@ -63,8 +63,13 @@ mod ring_peek_objects {
         state
     }
 
+    /// The cell at `(dx, dy)`, without the composite's `under` (M2-07's
+    /// tests in `ring_composite.rs` cover it).
     fn cell(ring: &TopDownPeekRing, dx: isize, dy: isize) -> PeekCell {
-        ring.cells[ring.window.index_of(dx, dy).unwrap()].unwrap()
+        PeekCell {
+            under: None,
+            ..ring.cells[ring.window.index_of(dx, dy).unwrap()].unwrap()
+        }
     }
 
     fn actor(byte: u8) -> PeekCell {
@@ -72,6 +77,7 @@ mod ring_peek_objects {
             tile: byte,
             shade: PeekShade::Lit,
             atlas: Some(u16::from(byte) + 256),
+            under: None,
         }
     }
 
@@ -215,6 +221,7 @@ mod ring_peek_objects {
                 tile: 0x9E,
                 shade: PeekShade::Lit,
                 atlas: Some(0x9E),
+                under: None,
             }
         );
     }
@@ -318,6 +325,8 @@ mod ring_peek_objects {
         ));
         let pristine = state.clone();
         let atlas = synthetic_tile_atlas(TileGraphicsDepth::Ega16);
+        // M2-07: the composited raster is as pure.
+        let masks = crate::enhancements::sprite_mask::SpriteMasks::from_atlas(&atlas);
         let first = state.peek_top_down_ring(ULTRAWIDE, PeekLightPolicy::Scaled);
         for call in 0..100 {
             let light = POLICIES[call % 2];
@@ -326,6 +335,9 @@ mod ring_peek_objects {
                 assert_eq!(Some(&ring), first.as_ref());
             }
             state.render_peek_ring(&ring, &atlas).unwrap();
+            state
+                .render_peek_ring_composited(&ring, &atlas, Some((&masks, call % 3 == 0)))
+                .unwrap();
         }
         assert_eq!(state.prng_state, pristine.prng_state);
         assert_eq!(format!("{state:?}"), format!("{pristine:?}"));

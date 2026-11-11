@@ -151,6 +151,7 @@ fn options(rows: &CrawlRows, open: bool, centre_party: bool) -> ComposeOptions<'
             ..ColumnView::default()
         },
         centre_party,
+        composite: None,
     }
 }
 

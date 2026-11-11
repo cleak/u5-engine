@@ -26,7 +26,8 @@
 //!
 //! The step is first in the pipeline ([`StepOrder::COMPOSITE`]), so it sees
 //! the faithful pixels and the grow-left compositor copies a composited
-//! core. Ring objects stay boxed until P5b (M2-07).
+//! core. The grow-left step composites the ring's objects itself, with the
+//! same masks and rule (P5b, M2-07).
 //!
 //! The masks ([`CompositeMasks`]) are built once from the atlas the shell
 //! loaded from the player's TILES.16, on the first play frame the step
@@ -238,6 +239,18 @@ impl PresentStep for CompositeStep {
     }
 }
 
+/// The session's [`CompositeMasks`], inserted on first use: the
+/// `[composite]` step and the grow-left ring (P5b) draw with the same
+/// masks, built once. Called only while compositing is on.
+pub(crate) fn shared_masks(app: &mut App) -> CompositeMasks {
+    if let Some(masks) = app.world().get_resource::<CompositeMasks>() {
+        return masks.clone();
+    }
+    let masks = CompositeMasks::default();
+    app.insert_resource(masks.clone());
+    masks
+}
+
 /// Registers the compositing step while `display.sprite_composite` is on,
 /// with the [`CompositeMasks`] it fills and `follow_composite_settings` for
 /// a change in play. Adds nothing while it is off, unless the menu overlay
@@ -252,9 +265,8 @@ pub(crate) fn add_composite(app: &mut App, settings: &DisplaySettings) {
         return;
     }
     if light.composite {
-        let masks = CompositeMasks::default();
-        register_present_step(app, CompositeStep::new(masks.0.clone(), light.halo));
-        app.insert_resource(masks);
+        let masks = shared_masks(app);
+        register_present_step(app, CompositeStep::new(masks.0, light.halo));
     } else {
         // The menu may switch it on: the step list has to be there.
         install_present_pipeline(app);

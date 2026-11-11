@@ -431,6 +431,7 @@ fn grow_left_review_shots() {
                 crawl: None,
                 column,
                 centre_party: shot.centre,
+                composite: None,
             };
             let mut scripted = compose_for_state(&frame, &state, &atlas, &canvas, options)
                 .expect("the top-down view");
@@ -858,6 +859,7 @@ fn grow_left_effect_shots() {
             crawl: None,
             column,
             centre_party: false,
+            composite: None,
         };
         // The scripted ends: B's rows on the collapsed canvas, D's in the
         // open window.

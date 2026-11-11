@@ -655,13 +655,15 @@ fn place_objects(state: &mut PlayState, place: &[(u8, usize, usize)]) {
 /// a torch, S4 the ship, each with the mockups' placed demo objects) on the
 /// 16:9 grow-left canvas, with compositing off, on without the halo and on
 /// with it, against `display-C-<scene>-off.png`, `-flood.png` and
-/// `-halo.png`. The step composites the core (the 11x11 view); the ring
-/// keeps its boxes until P5b (M2-07), so the core is compared with the
-/// variant's mockup and the ring with the `off` mockup. Review output only:
-/// skipped unless `U5_MOCKUP_PROFILE`, `U5_DISPLAY_MOCKUPS` and
+/// `-halo.png`. The step composites the core (the 11x11 view) and, since
+/// P5b (M2-07), the grow-left step composites the ring, so the whole map
+/// is compared with the variant's mockup. Review output only: skipped
+/// unless `U5_MOCKUP_PROFILE`, `U5_DISPLAY_MOCKUPS` and
 /// `U5_COMPOSITE_SHOTS` (the output folder) are set. Writes
-/// `composite-<scene>-<variant>.png` and `-side-by-side.png` (mockup above,
-/// shell below, 2x), and reports the differing pixels per region.
+/// `composite-<scene>-<variant>.png`, `-side-by-side.png` (mockup above,
+/// shell below, 2x) and `-diff.png` (ours, with each pixel that differs
+/// from the mockup in magenta), and reports the differing pixels per
+/// region, core and ring.
 #[test]
 fn composite_shell_review_shots() {
     let (Some(profile), Some(mockups), Some(out)) = (
@@ -790,27 +792,31 @@ fn composite_shell_review_shots() {
             let base = ours_off.get_or_insert_with(|| ours.clone()).clone();
             // Where our `off` image equals the `off` mockup (the water's
             // scroll phase and the crawl's rows aside), the variant must
-            // equal the variant's mockup too.
+            // equal the variant's mockup too, in the core and the ring.
             let (mut same_base, mut step_differs) = (0, 0);
+            let (mut ring_same_base, mut ring_step_differs) = (0, 0);
             let (mut core, mut ring, mut chrome) = (0, 0, 0);
+            let mut diff = ours.clone();
             for y in 0..h {
                 for x in 0..w {
                     let i = ((y * w + x) * 4) as usize;
                     let in_core = (cx..cx + side).contains(&(x as usize))
                         && (cy..cy + side).contains(&(y as usize));
                     let in_map = (mx0..=mx1).contains(&x) && (my0..=my1).contains(&y);
-                    // The ring keeps its boxes until M2-07: compare it with
-                    // the `off` mockup.
-                    if in_core && base[i..i + 3] == off[i..i + 3] {
-                        same_base += 1;
-                        if ours[i..i + 3] != theirs[i..i + 3] {
-                            step_differs += 1;
+                    if in_map && base[i..i + 3] == off[i..i + 3] {
+                        let differs = ours[i..i + 3] != theirs[i..i + 3];
+                        if in_core {
+                            same_base += 1;
+                            step_differs += usize::from(differs);
+                        } else {
+                            ring_same_base += 1;
+                            ring_step_differs += usize::from(differs);
                         }
                     }
-                    let expected = if in_core { &theirs } else { &off };
-                    if ours[i..i + 3] == expected[i..i + 3] {
+                    if ours[i..i + 3] == theirs[i..i + 3] {
                         continue;
                     }
+                    diff[i..i + 3].copy_from_slice(&[0xff, 0x00, 0xff]);
                     if in_core {
                         core += 1;
                     } else if in_map {
@@ -821,10 +827,16 @@ fn composite_shell_review_shots() {
                 }
             }
             eprintln!(
-                "composite {} {variant}: core against the {variant} mockup {core}, ring against \
-                 the off mockup {ring}, chrome {chrome}; in the core where the two off images \
-                 agree ({same_base}), {step_differs} differ",
+                "composite {} {variant}: against the {variant} mockup, core {core}, ring {ring}, \
+                 chrome {chrome}; where the two off images agree, core {step_differs} of \
+                 {same_base} and ring {ring_step_differs} of {ring_same_base} differ",
                 composite.name
+            );
+            save_png(
+                &out.join(format!("composite-{}-{variant}-diff.png", composite.name)),
+                w,
+                h,
+                diff,
             );
             save_png(
                 &out.join(format!("composite-{}-{variant}.png", composite.name)),

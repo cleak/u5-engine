@@ -14,15 +14,19 @@
 //! floor are then composited onto the lit ring cells with the faithful
 //! compositor, always at variant 0, so the peek never draws from the shared
 //! gameplay stream. [`PlayState::render_peek_ring`] rasterises a ring the
-//! way the faithful viewport blit does. Nothing in the game calls the peek
-//! yet.
+//! way the faithful viewport blit does; with sprite compositing on,
+//! [`PlayState::render_peek_ring_composited`] draws the ring's object
+//! cells as the core's composite does (design 9.4.4, P5b), from the
+//! `under` each stamped cell carries.
 
 use std::collections::VecDeque;
 use std::io;
 
+use crate::enhancements::sprite_mask::{SpriteMasks, TileMask, composite_eligible, mask_bit};
+
 use crate::{
     ActiveObject, ActiveObjectCompositeResult, FULL_DAYLIGHT, NATURAL_MOONGATE_LIVE_TILE,
-    PlayState, TILE_ATLAS_SIDE, TileAtlas, TileViewport, TopDownRenderArea,
+    PlayState, TILE_ATLAS_SIDE, TILE_ATLAS_TILE_PIXELS, TileAtlas, TileViewport, TopDownRenderArea,
     VISIBILITY_CARVE_NEIGHBOR_ORDER, VISIBILITY_CLEAR, VISIBILITY_DIM_PERIPHERY, VISIBILITY_HIDDEN,
     VISIBILITY_USE_COMPANION, blit_terrain_tile_to_viewport, composite_active_object_slot,
     fire_fixture_spec, fire_pass_refreshes_field_tile, static_tile_animation_family,
@@ -145,6 +149,12 @@ pub struct PeekCell {
     /// in the actor half (byte + 256), which `tile` alone cannot tell
     /// apart. `None` exactly when the cell is hidden.
     pub atlas: Option<u16>,
+    /// For a cell the object pass stamped with an actor tile (a
+    /// use-companion cell, as the core's object cells are): the terrain the
+    /// cell shows when it is empty, the live map tile through the
+    /// animated-tile frame table (design 9.4.4, P5b). `None` for terrain,
+    /// direct-tile and hidden cells. Only the composited raster reads it.
+    pub under: Option<u8>,
 }
 
 impl PeekCell {
@@ -154,6 +164,7 @@ impl PeekCell {
         tile: VISIBILITY_HIDDEN,
         shade: PeekShade::Hidden,
         atlas: None,
+        under: None,
     };
 
     /// A lit cell showing the terrain id `tile` with nothing over it.
@@ -162,6 +173,7 @@ impl PeekCell {
             tile,
             shade: PeekShade::Lit,
             atlas: Some(tile as u16),
+            under: None,
         }
     }
 }
@@ -238,7 +250,8 @@ impl PlayState {
         let area = self.top_down_render_area()?;
         let mut ring = TopDownPeekRing::all_hidden(window);
         let mut prepared = self.flood_peek_ring(area, light, window);
-        self.composite_peek_ring_objects(area, window, &mut prepared);
+        let mut unders = vec![None; prepared.len()];
+        self.composite_peek_ring_objects(area, window, &mut prepared, &mut unders);
         for (index, cell) in prepared.into_iter().enumerate() {
             let Some(cell) = cell else {
                 continue;
@@ -251,10 +264,16 @@ impl PlayState {
             };
             let (dx, dy) = window.offset_of(index)?;
             ring.animated |= self.peek_cell_animates(area, tile, atlas, dx, dy);
+            let under = unders[index];
+            if let Some(under) = under {
+                // The composited raster draws the terrain under the actor.
+                ring.animated |= self.peek_cell_animates(area, under, u16::from(under), dx, dy);
+            }
             ring.cells[index] = Some(PeekCell {
                 tile,
                 shade: PeekShade::Lit,
                 atlas: Some(atlas),
+                under,
             });
         }
         Some(ring)
@@ -438,15 +457,29 @@ impl PlayState {
     /// that would leave the cell with no atlas tile (the draw-nothing actor
     /// byte, which the faithful blit answers with the previous frame's
     /// pixels) is not applied, so the ring shows what is under it.
+    ///
+    /// `unders` (one entry per window cell, all `None` on entry) receives
+    /// the rule of the object-cell peek (design 9.3.5, 9.4.4): a cell the
+    /// pass leaves as a use-companion stamp gets the terrain the flood
+    /// painted there, which is the tile the cell shows when it is empty;
+    /// any other stamp, or a previous-row marker written over a stamped
+    /// cell, leaves it `None`.
     fn composite_peek_ring_objects(
         &self,
         area: TopDownRenderArea,
         window: PeekWindow,
         prepared: &mut [Option<PreparedTopDownCell>],
+        unders: &mut [Option<u8>],
     ) {
         let Some(floor) = self.current_floor() else {
             return;
         };
+        // The flood paints every lit ring cell with its live terrain under
+        // the clear marker: the picture of the cell with nothing on it.
+        let empty: Vec<Option<u8>> = prepared
+            .iter()
+            .map(|cell| cell.map(|cell| cell.terrain))
+            .collect();
         let columns = window.columns();
         for slot in (1..self.active_objects.len()).rev() {
             let object = self.active_objects[slot];
@@ -519,6 +552,7 @@ impl PlayState {
                         && marked.tile_id().is_some()
                     {
                         prepared[previous] = Some(marked);
+                        unders[previous] = None;
                     }
                     PreparedTopDownCell {
                         terrain: tile,
@@ -528,6 +562,9 @@ impl PlayState {
             };
             if stamped.tile_id().is_some() && stamped.tile() != VISIBILITY_HIDDEN {
                 prepared[index] = Some(stamped);
+                unders[index] = (stamped.grid == VISIBILITY_USE_COMPANION)
+                    .then_some(empty[index])
+                    .flatten();
             }
         }
     }
@@ -590,6 +627,27 @@ impl PlayState {
         ring: &TopDownPeekRing,
         atlas: &TileAtlas,
     ) -> io::Result<TileViewport> {
+        self.render_peek_ring_composited(ring, atlas, None)
+    }
+
+    /// [`PlayState::render_peek_ring`] with sprite compositing (design
+    /// 9.4.4, P5b). With `composite` = `Some((masks, halo))`, each lit cell
+    /// with an `under` that [`composite_eligible`] accepts for its atlas
+    /// tile is drawn as the core's composite draws it: the actor tile as
+    /// the faithful blit draws it, then every pixel of the tile's
+    /// background mask (less the 1-px halo with `halo`) that is still
+    /// palette 0 takes the pixel of `under`, drawn as the faithful render
+    /// draws a terrain cell (the animators and the live moon-gate phase).
+    /// The mask is black in the actor tile by construction, so this is
+    /// `under` and then the actor's unmasked pixels. A live moon-gate
+    /// phase cell is drawn as before and never composited, as in the core.
+    /// With `None` the raster is exactly [`PlayState::render_peek_ring`]'s.
+    pub fn render_peek_ring_composited(
+        &self,
+        ring: &TopDownPeekRing,
+        atlas: &TileAtlas,
+        composite: Option<(&SpriteMasks, bool)>,
+    ) -> io::Result<TileViewport> {
         let window = ring.window;
         if ring.cells.len() != window.cell_count() {
             return Err(io::Error::new(
@@ -613,6 +671,7 @@ impl PlayState {
                 tile,
                 shade: PeekShade::Lit,
                 atlas: Some(atlas_id),
+                under,
             }) = *cell
             else {
                 continue;
@@ -642,7 +701,57 @@ impl PlayState {
                 self.water_scroll,
                 &self.fire_flicker,
             )?;
+            if let (Some((masks, halo)), Some(under)) = (composite, under)
+                && composite_eligible(masks, Some(usize::from(atlas_id)), Some(under))
+            {
+                let live_gate = under == NATURAL_MOONGATE_LIVE_TILE
+                    && area.is_some_and(|area| {
+                        self.live_natural_moongate_terrain_at(
+                            area,
+                            self.player.x as isize + dx,
+                            self.player.y as isize + dy,
+                        )
+                    });
+                if let Some(under_pixels) =
+                    self.object_cell_under_pixels(atlas, under, live_gate, false)
+                {
+                    composite_viewport_cell(
+                        &mut viewport,
+                        cell_x,
+                        cell_y,
+                        masks.background(usize::from(atlas_id), halo),
+                        &under_pixels,
+                    );
+                }
+            }
         }
         Ok(viewport)
+    }
+}
+
+/// Writes `under` into cell `(cell_x, cell_y)` of `viewport` wherever
+/// `mask` is set and the pixel is still palette 0, the core composite's
+/// rule (design 9.3.8) on a palette raster.
+fn composite_viewport_cell(
+    viewport: &mut TileViewport,
+    cell_x: usize,
+    cell_y: usize,
+    mask: &TileMask,
+    under: &[u8; TILE_ATLAS_TILE_PIXELS],
+) {
+    let x0 = cell_x * TILE_ATLAS_SIDE;
+    let y0 = cell_y * TILE_ATLAS_SIDE;
+    for y in 0..TILE_ATLAS_SIDE {
+        for x in 0..TILE_ATLAS_SIDE {
+            if !mask_bit(mask, x, y) {
+                continue;
+            }
+            let at = (y0 + y) * viewport.width + x0 + x;
+            if let Some(pixel) = viewport.pixels.get_mut(at)
+                && *pixel == 0
+            {
+                *pixel = under[y * TILE_ATLAS_SIDE + x];
+            }
+        }
     }
 }

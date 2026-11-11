@@ -112,6 +112,7 @@ fn options<'a>(
             ..ColumnView::default()
         },
         centre_party: false,
+        composite: None,
     }
 }
 

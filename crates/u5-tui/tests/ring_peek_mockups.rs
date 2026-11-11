@@ -216,6 +216,7 @@ fn tile_rgb(state: &PlayState, atlas: &TileAtlas, id: u16) -> Vec<[u8; 3]> {
         tile: id as u8,
         shade: PeekShade::Lit,
         atlas: Some(id),
+        under: None,
     });
     let raster = state.render_peek_ring(&ring, atlas).unwrap();
     cell_rgb(&raster.to_rgba(), raster.width, window.columns() - 1, 5)

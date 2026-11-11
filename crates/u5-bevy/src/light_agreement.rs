@@ -140,6 +140,7 @@ fn check_canvas(
             ..ColumnView::default()
         },
         centre_party: true,
+        composite: None,
     };
     let Some((rgba, region)) = compose_for_state_mapped(frame, state, atlas, &canvas, options)
     else {

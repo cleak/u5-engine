@@ -548,6 +548,7 @@ fn compose(
             }),
             column,
             centre_party: true,
+            composite: None,
         },
     )
     .expect("a canvas on the open grid")
