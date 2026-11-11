@@ -12,7 +12,8 @@
 //!   Ctrl+P typed after every fifth game key, so the column opens and
 //!   closes with its effect all through the script;
 //! - **pairs** (the shortest script): every pair of the chapter's keys, one
-//!   value each, with Ctrl+P as in the column run.
+//!   value each, with Ctrl+P as in the column run, and each chapter 9
+//!   value with the wider view and with sharp scaling.
 //!
 //! Each run is compared with the off run frame by frame on the
 //! [`TrajectoryDigest`](u5_runtime::enhancements::TrajectoryDigest) (which
@@ -45,12 +46,13 @@ use u5_runtime::{
     WorldPlane, handle_play_key_input, parse_ch_font, potion_flash_playback,
 };
 
+use super::composite::CompositeMasks;
 use super::grow::column::ColumnState;
 use crate::enh::VisualLaunchConfig;
 use crate::enh::equivalence::{
     FrameRecord, Owner, Scene, Shell, ShellRun, Timeline, compare_shell_runs,
 };
-use crate::enh::present::PresentHost;
+use crate::enh::present::{PresentHost, PresentSteps, StepOrder};
 
 /// The window most runs use: the named 16:9 layout (a 512x240 canvas).
 const W16: (f32, f32) = (2560.0, 1440.0);
@@ -105,6 +107,20 @@ impl Config {
         self.settings
             .iter()
             .any(|s| matches!(s, CliSetting::Enable(key) if key == "display.grow_left"))
+    }
+
+    /// Whether the settings dim the map view (chapter 9).
+    fn brightness(&self) -> bool {
+        self.settings.iter().any(
+            |s| matches!(s, CliSetting::Set { key, value } if key == "display.brightness" && value != "100"),
+        )
+    }
+
+    /// Whether the settings composite sprites over terrain (chapter 9).
+    fn composite(&self) -> bool {
+        self.settings
+            .iter()
+            .any(|s| matches!(s, CliSetting::Enable(key) if key == "display.sprite_composite"))
     }
 
     /// The launch a host resolves for these settings, with the shipped
@@ -185,6 +201,7 @@ fn alone() -> Vec<Config> {
         grow_sub("dither=false", off("display.dither")),
         grow_sub("centre_party=true", on("display.centre_party")),
     ];
+    configs.extend(light_alone());
     for (name, window) in [
         ("grow_left@3440x1440", (3440.0, 1440.0)),
         ("grow_left@1920x1080", (1920.0, 1080.0)),
@@ -195,6 +212,62 @@ fn alone() -> Vec<Config> {
             window,
             ..Config::new(name, vec![on("display.grow_left")])
         });
+    }
+    configs
+}
+
+/// Chapter 9's keys (design 9.4.3, build plan M2-08), each alone: the
+/// suggested and the lowest brightness, the whole-frame scope (with the
+/// suggested level, since the scope is inert without it), compositing, and
+/// compositing without its outline.
+fn light_values() -> Vec<(&'static str, Vec<CliSetting>)> {
+    vec![
+        ("brightness=70", vec![set("display.brightness", "70")]),
+        ("brightness=25", vec![set("display.brightness", "25")]),
+        (
+            "brightness_scope=frame",
+            vec![
+                set("display.brightness", "70"),
+                set("display.brightness_scope", "frame"),
+            ],
+        ),
+        ("sprite_composite", vec![on("display.sprite_composite")]),
+        (
+            "composite_halo=false",
+            vec![
+                on("display.sprite_composite"),
+                off("display.composite_halo"),
+            ],
+        ),
+    ]
+}
+
+fn light_alone() -> Vec<Config> {
+    light_values()
+        .into_iter()
+        .map(|(name, settings)| Config::new(name, settings))
+        .collect()
+}
+
+/// Each of [`light_values`] with the wider world view and with sharp
+/// scaling (build plan M2-08), Ctrl+P typed as in [`column`]. The pairs
+/// among the chapter's own keys and with every other display key come
+/// from [`pair_values`].
+fn light_pairs() -> Vec<Config> {
+    let partners = [
+        ("grow_left", vec![on("display.grow_left")]),
+        ("scale_mode=sharp", vec![set("display.scale_mode", "sharp")]),
+    ];
+    let mut configs = Vec::new();
+    for (light, settings) in light_values() {
+        for (partner, with) in &partners {
+            let mut both = settings.clone();
+            both.extend(with.iter().cloned());
+            configs.push(Config {
+                column_keys: true,
+                ..Config::new(&format!("{light} + {partner}"), both)
+            });
+        }
     }
     configs
 }
@@ -253,6 +326,22 @@ fn pair_values() -> Vec<(&'static str, Vec<CliSetting>)> {
         (
             "centre_party=true",
             vec![on("display.grow_left"), on("display.centre_party")],
+        ),
+        ("brightness=70", vec![set("display.brightness", "70")]),
+        (
+            "brightness_scope=frame",
+            vec![
+                set("display.brightness", "25"),
+                set("display.brightness_scope", "frame"),
+            ],
+        ),
+        ("sprite_composite", vec![on("display.sprite_composite")]),
+        (
+            "composite_halo=false",
+            vec![
+                on("display.sprite_composite"),
+                off("display.composite_halo"),
+            ],
         ),
     ]
 }
@@ -484,6 +573,10 @@ struct Trace {
     composes: u64,
     /// Frames on which the docked column was open.
     open_frames: usize,
+    /// The presentation steps registered at the end of the run.
+    steps: Vec<StepOrder>,
+    /// Whether the compositing masks were built from the atlas.
+    masks_built: bool,
 }
 
 fn copy_dir(from: &Path, to: &Path) {
@@ -551,6 +644,16 @@ fn run(
         .world()
         .get_resource::<PresentHost>()
         .map_or(0, PresentHost::composes);
+    let steps = shell
+        .app
+        .world()
+        .get_resource::<PresentSteps>()
+        .map_or_else(Vec::new, PresentSteps::orders);
+    let masks_built = shell
+        .app
+        .world()
+        .get_resource::<CompositeMasks>()
+        .is_some_and(|masks| masks.get().is_some());
     Trace {
         run: ShellRun {
             frames,
@@ -560,6 +663,8 @@ fn run(
         saves: scripted_save(shell.visual().state.clone(), &script.save_seed),
         composes,
         open_frames,
+        steps,
+        masks_built,
     }
 }
 
@@ -621,6 +726,7 @@ fn check(script: &Script, configs: &[Config]) -> Vec<String> {
                 script.name
             );
             assert_eq!(off.composes, 0);
+            assert!(off.steps.is_empty() && !off.masks_built);
             offs.push((off_key, off));
         }
         let off = &offs.iter().find(|(key, _)| *key == off_key).unwrap().1;
@@ -634,6 +740,29 @@ fn check(script: &Script, configs: &[Config]) -> Vec<String> {
                 "{} / {}: the canvas was never drawn",
                 script.name,
                 config.name
+            );
+        }
+        // Chapter 9's steps really ran: the brightness step is registered,
+        // and compositing built its masks wherever a map was drawn.
+        assert_eq!(
+            on.steps.contains(&StepOrder::BRIGHTNESS),
+            config.brightness(),
+            "{} / {}: the brightness step",
+            script.name,
+            config.name
+        );
+        assert_eq!(
+            on.steps.contains(&StepOrder::COMPOSITE),
+            config.composite(),
+            "{} / {}: the composite step",
+            script.name,
+            config.name
+        );
+        if config.composite() && script.top_down {
+            assert!(
+                on.masks_built,
+                "{} / {}: the sprite masks were never built",
+                script.name, config.name
             );
         }
         if config.column_keys && config.grow_left() && script.top_down {
@@ -702,8 +831,9 @@ fn the_potion_sweep_is_left_alone() {
 #[test]
 fn every_pair_of_display_keys_leaves_the_shortest_script_alone() {
     let scratch = Scratch::new("pairs");
-    let configs = pairs();
-    assert_eq!(configs.len(), 13 * 12 / 2);
+    let mut configs = pairs();
+    assert_eq!(configs.len(), 17 * 16 / 2);
+    configs.extend(light_pairs());
     let script = synthetic_scripts(&scratch)
         .into_iter()
         .find(|script| script.name == "town walk")
@@ -819,9 +949,11 @@ fn the_matrix_leaves_the_real_game_alone() {
         let runs: Vec<_> = scripts
             .iter()
             .map(|script| scope.spawn(move || check(script, configs)))
-            .chain(std::iter::once(
-                scope.spawn(|| check(&scripts[0], &pairs())),
-            ))
+            .chain(std::iter::once(scope.spawn(|| {
+                let mut pairs = pairs();
+                pairs.extend(light_pairs());
+                check(&scripts[0], &pairs)
+            })))
             .collect();
         runs.into_iter()
             .flat_map(|run| run.join().unwrap())

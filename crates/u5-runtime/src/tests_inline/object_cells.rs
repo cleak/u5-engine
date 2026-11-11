@@ -255,6 +255,31 @@ mod object_cells {
         assert_eq!(cell.under_pixels, solid(TOWN_HIDDEN_DOOR_TILE % 16));
     }
 
+    /// Design 9.6 (build plan M2-08): a hidden treasure is a Search record
+    /// with no object or tile until it is found (`hidden-treasures.md` §1),
+    /// so an object standing on a not-yet-searched treasure cell composites
+    /// over the plain terrain the cell shows when empty.
+    #[test]
+    fn an_object_on_an_unsearched_treasure_cell_peeks_the_plain_terrain() {
+        let atlas = boxed_atlas();
+        let (plane, floor, x, y) = PlayState::fixed_hidden_treasure_world_cell(0).unwrap();
+        assert_eq!(plane, WorldPlane::Underworld, "the fixture's plane");
+        let state = world_state(open_world_grid(), x - 3, y - 2);
+        let state = PlayState {
+            ambient_light: FULL_DAYLIGHT,
+            ..state
+        };
+        let z = state.current_floor().unwrap();
+        assert_eq!(z, floor, "the fixture is on the treasure's floor");
+        assert!(!state.fixed_hidden_treasure_found(0));
+        let mut state = with_objects(state, &[object(PERSON, x, y, z)]);
+        let peek = render_and_peek(&mut state, &atlas).unwrap();
+        let (col, row) = view_cell(&state, x, y);
+        let cell = cell_at(&peek, col, row).expect("the person on the treasure cell");
+        assert_eq!(cell.under, GRASS);
+        assert_eq!(cell.under_pixels, solid(GRASS));
+    }
+
     #[test]
     fn the_draw_nothing_byte_is_skipped() {
         let atlas = boxed_atlas();

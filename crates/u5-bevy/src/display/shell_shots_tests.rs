@@ -613,6 +613,32 @@ const COMPOSITE_SCENES: [CompositeScene; 4] = [
     },
 ];
 
+/// make_display.py's `brightness_lut`: each byte scaled by `level` in
+/// linear light and re-encoded to sRGB, rounded, in double precision.
+fn mockup_brightness_lut(level: f64) -> [u8; 256] {
+    let to_linear = |s: f64| {
+        if s < 0.04045 {
+            s / 12.92
+        } else {
+            ((s + 0.055) / 1.055).powf(2.4)
+        }
+    };
+    let to_srgb = |v: f64| {
+        let v = v.clamp(0.0, 1.0);
+        let out = if v < 0.0031308 {
+            v * 12.92
+        } else {
+            1.055 * v.powf(1.0 / 2.4) - 0.055
+        };
+        out.clamp(0.0, 1.0)
+    };
+    let mut table = [0u8; 256];
+    for (byte, entry) in table.iter_mut().enumerate() {
+        *entry = (to_srgb(to_linear(byte as f64 / 255.0) * level) * 255.0).round() as u8;
+    }
+    table
+}
+
 /// The mockup renderer's `--place`: each object goes into an empty slot,
 /// else the slot farthest from the party (or on another floor), on the
 /// current floor, standing still.
@@ -686,9 +712,15 @@ fn composite_shell_review_shots() {
     let canvas = Canvas::for_window(W16.0, W16.1, PixelAspect::Dos).unwrap();
     let (w, h) = (canvas.w, canvas.h);
     let launch = {
+        // Launched with the suggested brightness too, so its step is there
+        // for the `halo-b070` variant; the others set it back to 100.
         let cli = vec![
             CliSetting::Enable("display.grow_left".into()),
             CliSetting::Enable("display.sprite_composite".into()),
+            CliSetting::Set {
+                key: "display.brightness".into(),
+                value: "70".into(),
+            },
         ];
         let enhancements = resolve(ResolveInput {
             stored: None,
@@ -750,16 +782,21 @@ fn composite_shell_review_shots() {
                 crate::repaint_visual_frame(&mut visual, &mut images, "review placement");
             });
         let mut ours_off: Option<Vec<u8>> = None;
-        for (variant, on, halo) in [
-            ("off", false, true),
-            ("flood", true, false),
-            ("halo", true, true),
+        for (variant, on, halo, percent) in [
+            ("off", false, true, 100),
+            ("flood", true, false, 100),
+            ("halo", true, true, 100),
+            // M2-08: the Recommended look with the suggested brightness.
+            ("halo-b070", true, true, 70),
         ] {
             {
                 let mut display = shell.app.world_mut().resource_mut::<super::Display>();
-                if display.0.light.composite != on || display.0.light.halo != halo {
+                let light = display.0.light;
+                if light.composite != on || light.halo != halo || light.brightness != percent {
                     display.0.light.composite = on;
                     display.0.light.halo = halo;
+                    display.0.light.brightness = percent;
+                    display.0.light.scope = BrightnessScope::Map;
                 }
             }
             shell.step(&[]);
@@ -786,9 +823,26 @@ fn composite_shell_review_shots() {
                 assert_eq!((image.width(), image.height()), (w, h), "{name}");
                 image.into_raw()
             };
-            let theirs = load(variant);
-            let off = load("off");
             let (mx0, my0, mx1, my1) = canvas.map_window();
+            // No mockup shows compositing and brightness together: the
+            // expected image is the halo mockup with its map window dimmed
+            // by the mockups' own table (make_display.py `brightness_lut`).
+            let theirs = if percent == 100 {
+                load(variant)
+            } else {
+                let mut dimmed = load("halo");
+                let table = mockup_brightness_lut(f64::from(percent) / 100.0);
+                for y in my0..=my1 {
+                    for x in mx0..=mx1 {
+                        let i = ((y * w + x) * 4) as usize;
+                        for channel in &mut dimmed[i..i + 3] {
+                            *channel = table[usize::from(*channel)];
+                        }
+                    }
+                }
+                dimmed
+            };
+            let off = load("off");
             let base = ours_off.get_or_insert_with(|| ours.clone()).clone();
             // Where our `off` image equals the `off` mockup (the water's
             // scroll phase and the crawl's rows aside), the variant must

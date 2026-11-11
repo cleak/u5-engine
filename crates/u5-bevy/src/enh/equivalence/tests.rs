@@ -7,8 +7,8 @@
 use std::sync::{Arc, Mutex};
 
 use u5_runtime::enhancements::{
-    HostCapabilities, LockState, ResolveInput, ResolvedEnhancements, TOGGLES, Toggle, resolve,
-    toggle_matrix,
+    CliSetting, HostCapabilities, LockState, MATRIX_FILE, ResolveInput, ResolvedEnhancements,
+    TOGGLES, Toggle, matrix_tsv, resolve, toggle_matrix,
 };
 use u5_runtime::test_fixtures::{configured_original_asset_dir, open_grid, test_state};
 use u5_runtime::{GameClock, PlayOptions, PlayTarget, WorldPlane};
@@ -142,6 +142,75 @@ fn every_matrix_row_equals_the_off_run() {
         assert!(on.fed.iter().all(Vec::is_empty), "{}", row.name);
         assert_eq!(compare_shell_runs(&off, &on), [], "{}", row.name);
     }
+}
+
+/// The committed `qa/enhancements/matrix.tsv` (build plan M2-08, design
+/// 1.3.12 and 9.4.3): it is the generator's current output, so it holds
+/// chapter 9's rows, and every row it lists, read from the file as a host
+/// reads `--set KEY=VALUE`, equals the off run through
+/// [`check_shell_equivalence`] in a 16:9 window, where the presentation
+/// steps (the wider view, compositing, brightness) really draw.
+#[test]
+fn every_row_of_the_committed_matrix_equals_the_off_run_in_a_window() {
+    let path = u5_runtime::test_fixtures::workspace_file(MATRIX_FILE);
+    let text = std::fs::read_to_string(&path).expect("the committed matrix");
+    assert_eq!(
+        text,
+        matrix_tsv(&toggle_matrix()),
+        "{MATRIX_FILE} is out of date with the catalogue"
+    );
+    for key in [
+        "display.brightness=",
+        "display.brightness_scope=",
+        "display.sprite_composite=",
+        "display.composite_halo=",
+    ] {
+        assert!(text.contains(key), "{MATRIX_FILE} has no {key} row");
+    }
+    let timeline = walk(80);
+    let window = |app: &mut App| {
+        app.world_mut().spawn(Window {
+            resolution: bevy::window::WindowResolution::new(2560.0, 1440.0),
+            ..default()
+        });
+    };
+    let (mut rows, mut lit, mut composited) = (0, 0, 0);
+    for line in text.lines().filter(|line| !line.starts_with('#')) {
+        let (name, settings) = line.split_once('\t').expect("NAME<TAB>SETTINGS");
+        let settings: Vec<CliSetting> = settings
+            .split(',')
+            .filter(|setting| !setting.is_empty())
+            .map(|setting| {
+                let (key, value) = setting.split_once('=').expect("KEY=VALUE");
+                CliSetting::Set {
+                    key: key.into(),
+                    value: value.into(),
+                }
+            })
+            .collect();
+        let resolved = resolve(ResolveInput {
+            stored: None,
+            cli: &settings,
+            lock: LockState::Off,
+            caps: HostCapabilities::ALL,
+        });
+        let light = resolved.display().light;
+        lit += usize::from(light.brightness != 100);
+        composited += usize::from(light.composite);
+        let launch = VisualLaunchConfig {
+            enhancements: resolved,
+            ..VisualLaunchConfig::classic()
+        };
+        let mismatches =
+            check_shell_equivalence(&town(), &Scene::synthetic(), &timeline, &launch, window);
+        assert_eq!(mismatches, [], "{name}");
+        rows += 1;
+    }
+    assert_eq!(rows, toggle_matrix().len());
+    assert!(
+        lit > 0 && composited > 0,
+        "brightness {lit}, compositing {composited}"
+    );
 }
 
 // ---------------------------------------------------------------------------

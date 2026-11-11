@@ -1,5 +1,6 @@
 //! The P8 timing check (Phase B design 2.4.3, 2.7 "Frame time and idle-tick
-//! interleaving"; build plan M1-16): with every display feature on at 4K,
+//! interleaving"; build plan M1-16, with chapter 9's compositing and
+//! brightness added by M2-08): with every display feature on at 4K,
 //! the shell's frames stay short enough that the gameplay pump
 //! (`AnimationPump`) never has to catch up, so the logic tick count over any
 //! stretch of wall time is the 1.0.1 count.
@@ -87,7 +88,8 @@ fn frame_costs(
     (max, mean)
 }
 
-/// Everything on at 4K (sharp scaling and the ribbon fill too), the column
+/// Everything on at 4K (sharp scaling, the ribbon fill, sprite compositing
+/// and brightness too), the column
 /// opened and closed by Ctrl+P (with its effect) while the player walks: in
 /// an optimised build no frame comes near a world tick
 /// (`cargo test --release -p u5-bevy --lib timing_tests`). Every
@@ -122,6 +124,17 @@ fn every_feature_on_at_4k_keeps_each_frame_under_a_tick() {
         on("display.dither"),
         on("display.centre_party"),
         on("display.fullscreen_key"),
+        // Chapter 9 (build plan M2-08): compositing with its outline, and
+        // the suggested brightness over the whole frame (the larger region).
+        on("display.sprite_composite"),
+        CliSetting::Set {
+            key: "display.brightness".into(),
+            value: "70".into(),
+        },
+        CliSetting::Set {
+            key: "display.brightness_scope".into(),
+            value: "frame".into(),
+        },
         CliSetting::Set {
             key: "display.scale_mode".into(),
             value: "sharp".into(),

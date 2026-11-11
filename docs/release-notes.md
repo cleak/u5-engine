@@ -20,8 +20,8 @@ the display settings below, arrive in this release too.
   what a launch would use. Unknown keys and bad values never stop the game:
   the setting keeps its default and the log says why.
 - **Presets.** Classic (the default, the original game), Recommended and
-  Everything. In this release Recommended still gives the original game, and
-  Everything only adds sharp scaling and the F11 fullscreen key.
+  Everything. In this release Recommended turns on only sprites over terrain
+  (below), and Everything adds sharp scaling and the F11 fullscreen key.
 - **Parity lock.** `--parity-lock` or `U5_PARITY_LOCK=1` turns every
   enhancement off whatever the settings say.
 - **Hotkeys** for future features are listed in
@@ -58,3 +58,28 @@ Each of these is off unless you turn it on, and none changes the game
   effects, keeping the party centred) are separate settings. It never shows a
   letter the original screen has not shown or a cell out of the party's sight
   ([the wider world view](settings.md#the-wider-world-view)).
+
+### Optional enhancements: brightness and sprites
+
+Both are off unless you turn them on (sprites over terrain is part of the
+Recommended preset), and neither changes the game: they only change the
+picture you see, never what the game decides, its random numbers, its timing
+or its save files ([brightness and sprites](settings.md#brightness-and-sprites)).
+
+- **Sprites over terrain (no black boxes)** (`--sprite-composite`). People,
+  monsters, the party, ships and items are drawn over the grass, floor or
+  water of their cell instead of on a black square. A thin black outline
+  stays round each sprite so it still stands out (`display.composite_halo`,
+  on by default). Black that is part of a picture, a person in a bed or on a
+  chair, a few creatures drawn with black in them, combat fields, and the
+  first-person dungeons stay exactly as they were. The ground drawn under a
+  sprite is the ground that cell shows when it is empty, so nothing new is
+  revealed.
+- **Map view brightness** (`--brightness 70`). Dims the map in linear
+  light, from 100% (the original colours) down to 25%, so the bright EGA
+  colours look closer to the darker feel the game has on an old monitor.
+  70% is the suggested level (`--enable display.brightness` picks it); 85%
+  is barely visible and 55% starts to look muddy. Only the map is dimmed:
+  the frame, the party panel and the messages keep their exact colours,
+  unless you choose the whole screen (`display.brightness_scope = "frame"`).
+  Black stays black, so nothing hidden in the dark ever shows.

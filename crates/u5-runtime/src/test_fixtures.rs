@@ -1023,6 +1023,15 @@ pub fn configured_test_dir(variable: &str) -> Option<PathBuf> {
     std::env::var_os(variable).map(PathBuf::from)
 }
 
+/// A file of the workspace, by its path from the workspace root, such as
+/// the committed toggle matrix (`enhancements::MATRIX_FILE`). Keeps the
+/// build-time path out of the shell's own modules.
+pub fn workspace_file(relative: &str) -> PathBuf {
+    Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../..")
+        .join(relative)
+}
+
 /// A new, empty, uniquely named folder under the system's temporary
 /// folder, for a test's scratch files. The caller removes it.
 pub fn unique_scratch_dir(label: &str) -> PathBuf {

@@ -158,6 +158,60 @@ already drawn and decided: with it on, the game's state, random numbers,
 timing and save files are exactly those of the same play with it off
 (see [How a setting is checked](#how-a-setting-is-checked)).
 
+## Brightness and sprites
+
+Two settings change how the map looks and nothing else. Neither shows
+anything the original screen does not show the player.
+
+**Sprites over terrain (no black boxes).** `display.sprite_composite`,
+**"Sprites over terrain (no black boxes)"** (`--sprite-composite`), off by
+default and part of the Recommended and Everything presets. The original
+draws every person, monster, ship and item on a black square. With this
+on, the black round the sprite is replaced by the ground of its cell, so a
+skeleton stands on the grass and a ship floats on moving water:
+
+- the ground drawn is the tile that cell shows when nothing stands on it
+  (the arena's ground in combat), so it never shows anything the empty
+  cell would not;
+- `display.composite_halo`, **"Keep a thin black outline around sprites"**,
+  on by default, keeps the black pixels that touch the sprite, so it keeps
+  the original's outlined look on busy ground. Turn it off for no outline;
+- black inside a sprite stays black, and only pixels that are still black
+  in the finished picture are replaced: the combat cursor, the aim marker
+  and the camp and potion flashes look as they always did;
+- some tiles keep their box: the shark (its water is painted in), the
+  dotted creatures, creatures drawn as eyes or dots in the dark, people in
+  a bed, on a chair or in the stocks, combat fields such as fire and poison,
+  and the first-person dungeon view, which already draws its own sprites;
+- under the wider world view, objects in the outer ring are drawn the same
+  way as in the original view.
+
+**Map view brightness.** `display.brightness`, **"Map view brightness
+(100% is the original colours)"** (`--brightness PERCENT`), 25 to 100,
+where 100 (the default) is off and gives the original colours. It scales
+the light of each colour, not the colour numbers, so the EGA greys stay
+even and black stays black at every level:
+
+| Brightness | Dark grey | Light grey | White |
+|---|---|---|---|
+| 100% (off) | 85 | 170 | 255 |
+| 85% | 79 | 158 | 237 |
+| 70% (suggested) | 71 | 145 | 218 |
+| 55% | 63 | 129 | 196 |
+| 40% | 54 | 112 | 170 |
+| 25% | 42 | 89 | 137 |
+
+70% brings back most of the darker feel the game had on an old monitor;
+`--enable display.brightness` sets it, and `--disable display.brightness`
+sets 100. No preset sets brightness: it is a preference, like a volume.
+`display.brightness_scope`, **"Brightness applies to: the map view, or the
+whole screen"**, is `map` by default: only the map (and the whole map of
+the wider world view) is dimmed, while the frame, the party panel, the
+messages, the title screens and character creation keep their exact
+colours. `frame` dims the whole picture, title screens included. Menus,
+the journal and other separate panels are never dimmed. Screenshots and
+the QA frame captures always record the original picture.
+
 ## The parity lock
 
 `--parity-lock`, or `U5_PARITY_LOCK=1` in the environment, turns every
@@ -188,9 +242,14 @@ one that types keys must change it exactly as typing those keys would:
   overworld by day and night, a conversation, a dungeon, the camp flash and
   a potion's sweep, compared frame by frame and on the world ticks and the
   saved files (and on the real game files, with combat and Britain at
-  night, when `U5_TEST_ASSET_DIR` names a copy). A fresh game with every
-  display setting on is checked to draw no letter the original screen has
-  not shown and no map cell out of the party's sight.
+  night, when `U5_TEST_ASSET_DIR` names a copy). Sprites over terrain and
+  brightness are in that matrix too: each alone, at 70% and 25% and over
+  the whole screen, with and without the outline, and each with the wider
+  view and with sharp scaling. A fresh game with every display setting on
+  is checked to draw no letter the original screen has not shown and no
+  map cell out of the party's sight, and with sprites over terrain and
+  brightness on, to draw under each sprite exactly the ground its cell
+  shows when empty and never to light a pixel the original leaves black.
 - `qa/enhancements/matrix.tsv` is the toggle matrix: every key alone, a
   pairwise covering of the toggles and classed values, and everything on
   except the cheats. It is generated from the catalogue, and a test keeps

@@ -2984,6 +2984,19 @@ impl PlayState {
         FIXED_HIDDEN_TREASURES.len()
     }
 
+    /// The plane, floor and cell of a world record of the table, for the
+    /// object-cell peek's treasure fixture (build plan M2-08).
+    #[cfg(test)]
+    pub fn fixed_hidden_treasure_world_cell(
+        record: usize,
+    ) -> Option<(WorldPlane, i8, usize, usize)> {
+        let entry = FIXED_HIDDEN_TREASURES.get(record)?;
+        match entry.target {
+            HiddenTreasureTarget::World(plane) => Some((plane, entry.floor, entry.x, entry.y)),
+            _ => None,
+        }
+    }
+
     #[cfg(test)]
     pub fn fixed_hidden_treasure_table_records_are_sequential() -> bool {
         FIXED_HIDDEN_TREASURES
