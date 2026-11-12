@@ -117,6 +117,7 @@ pub use play_state_impl::{
     PEEK_CORE_REACH, PEEK_MAX_REACH, PeekCell, PeekLightPolicy, PeekShade, PeekWindow,
     TopDownPeekRing,
 };
+pub use play_state_impl::{ViewOverlayFootprint, draw_dungeon_view_glyph, draw_surface_view_cell};
 pub mod predicates;
 pub mod prng;
 pub mod pth;
@@ -1316,4 +1317,5 @@ mod tests {
     include!("tests_inline/map_view_kind.rs");
     include!("tests_inline/object_cells.rs");
     include!("tests_inline/ring_composite.rs");
+    include!("tests_inline/gem_runtime_visibility.rs");
 }

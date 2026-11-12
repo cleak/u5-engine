@@ -4,6 +4,18 @@ use std::path::Path;
 
 use crate::*;
 
+/// The cells an open View overlay sampled: see
+/// [`PlayState::view_overlay_footprint`]. Coordinates are absolute and
+/// wrapped, sorted and unique.
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub enum ViewOverlayFootprint {
+    /// A town floor's cells (`0..32`) or the overworld window's (`0..256`),
+    /// on the party's current floor or plane.
+    Surface { cells: Vec<(u8, u8)> },
+    /// The flood cells of one dungeon level (`0..8`).
+    Dungeon { level: u8, cells: Vec<(u8, u8)> },
+}
+
 const SURFACE_LOOK_VISIBILITY_RADIUS: usize = 5;
 
 #[derive(Clone, Debug)]
@@ -3822,29 +3834,64 @@ impl PlayState {
     ///
     /// The overworld keeps the window. It is 256 by 256, so a local view of
     /// it is a window by necessity, and the party is at its centre.
-    fn surface_view_tile_at(&self, cell_x: usize, cell_y: usize) -> u8 {
-        let px = self.player.x as isize;
-        let py = self.player.y as isize;
-        let side = LOCAL_VIEW_OVERLAY_SIDE as isize;
-        let x = px - side / 2 + cell_x as isize;
-        let y = py - side / 2 + cell_y as isize;
+    pub(crate) fn surface_view_tile_at(&self, cell_x: usize, cell_y: usize) -> u8 {
+        let (x, y) = self.surface_view_cell_coordinate(cell_x, cell_y);
+        self.gem_sample_tile(x, y, false)
+    }
+
+    /// The absolute map coordinate a local-view overlay cell samples (see
+    /// [`PlayState::surface_view_tile_at`]): the cell itself on a town floor,
+    /// the party-centred window cell, not yet wrapped, on the overworld.
+    pub(crate) fn surface_view_cell_coordinate(
+        &self,
+        cell_x: usize,
+        cell_y: usize,
+    ) -> (isize, isize) {
+        match self.area {
+            Area::World { .. } => {
+                let side = LOCAL_VIEW_OVERLAY_SIDE as isize;
+                (
+                    self.player.x as isize - side / 2 + cell_x as isize,
+                    self.player.y as isize - side / 2 + cell_y as isize,
+                )
+            }
+            Area::Town { .. } | Area::Dungeon { .. } => (cell_x as isize, cell_y as isize),
+        }
+    }
+
+    /// The tile the gem view draws at an absolute map coordinate: a town
+    /// floor cell, or an overworld cell (wrapped at 256 on both axes, so the
+    /// caller may pass an unwrapped window coordinate). It is the body of the
+    /// faithful local-view lookup, which calls it with `terrain_only =
+    /// false` and so keeps its results: an object on the cell wins,
+    /// otherwise the grid tile through the static-animation resolver.
+    ///
+    /// `terrain_only = true` skips the object step and always returns the
+    /// resolved grid tile: the enhanced gem map draws no people or monsters
+    /// from object bytes (gem map design 10.2.12, D-M3.5). Off a town floor
+    /// and in a dungeon the result is `0`, the faithful view's blank.
+    ///
+    /// Read-only: it takes `&self`, renders nothing and draws no random
+    /// number.
+    pub fn gem_sample_tile(&self, x: isize, y: isize, terrain_only: bool) -> u8 {
         match self.area {
             Area::Town { .. } => {
-                let (x, y) = (cell_x as isize, cell_y as isize);
-                if !(0..32).contains(&x) || !(0..32).contains(&y) {
+                let side = TOWN_GRID_SIDE as isize;
+                if !(0..side).contains(&x) || !(0..side).contains(&y) {
                     return 0;
                 }
-                if let Some(object) = self.object_at_current_floor(x as usize, y as usize) {
+                let (x, y) = (x as usize, y as usize);
+                if !terrain_only && let Some(object) = self.object_at_current_floor(x, y) {
                     object.tile
                 } else {
-                    let tile = self.grid[y as usize * 32 + x as usize];
+                    let tile = self.grid[y * TOWN_GRID_SIDE + x];
                     self.animation.resolve_static_tile(tile)
                 }
             }
             Area::World { .. } => {
                 let wx = x.rem_euclid(WORLD_SIDE as isize) as usize;
                 let wy = y.rem_euclid(WORLD_SIDE as isize) as usize;
-                if let Some(object) = self.world_object_at(wx, wy) {
+                if !terrain_only && let Some(object) = self.world_object_at(wx, wy) {
                     object.tile
                 } else {
                     let tile = self.grid[world_cell_index(wx, wy)];
@@ -3995,6 +4042,117 @@ impl PlayState {
             }
         }
         glyphs
+    }
+
+    /// The map cells the open View overlay sampled, for the automap's and
+    /// the gem map's stamps (automap design 4.3.1, gem map design 10.3.1).
+    ///
+    /// - A surface overlay (`view.md §4`) samples the whole 32 x 32 town
+    ///   floor, or the 32 x 32 overworld window centred on the party,
+    ///   wrapped at 256. A surface overlay in a dungeon samples nothing.
+    /// - A dungeon overlay (`dungeon-mode.md §12.2`) shows the flood cells
+    ///   of the 22 x 22 scratch grid, which wrap onto the 8 x 8 level. The
+    ///   flood here mirrors [`PlayState::dungeon_vision_glyphs`] without its
+    ///   glyph step, and a test pins the two together.
+    /// - The sky overlay shows no map cell, and with no overlay open there is
+    ///   no footprint: both give `None`.
+    ///
+    /// The cells are sorted and unique. The view mode is not consulted: the
+    /// caller decides which modes it stamps. Read-only: no render and no
+    /// random draw.
+    pub fn view_overlay_footprint(&self) -> Option<ViewOverlayFootprint> {
+        let overlay = self.active_view_overlay.as_ref()?;
+        match overlay.kind {
+            ViewOverlayKind::Sky(_) => None,
+            ViewOverlayKind::Surface => {
+                let mut cells = Vec::new();
+                if !matches!(self.area, Area::Dungeon { .. }) {
+                    let side = LOCAL_VIEW_OVERLAY_SIDE;
+                    cells.reserve(side * side);
+                    for cell_y in 0..side {
+                        for cell_x in 0..side {
+                            let (x, y) = self.surface_view_cell_coordinate(cell_x, cell_y);
+                            // Both a town floor (0..32) and the wrapped
+                            // overworld (0..256) fit a byte.
+                            let x = x.rem_euclid(WORLD_SIDE as isize) as u8;
+                            let y = y.rem_euclid(WORLD_SIDE as isize) as u8;
+                            cells.push((x, y));
+                        }
+                    }
+                }
+                cells.sort_unstable();
+                cells.dedup();
+                Some(ViewOverlayFootprint::Surface { cells })
+            }
+            ViewOverlayKind::Dungeon { level } => {
+                let side = DUNGEON_GEM_VIEW_GRID_SIDE;
+                let (party_cell_x, party_cell_y) = DUNGEON_GEM_VIEW_PARTY_CELL;
+                let visible = self.dungeon_vision_flood(level);
+                let mut cells = Vec::new();
+                for scratch_y in 0..side {
+                    for scratch_x in 0..side {
+                        if !visible[scratch_y * side + scratch_x] {
+                            continue;
+                        }
+                        let dx = scratch_x as isize - party_cell_x as isize;
+                        let dy = scratch_y as isize - party_cell_y as isize;
+                        let x = (self.player.x as isize + dx).rem_euclid(DUNGEON_SIDE as isize);
+                        let y = (self.player.y as isize + dy).rem_euclid(DUNGEON_SIDE as isize);
+                        cells.push((x as u8, y as u8));
+                    }
+                }
+                cells.sort_unstable();
+                cells.dedup();
+                Some(ViewOverlayFootprint::Dungeon { level, cells })
+            }
+        }
+    }
+
+    /// The flood-accepted cells of the dungeon View's 22 x 22 scratch grid,
+    /// row-major. A mirror of the flood in
+    /// [`PlayState::dungeon_vision_glyphs`] (which stays untouched as the
+    /// faithful painter's source), pinned to it by a test.
+    fn dungeon_vision_flood(&self, level: u8) -> Vec<bool> {
+        let side = DUNGEON_GEM_VIEW_GRID_SIDE;
+        let (party_cell_x, party_cell_y) = DUNGEON_GEM_VIEW_PARTY_CELL;
+        let min_dx = -(party_cell_x as isize);
+        let max_dx = (side - party_cell_x - 1) as isize;
+        let min_dy = -(party_cell_y as isize);
+        let max_dy = (side - party_cell_y - 1) as isize;
+        let mut visible = vec![false; side * side];
+        let mut queue = VecDeque::with_capacity(DUNGEON_GEM_VIEW_FRONTIER_CAPACITY);
+        visible[party_cell_y * side + party_cell_x] = true;
+        queue.push_back((0isize, 0isize));
+        while let Some((sx, sy)) = queue.pop_front() {
+            let world_x = (self.player.x as isize + sx).rem_euclid(DUNGEON_SIDE as isize) as usize;
+            let world_y = (self.player.y as isize + sy).rem_euclid(DUNGEON_SIDE as isize) as usize;
+            if (sx != 0 || sy != 0)
+                && !dungeon_minimap_expands(self.dungeon_cell(level, world_x, world_y))
+            {
+                continue;
+            }
+            for dy in -1..=1 {
+                for dx in -1..=1 {
+                    if dx == 0 && dy == 0 {
+                        continue;
+                    }
+                    let next_x = sx + dx;
+                    let next_y = sy + dy;
+                    if next_x < min_dx || next_x > max_dx || next_y < min_dy || next_y > max_dy {
+                        continue;
+                    }
+                    let scratch_x = (next_x + party_cell_x as isize) as usize;
+                    let scratch_y = (next_y + party_cell_y as isize) as usize;
+                    let index = scratch_y * side + scratch_x;
+                    if !visible[index] {
+                        visible[index] = true;
+                        queue.push_back((next_x, next_y));
+                        debug_assert!(queue.len() <= DUNGEON_GEM_VIEW_FRONTIER_CAPACITY);
+                    }
+                }
+            }
+        }
+        visible
     }
 
     pub fn dungeon_vision_map(&self, level: u8) -> String {
@@ -7567,7 +7725,7 @@ const fn surface_view_marker_visible(idle_polls: u32) -> bool {
     (idle_polls / 4).is_multiple_of(2)
 }
 
-fn draw_surface_view_cell(
+pub fn draw_surface_view_cell(
     viewport: &mut TileViewport,
     cell_x: usize,
     cell_y: usize,
@@ -7674,7 +7832,7 @@ fn draw_surface_view_cell(
 /// only thing the original varied here is the display adapter, which this
 /// engine models as [`TileGraphicsDepth`] on the viewport, and only the
 /// high-colour (EGA/Tandy) pens are in the v1 target.
-fn draw_dungeon_view_glyph(
+pub fn draw_dungeon_view_glyph(
     viewport: &mut TileViewport,
     cell_x: usize,
     cell_y: usize,

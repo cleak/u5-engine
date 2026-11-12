@@ -12,6 +12,7 @@ mod chunk_07;
 mod chunk_08;
 mod chunk_09;
 mod chunk_10;
+pub use chunk_04::{ViewOverlayFootprint, draw_dungeon_view_glyph, draw_surface_view_cell};
 pub use chunk_07::{CombatKlimbCurrentCell, TownRestBurstOutcome};
 pub use chunk_09::object_cells::{MapViewKind, ObjectCell, ObjectCellPeek};
 pub use chunk_09::ring_peek::{
