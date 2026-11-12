@@ -462,6 +462,35 @@ fn the_defaults_are_off() {
 }
 
 #[test]
+fn map_brightness_is_read_alone_and_never_from_brightness() {
+    // 9.3.4 / D9.4b: the maps take `display.map_brightness` only.
+    assert_eq!(
+        ResolvedEnhancements::classic().display_map_brightness(),
+        100
+    );
+    assert_eq!(shipped(None, &[]).display_map_brightness(), 100);
+    for value in ["25", "55", "70", "85"] {
+        let resolved = shipped(None, &[set(BRIGHTNESS_KEY, value)]);
+        assert_eq!(resolved.display_map_brightness(), 100, "{value}");
+    }
+    let resolved = shipped(None, &[set(MAP_BRIGHTNESS_KEY, "70")]);
+    assert_eq!(resolved.display_map_brightness(), 70);
+    // The main view's brightness is unaffected by the map key.
+    assert_eq!(resolved.display_light(), DisplayLight::default());
+    // An out-of-range file value never reaches the maps as below 25.
+    let stored = Stored::default().with(MAP_BRIGHTNESS_KEY, SettingValue::Int(5));
+    let value = shipped(Some(&stored), &[]).display_map_brightness();
+    assert!(
+        (BRIGHTNESS_MIN..=BRIGHTNESS_OFF).contains(&value),
+        "{value}"
+    );
+    assert_eq!(
+        shipped(None, &[set(MAP_BRIGHTNESS_KEY, "25")]).display_map_brightness(),
+        BRIGHTNESS_MIN
+    );
+}
+
+#[test]
 fn the_view_reads_file_and_command_line_values() {
     let stored = Stored::default()
         .with(BRIGHTNESS_KEY, SettingValue::Int(55))

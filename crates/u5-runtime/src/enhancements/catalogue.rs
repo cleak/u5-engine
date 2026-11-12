@@ -354,7 +354,13 @@ toggles! {
         ships: LIGHT_P2,
         tags: &[],
         cli_aliases: &[],
-        soft_deps: &[],
+        // Front matter's soft-dependency table: it needs a map view to
+        // show on, the gem map through `brightness_link` (M3) or the full
+        // map (L1); without one it is inert.
+        soft_deps: &[SoftDep {
+            prefers: "gem_map.brightness_link",
+            fallback: "inert",
+        }],
         needs: &[],
         driven: true,
     },

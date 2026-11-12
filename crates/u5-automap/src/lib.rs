@@ -17,7 +17,9 @@
 //! - [`gem`]: the enhanced gem map's knowledge record and its observer
 //!   (10.3.2, 10.3.3, M3-05);
 //! - [`section`]: the tag, key, length section codec the `AMAP` and
-//!   `GEMK` payloads share (4.3.8, 10.3.7).
+//!   `GEMK` payloads share (4.3.8, 10.3.7);
+//! - [`raster`]: the maps' light and the tile colour table, ninth-virtue's
+//!   low-pass sample and coverage curve (9.3.4, M3-09).
 
 #![forbid(unsafe_code)]
 
@@ -25,12 +27,17 @@ pub mod gem;
 pub mod memory;
 pub mod observe;
 pub mod perceived;
+pub mod raster;
 pub mod section;
 pub mod static_maps;
 
 pub use memory::{DUNGEON_LEVEL_COUNT, DUNGEON_RECORDS, DUNGEON_SIDE_CELLS, DungeonBits};
 pub use observe::{CorridorCell, CorridorCells, CorridorLane, dungeon_corridor_cells};
 pub use perceived::{DungeonLook, PerceivedCell, perceived_dungeon_cell};
+pub use raster::{
+    LowpassEntry, MAP_PALETTE, MapLight, Premultiplied, ReducedTiles, TILE_COLOUR_TABLE_LEN,
+    TileColourTable,
+};
 pub use section::{
     SECTION_HEADER_LEN, SectionError, SectionList, SectionRef, read_sections, write_section,
 };

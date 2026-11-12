@@ -446,6 +446,19 @@ impl ResolvedEnhancements {
         }
     }
 
+    /// `display.map_brightness` in percent, 25..=100 (100 is off, the
+    /// default): the scale the map views' raster takes as its `MapLight`
+    /// (9.3.4). It is read on its own, never from `display.brightness`,
+    /// which does not reach the maps (D9.4b). A missing or unexpected
+    /// value reads as 100; a value outside the range is clamped.
+    pub fn display_map_brightness(&self) -> u8 {
+        self.values
+            .int(MAP_BRIGHTNESS_KEY)
+            .map_or(BRIGHTNESS_OFF, |value| {
+                value.clamp(i64::from(BRIGHTNESS_MIN), i64::from(BRIGHTNESS_OFF)) as u8
+            })
+    }
+
     /// Chapter 9's keys as [`DisplayLight`] (9.4.1). As for
     /// [`display`](Self::display), a missing or unexpected value reads as
     /// the key's default; a brightness outside 25..=100 is clamped.
