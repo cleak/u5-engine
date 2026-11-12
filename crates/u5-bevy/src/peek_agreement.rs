@@ -19,13 +19,22 @@
 //! after each map or combat render, every cell the peek names must hold
 //! exactly the atlas tile it says the render drew there
 //! ([`note_object_cells`]).
+//!
+//! Phase B M3-04 (design 4.3.3, 4.6) pins the dungeon corridor iterator
+//! the same way: on every dungeon frame, the cells
+//! `u5_automap::dungeon_corridor_cells` names must be exactly the cells
+//! whose content the faithful corridor render depends on, found by
+//! rendering clones with each cell of the level set to passage and to wall
+//! ([`note_corridor_cells`]).
 
 use std::cell::RefCell;
+use std::collections::HashSet;
 
 use u5_runtime::enhancements::SpriteMasks;
 use u5_runtime::{
-    MapViewKind, PlayState, TILE_ATLAS_SIDE, TILE_ATLAS_TILE_PIXELS, TileAtlas, TileViewport,
-    blit_terrain_tile_to_viewport,
+    Area, DUNGEON_BANDS, MapViewKind, PlayState, TILE_ATLAS_SIDE, TILE_ATLAS_TILE_PIXELS,
+    TileAtlas, TileViewport, VIEWPORT_PLAYER_ROW, blit_terrain_tile_to_viewport,
+    dungeon_cell_index,
 };
 
 /// The branch `render_base_framebuffer` took for the viewport.
@@ -114,6 +123,25 @@ pub(crate) struct ObjectCellTally {
     pub mismatches: Vec<String>,
 }
 
+/// The corridor iterator checked against the dungeon frames (M3-04).
+#[derive(Clone, Debug, Default)]
+pub(crate) struct CorridorTally {
+    /// Dungeon frames seen.
+    pub frames: usize,
+    /// Distinct views (level bytes, position, facing, light) flip-checked.
+    pub views: usize,
+    /// Views with a personal light.
+    pub lit: usize,
+    /// Views whose corridor stopped at a blocked band before the last.
+    pub blocked: usize,
+    /// Views with a heavy door underfoot (the point-blank rule).
+    pub point_blank: usize,
+    /// Cells the iterator named, over the distinct views.
+    pub cells: usize,
+    /// One line per view whose named cells were not the frame's.
+    pub mismatches: Vec<String>,
+}
+
 #[derive(Default)]
 struct Recorder {
     branch: Option<BaseBranch>,
@@ -122,6 +150,8 @@ struct Recorder {
     object_cells: ObjectCellTally,
     /// The masks of the last atlas seen, by its pixel buffer's address.
     masks: Option<(usize, SpriteMasks)>,
+    corridor: CorridorTally,
+    corridor_seen: HashSet<Vec<u8>>,
 }
 
 thread_local! {
@@ -151,6 +181,111 @@ pub(crate) fn object_cell_tally() -> ObjectCellTally {
             .map(|recorder| recorder.object_cells.clone())
             .unwrap_or_default()
     })
+}
+
+/// The corridor tally since [`start`].
+pub(crate) fn corridor_tally() -> CorridorTally {
+    RECORDER.with(|cell| {
+        cell.borrow()
+            .as_ref()
+            .map(|recorder| recorder.corridor.clone())
+            .unwrap_or_default()
+    })
+}
+
+/// Check the corridor iterator on the dungeon frame just drawn from
+/// `state` (design 4.6, "Corridor iterator, black-box"): a cell of the
+/// level is visible exactly when the faithful corridor render, on a clone,
+/// differs between the cell set to passage `0x00` and to wall `0xB0`, every
+/// other cell held. The visible set must be the iterator's, or, unlit, the
+/// render must paint nothing and the iterator name the party's cell alone.
+/// Each distinct view is checked once; frames without corridor art are
+/// counted but not checked.
+pub(crate) fn note_corridor_cells(state: &PlayState, atlas: &TileAtlas) {
+    let Some(banks) = atlas.dungeon_billboards.as_ref() else {
+        return;
+    };
+    let Area::Dungeon { level, .. } = state.area else {
+        return;
+    };
+    let Some(cells) = u5_automap::dungeon_corridor_cells(state) else {
+        return;
+    };
+    RECORDER.with(|cell| {
+        let mut borrow = cell.borrow_mut();
+        let Some(recorder) = borrow.as_mut() else {
+            return;
+        };
+        recorder.corridor.frames += 1;
+        let at = |x: u8, y: u8| dungeon_cell_index(level, usize::from(x), usize::from(y));
+        let mut key: Vec<u8> = (0..8u8)
+            .flat_map(|y| (0..8u8).map(move |x| (x, y)))
+            .map(|(x, y)| state.grid[at(x, y)])
+            .collect();
+        key.extend([
+            cells.record,
+            level,
+            state.player.x as u8,
+            state.player.y as u8,
+            state.player.facing as u8,
+            u8::from(cells.lit),
+        ]);
+        if !recorder.corridor_seen.insert(key) {
+            return;
+        }
+        let tally = &mut recorder.corridor;
+        tally.views += 1;
+        tally.lit += usize::from(cells.lit);
+        tally.cells += cells.cells.len();
+        let last_band = cells.cells.last().map_or(0, |c| c.band);
+        tally.blocked += usize::from(cells.lit && usize::from(last_band) + 1 < DUNGEON_BANDS);
+        let (px, py) = (cells.cells[0].x, cells.cells[0].y);
+        tally.point_blank += usize::from(cells.lit && state.grid[at(px, py)] >> 4 == 0xE);
+
+        let render = |probe: &PlayState| {
+            probe
+                .clone()
+                .render_dungeon_viewport(
+                    VIEWPORT_PLAYER_ROW,
+                    atlas.depth,
+                    Some(banks),
+                    atlas.dungeon_sprites.as_ref(),
+                )
+                .map(|viewport| viewport.pixels)
+        };
+        let mut visible = Vec::new();
+        for y in 0..8u8 {
+            for x in 0..8u8 {
+                let mut open = state.clone();
+                open.grid[at(x, y)] = 0x00;
+                let mut shut = state.clone();
+                shut.grid[at(x, y)] = 0xB0;
+                match (render(&open), render(&shut)) {
+                    (Ok(a), Ok(b)) if a != b => visible.push((x, y)),
+                    (Ok(_), Ok(_)) => {}
+                    (Err(err), _) | (_, Err(err)) => {
+                        tally.mismatches.push(format!("render failed: {err}"));
+                        return;
+                    }
+                }
+            }
+        }
+        let mut named: Vec<(u8, u8)> = if cells.lit {
+            cells.positions().collect()
+        } else {
+            Vec::new()
+        };
+        named.sort_unstable();
+        visible.sort_unstable();
+        let unlit_wrong = !cells.lit && cells.cells.len() != 1;
+        if named != visible || unlit_wrong {
+            tally.mismatches.push(format!(
+                "record {} level {level} at ({}, {}) facing {:?} lit {}: iterator {named:?}, \
+                 frame {visible:?}",
+                cells.record, state.player.x, state.player.y, state.player.facing, cells.lit
+            ));
+        }
+    });
 }
 
 /// Peek the object cells of the frame `viewport` just drawn from `state`

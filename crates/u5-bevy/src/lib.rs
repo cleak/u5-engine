@@ -18850,6 +18850,9 @@ fn render_base_framebuffer(state: &mut PlayState, atlas: &TileAtlas) -> Vec<u8> 
                 ) {
                     peek_agreement::note_object_cells(state, atlas, &viewport);
                 }
+                if branch == peek_agreement::BaseBranch::Dungeon {
+                    peek_agreement::note_corridor_cells(state, atlas);
+                }
             }
             let rgba = tile_viewport_to_visual_rgba(&viewport);
             if viewport.width as u32 == VIEWPORT_SIZE_PX
@@ -27621,6 +27624,52 @@ mod tests {
         );
     }
 
+    /// Phase B M3-04 (design 4.6): the corridor iterator against the
+    /// faithful dungeon frame through the play compositor, on synthetic
+    /// corridor art: open, walled, a heavy door underfoot, unlit, and the
+    /// three presentation flavours.
+    #[test]
+    fn corridor_cells_agree_with_the_dungeon_frame_on_synthetic_levels() {
+        let mut atlas = synthetic_tile_atlas(TileGraphicsDepth::Ega16);
+        atlas.dungeon_billboards = Some(
+            u5_runtime::test_fixtures::synthetic_dungeon_billboard_banks(TileGraphicsDepth::Ega16),
+        );
+        let font = staircase_corner_font();
+        let mut states = Vec::new();
+        for record in [1u8, 5, 0] {
+            let mut open = dungeon_state(open_dungeon_record(), 2, 3, 4);
+            open.area = u5_runtime::Area::Dungeon {
+                scene: u5_runtime::DungeonScene::from_record(record).unwrap(),
+                level: 2,
+            };
+            open.torch_counter = 40;
+            let mut walled = open.clone();
+            walled.grid[u5_runtime::dungeon_cell_index(2, 5, 4)] = 0xB0;
+            walled.player.facing = u5_runtime::Direction::East;
+            let mut heavy = open.clone();
+            heavy.grid[u5_runtime::dungeon_cell_index(2, 3, 4)] = 0xE0;
+            heavy.player.facing = u5_runtime::Direction::North;
+            let mut dark = open.clone();
+            dark.torch_counter = 0;
+            dark.light_spell_counter = 0;
+            states.extend([open, walled, heavy, dark]);
+        }
+
+        peek_agreement::start();
+        for mut state in states {
+            let _ = render_visual_play_frame(&mut state, &atlas, play_ctx(&font));
+        }
+        let tally = peek_agreement::corridor_tally();
+        let _ = peek_agreement::finish();
+        assert_eq!(
+            (tally.frames, tally.views, tally.lit),
+            (12, 12, 9),
+            "{tally:?}"
+        );
+        assert_eq!((tally.blocked, tally.point_blank), (3, 3), "{tally:?}");
+        assert!(tally.mismatches.is_empty(), "{:#?}", tally.mismatches);
+    }
+
     /// A font whose every glyph is distinct and has ink: each row is the
     /// code, its complement and the code again, so a glyph check against
     /// the frame means something.
@@ -27754,6 +27803,7 @@ mod tests {
         let routes_dir = temp_output_dir("peek-routes");
         visual_route_suite(&writable_game_dir, TileGraphicsDepth::Ega16, &routes_dir).unwrap();
         let object_cells = peek_agreement::object_cell_tally();
+        let corridor = peek_agreement::corridor_tally();
         let filed = peek_agreement::finish();
         let (rows_checked, row_mismatches) = accessor_agreement::finish();
         let grow = grow_agreement::finish();
@@ -27835,6 +27885,23 @@ mod tests {
             "{:#?}",
             object_cells.mismatches
         );
+
+        // Phase B M3-04 (design 4.3.3, 4.6): on every dungeon frame of the
+        // suites, the corridor iterator names exactly the cells the
+        // faithful corridor render depends on (the party's cell alone,
+        // unlit), by the passage/wall flip on clones.
+        println!(
+            "dungeon corridor: {} frames, {} views ({} lit, {} blocked short, {} point-blank), \
+             {} cells",
+            corridor.frames,
+            corridor.views,
+            corridor.lit,
+            corridor.blocked,
+            corridor.point_blank,
+            corridor.cells
+        );
+        assert!(corridor.views > 0 && corridor.lit > 0, "{corridor:?}");
+        assert!(corridor.mismatches.is_empty(), "{:#?}", corridor.mismatches);
 
         // Phase B M2-06 (design 9.3.8): on every map and combat frame of the
         // suites, the composite changes only black mask pixels of peeked

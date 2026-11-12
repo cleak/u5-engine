@@ -752,6 +752,29 @@ fn validate_dungeon_sprite_slot(
 }
 
 impl DungeonBillboardBanks {
+    /// Build the three banks from already loaded directories, each
+    /// checked by [`validate_dungeon_billboard_bank`]. For synthetic test
+    /// fixtures (Phase B M3-04); the game loads its banks through
+    /// [`load_dungeon_billboard_banks`].
+    pub fn from_banks(
+        normal: DungeonBillboardBank,
+        mine: DungeonBillboardBank,
+        flavour_byte_3: DungeonBillboardBank,
+    ) -> io::Result<Self> {
+        for (stem, bank) in [
+            ("DNG1", &normal),
+            ("DNG2", &mine),
+            ("DNG3", &flavour_byte_3),
+        ] {
+            validate_dungeon_billboard_bank(bank, stem)?;
+        }
+        Ok(Self {
+            normal,
+            mine,
+            flavour_byte_3,
+        })
+    }
+
     /// Bank for a presentation flavour.
     pub fn bank(&self, flavour: DungeonPresentationFlavour) -> &DungeonBillboardBank {
         match flavour {

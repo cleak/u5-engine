@@ -1244,6 +1244,42 @@ pub fn synthetic_beacon_bearing_stencils() -> BeaconBearingStencils {
         .expect("the synthetic stencil table must satisfy the published record shape")
 }
 
+/// Three synthetic corridor banks with every slot of the published shape
+/// populated by an opaque pattern unique to its slot and flavour, so any
+/// change of billboard role or band changes the painted pixels. Used by
+/// the dungeon-corridor cross-checks (Phase B M3-04), which need a
+/// renderer that paints without a game directory.
+pub fn synthetic_dungeon_billboard_banks(depth: TileGraphicsDepth) -> DungeonBillboardBanks {
+    let limit = u16::from(depth.pixel_limit()).max(2);
+    let bank = |flavour: usize| GraphicImageDirectory {
+        depth,
+        images: (0..DUNGEON_BILLBOARD_SLOTS)
+            .map(|slot| {
+                if DUNGEON_BILLBOARD_ABSENT_SLOTS.contains(&slot) {
+                    return None;
+                }
+                let role = dungeon_billboard_role_for_slot(slot)?;
+                let width = dungeon_billboard_width(role, slot % DUNGEON_BANDS)? as usize;
+                let pixels = (0..width * DUNGEON_BILLBOARD_ROWS)
+                    .map(|at| {
+                        let (x, y) = (at % width, at / width);
+                        let seed = (slot * 7 + flavour * 3 + x / 2 + y / 3) as u16;
+                        // Index 0 is the transparent margin; never use it.
+                        (seed % (limit - 1) + 1) as u8
+                    })
+                    .collect();
+                Some(GraphicImage {
+                    width,
+                    height: DUNGEON_BILLBOARD_ROWS,
+                    pixels,
+                })
+            })
+            .collect(),
+    };
+    DungeonBillboardBanks::from_banks(bank(0), bank(1), bank(2))
+        .expect("the synthetic banks follow the published slot shape")
+}
+
 /// The message slot followed by every staged beat still queued, in order:
 /// what the window will read once a paced presentation has run out.
 pub fn message_with_staged(state: &PlayState) -> String {
