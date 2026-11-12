@@ -15,6 +15,11 @@
 //! centre exactly: its top-left is `(W / 2 - 2, H / 2 - 2)`. The cells
 //! around it are laid out from there, so the outermost columns and rows
 //! are cut by the canvas edge (2 px of them show at the even sizes).
+//!
+//! **In towns** ([`TownLayout`], 10.2.5, M3-12) the whole 32 x 32 floor is
+//! centred at the largest whole cell size that fits: 7 px at 240 lines,
+//! 6 px at 200 or 216. The land beside it and the strips above and below
+//! fill the rest of the canvas at the same size.
 
 use super::seen::GemWindow;
 
@@ -129,6 +134,109 @@ impl OutdoorLayout {
         GemWindow {
             half_cols: self.dx.0.unsigned_abs().max(self.dx.1.unsigned_abs()) as u16,
             half_rows: self.dy.0.unsigned_abs().max(self.dy.1.unsigned_abs()) as u16,
+        }
+    }
+}
+
+/// Cells on a side of a town floor (`town-mode.md §3`).
+pub const TOWN_FLOOR_CELLS: i32 = 32;
+
+/// The floor row the gazetteer entrance row sits beside (10.2.5, the
+/// approved mockup): floor row `r` is beside world row
+/// `entrance_y - 16 + r`, so the canvas's 36 rows at 240 lines are the side
+/// window's 36 rows.
+pub const TOWN_ENTRANCE_FLOOR_ROW: i32 = 16;
+
+/// Where a town's cells fall on a canvas (10.2.5). Cells are addressed by
+/// floor column and row: `0..32` is the floor, negative columns are the
+/// land west of the entrance, columns from 32 the land east of it, and the
+/// rows above 0 and from 32 on are the strips.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub struct TownLayout {
+    pub canvas: GemCanvas,
+    /// Pixels per cell side: the largest whole size at which the 32 x 32
+    /// floor fits the canvas (7 at 240 lines, 6 at 200 or 216).
+    pub cell: u32,
+    /// The canvas position of floor cell (0, 0)'s top-left: the floor is
+    /// centred.
+    pub floor_px: (i32, i32),
+    /// The first and last floor columns and rows the canvas touches,
+    /// inclusive, partial ones included.
+    pub cols: (i32, i32),
+    pub rows: (i32, i32),
+}
+
+impl TownLayout {
+    /// The town layout of `canvas`, or `None` when the floor cannot fit at
+    /// one pixel a cell.
+    pub fn new(canvas: GemCanvas) -> Option<Self> {
+        let floor = TOWN_FLOOR_CELLS as u32;
+        let cell = (canvas.w / floor).min(canvas.h / floor).min(16);
+        if cell == 0 {
+            return None;
+        }
+        let side = floor * cell;
+        let floor_px = (
+            ((canvas.w - side) / 2) as i32,
+            ((canvas.h - side) / 2) as i32,
+        );
+        let c = cell as i32;
+        let span = |origin: i32, extent: i32| {
+            (
+                -(origin + c - 1).div_euclid(c),
+                (extent - 1 - origin).div_euclid(c),
+            )
+        };
+        Some(Self {
+            canvas,
+            cell,
+            floor_px,
+            cols: span(floor_px.0, canvas.w as i32),
+            rows: span(floor_px.1, canvas.h as i32),
+        })
+    }
+
+    /// The canvas rectangle of floor cell `(fx, fy)`, as `(x, y, w, h)`
+    /// before clipping.
+    pub fn cell_rect(&self, fx: i32, fy: i32) -> (i32, i32, u32, u32) {
+        let c = self.cell as i32;
+        (
+            self.floor_px.0 + fx * c,
+            self.floor_px.1 + fy * c,
+            self.cell,
+            self.cell,
+        )
+    }
+
+    /// The columns the canvas touches west and east of the floor, partial
+    /// ones included (21 and 21 at 512 x 240, 11 and 11 at 320 x 200).
+    pub fn drawn_sides(&self) -> (u32, u32) {
+        (
+            (-self.cols.0).max(0) as u32,
+            (self.cols.1 - (TOWN_FLOOR_CELLS - 1)).max(0) as u32,
+        )
+    }
+
+    /// The side widths in cells as the approved mockup reports them: the
+    /// west side with its partial column, the east side as the whole cells
+    /// left of `W / cell` (21 and 20 at 512 x 240, 11 and 10 at 320 x 200).
+    pub fn side_cells(&self) -> (u32, u32) {
+        let west = self.drawn_sides().0;
+        let whole = self.canvas.w / self.cell;
+        (west, whole.saturating_sub(TOWN_FLOOR_CELLS as u32 + west))
+    }
+
+    /// The offset from the entrance column of floor column `fx`'s land:
+    /// `fx` on the west side (-1 touches the floor), `fx - 31` on the east
+    /// side (32 is one east of the entrance), `None` on the floor's own
+    /// columns, which cut the land open at the entrance column.
+    pub fn entrance_dx(fx: i32) -> Option<i32> {
+        if fx < 0 {
+            Some(fx)
+        } else if fx >= TOWN_FLOOR_CELLS {
+            Some(fx - (TOWN_FLOOR_CELLS - 1))
+        } else {
+            None
         }
     }
 }

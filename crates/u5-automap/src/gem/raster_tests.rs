@@ -120,10 +120,13 @@ fn the_image_is_cleared_unless_a_gem_view_is_open() {
         assert_eq!(drawn, GemRender::Cleared);
         assert!(image.is_cleared());
     }
-    // A town gem (M3-12) draws nothing yet.
+    // A town gem draws its town (M3-12), and only with the feature on.
     let mut town = test_state(open_grid(), 5, 5);
     town.active_view_overlay = gem_overlay();
-    assert_eq!(render(&town, &on(), canvas, 100).1, GemRender::Cleared);
+    assert_eq!(render(&town, &on(), canvas, 100).1, GemRender::Town);
+    let (image, drawn) = render(&town, &GemMapToggles::default(), canvas, 100);
+    assert_eq!(drawn, GemRender::Cleared);
+    assert!(image.is_cleared());
 }
 
 #[test]

@@ -35,8 +35,15 @@
 //!
 //! The canvas is the foundation's for the window ([`Canvas::for_window`]),
 //! or the classic 320x200; below a 320x200 window there is no gem map and
-//! the 1.0.1 view shows (D-M3.3). Views this build does not draw yet (towns,
-//! dungeons) leave the 1.0.1 view showing too.
+//! the 1.0.1 view shows (D-M3.3). Views this build does not draw yet
+//! (dungeons) leave the 1.0.1 view showing too.
+//!
+//! **Towns** (10.2.5, M3-12): the land beside the floor comes from the
+//! static world map of the town's plane, read through [`StaticMaps`] from
+//! the folder the game plays from on the first town gem with
+//! `gem_map.town_surroundings` on, and kept. Only the cells the record says
+//! the party has seen are drawn. A map that cannot be read leaves the sides
+//! black.
 
 use std::time::Duration;
 
@@ -44,9 +51,10 @@ use bevy::image::ImageSampler;
 use bevy::prelude::*;
 use bevy::render::render_asset::RenderAssetUsages;
 use bevy::render::render_resource::{Extent3d, TextureDimension, TextureFormat};
+use u5_automap::StaticMaps;
 use u5_automap::gem::{
-    GemCanvas, GemImage, GemRender, GemShown, GemViewState, GemWindow, MapArt, gem_canvas,
-    gem_view_open, render_gem_map,
+    GemCanvas, GemImage, GemRender, GemShown, GemViewState, GemWindow, MapArt, TownInputs,
+    gem_canvas, gem_view_open, render_gem_map, town_world_plane,
 };
 use u5_runtime::enhancements::{GemMapToggles, PixelAspect, ResolvedEnhancements};
 use u5_runtime::{Area, PlayState};
@@ -207,9 +215,22 @@ pub struct GemBefore {
 
 /// What the gem map shows and how far its sweep is. Exists only while the
 /// plugin is in the app.
+/// The static maps a town view's sides read, kept for the session.
+#[derive(Default)]
+struct GemStatics(Option<StaticMaps>);
+
+impl std::fmt::Debug for GemStatics {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("GemStatics")
+            .field("cached", &self.0.as_ref().map(StaticMaps::cached_len))
+            .finish()
+    }
+}
+
 #[derive(Resource, Debug, Default)]
 pub struct GemShow {
     art: Option<MapArt>,
+    statics: GemStatics,
     /// The open view, from its open until it closes.
     view: Option<GemViewState>,
     /// The gem count the open view opened with: each open spends a gem, so
@@ -397,7 +418,23 @@ pub(super) fn gem_render(
         let new_canvas = show.view.as_ref().is_some_and(|view| view.canvas != canvas);
         if new_open || new_canvas {
             let art = show.art.get_or_insert_with(|| MapArt::build(&visual.atlas));
-            let view = GemViewState::open(state, canvas, display_map);
+            let surroundings = t.opts.town_surroundings;
+            let world = town_world_plane(state)
+                .filter(|_| surroundings)
+                .and_then(|plane| {
+                    let statics = show
+                        .statics
+                        .0
+                        .get_or_insert_with(|| StaticMaps::new(&visual.game_dir));
+                    statics.set_game_dir(&visual.game_dir);
+                    statics.world_map(plane).ok()
+                });
+            let town = TownInputs {
+                know: Some(gem.knowledge()),
+                world,
+                surroundings,
+            };
+            let view = GemViewState::open_with(state, canvas, display_map, town);
             let drawn = render_gem_map(state, gem.knowledge(), art, &t, &view, &mut show.full);
             show.renders += 1;
             if drawn == GemRender::Cleared || matches!(view.shown, GemShown::Empty) {

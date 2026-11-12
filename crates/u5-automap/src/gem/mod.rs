@@ -12,8 +12,8 @@
 //! - [`session`]: one play session's record as both frontends drive it:
 //!   attach, probe and observe, write after a save, new game (10.3.5,
 //!   10.3.6, M3-08);
-//! - [`layout`]: the gem canvas and the outdoor layout (10.2.4, D-M3.3,
-//!   M3-10);
+//! - [`layout`]: the gem canvas, the outdoor layout (10.2.4, D-M3.3,
+//!   M3-10) and the town layout (10.2.5, M3-12);
 //! - [`shown`]: the shown set, the cells drawn and their tiles, cached per
 //!   open in [`GemViewState`] (10.2.3, D-M3.5, M3-10);
 //! - [`raster`]: [`render_gem_map`], the CPU raster (10.3.4, M3-10).
@@ -33,7 +33,10 @@ pub use knowledge::{
     GemKnowledge, KeeperMark, KnowEvent, LinkDir, MarkKind, SIDE_WINDOW_BYTES, SIDE_WINDOW_HEIGHT,
     SIDE_WINDOW_WIDTH, SIGN_TRADES, SignCell, TRADES, TownLink, Trade,
 };
-pub use layout::{GEM_CLASSIC_CANVAS, GemCanvas, OUTDOOR_CELL_PX, OutdoorLayout, gem_canvas};
+pub use layout::{
+    GEM_CLASSIC_CANVAS, GemCanvas, OUTDOOR_CELL_PX, OutdoorLayout, TOWN_ENTRANCE_FLOOR_ROW,
+    TOWN_FLOOR_CELLS, TownLayout, gem_canvas,
+};
 pub use payload::{
     AttachOutcome, EmptyReason, PayloadError, attach, attach_payload, decode_payload,
     encode_payload,
@@ -44,12 +47,15 @@ pub use probe::{
 };
 pub use probe_more::{ENTRANCE_NAME_COLUMNS, entrance_record_for_column};
 pub use raster::{
-    GemImage, GemRender, MapArt, PARTY_MARKER_PX, PARTY_SPRITE_PX, map_percent, party_sprite_tile,
-    render_gem_map,
+    GemImage, GemRender, MapArt, PARTY_MARKER_PX, PARTY_SPRITE_PX, TOWN_SIDE_PERCENT, map_percent,
+    party_sprite_tile, render_gem_map, town_side_lut,
 };
 pub use seen::{
     GemWindow, SideWindow, faithful_window_cells, frame_seen_events, gem_view_events,
     observation_open, side_window, side_windows,
 };
 pub use session::{GEM_SUMMARY_PREFIX, GemSession, summary_line};
-pub use shown::{GemShown, GemViewState, OutdoorShown, gem_view_open};
+pub use shown::{
+    GemShown, GemViewState, OutdoorShown, TownInputs, TownPart, TownShown, gem_view_open,
+    town_part, town_world_plane,
+};

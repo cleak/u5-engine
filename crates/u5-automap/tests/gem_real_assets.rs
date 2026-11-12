@@ -103,3 +103,101 @@ fn real_assets_render_outdoors() {
         }
     }
 }
+
+fn real_britain(dir: &std::path::Path) -> PlayState {
+    let mut state = PlayState::load_scene(
+        dir,
+        u5_runtime::PlayOptions {
+            target: u5_runtime::PlayTarget::Town(u5_runtime::Scene::from_key("TOWNE:1").unwrap()),
+            floor: 0,
+            // The mockups' S2: Britain, party at (15, 17).
+            start: Some((15, 17)),
+            clock: u5_runtime::GameClock::new(10, 0).unwrap(),
+            ..u5_runtime::PlayOptions::default()
+        },
+    )
+    .unwrap();
+    state.active_view_overlay = gem_overlay();
+    state
+}
+
+fn write_ppm(dir: &std::path::Path, name: &str, out: &GemImage) {
+    let mut ppm = format!("P6\n{} {}\n255\n", out.w, out.h).into_bytes();
+    for p in out.rgba.chunks(4) {
+        ppm.extend_from_slice(&p[..3]);
+    }
+    std::fs::write(dir.join(name), ppm).unwrap();
+}
+
+/// With `U5_MOCKUP_PROFILE` naming a game copy: Britain at 16:9 and 4:3
+/// (the mockups' T1 and T3), once with every cell of its side window seen
+/// and once on a fresh record, where every side cell is black. With
+/// `U5_GEM_SHOTS`, the renders are written there as PPM files.
+#[test]
+fn real_assets_render_britain() {
+    use u5_automap::StaticMaps;
+    use u5_automap::gem::{
+        KnowEvent, SIDE_WINDOW_HEIGHT, SIDE_WINDOW_WIDTH, TownInputs, TownPart, side_window,
+        town_world_plane,
+    };
+    let Some(dir) = env_dir("U5_MOCKUP_PROFILE") else {
+        eprintln!("skipped: set U5_MOCKUP_PROFILE");
+        return;
+    };
+    let atlas = u5_runtime::load_tile_atlas(&dir, TileGraphicsDepth::Ega16).unwrap();
+    let art = MapArt::build(&atlas);
+    let state = real_britain(&dir);
+    let scene = u5_runtime::Scene::from_key("TOWNE:1").unwrap().byte;
+    assert!(side_window(scene).is_some());
+    let mut maps = StaticMaps::new(&dir);
+    let world = maps
+        .world_map(town_world_plane(&state).unwrap())
+        .unwrap()
+        .to_vec();
+    let mut seen = GemKnowledge::new();
+    for index in 0..u16::from(SIDE_WINDOW_WIDTH) * u16::from(SIDE_WINDOW_HEIGHT) {
+        seen.apply(&KnowEvent::SideCellSeen { scene, index });
+    }
+    let fresh = GemKnowledge::new();
+    let shots = env_dir("U5_GEM_SHOTS");
+    for (name, canvas) in [("T3-43", CANVASES[0]), ("T1-169", CANVASES[1])] {
+        for (record, know) in [("seen", &seen), ("fresh", &fresh)] {
+            for percent in [70, 100] {
+                let mut t = on();
+                t.opts.map_brightness = percent;
+                let inputs = TownInputs {
+                    know: Some(know),
+                    world: Some(&world),
+                    surroundings: true,
+                };
+                let view = GemViewState::open_with(&state, canvas, 100, inputs);
+                let u5_automap::gem::GemShown::Town(shown) = &view.shown else {
+                    panic!("a town view");
+                };
+                let sides = shown
+                    .cells()
+                    .filter(|cell| cell.2 == TownPart::Side)
+                    .collect::<Vec<_>>();
+                assert!(!sides.is_empty());
+                if record == "fresh" {
+                    assert!(sides.iter().all(|cell| cell.3.is_none()));
+                } else {
+                    assert!(sides.iter().all(|cell| cell.3.is_some()));
+                }
+                let mut out = GemImage::default();
+                assert_eq!(
+                    render_gem_map(&state, know, &art, &t, &view, &mut out),
+                    GemRender::Town
+                );
+                assert!(out.rgba.chunks(4).all(|p| p[3] == 255));
+                if let Some(shots) = &shots {
+                    write_ppm(
+                        shots,
+                        &format!("engine-{name}-{record}-{percent:03}.ppm"),
+                        &out,
+                    );
+                }
+            }
+        }
+    }
+}

@@ -14,12 +14,29 @@
 //! [`GemViewState`] (10.3.4 step 1); the render only reads it. Every read
 //! here is `&PlayState`.
 //!
-//! Towns (M3-12) and dungeons (M3-13) add their own arms; until then their
-//! shown set is empty and nothing is drawn.
+//! **In a town** ([`TownShown`], 10.2.5, M3-12) the shown set is the whole
+//! 32 x 32 floor, each cell `gem_sample_tile(x, y, terrain_only = true)`:
+//! the live terrain only, so no townsfolk or other object is drawn
+//! (10.2.12, pending D0.2). Beside it lies the Britannia land around the
+//! town's gazetteer entrance, cut open at the entrance column, from the
+//! static world map (`StaticMaps`), and only the cells the record says the
+//! party has seen (tag 11; 10.2.5 "only land the party has seen"). Every
+//! other side cell is black: a cell outside the side window, a cell never
+//! seen, every cell with `gem_map.town_surroundings` off, and every cell
+//! when the world map could not be read. The strips above and below the
+//! floor show the floor's south-east corner cell, as the world-tile getter
+//! returns it past the floor edge (`town-mode.md §15`, `visibility.md §3`).
+//!
+//! Dungeons (M3-13) add their own arm; until then their shown set is empty
+//! and nothing is drawn.
 
 use u5_runtime::{Area, PlayState, ViewOverlayKind, ViewOverlayMode, WORLD_SIDE, WorldPlane};
 
-use super::layout::{GemCanvas, OutdoorLayout};
+use super::knowledge::GemKnowledge;
+use super::layout::{
+    GemCanvas, OutdoorLayout, TOWN_ENTRANCE_FLOOR_ROW, TOWN_FLOOR_CELLS, TownLayout,
+};
+use super::seen::side_window;
 
 /// The outdoor shown set (10.2.3, 10.2.4): one drawn tile per canvas cell.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -104,13 +121,146 @@ fn wrap(value: isize) -> u8 {
     value.rem_euclid(WORLD_SIDE as isize) as u8
 }
 
+/// Which part of a town view a cell is (10.2.5).
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum TownPart {
+    /// The 32 x 32 floor, at the map brightness.
+    Floor,
+    /// Above or below the floor: the floor's south-east corner cell.
+    Strip,
+    /// Beside the floor: the land around the entrance, if seen.
+    Side,
+}
+
+/// What a town view reads besides the game (10.3.4 step 1): the record's
+/// seen side cells, the static world map of the town's plane
+/// ([`town_world_plane`]), and `gem_map.town_surroundings`. The default
+/// reads nothing, so every side cell is black.
+#[derive(Clone, Copy, Debug, Default)]
+pub struct TownInputs<'a> {
+    pub know: Option<&'a GemKnowledge>,
+    /// The decoded 256 x 256 world map, row-major.
+    pub world: Option<&'a [u8]>,
+    pub surroundings: bool,
+}
+
+/// The world plane whose static map a town view's sides need: the plane
+/// of the town's side window, when the party is in a town that has one.
+pub fn town_world_plane(state: &PlayState) -> Option<WorldPlane> {
+    let Area::Town { scene, .. } = state.area else {
+        return None;
+    };
+    side_window(scene.byte).map(|window| window.plane)
+}
+
+/// The town shown set (10.2.3, 10.2.5): one drawn tile, or black, per
+/// canvas cell.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct TownShown {
+    pub scene: u8,
+    pub floor: i8,
+    /// The party's floor cell.
+    pub party: (u8, u8),
+    pub layout: TownLayout,
+    /// The floor's south-east corner cell, drawn in the strips.
+    pub corner: u8,
+    /// The drawn tiles, row-major over the layout's columns and rows;
+    /// `None` is black.
+    tiles: Vec<Option<u8>>,
+}
+
+impl TownShown {
+    /// The shown set of the floor the party is on, or `None` outside a
+    /// town or on a canvas too small for the floor.
+    pub fn sample(state: &PlayState, canvas: GemCanvas, inputs: TownInputs<'_>) -> Option<Self> {
+        let Area::Town { scene, floor } = state.area else {
+            return None;
+        };
+        let layout = TownLayout::new(canvas)?;
+        let last = TOWN_FLOOR_CELLS as isize - 1;
+        let corner = state.gem_sample_tile(last, last, true);
+        let window = side_window(scene.byte);
+        let world = inputs
+            .world
+            .filter(|world| world.len() == WORLD_SIDE * WORLD_SIDE && inputs.surroundings);
+        let side_tile = |fx: i32, fy: i32| -> Option<u8> {
+            let (window, world, know) = (window?, world?, inputs.know?);
+            let dx = TownLayout::entrance_dx(fx)?;
+            let dy = fy - TOWN_ENTRANCE_FLOOR_ROW;
+            let (ex, ey) = window.entrance;
+            let x = wrap(ex as isize + dx as isize);
+            let y = wrap(ey as isize + dy as isize);
+            let index = window.index_of(x, y)?;
+            know.side_seen(scene.byte, index)
+                .then(|| {
+                    world
+                        .get(usize::from(y) * WORLD_SIDE + usize::from(x))
+                        .copied()
+                })
+                .flatten()
+        };
+        let mut tiles = Vec::new();
+        for fy in layout.rows.0..=layout.rows.1 {
+            for fx in layout.cols.0..=layout.cols.1 {
+                tiles.push(match town_part(fx, fy) {
+                    TownPart::Floor => Some(state.gem_sample_tile(fx as isize, fy as isize, true)),
+                    TownPart::Strip => Some(corner),
+                    TownPart::Side => side_tile(fx, fy),
+                });
+            }
+        }
+        Some(Self {
+            scene: scene.byte,
+            floor,
+            party: (state.player.x as u8, state.player.y as u8),
+            layout,
+            corner,
+            tiles,
+        })
+    }
+
+    /// The drawn tile at floor cell `(fx, fy)`: `None` for a black cell or
+    /// one off the canvas.
+    pub fn tile(&self, fx: i32, fy: i32) -> Option<u8> {
+        let (cols, rows) = (self.layout.cols, self.layout.rows);
+        if !(cols.0..=cols.1).contains(&fx) || !(rows.0..=rows.1).contains(&fy) {
+            return None;
+        }
+        let width = (cols.1 - cols.0 + 1) as usize;
+        let at = (fy - rows.0) as usize * width + (fx - cols.0) as usize;
+        self.tiles.get(at).copied().flatten()
+    }
+
+    /// Every canvas cell as `(fx, fy, part, tile)`, row-major.
+    pub fn cells(&self) -> impl Iterator<Item = (i32, i32, TownPart, Option<u8>)> + '_ {
+        let (cols, rows) = (self.layout.cols, self.layout.rows);
+        let width = cols.1 - cols.0 + 1;
+        self.tiles.iter().enumerate().map(move |(index, &tile)| {
+            let index = index as i32;
+            let (fx, fy) = (cols.0 + index % width, rows.0 + index / width);
+            (fx, fy, town_part(fx, fy), tile)
+        })
+    }
+}
+
+/// The part of a town view floor cell `(fx, fy)` is in.
+pub fn town_part(fx: i32, fy: i32) -> TownPart {
+    let on = |v: i32| (0..TOWN_FLOOR_CELLS).contains(&v);
+    match (on(fx), on(fy)) {
+        (true, true) => TownPart::Floor,
+        (true, false) => TownPart::Strip,
+        (false, _) => TownPart::Side,
+    }
+}
+
 /// The shown set of one open view.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum GemShown {
     /// Nothing to draw: no gem view, or a view this milestone does not
-    /// draw yet (towns, dungeons).
+    /// draw yet (dungeons).
     Empty,
     Outdoor(OutdoorShown),
+    Town(TownShown),
 }
 
 /// One open gem view's state (10.3.2): the canvas, the cached shown set
@@ -130,14 +280,29 @@ pub struct GemViewState {
 }
 
 impl GemViewState {
-    /// The state for the view now open on `state`, at `canvas`. The shown
-    /// set is empty unless a gem view (not Peer, X-Ray or the sky) is up.
+    /// The state for the view now open on `state`, at `canvas`, with no
+    /// town inputs: a town view's sides are all black. The shown set is
+    /// empty unless a gem view (not Peer, X-Ray or the sky) is up.
     pub fn open(state: &PlayState, canvas: GemCanvas, display_map_brightness: u8) -> Self {
+        Self::open_with(state, canvas, display_map_brightness, TownInputs::default())
+    }
+
+    /// [`GemViewState::open`] with what a town view reads besides the
+    /// game (10.2.5).
+    pub fn open_with(
+        state: &PlayState,
+        canvas: GemCanvas,
+        display_map_brightness: u8,
+        town: TownInputs<'_>,
+    ) -> Self {
         let shown = if gem_view_open(state) {
             match state.area {
                 Area::World { .. } => OutdoorShown::sample(state, OutdoorLayout::new(canvas))
                     .map_or(GemShown::Empty, GemShown::Outdoor),
-                Area::Town { .. } | Area::Dungeon { .. } => GemShown::Empty,
+                Area::Town { .. } => {
+                    TownShown::sample(state, canvas, town).map_or(GemShown::Empty, GemShown::Town)
+                }
+                Area::Dungeon { .. } => GemShown::Empty,
             }
         } else {
             GemShown::Empty
@@ -163,3 +328,7 @@ pub fn gem_view_open(state: &PlayState) -> bool {
 #[cfg(test)]
 #[path = "shown_tests.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "town_tests.rs"]
+mod town_tests;

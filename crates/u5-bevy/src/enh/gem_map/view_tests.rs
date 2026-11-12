@@ -10,7 +10,9 @@ use u5_runtime::PlayState;
 use u5_runtime::enhancements::{
     CliSetting, HostCapabilities, LockState, PixelAspect, ResolveInput, resolve,
 };
-use u5_runtime::test_fixtures::{open_grid, open_world_grid, test_state, world_state};
+use u5_runtime::test_fixtures::{
+    dungeon_state, open_dungeon_record, open_grid, open_world_grid, test_state, world_state,
+};
 
 use super::*;
 use crate::enh::equivalence::{FRAME, FrameRecord, Scene, Shell, Timeline};
@@ -624,13 +626,53 @@ fn a_small_window_or_no_window_keeps_the_1_0_1_view() {
 
 #[test]
 fn a_view_this_build_does_not_draw_keeps_the_1_0_1_view() {
-    // A town gem (M3-12 draws towns).
-    let mut town = test_state(open_grid(), 5, 5);
-    town.gems = 2;
+    // A dungeon gem (M3-13 draws dungeons).
+    let mut cave = dungeon_state(open_dungeon_record(), 0, 1, 1);
+    cave.gems = 2;
     let timeline = v_then(30, &[]);
-    let (beats, shows) = run(&town, &gem_on(), Some(W169), &timeline);
+    let (beats, shows) = run(&cave, &gem_on(), Some(W169), &timeline);
     assert!(beats.last().unwrap().overlay.contains("GemView"));
     assert!(shows.iter().all(|s| s.nodes == 0 && s.befores == 0));
+}
+
+/// In a town, with three gems.
+fn in_town() -> PlayState {
+    let mut town = test_state(open_grid(), 5, 5);
+    town.gems = 3;
+    town
+}
+
+#[test]
+fn a_town_gem_shows_the_town_map_and_the_game_is_the_off_run() {
+    // M3-12: the town floor over the whole window. The synthetic scene has
+    // no world map to read, so the sides stay black; the game is the off
+    // run frame for frame, with the surroundings on or off.
+    let timeline = v_then(80, &[(50, KeyCode::Space), (60, KeyCode::KeyV)]);
+    for window in [W43, W169] {
+        let (off, _) = run(
+            &in_town(),
+            &VisualLaunchConfig::classic(),
+            Some(window),
+            &timeline,
+        );
+        let no_land = launch(&[
+            CliSetting::Enable("gem_map.enhanced".into()),
+            CliSetting::Disable("gem_map.town_surroundings".into()),
+        ]);
+        for launch in [gem_on(), no_land] {
+            let (on, shows) = run(&in_town(), &launch, Some(window), &timeline);
+            assert_eq!(on, off, "{window:?}");
+            let held = shows
+                .iter()
+                .find(|s| s.nodes == 1 && s.step.is_none() && s.sweep_open)
+                .expect("the map is held");
+            let picture = held.picture.as_ref().unwrap();
+            assert!(picture.chunks(4).all(|p| p[3] == 255), "opaque");
+            // The far west column is land, black here.
+            assert_eq!(&picture[..4], &[0, 0, 0, 255]);
+        }
+        assert_eq!(off.last().unwrap().gems, 1, "two gems spent");
+    }
 }
 
 #[test]

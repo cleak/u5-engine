@@ -233,19 +233,23 @@ fn no_gem_map_row_shows_every_name() {
     assert!(option(GLYPHS_KEY).label.contains("spoiler"));
 }
 
-/// The rows G2 ships (M3-11): the main toggle and its outdoor options.
-const G2_KEYS: &[&str] = &[
+/// The rows G2 (M3-11) and G3 (M3-12) ship: the main toggle, its outdoor
+/// options and the town surroundings.
+const SHIPPED_KEYS: &[&str] = &[
     ENHANCED_KEY,
     BRIGHTNESS_LINK_KEY,
     MAP_BRIGHTNESS_KEY,
     SWEEP_KEY,
+    TOWN_SURROUNDINGS_KEY,
 ];
 
 #[test]
-fn only_g2_of_chapter_10_ships() {
-    assert!(SHIPPED_PHASES.contains(&GEM_G2));
-    assert!(GEM_G2.is_shipped());
-    for phase in &ALL_GEM[1..] {
+fn only_g2_and_g3_of_chapter_10_ship() {
+    for phase in &ALL_GEM[..2] {
+        assert!(SHIPPED_PHASES.contains(phase), "{phase:?}");
+        assert!(phase.is_shipped());
+    }
+    for phase in &ALL_GEM[2..] {
         assert!(!SHIPPED_PHASES.contains(phase), "{phase:?}");
         assert!(!phase.is_shipped());
     }
@@ -259,7 +263,7 @@ fn only_g2_of_chapter_10_ships() {
     for row in CatalogueRow::all().filter(|row| row.key().starts_with("gem_map.")) {
         assert_eq!(
             row.is_shipped(),
-            G2_KEYS.contains(&row.key()),
+            SHIPPED_KEYS.contains(&row.key()),
             "{} (U13)",
             row.key()
         );
@@ -278,12 +282,20 @@ fn only_g2_of_chapter_10_ships() {
     let view = resolved.gem_map();
     assert!(view.enhanced && view.brightness_link && !view.opts.sweep);
     assert_eq!(view.opts.map_brightness, 50);
+    // The G3 row too.
+    let resolved = resolve(input(
+        None,
+        &[enable(ENHANCED_KEY), disable(TOWN_SURROUNDINGS_KEY)],
+    ));
+    assert!(resolved.notes.is_empty(), "{:?}", note_lines(&resolved));
+    let view = resolved.gem_map();
+    assert!(view.enhanced && !view.opts.town_surroundings);
     // The later rows are still refused with a note and change nothing,
     // whether set by name, flag or file.
     for cli in [
         set(GLYPHS_KEY, "gem-faithful"),
         disable(LABELS_KEY),
-        disable(TOWN_SURROUNDINGS_KEY),
+        disable(DUNGEON_STACK_KEY),
     ] {
         let resolved = resolve(input(None, std::slice::from_ref(&cli)));
         assert!(resolved.is_classic(), "{cli:?}");
@@ -604,9 +616,9 @@ fn presets_set_only_the_main_toggle_and_never_the_spoiler() {
 
 #[test]
 fn everything_turns_the_gem_map_on_and_skips_its_hidden_rows() {
-    // G2 has shipped (M3-11): Everything applies `gem_map.enhanced`; no
-    // preset applies a row of a later phase, and none but Everything turns
-    // the map on.
+    // G2 and G3 have shipped (M3-11, M3-12): Everything applies
+    // `gem_map.enhanced`; no preset applies a row of a later phase, and none
+    // but Everything turns the map on.
     for preset in PRESETS {
         let on = *preset == Preset::Everything;
         assert_eq!(
@@ -616,7 +628,11 @@ fn everything_turns_the_gem_map_on_and_skips_its_hidden_rows() {
         );
         for (entry, row) in preset.shipped_entries() {
             if entry.key.starts_with("gem_map.") {
-                assert!(G2_KEYS.contains(&entry.key), "{preset:?} {}", entry.key);
+                assert!(
+                    SHIPPED_KEYS.contains(&entry.key),
+                    "{preset:?} {}",
+                    entry.key
+                );
                 assert!(row.is_shipped());
             }
         }
