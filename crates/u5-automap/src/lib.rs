@@ -14,11 +14,14 @@
 //! - [`memory`]: the remembered dungeon cells, one bit per cell (4.3.2);
 //! - [`observe`]: what the faithful views show, read without changing the
 //!   game, starting with the dungeon corridor's cells (4.3.3, M3-04);
+//! - [`gem`]: the enhanced gem map's knowledge record and its observer
+//!   (10.3.2, 10.3.3, M3-05);
 //! - [`section`]: the tag, key, length section codec the `AMAP` and
 //!   `GEMK` payloads share (4.3.8, 10.3.7).
 
 #![forbid(unsafe_code)]
 
+pub mod gem;
 pub mod memory;
 pub mod observe;
 pub mod perceived;

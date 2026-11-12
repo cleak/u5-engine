@@ -32,6 +32,9 @@
 //! - [`sprite_mask`]: chapter 9's sprite background masks and halo, and
 //!   [`composite_eligible`], the rule for which object cells composite
 //!   (design 9.3.6, 9.3.9).
+//! - [`transcript`]: the [`TranscriptCursor`], a pure diff of the message
+//!   transcript that the gem map's and the clue log's observers share
+//!   (design 10.3.3, 8.3.4).
 //! - [`idle`]: the idle-prompt predicate's runtime half,
 //!   [`PlayState::idle_command_prompt`](crate::PlayState::idle_command_prompt)
 //!   (design 1.3.7).
@@ -56,6 +59,7 @@ pub mod resolve;
 pub mod sidecar;
 pub mod source;
 pub mod sprite_mask;
+pub mod transcript;
 
 pub use catalogue::{
     ApplyAt, CatalogueRow, EffectClass, FeatureToggles, OPTIONS, OptionDefault, OptionKind,
@@ -109,3 +113,4 @@ pub use sprite_mask::{
     SpriteMasks, TileMask, composite_eligible, flood_mask, halo_of, keeps_box, mask_bit,
     mask_count,
 };
+pub use transcript::{CURSOR_TAIL, TranscriptCursor, TranscriptDiff, Unanchored};
