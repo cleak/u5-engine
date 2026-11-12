@@ -21,6 +21,10 @@
 //! | town ladder or stairs | the floor changed, the party moved at most one step, and its cell on the old floor was `0xC4..=0xC9`; the direction is the floor change (L5) |
 //! | town exit | town to world from an edge cell, or world to town onto one |
 //!
+//! The events of [`super::probe_more`] (M3-06: Look, the dungeon events)
+//! run from [`observe_commands`] too; the seen cells are in
+//! [`super::seen`].
+//!
 //! **Ambiguity records nothing.** When the shell knows that more than one
 //! command ran between the probe and the observation
 //! ([`observe_commands`]), only the events whose evidence does not depend
@@ -79,6 +83,10 @@ pub struct KnowProbe {
     /// The town floor's terrain around the party (town only; `0` off the
     /// floor).
     pub town_tiles: [u8; 9],
+    /// Bit `i` set: a blocking object (a person, a creature, a ship...)
+    /// stood on neighbourhood cell `i` (town and world). A Look at such a
+    /// cell prints the object, never the sign under it (10.6).
+    pub objects_near: u16,
     /// The message transcript as it stood (chapter 8's cursor).
     pub transcript: TranscriptCursor,
 }
@@ -100,6 +108,7 @@ pub fn probe(state: &PlayState) -> KnowProbe {
         _ => None,
     };
     let mut live_gates = 0u16;
+    let mut objects_near = 0u16;
     let mut town_tiles = [0u8; 9];
     for (i, town_tile) in town_tiles.iter_mut().enumerate() {
         let (dx, dy) = (i as isize % 3 - 1, i as isize / 3 - 1);
@@ -112,6 +121,9 @@ pub fn probe(state: &PlayState) -> KnowProbe {
             }
             Area::Town { .. } => *town_tile = state.gem_sample_tile(x, y, true),
             Area::Dungeon { .. } => {}
+        }
+        if super::probe_more::object_at(state, x, y) {
+            objects_near |= 1 << i;
         }
     }
     KnowProbe {
@@ -127,6 +139,7 @@ pub fn probe(state: &PlayState) -> KnowProbe {
         on_live_gate: live_gates & (1 << 4) != 0,
         live_gates,
         town_tiles,
+        objects_near,
         transcript: TranscriptCursor::of(state),
     }
 }
@@ -185,7 +198,10 @@ pub fn observe_commands(before: &KnowProbe, after: &PlayState, commands: usize) 
         moongate_events(before, after, &mut events);
         town_link_events(before, after, &mut events);
         town_exit_events(before, after, &mut events);
+        super::probe_more::look_events(before, after, &mut events);
+        super::probe_more::fountain_events(before, after, &mut events);
     }
+    super::probe_more::dungeon_events(before, after, single, &mut events);
     events
 }
 

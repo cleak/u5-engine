@@ -23,6 +23,7 @@ use u5_runtime::DungeonScene;
 use u5_runtime::shop_session::ActiveShopSession;
 
 use crate::memory::DungeonBits;
+use crate::perceived::{DungeonLook, PerceivedCell, perceived_dungeon_cell};
 
 /// The sidecar tag of the gem map's record (10.3.7).
 pub const GEM_SIDECAR_TAG: [u8; 4] = *b"GEMK";
@@ -422,6 +423,32 @@ impl GemKnowledge {
     /// Whether dungeon cell `(x, y)` of `record`, `level` is remembered.
     pub fn remembered(&self, record: u8, level: u8, x: u8, y: u8) -> bool {
         self.cells.is_set(record, level, x, y)
+    }
+
+    /// How a dungeon cell whose raw byte is `raw` is drawn under the
+    /// `perceived` policy, given what the party found there (10.3.3
+    /// "Remembered cells under `perceived`"): a `0xD?` secret door the
+    /// party found by Search draws as a door, and a fall trap (`0x61`,
+    /// `0x69`) it found draws as a pit, even after the dungeon reloads and
+    /// the live byte is the hidden form again. Everything else is the plain
+    /// perceived rule (4.2.3).
+    pub fn perceived_cell(&self, record: u8, level: u8, x: u8, y: u8, raw: u8) -> PerceivedCell {
+        let mut cell = perceived_dungeon_cell(raw);
+        let found = |kind| {
+            self.marks.contains(&DungeonMark {
+                record,
+                level,
+                x,
+                y,
+                kind,
+            })
+        };
+        if raw >> 4 == 0xD && found(MarkKind::SecretDoor) {
+            cell.look = DungeonLook::Door;
+        } else if matches!(raw, 0x61 | 0x69) && found(MarkKind::Trap) {
+            cell.look = DungeonLook::Pit;
+        }
+        cell
     }
 
     /// The directions the party used a town ladder or stairs cell in.

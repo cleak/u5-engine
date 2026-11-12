@@ -637,23 +637,30 @@ fn the_observer_names_no_mutating_method() {
     for known in ["clear_message_window", "push_message_entry", "advance_turn"] {
         assert!(names.iter().any(|n| n == known), "scan missed {known}");
     }
-    let source = include_str!("probe.rs");
-    let code: String = source
-        .split("#[cfg(test)]")
-        .next()
-        .unwrap()
-        .lines()
-        .map(|line| line.split("//").next().unwrap())
-        .collect::<Vec<_>>()
-        .join("\n");
-    assert!(!code.contains("&mut PlayState"));
-    assert!(!code.contains("&mut self"));
-    for name in &names {
-        for call in [format!(".{name}("), format!("::{name}(")] {
-            assert!(
-                !code.contains(&call),
-                "probe.rs calls the mutating PlayState method {name}"
-            );
+    // The observer's files: the place events (M3-05), Look and the dungeon
+    // events, and the seen cells (M3-06).
+    for (file, source) in [
+        ("probe.rs", include_str!("probe.rs")),
+        ("probe_more.rs", include_str!("probe_more.rs")),
+        ("seen.rs", include_str!("seen.rs")),
+    ] {
+        let code: String = source
+            .split("#[cfg(test)]")
+            .next()
+            .unwrap()
+            .lines()
+            .map(|line| line.split("//").next().unwrap())
+            .collect::<Vec<_>>()
+            .join("\n");
+        assert!(!code.contains("&mut PlayState"), "{file}");
+        assert!(!code.contains("&mut self"), "{file}");
+        for name in &names {
+            for call in [format!(".{name}("), format!("::{name}(")] {
+                assert!(
+                    !code.contains(&call),
+                    "{file} calls the mutating PlayState method {name}"
+                );
+            }
         }
     }
 }

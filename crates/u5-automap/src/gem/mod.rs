@@ -3,10 +3,15 @@
 //! - [`knowledge`]: the [`GemKnowledge`] record of what the player has
 //!   discovered, its [`KnowEvent`]s and [`FeatureKey`]s (10.3.2);
 //! - [`probe`]: the observer, [`KnowProbe`], [`probe`](probe::probe) and
-//!   [`observe_command`], which read the game and never change it (10.3.3).
+//!   [`observe_command`], which read the game and never change it (10.3.3);
+//! - [`probe_more`]: the observer's Look and dungeon events (M3-06);
+//! - [`seen`]: the dungeon and town-side cells the player has seen, per
+//!   frame and when a gem view opens (10.3.3, M3-06).
 
 pub mod knowledge;
 pub mod probe;
+pub mod probe_more;
+pub mod seen;
 
 pub use knowledge::{
     DungeonMark, EdgeSide, ExitRun, FeatureKey, GEM_PAYLOAD_VERSION, GEM_SIDECAR_TAG, GateCell,
@@ -16,4 +21,9 @@ pub use knowledge::{
 pub use probe::{
     KnowEvents, KnowProbe, TOWN_LINK_TILES, attach_events, edge_side, observe_command,
     observe_commands, probe,
+};
+pub use probe_more::{ENTRANCE_NAME_COLUMNS, entrance_record_for_column};
+pub use seen::{
+    GemWindow, SideWindow, faithful_window_cells, frame_seen_events, gem_view_events,
+    observation_open, side_window, side_windows,
 };
