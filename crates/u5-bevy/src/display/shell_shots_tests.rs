@@ -430,6 +430,9 @@ fn brightness_shell_review_shots() {
         for (variant, percent, scope) in [
             ("map070", 70, BrightnessScope::Map),
             ("b070", 70, BrightnessScope::Frame),
+            // M2 gate review: the mockups' other two whole-frame levels.
+            ("b085", 85, BrightnessScope::Frame),
+            ("b055", 55, BrightnessScope::Frame),
             ("b100", 100, BrightnessScope::Map),
         ] {
             {
@@ -920,4 +923,193 @@ fn composite_shell_review_shots() {
         }
     }
     let _ = fs::remove_dir_all(&game);
+}
+
+/// The tiles of the mockups' problem sheets (`make_display.py` `PROBLEMS`),
+/// in sheet order, with the terrain each is pasted on.
+const PROBLEM_TILES: [(usize, &str); 22] = [
+    (304, "brick"),
+    (309, "brick"),
+    (352, "brick"),
+    (356, "grass"),
+    (396, "water"),
+    (398, "water"),
+    (488, "grass"),
+    (490, "grass"),
+    (500, "grass"),
+    (504, "grass"),
+    (412, "water"),
+    (279, "brick"),
+    (268, "brick"),
+    (316, "brick"),
+    (256, "grass"),
+    (444, "grass"),
+    (468, "grass"),
+    (470, "water"),
+    (480, "grass"),
+    (264, "brick"),
+    (372, "grass"),
+    (508, "grass"),
+];
+
+/// M2 gate review: the engine's sprite masks and compositing rule on the
+/// mockups' problem sheets (`display-C-problem-tiles-4x-1.png` and `-2`),
+/// tile by tile and column by column (OFF, flood, flood + halo, rule).
+///
+/// The sheets paste real tiles on real terrain cells, 4x. The terrain under
+/// the sprite is not drawn on its own there, so it is read back from the
+/// sheets' flood columns at the pixels the engine's flood mask clears,
+/// pooled over every tile on the same terrain (each pixel must agree). Each
+/// engine cell is then the atlas tile with the engine's mask pixels taken
+/// from that terrain, and the rule column uses [`composite_eligible`] on a
+/// plain terrain byte. Review output only: skipped unless
+/// `U5_MOCKUP_PROFILE`, `U5_DISPLAY_MOCKUPS` and `U5_COMPOSITE_SHOTS` are
+/// set. Writes `problem-tiles-<part>.png` (the sheet with the engine's
+/// cells pasted in) and `problem-tiles-<part>-diff.png` (magenta where a
+/// cell pixel differs from the mockup), and reports each differing cell.
+///
+/// [`composite_eligible`]: u5_runtime::enhancements::composite_eligible
+#[test]
+fn composite_problem_tiles_review() {
+    use u5_runtime::enhancements::{SpriteMasks, composite_eligible, mask_bit};
+    let (Some(profile), Some(mockups), Some(out)) = (
+        configured_test_dir("U5_MOCKUP_PROFILE"),
+        configured_test_dir("U5_DISPLAY_MOCKUPS"),
+        configured_test_dir("U5_COMPOSITE_SHOTS"),
+    ) else {
+        eprintln!("skipped: set U5_MOCKUP_PROFILE, U5_DISPLAY_MOCKUPS and U5_COMPOSITE_SHOTS");
+        return;
+    };
+    fs::create_dir_all(&out).unwrap();
+    let atlas = u5_runtime::load_tile_atlas(&profile, u5_runtime::TileGraphicsDepth::Ega16)
+        .expect("the atlas");
+    let masks = SpriteMasks::from_atlas(&atlas);
+    let palette = crate::visual_palette(atlas.depth);
+    // make_display.py `problems`: 4x, 16 px gap, a 470 px label column, a
+    // 140 px header, 48x48 cells (the tile at 16..32 of 3x3 terrain cells).
+    let (k, gap, lab_w, head) = (4u32, 16u32, 470u32, 140u32);
+    let cw = 48 * k;
+    let half = PROBLEM_TILES.len().div_ceil(2);
+    let sheets: Vec<image::RgbImage> = ["1", "2"]
+        .iter()
+        .map(|part| {
+            image::open(mockups.join(format!("display-C-problem-tiles-4x-{part}.png")))
+                .unwrap()
+                .to_rgb8()
+        })
+        .collect();
+    let at = |index: usize, column: u32| {
+        let (sheet, row) = (index / half, (index % half) as u32);
+        (
+            sheet,
+            lab_w + column * (cw + gap) + 16 * k,
+            head + row * (cw + gap) + 16 * k,
+        )
+    };
+    let theirs = |index: usize, column: u32, x: usize, y: usize| -> [u8; 3] {
+        let (sheet, x0, y0) = at(index, column);
+        sheets[sheet]
+            .get_pixel(x0 + x as u32 * k, y0 + y as u32 * k)
+            .0
+    };
+    let sprite = |tile: usize, x: usize, y: usize| -> [u8; 3] {
+        let pixels = atlas.tile_pixels(tile).expect("an actor tile");
+        palette[usize::from(pixels[y * 16 + x]) % palette.len()]
+    };
+    // The terrain under the cell, per kind, from the flood columns.
+    let mut terrain: std::collections::HashMap<&str, [Option<[u8; 3]>; 256]> =
+        std::collections::HashMap::new();
+    let mut disagree = 0;
+    for (index, &(tile, kind)) in PROBLEM_TILES.iter().enumerate() {
+        let flood = masks.background(tile, false);
+        let pooled = terrain.entry(kind).or_insert([None; 256]);
+        for y in 0..16 {
+            for x in 0..16 {
+                if !mask_bit(flood, x, y) {
+                    continue;
+                }
+                let seen = theirs(index, 1, x, y);
+                match pooled[y * 16 + x] {
+                    None => pooled[y * 16 + x] = Some(seen),
+                    Some(known) if known != seen => disagree += 1,
+                    Some(_) => {}
+                }
+            }
+        }
+    }
+    for (kind, pooled) in &terrain {
+        let known = pooled.iter().filter(|pixel| pixel.is_some()).count();
+        eprintln!("problem tiles: {kind} terrain known at {known} of 256 pixels");
+    }
+    eprintln!("problem tiles: {disagree} pooled terrain pixels disagree between tiles");
+    let mut ours: Vec<image::RgbImage> = sheets.clone();
+    let mut diffs: Vec<image::RgbImage> = sheets.clone();
+    let (mut total, mut unknown) = (0, 0);
+    for (index, &(tile, kind)) in PROBLEM_TILES.iter().enumerate() {
+        let pooled = &terrain[kind];
+        // A plain floor byte under the cell: no furniture, so only the
+        // tile's own lists, the fields and the fallback decide.
+        let eligible = composite_eligible(&masks, Some(tile), Some(0x05));
+        for (column, name) in ["off", "flood", "halo", "rule"].iter().enumerate() {
+            let mask = match *name {
+                "off" => None,
+                "flood" => Some(masks.background(tile, false)),
+                "halo" => Some(masks.background(tile, true)),
+                _ => eligible.then(|| masks.background(tile, true)),
+            };
+            let mut differs = 0;
+            for y in 0..16 {
+                for x in 0..16 {
+                    let cleared = mask.is_some_and(|mask| mask_bit(mask, x, y));
+                    let pixel = if cleared {
+                        match pooled[y * 16 + x] {
+                            Some(pixel) => pixel,
+                            None => {
+                                unknown += 1;
+                                continue;
+                            }
+                        }
+                    } else {
+                        sprite(tile, x, y)
+                    };
+                    let (sheet, x0, y0) = at(index, column as u32);
+                    let mockup = theirs(index, column as u32, x, y);
+                    for dy in 0..k {
+                        for dx in 0..k {
+                            let (px, py) = (x0 + x as u32 * k + dx, y0 + y as u32 * k + dy);
+                            ours[sheet].put_pixel(px, py, image::Rgb(pixel));
+                            diffs[sheet].put_pixel(
+                                px,
+                                py,
+                                image::Rgb(if pixel == mockup {
+                                    pixel
+                                } else {
+                                    [0xff, 0x00, 0xff]
+                                }),
+                            );
+                        }
+                    }
+                    differs += usize::from(pixel != mockup);
+                }
+            }
+            total += differs;
+            if differs > 0 {
+                eprintln!(
+                    "problem tile {tile} on {kind}, {name}: {differs} pixels differ (engine rule: {})",
+                    if eligible {
+                        "composite"
+                    } else {
+                        "keeps its box"
+                    }
+                );
+            }
+        }
+    }
+    eprintln!("problem tiles: {total} differing pixels, {unknown} with no terrain known");
+    for (part, (ours, diff)) in ["1", "2"].iter().zip(ours.iter().zip(diffs.iter())) {
+        ours.save(out.join(format!("problem-tiles-{part}.png")))
+            .unwrap();
+        diff.save(out.join(format!("problem-tiles-{part}-diff.png")))
+            .unwrap();
+    }
 }

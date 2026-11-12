@@ -235,6 +235,7 @@ fn input_for<'a>(faithful: &'a [u8], state: Option<&'a PlayState>) -> PresentInp
         window: UVec2::ZERO,
         scale_factor: 1.0,
         side: None,
+        sweep_settling: false,
     }
 }
 
@@ -268,6 +269,38 @@ fn the_revision_follows_the_percent_the_scope_and_the_map_kind() {
         }
     }
     assert_eq!(seen.len(), 3 * 3);
+}
+
+/// M2 gate review: the White potion's visibility sweep draws the map it
+/// sweeps over, so scope `map` keeps dimming the viewport through it rather
+/// than letting the map flash to full colour for the sweep's frames.
+#[test]
+fn a_visibility_sweep_keeps_the_map_dimmed() {
+    let mut swept = test_state(open_grid(), 5, 5);
+    swept.visibility_sweep = Some(u5_runtime::VisibilitySweep {
+        frames_remaining: 7,
+        pause_bios_ticks_per_frame: 1,
+        center_x: 5,
+        center_y: 5,
+        visible_cells: [true; u5_runtime::VIEWPORT_SIDE * u5_runtime::VIEWPORT_SIDE],
+    });
+    assert_eq!(swept.map_view_kind(), None);
+    let plain = test_state(open_grid(), 5, 5);
+    let faithful = pattern(FRAME, 3);
+    let mut step = step(70, BrightnessScope::Map);
+    let dimmed = |step: &mut BrightnessStep, state: &PlayState| {
+        let mut frame = frame_of(FRAME, faithful.clone());
+        step.apply(&input_for(&faithful, Some(state)), &mut frame);
+        frame.rgba
+    };
+    let during = dimmed(&mut step, &swept);
+    assert_ne!(during, faithful, "the sweep's map is dimmed");
+    assert_eq!(during, dimmed(&mut step, &plain), "as the map is");
+    assert_eq!(
+        step.revision(&input_for(&faithful, Some(&swept))),
+        step.revision(&input_for(&faithful, Some(&plain))),
+        "no repaint as the sweep starts or ends"
+    );
 }
 
 // --- In the shell. -----------------------------------------------------------

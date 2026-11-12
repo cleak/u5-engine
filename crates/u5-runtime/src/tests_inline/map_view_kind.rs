@@ -158,6 +158,35 @@ mod map_view_kind {
         assert!(rendered_kinds >= 4);
     }
 
+    /// The brightness step's kind (9.3.3, M2 gate review): the map-view
+    /// kind, except that a visibility sweep counts as the map it sweeps
+    /// over, so the White potion's sweep keeps the map's brightness. Combat
+    /// and the dungeon draw their own view through a sweep, and every
+    /// other `None` stays `None`.
+    #[test]
+    fn the_light_kind_counts_a_sweep_as_its_map() {
+        for (label, state, expected) in kind_cases() {
+            let light = match label {
+                "visibility sweep" => Some(MapViewKind::World),
+                "sweep in combat" => Some(MapViewKind::Combat),
+                _ => expected,
+            };
+            assert_eq!(state.light_view_kind(), light, "{label}");
+        }
+        let mut town_sweep = test_state(open_grid(), 5, 5);
+        town_sweep.visibility_sweep = Some(sweep());
+        assert_eq!(town_sweep.map_view_kind(), None);
+        assert_eq!(town_sweep.light_view_kind(), Some(MapViewKind::Town));
+        let mut dungeon_sweep = dungeon_state(open_dungeon_record(), 0, 1, 1);
+        dungeon_sweep.visibility_sweep = Some(sweep());
+        assert_eq!(dungeon_sweep.light_view_kind(), Some(MapViewKind::Dungeon));
+        // The overlay and the endgame still come first.
+        let mut endgame_sweep = world_state(open_world_grid(), 10, 20);
+        endgame_sweep.visibility_sweep = Some(sweep());
+        endgame_sweep.endgame = Some(EndgameState::awaiting_first_confirmation());
+        assert_eq!(endgame_sweep.light_view_kind(), None);
+    }
+
     #[test]
     fn the_kind_leaves_the_state_untouched() {
         for (label, state, _) in kind_cases() {
@@ -165,6 +194,7 @@ mod map_view_kind {
             let prng = state.prng_state;
             for _ in 0..50 {
                 let _ = state.map_view_kind();
+                let _ = state.light_view_kind();
             }
             assert_eq!(state.prng_state, prng, "{label}");
             assert_eq!(format!("{state:?}"), before, "{label}");

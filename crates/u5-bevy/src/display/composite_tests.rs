@@ -420,6 +420,7 @@ fn input_for<'a>(
         window: UVec2::ZERO,
         scale_factor: 1.0,
         side: None,
+        sweep_settling: false,
     }
 }
 
@@ -503,6 +504,42 @@ fn water_under_a_ship_repaints_on_a_scroll_change_with_the_same_frame() {
     );
     assert_eq!(frame.rgba, expected);
     assert_ne!(frame.rgba, faithful);
+}
+
+/// M2 gate review: the last frame of a visibility sweep was drawn from the
+/// sweep's own grid, while the buffers the peek reads predate the sweep.
+/// That frame passes through without a peek; the idle redraw after it is
+/// peeked again even when its faithful image is the same.
+#[test]
+fn the_last_frame_of_a_sweep_passes_through_without_a_peek() {
+    let atlas = boxed_atlas(TileGraphicsDepth::Ega16);
+    let mut state = town_with(&[object(PERSON, 3, 4)]);
+    state
+        .render_top_down_base_frame(VIEWPORT_PLAYER_ROW, &atlas)
+        .unwrap();
+    let faithful = vec![0u8; (FRAME.x * FRAME.y * 4) as usize];
+    let mut step = CompositeStep::new(Arc::default(), true);
+    let settling = PresentInput {
+        sweep_settling: true,
+        ..input_for(&faithful, 3, Some(&state), Some(&atlas))
+    };
+    let passed = step.revision(&settling);
+    assert_eq!(step.peeks(), 0);
+    let mut frame = PresentedFrame {
+        size: FRAME,
+        rgba: faithful.clone(),
+        ..PresentedFrame::default()
+    };
+    step.apply(&settling, &mut frame);
+    assert_eq!(frame.rgba, faithful, "the settling frame is left alone");
+    assert_eq!(step.peeks(), 0);
+    // The redraw: the same faithful hash, no longer settling.
+    let redraw = input_for(&faithful, 3, Some(&state), Some(&atlas));
+    let peeked = step.revision(&redraw);
+    assert_eq!(step.peeks(), 1);
+    assert_ne!(peeked, passed);
+    step.apply(&redraw, &mut frame);
+    assert_ne!(frame.rgba, faithful, "the redraw is composited");
 }
 
 #[test]

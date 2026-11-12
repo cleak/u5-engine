@@ -10,7 +10,9 @@
 //!    `animated_under` was set, it asks [`PlayState::peek_object_cells`]
 //!    which viewport cells hold an object, which atlas tile was drawn there
 //!    and the 16x16 pixels of the terrain under it. `None` (no top-down or
-//!    combat map) passes the image through.
+//!    combat map) passes the image through, as does the last frame of a
+//!    visibility sweep ([`PresentInput::sweep_settling`]), which the sweep
+//!    drew from its own grid rather than the buffers the peek reads.
 //! 2. For each cell, at `(8 + 16 * col, 8 + 16 * row)` on the 320x200 copy,
 //!    a pixel is replaced only where the tile's mask bit is set (the
 //!    background, or the background less its 1-px halo with
@@ -111,13 +113,15 @@ pub fn composite_cells(
 }
 
 /// The animation clocks the terrain under an object moves with: the water
-/// scroll, the fire flicker and the shared phase.
+/// scroll, the fire flicker, the shared phase and the moon gates' phase
+/// counter (a live gate under an object).
 fn animation_phase(state: &PlayState) -> u64 {
     let mut hasher = std::collections::hash_map::DefaultHasher::new();
     (
         state.water_scroll,
         &state.fire_flicker,
         state.animation.frame,
+        state.natural_moongate_counter,
     )
         .hash(&mut hasher);
     hasher.finish()
@@ -127,6 +131,8 @@ fn animation_phase(state: &PlayState) -> u64 {
 #[derive(Clone, Debug)]
 struct PeekCache {
     faithful_hash: u64,
+    /// Taken on the last frame of a visibility sweep, with no peek.
+    settling: bool,
     /// The animation phase, while the peek's `animated_under` was set.
     phase: Option<u64>,
     peek: Option<ObjectCellPeek>,
@@ -170,14 +176,23 @@ impl CompositeStep {
         let state = input.state?;
         let atlas = input.atlas?;
         let phase = animation_phase(state);
+        let settling = input.sweep_settling;
         let fresh = self.cache.as_ref().is_some_and(|cache| {
             cache.faithful_hash == input.faithful_hash
+                && cache.settling == settling
                 && cache.phase.is_none_or(|last| last == phase)
         });
         if !fresh {
             let masks = self.masks.get_or_init(|| SpriteMasks::from_atlas(atlas));
-            let peek = state.peek_object_cells(atlas, masks);
-            self.peeks += 1;
+            // The last frame of a visibility sweep was drawn from the
+            // sweep's own grid, and the buffers the peek reads predate it:
+            // that frame passes through, as the sweep's other frames do.
+            let peek = if settling {
+                None
+            } else {
+                self.peeks += 1;
+                state.peek_object_cells(atlas, masks)
+            };
             let animated = peek.as_ref().is_some_and(|peek| peek.animated_under);
             let phase = animated.then_some(phase);
             let mut hasher = std::collections::hash_map::DefaultHasher::new();
@@ -191,6 +206,7 @@ impl CompositeStep {
             self.halo.hash(&mut hasher);
             self.cache = Some(PeekCache {
                 faithful_hash: input.faithful_hash,
+                settling,
                 phase,
                 peek,
                 revision: hasher.finish(),

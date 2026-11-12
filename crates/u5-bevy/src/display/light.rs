@@ -7,9 +7,11 @@
 //! `[grow-left compose]` and before `[prescale]` ([`StepOrder::BRIGHTNESS`]),
 //! on the CPU, and never touches the faithful image.
 //!
-//! - **Scope `map`.** Nothing while [`PlayState::map_view_kind`] is `None`
-//!   (the intro, title, character creation, full-screen text pages, the
-//!   shrine and the cinematic screens). Otherwise the copy's
+//! - **Scope `map`.** Nothing while [`PlayState::light_view_kind`] is
+//!   `None` (the intro, title, character creation, full-screen text pages,
+//!   the shrine and the cinematic screens). That is the
+//!   [`PlayState::map_view_kind`], except that a visibility sweep counts as
+//!   the map it sweeps over (the sweep draws that map). Otherwise the copy's
 //!   [`MapRegion`] when a step set one (the grow-left canvas: the map
 //!   window less the docked column and the crawl's text), or else the
 //!   320x200 frame's viewport, pixels 8..=183 on both axes. The frame
@@ -25,6 +27,7 @@
 //! waits for that change. The vignette (9.3.3 steps 2 and 3) is P3's.
 //!
 //! [`PlayState::map_view_kind`]: u5_runtime::PlayState::map_view_kind
+//! [`PlayState::light_view_kind`]: u5_runtime::PlayState::light_view_kind
 
 use std::hash::{Hash, Hasher};
 
@@ -121,8 +124,13 @@ impl BrightnessStep {
     }
 }
 
+/// The map the step dims: [`PlayState::light_view_kind`], which counts a
+/// visibility sweep as the map it sweeps over, so the map does not flash to
+/// full colour during the White potion's sweep.
+///
+/// [`PlayState::light_view_kind`]: u5_runtime::PlayState::light_view_kind
 fn kind_of(input: &PresentInput) -> Option<MapViewKind> {
-    input.state.and_then(|state| state.map_view_kind())
+    input.state.and_then(|state| state.light_view_kind())
 }
 
 impl PresentStep for BrightnessStep {

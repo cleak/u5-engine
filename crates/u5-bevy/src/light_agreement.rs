@@ -155,7 +155,7 @@ fn check_canvas(
         smooth: false,
         map_region: Some(region.clone()),
     };
-    step(BrightnessScope::Map).dim(state.map_view_kind(), &mut copy);
+    step(BrightnessScope::Map).dim(state.light_view_kind(), &mut copy);
     let wrong = wrong_pixels(&rgba, &copy.rgba, size, Some(&region), &lut);
     if wrong > 0 {
         found.push(format!(
@@ -204,7 +204,7 @@ pub(crate) fn note(state: &PlayState, atlas: &TileAtlas, font: &FixedCellFont, f
         return;
     }
     let mut found = Vec::new();
-    let kind = state.map_view_kind();
+    let kind = state.light_view_kind();
     let lut = BrightnessLut::for_percent(PERCENT);
     let mut map = PresentedFrame {
         size: FRAME,

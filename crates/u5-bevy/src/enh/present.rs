@@ -95,6 +95,12 @@ pub struct PresentInput<'a> {
     pub scale_factor: f32,
     /// The side-space arbiter's layout, while the arbiter is in the app.
     pub side: Option<&'a SideLayout>,
+    /// The faithful frame is the last frame of a visibility sweep (the
+    /// White potion): the state has already left the sweep, but its
+    /// top-down visibility buffers predate the sweep until the idle redraw
+    /// that follows on the next tick. A step that reads those buffers (the
+    /// object-cell peek, design 9.3.7) passes this frame through.
+    pub sweep_settling: bool,
 }
 
 /// The presented copy a step draws on. It starts as the faithful frame; a
@@ -409,6 +415,9 @@ pub(crate) fn present_frame(
         .map(|window| (window.physical_size(), window.scale_factor()))
         .unwrap_or((UVec2::ZERO, 1.0));
     let side = side.as_deref();
+    let sweep_settling = visual
+        .as_deref()
+        .is_some_and(|visual| visual.sweep_idle_redraw_pending);
     let triggers = {
         let Some(image) = images.get(&faithful) else {
             return;
@@ -428,6 +437,7 @@ pub(crate) fn present_frame(
             window,
             scale_factor,
             side,
+            sweep_settling,
         };
         let revisions = steps
             .0
@@ -473,6 +483,7 @@ pub(crate) fn present_frame(
         window,
         scale_factor,
         side,
+        sweep_settling,
     };
     host.frame.size = triggers.size;
     host.frame.smooth = false;

@@ -52,6 +52,20 @@ impl PlayState {
     /// its kin), the endgame or a visibility sweep is present, since those
     /// keep the faithful frame.
     pub fn map_view_kind(&self) -> Option<MapViewKind> {
+        self.view_kind(false)
+    }
+
+    /// The map the brightness step dims (design 9.3.3): the
+    /// [`PlayState::map_view_kind`], except that a visibility sweep (the
+    /// White potion) counts as the map it sweeps over. The sweep's frames
+    /// draw that map's terrain and objects in the same viewport, so the
+    /// map keeps its brightness through the sweep instead of flashing to
+    /// full colour for its twenty frames. Read-only.
+    pub fn light_view_kind(&self) -> Option<MapViewKind> {
+        self.view_kind(true)
+    }
+
+    fn view_kind(&self, sweep_is_map: bool) -> Option<MapViewKind> {
         // The rescue's own render. During its live-grid stretch it draws
         // nothing and the ordinary map shows, so the switch to the fixed
         // screen comes on the first frame the rescue paints (2.2.8);
@@ -72,7 +86,7 @@ impl PlayState {
         }
         if self.active_view_overlay.is_some()
             || self.endgame.is_some()
-            || self.visibility_sweep.is_some()
+            || (self.visibility_sweep.is_some() && !sweep_is_map)
         {
             return None;
         }
