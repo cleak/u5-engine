@@ -27,11 +27,13 @@
 //! floor show the floor's south-east corner cell, as the world-tile getter
 //! returns it past the floor edge (`town-mode.md §15`, `visibility.md §3`).
 //!
-//! Dungeons (M3-13) add their own arm; until then their shown set is empty
-//! and nothing is drawn.
+//! **In a dungeon** ([`DungeonShown`], 10.2.6, M3-13) the shown set is the
+//! gem's flood on the current level plus the remembered cells of every
+//! level, under the glyph policy; see [`super::dungeon`].
 
 use u5_runtime::{Area, PlayState, ViewOverlayKind, ViewOverlayMode, WORLD_SIDE, WorldPlane};
 
+use super::dungeon::{DungeonInputs, DungeonShown};
 use super::knowledge::GemKnowledge;
 use super::layout::{
     GemCanvas, OutdoorLayout, TOWN_ENTRANCE_FLOOR_ROW, TOWN_FLOOR_CELLS, TownLayout,
@@ -256,11 +258,11 @@ pub fn town_part(fx: i32, fy: i32) -> TownPart {
 /// The shown set of one open view.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum GemShown {
-    /// Nothing to draw: no gem view, or a view this milestone does not
-    /// draw yet (dungeons).
+    /// Nothing to draw: no gem view.
     Empty,
     Outdoor(OutdoorShown),
     Town(TownShown),
+    Dungeon(DungeonShown),
 }
 
 /// One open gem view's state (10.3.2): the canvas, the cached shown set
@@ -295,18 +297,37 @@ impl GemViewState {
         display_map_brightness: u8,
         town: TownInputs<'_>,
     ) -> Self {
-        let shown = if gem_view_open(state) {
-            match state.area {
-                Area::World { .. } => OutdoorShown::sample(state, OutdoorLayout::new(canvas))
-                    .map_or(GemShown::Empty, GemShown::Outdoor),
-                Area::Town { .. } => {
-                    TownShown::sample(state, canvas, town).map_or(GemShown::Empty, GemShown::Town)
+        Self::open_all(
+            state,
+            canvas,
+            display_map_brightness,
+            town,
+            DungeonInputs::default(),
+        )
+    }
+
+    /// [`GemViewState::open_with`] with what a dungeon view reads besides
+    /// the game (10.2.6): the record and the glyph policy.
+    pub fn open_all(
+        state: &PlayState,
+        canvas: GemCanvas,
+        display_map_brightness: u8,
+        town: TownInputs<'_>,
+        dungeon: DungeonInputs<'_>,
+    ) -> Self {
+        let shown =
+            if gem_view_open(state) {
+                match state.area {
+                    Area::World { .. } => OutdoorShown::sample(state, OutdoorLayout::new(canvas))
+                        .map_or(GemShown::Empty, GemShown::Outdoor),
+                    Area::Town { .. } => TownShown::sample(state, canvas, town)
+                        .map_or(GemShown::Empty, GemShown::Town),
+                    Area::Dungeon { .. } => DungeonShown::sample(state, dungeon)
+                        .map_or(GemShown::Empty, GemShown::Dungeon),
                 }
-                Area::Dungeon { .. } => GemShown::Empty,
-            }
-        } else {
-            GemShown::Empty
-        };
+            } else {
+                GemShown::Empty
+            };
         Self {
             canvas,
             display_map_brightness,

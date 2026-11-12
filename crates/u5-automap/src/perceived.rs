@@ -79,9 +79,69 @@ pub const fn perceived_dungeon_cell(raw: u8) -> PerceivedCell {
     }
 }
 
+/// A raw byte that the original gem's glyph table (`dungeon-mode.md
+/// §12.4`) draws as `cell` looks (design 4.2.3, 10.2.3): `raw` itself when
+/// its own class already has that look, else the plainest byte of the
+/// look's class. So a `0xD?` secret door seen as wall becomes the `0xB?`
+/// wall with the same low nibble; one found by Search (`cell` a door)
+/// becomes the `0xE?` door Search writes; a hidden pit or bomb trap seen as
+/// passage becomes passage `0x00`, keeping bit `0x08` so the rising badge
+/// stays; a fall trap found becomes the visible pit `0x60` (`0x68` rising).
+pub const fn perceived_byte(cell: PerceivedCell, raw: u8) -> u8 {
+    // The hidden forms never keep their byte: their own glyph shows them.
+    let hidden = raw >> 4 == 0xD || (raw >> 4 == 0x6 && raw & 0x07 != 0);
+    if !hidden && perceived_dungeon_cell(raw).look as u8 == cell.look as u8 {
+        return raw;
+    }
+    let low = raw & 0x0F;
+    let rising = if cell.rising_marker { 0x08 } else { 0x00 };
+    match cell.look {
+        DungeonLook::Passage => rising,
+        DungeonLook::Wall => 0xB0 | low,
+        DungeonLook::FlavourWall => 0xC0 | low,
+        DungeonLook::Door => 0xE0 | low,
+        DungeonLook::LadderUp => 0x10 | rising,
+        DungeonLook::LadderDown => 0x20 | rising,
+        DungeonLook::LadderBoth => 0x30 | rising,
+        DungeonLook::Chest => 0x40 | rising,
+        DungeonLook::OpenChest => 0x70 | rising,
+        DungeonLook::Fountain => 0x50 | rising,
+        DungeonLook::Pit => 0x60 | rising,
+        DungeonLook::Field => 0x80 | rising,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn the_perceived_byte_has_the_look_and_keeps_the_raw_byte_when_it_can() {
+        for raw in 0..=u8::MAX {
+            let cell = perceived_dungeon_cell(raw);
+            let byte = perceived_byte(cell, raw);
+            assert_eq!(perceived_dungeon_cell(byte).look, cell.look, "{raw:#04x}");
+            if !matches!(raw >> 4, 0x6 | 0xD) {
+                assert_eq!(byte, raw, "{raw:#04x}");
+            }
+        }
+        // The hidden forms.
+        assert_eq!(perceived_byte(perceived_dungeon_cell(0xD3), 0xD3), 0xB3);
+        assert_eq!(perceived_byte(perceived_dungeon_cell(0x61), 0x61), 0x00);
+        assert_eq!(perceived_byte(perceived_dungeon_cell(0x62), 0x62), 0x00);
+        assert_eq!(perceived_byte(perceived_dungeon_cell(0x69), 0x69), 0x08);
+        // Found: a door, a pit.
+        let door = PerceivedCell {
+            look: DungeonLook::Door,
+            rising_marker: false,
+        };
+        assert_eq!(perceived_byte(door, 0xD3), 0xE3);
+        let pit = PerceivedCell {
+            look: DungeonLook::Pit,
+            rising_marker: true,
+        };
+        assert_eq!(perceived_byte(pit, 0x69), 0x68);
+    }
 
     /// The 4.2.3 table, written out independently of the match above.
     fn table_look(raw: u8) -> DungeonLook {

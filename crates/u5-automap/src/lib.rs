@@ -33,7 +33,7 @@ pub mod static_maps;
 
 pub use memory::{DUNGEON_LEVEL_COUNT, DUNGEON_RECORDS, DUNGEON_SIDE_CELLS, DungeonBits};
 pub use observe::{CorridorCell, CorridorCells, CorridorLane, dungeon_corridor_cells};
-pub use perceived::{DungeonLook, PerceivedCell, perceived_dungeon_cell};
+pub use perceived::{DungeonLook, PerceivedCell, perceived_byte, perceived_dungeon_cell};
 pub use raster::{
     LowpassEntry, MAP_PALETTE, MapLight, Premultiplied, ReducedTiles, TILE_COLOUR_TABLE_LEN,
     TileColourTable,

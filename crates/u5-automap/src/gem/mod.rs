@@ -13,11 +13,15 @@
 //!   attach, probe and observe, write after a save, new game (10.3.5,
 //!   10.3.6, M3-08);
 //! - [`layout`]: the gem canvas, the outdoor layout (10.2.4, D-M3.3,
-//!   M3-10) and the town layout (10.2.5, M3-12);
+//!   M3-10), the town layout (10.2.5, M3-12) and the dungeon panel table
+//!   (10.2.6, M3-13);
+//! - [`dungeon`]: the dungeon shown set, its panels and titles (10.2.6,
+//!   M3-13);
 //! - [`shown`]: the shown set, the cells drawn and their tiles, cached per
 //!   open in [`GemViewState`] (10.2.3, D-M3.5, M3-10);
 //! - [`raster`]: [`render_gem_map`], the CPU raster (10.3.4, M3-10).
 
+pub mod dungeon;
 pub mod knowledge;
 pub mod layout;
 pub mod payload;
@@ -28,14 +32,16 @@ pub mod seen;
 pub mod session;
 pub mod shown;
 
+pub use dungeon::{DungeonCell, DungeonInputs, DungeonLit, DungeonShown, DungeonSlot, leads};
 pub use knowledge::{
     DungeonMark, EdgeSide, ExitRun, FeatureKey, GEM_PAYLOAD_VERSION, GEM_SIDECAR_TAG, GateCell,
     GemKnowledge, KeeperMark, KnowEvent, LinkDir, MarkKind, SIDE_WINDOW_BYTES, SIDE_WINDOW_HEIGHT,
     SIDE_WINDOW_WIDTH, SIGN_TRADES, SignCell, TRADES, TownLink, Trade,
 };
 pub use layout::{
-    GEM_CLASSIC_CANVAS, GemCanvas, OUTDOOR_CELL_PX, OutdoorLayout, TOWN_ENTRANCE_FLOOR_ROW,
-    TOWN_FLOOR_CELLS, TownLayout, gem_canvas,
+    DUNGEON_MIN_CELL_PX, DUNGEON_PANEL_CELLS, DUNGEON_PANEL_TABLE, DungeonLayout,
+    GEM_CLASSIC_CANVAS, GemCanvas, GlyphScale, OUTDOOR_CELL_PX, OutdoorLayout,
+    TOWN_ENTRANCE_FLOOR_ROW, TOWN_FLOOR_CELLS, TownLayout, dungeon_cell_size, gem_canvas,
 };
 pub use payload::{
     AttachOutcome, EmptyReason, PayloadError, attach, attach_payload, decode_payload,
@@ -47,8 +53,10 @@ pub use probe::{
 };
 pub use probe_more::{ENTRANCE_NAME_COLUMNS, entrance_record_for_column};
 pub use raster::{
-    GemImage, GemRender, MapArt, PARTY_MARKER_PX, PARTY_SPRITE_PX, TOWN_SIDE_PERCENT, map_percent,
-    party_sprite_tile, render_gem_map, town_side_lut,
+    DUNGEON_REMEMBERED_PERCENT, DUNGEON_WRAP_PERCENT, DungeonLuts, GemImage, GemRender, MapArt,
+    PARTY_MARKER_PX, PARTY_SPRITE_PX, TOWN_SIDE_PERCENT, dungeon_glyph_pixels,
+    dungeon_panel_levels, facing_arrow, map_percent, party_sprite_tile, remembered_channel,
+    render_gem_map, town_side_lut,
 };
 pub use seen::{
     GemWindow, SideWindow, faithful_window_cells, frame_seen_events, gem_view_events,

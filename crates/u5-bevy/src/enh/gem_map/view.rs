@@ -35,8 +35,11 @@
 //!
 //! The canvas is the foundation's for the window ([`Canvas::for_window`]),
 //! or the classic 320x200; below a 320x200 window there is no gem map and
-//! the 1.0.1 view shows (D-M3.3). Views this build does not draw yet
-//! (dungeons) leave the 1.0.1 view showing too.
+//! the 1.0.1 view shows (D-M3.3).
+//!
+//! **Dungeons** (10.2.6, M3-13): the level stack, drawn with the IBM.CH and
+//! RUNES.CH fonts the shell already holds, the record and
+//! `gem_map.glyphs`.
 //!
 //! **Towns** (10.2.5, M3-12): the land beside the floor comes from the
 //! static world map of the town's plane, read through [`StaticMaps`] from
@@ -53,8 +56,8 @@ use bevy::render::render_asset::RenderAssetUsages;
 use bevy::render::render_resource::{Extent3d, TextureDimension, TextureFormat};
 use u5_automap::StaticMaps;
 use u5_automap::gem::{
-    GemCanvas, GemImage, GemRender, GemShown, GemViewState, GemWindow, MapArt, TownInputs,
-    gem_canvas, gem_view_open, render_gem_map, town_world_plane,
+    DungeonInputs, GemCanvas, GemImage, GemRender, GemShown, GemViewState, GemWindow, MapArt,
+    TownInputs, gem_canvas, gem_view_open, render_gem_map, town_world_plane,
 };
 use u5_runtime::enhancements::{GemMapToggles, PixelAspect, ResolvedEnhancements};
 use u5_runtime::{Area, PlayState};
@@ -417,7 +420,10 @@ pub(super) fn gem_render(
         let new_open = show.view.is_none() || show.opened_gems != Some(state.gems);
         let new_canvas = show.view.as_ref().is_some_and(|view| view.canvas != canvas);
         if new_open || new_canvas {
-            let art = show.art.get_or_insert_with(|| MapArt::build(&visual.atlas));
+            let art = show.art.get_or_insert_with(|| {
+                MapArt::build(&visual.atlas)
+                    .with_fonts(visual.text_font.clone(), visual.rune_font.clone())
+            });
             let surroundings = t.opts.town_surroundings;
             let world = town_world_plane(state)
                 .filter(|_| surroundings)
@@ -434,7 +440,11 @@ pub(super) fn gem_render(
                 world,
                 surroundings,
             };
-            let view = GemViewState::open_with(state, canvas, display_map, town);
+            let dungeon = DungeonInputs {
+                know: Some(gem.knowledge()),
+                glyphs: t.opts.glyphs,
+            };
+            let view = GemViewState::open_all(state, canvas, display_map, town, dungeon);
             let drawn = render_gem_map(state, gem.knowledge(), art, &t, &view, &mut show.full);
             show.renders += 1;
             if drawn == GemRender::Cleared || matches!(view.shown, GemShown::Empty) {

@@ -625,14 +625,30 @@ fn a_small_window_or_no_window_keeps_the_1_0_1_view() {
 }
 
 #[test]
-fn a_view_this_build_does_not_draw_keeps_the_1_0_1_view() {
-    // A dungeon gem (M3-13 draws dungeons).
+fn a_dungeon_gem_shows_the_level_stack_and_the_game_is_the_off_run() {
+    // M3-13: the dungeon stack over the whole window, at 4:3, 16:9 and
+    // 21:9; the game is the off run frame for frame.
     let mut cave = dungeon_state(open_dungeon_record(), 0, 1, 1);
     cave.gems = 2;
-    let timeline = v_then(30, &[]);
-    let (beats, shows) = run(&cave, &gem_on(), Some(W169), &timeline);
-    assert!(beats.last().unwrap().overlay.contains("GemView"));
-    assert!(shows.iter().all(|s| s.nodes == 0 && s.befores == 0));
+    let timeline = v_then(80, &[(50, KeyCode::Space)]);
+    for window in [W43, W169, W219] {
+        let (off, _) = run(
+            &cave,
+            &VisualLaunchConfig::classic(),
+            Some(window),
+            &timeline,
+        );
+        let (on, shows) = run(&cave, &gem_on(), Some(window), &timeline);
+        assert_eq!(on, off, "{window:?}");
+        let held = shows
+            .iter()
+            .find(|s| s.nodes == 1 && s.step.is_none() && s.sweep_open)
+            .expect("the map is held");
+        let picture = held.picture.as_ref().unwrap();
+        assert!(picture.chunks(4).all(|p| p[3] == 255), "opaque");
+        assert!(off.iter().any(|beat| beat.overlay.contains("GemView")));
+        assert_eq!(off.last().unwrap().gems, 1, "one gem spent");
+    }
 }
 
 /// In a town, with three gems.

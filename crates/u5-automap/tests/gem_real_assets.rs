@@ -201,3 +201,112 @@ fn real_assets_render_britain() {
         }
     }
 }
+
+/// Despise, the mockups' D scenes: level 3 at (6, 1) facing north, a gem
+/// view up.
+fn real_despise(dir: &std::path::Path) -> PlayState {
+    let scene = u5_runtime::DungeonScene::from_record(1).unwrap();
+    let mut state = PlayState::load_scene(
+        dir,
+        u5_runtime::PlayOptions {
+            target: u5_runtime::PlayTarget::Dungeon(scene),
+            floor: 2,
+            start: Some((6, 1)),
+            clock: u5_runtime::GameClock::new(12, 0).unwrap(),
+            ..u5_runtime::PlayOptions::default()
+        },
+    )
+    .unwrap();
+    state.player.facing = u5_runtime::Direction::North;
+    state.active_view_overlay = Some(ViewOverlay {
+        title: String::new(),
+        text_map: String::new(),
+        kind: ViewOverlayKind::Dungeon { level: 2 },
+        mode: ViewOverlayMode::GemView,
+    });
+    state
+}
+
+/// With `U5_MOCKUP_PROFILE` naming a game copy: the Despise stack at the
+/// three canvases, with and without the wrap rows. The remembered cells
+/// come from `U5_GEM_DUNGEON_MEMORY`, a review-only list of `cell L X Y`
+/// and `trap L X Y` lines (the mockups' demo walk), when it is set; else
+/// only the flood shows. With `U5_GEM_SHOTS`, the renders are written there
+/// as PPM files.
+#[test]
+fn real_assets_render_despise() {
+    use u5_automap::gem::{DungeonInputs, DungeonMark, GemShown, KnowEvent, MarkKind, TownInputs};
+    use u5_runtime::enhancements::GlyphPolicy;
+    let Some(dir) = env_dir("U5_MOCKUP_PROFILE") else {
+        eprintln!("skipped: set U5_MOCKUP_PROFILE");
+        return;
+    };
+    let atlas = u5_runtime::load_tile_atlas(&dir, TileGraphicsDepth::Ega16).unwrap();
+    let art = MapArt::build(&atlas).with_fonts(
+        u5_runtime::load_ibm_ch_font(&dir).unwrap(),
+        u5_runtime::load_runes_ch_font(&dir).unwrap(),
+    );
+    let state = real_despise(&dir);
+    let mut know = GemKnowledge::new();
+    if let Some(path) = std::env::var_os("U5_GEM_DUNGEON_MEMORY") {
+        for line in std::fs::read_to_string(path).unwrap().lines() {
+            let words: Vec<_> = line.split_whitespace().collect();
+            let [kind, l, x, y] = words[..] else { continue };
+            let (l, x, y): (u8, u8, u8) =
+                (l.parse().unwrap(), x.parse().unwrap(), y.parse().unwrap());
+            match kind {
+                "cell" => {
+                    let mut rows = [0; 8];
+                    rows[usize::from(y)] = 1 << x;
+                    know.apply(&KnowEvent::DungeonCellsSeen {
+                        record: 1,
+                        level: l,
+                        rows,
+                    });
+                }
+                "trap" => {
+                    know.apply(&KnowEvent::DungeonMarked(DungeonMark {
+                        record: 1,
+                        level: l,
+                        x,
+                        y,
+                        kind: MarkKind::Trap,
+                    }));
+                }
+                _ => {}
+            }
+        }
+    }
+    let shots = env_dir("U5_GEM_SHOTS");
+    for (name, canvas) in [
+        ("D3-43", CANVASES[0]),
+        ("D1-169", CANVASES[1]),
+        ("D2-219", CANVASES[2]),
+    ] {
+        for wrap in [true, false] {
+            let mut t = on();
+            t.opts.wrap_rows = wrap;
+            let view = GemViewState::open_all(
+                &state,
+                canvas,
+                100,
+                TownInputs::default(),
+                DungeonInputs {
+                    know: Some(&know),
+                    glyphs: GlyphPolicy::Perceived,
+                },
+            );
+            assert!(matches!(view.shown, GemShown::Dungeon(_)));
+            let mut out = GemImage::default();
+            assert_eq!(
+                render_gem_map(&state, &know, &art, &t, &view, &mut out),
+                GemRender::Dungeon
+            );
+            assert!(out.rgba.chunks(4).all(|p| p[3] == 255));
+            if let Some(shots) = &shots {
+                let tag = if wrap { "" } else { "-nowrap" };
+                write_ppm(shots, &format!("engine-{name}{tag}.ppm"), &out);
+            }
+        }
+    }
+}

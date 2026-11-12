@@ -241,6 +241,157 @@ impl TownLayout {
     }
 }
 
+/// Cells on a side of a dungeon level (`dungeon-mode.md §1`).
+pub const DUNGEON_PANEL_CELLS: u32 = 8;
+
+/// The smallest dungeon cell a panel may have (10.2.6): the 8 x 8 glyph
+/// at 2x.
+pub const DUNGEON_MIN_CELL_PX: u32 = 16;
+
+/// The approved panel table (10.2.6): canvas, panels, cell size, gap.
+pub const DUNGEON_PANEL_TABLE: [(GemCanvas, u8, u32, u32); 3] = [
+    (GemCanvas { w: 512, h: 240 }, 3, 20, 16),
+    (GemCanvas { w: 688, h: 240 }, 5, 16, 12),
+    (GemCanvas { w: 320, h: 200 }, 1, 24, 0),
+];
+
+/// How an 8 x 8 glyph fills a cell (10.2.6): each glyph pixel becomes a
+/// `factor` x `factor` block, and the outermost rows and columns are
+/// repeated `pad` more pixels on every side. 16 px is 2x, 24 px is 3x and
+/// 20 px is 2x with 2 px of edge repeat, so no pixel is uneven.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub struct GlyphScale {
+    pub factor: u32,
+    pub pad: u32,
+}
+
+impl GlyphScale {
+    /// The scale for a cell of `cell` px, `8 * factor + 2 * pad`.
+    pub fn for_cell(cell: u32) -> Self {
+        let factor = (cell / DUNGEON_PANEL_CELLS).max(1);
+        Self {
+            factor,
+            pad: cell.saturating_sub(factor * DUNGEON_PANEL_CELLS) / 2,
+        }
+    }
+
+    /// The glyph pixel, `0..8`, that cell pixel `i` shows.
+    pub fn source(self, i: u32) -> u32 {
+        (i.saturating_sub(self.pad) / self.factor).min(DUNGEON_PANEL_CELLS - 1)
+    }
+}
+
+/// The largest cell size of at most `max` px that whole-pixel glyph scaling
+/// draws evenly: `8k` or `8k + 4` (16, 20, 24, 28 ...), never below
+/// [`DUNGEON_MIN_CELL_PX`].
+pub fn dungeon_cell_size(max: u32) -> Option<u32> {
+    if max < DUNGEON_MIN_CELL_PX {
+        return None;
+    }
+    let whole = max / DUNGEON_PANEL_CELLS * DUNGEON_PANEL_CELLS;
+    Some(if max - whole >= 4 { whole + 4 } else { whole })
+}
+
+/// Where a dungeon gem map's level panels fall on a canvas (10.2.6): up to
+/// five 8 x 8 panels side by side, the centre one the level shown in the
+/// middle (the current level, or the paged one), the others the levels
+/// above (left) and below (right). Every panel is vertically centred.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub struct DungeonLayout {
+    pub canvas: GemCanvas,
+    /// Panels side by side: 5, 3 or 1.
+    pub panels: u8,
+    /// Pixels per cell side.
+    pub cell: u32,
+    /// Pixels between two panels.
+    pub gap: u32,
+    /// The canvas position of the leftmost panel's top-left corner.
+    pub origin: (i32, i32),
+}
+
+impl DungeonLayout {
+    /// The layout of `canvas`. With `stack` on (`gem_map.dungeon_stack`):
+    /// the panel table, else the largest of 5, 3 or 1 panels whose cells
+    /// are at least 16 px, with a gap of `cell - 4`. With it off: the one
+    /// level alone at the largest size that fits. `None` when not even one
+    /// 16 px panel fits.
+    pub fn new(canvas: GemCanvas, stack: bool) -> Option<Self> {
+        if stack {
+            if let Some(&(_, panels, cell, gap)) = DUNGEON_PANEL_TABLE
+                .iter()
+                .find(|(table, ..)| *table == canvas)
+            {
+                return Some(Self::place(canvas, panels, cell, gap));
+            }
+            return Self::general(canvas);
+        }
+        let max = (canvas.w.min(canvas.h)) / DUNGEON_PANEL_CELLS;
+        dungeon_cell_size(max).map(|cell| Self::place(canvas, 1, cell, 0))
+    }
+
+    /// The general rule (10.2.6), which the table's rows also follow.
+    pub fn general(canvas: GemCanvas) -> Option<Self> {
+        [5u8, 3, 1].into_iter().find_map(|panels| {
+            let n = u32::from(panels);
+            // n * 8c + (n - 1) * (c - 4) <= W, and 8c <= H.
+            let wide = (canvas.w + 4 * (n - 1)) / (9 * n - 1);
+            let max = wide.min(canvas.h / DUNGEON_PANEL_CELLS);
+            let cell = dungeon_cell_size(max)?;
+            let gap = if panels > 1 { cell - 4 } else { 0 };
+            Some(Self::place(canvas, panels, cell, gap))
+        })
+    }
+
+    fn place(canvas: GemCanvas, panels: u8, cell: u32, gap: u32) -> Self {
+        let n = u32::from(panels);
+        let side = DUNGEON_PANEL_CELLS * cell;
+        let total = n * side + n.saturating_sub(1) * gap;
+        Self {
+            canvas,
+            panels,
+            cell,
+            gap,
+            origin: (
+                (canvas.w.saturating_sub(total) / 2) as i32,
+                (canvas.h.saturating_sub(side) / 2) as i32,
+            ),
+        }
+    }
+
+    /// A panel's side in pixels, `8 * cell`.
+    pub fn panel_px(&self) -> u32 {
+        DUNGEON_PANEL_CELLS * self.cell
+    }
+
+    /// The level offset of panel `index` from the centre panel: -2..=2 on
+    /// five panels, -1..=1 on three, 0 on one.
+    pub fn offset(&self, index: u8) -> i32 {
+        i32::from(index) - i32::from(self.panels / 2)
+    }
+
+    /// Panel `index`'s top-left corner.
+    pub fn panel_origin(&self, index: u8) -> (i32, i32) {
+        let step = (self.panel_px() + self.gap) as i32;
+        (self.origin.0 + i32::from(index) * step, self.origin.1)
+    }
+
+    /// The wrap columns' width beside a lone panel (10.2.6: "at the sides
+    /// on 4:3"): the margin to the canvas edge, or 0 with several panels,
+    /// whose wrap is above and below only.
+    pub fn wrap_side(&self) -> u32 {
+        if self.panels == 1 {
+            self.origin.0.max(0) as u32
+        } else {
+            0
+        }
+    }
+
+    /// The glyph scale of this layout's cells.
+    pub fn glyph_scale(&self) -> GlyphScale {
+        GlyphScale::for_cell(self.cell)
+    }
+}
+
 #[cfg(test)]
 #[path = "layout_tests.rs"]
 mod tests;

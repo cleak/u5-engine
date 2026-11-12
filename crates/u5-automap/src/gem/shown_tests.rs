@@ -158,7 +158,7 @@ fn nothing_is_shown_without_an_open_gem_view() {
 }
 
 #[test]
-fn dungeons_have_no_shown_set_yet() {
+fn towns_and_dungeons_have_their_shown_sets() {
     // Towns have theirs since M3-12 (town_tests.rs).
     let mut town = test_state(open_grid(), 5, 5);
     town.active_view_overlay = overlay(ViewOverlayKind::Surface, ViewOverlayMode::GemView);
@@ -171,7 +171,11 @@ fn dungeons_have_no_shown_set_yet() {
         ViewOverlayKind::Dungeon { level: 0 },
         ViewOverlayMode::GemView,
     );
-    assert_eq!(GemViewState::open(&cave, BOX, 100).shown, GemShown::Empty);
+    // Dungeons since M3-13 (dungeon_tests.rs).
+    assert!(matches!(
+        GemViewState::open(&cave, BOX, 100).shown,
+        GemShown::Dungeon(_)
+    ));
 }
 
 #[test]
