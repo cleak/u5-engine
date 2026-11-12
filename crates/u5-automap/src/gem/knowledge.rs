@@ -38,9 +38,9 @@ pub const SIDE_WINDOW_HEIGHT: u8 = 36;
 pub const SIDE_WINDOW_BYTES: usize = SIDE_WINDOW_WIDTH as usize * SIDE_WINDOW_HEIGHT as usize / 8;
 
 /// `flags` bit: the party has been on the Underworld surface.
-const FLAG_UNDERWORLD: u8 = 1 << 0;
+pub(crate) const FLAG_UNDERWORLD: u8 = 1 << 0;
 /// `flags` bit: the party has entered the Codex.
-const FLAG_CODEX: u8 = 1 << 1;
+pub(crate) const FLAG_CODEX: u8 = 1 << 1;
 
 /// The nine shop trades of `ActiveShopSession` (10.3.3 "Shop trades").
 ///
