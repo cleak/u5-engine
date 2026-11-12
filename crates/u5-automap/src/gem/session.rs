@@ -113,11 +113,23 @@ impl GemSession {
     /// the unambiguous events. Then the frame's seen cells. True when the
     /// record changed.
     pub fn after(&mut self, state: &PlayState, commands: usize) -> bool {
+        self.after_drawn(state, commands, None)
+    }
+
+    /// [`after`](Self::after) for a frontend that draws the enhanced map:
+    /// `window` is the wider outdoor window its canvas shows, recorded with
+    /// the gem's own footprint on the frame a gem view opens (10.3.3).
+    pub fn after_drawn(
+        &mut self,
+        state: &PlayState,
+        commands: usize,
+        window: Option<GemWindow>,
+    ) -> bool {
         let mut changed = false;
         if let Some(before) = self.pending.take() {
             changed |= self.fold(&observe_commands(&before, state, commands));
         }
-        changed | self.frame(state, None)
+        changed | self.frame(state, window)
     }
 
     /// The cells the faithful view shows on this frame, and a gem view's

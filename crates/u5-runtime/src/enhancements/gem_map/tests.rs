@@ -233,11 +233,23 @@ fn no_gem_map_row_shows_every_name() {
     assert!(option(GLYPHS_KEY).label.contains("spoiler"));
 }
 
+/// The rows G2 ships (M3-11): the main toggle and its outdoor options.
+const G2_KEYS: &[&str] = &[
+    ENHANCED_KEY,
+    BRIGHTNESS_LINK_KEY,
+    MAP_BRIGHTNESS_KEY,
+    SWEEP_KEY,
+];
+
 #[test]
-fn no_chapter_10_phase_ships_yet() {
-    for phase in ALL_GEM {
+fn only_g2_of_chapter_10_ships() {
+    assert!(SHIPPED_PHASES.contains(&GEM_G2));
+    assert!(GEM_G2.is_shipped());
+    for phase in &ALL_GEM[1..] {
         assert!(!SHIPPED_PHASES.contains(phase), "{phase:?}");
         assert!(!phase.is_shipped());
+    }
+    for phase in ALL_GEM {
         assert_eq!(phase.chapter, 10);
     }
     assert_eq!(
@@ -245,15 +257,33 @@ fn no_chapter_10_phase_ships_yet() {
         ["G2", "G3", "G4", "G5"]
     );
     for row in CatalogueRow::all().filter(|row| row.key().starts_with("gem_map.")) {
-        assert!(!row.is_shipped(), "{} is hidden (U13)", row.key());
+        assert_eq!(
+            row.is_shipped(),
+            G2_KEYS.contains(&row.key()),
+            "{} (U13)",
+            row.key()
+        );
     }
-    // In this build the rows are refused with a note and leave the game
-    // Classic, whether set by name, flag or file.
+    // The G2 rows resolve with no note; the main toggle leaves Classic.
+    let resolved = resolve(input(
+        None,
+        &[
+            enable(ENHANCED_KEY),
+            set(MAP_BRIGHTNESS_KEY, "50"),
+            enable(BRIGHTNESS_LINK_KEY),
+            disable(SWEEP_KEY),
+        ],
+    ));
+    assert!(resolved.notes.is_empty(), "{:?}", note_lines(&resolved));
+    let view = resolved.gem_map();
+    assert!(view.enhanced && view.brightness_link && !view.opts.sweep);
+    assert_eq!(view.opts.map_brightness, 50);
+    // The later rows are still refused with a note and change nothing,
+    // whether set by name, flag or file.
     for cli in [
-        enable(ENHANCED_KEY),
-        set(MAP_BRIGHTNESS_KEY, "50"),
         set(GLYPHS_KEY, "gem-faithful"),
         disable(LABELS_KEY),
+        disable(TOWN_SURROUNDINGS_KEY),
     ] {
         let resolved = resolve(input(None, std::slice::from_ref(&cli)));
         assert!(resolved.is_classic(), "{cli:?}");
@@ -268,8 +298,14 @@ fn no_chapter_10_phase_ships_yet() {
         .with(ENHANCED_KEY, SettingValue::Bool(true))
         .with(GLYPHS_KEY, SettingValue::Str("gem-faithful".into()));
     let resolved = resolve(input(Some(&stored), &[]));
-    assert!(resolved.is_classic());
-    assert_eq!(resolved.gem_map(), GemMapToggles::default());
+    assert!(!resolved.is_classic(), "the file turns the map on");
+    let view = resolved.gem_map();
+    assert!(view.enhanced);
+    assert_eq!(
+        view.opts.glyphs,
+        GlyphPolicy::Perceived,
+        "the hidden glyph row keeps its default"
+    );
 }
 
 #[test]
@@ -567,24 +603,30 @@ fn presets_set_only_the_main_toggle_and_never_the_spoiler() {
 }
 
 #[test]
-fn presets_skip_the_hidden_gem_map_rows() {
-    // In this build no chapter 10 phase has shipped, so Everything names
-    // `gem_map.enhanced` but does not apply it.
+fn everything_turns_the_gem_map_on_and_skips_its_hidden_rows() {
+    // G2 has shipped (M3-11): Everything applies `gem_map.enhanced`; no
+    // preset applies a row of a later phase, and none but Everything turns
+    // the map on.
     for preset in PRESETS {
-        assert!(!preset.toggles().on(Toggle::GemMapEnhanced), "{preset:?}");
-        assert!(
-            preset
-                .shipped_entries()
-                .all(|(entry, _)| !entry.key.starts_with("gem_map.")),
+        let on = *preset == Preset::Everything;
+        assert_eq!(
+            preset.toggles().on(Toggle::GemMapEnhanced),
+            on,
             "{preset:?}"
         );
+        for (entry, row) in preset.shipped_entries() {
+            if entry.key.starts_with("gem_map.") {
+                assert!(G2_KEYS.contains(&entry.key), "{preset:?} {}", entry.key);
+                assert!(row.is_shipped());
+            }
+        }
         let resolved = resolve(input(None, &[CliSetting::Preset(*preset)]));
-        assert!(!resolved.gem_map().enhanced, "{preset:?}");
+        assert_eq!(resolved.gem_map().enhanced, on, "{preset:?}");
+        if on {
+            assert_eq!(resolved.gem_map().opts, GemMapOptions::default());
+        }
     }
-    // Once G2 ships, Everything turns it on and Classic still does not.
-    let everything = shipped(None, &[CliSetting::Preset(Preset::Everything)]);
-    assert!(everything.gem_map().enhanced);
-    let classic = shipped(None, &[CliSetting::Preset(Preset::Classic)]);
+    let classic = resolve(input(None, &[CliSetting::Preset(Preset::Classic)]));
     assert!(classic.is_classic());
     assert_eq!(classic.gem_map(), GemMapToggles::default());
 }
@@ -600,7 +642,7 @@ fn the_gem_map_toggle_turns_the_sidecar_on() {
     assert!(sidecar_feature_on(toggles));
     let resolved = shipped(None, &[enable(ENHANCED_KEY)]);
     assert!(sidecar_feature_on(resolved.toggles));
-    // In this build the row is hidden, so nothing resolves it on.
+    // The row has shipped (G2): the plain resolver turns it on too.
     let resolved = resolve(input(None, &[enable(ENHANCED_KEY)]));
-    assert!(!sidecar_feature_on(resolved.toggles));
+    assert!(sidecar_feature_on(resolved.toggles));
 }

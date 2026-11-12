@@ -351,13 +351,14 @@ fn map_brightness_prefers_the_gem_maps_brightness_link() {
         }]
     );
     assert!(spec.needs.is_empty());
-    // LIGHT_P2 ships with brightness_link in M3-11, not here.
-    assert!(!u5_runtime::enhancements::SHIPPED_PHASES.contains(&LIGHT_P2));
-    assert!(
-        u5_runtime::enhancements::OPTIONS
-            .iter()
-            .any(|option| option.key == "gem_map.brightness_link")
-    );
+    // LIGHT_P2 ships with brightness_link (M3-11), together with GEM_G2.
+    let shipped = u5_runtime::enhancements::SHIPPED_PHASES;
+    assert!(shipped.contains(&LIGHT_P2) && shipped.contains(&GEM_G2));
+    let link = u5_runtime::enhancements::OPTIONS
+        .iter()
+        .find(|option| option.key == "gem_map.brightness_link")
+        .unwrap();
+    assert_eq!(link.ships, GEM_G2);
 }
 
 #[test]

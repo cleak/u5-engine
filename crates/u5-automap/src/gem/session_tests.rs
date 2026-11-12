@@ -126,6 +126,57 @@ fn a_gem_view_footprint_is_taken_on_the_frame_it_opens() {
     assert!(!session.frame(&state, None));
 }
 
+/// M3-11: the shell passes the wider outdoor window its canvas draws, and
+/// the side cells inside it are recorded on the frame the gem opens; the
+/// faithful 32 x 32 footprint alone does not reach them.
+#[test]
+fn the_drawn_outdoor_window_is_recorded_when_a_gem_opens() {
+    let side = crate::gem::seen::side_windows()
+        .iter()
+        .copied()
+        .find(|w| w.plane == WorldPlane::Britannia)
+        .expect("a Britannia town");
+    let (ex, ey) = side.entrance;
+    // 50 cells east of the entrance: the faithful footprint (16 each way)
+    // misses the 48-wide side window; the 16:9 map (64 each way) covers it.
+    let gem = |state: &mut PlayState| {
+        state.active_view_overlay = Some(ViewOverlay {
+            title: String::new(),
+            text_map: String::new(),
+            kind: ViewOverlayKind::Surface,
+            mode: ViewOverlayMode::GemView,
+        });
+    };
+    let seen = |window: Option<GemWindow>| {
+        let mut session = GemSession::new();
+        let mut state = britannia(usize::from(ex.wrapping_add(50)), usize::from(ey));
+        session.attach(&state, None);
+        session.before(&state);
+        gem(&mut state);
+        session.after_drawn(&state, 1, window);
+        (0..(crate::gem::SIDE_WINDOW_BYTES * 8) as u16)
+            .filter(|&index| session.knowledge().side_seen(side.scene, index))
+            .count()
+    };
+    assert_eq!(seen(None), 0, "the faithful footprint alone");
+    let wide = seen(Some(GemWindow {
+        half_cols: 64,
+        half_rows: 30,
+    }));
+    assert!(wide > 0, "the drawn window reaches the side");
+    // `after` is `after_drawn` with no window.
+    let mut session = GemSession::new();
+    let mut state = britannia(usize::from(ex.wrapping_add(50)), usize::from(ey));
+    session.attach(&state, None);
+    session.before(&state);
+    gem(&mut state);
+    session.after(&state, 1);
+    assert!(
+        (0..(crate::gem::SIDE_WINDOW_BYTES * 8) as u16)
+            .all(|index| !session.knowledge().side_seen(side.scene, index))
+    );
+}
+
 #[test]
 fn the_record_is_written_only_after_a_save_and_read_back() {
     let dir = SaveDir::new("write");

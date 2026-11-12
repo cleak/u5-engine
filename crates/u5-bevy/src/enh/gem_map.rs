@@ -1,9 +1,10 @@
-//! The enhanced gem map in the Bevy shell, record half (Phase B design
-//! 10.3.5; build plan M3-08).
+//! The enhanced gem map in the Bevy shell (Phase B design 10.3.5; build
+//! plan M3-08, M3-11).
 //!
 //! The record of what the player has discovered ([`GemSession`], in
-//! `u5-automap`) is filled and kept here; the gem map image arrives with
-//! M3-11. Four systems, each in one of the foundation's [`EnhSet`]s:
+//! `u5-automap`) is filled and kept here, and [`view`] shows the map while
+//! the game's gem view is up. The record's four systems, each in one of
+//! the foundation's [`EnhSet`]s:
 //!
 //! - `gem_attach` (`Feed`, before the probe): reads `gemmap.u5e` when a
 //!   `VisualState` appears, after a slot load ([`GemMap::request_attach`])
@@ -17,13 +18,17 @@
 //!   (character creation or the Ultima IV transfer) first forgets the old
 //!   record and removes its file.
 //!
+//! The map's own systems (`gem_capture_pre`, `gem_render`, `gem_layout`
+//! and `gem_hide`) are described in [`view`].
+//!
 //! Zero footprint: the plugin is added only when `gem_map.enhanced` is on
 //! at launch, never under the parity lock (the foundation plugin itself is
-//! absent then). Every system runs only while the toggle is on, and all
-//! but the new-game reset only while a `VisualState` exists: the reset
-//! answers a stamp the intro sends before gameplay starts. No key is bound
-//! and nothing is drawn, so the game's frame, keys and state are the 1.0.1
-//! ones; every reader takes `&PlayState`.
+//! absent then). Every system runs only while the toggle is on, except
+//! `gem_hide`, which runs only while it is off and something of the map is
+//! left; all but the new-game reset only while a `VisualState` exists: the
+//! reset answers a stamp the intro sends before gameplay starts. No key is
+//! bound, and the map is a UI node over the window, so the game's frame,
+//! keys and state are the 1.0.1 ones; every reader takes `&PlayState`.
 
 use bevy::prelude::*;
 use u5_automap::gem::{AttachOutcome, GEM_SIDECAR_TAG, GemKnowledge, GemSession};
@@ -36,6 +41,10 @@ use super::sidecar_io::{SaveStamped, SaveWatch};
 use super::toast::Toasts;
 use super::{EnhLaunch, EnhSet, VisualLaunchConfig, feature_wanted, toggle_on};
 use crate::VisualState;
+
+pub mod view;
+
+pub use view::{GemBeforeNode, GemMapNode, GemShow};
 
 /// The toggle this module belongs to.
 const GEM: Toggle = Toggle::GemMapEnhanced;
@@ -111,12 +120,13 @@ pub struct GemMapPlugin;
 
 impl Plugin for GemMapPlugin {
     fn build(&self, app: &mut App) {
-        app.init_resource::<GemMap>();
+        app.init_resource::<GemMap>().init_resource::<GemShow>();
         app.add_systems(
             Update,
             (
                 gem_attach.before(gem_probe_pre),
                 gem_probe_pre.after(super::synthetic::feed_synthetic_keys),
+                view::gem_capture_pre.after(gem_probe_pre),
             )
                 .in_set(EnhSet::Feed)
                 .run_if(resource_exists::<VisualState>)
@@ -128,6 +138,25 @@ impl Plugin for GemMapPlugin {
                 .in_set(EnhSet::Observe)
                 .run_if(resource_exists::<VisualState>)
                 .run_if(toggle_on(GEM)),
+        )
+        .add_systems(
+            Update,
+            (
+                view::gem_render
+                    .run_if(resource_exists::<VisualState>)
+                    .run_if(view::gem_render_due),
+                view::gem_layout
+                    .after(view::gem_render)
+                    .run_if(view::gem_layout_due),
+            )
+                .in_set(EnhSet::Present)
+                .run_if(toggle_on(GEM)),
+        )
+        .add_systems(
+            Update,
+            view::gem_hide
+                .in_set(EnhSet::Present)
+                .run_if(view::gem_hide_due),
         );
         // The save watcher exists only when the host gave a save folder; it
         // owns the `SaveStamped` event.
@@ -199,10 +228,17 @@ fn gem_probe_pre(
     gem.session.before(&visual.state);
 }
 
-/// The events since the probe, and this frame's seen cells.
-fn gem_probe_post(mut gem: ResMut<GemMap>, visual: Res<VisualState>) {
+/// The events since the probe, and this frame's seen cells: on the frame
+/// a gem view opens outdoors, the wider window the map draws, too.
+fn gem_probe_post(
+    mut gem: ResMut<GemMap>,
+    visual: Res<VisualState>,
+    launch: Res<EnhLaunch>,
+    windows: Query<&Window>,
+) {
     let commands = gem.commands;
-    gem.session.after(&visual.state, commands);
+    let window = view::drawn_window(&visual.state, &windows, &launch);
+    gem.session.after_drawn(&visual.state, commands, window);
 }
 
 /// Writes the record after each new save (10.3.7). A new character's stamp

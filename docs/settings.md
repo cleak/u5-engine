@@ -42,8 +42,10 @@ In this build Recommended turns on only sprites over terrain
 (`display.sprite_composite`), and Everything adds sharp scaling
 (`display.scale_mode = "sharp"`) and the F11 fullscreen key
 (`display.fullscreen_key`); none of them changes the game. The wider world
-view is a deviation, so no preset turns it on. No preset sets brightness or
-the sprite outline (`display.composite_halo`): they are preferences.
+view is a deviation, so no preset turns it on. Everything also turns on the
+enhanced gem map (`gem_map.enhanced`). No preset sets brightness, map
+brightness or the sprite outline (`display.composite_halo`): they are
+preferences.
 
 ## Changing settings
 
@@ -72,6 +74,7 @@ the sprite outline (`display.composite_halo`): they are preferences.
 | `--grow-left`, `--no-grow-left` | `--enable` / `--disable display.grow_left`: the wider world view (shows more than the original). |
 | `--sprite-composite`, `--no-sprite-composite` | `--enable` / `--disable display.sprite_composite`: draw people, monsters, ships and items over the terrain instead of in black boxes. `display.composite_halo` (on by default) keeps a thin black outline round each sprite. |
 | `--brightness PERCENT` | `--set display.brightness=PERCENT`: dim the map view, 25 to 100 (100 is the original colours; `--enable display.brightness` sets the suggested 70). `display.brightness_scope` chooses the map view (`map`) or the whole screen (`frame`). |
+| `--gem-map`, `--no-gem-map` | `--enable` / `--disable gem_map.enhanced`: using a gem shows a full-screen map with real tiles, wider than the original gem's. |
 
 `config.toml` applies to the default launch (no game folder or mode on the
 command line); other launches use the command line alone. An unknown key on
@@ -212,6 +215,40 @@ colours. `frame` dims the whole picture, title screens included. Menus,
 the journal and other separate panels are never dimmed. Screenshots and
 the QA frame captures always record the original picture.
 
+## The gem map
+
+`gem_map.enhanced`, **"Enhanced gem map"** (`--gem-map`), off by default and
+part of the Everything preset. Using a gem works exactly as in the original:
+`V` spends one gem, prints the same lines and opens the game's view, and the
+next key closes it and is thrown away. With this on, the view is drawn as a
+map over the whole window instead of the original's small square:
+
+- **Outdoors** every cell is the real tile from your game's `TILES.16`,
+  shrunk to 4 pixels, with the party in the middle: 128 by 60 cells at
+  16:9, 172 by 60 at 21:9 and 80 by 50 at 4:3, where the original gem shows
+  32 by 32. The map shows the ground only: no people, monsters or other
+  objects are drawn on it, and the party is a steady yellow box around its
+  own picture. Towns and dungeons still show the original view in this
+  build.
+- **Dimming.** `gem_map.map_brightness`, **"Gem map dimming (names stay
+  bright)"**, 25 to 100, is 70 by default: the map is drawn at 70% light so
+  the party box stands out. `gem_map.brightness_link`, **"Follow map
+  brightness"**, off by default, uses `display.map_brightness`, **"Map
+  brightness (full map, gem map)"**, instead while that is below 100, so one
+  setting dims every map.
+- **Fade.** `gem_map.sweep`, **"Fade the gem map in and out"**, on by
+  default: the map rises in over the screen with a dithered edge and sweeps
+  back out when the view closes, about half a second each way. The fade
+  never holds a key: a key pressed while it runs closes the view at once,
+  as in the original, and the fade turns round.
+- On a window smaller than 320x200 the original view is shown.
+
+Nothing here changes the game: the gem is spent by the game itself, the
+original view is still drawn underneath, and the game's state, random
+numbers, timing and save files are exactly those of the same play with the
+map off. What the map remembers of your discoveries is kept beside the save
+(see [sidecars.md](sidecars.md#player-sidecars)).
+
 ## The parity lock
 
 `--parity-lock`, or `U5_PARITY_LOCK=1` in the environment, turns every
@@ -283,7 +320,7 @@ one that types keys must change it exactly as typing those keys would:
 | display.fullscreen_key | Switch fullscreen with a key (F11) | bool = false | a, F | feature | --fullscreen-key | a window, a keyboard | yes |
 | display.grow_left | Wider world view (shows more than the original) | bool = false | a, F | deviation, wider view | --grow-left | - | yes |
 | display.sprite_composite | Sprites over terrain (no black boxes) | bool = false | a, F | feature | --sprite-composite | - | yes |
-| gem_map.enhanced | Enhanced gem map | bool = false | a, P | feature | --gem-map | - | later (chapter 10 G2) |
+| gem_map.enhanced | Enhanced gem map | bool = false | a, P | feature | --gem-map | - | yes |
 | enhancements.schema | Settings file format version | int 1..1 = 1 | -, L | feature | - | - | yes |
 | enhancements.preset | Preset | enum classic\|recommended\|everything = classic | -, P | feature | --preset | - | yes |
 | keys.menu | Open the menu | chord = F12 | -, F | feature | - | a keyboard | later (chapter 1 P5) |
@@ -313,13 +350,13 @@ one that types keys must change it exactly as typing those keys would:
 | display.raster | Tile graphics | enum ega\|tandy = ega | a, L | feature | --raster-depth | - | yes |
 | display.brightness | Map view brightness (100% is the original colours) | int 25..100 = 100 | a, F | feature | --brightness | - | yes |
 | display.brightness_scope | Brightness applies to: the map view, or the whole screen | enum map\|frame = map | a, F | feature | - | - | yes |
-| display.map_brightness | Map brightness (full map, gem map) | int 25..100 = 100 | a, F | feature | - | - | later (chapter 9 P2) |
+| display.map_brightness | Map brightness (full map, gem map) | int 25..100 = 100 | a, F | feature | - | - | yes |
 | display.vignette | Edge darkening | int 0..50 = 0 | a, F | feature | --vignette | - | later (chapter 9 P3) |
 | display.composite_halo | Keep a thin black outline around sprites | bool = true | a, F | feature | - | - | yes |
 | gem_map.labels | Names on the gem map (only places you have found) | bool = true | a, F | feature | - | - | later (chapter 10 G5) |
-| gem_map.brightness_link | Follow map brightness | bool = false | a, F | feature | - | - | later (chapter 10 G2) |
-| gem_map.map_brightness | Gem map dimming (names stay bright) | int 25..100 = 70 | a, F | feature | - | - | later (chapter 10 G2) |
-| gem_map.sweep | Fade the gem map in and out | bool = true | a, F | feature | - | - | later (chapter 10 G2) |
+| gem_map.brightness_link | Follow map brightness | bool = false | a, F | feature | - | - | yes |
+| gem_map.map_brightness | Gem map dimming (names stay bright) | int 25..100 = 70 | a, F | feature | - | - | yes |
+| gem_map.sweep | Fade the gem map in and out | bool = true | a, F | feature | - | - | yes |
 | gem_map.town_surroundings | Show the land around a town | bool = true | a, F | feature | - | - | later (chapter 10 G3) |
 | gem_map.dungeon_stack | Show every dungeon level you have seen | bool = true | a, F | feature | - | - | later (chapter 10 G4) |
 | gem_map.wrap_rows | Show the dungeon's wrapped edge | bool = true | a, F | feature | - | - | later (chapter 10 G4) |

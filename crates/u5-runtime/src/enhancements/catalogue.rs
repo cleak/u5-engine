@@ -161,7 +161,9 @@ pub const SHIPPED_PHASES: &[Phase] = &[
     DISPLAY_P2,
     DISPLAY_P8,
     LIGHT_P1,
+    LIGHT_P2,
     LIGHT_P5,
+    GEM_G2,
 ];
 
 /// A soft dependency (design 1.4.5): what a feature prefers to have, and

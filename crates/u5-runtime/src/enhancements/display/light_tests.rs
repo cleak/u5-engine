@@ -215,21 +215,21 @@ fn every_chapter_9_row_matches_the_design() {
 }
 
 #[test]
-fn p1_and_p5_of_chapter_9_ship_in_this_build() {
+fn p1_p2_and_p5_of_chapter_9_ship_in_this_build() {
     // M2-01 added the rows; M2-03 ships P1 (`brightness` and
-    // `brightness_scope`) and M2-06 ships P5 (`sprite_composite` and
-    // `composite_halo`). P2 is M3's and P3 is optional (L3).
-    for phase in [LIGHT_P1, LIGHT_P5] {
+    // `brightness_scope`), M2-06 ships P5 (`sprite_composite` and
+    // `composite_halo`) and M3-11 ships P2 (`map_brightness`) with the gem
+    // map's brightness link. P3 is optional (L3).
+    for phase in [LIGHT_P1, LIGHT_P2, LIGHT_P5] {
         assert!(SHIPPED_PHASES.contains(&phase), "{phase:?}");
     }
-    for phase in [LIGHT_P2, LIGHT_P3] {
-        assert!(!SHIPPED_PHASES.contains(&phase), "{phase:?}");
-    }
+    assert!(!SHIPPED_PHASES.contains(&LIGHT_P3));
     for row in CatalogueRow::all().filter(|row| row.ships().chapter == 9) {
         let shipped = matches!(
             row.key(),
             "display.brightness"
                 | "display.brightness_scope"
+                | "display.map_brightness"
                 | "display.sprite_composite"
                 | "display.composite_halo"
         );
@@ -240,29 +240,27 @@ fn p1_and_p5_of_chapter_9_ship_in_this_build() {
         enable("display.brightness"),
         set("display.brightness", "70"),
         enable("display.sprite_composite"),
+        set("display.map_brightness", "70"),
     ] {
         let resolved = resolve(input(None, std::slice::from_ref(&cli)));
         assert!(!resolved.is_classic(), "{cli:?}");
         assert_eq!(note_lines(&resolved), Vec::<String>::new(), "{cli:?}");
     }
+    let resolved = resolve(input(None, &[set("display.map_brightness", "70")]));
+    assert_eq!(resolved.display_map_brightness(), 70);
     // The halo alone is a sub-option of an off feature: no note, still
     // Classic.
     let resolved = resolve(input(None, &[set("display.composite_halo", "false")]));
     assert!(resolved.is_classic());
     assert_eq!(note_lines(&resolved), Vec::<String>::new());
-    // The hidden ones are refused with a note and leave the game Classic.
-    for cli in [
-        set("display.map_brightness", "70"),
-        set("display.vignette", "20"),
-    ] {
-        let resolved = resolve(input(None, std::slice::from_ref(&cli)));
-        assert!(resolved.is_classic(), "{cli:?}");
-        assert!(
-            matches!(resolved.notes[..], [SettingNote::NotAvailable { .. }]),
-            "{cli:?}: {:?}",
-            note_lines(&resolved)
-        );
-    }
+    // The hidden one is refused with a note and leaves the game Classic.
+    let resolved = resolve(input(None, &[set("display.vignette", "20")]));
+    assert!(resolved.is_classic());
+    assert!(
+        matches!(resolved.notes[..], [SettingNote::NotAvailable { .. }]),
+        "{:?}",
+        note_lines(&resolved)
+    );
 }
 
 #[test]
