@@ -4,17 +4,20 @@ use std::io;
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
+use u5_runtime::enhancements::LockState;
 use u5_runtime::{
     Direction, DiskPromptSession, PlayOptions, PlayState, audit_location_dat_files,
     location_audit_report_text, run_report,
 };
 use u5_tui::{
-    CliArgs, ReadyGameData, SETTINGS_WINDOW_FLAG, SETUP_WINDOW_FLAG, WizardMode, cli_usage,
-    compare_manifest_files, describe_failure, open_settings_page, parse_cli_command,
-    prepare_writable_game_dir, resolve_game_data, run_audio_suite, run_create_character_command,
-    run_equivalence_suite, run_interactive_create_character, run_intro_menu_loop, run_play_loop,
-    run_route_smoke, run_save_frame, run_save_frame_suite, run_save_screen,
-    run_settings_window_child, run_setup_window_child, run_show_settings,
+    CliArgs, PARITY_LOCK_LINE, ReadyGameData, SETTINGS_WINDOW_FLAG, SETUP_WINDOW_FLAG,
+    TerminalFeature, TerminalGemMap, TerminalSession, WizardMode, cli_usage,
+    compare_manifest_files, describe_failure, lock_state_for_process, open_settings_page,
+    parse_cli_command, prepare_writable_game_dir, resolve_game_data, run_audio_suite,
+    run_create_character_command, run_equivalence_suite, run_interactive_create_character,
+    run_intro_menu_loop, run_play_loop_with, run_route_smoke, run_route_smoke_with, run_save_frame,
+    run_save_frame_suite, run_save_screen, run_settings_window_child, run_setup_window_child,
+    run_show_settings,
 };
 
 fn main() -> ExitCode {
@@ -167,6 +170,14 @@ fn dispatch(mut args: CliArgs) -> io::Result<()> {
         );
     }
     if args.route_smoke {
+        if gem_map_on(&args) {
+            return run_route_smoke_with(
+                &args.game_dir,
+                args.raster_depth,
+                args.route_smoke_manifest.as_deref(),
+                || vec![Box::new(TerminalGemMap::in_memory()) as Box<dyn TerminalFeature>],
+            );
+        }
         return run_route_smoke(
             &args.game_dir,
             args.raster_depth,
@@ -177,15 +188,30 @@ fn dispatch(mut args: CliArgs) -> io::Result<()> {
         return run_visual(args);
     }
     if args.play {
-        return run_play_loop(
+        let session = TerminalSession::for_play(&args.game_dir, gem_map_on(&args));
+        return run_play_loop_with(
             &args.game_dir,
             args.play_options,
             args.raster_diagnostics,
             args.raster_depth,
             args.play_script,
+            (!session.is_empty()).then_some(session),
         );
     }
     run_report(&args.game_dir)
+}
+
+/// Whether `--gem-map` keeps the record in this terminal run: never under
+/// the parity lock, which then prints its one line (design 10.4.5).
+fn gem_map_on(args: &CliArgs) -> bool {
+    if !args.gem_map {
+        return false;
+    }
+    if lock_state_for_process(args.parity_lock) != LockState::Off {
+        eprintln!("{PARITY_LOCK_LINE}");
+        return false;
+    }
+    true
 }
 
 fn needs_writable_game_dir(args: &CliArgs) -> bool {

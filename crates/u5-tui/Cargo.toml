@@ -10,6 +10,7 @@ visual = ["dep:u5-bevy", "dep:u5-bevy-setup", "u5-host-desktop/native-dialogs"]
 
 [dependencies]
 u5-runtime = { workspace = true }
+u5-automap = { workspace = true }
 u5-bevy = { workspace = true, optional = true }
 u5-gamedata = { workspace = true }
 u5-host-desktop = { workspace = true }

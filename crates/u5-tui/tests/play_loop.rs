@@ -2323,7 +2323,9 @@ fn the_save_bytes_are_the_same_with_and_without_the_terminal_watch() {
             &dir,
             &script(&["d", "Q", "Y", "s", "QY"]),
             None,
-            save_watch.as_mut(),
+            save_watch
+                .as_mut()
+                .map(|watch| watch as &mut dyn PlayObserver),
         )
         .unwrap();
         let bytes = fs::read(dir.join(SAVED_GAM_FILENAME)).unwrap();

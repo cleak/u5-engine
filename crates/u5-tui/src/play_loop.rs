@@ -63,7 +63,15 @@ impl TerminalSaveWatch {
 
     /// After a command that consumed a key.
     pub fn after_command(&mut self, state: &PlayState) {
-        self.stamps.extend(self.watcher.poll(state, &self.save_dir));
+        self.poll(state);
+    }
+
+    /// After a command: the stamp of the save it wrote, if it wrote one.
+    /// The stamp is also kept for [`take_stamps`](Self::take_stamps).
+    pub fn poll(&mut self, state: &PlayState) -> Option<SaveStamp> {
+        let stamp = self.watcher.poll(state, &self.save_dir);
+        self.stamps.extend(stamp);
+        stamp
     }
 
     /// The stamps of the saves found since the last call, oldest first.
@@ -72,24 +80,133 @@ impl TerminalSaveWatch {
     }
 }
 
-fn after_command(save_watch: &mut Option<&mut TerminalSaveWatch>, state: &PlayState) {
-    if let Some(watch) = save_watch {
-        watch.after_command(state);
+/// What watches a terminal play run, command by command. Every method sees
+/// the state read-only and does nothing by default, so a watched run with
+/// nothing on is the 1.0.1 run.
+pub trait PlayObserver {
+    /// Just before a command runs.
+    fn before_command(&mut self, _state: &PlayState) {}
+    /// Just after a command ran.
+    fn after_command(&mut self, _state: &PlayState) {}
+    /// An enhancement's `@` token, before it is parsed: true when a feature
+    /// took it, and then nothing runs for it.
+    fn take_token(&mut self, _token: &str, _state: &PlayState) -> bool {
+        false
     }
 }
 
-/// [`run_play_loop`] with the save watch the enabled sidecar features need.
+impl PlayObserver for TerminalSaveWatch {
+    fn after_command(&mut self, state: &PlayState) {
+        self.poll(state);
+    }
+}
+
+/// The enhancements a terminal play run keeps: the save watch and the
+/// features that need it. With both `None` it watches nothing.
+#[derive(Debug, Default)]
+pub struct TerminalSession {
+    pub save_watch: Option<TerminalSaveWatch>,
+    pub gem_map: Option<crate::gem_map::TerminalGemMap>,
+}
+
+impl TerminalSession {
+    /// The session for a `--play` run in `save_dir`: the gem map when
+    /// `gem_map` is on (the caller has already applied the parity lock),
+    /// with the save watch it needs.
+    pub fn for_play(save_dir: &Path, gem_map: bool) -> Self {
+        if !gem_map {
+            return Self::default();
+        }
+        Self {
+            save_watch: Some(TerminalSaveWatch::new(save_dir)),
+            gem_map: Some(crate::gem_map::TerminalGemMap::for_save_dir(save_dir)),
+        }
+    }
+
+    /// Whether nothing is on.
+    pub fn is_empty(&self) -> bool {
+        self.save_watch.is_none() && self.gem_map.is_none()
+    }
+
+    /// Gameplay starts on `state`: the features read their sidecars.
+    pub fn start(&mut self, state: &PlayState) {
+        if let Some(gem_map) = self.gem_map.as_mut() {
+            gem_map.attach(state);
+        }
+    }
+}
+
+impl PlayObserver for TerminalSession {
+    fn before_command(&mut self, state: &PlayState) {
+        if let Some(gem_map) = self.gem_map.as_mut() {
+            gem_map.before(state);
+        }
+    }
+
+    fn after_command(&mut self, state: &PlayState) {
+        let stamp = self.save_watch.as_mut().and_then(|watch| watch.poll(state));
+        if let Some(gem_map) = self.gem_map.as_mut() {
+            gem_map.after(state);
+            if let Some(stamp) = stamp {
+                gem_map.saved(&stamp);
+            }
+        }
+    }
+
+    fn take_token(&mut self, token: &str, _state: &PlayState) -> bool {
+        match self.gem_map.as_ref() {
+            Some(gem_map) if crate::gem_map::TerminalGemMap::owns(token) => {
+                println!("{}", gem_map.summary());
+                true
+            }
+            _ => false,
+        }
+    }
+}
+
+fn before_command(observer: &mut Option<&mut dyn PlayObserver>, state: &PlayState) {
+    if let Some(observer) = observer {
+        observer.before_command(state);
+    }
+}
+
+fn after_command(observer: &mut Option<&mut dyn PlayObserver>, state: &PlayState) {
+    if let Some(observer) = observer {
+        observer.after_command(state);
+    }
+}
+
+/// Whether a feature took `command`, an `@` token. Only `@` tokens are
+/// offered, and only when something watches.
+fn token_taken(
+    observer: &mut Option<&mut dyn PlayObserver>,
+    command: &str,
+    state: &PlayState,
+) -> bool {
+    match observer {
+        Some(observer) if is_enhancement_token(command) => {
+            observer.take_token(command.trim(), state)
+        }
+        _ => false,
+    }
+}
+
+/// [`run_play_loop`] with the enhancements a terminal run keeps.
 pub fn run_play_loop_with(
     game_dir: &Path,
     options: PlayOptions,
     raster_diagnostics: bool,
     raster_depth: TileGraphicsDepth,
     play_script: Option<Vec<String>>,
-    mut save_watch: Option<TerminalSaveWatch>,
+    mut session: Option<TerminalSession>,
 ) -> io::Result<()> {
     let intro_target = options.target;
     let intro_floor = options.floor;
     let mut state = PlayState::load_scene(game_dir, options)?;
+    if let Some(session) = session.as_mut() {
+        session.start(&state);
+    }
+    let observer = session.as_mut().map(|s| s as &mut dyn PlayObserver);
     let tile_atlas = if raster_diagnostics {
         Some(load_tile_atlas(game_dir, raster_depth)?)
     } else {
@@ -108,7 +225,7 @@ pub fn run_play_loop_with(
             game_dir,
             &commands,
             tile_atlas.as_ref(),
-            save_watch.as_mut(),
+            observer,
         );
     }
     run_interactive_play_loop_watched(
@@ -116,7 +233,7 @@ pub fn run_play_loop_with(
         game_dir,
         tile_atlas.as_ref(),
         &mut io::stdin().lock(),
-        save_watch.as_mut(),
+        observer,
     )
 }
 
@@ -168,13 +285,14 @@ pub fn run_interactive_play_loop<R: BufRead>(
     run_interactive_play_loop_watched(state, game_dir, tile_atlas, input_reader, None)
 }
 
-/// [`run_interactive_play_loop`], polling `save_watch` after every key.
+/// [`run_interactive_play_loop`], with `observer` around every key and
+/// offered every `@` line.
 pub fn run_interactive_play_loop_watched<R: BufRead>(
     state: &mut PlayState,
     game_dir: &Path,
     tile_atlas: Option<&TileAtlas>,
     input_reader: &mut R,
-    mut save_watch: Option<&mut TerminalSaveWatch>,
+    mut observer: Option<&mut dyn PlayObserver>,
 ) -> io::Result<()> {
     let mut input = String::new();
     let mut queued_input = VecDeque::new();
@@ -227,6 +345,9 @@ pub fn run_interactive_play_loop_watched<R: BufRead>(
             if input_reader.read_line(&mut input)? == 0 {
                 break;
             }
+            if !play_state_whole_line_reader(state) && token_taken(&mut observer, &input, state) {
+                continue;
+            }
             if play_state_whole_line_reader(state) {
                 match free_text_line_input(&input) {
                     FreeTextLineInput::Submit(key, suffix) => (key, suffix),
@@ -259,8 +380,9 @@ pub fn run_interactive_play_loop_watched<R: BufRead>(
             }
         };
         let effects_before = state.sound_effect_serial;
+        before_command(&mut observer, state);
         let disposition = handle_play_key_input(state, key, &suffix, game_dir)?;
-        after_command(&mut save_watch, state);
+        after_command(&mut observer, state);
         if disposition == PlayInputDisposition::Quit {
             break;
         }
@@ -318,13 +440,14 @@ pub fn run_play_script_commands(
     run_play_script_commands_watched(state, game_dir, commands, tile_atlas, None)
 }
 
-/// [`run_play_script_commands`], polling `save_watch` after every command.
+/// [`run_play_script_commands`], with `observer` around every command and
+/// offered every `@` token.
 pub fn run_play_script_commands_watched(
     state: &mut PlayState,
     game_dir: &Path,
     commands: &[String],
     tile_atlas: Option<&TileAtlas>,
-    mut save_watch: Option<&mut TerminalSaveWatch>,
+    mut observer: Option<&mut dyn PlayObserver>,
 ) -> io::Result<()> {
     run_play_script_load_entry_reaction(state, game_dir)?;
     print_play_script_snapshot(state, tile_atlas)?;
@@ -334,9 +457,13 @@ pub fn run_play_script_commands_watched(
             index + 1,
             play_script_command_label(command)
         );
+        if token_taken(&mut observer, command, state) {
+            continue;
+        }
         // No pump in script mode either; see the interactive loop above.
+        before_command(&mut observer, state);
         let disposition = run_play_script_step(state, command, game_dir)?;
-        after_command(&mut save_watch, state);
+        after_command(&mut observer, state);
         print_play_script_snapshot(state, tile_atlas)?;
         if disposition == PlayInputDisposition::Quit {
             break;
@@ -435,7 +562,17 @@ pub enum ScriptTokenIntercept {
 
 /// Who may intercept `@` tokens before [`handle_play_script_command`] sees
 /// them. Only `@` tokens are offered; every other command runs untouched.
+///
+/// A class (a) feature may also watch every command that runs, through
+/// [`before_command`](Self::before_command) and
+/// [`after_command`](Self::after_command); both see the state read-only and
+/// do nothing by default.
 pub trait ScriptTokenHooks {
+    /// Just before a command runs.
+    fn before_command(&mut self, _state: &PlayState) {}
+    /// Just after a command ran, before the caller's own callback.
+    fn after_command(&mut self, _state: &PlayState) {}
+
     fn intercept(
         &mut self,
         index: usize,
@@ -510,7 +647,9 @@ where
             None => std::slice::from_ref(command),
         };
         for command in run {
+            hooks.before_command(state);
             let disposition = run_play_script_step(state, command, game_dir)?;
+            hooks.after_command(state);
             after_command(state, index, command)?;
             if disposition == PlayInputDisposition::Quit {
                 return Ok(());

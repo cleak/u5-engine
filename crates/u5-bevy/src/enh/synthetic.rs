@@ -187,7 +187,7 @@ fn synthetic_keys_queued(owner: Res<SyntheticInputOwner>) -> bool {
 /// `EnhSet::Feed`, after the overlay bookkeeping and before the input
 /// driver reads. Nothing moves while an overlay is open, or before
 /// gameplay (no `VisualState`): the keys wait.
-fn feed_synthetic_keys(
+pub(super) fn feed_synthetic_keys(
     mut owner: ResMut<SyntheticInputOwner>,
     overlay: Option<Res<OverlayState>>,
     visual: Option<ResMut<VisualState>>,

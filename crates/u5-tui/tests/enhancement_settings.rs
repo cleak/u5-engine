@@ -151,19 +151,18 @@ fn gem_map_keys_parse_and_the_alias_waits_for_its_phase() {
     let shipped = u5_runtime::enhancements::CatalogueRow::find("gem_map.enhanced")
         .unwrap()
         .is_shipped();
-    for (flag, on) in [("--gem-map", true), ("--no-gem-map", false)] {
-        if shipped {
-            let args = parse_cli_args([flag]).unwrap();
-            let key = "gem_map.enhanced".to_string();
-            let expected = if on {
-                CliSetting::Enable(key)
-            } else {
-                CliSetting::Disable(key)
-            };
-            assert_eq!(args.enhancements, [expected]);
-        } else {
-            assert!(parse_error(&[flag]).contains("unknown option"), "{flag}");
-        }
+    // `--gem-map` turns the terminal record on from M3-08 (design 10.3.6);
+    // a play launch also sees it as the setting once the row ships.
+    let args = parse_cli_args(["--gem-map"]).unwrap();
+    assert!(args.gem_map);
+    let key = "gem_map.enhanced".to_string();
+    if shipped {
+        assert_eq!(args.enhancements, [CliSetting::Enable(key.clone())]);
+        let args = parse_cli_args(["--no-gem-map"]).unwrap();
+        assert_eq!(args.enhancements, [CliSetting::Disable(key)]);
+    } else {
+        assert!(args.enhancements.is_empty());
+        assert!(parse_error(&["--no-gem-map"]).contains("unknown option"));
     }
     assert!(parse_error(&["--enable", "gem_map.show_all_names"]).contains("unknown setting"));
 }

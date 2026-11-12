@@ -35,6 +35,8 @@
 //!   runs only while such a feature is on.
 //! - The display chapter's plugin ([`crate::display`]) is added only while
 //!   a display toggle or the menu overlay is on.
+//! - The gem map's plugin ([`gem_map`]) is added only while
+//!   `gem_map.enhanced` is on at launch.
 //!
 //! The Bevy half of the trajectory-equivalence harness (`equivalence`,
 //! test-only) runs the real `--visual` app headless, feature on against
@@ -48,6 +50,7 @@
 
 #[cfg(test)]
 pub(crate) mod equivalence;
+pub mod gem_map;
 pub mod idle;
 pub mod input;
 pub mod overlay;
@@ -234,6 +237,7 @@ impl Plugin for EnhancementsPlugin {
             self.launch.enhancements.toggles,
             self.launch.save_dir.as_deref(),
         );
+        gem_map::add_gem_map(app, &self.launch);
         crate::display::add_display(app, &self.launch);
     }
 }
@@ -295,6 +299,7 @@ fn apply_pending_toggles(
     launch: Res<EnhLaunch>,
     keymap: Option<ResMut<KeyMap>>,
     save_watch: Option<ResMut<sidecar_io::SaveWatch>>,
+    gem_map: Option<ResMut<gem_map::GemMap>>,
     idle: IdleProbe,
 ) {
     let before = toggles.0;
@@ -316,6 +321,11 @@ fn apply_pending_toggles(
         && let Some(mut save_watch) = save_watch
     {
         save_watch.toggles_changed(before, toggles.0);
+    }
+    if toggles.0 != before
+        && let Some(mut gem_map) = gem_map
+    {
+        gem_map.toggles_changed(before, toggles.0);
     }
     if stored.is_empty() {
         return;

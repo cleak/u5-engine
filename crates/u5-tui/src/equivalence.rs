@@ -45,6 +45,7 @@ use u5_runtime::{
 };
 
 use crate::enhancement_settings::{check_cli_key, resolve_launch};
+use crate::gem_map::TerminalGemMap;
 use crate::play_loop::{
     NoScriptTokenHooks, ScriptTokenHooks, ScriptTokenIntercept, play_script_state_line,
     replay_play_script_commands_hooked,
@@ -89,15 +90,29 @@ pub trait TerminalFeature {
     fn owns_token(&self, token: &str) -> bool;
     /// Handles one of its tokens and returns the commands it types.
     fn on_token(&mut self, token: &str, state: &PlayState) -> Vec<String>;
+    /// Before each command runs: an observer takes its probe here.
+    fn before_command(&mut self, _state: &PlayState) {}
+    /// After each command ran: an observer folds what it saw here.
+    fn after_command(&mut self, _state: &PlayState) {}
 }
 
 /// The terminal features a resolved configuration turns on.
 ///
-/// No feature has a terminal half yet: M0 builds only the foundation. A
-/// feature chapter adds its line here, behind its own toggle, so with every
-/// toggle off this list is empty and the play script is the 1.0.1 script.
-pub fn terminal_features(_resolved: &ResolvedEnhancements) -> Vec<Box<dyn TerminalFeature>> {
-    Vec::new()
+/// A feature chapter adds its line here, behind its own toggle, so with
+/// every toggle off (or the parity lock set) this list is empty and the
+/// play script is the 1.0.1 script.
+///
+/// - The gem map (chapter 10, class (a)): its record, kept in memory, and
+///   `@gemmap`, a count-only summary of it.
+pub fn terminal_features(resolved: &ResolvedEnhancements) -> Vec<Box<dyn TerminalFeature>> {
+    let mut features: Vec<Box<dyn TerminalFeature>> = Vec::new();
+    if resolved.lock != LockState::Off {
+        return features;
+    }
+    if resolved.toggles.on(Toggle::GemMapEnhanced) {
+        features.push(Box::new(TerminalGemMap::in_memory()));
+    }
+    features
 }
 
 /// One `@` token a feature took during the on run.
@@ -134,6 +149,18 @@ impl FeatureHooks {
 }
 
 impl ScriptTokenHooks for FeatureHooks {
+    fn before_command(&mut self, state: &PlayState) {
+        for feature in &mut self.features {
+            feature.before_command(state);
+        }
+    }
+
+    fn after_command(&mut self, state: &PlayState) {
+        for feature in &mut self.features {
+            feature.after_command(state);
+        }
+    }
+
     fn intercept(
         &mut self,
         index: usize,

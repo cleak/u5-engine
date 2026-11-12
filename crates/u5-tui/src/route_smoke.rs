@@ -3359,6 +3359,19 @@ pub fn run_route_smoke(
     raster_depth: TileGraphicsDepth,
     manifest_path: Option<&Path>,
 ) -> io::Result<()> {
+    run_route_smoke_with(game_dir, raster_depth, manifest_path, Vec::new)
+}
+
+/// [`run_route_smoke`] with the class (a) terminal features `features`
+/// makes watching every case, each case with fresh ones (`--route-smoke
+/// --gem-map`). They read the state only, so the manifest is the plain
+/// route smoke's. With no feature it is exactly [`run_route_smoke`].
+pub fn run_route_smoke_with(
+    game_dir: &Path,
+    raster_depth: TileGraphicsDepth,
+    manifest_path: Option<&Path>,
+    features: impl Fn() -> Vec<Box<dyn crate::equivalence::TerminalFeature>>,
+) -> io::Result<()> {
     let cases = route_smoke_cases();
     let atlas = load_tile_atlas(game_dir, raster_depth)?;
     let baseline_brit_ool = fs::read(game_dir.join(BRIT_OOL_FILENAME))?;
@@ -3379,7 +3392,14 @@ pub fn run_route_smoke(
     for case in &cases {
         fs::write(game_dir.join(BRIT_OOL_FILENAME), &baseline_brit_ool)?;
         fs::write(game_dir.join(UNDER_OOL_FILENAME), &baseline_under_ool)?;
-        match run_route_smoke_case(game_dir, &atlas, case) {
+        let watching = features();
+        let result = if watching.is_empty() {
+            run_route_smoke_case(game_dir, &atlas, case)
+        } else {
+            let mut hooks = crate::equivalence::FeatureHooks::new(watching);
+            run_route_smoke_case_traced(game_dir, &atlas, case, &mut hooks, &mut NoRouteTrace)
+        };
+        match result {
             Ok(report) => {
                 println!(
                     "route-smoke {}: {} command(s), {}",

@@ -17,7 +17,7 @@ use u5_runtime::{
     question_record_display_text, run_chargen_tournament,
 };
 
-use u5_runtime::enhancements::{CliSetting, Preset};
+use u5_runtime::enhancements::{CliSetting, Preset, Toggle};
 
 use crate::enhancement_settings::{check_cli_key, cli_alias_usage, find_cli_alias};
 use crate::runtime_game_dir::prepare_writable_game_dir;
@@ -94,6 +94,10 @@ pub struct CliArgs {
     pub enhancements: Vec<CliSetting>,
     /// `--parity-lock`: every enhancement off, whatever else says (1.3.11).
     pub parity_lock: bool,
+    /// `--gem-map`: keep the enhanced gem map's record in a terminal
+    /// `--play` or `--route-smoke` run (Phase B design 10.3.6). Ignored
+    /// under the parity lock.
+    pub gem_map: bool,
     /// `--show-settings`: print the resolved settings and exit.
     pub show_settings: bool,
     /// `--settings`: open the setup window's Enhancements page, then start
@@ -243,6 +247,7 @@ where
     let mut seed_beside: Option<u8> = None;
     let mut enhancements: Vec<CliSetting> = Vec::new();
     let mut parity_lock = false;
+    let mut gem_map = false;
     let mut show_settings = false;
     let mut settings = false;
     let mut args = args.into_iter().map(Into::into);
@@ -660,6 +665,10 @@ where
                 });
             }
             "--parity-lock" => parity_lock = true,
+            // Chapter 10's alias, taken here so the terminal modes have it
+            // before its row ships (design 10.3.6); `--no-gem-map` stays
+            // with the catalogue's aliases.
+            "--gem-map" => gem_map = true,
             "--show-settings" => show_settings = true,
             "--settings" => settings = true,
             _ if arg.starts_with("--") => {
@@ -713,6 +722,7 @@ where
             setup: false,
             enhancements: Vec::new(),
             parity_lock: false,
+            gem_map: false,
             show_settings: false,
             settings: false,
             settings_file: false,
@@ -1013,7 +1023,7 @@ where
         }
         None
     };
-    let args = CliArgs {
+    let mut args = CliArgs {
         intro,
         play,
         visual,
@@ -1042,10 +1052,26 @@ where
         setup,
         enhancements,
         parity_lock,
+        gem_map,
         show_settings,
         settings,
         settings_file: false,
     };
+    if args.gem_map {
+        if args.is_qa_mode() && !args.route_smoke {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "--gem-map applies to --play, --play-script, --route-smoke and play launches only",
+            ));
+        }
+        // A play launch that reads the settings (the window) sees it as
+        // `gem_map.enhanced` once that row ships; until then only the
+        // terminal record uses it.
+        if !args.is_qa_mode() && Toggle::GemMapEnhanced.spec().is_shipped() {
+            args.enhancements
+                .push(CliSetting::Enable(Toggle::GemMapEnhanced.key().to_string()));
+        }
+    }
     if args.show_settings {
         let mut mode = args.clone();
         mode.show_settings = false;
@@ -1202,6 +1228,9 @@ OPTIONS:
         --route-smoke-manifest <PATH>
                               With --route-smoke, write a sanitized manifest
                               compatible with --compare-frame-manifests.
+        --gem-map             With --play or --route-smoke, keep the enhanced
+                              gem map's record of discoveries (beside the save
+                              in --play); @gemmap in a script prints its counts.
         --equivalence-suite <OUT>
                               Run every route smoke case with every
                               enhancement off, then under Classic and each

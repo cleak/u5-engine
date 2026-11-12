@@ -148,7 +148,7 @@ fn save_watch_wanted(watch: Res<SaveWatch>, toggles: Option<Res<Toggles>>) -> bo
 
 /// Polls the watcher for this frame and sends a [`SaveStamped`] per new
 /// save. See the module documentation for when it hashes.
-fn save_watcher(
+pub(super) fn save_watcher(
     mut watch: ResMut<SaveWatch>,
     visual: Option<Res<VisualState>>,
     intro: Option<Res<VisualIntroState>>,
