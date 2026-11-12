@@ -1,0 +1,9 @@
+[package]
+name = "u5-automap"
+version.workspace = true
+license.workspace = true
+edition.workspace = true
+description = "Map memory, perceived cells and static maps for the automap and the enhanced gem map (std only, no host code)."
+
+[dependencies]
+u5-runtime = { workspace = true }

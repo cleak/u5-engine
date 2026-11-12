@@ -10,5 +10,6 @@ original-asset-tests = []
 
 [dependencies]
 u5-runtime = { workspace = true }
+u5-automap = { workspace = true }
 bevy = { workspace = true }
 image = { workspace = true }
