@@ -354,14 +354,24 @@ fn the_save_bytes_are_the_same_with_and_without_the_watcher() {
 }
 
 #[test]
-fn no_catalogue_toggle_keeps_a_sidecar_yet() {
+fn only_the_gem_map_toggle_keeps_a_sidecar_so_far() {
     assert!(!sidecar_feature_on(FeatureToggles::CLASSIC));
-    let mut all = FeatureToggles::CLASSIC;
-    for spec in TOGGLES {
-        all.set(spec.toggle, true);
+    // Chapter 10's `gem_map.enhanced` is the first sidecar feature with a
+    // catalogue row (M3-01); chapters 4, 7 and 8 bring the others.
+    let mut others = FeatureToggles::CLASSIC;
+    for spec in TOGGLES.iter().filter(|spec| spec.key != "gem_map.enhanced") {
+        others.set(spec.toggle, true);
     }
-    // The sidecar features ship with chapters 4, 7, 8 and 10.
-    assert!(!sidecar_feature_on(all));
+    assert!(!sidecar_feature_on(others));
+    let mut gem = FeatureToggles::CLASSIC;
+    gem.set(Toggle::GemMapEnhanced, true);
+    assert!(sidecar_feature_on(gem));
+    let resolved: Vec<&str> = SIDECAR_KEYS
+        .iter()
+        .copied()
+        .filter(|key| Toggle::from_key(key).is_some())
+        .collect();
+    assert_eq!(resolved, ["gem_map.enhanced"]);
     for key in SIDECAR_KEYS {
         let (section, name) = key.split_once('.').unwrap();
         assert!(!section.is_empty() && !name.is_empty() && !name.contains('.'));

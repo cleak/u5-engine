@@ -38,6 +38,7 @@ use super::display::{
     BRIGHTNESS_SCOPE_WORDS, GROW_LEFT_LIGHT_WORDS, PILLAR_FILL_WORDS, PIXEL_ASPECT_WORDS,
     RASTER_WORDS, SCALE_MODE_WORDS,
 };
+use super::gem_map::GLYPH_WORDS;
 use super::source::Capability;
 
 /// The three effect classes (user requirement, 2026-11-01).
@@ -140,6 +141,16 @@ pub const LIGHT_P3: Phase = Phase::new(9, "P3");
 /// Chapter 9, P5: sprite compositing (`display.sprite_composite` and
 /// `display.composite_halo`; build plan M2).
 pub const LIGHT_P5: Phase = Phase::new(9, "P5");
+/// Chapter 10, G2: the outdoor gem map in Bevy (`gem_map.enhanced`,
+/// `map_brightness`, `brightness_link` and `sweep`; design 10.4.1, 10.5).
+pub const GEM_G2: Phase = Phase::new(10, "G2");
+/// Chapter 10, G3: towns (`gem_map.town_surroundings`).
+pub const GEM_G3: Phase = Phase::new(10, "G3");
+/// Chapter 10, G4: dungeons (`gem_map.dungeon_stack`, `wrap_rows`,
+/// `level_paging` and `glyphs`).
+pub const GEM_G4: Phase = Phase::new(10, "G4");
+/// Chapter 10, G5: marks and labels (`gem_map.labels`).
+pub const GEM_G5: Phase = Phase::new(10, "G5");
 
 /// Every phase that has shipped in this build. Shipping a phase is adding
 /// it here, in the package that completes it; its rows then become
@@ -367,6 +378,22 @@ toggles! {
         ships: LIGHT_P5,
         tags: &[],
         cli_aliases: &["--sprite-composite"],
+        soft_deps: &[],
+        needs: &[],
+        driven: false,
+    },
+    // `[gem_map]`, chapter 10 (design 10.4.1). The main toggle applies at
+    // the next idle prompt, because turning it on attaches the record from
+    // the sidecar. Its nine sub-options are valued rows in `OPTIONS` whose
+    // parent is this toggle, inert while it is off.
+    GemMapEnhanced = "gem_map.enhanced" {
+        label: "Enhanced gem map",
+        class: EffectClass::Presentation,
+        apply: ApplyAt::IdlePrompt,
+        tier: Tier::Feature,
+        ships: GEM_G2,
+        tags: &[],
+        cli_aliases: &["--gem-map"],
         soft_deps: &[],
         needs: &[],
         driven: false,
@@ -622,6 +649,35 @@ const fn grow_left_option(
         None,
         Some(Toggle::DisplayGrowLeft),
     )
+}
+
+/// A `[gem_map]` sub-option (design 10.4.1): class (a), feature tier,
+/// applied at the next frame, inert while `gem_map.enhanced` is off, and
+/// shipped with the gem map phase that uses it.
+const fn gem_map_option(
+    key: &'static str,
+    label: &'static str,
+    kind: OptionKind,
+    default: OptionDefault,
+    ships: Phase,
+) -> OptionSpec {
+    OptionSpec {
+        key,
+        label,
+        kind,
+        default,
+        class: Some(EffectClass::Presentation),
+        apply: ApplyAt::Frame,
+        tier: Tier::Feature,
+        deviation_values: &[],
+        ships,
+        tags: &[],
+        cli_aliases: &[],
+        toggle: None,
+        parent: Some(Toggle::GemMapEnhanced),
+        needs: &[],
+        switch: None,
+    }
 }
 
 /// Every valued setting, in catalogue order.
@@ -889,6 +945,78 @@ pub const OPTIONS: &[OptionSpec] = &[
         None,
         Some(Toggle::DisplaySpriteComposite),
     ),
+    // `[gem_map]`, chapter 10 (design 10.4.1, 10.2.1). Every row is a
+    // sub-option of `gem_map.enhanced`, hidden until the phase that uses
+    // it ships (U13). `map_brightness` and `brightness_link` are
+    // preferences in no preset (foundation 1.4.2).
+    gem_map_option(
+        "gem_map.labels",
+        "Names on the gem map (only places you have found)",
+        OptionKind::Bool,
+        OptionDefault::Bool(true),
+        GEM_G5,
+    ),
+    gem_map_option(
+        "gem_map.brightness_link",
+        "Follow map brightness",
+        OptionKind::Bool,
+        OptionDefault::Bool(false),
+        GEM_G2,
+    ),
+    gem_map_option(
+        "gem_map.map_brightness",
+        "Gem map dimming (names stay bright)",
+        OptionKind::Int { min: 25, max: 100 },
+        OptionDefault::Int(70),
+        GEM_G2,
+    ),
+    gem_map_option(
+        "gem_map.sweep",
+        "Fade the gem map in and out",
+        OptionKind::Bool,
+        OptionDefault::Bool(true),
+        GEM_G2,
+    ),
+    gem_map_option(
+        "gem_map.town_surroundings",
+        "Show the land around a town",
+        OptionKind::Bool,
+        OptionDefault::Bool(true),
+        GEM_G3,
+    ),
+    gem_map_option(
+        "gem_map.dungeon_stack",
+        "Show every dungeon level you have seen",
+        OptionKind::Bool,
+        OptionDefault::Bool(true),
+        GEM_G4,
+    ),
+    gem_map_option(
+        "gem_map.wrap_rows",
+        "Show the dungeon's wrapped edge",
+        OptionKind::Bool,
+        OptionDefault::Bool(true),
+        GEM_G4,
+    ),
+    gem_map_option(
+        "gem_map.level_paging",
+        "Page through dungeon levels (PgUp, PgDn)",
+        OptionKind::Bool,
+        OptionDefault::Bool(true),
+        GEM_G4,
+    ),
+    OptionSpec {
+        // `gem-faithful` draws what the gem's own view draws, secret doors
+        // and hidden pits included: deviation tier, in no preset (D10.6).
+        deviation_values: &["gem-faithful"],
+        ..gem_map_option(
+            "gem_map.glyphs",
+            "Dungeon symbols (gem-faithful is a spoiler: shows secret doors and hidden pits on sight)",
+            OptionKind::Enum(GLYPH_WORDS),
+            OptionDefault::Str("perceived"),
+            GEM_G4,
+        )
+    },
 ];
 
 /// The named stops of a long `Int` row (build plan D-M2.4): the values a
@@ -902,6 +1030,9 @@ pub fn named_stops(key: &str) -> Option<&'static [i64]> {
         "display.brightness" => Some(&[100, 85, 70, 55, 40, 25]),
         "display.map_brightness" => Some(&[100, 85, 70]),
         "display.vignette" => Some(&[0, 15, 30, 45]),
+        // 10.2.10: the default 70 first, then the brighter and darker
+        // steps.
+        "gem_map.map_brightness" => Some(&[70, 85, 100, 55, 40, 25]),
         _ => None,
     }
 }

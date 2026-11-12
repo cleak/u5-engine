@@ -1253,6 +1253,33 @@ mod tests {
         assert!(SELF_PARSED_ALIASES.contains(&"--raster-depth"));
     }
 
+    /// Chapter 10's `--gem-map` and `--no-gem-map` (10.2.1, 10.4.1): the
+    /// main toggle's alias, the only one of `[gem_map]`. Hidden until G2
+    /// ships, so it parses only through the full catalogue.
+    #[test]
+    fn the_gem_map_alias_parses_once_its_row_ships() {
+        let gem = || CatalogueRow::all().filter(|row| row.key().starts_with("gem_map."));
+        let shipped = CatalogueRow::find("gem_map.enhanced").unwrap().is_shipped();
+        for (flag, on) in [("--gem-map", true), ("--no-gem-map", false)] {
+            let alias = CliAlias::Switch {
+                key: "gem_map.enhanced",
+                on,
+            };
+            assert_eq!(find_cli_alias_in(gem(), flag), Some(alias), "{flag}");
+            assert_eq!(find_cli_alias(flag), shipped.then_some(alias), "{flag}");
+        }
+        // No sub-option has an alias; the generic flags reach them.
+        let aliases: Vec<&str> = gem()
+            .flat_map(|row| row.cli_aliases().iter().copied())
+            .collect();
+        assert_eq!(aliases, ["--gem-map"]);
+        for flag in ["--gem-map-labels", "--no-gem-map-labels", "--gem-map-png"] {
+            assert_eq!(find_cli_alias_in(gem(), flag), None, "{flag}");
+        }
+        // The usage lists it exactly when its row has shipped.
+        assert_eq!(cli_alias_usage().contains("--gem-map"), shipped);
+    }
+
     #[test]
     fn display_raster_feeds_the_launch_parameter() {
         use u5_runtime::enhancements::{DISPLAY_P1, resolve_as_shipped};

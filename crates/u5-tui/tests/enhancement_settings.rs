@@ -123,6 +123,51 @@ fn enable_takes_a_comma_list() {
     assert_eq!(args.enhancements.len(), 2);
 }
 
+/// Chapter 10's keys (M3-01): the generic flags name them now; the
+/// `--gem-map` alias parses once G2 ships the row, and until then is an
+/// unknown option like any hidden alias.
+#[test]
+fn gem_map_keys_parse_and_the_alias_waits_for_its_phase() {
+    let args = parse_cli_args([
+        "--enable",
+        "gem_map.enhanced",
+        "--set",
+        "gem_map.map_brightness=55",
+        "--disable",
+        "gem_map.labels",
+    ])
+    .unwrap();
+    assert_eq!(
+        args.enhancements,
+        [
+            CliSetting::Enable("gem_map.enhanced".into()),
+            CliSetting::Set {
+                key: "gem_map.map_brightness".into(),
+                value: "55".into()
+            },
+            CliSetting::Disable("gem_map.labels".into()),
+        ]
+    );
+    let shipped = u5_runtime::enhancements::CatalogueRow::find("gem_map.enhanced")
+        .unwrap()
+        .is_shipped();
+    for (flag, on) in [("--gem-map", true), ("--no-gem-map", false)] {
+        if shipped {
+            let args = parse_cli_args([flag]).unwrap();
+            let key = "gem_map.enhanced".to_string();
+            let expected = if on {
+                CliSetting::Enable(key)
+            } else {
+                CliSetting::Disable(key)
+            };
+            assert_eq!(args.enhancements, [expected]);
+        } else {
+            assert!(parse_error(&[flag]).contains("unknown option"), "{flag}");
+        }
+    }
+    assert!(parse_error(&["--enable", "gem_map.show_all_names"]).contains("unknown setting"));
+}
+
 #[test]
 fn unknown_options_and_keys_are_rejected() {
     // The rejection of unknown options stays.

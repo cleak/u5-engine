@@ -283,6 +283,7 @@ one that types keys must change it exactly as typing those keys would:
 | display.fullscreen_key | Switch fullscreen with a key (F11) | bool = false | a, F | feature | --fullscreen-key | a window, a keyboard | yes |
 | display.grow_left | Wider world view (shows more than the original) | bool = false | a, F | deviation, wider view | --grow-left | - | yes |
 | display.sprite_composite | Sprites over terrain (no black boxes) | bool = false | a, F | feature | --sprite-composite | - | yes |
+| gem_map.enhanced | Enhanced gem map | bool = false | a, P | feature | --gem-map | - | later (chapter 10 G2) |
 | enhancements.schema | Settings file format version | int 1..1 = 1 | -, L | feature | - | - | yes |
 | enhancements.preset | Preset | enum classic\|recommended\|everything = classic | -, P | feature | --preset | - | yes |
 | keys.menu | Open the menu | chord = F12 | -, F | feature | - | a keyboard | later (chapter 1 P5) |
@@ -315,4 +316,13 @@ one that types keys must change it exactly as typing those keys would:
 | display.map_brightness | Map brightness (full map, gem map) | int 25..100 = 100 | a, F | feature | - | - | later (chapter 9 P2) |
 | display.vignette | Edge darkening | int 0..50 = 0 | a, F | feature | --vignette | - | later (chapter 9 P3) |
 | display.composite_halo | Keep a thin black outline around sprites | bool = true | a, F | feature | - | - | yes |
+| gem_map.labels | Names on the gem map (only places you have found) | bool = true | a, F | feature | - | - | later (chapter 10 G5) |
+| gem_map.brightness_link | Follow map brightness | bool = false | a, F | feature | - | - | later (chapter 10 G2) |
+| gem_map.map_brightness | Gem map dimming (names stay bright) | int 25..100 = 70 | a, F | feature | - | - | later (chapter 10 G2) |
+| gem_map.sweep | Fade the gem map in and out | bool = true | a, F | feature | - | - | later (chapter 10 G2) |
+| gem_map.town_surroundings | Show the land around a town | bool = true | a, F | feature | - | - | later (chapter 10 G3) |
+| gem_map.dungeon_stack | Show every dungeon level you have seen | bool = true | a, F | feature | - | - | later (chapter 10 G4) |
+| gem_map.wrap_rows | Show the dungeon's wrapped edge | bool = true | a, F | feature | - | - | later (chapter 10 G4) |
+| gem_map.level_paging | Page through dungeon levels (PgUp, PgDn) | bool = true | a, F | feature | - | - | later (chapter 10 G4) |
+| gem_map.glyphs | Dungeon symbols (gem-faithful is a spoiler: shows secret doors and hidden pits on sight) | enum perceived\|gem-faithful = perceived | a, F | feature (deviation: gem-faithful) | - | - | later (chapter 10 G4) |
 <!-- END GENERATED -->

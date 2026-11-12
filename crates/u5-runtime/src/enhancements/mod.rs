@@ -11,6 +11,9 @@
 //!   [`ResolvedEnhancements::display`] and [`DisplaySettings`] (design
 //!   2.3.2), and chapter 9's [`ResolvedEnhancements::display_light`] and
 //!   [`DisplayLight`] (9.4.1).
+//! - [`gem_map`]: chapter 10's `[gem_map]` typed view,
+//!   [`ResolvedEnhancements::gem_map`] and [`GemMapToggles`], and the
+//!   [`GlyphPolicy`] chapter 4 shares (design 10.3.2, 10.4.1).
 //! - [`catalogue`]: the toggle and option catalogue, effect classes, apply
 //!   points, preset tiers, shipping phases and the three presets
 //!   (design 1.3.2, 1.4.1 and 1.4.2).
@@ -45,6 +48,7 @@
 pub mod catalogue;
 pub mod digest;
 pub mod display;
+pub mod gem_map;
 pub mod idle;
 pub mod light;
 pub mod matrix;
@@ -60,8 +64,8 @@ pub use catalogue::{
     settings_table,
 };
 pub use catalogue::{
-    DISPLAY_P1, DISPLAY_P2, DISPLAY_P8, LAUNCH_PARAMETER_KEYS, LIGHT_P1, LIGHT_P2, LIGHT_P3,
-    LIGHT_P5, named_stops,
+    DISPLAY_P1, DISPLAY_P2, DISPLAY_P8, GEM_G2, GEM_G3, GEM_G4, GEM_G5, LAUNCH_PARAMETER_KEYS,
+    LIGHT_P1, LIGHT_P2, LIGHT_P3, LIGHT_P5, named_stops,
 };
 pub use digest::{
     DIGEST_GROUPS, SKIPPED_FIELDS, TrajectoryDigest, digest_groups, trajectory_digest,
@@ -71,6 +75,10 @@ pub use display::{
     BrightnessScope, DISPLAY_TOGGLES, DisplayLight, DisplaySettings, GROW_LEFT_SUB_KEYS, GrowLeft,
     LIGHT_SUB_KEYS, PillarFill, PixelAspect, RASTER_KEY, REMOVED_DISPLAY_KEYS, ScaleMode,
     raster_word,
+};
+pub use gem_map::{
+    GEM_MAP_BRIGHTNESS_DEFAULT, GEM_MAP_BRIGHTNESS_MAX, GEM_MAP_BRIGHTNESS_MIN, GEM_MAP_SUB_KEYS,
+    GLYPH_WORDS, GemMapOptions, GemMapToggles, GlyphPolicy,
 };
 pub use idle::{GUARDED_DRAINS, GuardedDrain, IdleBlocker, IdlePromptKind};
 pub use light::{

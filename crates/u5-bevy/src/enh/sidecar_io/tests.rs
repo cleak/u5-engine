@@ -145,7 +145,13 @@ fn the_watcher_runs_only_while_a_requesting_toggle_is_on() {
     assert_eq!(watch.save_dir(), dir, "the first install's folder stays");
     assert!(watch.wanted(only(T)));
     assert!(!watch.wanted(FeatureToggles::CLASSIC));
-    assert_eq!(sidecar_toggles(), FeatureToggles::CLASSIC, "none ships yet");
+    // Chapter 10's `gem_map.enhanced` is the first sidecar toggle with a
+    // catalogue row (M3-01); it is hidden, so no launch resolves it on.
+    assert_eq!(
+        sidecar_toggles().iter_on().collect::<Vec<_>>(),
+        [Toggle::GemMapEnhanced]
+    );
+    assert!(!Toggle::GemMapEnhanced.spec().is_shipped());
     let _ = fs::remove_dir_all(dir);
 }
 
