@@ -11,6 +11,7 @@ pub mod gem_equivalence;
 pub mod gem_map;
 pub mod intro_loop;
 pub mod play_loop;
+pub mod relaunch;
 pub mod route_smoke;
 pub mod runtime_game_dir;
 pub mod save_frame;
@@ -20,15 +21,16 @@ pub mod visual_manifest;
 pub use audio_suite::{AudioSuiteCase, audio_suite_cases, run_audio_suite};
 pub use cli::{
     CLI_USAGE, CliArgs, CliCommand, CreateCharacterCommand, chargen_typed_name, cli_usage,
-    parse_chargen_gender_arg, parse_chargen_winners_arg, parse_cli_args, parse_cli_command,
-    parse_pending_vehicle_arg, parse_start_arg, parse_time_arg, parse_transport_arg,
-    run_create_character_command, run_interactive_create_character, split_play_script,
+    parse_boot_key, parse_chargen_gender_arg, parse_chargen_winners_arg, parse_cli_args,
+    parse_cli_command, parse_pending_vehicle_arg, parse_start_arg, parse_time_arg,
+    parse_transport_arg, run_create_character_command, run_interactive_create_character,
+    split_play_script,
 };
 #[cfg(feature = "visual")]
 pub use enhancement_settings::visual_launch_config;
 pub use enhancement_settings::{
-    PARITY_LOCK_ENV, PARITY_LOCK_LINE, SettingsFile, launch_enhancements, launch_raster_depth,
-    lock_state_for_process, run_show_settings,
+    MENU_SCRIPT_ENV, PARITY_LOCK_ENV, PARITY_LOCK_LINE, SettingsFile, launch_enhancements,
+    launch_raster_depth, lock_state_for_process, menu_script, run_show_settings,
 };
 pub use equivalence::{
     FeatureHooks, MatrixRow, Mismatch, ReplayHooks, RunRecord, TerminalFeature, TokenEvent,
@@ -57,6 +59,7 @@ pub use play_loop::{
     run_play_script_commands_watched, run_play_script_step, run_terminal_input_wait_pass,
     unclassified_escape_sequence,
 };
+pub use relaunch::{SpawnFailed, relaunch, relaunch_args, relaunch_program};
 pub use route_smoke::{
     NoRouteTrace, RouteSmokeCase, RouteSmokeExpectation, RouteSmokeFrameReport, RouteSmokeReport,
     RouteTraceObserver, route_smoke_cases, run_route_smoke, run_route_smoke_case,

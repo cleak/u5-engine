@@ -8,6 +8,7 @@
 
 pub mod frame;
 pub mod geometry;
+pub mod host;
 pub mod text;
 
 #[cfg(test)]

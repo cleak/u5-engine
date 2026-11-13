@@ -11,7 +11,7 @@
 //! `U5_ENGINE_RUNTIME_DIR` (the runtime save-mirror root, as before).
 
 use std::collections::HashMap;
-use std::ffi::OsString;
+use std::ffi::{OsStr, OsString};
 use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};
@@ -126,6 +126,11 @@ impl DesktopPaths {
     pub fn log_file(&self) -> PathBuf {
         self.data_base.join("u5-engine.log")
     }
+
+    /// The save-slot root, as [`saves_root`] gives it.
+    pub fn saves_root(&self) -> PathBuf {
+        self.data_base.join(SAVES_DIR_NAME)
+    }
 }
 
 /// The configuration file.
@@ -154,6 +159,82 @@ pub fn data_base(env: &HostEnv) -> PathBuf {
         return path;
     }
     platform_data_base(env).unwrap_or_else(|| env.temp_dir.join(APP_DIR_NAME))
+}
+
+/// The save-slot root: `data_base/saves` (Phase B design 3.3.3). Slots never
+/// go in the game folder, the pristine tree or the runtime mirror.
+pub fn saves_root(env: &HostEnv) -> PathBuf {
+    data_base(env).join(SAVES_DIR_NAME)
+}
+
+/// The folder under the data base that holds the save slots.
+pub const SAVES_DIR_NAME: &str = "saves";
+
+/// The six files of a game's working set: the save image, the three
+/// object-list files, and the engine's world-progress and town-mutation
+/// files (design 3.3.3). They change in play, so the runtime mirror never
+/// refreshes them from the source folder, and a save slot holds exactly
+/// these (plus the enhancement sidecar folder).
+///
+/// The names are the engine's own constants; u5-tui pins the two lists
+/// together in a test, since this crate does not depend on the engine.
+pub const WORKING_SET_FILES: [&str; 6] = [
+    "SAVED.GAM",
+    "SAVED.OOL",
+    "BRIT.OOL",
+    "UNDER.OOL",
+    "SAVED.WPS",
+    ".u5-engine-town-npc-mutations",
+];
+
+/// Whether `name` is one of [`WORKING_SET_FILES`], ignoring ASCII case.
+pub fn is_working_set_file(name: &str) -> bool {
+    WORKING_SET_FILES
+        .iter()
+        .any(|candidate| name.eq_ignore_ascii_case(candidate))
+}
+
+/// A stable label for a working game folder, `<name>-<fnv1a64 hex>`: the
+/// runtime mirror's folder name, and the key save slots are filed under
+/// (design 3.3.3). `<name>` is the folder's last component with every
+/// character other than ASCII letters, digits, `-` and `_` turned into `_`
+/// (`ultima-v` when there is none); the hash is FNV-1a 64 of the whole path
+/// with `\` as `/`, ASCII-lowercased.
+///
+/// Moved unchanged from u5-tui's `runtime_directory_name`; a golden test
+/// pins its output, since existing mirrors and slots are found by it.
+pub fn work_key(dir: &Path) -> String {
+    let label = dir
+        .file_name()
+        .and_then(OsStr::to_str)
+        .unwrap_or("ultima-v")
+        .chars()
+        .map(|ch| {
+            if ch.is_ascii_alphanumeric() || ch == '-' || ch == '_' {
+                ch
+            } else {
+                '_'
+            }
+        })
+        .collect::<String>();
+    let normalized = dir
+        .to_string_lossy()
+        .replace('\\', "/")
+        .to_ascii_lowercase();
+    format!("{label}-{:016x}", fnv1a64(normalized.as_bytes()))
+}
+
+/// FNV-1a, 64-bit. The engine keeps its own copy for sidecar stamps;
+/// u5-tui tests that the two agree.
+pub const fn fnv1a64(bytes: &[u8]) -> u64 {
+    let mut hash = 0xcbf29ce484222325_u64;
+    let mut index = 0;
+    while index < bytes.len() {
+        hash ^= bytes[index] as u64;
+        hash = hash.wrapping_mul(0x100000001b3);
+        index += 1;
+    }
+    hash
 }
 
 /// `%LOCALAPPDATA%\u5-engine`, `~/Library/Application Support/u5-engine`
@@ -416,6 +497,95 @@ mod tests {
             b"progress"
         );
         fs::remove_dir_all(base).unwrap();
+    }
+
+    /// Captured from u5-tui's `runtime_directory_name` before the move
+    /// (M4-03). Existing runtime mirrors, and the save slots filed by this
+    /// key, are found only while these hold.
+    #[test]
+    fn work_key_golden() {
+        let golden: &[(&str, &str)] = &[
+            ("/home/player/ultima5", "ultima5-a057de60d1e7062f"),
+            // A trailing separator keeps the name but changes the hash.
+            ("/home/player/ultima5/", "ultima5-5c54de84ab8f3200"),
+            ("/home/player/ultima5//", "ultima5-73684a6f845245dd"),
+            // Case: the name keeps it, the hash folds it.
+            ("/HOME/Player/ULTIMA5", "ULTIMA5-a057de60d1e7062f"),
+            (
+                "/home/player/Ultima V (GOG)",
+                "Ultima_V__GOG_-98e8cdb7b9761a3c",
+            ),
+            // Unicode: one `_` per character, the hash over the UTF-8.
+            (
+                "/home/joueur/\u{dc}ltima \u{2164}",
+                "_ltima__-3f2618c3a423e260",
+            ),
+            ("/srv/u5/\u{6e38}\u{620f}", "__-6d7a2336911c719e"),
+            ("/", "ultima-v-af63a24c860189fe"),
+            ("u5", "u5-08c47f07b5674ebf"),
+            (
+                "/home/gamedev/.local/share/u5-engine/game-data/gog-1.0",
+                "gog-1_0-02784373a68bb9a7",
+            ),
+        ];
+        for (dir, key) in golden {
+            assert_eq!(work_key(Path::new(dir)), *key, "{dir}");
+        }
+        // A Windows path: the hash is the same everywhere; only the name
+        // depends on which separator the platform splits on.
+        #[cfg(not(windows))]
+        let windows: &[(&str, &str)] = &[
+            (r"C:\Games\U5-Clean", "C__Games_U5-Clean-a448608ac81d4127"),
+            (r"C:\Games\U5-Clean\", "C__Games_U5-Clean_-443d13d209b58098"),
+        ];
+        #[cfg(windows)]
+        let windows: &[(&str, &str)] = &[
+            (r"C:\Games\U5-Clean", "U5-Clean-a448608ac81d4127"),
+            (r"C:\Games\U5-Clean\", "U5-Clean-443d13d209b58098"),
+        ];
+        for (dir, key) in windows {
+            assert_eq!(work_key(Path::new(dir)), *key, "{dir}");
+        }
+    }
+
+    #[test]
+    fn fnv1a64_is_the_published_fnv_1a() {
+        assert_eq!(fnv1a64(b""), 0xcbf2_9ce4_8422_2325);
+        assert_eq!(fnv1a64(b"a"), 0xaf63_dc4c_8601_ec8c);
+        assert_eq!(fnv1a64(b"foobar"), 0x8594_4171_f739_67e8);
+    }
+
+    #[test]
+    fn saves_root_is_under_the_data_base() {
+        let unix = env(Platform::Unix, &[], Some("/home/ann"));
+        assert_eq!(
+            saves_root(&unix),
+            PathBuf::from("/home/ann/.local/share/u5-engine/saves")
+        );
+        assert_eq!(
+            DesktopPaths::from_env(&unix).saves_root(),
+            saves_root(&unix)
+        );
+        let over = env(
+            Platform::Unix,
+            &[(DATA_DIR_ENV, "/x/data")],
+            Some("/home/ann"),
+        );
+        assert_eq!(saves_root(&over), PathBuf::from("/x/data/saves"));
+        // Never the runtime mirror root.
+        let paths = DesktopPaths::from_env(&over);
+        assert!(!paths.saves_root().starts_with(&paths.runtime_root));
+    }
+
+    #[test]
+    fn working_set_names_match_any_case() {
+        for name in WORKING_SET_FILES {
+            assert!(is_working_set_file(name));
+            assert!(is_working_set_file(&name.to_ascii_lowercase()));
+        }
+        for name in ["IBM.CH", "INIT.GAM", "SAVED", ".u5-engine-enh", ""] {
+            assert!(!is_working_set_file(name), "{name}");
+        }
     }
 
     #[test]

@@ -479,13 +479,38 @@ pub fn visual_launch_config(
             std::sync::Arc::new(ConfigSink::new(path).with_bezel_updates(bezel_updates.clone()))
                 as std::sync::Arc<dyn SettingsSink>
         });
+    let menu_script = menu_script(
+        settings.resolved.lock,
+        std::env::var(MENU_SCRIPT_ENV).ok().as_deref(),
+    );
     u5_bevy::VisualLaunchConfig {
         bezel_updates: settings_sink.as_ref().map(|_| bezel_updates),
         enhancements: settings.resolved,
         settings_sink,
         save_dir: Some(save_dir.to_path_buf()),
         bezel: bezel.image,
+        // The slot host arrives with the slot pages (M4-11); the boot key
+        // is the caller's (`--boot-key`).
+        menu_host: None,
+        boot_key: None,
+        menu_script,
     }
+}
+
+/// QA only (D-M4.6): keys the menu takes one per frame while it is open,
+/// for headless app tests and manual QA. The engine never reads the
+/// environment, so the host passes them in the launch config.
+pub const MENU_SCRIPT_ENV: &str = "U5_MENU_PRESS";
+
+/// The menu script `raw` (the value of [`MENU_SCRIPT_ENV`]) gives: its
+/// characters, never under the parity lock, which every QA mode sets, and
+/// `None` when it is unset or empty.
+pub fn menu_script(lock: LockState, raw: Option<&str>) -> Option<Vec<char>> {
+    if lock != LockState::Off {
+        return None;
+    }
+    raw.filter(|keys| !keys.is_empty())
+        .map(|keys| keys.chars().collect())
 }
 
 /// `--show-settings`: the settings the default launch would use, with this
@@ -1643,5 +1668,23 @@ mod tests {
         assert_eq!(mailbox.take(), None);
         let stored = fs::read_to_string(&config).unwrap();
         assert!(stored.contains("bezel_image = \"frame.png\""), "{stored}");
+    }
+}
+
+#[cfg(test)]
+mod menu_script_tests {
+    use super::*;
+
+    #[test]
+    fn the_menu_script_is_qa_input_outside_the_lock_only() {
+        assert_eq!(
+            menu_script(LockState::Off, Some("\u{1b}jj\r")),
+            Some(vec!['\u{1b}', 'j', 'j', '\r'])
+        );
+        assert_eq!(menu_script(LockState::Off, Some("")), None);
+        assert_eq!(menu_script(LockState::Off, None), None);
+        for reason in [LockReason::CliFlag, LockReason::EnvVar, LockReason::QaEnv] {
+            assert_eq!(menu_script(LockState::Locked(reason), Some("jj")), None);
+        }
     }
 }

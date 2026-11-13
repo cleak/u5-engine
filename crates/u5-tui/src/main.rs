@@ -57,13 +57,25 @@ fn run(argv: Vec<String>, game_data: &mut Option<ReadyGameData>) -> io::Result<(
         return Ok(());
     }
     if !command.args.needs_game_data() {
-        return dispatch(command.finish(PathBuf::new())?);
+        return dispatch(command.finish(PathBuf::new())?, None);
     }
     // A bare `u5-engine` (or `u5-engine --setup [DIR]`) starts the game.
     // A folder with no mode flags keeps running the verification report.
     let default_launch =
         !command.args.has_mode() && (command.explicit_game_dir.is_none() || command.args.setup);
     let visual = command.args.visual || (default_launch && cfg!(feature = "visual"));
+    if command.args.boot_key.is_some() && !visual {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "--boot-key types a key as the window opens; it applies to the windowed game (the default launch or --visual-playable) only",
+        ));
+    }
+    // `--setup DIR` set that folder up for good; a relaunch is then the
+    // default launch, which finds it in config.toml.
+    let setup_dir = command
+        .explicit_game_dir
+        .clone()
+        .filter(|_| command.args.setup);
     let ready = resolve_game_data(
         command.explicit_game_dir.clone(),
         command.args.setup,
@@ -80,15 +92,17 @@ fn run(argv: Vec<String>, game_data: &mut Option<ReadyGameData>) -> io::Result<(
         // config.toml (Phase B design 1.2.4).
         args.settings_file = true;
     }
-    dispatch(args)
+    dispatch(args, setup_dir.as_deref())
 }
 
-fn dispatch(mut args: CliArgs) -> io::Result<()> {
+/// `setup_dir`: the folder a `--setup DIR` on this command line set up,
+/// which a relaunch leaves out (`relaunch::relaunch_args`).
+fn dispatch(mut args: CliArgs, setup_dir: Option<&Path>) -> io::Result<()> {
     if needs_writable_game_dir(&args) {
         args.game_dir = prepare_writable_game_dir(&args.game_dir)?;
     }
     if args.intro && args.visual {
-        return run_visual_intro(args);
+        return run_visual_intro(args, setup_dir);
     }
     if args.intro {
         return run_intro_menu_loop(&args.game_dir, args.raster_diagnostics, args.raster_depth);
@@ -185,7 +199,7 @@ fn dispatch(mut args: CliArgs) -> io::Result<()> {
         );
     }
     if args.visual {
-        return run_visual(args);
+        return run_visual(args, setup_dir);
     }
     if args.play {
         let gem_map = gem_map_on(&args);
@@ -351,17 +365,29 @@ fn run_location_audit(game_dir: &Path, out: &Path) -> io::Result<()> {
 }
 
 #[cfg(feature = "visual")]
-fn run_visual(args: CliArgs) -> io::Result<()> {
+fn run_visual(args: CliArgs, setup_dir: Option<&Path>) -> io::Result<()> {
     let launch = launch_config(&args);
     let depth = u5_tui::launch_raster_depth(args.raster_depth, &launch.enhancements);
-    u5_bevy::run_visual_loop_with(&args.game_dir, args.play_options, depth, launch).map(|_exit| ())
+    let exit = u5_bevy::run_visual_loop_with(&args.game_dir, args.play_options, depth, launch)?;
+    relaunch_if_asked(exit, setup_dir)
 }
 
 #[cfg(feature = "visual")]
-fn run_visual_intro(args: CliArgs) -> io::Result<()> {
+fn run_visual_intro(args: CliArgs, setup_dir: Option<&Path>) -> io::Result<()> {
     let launch = launch_config(&args);
     let depth = u5_tui::launch_raster_depth(args.raster_depth, &launch.enhancements);
-    u5_bevy::run_visual_intro_loop_with(&args.game_dir, depth, launch).map(|_exit| ())
+    let exit = u5_bevy::run_visual_intro_loop_with(&args.game_dir, depth, launch)?;
+    relaunch_if_asked(exit, setup_dir)
+}
+
+/// Starts the game again when the shell asked (design 3.3.5). On Unix a
+/// successful relaunch never returns; elsewhere this process then exits 0.
+#[cfg(feature = "visual")]
+fn relaunch_if_asked(exit: u5_bevy::ShellExit, setup_dir: Option<&Path>) -> io::Result<()> {
+    match exit.relaunch {
+        None => Ok(()),
+        Some(asked) => Ok(u5_tui::relaunch(asked.boot_key, setup_dir)?),
+    }
 }
 
 /// This play launch's launch config, with the startup line printed. QA
@@ -374,7 +400,9 @@ fn launch_config(args: &CliArgs) -> u5_bevy::VisualLaunchConfig {
         u5_tui::SettingsFile::Ignore
     };
     let settings = u5_tui::launch_enhancements(file, &args.enhancements, args.parity_lock);
-    u5_tui::visual_launch_config(settings, &args.game_dir)
+    let mut launch = u5_tui::visual_launch_config(settings, &args.game_dir);
+    launch.boot_key = args.boot_key;
+    launch
 }
 
 #[cfg(feature = "visual")]
@@ -388,7 +416,7 @@ fn run_visual_route_suite(args: &CliArgs, out_dir: &std::path::Path) -> io::Resu
 }
 
 #[cfg(not(feature = "visual"))]
-fn run_visual(_args: CliArgs) -> io::Result<()> {
+fn run_visual(_args: CliArgs, _setup_dir: Option<&Path>) -> io::Result<()> {
     Err(io::Error::new(
         io::ErrorKind::Unsupported,
         "--visual requires building with --features visual (e.g. \
@@ -397,7 +425,7 @@ fn run_visual(_args: CliArgs) -> io::Result<()> {
 }
 
 #[cfg(not(feature = "visual"))]
-fn run_visual_intro(_args: CliArgs) -> io::Result<()> {
+fn run_visual_intro(_args: CliArgs, _setup_dir: Option<&Path>) -> io::Result<()> {
     Err(io::Error::new(
         io::ErrorKind::Unsupported,
         "--visual-playable / --intro --visual requires building with --features visual (e.g. \

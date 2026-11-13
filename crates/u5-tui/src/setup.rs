@@ -817,11 +817,14 @@ pub fn describe_failure(error: &io::Error, game_data: Option<&ReadyGameData>) ->
 
 /// The no-argument launch: resolve the game data (with the windowed wizard
 /// when needed) and start the windowed game. Shared by `u5-engine` (no
-/// arguments, visual build) and `u5-engine-gui`.
+/// arguments, visual build) and `u5-engine-gui`. `boot_key` is
+/// `--boot-key` (design 3.3.5). When the shell asks for a relaunch, the
+/// game is started again from here.
 #[cfg(feature = "visual")]
 pub fn run_default_launch(
     force_setup: bool,
     cli: &[u5_runtime::enhancements::CliSetting],
+    boot_key: Option<u8>,
 ) -> Result<(), String> {
     let ready = resolve_game_data(None, force_setup, WizardMode::Window)?;
     let game_dir = crate::prepare_writable_game_dir(&ready.data_dir)
@@ -833,15 +836,21 @@ pub fn run_default_launch(
         cli,
         false,
     );
-    let launch = crate::enhancement_settings::visual_launch_config(settings, &game_dir);
+    let mut launch = crate::enhancement_settings::visual_launch_config(settings, &game_dir);
+    launch.boot_key = boot_key;
     // `display.raster` feeds the 1.0.1 launch parameter (design 2.4.1).
     let depth = crate::enhancement_settings::launch_raster_depth(
         u5_runtime::TileGraphicsDepth::Ega16,
         &launch.enhancements,
     );
-    u5_bevy::run_visual_intro_loop_with(&game_dir, depth, launch)
-        .map(|_exit| ())
-        .map_err(|error| describe_failure(&error, Some(&ready)))
+    let exit = u5_bevy::run_visual_intro_loop_with(&game_dir, depth, launch)
+        .map_err(|error| describe_failure(&error, Some(&ready)))?;
+    match exit.relaunch {
+        None => Ok(()),
+        Some(asked) => {
+            crate::relaunch::relaunch(asked.boot_key, None).map_err(|failed| failed.to_string())
+        }
+    }
 }
 
 /// Entry point of the `u5-engine-gui` binary (no console on Windows).
@@ -871,8 +880,24 @@ pub fn run_gui_main() -> ExitCode {
         }
     }
     let force_setup = first.as_deref() == Some("--setup");
+    // `--boot-key C`, which a relaunch after a slot restore passes (design
+    // 3.3.5); a bad key is reported like any other startup error.
+    let boot_key = match first.as_deref() {
+        Some("--boot-key") => match args.next().as_deref().map(crate::cli::parse_boot_key) {
+            Some(Ok(key)) => Some(key),
+            Some(Err(error)) => {
+                report_gui_error(&error.to_string());
+                return ExitCode::FAILURE;
+            }
+            None => {
+                report_gui_error("--boot-key requires one key, e.g. J");
+                return ExitCode::FAILURE;
+            }
+        },
+        _ => None,
+    };
     // This binary takes no settings flags; the stored settings apply.
-    match run_default_launch(force_setup, &[]) {
+    match run_default_launch(force_setup, &[], boot_key) {
         Ok(()) => ExitCode::SUCCESS,
         Err(message) => {
             report_gui_error(&message);

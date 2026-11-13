@@ -1506,3 +1506,58 @@ fn write_seed_keeps_the_template_moral_standing_and_encounter_damper() {
     assert_eq!(args.play_options.fortunes_of_war, 1);
     let _ = fs::remove_dir_all(dir);
 }
+
+// ---- `--boot-key` (Phase B design 3.3.5, build plan M4-03) ----
+
+#[test]
+fn boot_key_is_one_key_for_the_windowed_game() {
+    let bare = parse_cli_command(["--boot-key", "J"]).unwrap();
+    assert_eq!(bare.args.boot_key, Some(b'J'));
+    assert!(
+        !bare.args.has_mode(),
+        "a bare --boot-key is the default launch"
+    );
+    let playable = parse_cli_args(["--visual-playable", "--boot-key", "j", "/games/u5"]).unwrap();
+    assert_eq!(playable.boot_key, Some(b'j'));
+    assert_eq!(
+        parse_cli_args(["--visual-playable"]).unwrap().boot_key,
+        None
+    );
+    assert!(CLI_USAGE.contains("--boot-key <C>"));
+}
+
+/// A player input, not a setting: the parity lock leaves it alone.
+#[test]
+fn boot_key_is_allowed_under_the_parity_lock() {
+    let args = parse_cli_args(["--visual-playable", "--parity-lock", "--boot-key", "J"]).unwrap();
+    assert!(args.parity_lock);
+    assert_eq!(args.boot_key, Some(b'J'));
+    assert!(args.enhancements.is_empty());
+}
+
+#[test]
+fn boot_key_takes_exactly_one_printable_key() {
+    for bad in ["", "JJ", " ", "\u{e9}", "\t"] {
+        assert!(parse_boot_key(bad).is_err(), "{bad:?}");
+        assert!(parse_cli_command(["--boot-key", bad]).is_err(), "{bad:?}");
+    }
+    assert!(parse_cli_command(["--boot-key"]).is_err());
+    assert!(parse_cli_command(["--boot-key", "J", "--boot-key", "J"]).is_err());
+    assert_eq!(parse_boot_key("?").unwrap(), b'?');
+}
+
+#[test]
+fn boot_key_is_refused_where_no_window_boots() {
+    for argv in [
+        &["--route-smoke", "--boot-key", "J"][..],
+        &["--play", "--boot-key", "J"],
+        &["--intro", "--boot-key", "J"],
+        &["--save-frame-suite", "out", "--boot-key", "J"],
+    ] {
+        let error = parse_cli_command(argv.iter().copied()).unwrap_err();
+        assert!(
+            error.to_string().contains("--boot-key"),
+            "{argv:?}: {error}"
+        );
+    }
+}

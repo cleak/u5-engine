@@ -114,6 +114,11 @@ pub struct CliArgs {
     /// Only the default launch does (1.2.4). The parser never sets it; the
     /// frontend does, once it knows the launch is the default one.
     pub settings_file: bool,
+    /// `--boot-key C`: a key typed at boot, which the windowed intro's
+    /// pre-flourish poll reads (Phase B design 3.3.5). A player input, not
+    /// a setting, so it is allowed under the parity lock. A slot restore
+    /// relaunches with `--boot-key J`.
+    pub boot_key: Option<u8>,
 }
 
 impl CliArgs {
@@ -259,6 +264,7 @@ where
     let mut gem_map_canvas: Option<(u32, u32)> = None;
     let mut show_settings = false;
     let mut settings = false;
+    let mut boot_key: Option<u8> = None;
     let mut args = args.into_iter().map(Into::into);
     while let Some(arg) = args.next() {
         match arg.as_str() {
@@ -708,6 +714,20 @@ where
             }
             "--show-settings" => show_settings = true,
             "--settings" => settings = true,
+            "--boot-key" => {
+                let value = args.next().ok_or_else(|| {
+                    io::Error::new(
+                        io::ErrorKind::InvalidInput,
+                        "--boot-key requires one key, e.g. J",
+                    )
+                })?;
+                if boot_key.replace(parse_boot_key(&value)?).is_some() {
+                    return Err(io::Error::new(
+                        io::ErrorKind::InvalidInput,
+                        "--boot-key may only be supplied once",
+                    ));
+                }
+            }
             _ if arg.starts_with("--") => {
                 let Some(alias) = find_cli_alias(&arg) else {
                     return Err(io::Error::new(
@@ -765,6 +785,7 @@ where
             show_settings: false,
             settings: false,
             settings_file: false,
+            boot_key: None,
         };
         return Ok(CliCommand {
             args,
@@ -1097,6 +1118,7 @@ where
         show_settings,
         settings,
         settings_file: false,
+        boot_key,
     };
     if args.gem_map_canvas.is_some() && args.gem_map_png.is_none() {
         return Err(io::Error::new(
@@ -1143,6 +1165,15 @@ where
         return Err(io::Error::new(
             io::ErrorKind::InvalidInput,
             "--settings opens the Enhancements page and then starts the game; it cannot be combined with a mode flag or a game folder (use --setup <GAME_DIR> to set a folder up first)",
+        ));
+    }
+    // The key reaches the windowed intro's boot poll only; the terminal
+    // modes read their first key from the terminal, and the QA modes have
+    // no intro.
+    if args.boot_key.is_some() && (args.is_qa_mode() || (args.has_mode() && !args.visual)) {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "--boot-key types a key as the window opens; it applies to the windowed game (the default launch or --visual-playable) only",
         ));
     }
     if !args.enhancements.is_empty() && args.is_qa_mode() {
@@ -1339,6 +1370,9 @@ OPTIONS:
                               Combine with --intro for the Bevy intro/menu shell.
         --visual-playable     Launch the Bevy minimally playable v0 shell.
                               Alias for --intro --visual.
+        --boot-key <C>        Type C as the window opens, as if held at boot:
+                              J goes straight to Journey Onward. Allowed with
+                              --parity-lock.
         --save-frame <PATH>   Render the current viewport (after running
                               --play-script if given) to a PNG and exit.
                               Useful for verifying movement without a desktop.
@@ -1412,6 +1446,18 @@ ENVIRONMENT:
     U5_PARITY_LOCK            1 forces every enhancement off, like --parity-lock.
     cargo run --features visual -- --intro --visual C:\\Games\\U5-Clean
 ";
+
+/// `--boot-key`'s value: exactly one printable ASCII character.
+pub fn parse_boot_key(value: &str) -> io::Result<u8> {
+    let mut chars = value.chars();
+    match (chars.next(), chars.next()) {
+        (Some(ch), None) if ch.is_ascii_graphic() => Ok(ch as u8),
+        _ => Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            format!("--boot-key takes one letter or symbol, e.g. J; got `{value}`"),
+        )),
+    }
+}
 
 /// The `--help` text: [`CLI_USAGE`] with the shipped catalogue aliases
 /// (`--x` and `--no-x`) listed at the end of its ENHANCEMENTS section.

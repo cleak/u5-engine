@@ -23,7 +23,8 @@ pub use discovery::{DesktopDiscovery, looks_like_ultima};
 pub use help::HOW_TO_GET_THE_FILES;
 pub use paths::{
     CONFIG_ENV, DATA_DIR_ENV, DesktopPaths, GAME_DIR_ENV, HostEnv, Platform, RUNTIME_DIR_ENV,
-    legacy_temp_runtime_root, migrate_legacy_runtime_root, runtime_root,
+    WORKING_SET_FILES, is_working_set_file, legacy_temp_runtime_root, migrate_legacy_runtime_root,
+    runtime_root, saves_root, work_key,
 };
 pub use pipeline::{
     CHOSEN_FOLDER_LIMITS, DesktopHost, Origin, ReadyGameData, Resolution, ResolveRequest,

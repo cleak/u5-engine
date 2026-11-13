@@ -62,7 +62,7 @@ pub mod toast;
 
 use std::fmt;
 use std::path::PathBuf;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex, PoisonError};
 
 use bevy::input::InputSystem;
 use bevy::prelude::*;
@@ -73,6 +73,7 @@ use u5_runtime::enhancements::{
 
 use self::idle::IdleProbe;
 use self::input::KeyMap;
+pub use crate::menu::host::MenuHost;
 use crate::{
     animate_static_tiles, drive_visual, drive_visual_intro, fit_display_to_window,
     present_camp_apparition_flash, screenshot_system,
@@ -83,7 +84,8 @@ const SETTINGS_NOT_SAVED: &str = "enhancements: a changed setting could not be s
 
 /// Everything a visual launch is given by its host (design 1.3.3).
 ///
-/// Chapter 3 adds the menu's slot host and the boot key here.
+/// Chapter 3 adds the menu's slot host, the boot key and the QA menu
+/// script here.
 #[derive(Clone)]
 pub struct VisualLaunchConfig {
     /// The resolved settings: toggles, values, key bindings and the lock.
@@ -101,6 +103,18 @@ pub struct VisualLaunchConfig {
     /// Where the host's settings sink posts a bezel chosen while the game
     /// runs (2.3.3). `None`: no sink decodes bezels.
     pub bezel_updates: Option<BezelMailbox>,
+    /// The menu's slot store and other host services (design 3.3.1).
+    /// `None`: the menu has no slots to offer.
+    pub menu_host: Option<Arc<dyn MenuHost>>,
+    /// `--boot-key C`: the key queued at boot, which the intro's
+    /// pre-flourish poll reads (`systems/intro.md §3` step 6; design
+    /// 3.3.5). A player input, not a setting, so it holds under the parity
+    /// lock. `None`: the poll sees what it always saw.
+    pub boot_key: Option<u8>,
+    /// QA only (D-M4.6): keys the menu takes one per frame while it is
+    /// open. The host reads them from `U5_MENU_PRESS` and never passes
+    /// them under the parity lock; the engine never reads the environment.
+    pub menu_script: Option<Vec<char>>,
 }
 
 impl VisualLaunchConfig {
@@ -113,6 +127,9 @@ impl VisualLaunchConfig {
             save_dir: None,
             bezel: None,
             bezel_updates: None,
+            menu_host: None,
+            boot_key: None,
+            menu_script: None,
         }
     }
 
@@ -141,15 +158,62 @@ impl fmt::Debug for VisualLaunchConfig {
                 &self.bezel.as_ref().map(|bezel| (bezel.width, bezel.height)),
             )
             .field("bezel_updates", &self.bezel_updates.is_some())
+            .field("menu_host", &self.menu_host.is_some())
+            .field("boot_key", &self.boot_key.map(char::from))
+            .field("menu_script", &self.menu_script)
             .finish()
     }
 }
 
-/// What a visual shell hands back to its host when it ends. Chapter 3
-/// adds the relaunch request; until then a shell exit asks for nothing.
+/// What a visual shell hands back to its host when it ends (design 3.3.2).
+/// The default asks for nothing.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
-#[non_exhaustive]
-pub struct ShellExit {}
+pub struct ShellExit {
+    /// `Some`: the host restarts the process after `run()` returns, as a
+    /// slot restore in play asks (design 3.3.5 "Relaunch").
+    pub relaunch: Option<Relaunch>,
+}
+
+/// A restart the shell asks its host for.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Relaunch {
+    /// The new process's `--boot-key`: `Some(b'J')` after a slot restore,
+    /// so the restored save loads without the title.
+    pub boot_key: Option<u8>,
+}
+
+/// Where the running app leaves its [`ShellExit`] for the `_with` entry
+/// point to hand back. Inserted only while [`EnhancementsPlugin`] is in the
+/// app; under Classic nothing can ask for a relaunch, and the entry points
+/// return [`ShellExit::default`].
+#[derive(Resource, Clone, Debug, Default)]
+pub struct ShellExitSlot(pub Arc<Mutex<Option<ShellExit>>>);
+
+impl ShellExitSlot {
+    /// Leaves `exit` for the host. A later call replaces an earlier one.
+    pub fn set(&self, exit: ShellExit) {
+        *self.0.lock().unwrap_or_else(PoisonError::into_inner) = Some(exit);
+    }
+
+    /// What the app left, or the default when it left nothing.
+    pub fn take(&self) -> ShellExit {
+        self.0
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .take()
+            .unwrap_or_default()
+    }
+}
+
+/// A fresh slot for one shell run, added to `app` only when `launch`
+/// brings the enhancements plugin.
+pub(crate) fn add_shell_exit_slot(app: &mut App, launch: &VisualLaunchConfig) -> ShellExitSlot {
+    let slot = ShellExitSlot::default();
+    if launch.wants_enhancements() {
+        app.insert_resource(slot.clone());
+    }
+    slot
+}
 
 /// The six slots every enhancement system runs in (design 1.3.5).
 #[derive(SystemSet, Clone, Copy, Debug, PartialEq, Eq, Hash)]

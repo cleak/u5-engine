@@ -12,8 +12,7 @@ use std::io;
 use std::path::{Path, PathBuf};
 
 use u5_runtime::{
-    BRIT_OOL_FILENAME, DEFAULT_GAME_DIR, SAVED_GAM_FILENAME, SAVED_OOL_FILENAME,
-    TOWN_NPC_MUTATIONS_FILENAME, UNDER_OOL_FILENAME, WORLD_PROGRESS_STATE_FILE,
+    BRIT_OOL_FILENAME, DEFAULT_GAME_DIR, SAVED_GAM_FILENAME, SAVED_OOL_FILENAME, UNDER_OOL_FILENAME,
 };
 
 pub const RUNTIME_DIR_ENV: &str = u5_host_desktop::RUNTIME_DIR_ENV;
@@ -53,7 +52,7 @@ fn prepare_writable_game_dir_in(game_dir: &Path, root: &Path) -> io::Result<Path
         ));
     }
 
-    let target = root.join(runtime_directory_name(&source));
+    let target = root.join(u5_host_desktop::work_key(&source));
     fs::create_dir_all(&target)?;
     mirror_directory(&source, &target)?;
     Ok(target)
@@ -103,38 +102,6 @@ fn same_path(left: &Path, right: &Path) -> bool {
     normalized(left) == normalized(right)
 }
 
-fn runtime_directory_name(source: &Path) -> String {
-    let label = source
-        .file_name()
-        .and_then(OsStr::to_str)
-        .unwrap_or("ultima-v")
-        .chars()
-        .map(|ch| {
-            if ch.is_ascii_alphanumeric() || ch == '-' || ch == '_' {
-                ch
-            } else {
-                '_'
-            }
-        })
-        .collect::<String>();
-    let normalized = source
-        .to_string_lossy()
-        .replace('\\', "/")
-        .to_ascii_lowercase();
-    format!("{label}-{:016x}", fnv1a64(normalized.as_bytes()))
-}
-
-const fn fnv1a64(bytes: &[u8]) -> u64 {
-    let mut hash = 0xcbf29ce484222325_u64;
-    let mut index = 0;
-    while index < bytes.len() {
-        hash ^= bytes[index] as u64;
-        hash = hash.wrapping_mul(0x100000001b3);
-        index += 1;
-    }
-    hash
-}
-
 fn mirror_directory(source: &Path, target: &Path) -> io::Result<()> {
     for entry in fs::read_dir(source)? {
         let entry = entry?;
@@ -173,19 +140,8 @@ fn source_file_changed(source: &Path, target: &Path) -> io::Result<bool> {
 }
 
 fn is_mutable_runtime_file(name: &OsStr) -> bool {
-    let Some(name) = name.to_str() else {
-        return false;
-    };
-    [
-        SAVED_GAM_FILENAME,
-        SAVED_OOL_FILENAME,
-        BRIT_OOL_FILENAME,
-        UNDER_OOL_FILENAME,
-        WORLD_PROGRESS_STATE_FILE,
-        TOWN_NPC_MUTATIONS_FILENAME,
-    ]
-    .iter()
-    .any(|candidate| name.eq_ignore_ascii_case(candidate))
+    name.to_str()
+        .is_some_and(u5_host_desktop::is_working_set_file)
 }
 
 fn copy_writable(source: &Path, target: &Path) -> io::Result<()> {
@@ -222,11 +178,74 @@ mod tests {
             &[0xff; 4192],
         ] {
             assert_eq!(
-                fnv1a64(bytes),
+                u5_host_desktop::paths::fnv1a64(bytes),
                 u5_runtime::enhancements::fnv1a64(bytes),
                 "{bytes:?}"
             );
         }
+    }
+
+    /// The host's working-set constant is the engine's six file names,
+    /// in the engine's spelling.
+    #[test]
+    fn working_set_is_the_engine_names() {
+        use u5_runtime::{TOWN_NPC_MUTATIONS_FILENAME, WORLD_PROGRESS_STATE_FILE};
+        assert_eq!(
+            u5_host_desktop::WORKING_SET_FILES,
+            [
+                SAVED_GAM_FILENAME,
+                SAVED_OOL_FILENAME,
+                BRIT_OOL_FILENAME,
+                UNDER_OOL_FILENAME,
+                WORLD_PROGRESS_STATE_FILE,
+                TOWN_NPC_MUTATIONS_FILENAME,
+            ]
+        );
+    }
+
+    /// `is_mutable_runtime_file` reads the constant now; it accepts the
+    /// same names it always did, in any case, and nothing else.
+    #[test]
+    fn mutable_runtime_files_are_unchanged() {
+        for name in [
+            "SAVED.GAM",
+            "saved.gam",
+            "SAVED.OOL",
+            "Brit.Ool",
+            "UNDER.OOL",
+            "SAVED.WPS",
+            "saved.wps",
+            ".u5-engine-town-npc-mutations",
+            ".U5-ENGINE-TOWN-NPC-MUTATIONS",
+        ] {
+            assert!(is_mutable_runtime_file(OsStr::new(name)), "{name}");
+        }
+        for name in [
+            "IBM.CH",
+            "INIT.GAM",
+            "SAVED.GA",
+            "SAVED.GAM.tmp",
+            ".u5-engine-enh",
+            "TILES.16",
+            "",
+        ] {
+            assert!(!is_mutable_runtime_file(OsStr::new(name)), "{name}");
+        }
+    }
+
+    /// The mirror's folder is still named by the moved function.
+    #[test]
+    fn mirror_folder_is_the_work_key() {
+        let source = temp_dir("work-key-source");
+        let root = temp_dir("work-key-root");
+        fs::write(source.join(SAVED_GAM_FILENAME), b"save").unwrap();
+        let runtime = prepare_writable_game_dir_in(&source, &root).unwrap();
+        assert_eq!(
+            runtime,
+            root.join(u5_host_desktop::work_key(&source.canonicalize().unwrap()))
+        );
+        fs::remove_dir_all(source).unwrap();
+        fs::remove_dir_all(root).unwrap();
     }
 
     fn temp_dir(label: &str) -> PathBuf {

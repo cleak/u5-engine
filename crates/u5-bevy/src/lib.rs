@@ -230,7 +230,8 @@ pub mod enh;
 /// under Classic.
 pub mod menu;
 
-pub use enh::{EnhSet, EnhancementsPlugin, ShellExit, VisualLaunchConfig};
+pub use enh::{EnhSet, EnhancementsPlugin, Relaunch, ShellExit, ShellExitSlot, VisualLaunchConfig};
+pub use menu::host::MenuHost;
 
 /// The on-screen size of a logical frame at `scale`, aspect-corrected.
 ///
@@ -1569,9 +1570,10 @@ pub fn run_visual_loop_with(
         },
         &launch,
     );
+    let shell_exit = enh::add_shell_exit_slot(&mut app, &launch);
     app.run();
 
-    Ok(ShellExit::default())
+    Ok(shell_exit.take())
 }
 
 /// Everything the `--visual` app registers on top of its platform plugins:
@@ -1649,13 +1651,13 @@ pub fn run_visual_intro_loop_with(
     launch: VisualLaunchConfig,
 ) -> std::io::Result<ShellExit> {
     let launch_result = Arc::new(Mutex::new(None));
-    run_visual_intro_menu_app(
+    let shell_exit = run_visual_intro_menu_app(
         game_dir.to_path_buf(),
         raster_depth,
         launch_result.clone(),
         &launch,
     );
-    Ok(ShellExit::default())
+    Ok(shell_exit.take())
 }
 
 /// QA timing control: when this environment variable holds a positive whole
@@ -10084,7 +10086,7 @@ fn run_visual_intro_menu_app(
     raster_depth: TileGraphicsDepth,
     launch_result: Arc<Mutex<Option<PlayOptions>>>,
     launch: &VisualLaunchConfig,
-) {
+) -> ShellExitSlot {
     let screenshot_path: Option<PathBuf> = optional_env_path("U5_BEVY_SCREENSHOT");
     let screenshot_delay: u32 = screenshot_delay_from_env();
     let preset_keys: Vec<char> = preset_keys_from_env();
@@ -10097,7 +10099,9 @@ fn run_visual_intro_menu_app(
     // shortcut. The bevy harness exposes its queued-at-boot keys
     // through `U5_BEVY_PRESS`; the first character (case-folded
     // upstream by `run_intro_pre_flourish_phase`) drives the poll.
-    let queued_key = preset_keys.first().map(|ch| *ch as u8);
+    // A host `--boot-key` (design 3.3.5) comes first; without one this
+    // is the 1.0.1 expression.
+    let queued_key = intro_boot_queued_key(launch.boot_key, &preset_keys);
     let mut text_windows = TextWindowSystem::new();
     let (font_slots, pre_flourish_outcome) = run_intro_pre_flourish_phase(
         &game_dir,
@@ -10174,7 +10178,16 @@ fn run_visual_intro_menu_app(
         },
         launch,
     );
+    let shell_exit = enh::add_shell_exit_slot(&mut app, launch);
     app.run();
+    shell_exit
+}
+
+/// The key the intro's pre-flourish poll sees as queued at boot
+/// (`systems/intro.md §3` step 6): the host's `--boot-key` when it gave
+/// one, else the first `U5_BEVY_PRESS` key, as in 1.0.1.
+fn intro_boot_queued_key(boot_key: Option<u8>, preset_keys: &[char]) -> Option<u8> {
+    boot_key.or_else(|| preset_keys.first().map(|ch| *ch as u8))
 }
 
 /// Everything the default player app (the intro, then gameplay after
@@ -34788,5 +34801,101 @@ mod tests {
             }
         }
         assert!(emitted_frames > 0, "the waterfall ticked at least once");
+    }
+}
+
+/// Design 3.4.2 edit 1: the boot-key merge at the intro's queued key.
+#[cfg(test)]
+mod boot_key_tests {
+    use super::*;
+
+    /// What the pre-flourish poll decides for this boot key and preset
+    /// list, through the real phase on a fixture folder.
+    fn poll(boot_key: Option<u8>, preset_keys: &[char]) -> PreFlourishOutcome {
+        let dir = u5_runtime::test_fixtures::debug_game_dir();
+        let mut text_windows = TextWindowSystem::new();
+        let (_slots, outcome) = run_intro_pre_flourish_phase(
+            &dir,
+            DisplayDriverFamily::Ega,
+            &mut text_windows,
+            intro_boot_queued_key(boot_key, preset_keys),
+        )
+        .expect("pre-flourish phase on the fixture");
+        let _ = std::fs::remove_dir_all(&dir);
+        outcome
+    }
+
+    #[test]
+    fn none_gives_the_1_0_1_queued_key() {
+        assert_eq!(intro_boot_queued_key(None, &[]), None);
+        assert_eq!(intro_boot_queued_key(None, &['J', 'x']), Some(b'J'));
+        assert_eq!(intro_boot_queued_key(None, &['\r']), Some(b'\r'));
+        assert_eq!(poll(None, &[]), PreFlourishOutcome::ContinueToFlourish);
+        assert_eq!(
+            poll(None, &['j']),
+            PreFlourishOutcome::JourneyOnwardShortcut
+        );
+        assert_eq!(poll(None, &['q']), PreFlourishOutcome::ContinueToFlourish);
+    }
+
+    #[test]
+    fn boot_j_takes_the_pre_flourish_shortcut() {
+        assert_eq!(
+            poll(Some(b'J'), &[]),
+            PreFlourishOutcome::JourneyOnwardShortcut
+        );
+        // The poll folds case, as for a typed key.
+        assert_eq!(
+            poll(Some(b'j'), &[]),
+            PreFlourishOutcome::JourneyOnwardShortcut
+        );
+        // Any other boot key continues to the flourish.
+        assert_eq!(
+            poll(Some(b'N'), &[]),
+            PreFlourishOutcome::ContinueToFlourish
+        );
+    }
+
+    #[test]
+    fn the_boot_key_comes_before_the_preset_keys() {
+        assert_eq!(intro_boot_queued_key(Some(b'J'), &['x']), Some(b'J'));
+        assert_eq!(intro_boot_queued_key(Some(b'x'), &['J']), Some(b'x'));
+        assert_eq!(
+            poll(Some(b'J'), &['x']),
+            PreFlourishOutcome::JourneyOnwardShortcut
+        );
+    }
+
+    /// Under Classic the app gets no slot, and a shell that asked for
+    /// nothing hands back the default exit.
+    #[test]
+    fn the_shell_exit_defaults_to_no_relaunch() {
+        let mut app = App::new();
+        let slot = enh::add_shell_exit_slot(&mut app, &VisualLaunchConfig::classic());
+        assert!(app.world().get_resource::<ShellExitSlot>().is_none());
+        assert_eq!(slot.take(), ShellExit::default());
+        assert_eq!(ShellExit::default().relaunch, None);
+    }
+
+    /// With the enhancements plugin, what a system leaves in the slot is
+    /// what the entry point hands back, once.
+    #[test]
+    fn the_shell_exit_is_what_the_app_left() {
+        let mut launch = VisualLaunchConfig::classic();
+        launch
+            .enhancements
+            .toggles
+            .set(u5_runtime::enhancements::Toggle::MenuOverlay, true);
+        assert!(launch.wants_enhancements());
+        let mut app = App::new();
+        let slot = enh::add_shell_exit_slot(&mut app, &launch);
+        let asked = ShellExit {
+            relaunch: Some(Relaunch {
+                boot_key: Some(b'J'),
+            }),
+        };
+        app.world().resource::<ShellExitSlot>().set(asked.clone());
+        assert_eq!(slot.take(), asked);
+        assert_eq!(slot.take(), ShellExit::default());
     }
 }

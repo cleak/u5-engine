@@ -334,6 +334,10 @@ suites never read settings at all. A locked launch prints one line,
 `enhancements: parity-locked (all off)`, which the paired DOSBox harness
 requires in every run.
 
+`--boot-key C` is not a setting but a key typed as the window opens, as if
+it had been held at boot: `J` goes straight to Journey Onward, any other key
+lets the title play. Being a player input, it is allowed under the lock.
+
 ## Hotkeys and files
 
 Each feature's keys exist only while that feature is on; the defaults and
