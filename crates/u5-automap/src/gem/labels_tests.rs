@@ -182,6 +182,38 @@ fn crowd() -> (Vec<LabelItem>, Rect, Rect) {
     (items, (0, 0, 512, 240), party)
 }
 
+/// Gate review: a discovered place one or two cells from the party lies
+/// under the 16 px party marker at 4 px a cell. Its name is still placed,
+/// on a leader out across the marker, and the tag keeps clear of it.
+#[test]
+fn a_known_place_under_the_party_marker_is_still_named() {
+    let party_cell = (254, 118);
+    let party = party_keepout(party_cell, 4);
+    let bounds = (0, 0, 512, 240);
+    for dx in [1, 2, -1, -2] {
+        for dy in [0, 1, -2] {
+            let items = vec![item(
+                party_cell.0 + 4 * dx,
+                party_cell.1 + 4 * dy,
+                4,
+                LabelText::Word("Britain"),
+                1,
+                (dx * dx + dy * dy) as u32,
+            )];
+            assert!(overlaps(items[0].cell, party));
+            let layout = place_labels(&items, TagAt::Centre, bounds, &[party]);
+            check_group(&items, &layout, bounds, &[party]);
+            assert_eq!(layout.unlabelled, 0, "({dx}, {dy})");
+            assert!(layout.placed[0].tag.is_some(), "({dx}, {dy})");
+        }
+    }
+    // A "?" beside the party is laid out the same way.
+    let items = vec![item(258, 118, 4, LabelText::Question, 0, 1)];
+    let layout = place_labels(&items, TagAt::Centre, bounds, &[party]);
+    check_group(&items, &layout, bounds, &[party]);
+    assert_eq!(layout.unlabelled, 0);
+}
+
 #[test]
 fn a_crowd_is_laid_out_without_overlap_inside_the_canvas_and_clear_of_the_party() {
     let (items, bounds, party) = crowd();

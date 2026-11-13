@@ -19,7 +19,7 @@
 //! | shop opened | `active_shop` None to Some in a town, or a tavern turned to its sage; for Tavern and Sage, the one cell a keeper of that trade can be addressed from the party |
 //! | moongate used | one live `0xDC` gate within a step of the party, which jumped or changed plane (and, on the same plane, the gate cell is no longer live) |
 //! | town ladder or stairs | the floor changed, the party moved at most one step, and its cell on the old floor was `0xC4..=0xC9`; the direction is the floor change (L5) |
-//! | town exit | town to world from an edge cell, or world to town onto one |
+//! | town exit | town to world from an edge cell, or world to town onto one or one step inside one beside a passable edge cell |
 //!
 //! The events of [`super::probe_more`] (M3-06: Look, the dungeon events)
 //! run from [`observe_commands`] too; the seen cells are in
@@ -398,7 +398,35 @@ pub fn edge_side(x: u8, y: u8) -> Option<(EdgeSide, u8)> {
     }
 }
 
-/// Town exit: town to world from an edge cell, or world to town onto one.
+/// The gate a party arriving one step inside a town's edge came in by
+/// (10.2.8 "entered the town through that run"): the town's start cell is
+/// one step in from its gate (Britain's `(15, 30)` beside `(15, 31)`), so
+/// the edge cell beside it is the run it came through. Only when exactly
+/// one of the four neighbours is an edge cell and its drawn terrain is
+/// foot-passable, so the cell is in a run the map draws as an exit; a
+/// corner start or a wall beside it records nothing.
+fn arrival_gate(after: &PlayState, x: u8, y: u8) -> Option<(EdgeSide, u8)> {
+    let (x, y) = (i16::from(x), i16::from(y));
+    let mut gates = [(0, 1), (0, -1), (1, 0), (-1, 0)]
+        .into_iter()
+        .filter_map(|(dx, dy)| {
+            let (nx, ny) = (x + dx, y + dy);
+            let side = TOWN_GRID_SIDE as i16;
+            if !(0..side).contains(&nx) || !(0..side).contains(&ny) {
+                return None;
+            }
+            edge_side(nx as u8, ny as u8).map(|gate| (gate, nx, ny))
+        });
+    let (gate, nx, ny) = gates.next()?;
+    if gates.next().is_some() {
+        return None;
+    }
+    let tile = after.gem_sample_tile(isize::from(nx), isize::from(ny), true);
+    u5_runtime::predicates::foot_terrain_accepts(tile).then_some(gate)
+}
+
+/// Town exit: town to world from an edge cell, or world to town onto one
+/// or one step inside one ([`arrival_gate`]).
 fn town_exit_events(before: &KnowProbe, after: &PlayState, events: &mut KnowEvents) {
     let crossing = match (before.area, after.area) {
         (Area::Town { scene, .. }, Area::World { .. }) => {
@@ -409,8 +437,10 @@ fn town_exit_events(before: &KnowProbe, after: &PlayState, events: &mut KnowEven
         }
         _ => None,
     };
+    let arriving = matches!(after.area, Area::Town { .. });
     if let Some((scene, x, y)) = crossing
-        && let Some((side, at)) = edge_side(x, y)
+        && let Some((side, at)) =
+            edge_side(x, y).or_else(|| arriving.then(|| arrival_gate(after, x, y)).flatten())
     {
         events.push(KnowEvent::TownExit(ExitRun { scene, side, at }));
     }

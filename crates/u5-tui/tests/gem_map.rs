@@ -212,9 +212,14 @@ fn route_rows_record_exactly_their_discovery() {
     // (row, case, kind, kinds the same command may also record, final check)
     type Check = fn(&Counts) -> bool;
     let rows: [(&str, &str, &'static str, &[&'static str], Check); 14] = [
-        ("place entered", "debug-enter-castle", "places", &[], |c| {
-            c.places == 1
-        }),
+        // Entering by the gate also records that gate (one step in from it).
+        (
+            "place entered",
+            "debug-enter-castle",
+            "places",
+            &["exits"],
+            |c| c.places == 1 && c.exits <= 1,
+        ),
         (
             "Underworld visited",
             "britannia-chasm-fall-to-underworld",

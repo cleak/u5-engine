@@ -397,6 +397,40 @@ fn arriving_on_an_edge_records_the_place_and_the_exit() {
     );
 }
 
+/// Gate review: entering a town puts the party at its start cell, one step
+/// in from the gate (Britain's `(15, 30)`), never on the edge itself, so
+/// the gate it came through is the passable edge cell beside it (10.2.8).
+#[test]
+fn arriving_one_step_inside_a_gate_records_that_gate() {
+    let before = probe(&britannia(100, 100));
+    let after = town(15, 30);
+    assert_eq!(
+        observe_command(&before, &after),
+        vec![
+            KnowEvent::PlaceEntered { scene: TOWN },
+            KnowEvent::TownExit(ExitRun {
+                scene: TOWN,
+                side: EdgeSide::South,
+                at: 15
+            }),
+        ]
+    );
+    // A wall beside the start cell is no gate; nor is a start cell beside
+    // two edges (a corner) or deeper in.
+    let mut walled = town(15, 30);
+    set_town_tile(&mut walled, 15, 31, 0x4F);
+    assert!(!u5_runtime::predicates::foot_terrain_accepts(0x4F));
+    for after in [walled, town(1, 1), town(15, 29)] {
+        assert_eq!(
+            observe_command(&before, &after),
+            vec![KnowEvent::PlaceEntered { scene: TOWN }]
+        );
+    }
+    // Leaving from one step inside is still no exit.
+    let before = probe(&town(15, 30));
+    assert!(observe_command(&before, &britannia(100, 100)).is_empty());
+}
+
 #[test]
 fn a_corner_or_inner_cell_records_no_exit() {
     for (x, y) in [(0, 0), (31, 31), (5, 5)] {

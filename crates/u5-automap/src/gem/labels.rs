@@ -383,17 +383,25 @@ fn run(
                 .enumerate()
                 .any(|(k, &m)| k != i && overlaps(c, m))
         };
-        let clear_line = |end: (i32, i32), tag: Rect, placed: &[Rect]| {
-            leader_footprint(item.cell, end, marks[i], tag)
-                .into_iter()
-                .all(|b| {
-                    !placed.iter().any(|&q| overlaps(b, q))
-                        && !marks
+        // A feature whose own cell lies under a keep-out box (a place next
+        // to the party, under its 16 px marker at 4 px a cell) may lead out
+        // across that box: otherwise every leader from it is blocked and a
+        // discovered name next to the party is never shown. Its tag still
+        // keeps clear of the box, and the box is drawn over the leader.
+        let under: Vec<bool> = keepout.iter().map(|&k| overlaps(item.cell, k)).collect();
+        let clear_line =
+            |end: (i32, i32), tag: Rect, placed: &[Rect]| {
+                leader_footprint(item.cell, end, marks[i], tag)
+                    .into_iter()
+                    .all(|b| {
+                        !placed.iter().enumerate().any(|(n, &q)| {
+                            overlaps(b, q) && !under.get(n).copied().unwrap_or(false)
+                        }) && !marks
                             .iter()
                             .enumerate()
                             .any(|(k, &m)| k != i && overlaps(b, m))
-                })
-        };
+                    })
+            };
         let Some((w, h)) = item.tag_size() else {
             // A mark without a name (D10.4): its ring only.
             out[i] = Placed {
