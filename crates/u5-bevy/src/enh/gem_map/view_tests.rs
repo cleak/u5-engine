@@ -771,8 +771,14 @@ fn off_has_no_node_resource_or_system() {
 fn the_intro_is_inert() {
     let dir = u5_runtime::test_fixtures::debug_game_dir();
     let mut app = App::new();
-    app.add_plugins((MinimalPlugins, AssetPlugin::default()))
-        .init_asset::<Image>();
+    // The input plugin, as in the player's app: with level paging on the
+    // router is installed (D-M3.6) and reads the keyboard.
+    app.add_plugins((
+        MinimalPlugins,
+        AssetPlugin::default(),
+        bevy::input::InputPlugin,
+    ))
+    .init_asset::<Image>();
     crate::enh::add_enhancements(&mut app, &gem_on());
     spawn_window(&mut app, W169);
     let intro = crate::visual_intro_suite_state(

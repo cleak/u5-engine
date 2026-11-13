@@ -228,7 +228,7 @@ map over the whole window instead of the original's small square:
   16:9, 172 by 60 at 21:9 and 80 by 50 at 4:3, where the original gem shows
   32 by 32. The map shows the ground only: no people, monsters or other
   objects are drawn on it, and the party is a steady yellow box around its
-  own picture. Dungeons still show the original view in this build.
+  own picture.
 - **In a town** the whole floor fills the height of the screen, 7 pixels a
   cell (6 on a 200- or 216-line screen), with the ground only: no townsfolk,
   as the original gem shows them. The thin strips above and below are the
@@ -239,6 +239,32 @@ map over the whole window instead of the original's small square:
   east on the right, darker than the town. Only land you have already seen
   from outside is drawn; the rest stays black, so the map never shows
   ground you have not been near. Off, the sides are black.
+- **In a dungeon** the levels are drawn side by side with the original
+  gem's symbols, the one you are on in the middle: three levels at 16:9,
+  five at 21:9 and one at 4:3. Your own level shows what the gem lights up
+  plus what you have already seen of it, dimmer; the other levels show only
+  what you have seen. A level you have no sign of stays black, and a level
+  you only know a ladder leads to is a black panel. A yellow box joins a
+  ladder (or a pit you have found) to where it lands, only when you have
+  seen both ends. You are the yellow arrow.
+  - `gem_map.dungeon_stack`, **"Show every dungeon level you have
+    seen"**, on by default. Off, your own level is shown alone, larger.
+  - `gem_map.wrap_rows`, **"Show the dungeon's wrapped edge"**, on by
+    default: above and below each level (and at the sides on 4:3) the
+    level repeats, dimmed, as a dungeon level wraps round; a thin grey
+    edge marks where it really ends.
+  - `gem_map.level_paging`, **"Page through dungeon levels (PgUp,
+    PgDn)"**, on by default: when only one level fits (4:3, or the stack
+    off), PgUp shows the level above and PgDn the level below, skipping
+    levels with nothing to show. These two keys are the only ones the map
+    ever takes, and only then, when the game would just close its view;
+    any other key closes it as usual. At every other time PgUp and PgDn
+    are the game's own diagonal moves. Off, PgUp and PgDn close the view as
+    in the original.
+  - `gem_map.glyphs`, **"Dungeon symbols"**, `perceived` by default:
+    secret doors are drawn as wall and hidden traps as passage until you
+    find them. `gem-faithful` draws what the original gem draws, which
+    gives secret doors and hidden pits away on sight.
 - **Dimming.** `gem_map.map_brightness`, **"Gem map dimming (names stay
   bright)"**, 25 to 100, is 70 by default: the map is drawn at 70% light so
   the party box stands out. `gem_map.brightness_link`, **"Follow map
@@ -367,8 +393,8 @@ one that types keys must change it exactly as typing those keys would:
 | gem_map.map_brightness | Gem map dimming (names stay bright) | int 25..100 = 70 | a, F | feature | - | - | yes |
 | gem_map.sweep | Fade the gem map in and out | bool = true | a, F | feature | - | - | yes |
 | gem_map.town_surroundings | Show the land around a town | bool = true | a, F | feature | - | - | yes |
-| gem_map.dungeon_stack | Show every dungeon level you have seen | bool = true | a, F | feature | - | - | later (chapter 10 G4) |
-| gem_map.wrap_rows | Show the dungeon's wrapped edge | bool = true | a, F | feature | - | - | later (chapter 10 G4) |
-| gem_map.level_paging | Page through dungeon levels (PgUp, PgDn) | bool = true | a, F | feature | - | - | later (chapter 10 G4) |
-| gem_map.glyphs | Dungeon symbols (gem-faithful is a spoiler: shows secret doors and hidden pits on sight) | enum perceived\|gem-faithful = perceived | a, F | feature (deviation: gem-faithful) | - | - | later (chapter 10 G4) |
+| gem_map.dungeon_stack | Show every dungeon level you have seen | bool = true | a, F | feature | - | - | yes |
+| gem_map.wrap_rows | Show the dungeon's wrapped edge | bool = true | a, F | feature | - | - | yes |
+| gem_map.level_paging | Page through dungeon levels (PgUp, PgDn) | bool = true | a, F | feature | - | - | yes |
+| gem_map.glyphs | Dungeon symbols (gem-faithful is a spoiler: shows secret doors and hidden pits on sight) | enum perceived\|gem-faithful = perceived | a, F | feature (deviation: gem-faithful) | - | - | yes |
 <!-- END GENERATED -->

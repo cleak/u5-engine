@@ -29,6 +29,11 @@
 //! ladder or pit leads there, titled `Underworld` only once the party has
 //! been on the Underworld surface. Every other slot is plain black, with
 //! no title.
+//!
+//! **Link boxes and pages** (10.2.6, M3-14). [`DungeonShown::linked`]
+//! says which ladder and pit cells get a yellow link box: both ends in the
+//! shown set. [`DungeonShown::page_step`] is PgUp and PgDn on a lone
+//! panel, skipping the slots without a panel.
 
 use u5_runtime::enhancements::GlyphPolicy;
 use u5_runtime::{Area, Direction, PlayState, ViewOverlayFootprint};
@@ -230,6 +235,59 @@ impl DungeonShown {
         }
     }
 
+    /// Whether the slot of `level` is a panel a page can show (10.2.6
+    /// "Paging"): a dungeon level with a panel, or the Underworld's black
+    /// panel. The surface (a title only) and empty slots are not.
+    pub fn has_panel(&self, level: i32) -> bool {
+        matches!(
+            self.slot(level),
+            DungeonSlot::Level { .. } | DungeonSlot::Underworld { .. }
+        )
+    }
+
+    /// The page after one PgUp (`up`) or PgDn from `page` (10.2.6): the
+    /// nearest level above or below the paged one that has a panel,
+    /// skipping the levels without one. `page` itself when there is none.
+    pub fn page_step(&self, page: i8, up: bool) -> i8 {
+        let count = i32::from(DUNGEON_LEVEL_COUNT);
+        let step = if up { -1 } else { 1 };
+        let mut level = i32::from(self.level) + i32::from(page);
+        loop {
+            level += step;
+            if !(-1..=count).contains(&level) {
+                return page;
+            }
+            if self.has_panel(level) {
+                return (level - i32::from(self.level)) as i8;
+            }
+        }
+    }
+
+    /// Whether the shown cell `(x, y)` of `level` gets a ladder link box
+    /// (10.2.6): it is a ladder or a pit whose other end, the same cell of
+    /// the adjacent level, is also in the shown set. Both ends must be
+    /// shown, so a landing the player has not seen is never boxed; the other
+    /// level need not be on screen (on 4:3 it never is). A way down links
+    /// to the cell below when the cell below is a way up, or when it is a
+    /// pit (the fall lands there). Only ladder and pit cells are boxed: a
+    /// pit's landing on plain floor is not.
+    pub fn linked(&self, level: u8, x: u8, y: u8) -> bool {
+        let Some(cell) = self.cell(level, x, y) else {
+            return false;
+        };
+        let (up, down) = leads(cell.drawn);
+        let below = level
+            .checked_add(1)
+            .filter(|&l| l < DUNGEON_LEVEL_COUNT)
+            .and_then(|l| self.cell(l, x, y));
+        let above = level.checked_sub(1).and_then(|l| self.cell(l, x, y));
+        let joins = |upper: DungeonCell, lower: DungeonCell| {
+            leads(upper.drawn).1 && (is_pit(upper.drawn) || leads(lower.drawn).0)
+        };
+        (down && below.is_some_and(|lower| joins(cell, lower)))
+            || (up && above.is_some_and(|upper| joins(upper, cell)))
+    }
+
     /// Every shown cell of `level` as `(x, y, cell)`.
     pub fn cells(&self, level: u8) -> impl Iterator<Item = (u8, u8, DungeonCell)> + '_ {
         self.levels
@@ -254,6 +312,11 @@ pub fn leads(drawn: u8) -> (bool, bool) {
         0x6 if drawn & 0x07 == 0 => (false, true),
         _ => (false, false),
     }
+}
+
+/// Whether a drawn byte is the visible pit `0x60` (`0x68`).
+fn is_pit(drawn: u8) -> bool {
+    drawn >> 4 == 0x6 && drawn & 0x07 == 0
 }
 
 #[cfg(test)]

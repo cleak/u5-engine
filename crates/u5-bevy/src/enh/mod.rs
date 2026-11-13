@@ -225,6 +225,7 @@ impl Plugin for EnhancementsPlugin {
             app,
             &self.launch.enhancements.keys,
             self.launch.enhancements.toggles,
+            gem_map::paging_wanted(&self.launch),
         );
         overlay::add_overlay_model(app, self.launch.enhancements.toggles);
         side::add_side_space(

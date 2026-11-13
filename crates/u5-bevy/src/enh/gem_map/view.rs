@@ -239,6 +239,8 @@ pub struct GemShow {
     /// The gem count the open view opened with: each open spends a gem, so
     /// a new count is a new open even with no frame between.
     opened_gems: Option<u8>,
+    /// The dungeon page the map was last rendered at (M3-14).
+    drawn_page: i8,
     full: GemImage,
     steps: Option<SweepSteps>,
     pub sweep: GemSweep,
@@ -270,8 +272,19 @@ impl GemShow {
         self.steps.as_ref().map(|steps| steps.canvas)
     }
 
+    /// The open view the map draws, from its open until it closes.
+    pub fn view(&self) -> Option<&GemViewState> {
+        self.view.as_ref()
+    }
+
+    /// The open view, for the paging keys (M3-14).
+    pub(super) fn view_mut(&mut self) -> Option<&mut GemViewState> {
+        self.view.as_mut()
+    }
+
     fn hide(&mut self) {
         self.view = None;
+        self.drawn_page = 0;
         self.opened_gems = None;
         self.sweep.stop();
         self.show_before = false;
@@ -444,9 +457,15 @@ pub(super) fn gem_render(
                 know: Some(gem.knowledge()),
                 glyphs: t.opts.glyphs,
             };
-            let view = GemViewState::open_all(state, canvas, display_map, town, dungeon);
+            let mut view = GemViewState::open_all(state, canvas, display_map, town, dungeon);
+            // A resize keeps the page while the map is still one panel.
+            let page = show.view.as_ref().map_or(0, |view| view.page);
+            if !new_open && view.is_one_panel_dungeon(t.opts.dungeon_stack) {
+                view.page = page;
+            }
             let drawn = render_gem_map(state, gem.knowledge(), art, &t, &view, &mut show.full);
             show.renders += 1;
+            show.drawn_page = view.page;
             if drawn == GemRender::Cleared || matches!(view.shown, GemShown::Empty) {
                 // A view this build does not draw: the 1.0.1 view shows.
                 show.hide();
@@ -463,6 +482,16 @@ pub(super) fn gem_render(
                 show.sweep.start_open(t.opts.sweep);
                 started = true;
             }
+        } else if let (Some(view), Some(art)) = (show.view.as_ref(), show.art.as_ref())
+            && view.page != show.drawn_page
+        {
+            // PgUp or PgDn turned the page (M3-14): the same open view, the
+            // same shown set, another level on the lone panel. The sweep
+            // goes on where it is.
+            render_gem_map(state, gem.knowledge(), art, &t, view, &mut show.full);
+            show.renders += 1;
+            show.drawn_page = view.page;
+            show.composed = None;
         }
     } else if show.view.take().is_some() {
         show.opened_gems = None;

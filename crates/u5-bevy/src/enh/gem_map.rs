@@ -19,15 +19,19 @@
 //!   record and removes its file.
 //!
 //! The map's own systems (`gem_capture_pre`, `gem_render`, `gem_layout`
-//! and `gem_hide`) are described in [`view`].
+//! and `gem_hide`) are described in [`view`], and the PgUp and PgDn paging
+//! of a one-panel dungeon map (`gem_page`, `gem_paging_keys`) in
+//! [`paging`].
 //!
 //! Zero footprint: the plugin is added only when `gem_map.enhanced` is on
 //! at launch, never under the parity lock (the foundation plugin itself is
 //! absent then). Every system runs only while the toggle is on, except
 //! `gem_hide`, which runs only while it is off and something of the map is
 //! left; all but the new-game reset only while a `VisualState` exists: the
-//! reset answers a stamp the intro sends before gameplay starts. No key is
-//! bound, and the map is a UI node over the window, so the game's frame,
+//! reset answers a stamp the intro sends before gameplay starts. The only
+//! keys ever bound are PgUp and PgDn, and only while a one-panel dungeon
+//! map is up, when the game itself would only throw a key away
+//! ([`paging`]); the map is a UI node over the window, so the game's frame,
 //! keys and state are the 1.0.1 ones; every reader takes `&PlayState`.
 
 use bevy::prelude::*;
@@ -42,8 +46,10 @@ use super::toast::Toasts;
 use super::{EnhLaunch, EnhSet, VisualLaunchConfig, feature_wanted, toggle_on};
 use crate::VisualState;
 
+pub mod paging;
 pub mod view;
 
+pub(crate) use paging::paging_wanted;
 pub use view::{GemBeforeNode, GemMapNode, GemShow};
 
 /// The toggle this module belongs to.
@@ -91,6 +97,12 @@ impl GemMap {
         self.session.outcome()
     }
 
+    /// Seeds the record with `events` (tests and review runs only).
+    #[cfg(test)]
+    pub(crate) fn learn(&mut self, events: &[u5_automap::gem::KnowEvent]) {
+        self.session.learn(events);
+    }
+
     /// A slot load rewrote the save: the next frame reads its record.
     pub fn request_attach(&mut self) {
         self.attach_requested = true;
@@ -112,6 +124,7 @@ impl GemMap {
 pub(super) fn add_gem_map(app: &mut App, launch: &VisualLaunchConfig) {
     if feature_wanted(launch.enhancements.toggles, GEM) {
         app.add_plugins(GemMapPlugin);
+        paging::add_paging(app, launch);
     }
 }
 

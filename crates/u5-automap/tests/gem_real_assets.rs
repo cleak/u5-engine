@@ -307,6 +307,26 @@ fn real_assets_render_despise() {
                 let tag = if wrap { "" } else { "-nowrap" };
                 write_ppm(shots, &format!("engine-{name}{tag}.ppm"), &out);
             }
+            // The lone 4:3 panel pages (M3-14): PgUp and PgDn from the
+            // party's level, as the mockups' D3-pgup and D3-pgdn.
+            if canvas == CANVASES[0] {
+                for (up, page) in [(true, "pgup"), (false, "pgdn")] {
+                    let mut paged = view.clone();
+                    if !paged.turn_page(up, true) {
+                        continue;
+                    }
+                    let mut out = GemImage::default();
+                    assert_eq!(
+                        render_gem_map(&state, &know, &art, &t, &paged, &mut out),
+                        GemRender::Dungeon
+                    );
+                    assert!(out.rgba.chunks(4).all(|p| p[3] == 255));
+                    if let Some(shots) = &shots {
+                        let tag = if wrap { "" } else { "-nowrap" };
+                        write_ppm(shots, &format!("engine-D3-{page}{tag}.ppm"), &out);
+                    }
+                }
+            }
         }
     }
 }

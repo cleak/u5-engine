@@ -233,23 +233,27 @@ fn no_gem_map_row_shows_every_name() {
     assert!(option(GLYPHS_KEY).label.contains("spoiler"));
 }
 
-/// The rows G2 (M3-11) and G3 (M3-12) ship: the main toggle, its outdoor
-/// options and the town surroundings.
+/// The rows G2 (M3-11), G3 (M3-12) and G4 (M3-14) ship: the main toggle,
+/// its outdoor options, the town surroundings and the dungeon rows.
 const SHIPPED_KEYS: &[&str] = &[
     ENHANCED_KEY,
     BRIGHTNESS_LINK_KEY,
     MAP_BRIGHTNESS_KEY,
     SWEEP_KEY,
     TOWN_SURROUNDINGS_KEY,
+    DUNGEON_STACK_KEY,
+    WRAP_ROWS_KEY,
+    LEVEL_PAGING_KEY,
+    GLYPHS_KEY,
 ];
 
 #[test]
-fn only_g2_and_g3_of_chapter_10_ship() {
-    for phase in &ALL_GEM[..2] {
+fn g2_g3_and_g4_of_chapter_10_ship() {
+    for phase in &ALL_GEM[..3] {
         assert!(SHIPPED_PHASES.contains(phase), "{phase:?}");
         assert!(phase.is_shipped());
     }
-    for phase in &ALL_GEM[2..] {
+    for phase in &ALL_GEM[3..] {
         assert!(!SHIPPED_PHASES.contains(phase), "{phase:?}");
         assert!(!phase.is_shipped());
     }
@@ -290,34 +294,47 @@ fn only_g2_and_g3_of_chapter_10_ship() {
     assert!(resolved.notes.is_empty(), "{:?}", note_lines(&resolved));
     let view = resolved.gem_map();
     assert!(view.enhanced && !view.opts.town_surroundings);
-    // The later rows are still refused with a note and change nothing,
+    // And the G4 rows, the spoiler glyphs included (a deviation, which the
+    // player may still choose by name).
+    let resolved = resolve(input(
+        None,
+        &[
+            enable(ENHANCED_KEY),
+            disable(DUNGEON_STACK_KEY),
+            disable(WRAP_ROWS_KEY),
+            disable(LEVEL_PAGING_KEY),
+            set(GLYPHS_KEY, "gem-faithful"),
+        ],
+    ));
+    assert!(resolved.notes.is_empty(), "{:?}", note_lines(&resolved));
+    let view = resolved.gem_map();
+    assert!(view.enhanced);
+    assert!(!view.opts.dungeon_stack && !view.opts.wrap_rows && !view.opts.level_paging);
+    assert_eq!(view.opts.glyphs, GlyphPolicy::GemFaithful);
+    // The G4 defaults: the stack, the wrap rows and paging on, perceived
+    // glyphs.
+    let view = resolve(input(None, &[enable(ENHANCED_KEY)])).gem_map();
+    assert!(view.opts.dungeon_stack && view.opts.wrap_rows && view.opts.level_paging);
+    assert_eq!(view.opts.glyphs, GlyphPolicy::Perceived);
+    // The later row is still refused with a note and changes nothing,
     // whether set by name, flag or file.
-    for cli in [
-        set(GLYPHS_KEY, "gem-faithful"),
-        disable(LABELS_KEY),
-        disable(DUNGEON_STACK_KEY),
-    ] {
-        let resolved = resolve(input(None, std::slice::from_ref(&cli)));
-        assert!(resolved.is_classic(), "{cli:?}");
-        assert!(
-            matches!(resolved.notes[..], [SettingNote::NotAvailable { .. }]),
-            "{cli:?}: {:?}",
-            note_lines(&resolved)
-        );
-        assert_eq!(resolved.gem_map(), GemMapToggles::default(), "{cli:?}");
-    }
+    let cli = disable(LABELS_KEY);
+    let resolved = resolve(input(None, std::slice::from_ref(&cli)));
+    assert!(resolved.is_classic(), "{cli:?}");
+    assert!(
+        matches!(resolved.notes[..], [SettingNote::NotAvailable { .. }]),
+        "{cli:?}: {:?}",
+        note_lines(&resolved)
+    );
+    assert_eq!(resolved.gem_map(), GemMapToggles::default(), "{cli:?}");
     let stored = Stored::default()
         .with(ENHANCED_KEY, SettingValue::Bool(true))
-        .with(GLYPHS_KEY, SettingValue::Str("gem-faithful".into()));
+        .with(LABELS_KEY, SettingValue::Bool(false));
     let resolved = resolve(input(Some(&stored), &[]));
     assert!(!resolved.is_classic(), "the file turns the map on");
     let view = resolved.gem_map();
     assert!(view.enhanced);
-    assert_eq!(
-        view.opts.glyphs,
-        GlyphPolicy::Perceived,
-        "the hidden glyph row keeps its default"
-    );
+    assert!(view.labels, "the hidden labels row keeps its default");
 }
 
 #[test]
@@ -616,7 +633,7 @@ fn presets_set_only_the_main_toggle_and_never_the_spoiler() {
 
 #[test]
 fn everything_turns_the_gem_map_on_and_skips_its_hidden_rows() {
-    // G2 and G3 have shipped (M3-11, M3-12): Everything applies
+    // G2, G3 and G4 have shipped (M3-11, M3-12, M3-14): Everything applies
     // `gem_map.enhanced`; no preset applies a row of a later phase, and none
     // but Everything turns the map on.
     for preset in PRESETS {

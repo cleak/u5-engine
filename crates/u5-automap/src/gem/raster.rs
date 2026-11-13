@@ -30,11 +30,12 @@
 //! `gem_map.wrap_rows` on, the
 //! level repeated above and below each panel (and beside a lone panel) at
 //! [`DUNGEON_WRAP_PERCENT`] of that, with a 1 px dark-grey edge where the
-//! level's own 8 x 8 ends; then the party's yellow arrowhead pointing its
-//! facing, and the panel titles in IBM.CH with a 1 px black outline.
+//! level's own 8 x 8 ends; then the yellow ladder link boxes (M3-14,
+//! [`DungeonShown::linked`]), the party's yellow arrowhead pointing its
+//! facing, and the panel titles in IBM.CH with a 1 px black outline. A lone
+//! panel shows the paged level (`GemViewState::page`, M3-14).
 //!
-//! Marks, labels and the "?" (10.2.7) come later (M3-16), and the dungeon
-//! ladder link boxes and paging with M3-14.
+//! Marks, labels and the "?" (10.2.7) come later (M3-15, M3-16).
 //!
 //! The render reads `&PlayState` and the view's cached shown set only: it
 //! changes nothing in the game, draws no random number and reads no file.
@@ -67,6 +68,9 @@ pub const PARTY_MARKER_PX: u32 = PARTY_SPRITE_PX + 8;
 
 /// EGA 14, kept for the party and the dungeon link boxes (10.2.7).
 pub const PARTY_YELLOW: [u8; 3] = MAP_PALETTE[14];
+
+/// The dungeon ladder link boxes' colour, the party's EGA 14 (10.2.6).
+pub const LINK_YELLOW: [u8; 3] = PARTY_YELLOW;
 
 /// Remembered dungeon cells, as a share of the map brightness in percent
 /// (10.2.6, 10.3.4 step 3).
@@ -514,6 +518,12 @@ fn draw_dungeon(
             out,
         );
     }
+    // The ladder link boxes, at full brightness, on the panel's own 8 x 8.
+    for &(index, level) in &panels {
+        if let DungeonSlot::Level { level, cells: true } = shown.slot(level) {
+            draw_link_boxes(shown, layout, index, level, out);
+        }
+    }
     let Some(fonts) = fonts else {
         return;
     };
@@ -633,6 +643,26 @@ fn draw_dungeon_panel(
     }
     if wrap {
         out.frame((px - 1, py - 1, px + p, py + p), 1, DUNGEON_EDGE_GREY);
+    }
+}
+
+/// The yellow link boxes of one panel (10.2.6): a 1 px EGA 14 outline on
+/// the outer pixels of each [`DungeonShown::linked`] cell, inside the cell.
+fn draw_link_boxes(
+    shown: &DungeonShown,
+    layout: &DungeonLayout,
+    index: u8,
+    level: u8,
+    out: &mut GemImage,
+) {
+    let (px, py) = layout.panel_origin(index);
+    let c = layout.cell as i32;
+    for (x, y, _) in shown.cells(level) {
+        if !shown.linked(level, x, y) {
+            continue;
+        }
+        let (x0, y0) = (px + i32::from(x) * c, py + i32::from(y) * c);
+        out.frame((x0, y0, x0 + c - 1, y0 + c - 1), 1, LINK_YELLOW);
     }
 }
 

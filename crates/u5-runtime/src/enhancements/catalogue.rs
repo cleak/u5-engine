@@ -165,6 +165,7 @@ pub const SHIPPED_PHASES: &[Phase] = &[
     LIGHT_P5,
     GEM_G2,
     GEM_G3,
+    GEM_G4,
 ];
 
 /// A soft dependency (design 1.4.5): what a feature prefers to have, and

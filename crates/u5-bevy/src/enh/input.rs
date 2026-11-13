@@ -5,7 +5,8 @@
 //! system ([`EnhSet::Input`]). That is before every faithful `Update`
 //! system of both app chains and the intro, so it needs no edge into
 //! faithful code. It is in the app only while some binding is active (or
-//! the menu overlay is on); with nothing bound there is no [`KeyMap`], no
+//! the menu overlay is on, or the gem map's level paging may bind PgUp and
+//! PgDn, D-M3.6); with nothing bound there is no [`KeyMap`], no
 //! [`KeyLatch`] and no router.
 //!
 //! **Allocation.** The shell turns keys into game bytes in
@@ -446,6 +447,11 @@ impl KeyMap {
         notes
     }
 
+    /// Whether the gem map's paging pair is bound now.
+    pub fn gem_paging(&self) -> bool {
+        self.gem_paging
+    }
+
     /// The action bound to `chord`, if any.
     pub fn action(&self, chord: KeyChord) -> Option<EnhAction> {
         self.bindings.get(&chord).copied()
@@ -468,6 +474,9 @@ impl KeyMap {
     /// the view (10.2.6, D10.12). These are the only bindings on reserved
     /// keys.
     pub fn set_gem_paging(&mut self, open: bool) {
+        if self.gem_paging == open {
+            return;
+        }
         self.gem_paging = open;
         for (key, action) in [
             (KeyCode::PageUp, EnhAction::GemPageUp),
@@ -546,14 +555,23 @@ pub(crate) fn menu_overlay_on(toggles: FeatureToggles) -> bool {
     Toggle::from_key("menu.overlay").is_some_and(|toggle| toggles.on(toggle))
 }
 
-/// Adds the router when the launch binds a key or the menu overlay is on;
-/// otherwise adds nothing. Called from [`super::EnhancementsPlugin`].
-pub(super) fn add_input_router(app: &mut App, keys: &KeyBindings, toggles: FeatureToggles) {
+/// Adds the router when the launch binds a key, the menu overlay is on, or
+/// the gem map's level paging may bind PgUp and PgDn (`gem_paging`:
+/// `gem_map.enhanced` and `gem_map.level_paging` on, D-M3.6); otherwise
+/// adds nothing. For the gem paging alone the keymap stays empty until a
+/// one-panel dungeon gem map opens. Called from
+/// [`super::EnhancementsPlugin`].
+pub(super) fn add_input_router(
+    app: &mut App,
+    keys: &KeyBindings,
+    toggles: FeatureToggles,
+    gem_paging: bool,
+) {
     let (keymap, notes) = KeyMap::for_toggles(keys, toggles);
     for note in &notes {
         warn!("{note}");
     }
-    if keymap.is_empty() && !menu_overlay_on(toggles) {
+    if keymap.is_empty() && !menu_overlay_on(toggles) && !gem_paging {
         return;
     }
     install_input_router(app, keymap);

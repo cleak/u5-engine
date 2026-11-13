@@ -36,7 +36,7 @@ use u5_runtime::{Area, PlayState, ViewOverlayKind, ViewOverlayMode, WORLD_SIDE, 
 use super::dungeon::{DungeonInputs, DungeonShown};
 use super::knowledge::GemKnowledge;
 use super::layout::{
-    GemCanvas, OutdoorLayout, TOWN_ENTRANCE_FLOOR_ROW, TOWN_FLOOR_CELLS, TownLayout,
+    DungeonLayout, GemCanvas, OutdoorLayout, TOWN_ENTRANCE_FLOOR_ROW, TOWN_FLOOR_CELLS, TownLayout,
 };
 use super::seen::side_window;
 
@@ -274,7 +274,11 @@ pub struct GemViewState {
     /// `display.map_brightness` when the view opened, for
     /// `gem_map.brightness_link` (10.2.10). 100 means off.
     pub display_map_brightness: u8,
-    /// The dungeon level page, 0 for the current level (M3-15).
+    /// The dungeon level page on a lone panel: the shown level's offset
+    /// from the party's, 0 on open (10.2.6, M3-14). The shell changes it
+    /// with PgUp and PgDn through [`DungeonShown::page_step`].
+    ///
+    /// [`DungeonShown::page_step`]: super::dungeon::DungeonShown::page_step
     pub page: i8,
     /// The sweep step to draw, when a sweep runs (M3-11).
     pub sweep_step: Option<u8>,
@@ -335,6 +339,28 @@ impl GemViewState {
             sweep_step: None,
             shown,
         }
+    }
+
+    /// Whether this view is a dungeon map drawn as one panel: the 4:3
+    /// canvas, or `gem_map.dungeon_stack` (`stack`) off. Only this view
+    /// pages (10.2.6, D10.12).
+    pub fn is_one_panel_dungeon(&self, stack: bool) -> bool {
+        matches!(self.shown, GemShown::Dungeon(_))
+            && DungeonLayout::new(self.canvas, stack).is_some_and(|layout| layout.panels == 1)
+    }
+
+    /// One PgUp (`up`) or PgDn on a one-panel dungeon map: the page moves
+    /// to the nearest level with a panel. Returns whether it moved; any
+    /// other view is left as it is.
+    pub fn turn_page(&mut self, up: bool, stack: bool) -> bool {
+        if !self.is_one_panel_dungeon(stack) {
+            return false;
+        }
+        let GemShown::Dungeon(shown) = &self.shown else {
+            return false;
+        };
+        let page = shown.page_step(self.page, up);
+        std::mem::replace(&mut self.page, page) != page
     }
 }
 

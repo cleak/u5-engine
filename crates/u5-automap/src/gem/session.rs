@@ -189,6 +189,13 @@ impl GemSession {
         summary_line(&self.know)
     }
 
+    /// Folds `events` into the record as observation does, for a caller
+    /// that knows them from elsewhere (a test or a review run seeding a
+    /// demo walk). Returns whether the record changed.
+    pub fn learn(&mut self, events: &[KnowEvent]) -> bool {
+        self.fold(events)
+    }
+
     fn fold(&mut self, events: &[KnowEvent]) -> bool {
         let mut changed = false;
         for event in events {

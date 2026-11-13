@@ -858,3 +858,6 @@ fn the_panel_table_follows_the_general_rule() {
     assert_eq!(crate::gem::layout::dungeon_cell_size(25), Some(24));
     assert_eq!(crate::gem::layout::dungeon_cell_size(30), Some(28));
 }
+
+#[path = "links_tests.rs"]
+mod links;

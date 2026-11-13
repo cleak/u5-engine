@@ -53,8 +53,8 @@ pub use probe::{
 };
 pub use probe_more::{ENTRANCE_NAME_COLUMNS, entrance_record_for_column};
 pub use raster::{
-    DUNGEON_REMEMBERED_PERCENT, DUNGEON_WRAP_PERCENT, DungeonLuts, GemImage, GemRender, MapArt,
-    PARTY_MARKER_PX, PARTY_SPRITE_PX, TOWN_SIDE_PERCENT, dungeon_glyph_pixels,
+    DUNGEON_REMEMBERED_PERCENT, DUNGEON_WRAP_PERCENT, DungeonLuts, GemImage, GemRender,
+    LINK_YELLOW, MapArt, PARTY_MARKER_PX, PARTY_SPRITE_PX, TOWN_SIDE_PERCENT, dungeon_glyph_pixels,
     dungeon_panel_levels, facing_arrow, map_percent, party_sprite_tile, remembered_channel,
     render_gem_map, town_side_lut,
 };
