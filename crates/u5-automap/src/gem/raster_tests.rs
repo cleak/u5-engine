@@ -32,9 +32,12 @@ fn art() -> MapArt {
     MapArt::build(&synthetic_tile_atlas(TileGraphicsDepth::Ega16))
 }
 
+/// The feature on, with `labels` off: these tests read the map layer, and
+/// the marks over it are M3-15's (`features_tests.rs`).
 fn on() -> GemMapToggles {
     GemMapToggles {
         enhanced: true,
+        labels: false,
         ..GemMapToggles::default()
     }
 }

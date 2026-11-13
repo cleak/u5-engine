@@ -330,3 +330,174 @@ fn real_assets_render_despise() {
         }
     }
 }
+
+/// A review-only record from `U5_GEM_KNOWLEDGE` (the mockups' demo
+/// knowledge, never committed): one event per line, `place S`, `shrine V`,
+/// `codex`, `entrance R`, `gate P X Y`, `sign SCENE FLOOR X Y`,
+/// `trade SCENE CODE`, `keeper SCENE CODE FLOOR X Y`,
+/// `link SCENE FLOOR X Y up|down`, `exit SCENE N|E|S|W AT`, `sides SCENE`
+/// (every side cell seen), `cell R L X Y` and `mark R L X Y KIND` (kind
+/// code as `MarkKind`).
+fn demo_knowledge() -> u5_automap::gem::GemKnowledge {
+    use u5_automap::gem::{
+        DungeonMark, EdgeSide, ExitRun, GateCell, KnowEvent, LinkDir, MarkKind, SIDE_WINDOW_HEIGHT,
+        SIDE_WINDOW_WIDTH, SignCell, TownLink, Trade,
+    };
+    let mut know = GemKnowledge::new();
+    let Some(path) = std::env::var_os("U5_GEM_KNOWLEDGE") else {
+        return know;
+    };
+    for line in std::fs::read_to_string(path).unwrap().lines() {
+        let words: Vec<_> = line.split_whitespace().collect();
+        let n = |i: usize| -> i64 { words[i].parse().unwrap() };
+        let events = match words.first().copied() {
+            Some("place") => vec![KnowEvent::PlaceEntered { scene: n(1) as u8 }],
+            Some("shrine") => vec![KnowEvent::ShrineEntered { virtue: n(1) as u8 }],
+            Some("codex") => vec![KnowEvent::CodexEntered],
+            Some("entrance") => vec![KnowEvent::EntranceNamed { record: n(1) as u8 }],
+            Some("gate") => vec![KnowEvent::GateUsed(GateCell {
+                plane: n(1) as u8,
+                x: n(2) as u8,
+                y: n(3) as u8,
+            })],
+            Some("sign") => vec![KnowEvent::SignRead(SignCell {
+                scene: n(1) as u8,
+                floor: n(2) as i8,
+                x: n(3) as u8,
+                y: n(4) as u8,
+            })],
+            Some("trade") => vec![KnowEvent::ShopOpened {
+                scene: n(1) as u8,
+                trade: Trade::from_code(n(2) as u8).unwrap(),
+                keeper: None,
+            }],
+            Some("keeper") => vec![KnowEvent::ShopOpened {
+                scene: n(1) as u8,
+                trade: Trade::from_code(n(2) as u8).unwrap(),
+                keeper: Some((n(3) as i8, n(4) as u8, n(5) as u8)),
+            }],
+            Some("link") => vec![KnowEvent::TownLinkUsed(TownLink {
+                scene: n(1) as u8,
+                floor: n(2) as i8,
+                x: n(3) as u8,
+                y: n(4) as u8,
+                dir: if words[5] == "up" {
+                    LinkDir::Up
+                } else {
+                    LinkDir::Down
+                },
+            })],
+            Some("exit") => vec![KnowEvent::TownExit(ExitRun {
+                scene: n(1) as u8,
+                side: match words[2] {
+                    "N" => EdgeSide::North,
+                    "E" => EdgeSide::East,
+                    "S" => EdgeSide::South,
+                    _ => EdgeSide::West,
+                },
+                at: n(3) as u8,
+            })],
+            Some("sides") => (0..u16::from(SIDE_WINDOW_WIDTH) * u16::from(SIDE_WINDOW_HEIGHT))
+                .map(|index| KnowEvent::SideCellSeen {
+                    scene: n(1) as u8,
+                    index,
+                })
+                .collect(),
+            Some("cell") => {
+                let mut rows = [0; 8];
+                rows[n(4) as usize] = 1 << n(3);
+                vec![KnowEvent::DungeonCellsSeen {
+                    record: n(1) as u8,
+                    level: n(2) as u8,
+                    rows,
+                }]
+            }
+            Some("mark") => vec![KnowEvent::DungeonMarked(DungeonMark {
+                record: n(1) as u8,
+                level: n(2) as u8,
+                x: n(3) as u8,
+                y: n(4) as u8,
+                kind: [
+                    MarkKind::Ladder,
+                    MarkKind::Fountain,
+                    MarkKind::Chest,
+                    MarkKind::Trap,
+                    MarkKind::SecretDoor,
+                ][n(5) as usize],
+            })],
+            _ => vec![],
+        };
+        for event in &events {
+            know.apply(event);
+        }
+    }
+    know
+}
+
+/// With `U5_MOCKUP_PROFILE` naming a game copy: the marks and "?" tags
+/// (M3-15) over the mockups' O, T and D scenes, from the record in
+/// `U5_GEM_KNOWLEDGE` (empty when unset). Invariants only: every "?" lies
+/// on a shown cell, and nothing undiscovered has a label. With
+/// `U5_GEM_SHOTS`, the renders are written there as PPM files.
+#[test]
+fn real_assets_render_marks() {
+    use u5_automap::StaticMaps;
+    use u5_automap::gem::{DungeonInputs, TownInputs, gem_features, town_world_plane};
+    use u5_runtime::enhancements::GlyphPolicy;
+    let Some(dir) = env_dir("U5_MOCKUP_PROFILE") else {
+        eprintln!("skipped: set U5_MOCKUP_PROFILE");
+        return;
+    };
+    let atlas = u5_runtime::load_tile_atlas(&dir, TileGraphicsDepth::Ega16).unwrap();
+    let art = MapArt::build(&atlas).with_fonts(
+        u5_runtime::load_ibm_ch_font(&dir).unwrap(),
+        u5_runtime::load_runes_ch_font(&dir).unwrap(),
+    );
+    let know = demo_knowledge();
+    let shots = env_dir("U5_GEM_SHOTS");
+    let outdoors = real_world(&dir, (76, 108), (12, 6));
+    let britain = real_britain(&dir);
+    let despise = real_despise(&dir);
+    let mut maps = StaticMaps::new(&dir);
+    let world = maps
+        .world_map(town_world_plane(&britain).unwrap())
+        .unwrap()
+        .to_vec();
+    let scenes: [(&str, &PlayState, GemCanvas); 8] = [
+        ("O1-169", &outdoors, CANVASES[1]),
+        ("O2-219", &outdoors, CANVASES[2]),
+        ("O3-43", &outdoors, CANVASES[0]),
+        ("T1-169", &britain, CANVASES[1]),
+        ("T3-43", &britain, CANVASES[0]),
+        ("D1-169", &despise, CANVASES[1]),
+        ("D2-219", &despise, CANVASES[2]),
+        ("D3-43", &despise, CANVASES[0]),
+    ];
+    for (name, state, canvas) in scenes {
+        let view = GemViewState::open_all(
+            state,
+            canvas,
+            100,
+            TownInputs {
+                know: Some(&know),
+                world: Some(&world),
+                surroundings: true,
+            },
+            DungeonInputs {
+                know: Some(&know),
+                glyphs: GlyphPolicy::Perceived,
+            },
+        );
+        for feature in gem_features(&view.shown, &know) {
+            assert!(feature.known() || feature.label().is_none());
+        }
+        let mut out = GemImage::default();
+        assert_ne!(
+            render_gem_map(state, &know, &art, &on(), &view, &mut out),
+            GemRender::Cleared
+        );
+        if let Some(shots) = &shots {
+            write_ppm(shots, &format!("engine-marks-{name}.ppm"), &out);
+        }
+    }
+}

@@ -434,9 +434,12 @@ fn opening_a_town_reads_the_game_and_changes_nothing() {
 
 // ---- the raster ------------------------------------------------------------
 
+/// The feature on, with `labels` off: these tests read the map layer, and
+/// the marks over it are M3-15's (`features_tests.rs`).
 fn on() -> GemMapToggles {
     GemMapToggles {
         enhanced: true,
+        labels: false,
         ..GemMapToggles::default()
     }
 }

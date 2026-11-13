@@ -35,7 +35,17 @@
 //! facing, and the panel titles in IBM.CH with a 1 px black outline. A lone
 //! panel shows the paged level (`GemViewState::page`, M3-14).
 //!
-//! Marks, labels and the "?" (10.2.7) come later (M3-15, M3-16).
+//! **Marks and the "?"** (10.2.7, M3-15), with `gem_map.labels` on, after
+//! the map and before the party marker, at full brightness: each
+//! discovered feature's 1 px ring in its category colour with a black ring
+//! outside (a dungeon feature's comes with its label, M3-16), a town exit's
+//! white IBM.CH arrow just outside the floor, and on each undiscovered
+//! feature the 12 x 12 "?" tag with cut corners, a neutral grey ring and a
+//! white IBM.CH "?", centred on its cell outdoors and in towns and on the
+//! top-right corner of a dungeon cell. A dungeon panel shown only because a
+//! drawn ladder leads to it carries a "?" in its middle. The features come
+//! from [`gem_features`]: the drawn tiles of the shown set and the record.
+//! Labels and their placement come later (M3-16).
 //!
 //! The render reads `&PlayState` and the view's cached shown set only: it
 //! changes nothing in the game, draws no random number and reads no file.
@@ -50,7 +60,8 @@ use u5_runtime::{
 };
 
 use super::dungeon::{DungeonLit, DungeonShown, DungeonSlot};
-use super::knowledge::GemKnowledge;
+use super::features::{FeatureCell, GemFeature, NEUTRAL_GREY, QUESTION_TAG_PX, gem_features};
+use super::knowledge::{EdgeSide, GemKnowledge};
 use super::layout::{DUNGEON_PANEL_CELLS, DungeonLayout, GemCanvas, GlyphScale};
 use super::shown::{GemShown, GemViewState, OutdoorShown, TownPart, TownShown, gem_view_open};
 use crate::raster::{MAP_PALETTE, MAX_REDUCED_SIZE, MapLight, ReducedTiles};
@@ -239,7 +250,8 @@ pub fn map_percent(t: &GemMapToggles, view: &GemViewState) -> u8 {
 /// (10.3.2, 10.3.4). `out` is cleared, and [`GemRender::Cleared`]
 /// returned, unless the feature is on and the game's view overlay is a gem
 /// view with a shown set this build draws. `know` is the record the marks
-/// and labels will read (M3-16); the map itself never depends on it.
+/// read (M3-15); the map itself never depends on it, and with
+/// `gem_map.labels` off nothing reads it.
 pub fn render_gem_map(
     state: &PlayState,
     know: &GemKnowledge,
@@ -248,7 +260,6 @@ pub fn render_gem_map(
     view: &GemViewState,
     out: &mut GemImage,
 ) -> GemRender {
-    let _ = know;
     out.clear(view.canvas);
     if !t.enhanced || !gem_view_open(state) {
         return GemRender::Cleared;
@@ -258,6 +269,19 @@ pub fn render_gem_map(
         GemShown::Outdoor(shown) => {
             let lut = BrightnessLut::for_percent(map_percent(t, view));
             draw_outdoor_map(shown, art, &lut, out);
+            if t.labels {
+                let features = gem_features(&view.shown, know);
+                draw_marks(
+                    &features,
+                    |cell| match *cell {
+                        FeatureCell::Outdoor { dx, dy } => Some(shown.layout.cell_rect(dx, dy)),
+                        _ => None,
+                    },
+                    false,
+                    art,
+                    out,
+                );
+            }
             let (px, py) = shown.layout.party_px;
             draw_party_marker(state, art, (px, py), shown.layout.cell, out);
             GemRender::Outdoor
@@ -265,6 +289,19 @@ pub fn render_gem_map(
         GemShown::Town(shown) => {
             let percent = map_percent(t, view);
             draw_town_map(shown, art, percent, out);
+            if t.labels {
+                let features = gem_features(&view.shown, know);
+                draw_marks(
+                    &features,
+                    |cell| match *cell {
+                        FeatureCell::Town { fx, fy, .. } => Some(shown.layout.cell_rect(fx, fy)),
+                        _ => None,
+                    },
+                    false,
+                    art,
+                    out,
+                );
+            }
             let (fx, fy) = (i32::from(shown.party.0), i32::from(shown.party.1));
             let (px, py, _, _) = shown.layout.cell_rect(fx, fy);
             draw_party_marker(state, art, (px, py), shown.layout.cell, out);
@@ -275,6 +312,9 @@ pub fn render_gem_map(
                 return GemRender::Cleared;
             };
             draw_dungeon(shown, &layout, view.page, art, t, map_percent(t, view), out);
+            if t.labels {
+                draw_dungeon_marks(shown, &layout, view.page, &view.shown, know, art, out);
+            }
             GemRender::Dungeon
         }
     }
@@ -663,6 +703,197 @@ fn draw_link_boxes(
         }
         let (x0, y0) = (px + i32::from(x) * c, py + i32::from(y) * c);
         out.frame((x0, y0, x0 + c - 1, y0 + c - 1), 1, LINK_YELLOW);
+    }
+}
+
+/// The marks of `features` (10.2.7): the rings of the discovered ones
+/// (except in dungeons, `corner`, where the label carries them, M3-16), the
+/// exit arrows, then the "?" tags of the undiscovered ones, on the cells
+/// `rect` places, at full brightness. A feature whose cell the canvas cuts
+/// gets no mark.
+fn draw_marks(
+    features: &[GemFeature],
+    rect: impl Fn(&FeatureCell) -> Option<(i32, i32, u32, u32)>,
+    corner: bool,
+    art: &MapArt,
+    out: &mut GemImage,
+) {
+    let font = art.fonts.as_deref().map(|(text, _)| text);
+    // Only cells wholly on the canvas: a cut edge cell is too small to
+    // carry a mark (the approved mockups' rule).
+    let (cw, ch) = (out.w as i32, out.h as i32);
+    let placed = features
+        .iter()
+        .filter_map(|feature| Some((feature, rect(&feature.cell)?)))
+        .filter(|(_, (x0, y0, w, h))| {
+            *x0 >= 0 && *y0 >= 0 && x0 + *w as i32 <= cw && y0 + *h as i32 <= ch
+        })
+        .collect::<Vec<_>>();
+    for (feature, (x0, y0, w, h)) in &placed {
+        if feature.known() && feature.exit_side().is_none() && !corner {
+            let (x1, y1) = (x0 + *w as i32, y0 + *h as i32);
+            out.frame((x0 - 1, y0 - 1, x1, y1), 1, feature.ring_colour());
+            out.frame((x0 - 2, y0 - 2, x1 + 1, y1 + 1), 1, [0, 0, 0]);
+        }
+    }
+    for (feature, (x0, y0, w, h)) in &placed {
+        let Some(side) = feature.exit_side() else {
+            continue;
+        };
+        // The way out: one cell outside the floor's edge.
+        let (dx, dy) = match side {
+            EdgeSide::North => (0, -1),
+            EdgeSide::South => (0, 1),
+            EdgeSide::West => (-1, 0),
+            EdgeSide::East => (1, 0),
+        };
+        let cx = x0 + dx * *w as i32 + *w as i32 / 2;
+        let cy = y0 + dy * *h as i32 + *h as i32 / 2;
+        if !feature.known() {
+            question_tag(
+                out,
+                font,
+                cx - QUESTION_TAG_PX / 2,
+                cy - QUESTION_TAG_PX / 2,
+            );
+        } else if let Some(font) = font {
+            let arrow = char::from(exit_arrow(side)).to_string();
+            draw_text_tag(out, font, &arrow, cx - 5, cy - 5);
+        }
+    }
+    for (feature, (x0, y0, w, h)) in &placed {
+        if feature.known() || feature.exit_side().is_some() {
+            continue;
+        }
+        let (x, y) = if corner {
+            (x0 + *w as i32 - QUESTION_TAG_PX + 3, y0 - 3)
+        } else {
+            (
+                x0 + *w as i32 / 2 - QUESTION_TAG_PX / 2,
+                y0 + *h as i32 / 2 - QUESTION_TAG_PX / 2,
+            )
+        };
+        question_tag(out, font, x, y);
+    }
+}
+
+/// The dungeon marks (10.2.7) on the panels on screen: the "?" tags on the
+/// top-right corner of the undiscovered features' cells, and a "?" in the
+/// middle of each black panel a drawn ladder or pit leads to (10.2.6).
+fn draw_dungeon_marks(
+    shown: &DungeonShown,
+    layout: &DungeonLayout,
+    page: i8,
+    view: &GemShown,
+    know: &GemKnowledge,
+    art: &MapArt,
+    out: &mut GemImage,
+) {
+    let panels = dungeon_panel_levels(shown, layout, page);
+    let c = layout.cell as i32;
+    let features = gem_features(view, know);
+    draw_marks(
+        &features,
+        |cell| {
+            let FeatureCell::Dungeon { level, x, y } = *cell else {
+                return None;
+            };
+            let &(index, _) = panels.iter().find(|(_, shown_level)| {
+                *shown_level == i32::from(level)
+                    && matches!(
+                        shown.slot(*shown_level),
+                        DungeonSlot::Level { cells: true, .. }
+                    )
+            })?;
+            let (px, py) = layout.panel_origin(index);
+            Some((
+                px + i32::from(x) * c,
+                py + i32::from(y) * c,
+                layout.cell,
+                layout.cell,
+            ))
+        },
+        true,
+        art,
+        out,
+    );
+    let font = art.fonts.as_deref().map(|(text, _)| text);
+    let p = layout.panel_px() as i32;
+    for &(index, level) in &panels {
+        if matches!(
+            shown.slot(level),
+            DungeonSlot::Level { cells: false, .. } | DungeonSlot::Underworld { .. }
+        ) {
+            let (px, py) = layout.panel_origin(index);
+            question_tag(
+                out,
+                font,
+                px + p / 2 - QUESTION_TAG_PX / 2,
+                py + p / 2 - QUESTION_TAG_PX / 2,
+            );
+        }
+    }
+}
+
+/// The IBM.CH arrow out of a town side: up, right, down, left.
+pub fn exit_arrow(side: EdgeSide) -> u8 {
+    match side {
+        EdgeSide::North => 0x18,
+        EdgeSide::East => 0x1A,
+        EdgeSide::South => 0x19,
+        EdgeSide::West => 0x1B,
+    }
+}
+
+/// The "?" tag (10.2.7, L1) with its top-left at `(x, y)`: 12 x 12, black,
+/// the corners cut, a 1 px [`NEUTRAL_GREY`] ring with the pixel inside each
+/// corner also grey, and the IBM.CH "?" in white centred on its ink. With
+/// no font, the tag is drawn without the "?".
+pub fn question_tag(out: &mut GemImage, font: Option<&FixedCellFont>, x: i32, y: i32) {
+    let s = QUESTION_TAG_PX;
+    for j in 0..s {
+        for i in 0..s {
+            let edge_x = i == 0 || i == s - 1;
+            let edge_y = j == 0 || j == s - 1;
+            if edge_x && edge_y {
+                continue;
+            }
+            let inner_corner = (i == 1 || i == s - 2) && (j == 1 || j == s - 2);
+            let rgb = if edge_x || edge_y || inner_corner {
+                NEUTRAL_GREY
+            } else {
+                [0, 0, 0]
+            };
+            out.put(x + i, y + j, rgb);
+        }
+    }
+    let Some(font) = font else {
+        return;
+    };
+    let rows = (0..8)
+        .map(|row| font.glyph_row(b'?', row).unwrap_or(0))
+        .collect::<Vec<_>>();
+    let inked_rows = rows
+        .iter()
+        .enumerate()
+        .filter(|(_, bits)| **bits != 0)
+        .map(|(row, _)| row as i32)
+        .collect::<Vec<_>>();
+    let (Some(&top), Some(&bottom)) = (inked_rows.first(), inked_rows.last()) else {
+        return;
+    };
+    let ink = rows.iter().fold(0u8, |acc, bits| acc | bits);
+    let left = ink.leading_zeros() as i32;
+    let right = 7 - ink.trailing_zeros() as i32;
+    let (gw, gh) = (right - left + 1, bottom - top + 1);
+    let ox = x + (s - gw) / 2 - left;
+    let oy = y + (s - gh) / 2 - top;
+    for (row, bits) in rows.iter().enumerate() {
+        for col in 0..8 {
+            if bits & (0x80 >> col) != 0 {
+                out.put(ox + col, oy + row as i32, DUNGEON_TITLE_WHITE);
+            }
+        }
     }
 }
 

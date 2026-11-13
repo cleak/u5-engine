@@ -17,11 +17,14 @@
 //!   (10.2.6, M3-13);
 //! - [`dungeon`]: the dungeon shown set, its panels and titles (10.2.6,
 //!   M3-13);
+//! - [`features`]: the features of a view, from the drawn tiles of the
+//!   shown set and the record, and what each may tell (10.2.7, M3-15);
 //! - [`shown`]: the shown set, the cells drawn and their tiles, cached per
 //!   open in [`GemViewState`] (10.2.3, D-M3.5, M3-10);
 //! - [`raster`]: [`render_gem_map`], the CPU raster (10.3.4, M3-10).
 
 pub mod dungeon;
+pub mod features;
 pub mod knowledge;
 pub mod layout;
 pub mod payload;
@@ -33,6 +36,10 @@ pub mod session;
 pub mod shown;
 
 pub use dungeon::{DungeonCell, DungeonInputs, DungeonLit, DungeonShown, DungeonSlot, leads};
+pub use features::{
+    CHEST_BROWN, FeatureCategory, FeatureCell, GemFeature, NEUTRAL_GREY, QUESTION_TAG_PX,
+    dungeon_features, gem_features, outdoor_features, town_features, trade_label,
+};
 pub use knowledge::{
     DungeonMark, EdgeSide, ExitRun, FeatureKey, GEM_PAYLOAD_VERSION, GEM_SIDECAR_TAG, GateCell,
     GemKnowledge, KeeperMark, KnowEvent, LinkDir, MarkKind, SIDE_WINDOW_BYTES, SIDE_WINDOW_HEIGHT,
@@ -55,8 +62,8 @@ pub use probe_more::{ENTRANCE_NAME_COLUMNS, entrance_record_for_column};
 pub use raster::{
     DUNGEON_REMEMBERED_PERCENT, DUNGEON_WRAP_PERCENT, DungeonLuts, GemImage, GemRender,
     LINK_YELLOW, MapArt, PARTY_MARKER_PX, PARTY_SPRITE_PX, TOWN_SIDE_PERCENT, dungeon_glyph_pixels,
-    dungeon_panel_levels, facing_arrow, map_percent, party_sprite_tile, remembered_channel,
-    render_gem_map, town_side_lut,
+    dungeon_panel_levels, exit_arrow, facing_arrow, map_percent, party_sprite_tile, question_tag,
+    remembered_channel, render_gem_map, town_side_lut,
 };
 pub use seen::{
     GemWindow, SideWindow, faithful_window_cells, frame_seen_events, gem_view_events,

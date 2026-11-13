@@ -108,14 +108,25 @@ impl OutdoorShown {
 
     /// Whether world cell `(x, y)` is in the shown set.
     pub fn contains(&self, x: u8, y: u8) -> bool {
+        self.offset(x, y).is_some()
+    }
+
+    /// The offset `(dx, dy)` from the party at which world cell `(x, y)` is
+    /// drawn, or `None` outside the window. The nearer way round the wrap
+    /// wins when both are in the window.
+    pub fn offset(&self, x: u8, y: u8) -> Option<(i32, i32)> {
         let offset = |cell: u8, party: u8, span: (i32, i32)| {
             let d = i32::from(cell.wrapping_sub(party));
             // Try the offset both ways round the 256-cell wrap.
-            [d, d - WORLD_SIDE as i32]
+            [d - WORLD_SIDE as i32, d]
                 .into_iter()
-                .any(|d| (span.0..=span.1).contains(&d))
+                .filter(|d| (span.0..=span.1).contains(d))
+                .min_by_key(|d| d.abs())
         };
-        offset(x, self.party.0, self.layout.dx) && offset(y, self.party.1, self.layout.dy)
+        Some((
+            offset(x, self.party.0, self.layout.dx)?,
+            offset(y, self.party.1, self.layout.dy)?,
+        ))
     }
 }
 
@@ -231,6 +242,23 @@ impl TownShown {
         let width = (cols.1 - cols.0 + 1) as usize;
         let at = (fy - rows.0) as usize * width + (fx - cols.0) as usize;
         self.tiles.get(at).copied().flatten()
+    }
+
+    /// The world plane and cell a side cell `(fx, fy)` shows, or `None`
+    /// for a floor or strip cell, a town with no side window, or a cell
+    /// past the window. Whether the cell is drawn is [`TownShown::tile`].
+    pub fn side_world(&self, fx: i32, fy: i32) -> Option<(WorldPlane, u8, u8)> {
+        if town_part(fx, fy) != TownPart::Side {
+            return None;
+        }
+        let window = side_window(self.scene)?;
+        let dx = TownLayout::entrance_dx(fx)?;
+        let dy = fy - TOWN_ENTRANCE_FLOOR_ROW;
+        let (ex, ey) = window.entrance;
+        let x = wrap(ex as isize + dx as isize);
+        let y = wrap(ey as isize + dy as isize);
+        window.index_of(x, y)?;
+        Some((window.plane, x, y))
     }
 
     /// Every canvas cell as `(fx, fy, part, tile)`, row-major.
