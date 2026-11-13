@@ -203,12 +203,29 @@ fn assets() -> Option<PathBuf> {
     dir.join("CASTLE.DAT").exists().then_some(dir)
 }
 
+/// A writable copy of the player's files, removed on drop. The route
+/// cases save and rewrite the OOL mirrors in the folder they run in, so
+/// they never run in `U5_TEST_ASSET_DIR` itself: other suites read its
+/// shipped bytes (the M3 gate found `BRIT.OOL` rewritten there).
+fn writable_assets(label: &str) -> Option<SaveDir> {
+    let dir = assets()?;
+    let copy = SaveDir::new(label);
+    for entry in fs::read_dir(&dir).unwrap() {
+        let entry = entry.unwrap();
+        if entry.file_type().unwrap().is_file() {
+            fs::copy(entry.path(), copy.path().join(entry.file_name())).unwrap();
+        }
+    }
+    Some(copy)
+}
+
 #[test]
 fn route_rows_record_exactly_their_discovery() {
-    let Some(dir) = assets() else {
+    let Some(copy) = writable_assets("route-rows") else {
         eprintln!("skipped: set U5_TEST_ASSET_DIR");
         return;
     };
+    let dir = copy.path();
     // (row, case, kind, kinds the same command may also record, final check)
     type Check = fn(&Counts) -> bool;
     let rows: [(&str, &str, &'static str, &[&'static str], Check); 14] = [
@@ -309,7 +326,7 @@ fn route_rows_record_exactly_their_discovery() {
         ),
     ];
     for (row, case, kind, also, check) in rows {
-        let records = route_records(&dir, case);
+        let records = route_records(dir, case);
         assert_row(row, &records, kind, also, check);
     }
 }
@@ -657,10 +674,11 @@ impl RouteTraceObserver for Digests {
 /// through the same states, frames and report with it on as with it off.
 #[test]
 fn every_route_case_is_the_same_with_the_gem_map() {
-    let Some(dir) = assets() else {
+    let Some(copy) = writable_assets("every-route") else {
         eprintln!("skipped: set U5_TEST_ASSET_DIR");
         return;
     };
+    let dir = copy.path().to_path_buf();
     let atlas = load_tile_atlas(&dir, TileGraphicsDepth::Ega16).unwrap();
     for case in route_smoke_cases() {
         let mut off = Digests::default();
