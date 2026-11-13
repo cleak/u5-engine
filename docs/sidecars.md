@@ -106,9 +106,9 @@ writable save folder.
 | `journal.u5e` | `QJRN` | The journal's clue log. |
 | `gemmap.u5e` | `GEMK` | The enhanced gem map's discoveries. |
 
-- No other per-save file exists. In this build no feature that writes one has
-  shipped, and with every enhancement off (Classic) the folder is never
-  created, read or touched.
+- No other per-save file exists. In this build only the enhanced gem map
+  writes one (`gemmap.u5e`, below); with every enhancement off (Classic) the
+  folder is never created, read or touched.
 - `SAVED.GAM` never gains a byte, so the original game still loads every
   save.
 - Each file is one container: the magic `U5EH`, a container version, the
@@ -124,6 +124,33 @@ writable save folder.
   from a newer engine is never overwritten.
 - Turning a feature off leaves its file alone; turning it on again checks the
   file against the current save.
+
+### `gemmap.u5e`: the gem map's discoveries
+
+Written only while `gem_map.enhanced` is on, after each save the game
+makes, and stamped with that save. It holds what the player has
+discovered, as the gem map draws it ([settings.md](settings.md#the-gem-map)),
+and nothing the game itself keeps:
+
+- the places entered (towns, castles, dwellings, dungeons), the shrines and
+  the Codex entered, the dungeon entrances named by a Look, and whether the
+  party has stood in the Underworld;
+- the moongates travelled through, the signs read (the cell only, never the
+  text), the trades whose shops opened in each town and, for a tavern or
+  sage, where its keeper stood, the town ladders and stairs used and which
+  way, and the town edges crossed;
+- the dungeon cells seen, one bit a cell, and what the party did at a
+  dungeon cell: a ladder climbed, a fountain drunk from, a chest opened, a
+  trap or pit found, a secret door found;
+- for each town, which cells of the land around its entrance have been seen
+  from outside.
+
+A missing, damaged or stale file shows every feature as "?" and remembers
+nothing; it can never reveal anything. Loading an older save loads that
+save's own file, so later discoveries are forgotten as the game forgets
+them, and a new character starts with none. The payload is a list of
+tagged sections (`GEMK` payload version 1); an unknown section is skipped,
+and a file from a newer engine is left alone.
 
 ## General Rules
 

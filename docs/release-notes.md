@@ -83,3 +83,51 @@ or its save files ([brightness and sprites](settings.md#brightness-and-sprites))
   the frame, the party panel and the messages keep their exact colours,
   unless you choose the whole screen (`display.brightness_scope = "frame"`).
   Black stays black, so nothing hidden in the dark ever shows.
+
+### Optional enhancements: the gem map
+
+Off unless you turn it on (`--gem-map`, or the Everything preset), and it
+never changes the game ([the gem map](settings.md#the-gem-map)).
+
+- **A gem shows a real map.** Using a gem works exactly as in the
+  original: `V` spends one gem and opens the game's view, and the next key
+  closes it. With the enhanced gem map on, that view fills the whole window
+  with your game's own tiles, shrunk, edge to edge. It **shows more ground
+  than the original gem**: outdoors 128 by 60 cells on a 16:9 screen
+  instead of 32 by 32. In a town the whole floor fills the screen, with the
+  land you have seen outside the gates dimmed beside it. In a dungeon the
+  levels you have seen stand side by side, joined by yellow boxes where a
+  ladder leads, and on a 4:3 screen PgUp and PgDn show the level above and
+  below. The party is a steady yellow box, the map is drawn at 70% light
+  so the names stand out, and it fades in and out with a short dithered
+  sweep. Like the original gem, the map shows the ground only: no people or
+  monsters.
+- **Plain labels.** Places, signs, shops, ladders and stairs, exits,
+  fountains, chests and traps you have found get a coloured ring and a
+  plain name ("Britain", "Sign", "Armoury", "Ladder down", "Exit").
+- **No spoilers.** The map names only what you have discovered, and marks
+  what it draws but you have not found with a grey "?" that says nothing
+  about what it is. It never shows a sign's text, never says "Underworld"
+  before you have been there, never draws a dungeon level you have not
+  seen, and draws secret doors and hidden traps as they looked to you
+  until you find them. What you have discovered is kept beside the save in
+  `gemmap.u5e` ([sidecars.md](sidecars.md#gemmapu5e-the-gem-maps-discoveries)).
+- **Known faults of the original view (not of this map).** A paired check
+  against the original under DOSBox found that this engine's own 1.0.1 gem
+  view differs from the original's: in towns it draws the townsfolk, which
+  the original does not; outdoors it centres on the party where the
+  original snaps to its map blocks; and in dungeons its symbols use other
+  colours (D0.2). Separately, the party panel turns white after U-Use,
+  where the original's does not (D0.3). These are faults of the faithful
+  game, kept as they are in this release while a fix is decided; the
+  enhanced gem map draws terrain only in towns, as the original does.
+
+Checks behind it: using a gem outdoors, in a town and in a dungeon, with no
+gem and in combat spends and shows exactly what the original does with the
+map on and off (the gem count, the view, the random numbers, the clock, the
+messages, the key that closes the view, and the save files); every
+enhancement configuration in the toggle matrix plays exactly as the
+original while gems are used; the route smoke is unchanged from 1.0.1; and a
+no-spoiler suite checks every map drawn over a fresh character, a walk,
+each dungeon, the Underworld and random discoveries, comparing every label
+with the game's sign and conversation text.

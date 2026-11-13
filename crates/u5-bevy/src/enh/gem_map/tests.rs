@@ -166,6 +166,63 @@ fn the_plugin_adds_its_four_systems_only_when_on() {
     let _ = fs::remove_dir_all(dir);
 }
 
+/// Every system of the whole `--visual` app, by name, sorted.
+fn app_systems(launch: &VisualLaunchConfig) -> Vec<String> {
+    let shell = crate::enh::equivalence::Shell::new(
+        test_state(open_grid(), 5, 5),
+        &Scene::synthetic(),
+        launch,
+        |_| {},
+    );
+    let mut names: Vec<String> = shell
+        .app
+        .world()
+        .resource::<bevy::ecs::schedule::Schedules>()
+        .iter()
+        .flat_map(|(_, schedule)| {
+            schedule
+                .graph()
+                .systems()
+                .map(|(_, system, _)| system.name().to_string())
+                .collect::<Vec<_>>()
+        })
+        .collect();
+    names.sort();
+    names
+}
+
+/// Design 10.6 "Trajectory equivalence" and foundation 1.4.3 (build plan
+/// M3-18): with only `gem_map.enhanced` on, the app's schedules hold the
+/// 1.0.1 app's systems, the foundation's (as any one feature brings them)
+/// and this chapter's, nothing of any other chapter.
+#[test]
+fn with_only_the_gem_map_on_the_app_holds_only_this_chapters_systems() {
+    let classic = app_systems(&VisualLaunchConfig::classic());
+    // The foundation alone: another feature that adds no system of its own.
+    let mut foundation = VisualLaunchConfig::classic();
+    foundation
+        .enhancements
+        .toggles
+        .set(Toggle::EnhancementsFreezeOverlays, true);
+    let foundation = app_systems(&foundation);
+    let gem = app_systems(&gem_launch(None));
+    let extra: Vec<&String> = gem
+        .iter()
+        .filter(|name| !classic.contains(name) && !foundation.contains(name))
+        .collect();
+    assert!(!extra.is_empty(), "the gem map added nothing");
+    for name in &extra {
+        assert!(
+            name.contains("gem_map") || name.contains("enh::input"),
+            "{name} is no system of the gem map"
+        );
+    }
+    // Every 1.0.1 system is still there.
+    for name in &classic {
+        assert!(gem.contains(name), "{name} is gone");
+    }
+}
+
 #[test]
 fn every_system_waits_for_the_toggle() {
     let dir = save_dir();

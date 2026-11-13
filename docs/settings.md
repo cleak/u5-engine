@@ -299,6 +299,25 @@ map over the whole window instead of the original's small square:
   `--gem-map-canvas WxH` (320x200 when not given). Without `--gem-map`, or
   under the parity lock, nothing is written.
 
+**What the map never tells.** The map shows what the original gem shows
+and what you have already seen or done, nothing more:
+
+- a name appears only once you have been there (a town, castle, dwelling,
+  dungeon, shrine or the Codex), read it (a dungeon entrance named by a
+  Look), used it (a moongate, a ladder or stairs, which also gives its
+  direction) or done business there (a shop's trade, and a tavern or sage
+  only where you talked to its keeper);
+- a "?" is grey whatever is under it, and the "?" are placed nearest first,
+  so neither their colour nor which one wins a crowded spot tells what they
+  are; the map marks only what it draws, so a moongate gets a "?" only while
+  the gate is up, and nothing buried, hidden or carried gets a mark;
+- a sign is labelled `Sign`, never with its text, and no label is ever a
+  sign's or a person's words;
+- the word `Underworld` appears only once you have stood there;
+- dungeon levels you have not seen stay black, a level appears as a black
+  panel only when a ladder or pit you can see leads to it, and secret doors
+  and hidden traps look as they did to you until you find them.
+
 Nothing here changes the game: the gem is spent by the game itself, the
 original view is still drawn underneath, and the game's state, random
 numbers, timing and save files are exactly those of the same play with the

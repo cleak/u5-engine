@@ -234,6 +234,12 @@ impl GemFeature {
             .map_or(NEUTRAL_GREY, FeatureCategory::colour)
     }
 
+    /// The kind, known or not. Only the no-spoiler audit asks this of an
+    /// undiscovered feature (M3-18); nothing that draws does.
+    pub(crate) fn kind_for_audit(&self) -> FeatureCategory {
+        self.category
+    }
+
     /// The record key the feature is known by, when it has an identity.
     pub fn key(&self) -> Option<FeatureKey> {
         self.key

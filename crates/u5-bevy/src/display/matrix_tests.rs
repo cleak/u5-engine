@@ -52,6 +52,7 @@ use crate::enh::VisualLaunchConfig;
 use crate::enh::equivalence::{
     FrameRecord, Owner, Scene, Shell, ShellRun, Timeline, compare_shell_runs,
 };
+use crate::enh::gem_map::{GemMap, GemMapNode};
 use crate::enh::present::{PresentHost, PresentSteps, StepOrder};
 
 /// The window most runs use: the named 16:9 layout (a 512x240 canvas).
@@ -114,6 +115,13 @@ impl Config {
         self.settings.iter().any(
             |s| matches!(s, CliSetting::Set { key, value } if key == "display.brightness" && value != "100"),
         )
+    }
+
+    /// Whether the settings turn the enhanced gem map on (chapter 10).
+    fn gem(&self) -> bool {
+        self.settings
+            .iter()
+            .any(|s| matches!(s, CliSetting::Enable(key) if key == "gem_map.enhanced"))
     }
 
     /// Whether the settings composite sprites over terrain (chapter 9).
@@ -202,6 +210,7 @@ fn alone() -> Vec<Config> {
         grow_sub("centre_party=true", on("display.centre_party")),
     ];
     configs.extend(light_alone());
+    configs.extend(gem_alone());
     for (name, window) in [
         ("grow_left@3440x1440", (3440.0, 1440.0)),
         ("grow_left@1920x1080", (1920.0, 1080.0)),
@@ -246,6 +255,82 @@ fn light_alone() -> Vec<Config> {
     light_values()
         .into_iter()
         .map(|(name, settings)| Config::new(name, settings))
+        .collect()
+}
+
+/// Chapter 10's keys (design 10.4.1, build plan M3-18), each away from its
+/// default. A sub-key brings `gem_map.enhanced` with it, since it is inert
+/// without it; `brightness_link` comes with a dimmed
+/// `display.map_brightness`, which it would follow.
+fn gem_values() -> Vec<(&'static str, Vec<CliSetting>)> {
+    let gem = |more: Vec<CliSetting>| {
+        let mut settings = vec![on("gem_map.enhanced")];
+        settings.extend(more);
+        settings
+    };
+    vec![
+        ("gem_map.enhanced", gem(vec![])),
+        ("gem_map.labels=false", gem(vec![off("gem_map.labels")])),
+        ("gem_map.sweep=false", gem(vec![off("gem_map.sweep")])),
+        (
+            "gem_map.map_brightness=25",
+            gem(vec![set("gem_map.map_brightness", "25")]),
+        ),
+        (
+            "gem_map.map_brightness=100",
+            gem(vec![set("gem_map.map_brightness", "100")]),
+        ),
+        (
+            "gem_map.brightness_link",
+            gem(vec![
+                on("gem_map.brightness_link"),
+                set("display.map_brightness", "40"),
+            ]),
+        ),
+        (
+            "gem_map.town_surroundings=false",
+            gem(vec![off("gem_map.town_surroundings")]),
+        ),
+        (
+            "gem_map.dungeon_stack=false",
+            gem(vec![off("gem_map.dungeon_stack")]),
+        ),
+        (
+            "gem_map.wrap_rows=false",
+            gem(vec![off("gem_map.wrap_rows")]),
+        ),
+        (
+            "gem_map.level_paging=false",
+            gem(vec![off("gem_map.level_paging")]),
+        ),
+        (
+            "gem_map.glyphs=gem-faithful",
+            gem(vec![set("gem_map.glyphs", "gem-faithful")]),
+        ),
+    ]
+}
+
+fn gem_alone() -> Vec<Config> {
+    gem_values()
+        .into_iter()
+        .map(|(name, settings)| Config::new(name, settings))
+        .collect()
+}
+
+/// The gem keys of the pairwise matrix: the map itself, without its
+/// sweep, with the original glyphs and with one panel.
+fn gem_pair_values() -> Vec<(&'static str, Vec<CliSetting>)> {
+    gem_values()
+        .into_iter()
+        .filter(|(name, _)| {
+            matches!(
+                *name,
+                "gem_map.enhanced"
+                    | "gem_map.sweep=false"
+                    | "gem_map.glyphs=gem-faithful"
+                    | "gem_map.dungeon_stack=false"
+            )
+        })
         .collect()
 }
 
@@ -344,6 +429,9 @@ fn pair_values() -> Vec<(&'static str, Vec<CliSetting>)> {
             ],
         ),
     ]
+    .into_iter()
+    .chain(gem_pair_values())
+    .collect()
 }
 
 /// Every pair of [`pair_values`], with Ctrl+P typed as in [`column`].
@@ -380,6 +468,8 @@ struct Script {
     keys: Vec<KeyCode>,
     /// The plain top-down view, where the grow-left canvas is drawn.
     top_down: bool,
+    /// The keys use a gem (V), so the enhanced gem map shows.
+    gem: bool,
 }
 
 /// Frames between the player's keys, and after the last.
@@ -506,6 +596,41 @@ const DUNGEON: [KeyCode; 10] = [
     KeyCode::ArrowUp,
 ];
 
+/// A walk with three gems used (chapter 10): each V opens the gem view, the
+/// next key closes it and is thrown away, as in 1.0.1. The first close
+/// comes during the open sweep, the others after it.
+const GEM_WALK: [KeyCode; 12] = [
+    KeyCode::KeyV,
+    KeyCode::ArrowUp,
+    KeyCode::ArrowLeft,
+    KeyCode::Space,
+    KeyCode::KeyV,
+    KeyCode::Space,
+    KeyCode::ArrowDown,
+    KeyCode::ArrowRight,
+    KeyCode::KeyV,
+    KeyCode::ArrowDown,
+    KeyCode::ArrowUp,
+    KeyCode::Space,
+];
+
+/// The dungeon with three gems used. PgUp and PgDn, which a one-panel
+/// map takes, are left to [`the_paging_equivalence_holds_in_the_matrix`].
+const GEM_DUNGEON: [KeyCode; 12] = [
+    KeyCode::KeyV,
+    KeyCode::KeyW,
+    KeyCode::KeyA,
+    KeyCode::KeyV,
+    KeyCode::Space,
+    KeyCode::KeyD,
+    KeyCode::KeyV,
+    KeyCode::ArrowDown,
+    KeyCode::ArrowUp,
+    KeyCode::Space,
+    KeyCode::ArrowUp,
+    KeyCode::KeyS,
+];
+
 fn at_clock(mut state: PlayState, hour: u8, minute: u8) -> PlayState {
     state.clock = GameClock::new(hour, minute).unwrap();
     state
@@ -524,8 +649,13 @@ fn synthetic_scripts(scratch: &Scratch) -> Vec<Script> {
         save_seed: seed.clone(),
         keys: keys.to_vec(),
         top_down,
+        gem: keys.contains(&KeyCode::KeyV),
     };
     let town = || test_state(open_grid(), 5, 5);
+    let with_gems = |mut state: PlayState| {
+        state.gems = 3;
+        state
+    };
     let world = || world_state(open_world_grid(), 40, 40);
     let mut talking = town();
     crate::seed_visual_key_route_conversation(&mut talking);
@@ -556,6 +686,24 @@ fn synthetic_scripts(scratch: &Scratch) -> Vec<Script> {
         ),
         script("camp flash", flash, &WALK, true),
         script("potion sweep", sweep, &WALK, true),
+        script(
+            "gem outdoors",
+            with_gems(at_clock(world(), 12, 0)),
+            &GEM_WALK,
+            true,
+        ),
+        script("gem town", with_gems(town()), &GEM_WALK, true),
+        script(
+            "gem dungeon",
+            with_gems(u5_runtime::test_fixtures::dungeon_state(
+                open_dungeon_record(),
+                0,
+                1,
+                1,
+            )),
+            &GEM_DUNGEON,
+            false,
+        ),
     ]
 }
 
@@ -577,6 +725,10 @@ struct Trace {
     steps: Vec<StepOrder>,
     /// Whether the compositing masks were built from the atlas.
     masks_built: bool,
+    /// Frames on which the enhanced gem map's node was shown.
+    gem_frames: usize,
+    /// Whether the gem map's plugin was in the app.
+    gem_plugin: bool,
 }
 
 fn copy_dir(from: &Path, to: &Path) {
@@ -622,6 +774,7 @@ fn run(
     // The game state is inserted on the first frame.
     let mut clock = None;
     let mut open_frames = 0;
+    let mut gem_frames = 0;
     for index in 0..timeline.len() {
         frames.push(shell.step(timeline.frame(index)));
         let now = shell.visual().state.animation.frame;
@@ -638,7 +791,11 @@ fn run(
         {
             open_frames += 1;
         }
+        if gem_map_shown(&mut shell) {
+            gem_frames += 1;
+        }
     }
+    let gem_plugin = shell.app.world().contains_resource::<GemMap>();
     let composes = shell
         .app
         .world()
@@ -665,7 +822,16 @@ fn run(
         open_frames,
         steps,
         masks_built,
+        gem_frames,
+        gem_plugin,
     }
+}
+
+/// Whether the gem map's node is on screen this frame.
+fn gem_map_shown(shell: &mut Shell) -> bool {
+    let world = shell.app.world_mut();
+    let mut query = world.query_filtered::<(), With<GemMapNode>>();
+    query.iter(world).next().is_some()
 }
 
 /// Every difference between the off run and `on`, as lines.
@@ -727,6 +893,7 @@ fn check(script: &Script, configs: &[Config]) -> Vec<String> {
             );
             assert_eq!(off.composes, 0);
             assert!(off.steps.is_empty() && !off.masks_built);
+            assert!(!off.gem_plugin && off.gem_frames == 0);
             offs.push((off_key, off));
         }
         let off = &offs.iter().find(|(key, _)| *key == off_key).unwrap().1;
@@ -764,6 +931,25 @@ fn check(script: &Script, configs: &[Config]) -> Vec<String> {
                 "{} / {}: the sprite masks were never built",
                 script.name, config.name
             );
+        }
+        // Chapter 10: the gem map is in the app only when it is on, and it
+        // really showed wherever the script used a gem.
+        assert_eq!(
+            on.gem_plugin,
+            config.gem(),
+            "{} / {}: the gem map plugin",
+            script.name,
+            config.name
+        );
+        if config.gem() && script.gem {
+            assert!(
+                on.gem_frames > 0,
+                "{} / {}: the gem map never showed",
+                script.name,
+                config.name
+            );
+        } else {
+            assert_eq!(on.gem_frames, 0, "{} / {}", script.name, config.name);
         }
         if config.column_keys && config.grow_left() && script.top_down {
             assert!(
@@ -829,10 +1015,25 @@ fn the_potion_sweep_is_left_alone() {
 }
 
 #[test]
+fn a_gem_used_outdoors_is_left_alone() {
+    alone_and_column_on("gem outdoors");
+}
+
+#[test]
+fn a_gem_used_in_a_town_is_left_alone() {
+    alone_and_column_on("gem town");
+}
+
+#[test]
+fn a_gem_used_in_a_dungeon_is_left_alone() {
+    alone_and_column_on("gem dungeon");
+}
+
+#[test]
 fn every_pair_of_display_keys_leaves_the_shortest_script_alone() {
     let scratch = Scratch::new("pairs");
     let mut configs = pairs();
-    assert_eq!(configs.len(), 17 * 16 / 2);
+    assert_eq!(configs.len(), 21 * 20 / 2);
     configs.extend(light_pairs());
     let script = synthetic_scripts(&scratch)
         .into_iter()
@@ -840,6 +1041,102 @@ fn every_pair_of_display_keys_leaves_the_shortest_script_alone() {
         .unwrap();
     let mismatches = check(&script, &configs);
     assert!(mismatches.is_empty(), "{}", mismatches.join("\n"));
+}
+
+/// Whether `config` pages a one-panel dungeon map in `window` (10.2.6,
+/// D10.12): the gem map on with `level_paging`, on a 4:3 canvas or with
+/// the stack off.
+fn pages(config: &Config, window: (f32, f32)) -> bool {
+    let disabled = |key: &str| {
+        config
+            .settings
+            .iter()
+            .any(|s| matches!(s, CliSetting::Disable(k) if k == key))
+    };
+    config.gem()
+        && !disabled("gem_map.level_paging")
+        && (window.0 / window.1 < 1.5 || disabled("gem_map.dungeon_stack"))
+}
+
+/// The paging equivalence again, in the matrix (10.6, build plan M3-18):
+/// in a dungeon with levels above and below, V, then PgUp, PgDn and PgDn
+/// inside the open map, Space to close it and two steps. Where the
+/// configuration pages, the presses are the map's and the off run is the
+/// player who did not press them; everywhere else they are the game's
+/// keys in both runs (PgUp closes the view, as in 1.0.1). Every gem key
+/// alone and `gem_map.enhanced` with every other key of the pairwise
+/// matrix, at 4:3 and 16:9.
+#[test]
+fn the_paging_equivalence_holds_in_the_matrix() {
+    let scratch = Scratch::new("paging");
+    let seed = synthetic_save_seed(&scratch);
+    let mut state = u5_runtime::test_fixtures::dungeon_state(open_dungeon_record(), 2, 1, 1);
+    state.grid[u5_runtime::dungeon_cell_index(2, 2, 1)] = 0x10;
+    state.grid[u5_runtime::dungeon_cell_index(2, 1, 2)] = 0x20;
+    state.gems = 2;
+    let script = Script {
+        name: "paging",
+        state,
+        scene: inked_scene(),
+        save_seed: seed,
+        keys: Vec::new(),
+        top_down: false,
+        gem: true,
+    };
+    let mut configs = gem_alone();
+    for (name, settings) in pair_values() {
+        if name.starts_with("gem_map.") {
+            continue;
+        }
+        let mut both = vec![on("gem_map.enhanced")];
+        both.extend(settings);
+        configs.push(Config::new(&format!("gem_map.enhanced + {name}"), both));
+    }
+    let mut mismatches = Vec::new();
+    let mut paged = 0;
+    for window in [(1600.0, 1200.0), W16] {
+        let off_key = |pages: bool| pages;
+        let mut offs: Vec<(bool, Trace)> = Vec::new();
+        for config in &configs {
+            let pages = pages(config, window);
+            let owner = if pages { Owner::Feature } else { Owner::Game };
+            let mut timeline = Timeline::new(150);
+            timeline.game_tap(5, KeyCode::KeyV);
+            for (frame, key) in [
+                (50, KeyCode::PageUp),
+                (60, KeyCode::PageDown),
+                (70, KeyCode::PageDown),
+            ] {
+                timeline.tap(frame, key, owner);
+            }
+            timeline
+                .game_tap(90, KeyCode::Space)
+                .game_tap(105, KeyCode::ArrowUp)
+                .game_tap(120, KeyCode::KeyW);
+            if !offs.iter().any(|(key, _)| *key == off_key(pages)) {
+                let off = run(
+                    &script,
+                    &VisualLaunchConfig::classic(),
+                    window,
+                    &timeline.without_feature(),
+                );
+                offs.push((off_key(pages), off));
+            }
+            let off = &offs
+                .iter()
+                .find(|(key, _)| *key == off_key(pages))
+                .unwrap()
+                .1;
+            let on = run(&script, &config.launch(), window, &timeline);
+            for line in differences(off, &on) {
+                mismatches.push(format!("{window:?} {}: {line}", config.name));
+            }
+            assert!(on.gem_frames > 0, "{window:?} {}: no map", config.name);
+            paged += usize::from(pages);
+        }
+    }
+    assert!(mismatches.is_empty(), "{}", mismatches.join("\n"));
+    assert!(paged > 10, "only {paged} run(s) paged");
 }
 
 /// The ticks and the scripted save are compared, not only the digest: a
@@ -867,7 +1164,8 @@ fn an_extra_tick_and_a_changed_save_are_caught() {
 
 /// The 2.6 scripts on the real files: the overworld at noon and at night,
 /// Britain at night with its lamps, a conversation, a combat, a dungeon,
-/// the camp flash and the potion sweep, each with every key alone and the
+/// the camp flash and the potion sweep, and chapter 10's gems used
+/// outdoors, in Britain and in a dungeon, each with every key alone and the
 /// column; the pairs on the overworld walk. Runs only when
 /// `U5_TEST_ASSET_DIR` names a copy of the game.
 #[test]
@@ -918,6 +1216,11 @@ fn the_matrix_leaves_the_real_game_alone() {
         save_seed: game.clone(),
         keys: keys.to_vec(),
         top_down,
+        gem: keys.contains(&KeyCode::KeyV),
+    };
+    let with_gems = |mut state: PlayState| {
+        state.gems = 3;
+        state
     };
     const COMBAT: [KeyCode; 10] = [
         KeyCode::Space,
@@ -940,6 +1243,32 @@ fn the_matrix_leaves_the_real_game_alone() {
         script("dungeon", dungeon, &DUNGEON, false),
         script("camp flash", flash, &WALK, true),
         script("potion sweep", sweep, &WALK, true),
+        script(
+            "gem outdoors",
+            with_gems(load(world(12, 0))),
+            &GEM_WALK,
+            true,
+        ),
+        script(
+            "gem in Britain",
+            with_gems(load(PlayOptions {
+                target: PlayTarget::from_key("TOWNE:1").unwrap(),
+                start: Some((15, 19)),
+                clock: GameClock::new(12, 0).unwrap(),
+                ..PlayOptions::default()
+            })),
+            &GEM_WALK,
+            true,
+        ),
+        script(
+            "gem dungeon",
+            with_gems(load(PlayOptions {
+                target: PlayTarget::Dungeon(DungeonScene::new(0x21).unwrap()),
+                ..PlayOptions::default()
+            })),
+            &GEM_DUNGEON,
+            false,
+        ),
     ];
     let mut configs = alone();
     configs.push(column());

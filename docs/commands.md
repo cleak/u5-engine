@@ -48,9 +48,10 @@ uncertain, read the spec and the focused runtime tests before editing.
 The optional enhancements ([settings.md](settings.md)) add their own keys.
 Each key exists only while its feature is on, so with every enhancement off
 (Classic, the default) no key below does anything the 1.0.1 game does not.
-In this build F11 (`display.fullscreen_key`) and Ctrl+P (`display.grow_left`,
-see [settings.md](settings.md#the-wider-world-view)) are available; the
-others arrive with their features.
+In this build F11 (`display.fullscreen_key`), Ctrl+P (`display.grow_left`,
+see [settings.md](settings.md#the-wider-world-view)) and PgUp and PgDn on the
+gem map (`gem_map.level_paging`, see [settings.md](settings.md#the-gem-map))
+are available; the others arrive with their features.
 
 | Default | `[keys]` setting | Action | Bound while |
 |---|---|---|---|
@@ -64,8 +65,15 @@ others arrive with their features.
 | Ctrl+Shift+A | `keys.auto_party` | Auto-combat for the party | `combat.auto` is on |
 | Ctrl+F | `keys.auto_until_done` | Auto-combat until the fight ends | `combat.auto` is on |
 | Ctrl+F12 | `keys.cheats` | Open the cheats page | a cheat or `cheats.state_watch` is on |
+| PgUp, PgDn | none (fixed) | Show the dungeon level above or below on the gem map | `gem_map.enhanced` and `gem_map.level_paging` are on and a gem shows a dungeon as one level (4:3, or `gem_map.dungeon_stack` off) |
 
-- None of the defaults is a key the game reads.
+- None of the defaults is a key the game reads, except PgUp and PgDn, which
+  the gem map takes only while the game's gem view of a dungeon is up and
+  drawn as one level. Then the game would only close its view and throw the
+  key away, so a page turn leaves the game exactly as if the key had not
+  been pressed; any other key closes the view as usual. At every other time
+  PgUp and PgDn are the game's own diagonal moves, and with
+  `gem_map.level_paging` off they close the view as in the original.
 - A hotkey counts only when it is the first key typed in its frame and no key
   is waiting ahead of it; otherwise the game gets it and drops it, as 1.0.1
   does, and a short note explains.

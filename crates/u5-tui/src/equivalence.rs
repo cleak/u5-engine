@@ -45,7 +45,10 @@ use u5_runtime::{
 };
 
 use crate::enhancement_settings::{check_cli_key, resolve_launch};
-use crate::gem_map::TerminalGemMap;
+use crate::gem_equivalence::{
+    check_gem_expectation, compare_gem_runs, gem_consumption_cases, run_gem_case,
+};
+use crate::gem_map::{GemPng, TerminalGemMap};
 use crate::play_loop::{
     NoScriptTokenHooks, ScriptTokenHooks, ScriptTokenIntercept, play_script_state_line,
     replay_play_script_commands_hooked,
@@ -605,9 +608,45 @@ fn configuration_summary(resolved: &ResolvedEnhancements, same_as: Option<&str>)
     summary
 }
 
+/// The terminal features of a gem consumption case's on run: as
+/// [`terminal_features`], except that the gem map, when it is on, also
+/// draws the map a window would show each time a gem view opens, with the
+/// configuration's own `[gem_map]` keys and the real files, into `scratch`
+/// (removed after the suite). So the cases prove the renderer, too, leaves
+/// the game alone.
+pub fn gem_case_features(
+    resolved: &ResolvedEnhancements,
+    game_dir: &Path,
+    scratch: &Path,
+) -> Vec<Box<dyn TerminalFeature>> {
+    terminal_features(resolved)
+        .into_iter()
+        .map(|feature| -> Box<dyn TerminalFeature> {
+            if feature.toggle() != Toggle::GemMapEnhanced {
+                return feature;
+            }
+            let png = GemPng::new(
+                scratch,
+                gem_canvas_16_9(),
+                game_dir,
+                TileGraphicsDepth::Ega16,
+                resolved.gem_map(),
+                resolved.display_map_brightness(),
+            );
+            Box::new(TerminalGemMap::in_memory().with_png(png))
+        })
+        .collect()
+}
+
+/// The 16:9 gem canvas (512x240), where the suite's pictures are drawn.
+fn gem_canvas_16_9() -> u5_automap::gem::GemCanvas {
+    u5_automap::gem::GemCanvas { w: 512, h: 240 }
+}
+
 /// `u5-engine --equivalence-suite OUT [--matrix FILE] GAME_DIR`.
 ///
-/// For every route-smoke case: the all-off run, then Classic and each
+/// For every route-smoke case, and then every gem consumption case
+/// ([`crate::gem_equivalence`]): the all-off run, then Classic and each
 /// matrix row with that row's features on, each compared against the
 /// all-off run with the row's own events removed. A row that resolves
 /// exactly as an earlier one shares its runs ([`plan_configurations`]).
@@ -741,6 +780,63 @@ pub fn run_equivalence_suite(
             results.insert(index, (result, detail, steps, saved, final_digest));
         }
     }
+    // The gem consumption cases (design 10.6, M3-18): not route-smoke
+    // cases, so Classic's manifest and its digest are untouched.
+    let gem_cases = gem_consumption_cases();
+    let gem_scratch = route_smoke_temp_dir("gem-cases", "png")?;
+    for case in &gem_cases {
+        let baseline = run_gem_case(game_dir, case, &mut NoScriptTokenHooks, "gem-off")?;
+        let mut results: BTreeMap<usize, (&'static str, String, usize)> = BTreeMap::new();
+        for (index, ((name, resolved), same)) in configs.iter().zip(&plan).enumerate() {
+            if let Some(first) = *same {
+                let (result, detail, steps) = results[&first].clone();
+                let detail = if detail.is_empty() {
+                    format!("as {}", configs[first].0)
+                } else {
+                    format!("as {}: {detail}", configs[first].0)
+                };
+                lines.push(report_line(case.name, name, result, steps, 0, "-", &detail));
+                continue;
+            }
+            let mut hooks = FeatureHooks::new(gem_case_features(resolved, game_dir, &gem_scratch));
+            let on = run_gem_case(game_dir, case, &mut hooks, "gem-on")?;
+            let events = hooks.into_events();
+            let off = if events.is_empty() {
+                baseline.clone()
+            } else {
+                let mut replay = ReplayHooks::new(&events);
+                run_gem_case(game_dir, case, &mut replay, "gem-replay")?
+            };
+            let mut problems: Vec<String> = compare_gem_runs(&off, &on)
+                .iter()
+                .map(ToString::to_string)
+                .collect();
+            for (run, which) in [(&off, "off"), (&on, "on")] {
+                if let Err(why) = check_gem_expectation(case, run) {
+                    problems.push(format!("{which}: not as 1.0.1: {why}"));
+                }
+            }
+            let (result, detail) = if problems.is_empty() {
+                ("equal", String::new())
+            } else {
+                let detail = problems.join("; ");
+                failures.push(format!("{} {name}: {detail}", case.name));
+                ("DIFFER", detail)
+            };
+            println!("equivalence {} {name}: {result}", case.name);
+            let steps = on.beats.len().saturating_sub(1);
+            let saved = on.saves.iter().filter(|(_, hash)| hash.is_some()).count();
+            let digest = on
+                .beats
+                .last()
+                .map_or_else(|| "-".into(), |beat| beat.digest.to_string());
+            lines.push(report_line(
+                case.name, name, result, steps, saved, &digest, &detail,
+            ));
+            results.insert(index, (result, detail, steps));
+        }
+    }
+    let _ = fs::remove_dir_all(&gem_scratch);
     let report_path = out_dir.join(REPORT_FILE);
     let mut report = fs::File::create(&report_path)?;
     for line in &lines {

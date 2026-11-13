@@ -213,6 +213,146 @@ fn every_row_of_the_committed_matrix_equals_the_off_run_in_a_window() {
     );
 }
 
+/// The committed matrix's rows (`NAME<TAB>KEY=VALUE,...`), resolved as a
+/// host resolves `--set KEY=VALUE`.
+fn committed_matrix_rows() -> Vec<(String, ResolvedEnhancements)> {
+    let path = u5_runtime::test_fixtures::workspace_file(MATRIX_FILE);
+    let text = std::fs::read_to_string(&path).expect("the committed matrix");
+    text.lines()
+        .filter(|line| !line.starts_with('#'))
+        .map(|line| {
+            let (name, settings) = line.split_once('\t').expect("NAME<TAB>SETTINGS");
+            let settings: Vec<CliSetting> = settings
+                .split(',')
+                .filter(|setting| !setting.is_empty())
+                .map(|setting| {
+                    let (key, value) = setting.split_once('=').expect("KEY=VALUE");
+                    CliSetting::Set {
+                        key: key.into(),
+                        value: value.into(),
+                    }
+                })
+                .collect();
+            let resolved = resolve(ResolveInput {
+                stored: None,
+                cli: &settings,
+                lock: LockState::Off,
+                caps: HostCapabilities::ALL,
+            });
+            (name.to_string(), resolved)
+        })
+        .collect()
+}
+
+/// Outdoors on a synthetic meadow with three gems.
+fn outdoors_with_gems() -> PlayState {
+    let mut state = u5_runtime::test_fixtures::world_state(
+        u5_runtime::test_fixtures::open_world_grid(),
+        100,
+        100,
+    );
+    state.gems = 3;
+    state
+}
+
+/// Three gems used (design 10.6, build plan M3-18): the first view closed
+/// during its open sweep, the second after it, the third by Page Up
+/// (outdoors it is the game's key), with steps between.
+fn gem_timeline() -> Timeline {
+    let mut timeline = Timeline::new(200);
+    timeline
+        .game_tap(5, KeyCode::KeyV)
+        .game_tap(15, KeyCode::ArrowUp)
+        .game_tap(30, KeyCode::ArrowLeft)
+        .game_tap(45, KeyCode::KeyV)
+        .game_tap(95, KeyCode::Space)
+        .game_tap(110, KeyCode::ArrowDown)
+        .game_tap(125, KeyCode::KeyV)
+        .game_tap(165, KeyCode::PageUp)
+        .game_tap(180, KeyCode::ArrowRight);
+    timeline
+}
+
+/// Counts the frames on which the gem map's node is up.
+#[derive(Resource, Clone, Default)]
+struct GemFrames(Arc<Mutex<usize>>);
+
+fn count_gem_frames(
+    nodes: Query<(), With<crate::enh::gem_map::GemMapNode>>,
+    frames: Res<GemFrames>,
+) {
+    if !nodes.is_empty() {
+        *frames.0.lock().unwrap() += 1;
+    }
+}
+
+/// Every row of the committed matrix, "all on except cheats" among them,
+/// equals the off run while gems are used outdoors in a 16:9 window
+/// (design 10.6 "Trajectory equivalence", build plan M3-18): the digest
+/// (which holds the gem count, the view overlay, its idle polls, the
+/// random state, the clock and the transcript), the original frame and the
+/// key queue, frame by frame. The gem map really showed on every row that
+/// turns it on, and never on another.
+#[test]
+fn every_row_of_the_committed_matrix_leaves_a_used_gem_alone() {
+    let rows = committed_matrix_rows();
+    assert_eq!(rows.len(), toggle_matrix().len());
+    assert!(
+        rows.iter()
+            .any(|(name, _)| name == u5_runtime::enhancements::ALL_ON_EXCEPT_CHEATS)
+    );
+    let timeline = gem_timeline();
+    let start = outdoors_with_gems();
+    // The script is not vacuous: in 1.0.1 it spends all three gems.
+    let mut shell = Shell::new(
+        start.clone(),
+        &Scene::synthetic(),
+        &VisualLaunchConfig::classic(),
+        |_| {},
+    );
+    for frame in 0..timeline.len() {
+        shell.step(timeline.frame(frame));
+    }
+    assert_eq!(shell.visual().state.gems, 0);
+    assert!(shell.visual().state.active_view_overlay.is_none());
+    let mut shown_rows = 0;
+    for (name, resolved) in rows {
+        let gem_on = resolved.toggles.on(Toggle::GemMapEnhanced);
+        let frames = GemFrames::default();
+        let launch = VisualLaunchConfig {
+            enhancements: resolved,
+            ..VisualLaunchConfig::classic()
+        };
+        let counter = frames.clone();
+        let mismatches = check_shell_equivalence(
+            &start,
+            &Scene::synthetic(),
+            &timeline,
+            &launch,
+            move |app: &mut App| {
+                app.world_mut().spawn(Window {
+                    resolution: bevy::window::WindowResolution::new(2560.0, 1440.0),
+                    ..default()
+                });
+                app.insert_resource(counter)
+                    .add_systems(Last, count_gem_frames);
+            },
+        );
+        assert_eq!(mismatches, [], "{name}");
+        let shown = *frames.0.lock().unwrap();
+        if gem_on {
+            assert!(shown > 0, "{name}: the gem map never showed");
+            shown_rows += 1;
+        } else {
+            assert_eq!(shown, 0, "{name}: the gem map showed while off");
+        }
+    }
+    assert!(
+        shown_rows > 2,
+        "only {shown_rows} row(s) turn the gem map on"
+    );
+}
+
 // ---------------------------------------------------------------------------
 // A Live overlay.
 

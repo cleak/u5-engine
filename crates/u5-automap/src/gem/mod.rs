@@ -24,6 +24,8 @@
 //! - [`shown`]: the shown set, the cells drawn and their tiles, cached per
 //!   open in [`GemViewState`] (10.2.3, D-M3.5, M3-10);
 //! - [`raster`]: [`render_gem_map`], the CPU raster (10.3.4, M3-10);
+//! - [`spoiler`]: the no-spoiler audit of an open view (1.4.7, 10.6,
+//!   M3-18), which `spoiler_tests` runs over synthetic and real corpora;
 //! - `timing_tests`: the probe, observe and render budgets (10.6, M3-17).
 
 pub mod dungeon;
@@ -38,6 +40,7 @@ pub mod raster;
 pub mod seen;
 pub mod session;
 pub mod shown;
+pub mod spoiler;
 
 pub use dungeon::{DungeonCell, DungeonInputs, DungeonLit, DungeonShown, DungeonSlot, leads};
 pub use features::{
@@ -82,7 +85,11 @@ pub use shown::{
     GemShown, GemViewState, OutdoorShown, TownInputs, TownPart, TownShown, gem_view_open,
     town_part, town_world_plane,
 };
+pub use spoiler::{SpoilerReport, audit_gem_view, event_for_key, flip_changes, kind_tile};
 
+#[cfg(test)]
+#[path = "spoiler_tests.rs"]
+mod spoiler_tests;
 #[cfg(test)]
 #[path = "timing_tests.rs"]
 mod timing_tests;

@@ -3858,7 +3858,7 @@ fn reload_route_smoke_state_from_checkpoint(
     Ok(())
 }
 
-fn apply_route_smoke_case_setup(
+pub(crate) fn apply_route_smoke_case_setup(
     state: &mut PlayState,
     case_name: &str,
     game_dir: &Path,

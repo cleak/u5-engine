@@ -1,0 +1,11 @@
+# Ultima V gem consumption equivalence cases (Phase B design 10.6).
+# Generated from u5_tui::gem_equivalence; a test keeps this file equal
+# to it (cargo test -p u5-tui --test gem_equivalence;
+# U5_BLESS_GEM_CASES=1 rewrites it). The equivalence suite runs every
+# case under Classic and each matrix row; none is a route-smoke case.
+# name	place	gems	script	expect
+gem-outdoors	outdoors	2	v s a pass	opens-and-spends-one
+gem-town	town	2	v s a pass	opens-and-spends-one
+gem-dungeon	dungeon	2	v s pass	opens-and-spends-one
+gem-none	outdoors	0	v s a pass	opens-nothing-spends-nothing
+gem-combat	combat	2	v pass	opens-nothing-spends-nothing

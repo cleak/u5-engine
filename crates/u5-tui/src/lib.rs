@@ -7,6 +7,7 @@ pub mod audio_suite;
 pub mod cli;
 pub mod enhancement_settings;
 pub mod equivalence;
+pub mod gem_equivalence;
 pub mod gem_map;
 pub mod intro_loop;
 pub mod play_loop;
@@ -33,6 +34,11 @@ pub use equivalence::{
     FeatureHooks, MatrixRow, Mismatch, ReplayHooks, RunRecord, TerminalFeature, TokenEvent,
     TraceStep, check_equivalence, compare_runs, parse_matrix, plan_configurations,
     run_equivalence_suite, run_trace, terminal_features,
+};
+pub use gem_equivalence::{
+    GEM_CASES_FILE, GemBeat, GemCase, GemExpect, GemPlace, GemRun, check_gem_expectation,
+    compare_gem_runs, gem_case_state, gem_cases_tsv, gem_consumption_cases, run_gem_case,
+    run_gem_commands,
 };
 pub use gem_map::{GEM_MAP_TOKEN, GemPng, TerminalGemMap};
 pub use intro_loop::run_intro_menu_loop;
