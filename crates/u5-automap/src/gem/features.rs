@@ -92,7 +92,9 @@ pub const LADDER_TILES: std::ops::RangeInclusive<u8> = 0xC8..=0xC9;
 const CODEX_CELL: (u8, u8) = (233, 233);
 
 /// The gazetteer §5.1 names of the town-family scenes 1..=32; the three
-/// unnamed dwellings are `Hut` (10.2.7).
+/// unnamed dwellings are `Hut` (10.2.7). The two castles carry the
+/// approved map's short names (the mockups' README and the 10.2.4 sketch:
+/// `Castle British`, `Blackthorn`), so the label fits beside the castle.
 const PLACE_NAMES: [&str; 32] = [
     "Moonglow",
     "Britain",
@@ -110,8 +112,8 @@ const PLACE_NAMES: [&str; 32] = [
     "Hut",
     "Hut",
     "Hut",
-    "Lord British's Castle",
-    "Lord Blackthorn's Castle",
+    "Castle British",
+    "Blackthorn",
     "West Britanny",
     "North Britanny",
     "East Britanny",

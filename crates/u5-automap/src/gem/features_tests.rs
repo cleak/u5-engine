@@ -234,7 +234,8 @@ fn outdoor_features_come_from_drawn_tiles_and_the_gazetteer_names_them() {
     assert_eq!(britain.ring_colour(), MAP_PALETTE[15]);
     let castle = at(&features, cell(86, 107));
     assert_eq!(castle.len(), 1);
-    assert_eq!(castle[0].label(), Some("Lord British's Castle"));
+    // The approved map's short name, not the gazetteer's long one.
+    assert_eq!(castle[0].label(), Some("Castle British"));
     assert_eq!(castle[0].category(), Some(FeatureCategory::Castle));
     assert!(!castle[0].drawn);
     assert_eq!(at(&features, cell(91, 80))[0].label(), Some("Despise"));

@@ -190,7 +190,11 @@ fn dispatch(mut args: CliArgs) -> io::Result<()> {
     if args.play {
         let gem_map = gem_map_on(&args);
         let mut session = TerminalSession::for_play(&args.game_dir, gem_map);
-        if let (Some(dir), Some(record)) = (args.gem_map_png.as_deref(), session.gem_map.take()) {
+        // Take the record only when there is a PNG writer to give it: a
+        // `--gem-map` run without `--gem-map-png` keeps its record.
+        if let Some(dir) = args.gem_map_png.as_deref()
+            && let Some(record) = session.gem_map.take()
+        {
             session.gem_map = Some(record.with_png(gem_png(&args, dir)));
         }
         return run_play_loop_with(

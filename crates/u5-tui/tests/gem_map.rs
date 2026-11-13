@@ -913,6 +913,45 @@ fn the_binary_writes_pngs_only_with_the_gem_map_on() {
     assert!(files <= 1, "{files}");
 }
 
+/// The binary: `--gem-map` in `--play` without `--gem-map-png` keeps the
+/// record too, so `@gemmap` is taken and prints its counts (the M3 gate
+/// found the record dropped whenever no PNG folder was given, the token
+/// then reaching the game). Needs the player's files (`U5_TEST_ASSET_DIR`).
+#[test]
+fn the_binary_keeps_the_record_without_a_png_folder() {
+    let Some(assets) = assets() else {
+        eprintln!("skipped: set U5_TEST_ASSET_DIR");
+        return;
+    };
+    let scratch = SaveDir::new("record-binary");
+    let output = std::process::Command::new(env!("CARGO_BIN_EXE_u5-engine"))
+        .env(RUNTIME_DIR_ENV, scratch.path().join("runtime"))
+        .args([
+            "--play-script",
+            "@gemmap",
+            "--scene",
+            "BRITANNIA",
+            "--at",
+            "76,108",
+            "--gem-map",
+        ])
+        .arg(&assets)
+        .output()
+        .unwrap();
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert!(
+        stdout.contains(u5_automap::gem::GEM_SUMMARY_PREFIX),
+        "the record was dropped: {stdout}"
+    );
+    // The token never reached the game: no `What?` and no turn spent.
+    assert!(!stdout.contains("What?"), "{stdout}");
+}
+
 /// On the player's files (`U5_TEST_ASSET_DIR`): a gem used outdoors in a
 /// play script writes one PNG through the real art (tiles and fonts), and
 /// its pixels are the renderer's for the same view and record.
