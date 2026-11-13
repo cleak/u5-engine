@@ -73,11 +73,13 @@ fn strips(app: &mut App) -> Vec<(&'static str, Node)> {
 fn no_toast_or_badge_unless_a_feature_installs_them() {
     let mut launch = VisualLaunchConfig::classic();
     // ...except the grow-left layout, whose `[grow-left compose]` step,
-    // frame fit and canvas size are its own (M1-09, display/grow tests).
-    for spec in TOGGLES
-        .iter()
-        .filter(|spec| spec.toggle != Toggle::DisplayGrowLeft)
-    {
+    // frame fit and canvas size are its own (M1-09, display/grow tests),
+    // and the two menu toggles, whose overlay brings the shell services
+    // (overlay tests).
+    for spec in TOGGLES.iter().filter(|spec| {
+        spec.toggle != Toggle::DisplayGrowLeft
+            && !crate::enh::overlay::tests::MENU_OPENERS.contains(&spec.toggle)
+    }) {
         launch.enhancements.toggles.set(spec.toggle, true);
     }
     for launch in [VisualLaunchConfig::classic(), launch] {

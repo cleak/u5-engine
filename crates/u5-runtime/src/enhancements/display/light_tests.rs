@@ -33,7 +33,11 @@ struct Expected {
 const DESIGN_OPTIONS: &[Expected] = &[
     Expected {
         key: "display.brightness",
-        kind: OptionKind::Int { min: 25, max: 100 },
+        kind: OptionKind::Int {
+            min: 25,
+            max: 100,
+            step: 1,
+        },
         default: OptionDefault::Int(100),
         ships: LIGHT_P1,
         alias: Some("--brightness"),
@@ -53,7 +57,11 @@ const DESIGN_OPTIONS: &[Expected] = &[
     },
     Expected {
         key: "display.map_brightness",
-        kind: OptionKind::Int { min: 25, max: 100 },
+        kind: OptionKind::Int {
+            min: 25,
+            max: 100,
+            step: 1,
+        },
         default: OptionDefault::Int(100),
         ships: LIGHT_P2,
         alias: None,
@@ -63,7 +71,11 @@ const DESIGN_OPTIONS: &[Expected] = &[
     },
     Expected {
         key: "display.vignette",
-        kind: OptionKind::Int { min: 0, max: 50 },
+        kind: OptionKind::Int {
+            min: 0,
+            max: 50,
+            step: 1,
+        },
         default: OptionDefault::Int(0),
         ships: LIGHT_P3,
         alias: Some("--vignette"),
@@ -270,7 +282,7 @@ fn only_brightness_has_a_switch_value() {
             continue;
         };
         assert_eq!(spec.key, "display.brightness");
-        let OptionKind::Int { min, max } = spec.kind else {
+        let OptionKind::Int { min, max, .. } = spec.kind else {
             panic!("{} has a switch but is not an Int row", spec.key);
         };
         assert!((min..=max).contains(&enable) && (min..=max).contains(&disable));
@@ -576,7 +588,7 @@ fn named_stops_fit_their_rows() {
         let Some(stops) = named_stops(spec.key) else {
             continue;
         };
-        let OptionKind::Int { min, max } = spec.kind else {
+        let OptionKind::Int { min, max, .. } = spec.kind else {
             panic!("{} has stops but is not an Int row", spec.key);
         };
         assert!(max - min + 1 >= 10, "{} is short enough to list", spec.key);

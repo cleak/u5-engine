@@ -112,6 +112,12 @@ impl SettingValues {
     pub fn iter(&self) -> impl Iterator<Item = (&'static str, &SettingValue)> {
         self.0.iter().map(|(key, value)| (*key, value))
     }
+
+    /// Values as given, unchecked: for tests of a typed view's own guards.
+    #[cfg(test)]
+    pub(crate) fn from_pairs(pairs: Vec<(&'static str, SettingValue)>) -> Self {
+        Self(pairs)
+    }
 }
 
 /// The `[keys]` chords, in catalogue order. `None` is unbound: the host
@@ -497,7 +503,22 @@ impl<'a> State<'a> {
             },
             Row::Option(index) => {
                 let spec = &self.cat.options[index];
-                self.options[index] = match parse_value(spec, value.clone()) {
+                let cat = self.cat;
+                let parsed = parse_value(spec, value.clone()).and_then(|parsed| {
+                    // A value that ships later than its row, such as
+                    // `menu.quit_to_title = in-app` (3.4.1).
+                    match &parsed {
+                        SettingValue::Str(word)
+                            if spec
+                                .value_ships(word)
+                                .is_some_and(|phase| !cat.is_shipped(phase)) =>
+                        {
+                            Err(ValueProblem::NotInThisBuild)
+                        }
+                        _ => Ok(parsed),
+                    }
+                });
+                self.options[index] = match parsed {
                     Ok(value) => value,
                     Err(problem) => {
                         let default = default_value(spec);
@@ -685,11 +706,13 @@ fn parse_value(spec: &OptionSpec, value: SettingValue) -> Result<SettingValue, V
     match (spec.kind, value) {
         (OptionKind::Bool, value @ SettingValue::Bool(_)) => Ok(value),
         (OptionKind::Bool, _) => Err(ValueProblem::NotOnOff),
-        (OptionKind::Int { min, max }, SettingValue::Int(number)) => {
-            if (min..=max).contains(&number) {
-                Ok(SettingValue::Int(number))
-            } else {
+        (OptionKind::Int { min, max, step }, SettingValue::Int(number)) => {
+            if !(min..=max).contains(&number) {
                 Err(ValueProblem::OutOfRange { min, max })
+            } else if step > 1 && (number - min) % step != 0 {
+                Err(ValueProblem::NotAStep { step })
+            } else {
+                Ok(SettingValue::Int(number))
             }
         }
         (OptionKind::Int { .. }, _) => Err(ValueProblem::NotWholeNumber),
@@ -959,6 +982,7 @@ mod tests {
             apply: ApplyAt::Frame,
             tier: Tier::Feature,
             deviation_values: &[],
+            later_values: &[],
             ships: SHIP,
             tags: &[],
             cli_aliases: &[],
@@ -997,14 +1021,22 @@ mod tests {
             },
             option(
                 "audio.volume",
-                OptionKind::Int { min: 0, max: 100 },
+                OptionKind::Int {
+                    min: 0,
+                    max: 100,
+                    step: 1,
+                },
                 OptionDefault::Int(100),
                 Some(Toggle::EnhancementsFreezeOverlays),
                 &[],
             ),
             option(
                 "journal.spoiler_tier",
-                OptionKind::Int { min: 1, max: 4 },
+                OptionKind::Int {
+                    min: 1,
+                    max: 4,
+                    step: 1,
+                },
                 OptionDefault::Int(2),
                 None,
                 &[],
@@ -1032,7 +1064,11 @@ mod tests {
             ),
             option(
                 "input.mouse_speed",
-                OptionKind::Int { min: 1, max: 10 },
+                OptionKind::Int {
+                    min: 1,
+                    max: 10,
+                    step: 1,
+                },
                 OptionDefault::Int(5),
                 None,
                 &[Capability::Pointer],

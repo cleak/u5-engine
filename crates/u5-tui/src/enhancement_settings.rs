@@ -1282,6 +1282,79 @@ mod tests {
         assert_eq!(cli_alias_usage().contains("--gem-map"), shipped);
     }
 
+    /// Chapter 3's aliases (design 3.4.1, build plan M4-02): each boolean
+    /// one with its `--no-` form, `--volume` valued. Every row is hidden
+    /// until its phase ships, so each parses only through the full
+    /// catalogue until then.
+    #[test]
+    fn the_menu_and_audio_aliases_parse_once_their_rows_ship() {
+        let chapter_3 = || {
+            CatalogueRow::all().filter(|row| {
+                ["menu.", "audio.", "input."]
+                    .iter()
+                    .any(|section| row.key().starts_with(section))
+            })
+        };
+        let switches = [
+            ("--menu-overlay", "menu.overlay"),
+            ("--title-layer", "menu.title_layer"),
+            ("--named-slots", "menu.named_slots"),
+            ("--confirm-unsaved", "menu.confirm_unsaved"),
+            ("--mute", "audio.muted"),
+            ("--mute-on-focus-loss", "audio.mute_on_focus_loss"),
+            ("--start-sound-off", "audio.start_sound_off"),
+            ("--start-buffer-on", "audio.start_buffer_on"),
+        ];
+        for (flag, key) in switches {
+            let shipped = CatalogueRow::find(key).unwrap().is_shipped();
+            let no = format!("--no-{}", flag.trim_start_matches("--"));
+            for (flag, on) in [(flag, true), (no.as_str(), false)] {
+                let alias = CliAlias::Switch { key, on };
+                assert_eq!(find_cli_alias_in(chapter_3(), flag), Some(alias), "{flag}");
+                assert_eq!(find_cli_alias(flag), shipped.then_some(alias), "{flag}");
+            }
+            assert_eq!(cli_alias_usage().contains(flag), shipped, "{flag}");
+        }
+        let volume = CliAlias::Valued {
+            key: "audio.volume",
+        };
+        assert_eq!(find_cli_alias_in(chapter_3(), "--volume"), Some(volume));
+        assert_eq!(find_cli_alias_in(chapter_3(), "--no-volume"), None);
+        let shipped = CatalogueRow::find("audio.volume").unwrap().is_shipped();
+        assert_eq!(find_cli_alias("--volume"), shipped.then_some(volume));
+        assert_eq!(
+            volume.setting("--volume", || Some("55".into())).unwrap(),
+            CliSetting::Set {
+                key: "audio.volume".into(),
+                value: "55".into()
+            }
+        );
+        // Exactly these aliases: none for quicksave, quit_to_title or the
+        // input rows.
+        let mut aliases: Vec<&str> = chapter_3()
+            .flat_map(|row| row.cli_aliases().iter().copied())
+            .collect();
+        aliases.sort_unstable();
+        let mut expected: Vec<&str> = switches.iter().map(|(flag, _)| *flag).collect();
+        expected.push("--volume");
+        expected.sort_unstable();
+        assert_eq!(aliases, expected);
+        // The generic flags reach every row, hidden or not.
+        for row in chapter_3() {
+            assert!(
+                check_cli_key("--set", row.key(), false).is_ok(),
+                "{}",
+                row.key()
+            );
+            assert_eq!(
+                check_cli_key("--enable", row.key(), true).is_ok(),
+                is_switch(row),
+                "{}",
+                row.key()
+            );
+        }
+    }
+
     #[test]
     fn display_raster_feeds_the_launch_parameter() {
         use u5_runtime::enhancements::{DISPLAY_P1, resolve_as_shipped};

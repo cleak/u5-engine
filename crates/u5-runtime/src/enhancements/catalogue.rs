@@ -151,6 +151,26 @@ pub const GEM_G3: Phase = Phase::new(10, "G3");
 pub const GEM_G4: Phase = Phase::new(10, "G4");
 /// Chapter 10, G5: marks and labels (`gem_map.labels`).
 pub const GEM_G5: Phase = Phase::new(10, "G5");
+/// Chapter 3, Phase 1: the F12 overlay and its Audio and Display tabs
+/// (`menu.overlay`, `audio.volume`, `audio.muted`,
+/// `audio.mute_on_focus_loss`; design 3.5, build plan M4).
+pub const MENU_P1: Phase = Phase::new(3, "Phase 1");
+/// Chapter 3, Phase 2: named save slots (`menu.named_slots`,
+/// `menu.quicksave`).
+pub const MENU_P2: Phase = Phase::new(3, "Phase 2");
+/// Chapter 3, Phase 3: the title layer and Quit to title
+/// (`menu.title_layer`, `menu.quit_to_title`).
+pub const MENU_P3: Phase = Phase::new(3, "Phase 3");
+/// Chapter 3, Phase 4: the Game tab, the start keys and the unsaved
+/// warning (`audio.start_sound_off`, `audio.start_buffer_on`,
+/// `menu.confirm_unsaved`).
+pub const MENU_P4: Phase = Phase::new(3, "Phase 4");
+/// Chapter 3, Phase 5 (optional, not in M4): controller and mouse
+/// (`input.*`).
+pub const MENU_P5: Phase = Phase::new(3, "Phase 5");
+/// Chapter 3, Phase 7 (optional, not in M4): in-app load, the value
+/// `menu.quit_to_title = in-app`.
+pub const MENU_P7: Phase = Phase::new(3, "Phase 7");
 
 /// Every phase that has shipped in this build. Shipping a phase is adding
 /// it here, in the package that completes it; its rows then become
@@ -409,6 +429,148 @@ toggles! {
         needs: &[],
         driven: false,
     },
+    // `[menu]`, chapter 3 (design 3.4.1). The overlay is class (b): its
+    // Game tab types Ctrl-S and Ctrl-B and its slot save types Q and Y; the
+    // drawing is presentation. Its sub-options (`quicksave`,
+    // `confirm_unsaved`, `quit_to_title`) are valued rows in `OPTIONS`.
+    MenuOverlay = "menu.overlay" {
+        label: "Menu on F12 at the command prompt",
+        class: EffectClass::InputDriven,
+        apply: ApplyAt::NextLaunch,
+        tier: Tier::Feature,
+        ships: MENU_P1,
+        tags: &[],
+        cli_aliases: &["--menu-overlay"],
+        soft_deps: &[],
+        needs: &[],
+        driven: false,
+    },
+    MenuTitleLayer = "menu.title_layer" {
+        label: "Menu on F12 at the title screen",
+        class: EffectClass::InputDriven,
+        apply: ApplyAt::NextLaunch,
+        tier: Tier::Feature,
+        ships: MENU_P3,
+        tags: &[],
+        cli_aliases: &["--title-layer"],
+        soft_deps: &[],
+        needs: &[],
+        driven: false,
+    },
+    MenuNamedSlots = "menu.named_slots" {
+        label: "Named save slots",
+        class: EffectClass::InputDriven,
+        apply: ApplyAt::IdlePrompt,
+        tier: Tier::Feature,
+        ships: MENU_P2,
+        tags: &[],
+        cli_aliases: &["--named-slots"],
+        soft_deps: &[],
+        needs: &[],
+        driven: false,
+    },
+    // `[audio]`, chapter 3 (design 3.4.1, 3.3.7). Volume and the two mutes
+    // are output gain only, class (a). The start preferences type Ctrl-S
+    // or Ctrl-B once at the first idle prompt: class (b), deviation tier,
+    // in no preset.
+    AudioVolume = "audio.volume" {
+        label: "Volume",
+        class: EffectClass::Presentation,
+        apply: ApplyAt::Frame,
+        tier: Tier::Feature,
+        ships: MENU_P1,
+        tags: &[],
+        cli_aliases: &[],
+        soft_deps: &[],
+        needs: &[],
+        driven: true,
+    },
+    AudioMuted = "audio.muted" {
+        label: "Mute",
+        class: EffectClass::Presentation,
+        apply: ApplyAt::Frame,
+        tier: Tier::Feature,
+        ships: MENU_P1,
+        tags: &[],
+        cli_aliases: &["--mute"],
+        soft_deps: &[],
+        needs: &[],
+        driven: false,
+    },
+    AudioMuteOnFocusLoss = "audio.mute_on_focus_loss" {
+        label: "Mute while the window is in the background",
+        class: EffectClass::Presentation,
+        apply: ApplyAt::Frame,
+        tier: Tier::Feature,
+        ships: MENU_P1,
+        tags: &[],
+        cli_aliases: &["--mute-on-focus-loss"],
+        soft_deps: &[],
+        needs: &[],
+        driven: false,
+    },
+    AudioStartSoundOff = "audio.start_sound_off" {
+        label: "Begin with the game's sound off (types Ctrl-S once)",
+        class: EffectClass::InputDriven,
+        apply: ApplyAt::NextLaunch,
+        tier: Tier::Deviation,
+        ships: MENU_P4,
+        tags: &[],
+        cli_aliases: &["--start-sound-off"],
+        soft_deps: &[],
+        needs: &[],
+        driven: false,
+    },
+    AudioStartBufferOn = "audio.start_buffer_on" {
+        label: "Begin with the key buffer on (types Ctrl-B once)",
+        class: EffectClass::InputDriven,
+        apply: ApplyAt::NextLaunch,
+        tier: Tier::Deviation,
+        ships: MENU_P4,
+        tags: &[],
+        cli_aliases: &["--start-buffer-on"],
+        soft_deps: &[],
+        needs: &[],
+        driven: false,
+    },
+    // `[input]`, chapter 3's optional Phase 5: hidden in every M4 build
+    // (U13), so the resolver reports "not available in this build".
+    InputGamepad = "input.gamepad" {
+        label: "Play with a gamepad",
+        class: EffectClass::InputDriven,
+        apply: ApplyAt::Frame,
+        tier: Tier::Feature,
+        ships: MENU_P5,
+        tags: &[],
+        cli_aliases: &[],
+        soft_deps: &[],
+        needs: &[Capability::Gamepad],
+        driven: false,
+    },
+    InputMouse = "input.mouse" {
+        label: "Use the mouse in menus and to step",
+        class: EffectClass::InputDriven,
+        apply: ApplyAt::Frame,
+        tier: Tier::Feature,
+        ships: MENU_P5,
+        tags: &[],
+        cli_aliases: &[],
+        soft_deps: &[],
+        needs: &[Capability::Pointer],
+        driven: false,
+    },
+    InputExtraBindings = "input.extra_bindings" {
+        label: "Extra key bindings",
+        class: EffectClass::InputDriven,
+        apply: ApplyAt::Frame,
+        tier: Tier::Feature,
+        ships: MENU_P5,
+        tags: &[],
+        cli_aliases: &[],
+        soft_deps: &[],
+        needs: &[Capability::Keyboard],
+        driven: false,
+    },
 }
 
 // One bit per toggle in a `u128`.
@@ -476,9 +638,13 @@ impl FeatureToggles {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum OptionKind {
     Bool,
+    /// A whole number in `min..=max` that is `min` plus a multiple of
+    /// `step` (1 for every value; 5 for `audio.volume`). A value off the
+    /// steps falls back to the default with a note.
     Int {
         min: i64,
         max: i64,
+        step: i64,
     },
     /// One of the listed words.
     Enum(&'static [&'static str]),
@@ -520,6 +686,11 @@ pub struct OptionSpec {
     /// Values that are deviation tier although the row is not, such as
     /// `automap.glyphs = gem-faithful`. A preset never sets one.
     pub deviation_values: &'static [&'static str],
+    /// Values that ship later than the row, each with its phase, such as
+    /// `menu.quit_to_title = in-app` (chapter 3 Phase 7). Until that phase
+    /// ships the resolver uses the default with a note, and no page or
+    /// matrix offers the value.
+    pub later_values: &'static [(&'static str, Phase)],
     pub ships: Phase,
     pub tags: &'static [Tag],
     pub cli_aliases: &'static [&'static str],
@@ -552,6 +723,21 @@ impl OptionSpec {
         self.ships.is_shipped()
     }
 
+    /// The phase that ships `value`, when it ships later than the row.
+    pub fn value_ships(&self, value: &str) -> Option<Phase> {
+        self.later_values
+            .iter()
+            .find(|(word, _)| *word == value)
+            .map(|(_, phase)| *phase)
+    }
+
+    /// Whether `value` is offered in this build: always, unless it is one
+    /// of the [`later_values`](Self::later_values) whose phase has not
+    /// shipped.
+    pub fn value_is_shipped(&self, value: &str) -> bool {
+        self.value_ships(value).is_none_or(Phase::is_shipped)
+    }
+
     /// The tier of `value` for this row.
     pub fn value_tier(&self, value: &str) -> Tier {
         if self.deviation_values.contains(&value) {
@@ -577,6 +763,7 @@ const fn key_row(key: &'static str, label: &'static str, chord: &'static str) ->
         apply: ApplyAt::Frame,
         tier: Tier::Feature,
         deviation_values: &[],
+        later_values: &[],
         ships: FOUNDATION_P5,
         tags: &[],
         cli_aliases: &[],
@@ -632,6 +819,7 @@ const fn display_option(
         apply: ApplyAt::Frame,
         tier: Tier::Feature,
         deviation_values: &[],
+        later_values: &[],
         ships,
         tags: &[],
         cli_aliases,
@@ -681,6 +869,7 @@ const fn gem_map_option(
         apply: ApplyAt::Frame,
         tier: Tier::Feature,
         deviation_values: &[],
+        later_values: &[],
         ships,
         tags: &[],
         cli_aliases: &[],
@@ -696,12 +885,17 @@ pub const OPTIONS: &[OptionSpec] = &[
     OptionSpec {
         key: "enhancements.schema",
         label: "Settings file format version",
-        kind: OptionKind::Int { min: 1, max: 1 },
+        kind: OptionKind::Int {
+            min: 1,
+            max: 1,
+            step: 1,
+        },
         default: OptionDefault::Int(1),
         class: None,
         apply: ApplyAt::NextLaunch,
         tier: Tier::Feature,
         deviation_values: &[],
+        later_values: &[],
         ships: FOUNDATION_P2,
         tags: &[],
         cli_aliases: &[],
@@ -719,6 +913,7 @@ pub const OPTIONS: &[OptionSpec] = &[
         apply: ApplyAt::IdlePrompt,
         tier: Tier::Feature,
         deviation_values: &[],
+        later_values: &[],
         ships: FOUNDATION_P2,
         tags: &[],
         cli_aliases: &["--preset"],
@@ -840,6 +1035,7 @@ pub const OPTIONS: &[OptionSpec] = &[
         apply: ApplyAt::Frame,
         tier: Tier::Feature,
         deviation_values: &[],
+        later_values: &[],
         ships: FOUNDATION_P6,
         tags: &[],
         cli_aliases: &[],
@@ -851,12 +1047,17 @@ pub const OPTIONS: &[OptionSpec] = &[
     OptionSpec {
         key: "display.panel_guard",
         label: "Smallest game picture a side panel may leave, in percent",
-        kind: OptionKind::Int { min: 50, max: 100 },
+        kind: OptionKind::Int {
+            min: 50,
+            max: 100,
+            step: 1,
+        },
         default: OptionDefault::Int(80),
         class: Some(EffectClass::Presentation),
         apply: ApplyAt::Frame,
         tier: Tier::Feature,
         deviation_values: &[],
+        later_values: &[],
         ships: FOUNDATION_P6,
         tags: &[],
         cli_aliases: &[],
@@ -884,6 +1085,7 @@ pub const OPTIONS: &[OptionSpec] = &[
         apply: ApplyAt::NextLaunch,
         tier: Tier::Feature,
         deviation_values: &[],
+        later_values: &[],
         ships: DISPLAY_P1,
         tags: &[],
         cli_aliases: &["--raster-depth"],
@@ -901,7 +1103,11 @@ pub const OPTIONS: &[OptionSpec] = &[
         ..display_option(
             "display.brightness",
             "Map view brightness (100% is the original colours)",
-            OptionKind::Int { min: 25, max: 100 },
+            OptionKind::Int {
+                min: 25,
+                max: 100,
+                step: 1,
+            },
             OptionDefault::Int(100),
             LIGHT_P1,
             &["--brightness"],
@@ -926,7 +1132,11 @@ pub const OPTIONS: &[OptionSpec] = &[
     display_option(
         "display.map_brightness",
         "Map brightness (full map, gem map)",
-        OptionKind::Int { min: 25, max: 100 },
+        OptionKind::Int {
+            min: 25,
+            max: 100,
+            step: 1,
+        },
         OptionDefault::Int(100),
         LIGHT_P2,
         &[],
@@ -937,7 +1147,11 @@ pub const OPTIONS: &[OptionSpec] = &[
     display_option(
         "display.vignette",
         "Edge darkening",
-        OptionKind::Int { min: 0, max: 50 },
+        OptionKind::Int {
+            min: 0,
+            max: 50,
+            step: 1,
+        },
         OptionDefault::Int(0),
         LIGHT_P3,
         &["--vignette"],
@@ -977,7 +1191,11 @@ pub const OPTIONS: &[OptionSpec] = &[
     gem_map_option(
         "gem_map.map_brightness",
         "Gem map dimming",
-        OptionKind::Int { min: 25, max: 100 },
+        OptionKind::Int {
+            min: 25,
+            max: 100,
+            step: 1,
+        },
         OptionDefault::Int(70),
         GEM_G2,
     ),
@@ -1028,7 +1246,96 @@ pub const OPTIONS: &[OptionSpec] = &[
             GEM_G4,
         )
     },
+    // `[menu]` sub-options (design 3.4.1, 3.3.6): each inert while its
+    // parent is off, hidden until its phase ships (U13). `confirm_unsaved`
+    // is a preference; no preset sets it.
+    OptionSpec {
+        key: "menu.quicksave",
+        label: "A quick save slot",
+        kind: OptionKind::Bool,
+        default: OptionDefault::Bool(true),
+        class: Some(EffectClass::InputDriven),
+        apply: ApplyAt::IdlePrompt,
+        tier: Tier::Feature,
+        deviation_values: &[],
+        later_values: &[],
+        ships: MENU_P2,
+        tags: &[],
+        cli_aliases: &[],
+        toggle: None,
+        parent: Some(Toggle::MenuNamedSlots),
+        needs: &[],
+        switch: None,
+    },
+    OptionSpec {
+        key: "menu.confirm_unsaved",
+        label: "Ask before leaving with unsaved play",
+        kind: OptionKind::Bool,
+        default: OptionDefault::Bool(true),
+        class: Some(EffectClass::Presentation),
+        apply: ApplyAt::Frame,
+        tier: Tier::Feature,
+        deviation_values: &[],
+        later_values: &[],
+        ships: MENU_P4,
+        tags: &[],
+        cli_aliases: &["--confirm-unsaved"],
+        toggle: None,
+        parent: Some(Toggle::MenuOverlay),
+        needs: &[],
+        switch: None,
+    },
+    OptionSpec {
+        key: "menu.quit_to_title",
+        label: "Return to the title by restarting, or in the window (later)",
+        kind: OptionKind::Enum(QUIT_TO_TITLE_WORDS),
+        default: OptionDefault::Str("relaunch"),
+        class: Some(EffectClass::InputDriven),
+        apply: ApplyAt::NextLaunch,
+        tier: Tier::Feature,
+        deviation_values: &[],
+        // In-app load is the optional Phase 7; until it ships `in-app`
+        // resolves to `relaunch` with a note (3.4.1).
+        later_values: &[("in-app", MENU_P7)],
+        ships: MENU_P3,
+        tags: &[],
+        cli_aliases: &[],
+        toggle: None,
+        parent: Some(Toggle::MenuOverlay),
+        needs: &[],
+        switch: None,
+    },
+    // `[audio]` (design 3.4.1, 3.3.7): output gain in steps of 5, a
+    // preference in no preset. Away from 100 it switches the driven toggle
+    // `AudioVolume`, as `display.brightness` does, so `volume = 50` alone
+    // is not Classic (1.3.5).
+    OptionSpec {
+        key: "audio.volume",
+        label: "Volume in percent (output only; 100 is the original)",
+        kind: OptionKind::Int {
+            min: 0,
+            max: 100,
+            step: 5,
+        },
+        default: OptionDefault::Int(100),
+        class: Some(EffectClass::Presentation),
+        apply: ApplyAt::Frame,
+        tier: Tier::Feature,
+        deviation_values: &[],
+        later_values: &[],
+        ships: MENU_P1,
+        tags: &[],
+        cli_aliases: &["--volume"],
+        toggle: Some(Toggle::AudioVolume),
+        parent: None,
+        needs: &[],
+        switch: None,
+    },
 ];
+
+/// The words of `menu.quit_to_title`, in
+/// [`QuitToTitle`](super::menu::QuitToTitle) order.
+pub const QUIT_TO_TITLE_WORDS: &[&str] = &["relaunch", "in-app"];
 
 /// The named stops of a long `Int` row (build plan D-M2.4): the values a
 /// settings page with a short list of choices offers, such as the setup
@@ -1044,6 +1351,8 @@ pub fn named_stops(key: &str) -> Option<&'static [i64]> {
         // 10.2.10: the default 70 first, then the brighter and darker
         // steps.
         "gem_map.map_brightness" => Some(&[70, 85, 100, 55, 40, 25]),
+        // 3.2.7: 100 (the original loudness) first, then quarter steps.
+        "audio.volume" => Some(&[100, 75, 50, 25, 0]),
         _ => None,
     }
 }
@@ -1062,6 +1371,34 @@ pub fn help_line(key: &str) -> Option<&'static str> {
         ),
         "gem_map.map_brightness" => Some("How dark the map is drawn. Names stay bright."),
         "gem_map.brightness_link" => Some("Use the same darkness as the other maps."),
+        // Chapter 3 (3.2.1, 3.2.2, 3.2.4, 3.2.6, 3.2.7).
+        "menu.overlay" => Some(
+            "F12 at the command prompt opens a menu of saves and settings. The game's own keys are unchanged.",
+        ),
+        "menu.title_layer" => {
+            Some("F12 at the title screen opens a menu: continue, settings and quit.")
+        }
+        "menu.named_slots" => Some(
+            "Keep many saves under names of your choosing. Each slot holds the whole saved game.",
+        ),
+        "menu.quicksave" => {
+            Some("A slot named quick, always first, that saves without asking to overwrite.")
+        }
+        "menu.confirm_unsaved" => {
+            Some("Ask first when loading, or quitting, would lose play since the last save.")
+        }
+        "audio.volume" => {
+            Some("Sets the loudness only. The game's own Sound On and Off is the Ctrl-S key.")
+        }
+        "audio.mute_on_focus_loss" => Some(
+            "Silent while another window has the focus. A mute you chose stays on when you return.",
+        ),
+        "audio.start_sound_off" => Some(
+            "Types Ctrl-S once at the first command prompt, as a player could. The original starts with sound on.",
+        ),
+        "audio.start_buffer_on" => Some(
+            "Types Ctrl-B once at the first command prompt, as a player could. The original starts with the buffer off.",
+        ),
         _ => None,
     }
 }
@@ -1383,7 +1720,8 @@ fn tier_text(tier: Tier, deviation_values: &[&str]) -> String {
 fn option_kind_text(spec: &OptionSpec) -> String {
     let kind = match spec.kind {
         OptionKind::Bool => "bool".to_string(),
-        OptionKind::Int { min, max } => format!("int {min}..{max}"),
+        OptionKind::Int { min, max, step: 1 } => format!("int {min}..{max}"),
+        OptionKind::Int { min, max, step } => format!("int {min}..{max} by {step}"),
         OptionKind::Enum(words) => format!("enum {}", words.join("\\|")),
         OptionKind::Color => "color".to_string(),
         OptionKind::Path => "path".to_string(),
@@ -1397,7 +1735,14 @@ fn option_kind_text(spec: &OptionSpec) -> String {
         OptionDefault::Str(text) => text.to_string(),
         OptionDefault::List(items) => format!("[{}]", items.join(", ")),
     };
-    format!("{kind} = {default}")
+    let mut text = format!("{kind} = {default}");
+    for (value, phase) in spec.later_values {
+        text.push_str(&format!(
+            " ({value} later, chapter {} {})",
+            phase.chapter, phase.name
+        ));
+    }
+    text
 }
 
 #[cfg(test)]
@@ -1675,8 +2020,12 @@ mod tests {
         for spec in OPTIONS {
             let fits = match (spec.kind, spec.default) {
                 (OptionKind::Bool, OptionDefault::Bool(_)) => true,
-                (OptionKind::Int { min, max }, OptionDefault::Int(value)) => {
-                    min <= max && (min..=max).contains(&value)
+                (OptionKind::Int { min, max, step }, OptionDefault::Int(value)) => {
+                    min <= max
+                        && step >= 1
+                        && (max - min) % step == 0
+                        && (min..=max).contains(&value)
+                        && (value - min) % step == 0
                 }
                 (OptionKind::Enum(words), OptionDefault::Str(word)) => words.contains(&word),
                 (OptionKind::Color, OptionDefault::Str(text)) => is_colour(text),
@@ -1821,7 +2170,14 @@ mod tests {
         let Some(CatalogueRow::Option(guard)) = CatalogueRow::find("display.panel_guard") else {
             panic!("display.panel_guard is a valued setting");
         };
-        assert_eq!(guard.kind, OptionKind::Int { min: 50, max: 100 });
+        assert_eq!(
+            guard.kind,
+            OptionKind::Int {
+                min: 50,
+                max: 100,
+                step: 1
+            }
+        );
         assert_eq!(guard.default, OptionDefault::Int(80));
         for spec in [priority, guard] {
             assert_eq!(spec.class, Some(EffectClass::Presentation));
@@ -1871,9 +2227,9 @@ mod tests {
     fn option_accepts(spec: &OptionSpec, value: &str) -> bool {
         match spec.kind {
             OptionKind::Bool => value == "true" || value == "false",
-            OptionKind::Int { min, max } => value
+            OptionKind::Int { min, max, step } => value
                 .parse::<i64>()
-                .is_ok_and(|number| (min..=max).contains(&number)),
+                .is_ok_and(|number| (min..=max).contains(&number) && (number - min) % step == 0),
             OptionKind::Enum(words) => words.contains(&value),
             OptionKind::Color => is_colour(value),
             OptionKind::Path | OptionKind::Chord => true,

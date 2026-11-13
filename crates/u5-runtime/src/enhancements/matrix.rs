@@ -95,7 +95,7 @@ pub fn alternate_values(spec: &OptionSpec) -> Vec<String> {
     let default = default_text(spec);
     let mut values: Vec<String> = match spec.kind {
         OptionKind::Bool => vec![(default != "true").to_string()],
-        OptionKind::Int { min, max } => vec![min.to_string(), max.to_string()],
+        OptionKind::Int { min, max, .. } => vec![min.to_string(), max.to_string()],
         OptionKind::Enum(words) => words.iter().map(|w| w.to_string()).collect(),
         OptionKind::Color => vec![if default.eq_ignore_ascii_case("#ffffff") {
             "#000000".to_string()
@@ -107,7 +107,9 @@ pub fn alternate_values(spec: &OptionSpec) -> Vec<String> {
         OptionKind::Path => Vec::new(),
     };
     let mut seen = BTreeSet::new();
-    values.retain(|value| *value != default && seen.insert(value.clone()));
+    values.retain(|value| {
+        *value != default && spec.value_is_shipped(value) && seen.insert(value.clone())
+    });
     values
 }
 

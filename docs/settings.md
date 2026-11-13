@@ -375,7 +375,10 @@ one that types keys must change it exactly as typing those keys would:
 ## Columns
 
 - **Type = default**: `bool`, `int a..b`, `enum a|b`, `list of a|b`,
-  `color`, `path` or `chord`, then the default.
+  `color`, `path` or `chord`, then the default. `int a..b by n` takes only
+  every n-th value from a (`audio.volume` moves by 5); any other value falls
+  back to the default with a note. "(x later, ...)" names a value that is
+  not available yet: it too falls back to the default with a note.
 - **Cls**: effect class. `a` only shows things, `b` acts only through keys a
   player could type, `c` changes the game (cheats only), `-` is a setting of
   the foundation itself.
@@ -396,6 +399,16 @@ one that types keys must change it exactly as typing those keys would:
 | display.grow_left | Wider world view (shows more than the original) | bool = false | a, F | deviation, wider view | --grow-left | - | yes |
 | display.sprite_composite | Sprites over terrain (no black boxes) | bool = false | a, F | feature | --sprite-composite | - | yes |
 | gem_map.enhanced | Enhanced gem map | bool = false | a, P | feature | --gem-map | - | yes |
+| menu.overlay | Menu on F12 at the command prompt | bool = false | b, L | feature | --menu-overlay | - | later (chapter 3 Phase 1) |
+| menu.title_layer | Menu on F12 at the title screen | bool = false | b, L | feature | --title-layer | - | later (chapter 3 Phase 3) |
+| menu.named_slots | Named save slots | bool = false | b, P | feature | --named-slots | - | later (chapter 3 Phase 2) |
+| audio.muted | Mute | bool = false | a, F | feature | --mute | - | later (chapter 3 Phase 1) |
+| audio.mute_on_focus_loss | Mute while the window is in the background | bool = false | a, F | feature | --mute-on-focus-loss | - | later (chapter 3 Phase 1) |
+| audio.start_sound_off | Begin with the game's sound off (types Ctrl-S once) | bool = false | b, L | deviation | --start-sound-off | - | later (chapter 3 Phase 4) |
+| audio.start_buffer_on | Begin with the key buffer on (types Ctrl-B once) | bool = false | b, L | deviation | --start-buffer-on | - | later (chapter 3 Phase 4) |
+| input.gamepad | Play with a gamepad | bool = false | b, F | feature | - | a gamepad | later (chapter 3 Phase 5) |
+| input.mouse | Use the mouse in menus and to step | bool = false | b, F | feature | - | a mouse or pointer | later (chapter 3 Phase 5) |
+| input.extra_bindings | Extra key bindings | bool = false | b, F | feature | - | a keyboard | later (chapter 3 Phase 5) |
 | enhancements.schema | Settings file format version | int 1..1 = 1 | -, L | feature | - | - | yes |
 | enhancements.preset | Preset | enum classic\|recommended\|everything = classic | -, P | feature | --preset | - | yes |
 | keys.menu | Open the menu | chord = F12 | -, F | feature | - | a keyboard | later (chapter 1 P5) |
@@ -437,4 +450,8 @@ one that types keys must change it exactly as typing those keys would:
 | gem_map.wrap_rows | Show the dungeon's wrapped edge | bool = true | a, F | feature | - | - | yes |
 | gem_map.level_paging | Page through dungeon levels (PgUp, PgDn) | bool = true | a, F | feature | - | - | yes |
 | gem_map.glyphs | Dungeon symbols (gem-faithful is a spoiler: shows secret doors and hidden pits on sight) | enum perceived\|gem-faithful = perceived | a, F | feature (deviation: gem-faithful) | - | - | yes |
+| menu.quicksave | A quick save slot | bool = true | b, P | feature | - | - | later (chapter 3 Phase 2) |
+| menu.confirm_unsaved | Ask before leaving with unsaved play | bool = true | a, F | feature | --confirm-unsaved | - | later (chapter 3 Phase 4) |
+| menu.quit_to_title | Return to the title by restarting, or in the window (later) | enum relaunch\|in-app = relaunch (in-app later, chapter 3 Phase 7) | b, L | feature | - | - | later (chapter 3 Phase 3) |
+| audio.volume | Volume in percent (output only; 100 is the original) | int 0..100 by 5 = 100 | a, F | feature | --volume | - | later (chapter 3 Phase 1) |
 <!-- END GENERATED -->

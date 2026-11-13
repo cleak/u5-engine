@@ -431,12 +431,16 @@ fn wizard_rows(
                     OptionKind::Enum(words) => RowKind::Choice(
                         words
                             .iter()
+                            .filter(|word| spec.value_is_shipped(word))
                             .map(|word| (word.to_string(), word.to_string()))
                             .collect(),
                     ),
-                    OptionKind::Int { min, max } if max - min < MAX_NUMBER_CHOICES => {
+                    OptionKind::Int { min, max, step }
+                        if (max - min) / step < MAX_NUMBER_CHOICES =>
+                    {
                         RowKind::Choice(
                             (min..=max)
+                                .step_by(step as usize)
                                 .map(|number| (number.to_string(), number.to_string()))
                                 .collect(),
                         )

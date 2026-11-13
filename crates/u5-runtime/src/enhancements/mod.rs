@@ -14,6 +14,10 @@
 //! - [`gem_map`]: chapter 10's `[gem_map]` typed view,
 //!   [`ResolvedEnhancements::gem_map`] and [`GemMapToggles`], and the
 //!   [`GlyphPolicy`] chapter 4 shares (design 10.3.2, 10.4.1).
+//! - [`menu`]: chapter 3's `[menu]` and `[audio]` typed views,
+//!   [`ResolvedEnhancements::menu`] with [`MenuSettings`] and
+//!   [`QuitToTitle`], and [`ResolvedEnhancements::audio`] with
+//!   [`AudioSettings`] (design 3.3.3).
 //! - [`catalogue`]: the toggle and option catalogue, effect classes, apply
 //!   points, preset tiers, shipping phases and the three presets
 //!   (design 1.3.2, 1.4.1 and 1.4.2).
@@ -55,6 +59,7 @@ pub mod gem_map;
 pub mod idle;
 pub mod light;
 pub mod matrix;
+pub mod menu;
 pub mod resolve;
 pub mod sidecar;
 pub mod source;
@@ -69,7 +74,8 @@ pub use catalogue::{
 };
 pub use catalogue::{
     DISPLAY_P1, DISPLAY_P2, DISPLAY_P8, GEM_G2, GEM_G3, GEM_G4, GEM_G5, LAUNCH_PARAMETER_KEYS,
-    LIGHT_P1, LIGHT_P2, LIGHT_P3, LIGHT_P5, help_line, named_stops,
+    LIGHT_P1, LIGHT_P2, LIGHT_P3, LIGHT_P5, MENU_P1, MENU_P2, MENU_P3, MENU_P4, MENU_P5, MENU_P7,
+    QUIT_TO_TITLE_WORDS, help_line, named_stops,
 };
 pub use digest::{
     DIGEST_GROUPS, SKIPPED_FIELDS, TrajectoryDigest, digest_groups, trajectory_digest,
@@ -93,6 +99,7 @@ pub use matrix::{
     ALL_ON_EXCEPT_CHEATS, CHEATS_SECTION, MATRIX_FILE, MatrixRow, PairwiseFactor, alternate_values,
     covering_array, matrix_tsv, pairwise_factors, toggle_matrix,
 };
+pub use menu::{AudioSettings, INPUT_KEYS, MenuSettings, QuitToTitle, START_KEYS};
 pub use resolve::{
     CHEATS_SWITCH, KeyBindings, PRESET_KEY, PresetLabel, ResolveInput, ResolvedEnhancements,
     SettingValues, resolve, resolve_as_shipped,

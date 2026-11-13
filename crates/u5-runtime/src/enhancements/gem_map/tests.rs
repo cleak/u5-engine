@@ -33,7 +33,11 @@ const DESIGN_SUB_OPTIONS: &[(&str, OptionKind, OptionDefault, Phase)] = &[
     ),
     (
         MAP_BRIGHTNESS_KEY,
-        OptionKind::Int { min: 25, max: 100 },
+        OptionKind::Int {
+            min: 25,
+            max: 100,
+            step: 1,
+        },
         OptionDefault::Int(70),
         GEM_G2,
     ),
@@ -153,15 +157,22 @@ fn the_main_toggle_matches_the_design() {
     assert_eq!(spec.cli_aliases, ["--gem-map"]);
     assert!(spec.tags.is_empty() && spec.needs.is_empty() && spec.soft_deps.is_empty());
     assert_eq!(spec.label, "Enhanced gem map");
-    // It is the only `[gem_map]` toggle; it is the last catalogue bit, so
-    // no earlier toggle's bit moved.
+    // It is the only `[gem_map]` toggle. Its bit is the one M3 gave it
+    // (the thirteenth); later chapters' toggles come after it, so no bit
+    // moved.
     let gem_toggles: Vec<&str> = TOGGLES
         .iter()
         .filter(|spec| spec.key.starts_with("gem_map."))
         .map(|spec| spec.key)
         .collect();
     assert_eq!(gem_toggles, [ENHANCED_KEY]);
-    assert_eq!(TOGGLES.last().unwrap().toggle, Toggle::GemMapEnhanced);
+    assert_eq!(Toggle::GemMapEnhanced as usize, 12);
+    assert!(
+        TOGGLES[13..].iter().all(|spec| spec.ships.chapter != 10
+            && spec.ships.chapter != 9
+            && spec.ships.chapter != 2),
+        "only later rows follow the gem map's bit"
+    );
 }
 
 #[test]
@@ -344,6 +355,7 @@ fn map_brightness_has_named_stops() {
         OptionKind::Int {
             min: i64::from(GEM_MAP_BRIGHTNESS_MIN),
             max: i64::from(GEM_MAP_BRIGHTNESS_MAX),
+            step: 1,
         }
     );
 }

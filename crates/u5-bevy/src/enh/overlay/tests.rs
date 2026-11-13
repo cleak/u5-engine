@@ -258,14 +258,15 @@ fn no_overlay_model_while_no_overlay_feature_is_on() {
         add_enhancements(&mut app, &launch);
         assert!(!app.world().contains_resource::<OverlayState>());
     }
-    // Every catalogue toggle on: none of them is an overlay feature yet.
+    // Every catalogue toggle on: none of them is an overlay feature yet
+    // but chapter 3's two menu toggles, which bind F12 and open the menu
+    // overlay (checked below).
     let mut launch = VisualLaunchConfig::classic();
-    // ...except the grow-left layout, whose `[grow-left compose]` step,
+    // ...and except the grow-left layout, whose `[grow-left compose]` step,
     // frame fit and canvas size are its own (M1-09, display/grow tests).
-    for spec in TOGGLES
-        .iter()
-        .filter(|spec| spec.toggle != Toggle::DisplayGrowLeft)
-    {
+    for spec in TOGGLES.iter().filter(|spec| {
+        spec.toggle != Toggle::DisplayGrowLeft && !MENU_OPENERS.contains(&spec.toggle)
+    }) {
         launch.enhancements.toggles.set(spec.toggle, true);
     }
     assert!(!overlay_feature_on(launch.enhancements.toggles));
@@ -283,7 +284,25 @@ fn no_overlay_model_while_no_overlay_feature_is_on() {
     assert!(!has_system(&mut app, "close_when_not_idle"));
     // An overlay feature binds its opener; the model follows it.
     assert_eq!(Toggle::from_key("automap.fullscreen_map"), None);
+    for toggle in MENU_OPENERS {
+        let mut launch = VisualLaunchConfig::classic();
+        launch.enhancements.toggles.set(toggle, true);
+        assert!(
+            overlay_feature_on(launch.enhancements.toggles),
+            "{toggle:?}"
+        );
+        let mut app = App::new();
+        add_enhancements(&mut app, &launch);
+        assert!(
+            app.world().contains_resource::<OverlayState>(),
+            "{toggle:?}"
+        );
+    }
 }
+
+/// Chapter 3's toggles that open the menu overlay (M4-02 rows): each binds
+/// F12, so the overlay model is installed with it.
+pub(crate) const MENU_OPENERS: [Toggle; 2] = [Toggle::MenuOverlay, Toggle::MenuTitleLayer];
 
 #[test]
 fn the_model_brings_the_router_it_needs() {

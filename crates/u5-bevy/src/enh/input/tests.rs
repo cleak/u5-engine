@@ -272,9 +272,11 @@ fn chords_parse_without_regard_to_case_or_modifier_order() {
 }
 
 /// Bindings follow their feature. Of the feature rows in the catalogue so
-/// far, only the display chapter's two bind a chord: F11 for
-/// `display.fullscreen_key` and Ctrl+P for `display.grow_left`. The parked
-/// minimap and the contextual pair never bind through `[keys]`.
+/// far, four bind a chord: F12 for chapter 3's `menu.overlay` and
+/// `menu.title_layer` (rows from M4-02, hidden until chapter 3 Phases 1 and
+/// 3 ship), F11 for `display.fullscreen_key` and Ctrl+P for
+/// `display.grow_left`. The parked minimap and the contextual pair never
+/// bind through `[keys]`.
 #[test]
 fn bindings_follow_their_features() {
     let mut every = FeatureToggles::CLASSIC;
@@ -287,11 +289,37 @@ fn bindings_follow_their_features() {
         .collect();
     assert_eq!(
         enabled,
-        [EnhAction::ToggleFullscreen, EnhAction::ToggleColumn]
+        [
+            EnhAction::OpenMenu,
+            EnhAction::ToggleFullscreen,
+            EnhAction::ToggleColumn
+        ]
     );
     let (map, notes) = KeyMap::for_toggles(&default_keys(), every);
     assert!(notes.is_empty());
-    assert!(!menu_overlay_on(every));
+    assert!(menu_overlay_on(every));
+    // Either menu toggle binds F12 alone; the overlay is the one that
+    // binds it in play.
+    for toggle in [Toggle::MenuOverlay, Toggle::MenuTitleLayer] {
+        let mut one = FeatureToggles::CLASSIC;
+        one.set(toggle, true);
+        let enabled: Vec<EnhAction> = EnhAction::ALL
+            .into_iter()
+            .filter(|action| action.enabled(one))
+            .collect();
+        assert_eq!(enabled, [EnhAction::OpenMenu], "{toggle:?}");
+        assert_eq!(menu_overlay_on(one), toggle == Toggle::MenuOverlay);
+    }
+    // Chapter 3's other toggles bind nothing.
+    let mut rest = FeatureToggles::CLASSIC;
+    for spec in TOGGLES.iter().filter(|spec| {
+        spec.ships.chapter == 3
+            && ![Toggle::MenuOverlay, Toggle::MenuTitleLayer].contains(&spec.toggle)
+    }) {
+        rest.set(spec.toggle, true);
+    }
+    assert!(KeyMap::for_toggles(&default_keys(), rest).0.is_empty());
+    assert!(!menu_overlay_on(rest));
     // Each binding follows its own toggle only.
     let mut one = FeatureToggles::CLASSIC;
     one.set(Toggle::DisplayFullscreenKey, true);

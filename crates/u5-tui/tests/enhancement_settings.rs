@@ -167,6 +167,61 @@ fn gem_map_keys_parse_and_the_alias_waits_for_its_phase() {
     assert!(parse_error(&["--enable", "gem_map.show_all_names"]).contains("unknown setting"));
 }
 
+/// Chapter 3's keys (M4-02): the generic flags name them now; the aliases
+/// parse once their rows ship, and until then are unknown options like any
+/// hidden alias.
+#[test]
+fn menu_and_audio_keys_parse_and_the_aliases_wait_for_their_phases() {
+    let args = parse_cli_args([
+        "--enable",
+        "menu.overlay,audio.start_sound_off",
+        "--set",
+        "audio.volume=35",
+        "--disable",
+        "menu.confirm_unsaved",
+        "--set",
+        "menu.quit_to_title=in-app",
+        "--enable",
+        "input.gamepad",
+    ])
+    .unwrap();
+    assert_eq!(
+        args.enhancements,
+        [
+            CliSetting::Enable("menu.overlay".into()),
+            CliSetting::Enable("audio.start_sound_off".into()),
+            CliSetting::Set {
+                key: "audio.volume".into(),
+                value: "35".into()
+            },
+            CliSetting::Disable("menu.confirm_unsaved".into()),
+            CliSetting::Set {
+                key: "menu.quit_to_title".into(),
+                value: "in-app".into()
+            },
+            CliSetting::Enable("input.gamepad".into()),
+        ]
+    );
+    for (flag, key) in [
+        ("--menu-overlay", "menu.overlay"),
+        ("--no-mute", "audio.muted"),
+        ("--start-buffer-on", "audio.start_buffer_on"),
+    ] {
+        let shipped = u5_runtime::enhancements::CatalogueRow::find(key)
+            .unwrap()
+            .is_shipped();
+        if shipped {
+            assert_eq!(parse_cli_args([flag]).unwrap().enhancements.len(), 1);
+        } else {
+            assert!(parse_error(&[flag]).contains("unknown option"), "{flag}");
+        }
+    }
+    // `--enable` refuses the valued volume like any valued key.
+    assert!(parse_error(&["--enable", "audio.volume"]).contains("not an on/off setting"));
+    // Reserved, not in the catalogue (U3).
+    assert!(parse_error(&["--enable", "menu.escape_opens_menu"]).contains("unknown setting"));
+}
+
 #[test]
 fn unknown_options_and_keys_are_rejected() {
     // The rejection of unknown options stays.

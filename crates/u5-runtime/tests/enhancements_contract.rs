@@ -395,8 +395,9 @@ fn the_enhancement_docs_links_resolve() {
     assert_eq!(anchor(" Enhancement Hotkeys"), "enhancement-hotkeys");
 }
 
-/// Every help line belongs to a catalogue row, and the gem map's four rows
-/// of design 10.2.1 have one (build plan M3-17).
+/// Every help line belongs to a catalogue row: the gem map's four rows of
+/// design 10.2.1 (build plan M3-17) and chapter 3's nine (M4-02), in
+/// catalogue order.
 #[test]
 fn help_lines_belong_to_catalogue_rows() {
     use u5_runtime::enhancements::{CatalogueRow, help_line};
@@ -408,9 +409,18 @@ fn help_lines_belong_to_catalogue_rows() {
         with_help,
         [
             "gem_map.enhanced",
+            "menu.overlay",
+            "menu.title_layer",
+            "menu.named_slots",
+            "audio.mute_on_focus_loss",
+            "audio.start_sound_off",
+            "audio.start_buffer_on",
             "gem_map.labels",
             "gem_map.brightness_link",
             "gem_map.map_brightness",
+            "menu.quicksave",
+            "menu.confirm_unsaved",
+            "audio.volume",
         ]
     );
     assert_eq!(help_line("gem_map.not_a_row"), None);

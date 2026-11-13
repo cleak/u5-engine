@@ -161,12 +161,24 @@ impl HostCapabilities {
 pub enum ValueProblem {
     NotOnOff,
     NotWholeNumber,
-    OutOfRange { min: i64, max: i64 },
+    OutOfRange {
+        min: i64,
+        max: i64,
+    },
+    /// In range, but not on the row's steps (`audio.volume` moves by 5).
+    NotAStep {
+        step: i64,
+    },
+    /// A value that ships later than its row (`menu.quit_to_title =
+    /// in-app` before chapter 3 Phase 7).
+    NotInThisBuild,
     NotOneOf(&'static [&'static str]),
     NotColour,
     NotText,
     NotList,
-    ItemNotOneOf { item: String },
+    ItemNotOneOf {
+        item: String,
+    },
 }
 
 const NOT_ON_OFF: &str = "not true or false";
@@ -181,6 +193,8 @@ impl fmt::Display for ValueProblem {
             ValueProblem::NotOnOff => f.write_str(NOT_ON_OFF),
             ValueProblem::NotWholeNumber => f.write_str(NOT_WHOLE_NUMBER),
             ValueProblem::OutOfRange { min, max } => write!(f, "not in {min}..{max}"),
+            ValueProblem::NotAStep { step } => write!(f, "not a step of {step}"),
+            ValueProblem::NotInThisBuild => f.write_str(NOT_AVAILABLE),
             ValueProblem::NotOneOf(words) => write!(f, "not one of {}", words.join(", ")),
             ValueProblem::NotColour => f.write_str(NOT_COLOUR),
             ValueProblem::NotText => f.write_str(NOT_TEXT),
