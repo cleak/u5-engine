@@ -339,12 +339,17 @@ fn real_assets_render_despise() {
 /// (every side cell seen), `cell R L X Y` and `mark R L X Y KIND` (kind
 /// code as `MarkKind`).
 fn demo_knowledge() -> u5_automap::gem::GemKnowledge {
+    demo_knowledge_from("U5_GEM_KNOWLEDGE")
+}
+
+/// [`demo_knowledge`] from the file the variable `var` names.
+fn demo_knowledge_from(var: &str) -> u5_automap::gem::GemKnowledge {
     use u5_automap::gem::{
         DungeonMark, EdgeSide, ExitRun, GateCell, KnowEvent, LinkDir, MarkKind, SIDE_WINDOW_HEIGHT,
         SIDE_WINDOW_WIDTH, SignCell, TownLink, Trade,
     };
     let mut know = GemKnowledge::new();
-    let Some(path) = std::env::var_os("U5_GEM_KNOWLEDGE") else {
+    let Some(path) = std::env::var_os(var) else {
         return know;
     };
     for line in std::fs::read_to_string(path).unwrap().lines() {
@@ -498,6 +503,150 @@ fn real_assets_render_marks() {
         );
         if let Some(shots) = &shots {
             write_ppm(shots, &format!("engine-marks-{name}.ppm"), &out);
+        }
+    }
+}
+
+/// A dungeon of record `record` with the party on `level` at `at` facing
+/// north, a gem view up.
+fn real_dungeon(dir: &std::path::Path, record: u8, level: u8, at: (usize, usize)) -> PlayState {
+    let scene = u5_runtime::DungeonScene::from_record(record).unwrap();
+    let mut state = PlayState::load_scene(
+        dir,
+        u5_runtime::PlayOptions {
+            target: u5_runtime::PlayTarget::Dungeon(scene),
+            floor: level as i8,
+            start: Some(at),
+            clock: u5_runtime::GameClock::new(12, 0).unwrap(),
+            ..u5_runtime::PlayOptions::default()
+        },
+    )
+    .unwrap();
+    state.player.facing = u5_runtime::Direction::North;
+    state.active_view_overlay = Some(ViewOverlay {
+        title: String::new(),
+        text_map: String::new(),
+        kind: ViewOverlayKind::Dungeon { level },
+        mode: ViewOverlayMode::GemView,
+    });
+    state
+}
+
+/// With `U5_MOCKUP_PROFILE` naming a game copy: the labels (M3-16) over
+/// the mockups' O1, O1e, T1, T1e, D1 and D1f scenes at 16:9 (and the 4:3
+/// and 21:9 canvases of O, T and D), from the review-only records in
+/// `U5_GEM_KNOWLEDGE` (mid game), `U5_GEM_KNOWLEDGE_EARLY` and
+/// `U5_GEM_KNOWLEDGE_DECEIT` (empty when unset). Invariants only: no two
+/// tags overlap, every tag is inside the canvas and clear of the party,
+/// nothing undiscovered is named. With `U5_GEM_SHOTS`, the renders are
+/// written there as PPM files.
+#[test]
+fn real_assets_render_labels() {
+    use u5_automap::StaticMaps;
+    use u5_automap::gem::{
+        DungeonInputs, DungeonLayout, GemShown, LabelDraw, TownInputs, dungeon_panel_levels,
+        gem_features, gem_label_plan, town_world_plane,
+    };
+    use u5_runtime::enhancements::GlyphPolicy;
+    let Some(dir) = env_dir("U5_MOCKUP_PROFILE") else {
+        eprintln!("skipped: set U5_MOCKUP_PROFILE");
+        return;
+    };
+    let atlas = u5_runtime::load_tile_atlas(&dir, TileGraphicsDepth::Ega16).unwrap();
+    let art = MapArt::build(&atlas).with_fonts(
+        u5_runtime::load_ibm_ch_font(&dir).unwrap(),
+        u5_runtime::load_runes_ch_font(&dir).unwrap(),
+    );
+    let mid = demo_knowledge();
+    let early = demo_knowledge_from("U5_GEM_KNOWLEDGE_EARLY");
+    let deceit_know = demo_knowledge_from("U5_GEM_KNOWLEDGE_DECEIT");
+    let shots = env_dir("U5_GEM_SHOTS");
+    let outdoors = real_world(&dir, (76, 108), (12, 6));
+    let britain = real_britain(&dir);
+    let despise = real_despise(&dir);
+    let deceit = real_dungeon(&dir, 0, 1, (1, 6));
+    let mut maps = StaticMaps::new(&dir);
+    let world = maps
+        .world_map(town_world_plane(&britain).unwrap())
+        .unwrap()
+        .to_vec();
+    let scenes: [(&str, &PlayState, &GemKnowledge, GemCanvas); 12] = [
+        ("O1-169", &outdoors, &mid, CANVASES[1]),
+        ("O1e-169", &outdoors, &early, CANVASES[1]),
+        ("O2-219", &outdoors, &mid, CANVASES[2]),
+        ("O3-43", &outdoors, &mid, CANVASES[0]),
+        ("T1-169", &britain, &mid, CANVASES[1]),
+        ("T1e-169", &britain, &early, CANVASES[1]),
+        ("T3-43", &britain, &mid, CANVASES[0]),
+        ("D1-169", &despise, &mid, CANVASES[1]),
+        ("D2-219", &despise, &mid, CANVASES[2]),
+        ("D3-43", &despise, &mid, CANVASES[0]),
+        ("D1f-169", &deceit, &deceit_know, CANVASES[1]),
+        ("D3f-43", &deceit, &deceit_know, CANVASES[0]),
+    ];
+    for (name, state, know, canvas) in scenes {
+        let view = GemViewState::open_all(
+            state,
+            canvas,
+            100,
+            TownInputs {
+                know: Some(know),
+                world: Some(&world),
+                surroundings: true,
+            },
+            DungeonInputs {
+                know: Some(know),
+                glyphs: GlyphPolicy::Perceived,
+            },
+        );
+        let features = gem_features(&view.shown, know);
+        let layout = DungeonLayout::new(canvas, true).unwrap();
+        let panels = match &view.shown {
+            GemShown::Dungeon(shown) => dungeon_panel_levels(shown, &layout, 0),
+            _ => Vec::new(),
+        };
+        let plan = gem_label_plan(&view.shown, &features, Some((&layout, &panels)));
+        let tags = plan.tags();
+        for (i, &(a, _)) in tags.iter().enumerate() {
+            assert!(a.0 >= 0 && a.1 >= 0, "{name}: {a:?}");
+            assert!(
+                a.2 <= canvas.w as i32 && a.3 <= canvas.h as i32,
+                "{name}: {a:?}"
+            );
+            if let Some(p) = plan.party {
+                assert!(
+                    !(a.0 < p.2 && p.0 < a.2 && a.1 < p.3 && p.1 < a.3),
+                    "{name}"
+                );
+            }
+            for &(b, _) in &tags[i + 1..] {
+                assert!(
+                    !(a.0 < b.2 && b.0 < a.2 && a.1 < b.3 && b.1 < a.3),
+                    "{name}"
+                );
+            }
+        }
+        let named = features
+            .iter()
+            .filter_map(|f| f.label())
+            .collect::<Vec<_>>();
+        for draw in &plan.draws {
+            if let LabelDraw::Text { text, .. } = draw {
+                assert!(named.contains(text), "{name}: {text}");
+            }
+        }
+        eprintln!(
+            "{name}: {} tags, {} unlabelled",
+            tags.len(),
+            plan.unlabelled()
+        );
+        let mut out = GemImage::default();
+        assert_ne!(
+            render_gem_map(state, know, &art, &on(), &view, &mut out),
+            GemRender::Cleared
+        );
+        if let Some(shots) = &shots {
+            write_ppm(shots, &format!("engine-labels-{name}.ppm"), &out);
         }
     }
 }

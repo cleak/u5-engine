@@ -35,17 +35,17 @@
 //! facing, and the panel titles in IBM.CH with a 1 px black outline. A lone
 //! panel shows the paged level (`GemViewState::page`, M3-14).
 //!
-//! **Marks and the "?"** (10.2.7, M3-15), with `gem_map.labels` on, after
-//! the map and before the party marker, at full brightness: each
-//! discovered feature's 1 px ring in its category colour with a black ring
-//! outside (a dungeon feature's comes with its label, M3-16), a town exit's
-//! white IBM.CH arrow just outside the floor, and on each undiscovered
-//! feature the 12 x 12 "?" tag with cut corners, a neutral grey ring and a
-//! white IBM.CH "?", centred on its cell outdoors and in towns and on the
-//! top-right corner of a dungeon cell. A dungeon panel shown only because a
+//! **Marks, labels and the "?"** (10.2.7, M3-15, M3-16), with
+//! `gem_map.labels` on, after the map and before the party marker, at full
+//! brightness, as the view's [`LabelPlan`] lays them out
+//! ([`super::labels`]): a town exit's white IBM.CH arrow just outside the
+//! floor; the leaders, a 1 px line over a 3 px black one; the rings, 1 px
+//! in the category colour (or the neutral grey for a "?" moved off its
+//! cell) with a black ring outside; then the IBM.CH name tags with their
+//! 1 px black outline and the 12 x 12 "?" tags with cut corners, a neutral
+//! grey ring and a white IBM.CH "?". A dungeon panel shown only because a
 //! drawn ladder leads to it carries a "?" in its middle. The features come
 //! from [`gem_features`]: the drawn tiles of the shown set and the record.
-//! Labels and their placement come later (M3-16).
 //!
 //! The render reads `&PlayState` and the view's cached shown set only: it
 //! changes nothing in the game, draws no random number and reads no file.
@@ -60,8 +60,12 @@ use u5_runtime::{
 };
 
 use super::dungeon::{DungeonLit, DungeonShown, DungeonSlot};
-use super::features::{FeatureCell, GemFeature, NEUTRAL_GREY, QUESTION_TAG_PX, gem_features};
+use super::features::{NEUTRAL_GREY, QUESTION_TAG_PX, gem_features};
 use super::knowledge::{EdgeSide, GemKnowledge};
+use super::labels::{
+    LabelDraw, LabelPlan, dungeon_label_plan, dungeon_title_tags, leader_start, line_points,
+    outdoor_label_plan, text_tag_size, town_label_plan,
+};
 use super::layout::{DUNGEON_PANEL_CELLS, DungeonLayout, GemCanvas, GlyphScale};
 use super::shown::{GemShown, GemViewState, OutdoorShown, TownPart, TownShown, gem_view_open};
 use crate::raster::{MAP_PALETTE, MAX_REDUCED_SIZE, MapLight, ReducedTiles};
@@ -271,16 +275,7 @@ pub fn render_gem_map(
             draw_outdoor_map(shown, art, &lut, out);
             if t.labels {
                 let features = gem_features(&view.shown, know);
-                draw_marks(
-                    &features,
-                    |cell| match *cell {
-                        FeatureCell::Outdoor { dx, dy } => Some(shown.layout.cell_rect(dx, dy)),
-                        _ => None,
-                    },
-                    false,
-                    art,
-                    out,
-                );
+                draw_label_plan(&outdoor_label_plan(shown, &features), art, out);
             }
             let (px, py) = shown.layout.party_px;
             draw_party_marker(state, art, (px, py), shown.layout.cell, out);
@@ -291,16 +286,7 @@ pub fn render_gem_map(
             draw_town_map(shown, art, percent, out);
             if t.labels {
                 let features = gem_features(&view.shown, know);
-                draw_marks(
-                    &features,
-                    |cell| match *cell {
-                        FeatureCell::Town { fx, fy, .. } => Some(shown.layout.cell_rect(fx, fy)),
-                        _ => None,
-                    },
-                    false,
-                    art,
-                    out,
-                );
+                draw_label_plan(&town_label_plan(shown, &features), art, out);
             }
             let (fx, fy) = (i32::from(shown.party.0), i32::from(shown.party.1));
             let (px, py, _, _) = shown.layout.cell_rect(fx, fy);
@@ -606,35 +592,8 @@ fn draw_dungeon(
     }
     // The titles, centred over each panel; with no room above (4:3), in the
     // margin to the left, on two lines when one is too wide.
-    let p = layout.panel_px() as i32;
-    for &(index, level) in &panels {
-        let Some(title) = shown.title(level) else {
-            continue;
-        };
-        let (px, py) = layout.panel_origin(index);
-        let (w, h) = text_tag_size(&title);
-        let ty = py - h - 3;
-        if ty >= 0 {
-            draw_text_tag(out, fonts.text, &title, px + (p - w) / 2, ty);
-            continue;
-        }
-        let lines = if w <= px {
-            vec![title.clone()]
-        } else {
-            let words = title.split(' ').collect::<Vec<_>>();
-            let cut = words.len().saturating_sub(2);
-            vec![words[..cut].join(" "), words[cut..].join(" ")]
-        };
-        for (k, line) in lines.iter().filter(|line| !line.is_empty()).enumerate() {
-            let (w, _) = text_tag_size(line);
-            draw_text_tag(
-                out,
-                fonts.text,
-                line,
-                ((px - w) / 2).max(0),
-                6 + 10 * k as i32,
-            );
-        }
+    for (title, x, y) in dungeon_title_tags(shown, layout, &panels) {
+        draw_text_tag(out, fonts.text, &title, x, y);
     }
 }
 
@@ -706,79 +665,55 @@ fn draw_link_boxes(
     }
 }
 
-/// The marks of `features` (10.2.7): the rings of the discovered ones
-/// (except in dungeons, `corner`, where the label carries them, M3-16), the
-/// exit arrows, then the "?" tags of the undiscovered ones, on the cells
-/// `rect` places, at full brightness. A feature whose cell the canvas cuts
-/// gets no mark.
-fn draw_marks(
-    features: &[GemFeature],
-    rect: impl Fn(&FeatureCell) -> Option<(i32, i32, u32, u32)>,
-    corner: bool,
-    art: &MapArt,
-    out: &mut GemImage,
-) {
+/// The labels of a plan (10.2.7, M3-16), at full brightness, in its
+/// order: the exit arrows, the leaders, the rings, then the tags.
+fn draw_label_plan(plan: &LabelPlan, art: &MapArt, out: &mut GemImage) {
     let font = art.fonts.as_deref().map(|(text, _)| text);
-    // Only cells wholly on the canvas: a cut edge cell is too small to
-    // carry a mark (the approved mockups' rule).
-    let (cw, ch) = (out.w as i32, out.h as i32);
-    let placed = features
-        .iter()
-        .filter_map(|feature| Some((feature, rect(&feature.cell)?)))
-        .filter(|(_, (x0, y0, w, h))| {
-            *x0 >= 0 && *y0 >= 0 && x0 + *w as i32 <= cw && y0 + *h as i32 <= ch
-        })
-        .collect::<Vec<_>>();
-    for (feature, (x0, y0, w, h)) in &placed {
-        if feature.known() && feature.exit_side().is_none() && !corner {
-            let (x1, y1) = (x0 + *w as i32, y0 + *h as i32);
-            out.frame((x0 - 1, y0 - 1, x1, y1), 1, feature.ring_colour());
-            out.frame((x0 - 2, y0 - 2, x1 + 1, y1 + 1), 1, [0, 0, 0]);
+    for draw in &plan.draws {
+        match *draw {
+            LabelDraw::Arrow { code, x, y } => {
+                if let Some(font) = font {
+                    let arrow = char::from(code).to_string();
+                    draw_text_tag(out, font, &arrow, x, y);
+                }
+            }
+            LabelDraw::Leader { from, to, colour } => draw_leader(out, from, to, colour),
+            LabelDraw::Ring { cell, colour } => {
+                let (x0, y0, x1, y1) = cell;
+                out.frame((x0 - 1, y0 - 1, x1, y1), 1, colour);
+                out.frame((x0 - 2, y0 - 2, x1 + 1, y1 + 1), 1, [0, 0, 0]);
+            }
+            LabelDraw::Text { text, x, y } => {
+                if let Some(font) = font {
+                    draw_text_tag(out, font, text, x, y);
+                }
+            }
+            LabelDraw::Question { x, y } => question_tag(out, font, x, y),
         }
-    }
-    for (feature, (x0, y0, w, h)) in &placed {
-        let Some(side) = feature.exit_side() else {
-            continue;
-        };
-        // The way out: one cell outside the floor's edge.
-        let (dx, dy) = match side {
-            EdgeSide::North => (0, -1),
-            EdgeSide::South => (0, 1),
-            EdgeSide::West => (-1, 0),
-            EdgeSide::East => (1, 0),
-        };
-        let cx = x0 + dx * *w as i32 + *w as i32 / 2;
-        let cy = y0 + dy * *h as i32 + *h as i32 / 2;
-        if !feature.known() {
-            question_tag(
-                out,
-                font,
-                cx - QUESTION_TAG_PX / 2,
-                cy - QUESTION_TAG_PX / 2,
-            );
-        } else if let Some(font) = font {
-            let arrow = char::from(exit_arrow(side)).to_string();
-            draw_text_tag(out, font, &arrow, cx - 5, cy - 5);
-        }
-    }
-    for (feature, (x0, y0, w, h)) in &placed {
-        if feature.known() || feature.exit_side().is_some() {
-            continue;
-        }
-        let (x, y) = if corner {
-            (x0 + *w as i32 - QUESTION_TAG_PX + 3, y0 - 3)
-        } else {
-            (
-                x0 + *w as i32 / 2 - QUESTION_TAG_PX / 2,
-                y0 + *h as i32 / 2 - QUESTION_TAG_PX / 2,
-            )
-        };
-        question_tag(out, font, x, y);
     }
 }
 
-/// The dungeon marks (10.2.7) on the panels on screen: the "?" tags on the
-/// top-right corner of the undiscovered features' cells, and a "?" in the
+/// A leader (10.2.7): a 1 px line in `colour` from the cell's centre to
+/// `to`, over a 3 px black line so it reads on any terrain.
+fn draw_leader(out: &mut GemImage, from: (f64, f64), to: (i32, i32), colour: [u8; 3]) {
+    let (x0, y0) = leader_start(from);
+    let points = line_points((x0, y0), to);
+    let steep = (to.1 - y0).abs() > (to.0 - x0).abs();
+    for &(x, y) in &points {
+        for k in -1..=1 {
+            if steep {
+                out.put(x + k, y, [0, 0, 0]);
+            } else {
+                out.put(x, y + k, [0, 0, 0]);
+            }
+        }
+    }
+    for &(x, y) in &points {
+        out.put(x, y, colour);
+    }
+}
+
+/// The dungeon labels (10.2.7) on the panels on screen, and a "?" in the
 /// middle of each black panel a drawn ladder or pit leads to (10.2.6).
 fn draw_dungeon_marks(
     shown: &DungeonShown,
@@ -790,30 +725,9 @@ fn draw_dungeon_marks(
     out: &mut GemImage,
 ) {
     let panels = dungeon_panel_levels(shown, layout, page);
-    let c = layout.cell as i32;
     let features = gem_features(view, know);
-    draw_marks(
-        &features,
-        |cell| {
-            let FeatureCell::Dungeon { level, x, y } = *cell else {
-                return None;
-            };
-            let &(index, _) = panels.iter().find(|(_, shown_level)| {
-                *shown_level == i32::from(level)
-                    && matches!(
-                        shown.slot(*shown_level),
-                        DungeonSlot::Level { cells: true, .. }
-                    )
-            })?;
-            let (px, py) = layout.panel_origin(index);
-            Some((
-                px + i32::from(x) * c,
-                py + i32::from(y) * c,
-                layout.cell,
-                layout.cell,
-            ))
-        },
-        true,
+    draw_label_plan(
+        &dungeon_label_plan(shown, layout, &panels, &features),
         art,
         out,
     );
@@ -905,11 +819,6 @@ pub fn facing_arrow(facing: Direction) -> u8 {
         Direction::East => 0x1A,
         Direction::West => 0x1B,
     }
-}
-
-/// A text tag's size: 8 px a character and a 1 px outline round it.
-pub fn text_tag_size(text: &str) -> (i32, i32) {
-    (8 * text.chars().count() as i32 + 2, 10)
 }
 
 /// `text` in IBM.CH at `(x, y)`, EGA 15 with a 1 px black outline on all

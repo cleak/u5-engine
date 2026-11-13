@@ -265,6 +265,18 @@ map over the whole window instead of the original's small square:
     secret doors are drawn as wall and hidden traps as passage until you
     find them. `gem-faithful` draws what the original gem draws, which
     gives secret doors and hidden pits away on sight.
+- **Names and "?".** `gem_map.labels`, **"Names on the gem map (only
+  places you have found)"**, on by default. A place, sign, shop, ladder,
+  exit, fountain or chest you have found gets a coloured ring and its name
+  (`Sign`, never its text; a shop's trade; `Ladder up`, `Exit` ...). Where
+  the map draws something you have not found yet, a grey "?" marks it and
+  says nothing about what it is; things the map does not draw, such as a
+  tavern before you talk to its keeper, a secret door or anything buried,
+  get no mark at all. The names never touch each other or the party box;
+  when there is no room beside a mark, the name moves out on a thin line.
+  On 4:3 the land beside a town is too narrow for names, so places there
+  keep only their rings and the town's exits only their arrows. Off, no
+  ring, "?" or name is drawn; what you have found is still remembered.
 - **Dimming.** `gem_map.map_brightness`, **"Gem map dimming (names stay
   bright)"**, 25 to 100, is 70 by default: the map is drawn at 70% light so
   the party box stands out. `gem_map.brightness_link`, **"Follow map
@@ -388,7 +400,7 @@ one that types keys must change it exactly as typing those keys would:
 | display.map_brightness | Map brightness (full map, gem map) | int 25..100 = 100 | a, F | feature | - | - | yes |
 | display.vignette | Edge darkening | int 0..50 = 0 | a, F | feature | --vignette | - | later (chapter 9 P3) |
 | display.composite_halo | Keep a thin black outline around sprites | bool = true | a, F | feature | - | - | yes |
-| gem_map.labels | Names on the gem map (only places you have found) | bool = true | a, F | feature | - | - | later (chapter 10 G5) |
+| gem_map.labels | Names on the gem map (only places you have found) | bool = true | a, F | feature | - | - | yes |
 | gem_map.brightness_link | Follow map brightness | bool = false | a, F | feature | - | - | yes |
 | gem_map.map_brightness | Gem map dimming (names stay bright) | int 25..100 = 70 | a, F | feature | - | - | yes |
 | gem_map.sweep | Fade the gem map in and out | bool = true | a, F | feature | - | - | yes |

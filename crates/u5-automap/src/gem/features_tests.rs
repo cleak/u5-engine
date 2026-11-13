@@ -761,11 +761,28 @@ fn the_exit_arrow_and_its_question_mark_sit_outside_the_floor() {
     let (x0, y0, w, h) = shown.layout.cell_rect(15, 32);
     let (cx, cy) = (x0 + w as i32 / 2, y0 + h as i32 / 2);
     let out = render(&state, &GemKnowledge::new(), &on(), &view);
-    // Unknown: the "?" tag centred one cell below the gate.
+    // Unknown: the arrow one cell below the gate, and its "?" where the
+    // layout puts it (M3-16): the 8 px strip below the floor cannot hold
+    // the 12 px tag, so it goes out on a leader.
+    let features = gem_features(&view.shown, &GemKnowledge::new());
+    let plan = crate::gem::labels::gem_label_plan(&view.shown, &features, None);
+    let exit = plan
+        .groups
+        .iter()
+        .flat_map(|(items, layout, _)| items.iter().zip(&layout.placed))
+        .find(|(item, _)| item.own_mark)
+        .expect("the exit");
+    assert_eq!(exit.0.cell, (cx - 5, cy - 5, cx + 5, cy + 5));
+    let tag = exit.1.tag.expect("a \"?\" tag");
     assert_eq!(
-        out.pixel((cx - 5) as u32, (cy - 6) as u32),
+        out.pixel((tag.0 + 1) as u32, tag.1 as u32),
         Some(rgba(NEUTRAL_GREY))
     );
+    let arrow = (cx - 5..cx + 5)
+        .flat_map(|x| (cy - 5..cy + 5).map(move |y| (x, y)))
+        .filter_map(|(x, y)| out.pixel(x as u32, y as u32))
+        .collect::<Vec<_>>();
+    assert!(arrow.contains(&rgba(WHITE)));
     let mut know = GemKnowledge::new();
     know.apply(&KnowEvent::TownExit(ExitRun {
         scene: britain().byte,
@@ -987,7 +1004,11 @@ fn dungeon_labels_and_found_features() {
 
 #[test]
 fn dungeon_question_marks_sit_on_the_top_right_corner() {
-    let state = dungeon(2);
+    // The fountain alone: its neighbours' marks would push its tag away
+    // (M3-16 placement).
+    let mut state = dungeon(2);
+    set_dungeon(&mut state, 2, 3, 1, 0x00);
+    set_dungeon(&mut state, 2, 5, 1, 0x00);
     let know = GemKnowledge::new();
     let view = dungeon_view(&state, &know, GlyphPolicy::Perceived);
     let GemShown::Dungeon(shown) = &view.shown else {

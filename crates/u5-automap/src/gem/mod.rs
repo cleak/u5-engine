@@ -19,6 +19,8 @@
 //!   M3-13);
 //! - [`features`]: the features of a view, from the drawn tiles of the
 //!   shown set and the record, and what each may tell (10.2.7, M3-15);
+//! - [`labels`]: label placement and the order of the labels (10.2.7,
+//!   L2, D10.4, M3-16);
 //! - [`shown`]: the shown set, the cells drawn and their tiles, cached per
 //!   open in [`GemViewState`] (10.2.3, D-M3.5, M3-10);
 //! - [`raster`]: [`render_gem_map`], the CPU raster (10.3.4, M3-10).
@@ -26,6 +28,7 @@
 pub mod dungeon;
 pub mod features;
 pub mod knowledge;
+pub mod labels;
 pub mod layout;
 pub mod payload;
 pub mod probe;
@@ -44,6 +47,10 @@ pub use knowledge::{
     DungeonMark, EdgeSide, ExitRun, FeatureKey, GEM_PAYLOAD_VERSION, GEM_SIDECAR_TAG, GateCell,
     GemKnowledge, KeeperMark, KnowEvent, LinkDir, MarkKind, SIDE_WINDOW_BYTES, SIDE_WINDOW_HEIGHT,
     SIDE_WINDOW_WIDTH, SIGN_TRADES, SignCell, TRADES, TownLink, Trade,
+};
+pub use labels::{
+    GroupLayout, LabelDraw, LabelItem, LabelPlan, LabelText, Placed, Placement, TagAt,
+    gem_label_plan, place_labels, text_tag_size,
 };
 pub use layout::{
     DUNGEON_MIN_CELL_PX, DUNGEON_PANEL_CELLS, DUNGEON_PANEL_TABLE, DungeonLayout,

@@ -10,7 +10,7 @@ use crate::enhancements::catalogue::{
 use crate::enhancements::resolve::{PresetLabel, ResolveInput, resolve, resolve_as_shipped};
 use crate::enhancements::sidecar::{SIDECAR_KEYS, sidecar_feature_on};
 use crate::enhancements::source::{
-    CliSetting, HostCapabilities, LockReason, LockState, SettingNote, SettingValue, SettingsSource,
+    CliSetting, HostCapabilities, LockReason, LockState, SettingValue, SettingsSource,
 };
 use crate::enhancements::{FeatureToggles, PRESETS};
 
@@ -233,8 +233,9 @@ fn no_gem_map_row_shows_every_name() {
     assert!(option(GLYPHS_KEY).label.contains("spoiler"));
 }
 
-/// The rows G2 (M3-11), G3 (M3-12) and G4 (M3-14) ship: the main toggle,
-/// its outdoor options, the town surroundings and the dungeon rows.
+/// Every row of chapter 10 ships: G2 (M3-11) the main toggle and its
+/// outdoor options, G3 (M3-12) the town surroundings, G4 (M3-14) the dungeon
+/// rows and G5 (M3-16) the labels.
 const SHIPPED_KEYS: &[&str] = &[
     ENHANCED_KEY,
     BRIGHTNESS_LINK_KEY,
@@ -245,17 +246,14 @@ const SHIPPED_KEYS: &[&str] = &[
     WRAP_ROWS_KEY,
     LEVEL_PAGING_KEY,
     GLYPHS_KEY,
+    LABELS_KEY,
 ];
 
 #[test]
-fn g2_g3_and_g4_of_chapter_10_ship() {
-    for phase in &ALL_GEM[..3] {
+fn every_phase_of_chapter_10_ships() {
+    for phase in ALL_GEM {
         assert!(SHIPPED_PHASES.contains(phase), "{phase:?}");
         assert!(phase.is_shipped());
-    }
-    for phase in &ALL_GEM[3..] {
-        assert!(!SHIPPED_PHASES.contains(phase), "{phase:?}");
-        assert!(!phase.is_shipped());
     }
     for phase in ALL_GEM {
         assert_eq!(phase.chapter, 10);
@@ -316,25 +314,24 @@ fn g2_g3_and_g4_of_chapter_10_ship() {
     let view = resolve(input(None, &[enable(ENHANCED_KEY)])).gem_map();
     assert!(view.opts.dungeon_stack && view.opts.wrap_rows && view.opts.level_paging);
     assert_eq!(view.opts.glyphs, GlyphPolicy::Perceived);
-    // The later row is still refused with a note and changes nothing,
-    // whether set by name, flag or file.
-    let cli = disable(LABELS_KEY);
-    let resolved = resolve(input(None, std::slice::from_ref(&cli)));
-    assert!(resolved.is_classic(), "{cli:?}");
-    assert!(
-        matches!(resolved.notes[..], [SettingNote::NotAvailable { .. }]),
-        "{cli:?}: {:?}",
-        note_lines(&resolved)
-    );
-    assert_eq!(resolved.gem_map(), GemMapToggles::default(), "{cli:?}");
+    // And the G5 row: labels on by default, off by name or by file.
+    assert!(view.labels);
+    let resolved = resolve(input(None, &[enable(ENHANCED_KEY), disable(LABELS_KEY)]));
+    assert!(resolved.notes.is_empty(), "{:?}", note_lines(&resolved));
+    let view = resolved.gem_map();
+    assert!(view.enhanced && !view.labels);
     let stored = Stored::default()
         .with(ENHANCED_KEY, SettingValue::Bool(true))
         .with(LABELS_KEY, SettingValue::Bool(false));
     let resolved = resolve(input(Some(&stored), &[]));
-    assert!(!resolved.is_classic(), "the file turns the map on");
+    assert!(resolved.notes.is_empty(), "{:?}", note_lines(&resolved));
     let view = resolved.gem_map();
-    assert!(view.enhanced);
-    assert!(view.labels, "the hidden labels row keeps its default");
+    assert!(view.enhanced && !view.labels);
+    // A sub-option alone leaves the game Classic: it is inert without the
+    // main toggle.
+    let resolved = resolve(input(None, &[disable(LABELS_KEY)]));
+    assert!(resolved.notes.is_empty(), "{:?}", note_lines(&resolved));
+    assert!(!resolved.gem_map().enhanced);
 }
 
 #[test]
