@@ -1,0 +1,342 @@
+//! The menu's wording table (Phase B design 3.2, 3.2.10; build plan M4-01,
+//! D-M4.11).
+//!
+//! Every label, help line, dialog line and toast the menu shows is a
+//! `&'static str` here, in the original's voice kept plain and clear: "Save
+//! thy game...", never "thee" for the sake of it. Key names stay as they are
+//! printed on keyboards (F12, Esc, Enter). Toasts that carry a slot name or
+//! an OS reason are templates with one `{}` (D-M4.7); only a player-typed
+//! slot name or the OS's own error text is ever put into them.
+//!
+//! The lengths are fixed by the panels (`geometry`): a narrow page's rows
+//! hold [`NARROW_TEXT`] cells, a wide page's [`WIDE_TEXT`], a dialog's
+//! [`DIALOG_TEXT`], a footer tab [`TAB_TEXT_NARROW`] or [`TAB_TEXT_WIDE`].
+//! `tests::every_label_fits_its_page` holds them to that.
+//!
+//! No text here names a place, person or item of the game (1.4.7); a row
+//! that can show what the player has not found starts with [`SPOILER`].
+
+use super::geometry::{DIALOG_CELLS, NARROW_CELLS, WIDE_CELLS};
+
+/// Text cells of a narrow page's row: the interior less one margin cell on
+/// each side.
+pub const NARROW_TEXT: usize = NARROW_CELLS as usize - 4;
+/// Text cells of a wide page's row.
+pub const WIDE_TEXT: usize = WIDE_CELLS as usize - 4;
+/// Text cells of a dialog's line.
+pub const DIALOG_TEXT: usize = DIALOG_CELLS as usize - 4;
+/// Text cells of a tab on a narrow page's ring: the ring less the two corner
+/// cells, one band cell inside each, and the two caps.
+pub const TAB_TEXT_NARROW: usize = NARROW_CELLS as usize - 6;
+/// Text cells of a tab on a wide page's ring.
+pub const TAB_TEXT_WIDE: usize = WIDE_CELLS as usize - 6;
+
+// --- The top menu (3.2.1) -------------------------------------------------
+
+/// The top menu's title tab.
+pub const MENU_TITLE: &str = "Menu";
+/// Close the menu and go back to the prompt (Resume).
+pub const RESUME: &str = "Return to the game";
+/// Open the Save page.
+pub const SAVE: &str = "Save thy game...";
+/// Open the Load page.
+pub const LOAD: &str = "Load a saved game...";
+/// The journal door (M5), shown only when its owner pushes it.
+pub const JOURNAL: &str = "Thy journal";
+/// The full-map door (chapter 4), shown only when its owner pushes it.
+pub const MAP: &str = "The map";
+/// Open the Settings page.
+pub const SETTINGS: &str = "Settings...";
+/// The cheats door (chapter 7).
+pub const CHEATS: &str = "Cheats...";
+/// Restart at the title.
+pub const QUIT_TO_TITLE: &str = "Return to the title";
+/// Close the game.
+pub const QUIT_TO_DESKTOP: &str = "Leave the game";
+
+/// Footer: turns since the last save or load this session; `{}` is the
+/// count.
+pub const LAST_SAVE_TURNS: &str = "Saved {} turns ago.";
+/// Footer: saved on this very turn.
+pub const LAST_SAVE_NOW: &str = "Just saved.";
+/// Footer: nothing saved or loaded yet this session.
+pub const LAST_SAVE_NONE: &str = "Not saved this session.";
+/// Footer: the world is Live behind the menu (U1).
+pub const WAITING: &str = "The game waits.";
+/// Help for Save when `save_command_available` is false.
+pub const SAVE_UNAVAILABLE: &str = "Thou canst not save at this moment.";
+
+// --- Footer key tabs --------------------------------------------------------
+
+/// The key that closes the menu from any page.
+pub const KEY_CLOSE: &str = "F12: close";
+/// The key that goes back one page.
+pub const KEY_BACK: &str = "Esc: back";
+/// The Load page's keys, in its footer box.
+pub const LOAD_KEYS: &str = "Enter: load  F2: rename  Del: delete";
+
+// --- Save (3.2.2) -----------------------------------------------------------
+
+/// The Save page's title tab.
+pub const SAVE_TITLE: &str = "Save thy game";
+/// The first row: make a new slot.
+pub const NEW_SLOT: &str = "A new slot...";
+/// The name field's prompt.
+pub const NAME_PROMPT: &str = "Name this save:";
+/// The default name of an unnamed slot; `{}` is its number.
+pub const DEFAULT_SLOT_NAME: &str = "Slot {}";
+/// The quick slot's name (a fixed word, always first).
+pub const QUICK_SLOT: &str = "quick";
+/// The Save page's footer (D3.2).
+pub const SAVE_FOOTER: &str = "This also writes the save that Journey Onward loads.";
+
+// --- Load (3.2.3) -----------------------------------------------------------
+
+/// The Load page's title tab.
+pub const LOAD_TITLE: &str = "Load a game";
+/// A slot whose files are missing, the wrong length or fail their digest.
+pub const DAMAGED: &str = "Damaged";
+/// Shown in the thumbnail box of a slot imported from a DOS save.
+pub const IMPORTED: &str = "Imported";
+/// The details line of a slot saved after cheats (chapter 7).
+pub const SAVED_WITH_CHEATS: &str = "Saved with cheats";
+/// The one-cell cheats mark on the slot's row.
+pub const CHEATS_MARK: &str = "C";
+/// The details line with the turn count; `{}` is the turn.
+pub const TURN: &str = "Turn {}";
+/// An empty slot list.
+pub const NO_SLOTS: &str = "No saves yet.";
+
+// --- Dialogs (3.2.2, 3.2.3, 3.2.5, 3.2.6) --------------------------------
+
+/// Overwrite an existing slot; `{}` is its name.
+pub const OVERWRITE: &str = "Write over \"{}\"?";
+/// Delete a slot; `{}` is its name.
+pub const DELETE: &str = "Delete \"{}\"?";
+/// The second line of the delete dialog.
+pub const DELETE_WARNING: &str = "It cannot be undone.";
+/// Load a slot; `{}` is its name.
+pub const LOAD_ASK: &str = "Load \"{}\"?";
+/// Return to the title, asked when there is unsaved progress.
+pub const QUIT_TO_TITLE_ASK: &str = "Return to the title?";
+/// Leave the game, asked when there is unsaved progress.
+pub const QUIT_TO_DESKTOP_ASK: &str = "Leave the game?";
+/// Unsaved progress since a save or load this session; `{}` is the turns.
+pub const UNSAVED_TURNS: &str = "{} turns since thy last save will be lost.";
+/// Unsaved progress with no save or load yet this session.
+pub const UNSAVED_SESSION: &str = "Progress since this session began will be lost.";
+/// Dialog buttons.
+pub const YES: &str = "Yes";
+/// See [`YES`].
+pub const NO: &str = "No";
+/// See [`YES`].
+pub const LOAD_BUTTON: &str = "Load";
+/// See [`YES`].
+pub const CANCEL: &str = "Cancel";
+/// See [`YES`].
+pub const DELETE_BUTTON: &str = "Delete";
+
+// --- The title layer (3.2.4) -----------------------------------------------
+
+/// The title layer's title tab.
+pub const TITLE_LAYER_TITLE: &str = "Ultima V";
+/// Continue the newest slot; `{}` is "name, date".
+pub const CONTINUE_SLOT: &str = "Continue  ({})";
+/// The title layer's Continue row for slot `name` saved on `date`: the
+/// name is cut (ending in "...") so the row fits a wide page.
+pub fn continue_label(name: &str, date: &str) -> String {
+    let fixed = CONTINUE_SLOT.len() - 2 + 2 + date.len();
+    let room = WIDE_TEXT.saturating_sub(fixed);
+    fill(CONTINUE_SLOT, &[&format!("{}, {date}", cut(name, room))])
+}
+
+/// `text` cut to `cells`, ending in "..." when it was longer.
+pub fn cut(text: &str, cells: usize) -> String {
+    if text.len() <= cells {
+        text.to_string()
+    } else {
+        format!("{}...", &text[..cells.saturating_sub(3)])
+    }
+}
+
+/// Continue without slots: the game's own Journey Onward.
+pub const CONTINUE: &str = "Continue";
+/// Leave from the title.
+pub const QUIT: &str = "Leave the game";
+
+// --- Settings (3.2.7) -------------------------------------------------------
+
+/// The four tabs.
+pub const TAB_AUDIO: &str = "Audio";
+/// See [`TAB_AUDIO`].
+pub const TAB_DISPLAY: &str = "Display";
+/// See [`TAB_AUDIO`].
+pub const TAB_GAME: &str = "Game";
+/// See [`TAB_AUDIO`]. The wizard's Enhancements page; "Enhancements"
+/// does not fit the strip with a band cell between the tabs.
+pub const TAB_ENHANCEMENTS: &str = "Extras";
+/// The tabs in order.
+pub const SETTINGS_TABS: [&str; 4] = [TAB_AUDIO, TAB_DISPLAY, TAB_GAME, TAB_ENHANCEMENTS];
+
+/// Audio rows.
+pub const VOLUME: &str = "Volume";
+/// See [`VOLUME`].
+pub const MUTE: &str = "Mute";
+/// See [`VOLUME`].
+pub const MUTE_ON_FOCUS_LOSS: &str = "Mute in background";
+/// The Audio tab's help.
+pub const AUDIO_HELP: &str =
+    "Volume sets the loudness only. The game's own Sound On and Off is on the Game tab.";
+
+/// Game rows: the game's live values.
+pub const SOUND: &str = "Sound (Ctrl-S)";
+/// See [`SOUND`].
+pub const BUFFER: &str = "Buffer (Ctrl-B)";
+/// See [`SOUND`].
+pub const START_SOUND_OFF: &str = "Begin with sound off";
+/// See [`SOUND`].
+pub const START_BUFFER_ON: &str = "Begin with buffer on";
+/// See [`SOUND`].
+pub const CONFIRM_UNSAVED: &str = "Warn of unsaved play";
+/// See [`SOUND`].
+pub const PACING: &str = "Pacing...";
+/// The game's own On and Off, as the game prints them.
+pub const ON: &str = "On";
+/// See [`ON`].
+pub const OFF: &str = "Off";
+/// A reserved row.
+pub const RESERVED: &str = "(later)";
+
+/// The preset row.
+pub const PRESET: &str = "Preset:";
+/// A preset after a later change.
+pub const CUSTOM: &str = "Custom";
+
+/// A row's apply point when it is not the next frame (3.4.1, D-M4.4).
+pub const NEXT_PROMPT: &str = "next prompt";
+/// See [`NEXT_PROMPT`].
+pub const NEXT_LAUNCH: &str = "next launch";
+/// A row the command line set for this run (3.3.6).
+pub const SET_BY_COMMAND_LINE: &str = "(set by command line)";
+
+/// The word a row that can show undiscovered things starts with (U17).
+pub const SPOILER: &str = "Spoiler:";
+/// The collapsed cheats group's header (3.2.7).
+pub const CHEATS_GROUP: &str = "Cheats (changes thy game)";
+
+// --- Toasts (3.2.10, D-M4.7) ------------------------------------------------
+
+/// F12 away from the command prompt.
+pub const OPENS_AT_PROMPT: &str = "The menu opens at the command prompt.";
+/// A slot save finished; `{}` is the slot's name.
+pub const SAVED_TO: &str = "Saved to \"{}\".";
+/// The Q save failed.
+pub const SAVE_FAILED: &str = "Save failed; the slot was not changed.";
+/// The working save was written but the slot copy failed; `{}` the name,
+/// `{}` the reason.
+pub const SLOT_WRITE_FAILED: &str = "Saved the game, but could not write \"{}\": {}.";
+/// Another copy holds the slot lock.
+pub const SLOTS_BUSY: &str = "The saves are busy (another copy of the game?).";
+/// A restore failed and was rolled back; `{}` the name, `{}` the reason.
+pub const LOAD_FAILED: &str = "Could not load \"{}\": {}. Thy game is unchanged.";
+
+/// `template` with each `{}` replaced by the next of `args`, in order. A
+/// template with fewer holes than `args` ignores the rest.
+pub fn fill(template: &str, args: &[&str]) -> String {
+    let mut out = String::with_capacity(template.len() + 16);
+    let mut args = args.iter();
+    let mut rest = template;
+    while let Some(at) = rest.find("{}") {
+        out.push_str(&rest[..at]);
+        out.push_str(args.next().copied().unwrap_or(""));
+        rest = &rest[at + 2..];
+    }
+    out.push_str(rest);
+    out
+}
+
+/// `text` broken into lines of at most `width` cells at spaces; a word
+/// longer than `width` is cut.
+pub fn wrap(text: &str, width: usize) -> Vec<String> {
+    let mut lines = Vec::new();
+    let mut line = String::new();
+    for word in text.split(' ').filter(|word| !word.is_empty()) {
+        let mut word = word;
+        while word.len() > width {
+            if !line.is_empty() {
+                lines.push(std::mem::take(&mut line));
+            }
+            lines.push(word[..width].to_string());
+            word = &word[width..];
+        }
+        if line.is_empty() {
+            line.push_str(word);
+        } else if line.len() + 1 + word.len() <= width {
+            line.push(' ');
+            line.push_str(word);
+        } else {
+            lines.push(std::mem::replace(&mut line, word.to_string()));
+        }
+    }
+    if !line.is_empty() {
+        lines.push(line);
+    }
+    lines
+}
+
+/// Every row label of the narrow pages (the top menu, Save, the title
+/// layer), for the fit test.
+pub const NARROW_LABELS: &[&str] = &[
+    RESUME,
+    SAVE,
+    LOAD,
+    JOURNAL,
+    MAP,
+    SETTINGS,
+    CHEATS,
+    QUIT_TO_TITLE,
+    QUIT_TO_DESKTOP,
+    NEW_SLOT,
+    NAME_PROMPT,
+    LAST_SAVE_NOW,
+    NO_SLOTS,
+];
+
+/// Every row label of the wide pages' label column (Settings, the title
+/// layer's rows), for the fit test: [`SETTINGS_LABEL`] cells.
+pub const SETTINGS_ROW_LABELS: &[&str] = &[
+    VOLUME,
+    MUTE,
+    MUTE_ON_FOCUS_LOSS,
+    SOUND,
+    BUFFER,
+    START_SOUND_OFF,
+    START_BUFFER_ON,
+    CONFIRM_UNSAVED,
+    PACING,
+];
+
+/// Cells of a Settings row's label column.
+pub const SETTINGS_LABEL: usize = 20;
+
+/// Every title tab, for the fit test: narrow pages, then wide ones.
+pub const NARROW_TABS: &[&str] = &[MENU_TITLE, SAVE_TITLE, KEY_CLOSE, KEY_BACK];
+/// See [`NARROW_TABS`].
+pub const WIDE_TABS: &[&str] = &[LOAD_TITLE, TITLE_LAYER_TITLE, KEY_CLOSE, KEY_BACK];
+
+/// Every dialog line, filled with the longest slot name a player can type
+/// where it has a name, for the fit test (after wrapping to
+/// [`DIALOG_TEXT`]).
+pub const DIALOG_TEMPLATES: &[&str] = &[
+    OVERWRITE,
+    DELETE,
+    DELETE_WARNING,
+    LOAD_ASK,
+    QUIT_TO_TITLE_ASK,
+    QUIT_TO_DESKTOP_ASK,
+    UNSAVED_TURNS,
+    UNSAVED_SESSION,
+];
+
+/// The longest slot name (3.2.2).
+pub const SLOT_NAME_MAX: usize = 24;

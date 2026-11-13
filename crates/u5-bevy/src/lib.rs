@@ -225,6 +225,11 @@ pub mod display;
 /// under Classic.
 pub mod enh;
 
+/// The menu overlay (Phase B design chapter 3): the frame kit, the panel
+/// geometry and the wording. Nothing is registered yet; absent from the app
+/// under Classic.
+pub mod menu;
+
 pub use enh::{EnhSet, EnhancementsPlugin, ShellExit, VisualLaunchConfig};
 
 /// The on-screen size of a logical frame at `scale`, aspect-corrected.
