@@ -394,3 +394,24 @@ fn the_enhancement_docs_links_resolve() {
     }
     assert_eq!(anchor(" Enhancement Hotkeys"), "enhancement-hotkeys");
 }
+
+/// Every help line belongs to a catalogue row, and the gem map's four rows
+/// of design 10.2.1 have one (build plan M3-17).
+#[test]
+fn help_lines_belong_to_catalogue_rows() {
+    use u5_runtime::enhancements::{CatalogueRow, help_line};
+    let with_help: Vec<&str> = CatalogueRow::all()
+        .map(|row| row.key())
+        .filter(|key| help_line(key).is_some())
+        .collect();
+    assert_eq!(
+        with_help,
+        [
+            "gem_map.enhanced",
+            "gem_map.labels",
+            "gem_map.brightness_link",
+            "gem_map.map_brightness",
+        ]
+    );
+    assert_eq!(help_line("gem_map.not_a_row"), None);
+}

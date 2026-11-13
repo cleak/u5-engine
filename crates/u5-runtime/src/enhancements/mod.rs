@@ -69,7 +69,7 @@ pub use catalogue::{
 };
 pub use catalogue::{
     DISPLAY_P1, DISPLAY_P2, DISPLAY_P8, GEM_G2, GEM_G3, GEM_G4, GEM_G5, LAUNCH_PARAMETER_KEYS,
-    LIGHT_P1, LIGHT_P2, LIGHT_P3, LIGHT_P5, named_stops,
+    LIGHT_P1, LIGHT_P2, LIGHT_P3, LIGHT_P5, help_line, named_stops,
 };
 pub use digest::{
     DIGEST_GROUPS, SKIPPED_FIELDS, TrajectoryDigest, digest_groups, trajectory_digest,

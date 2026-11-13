@@ -154,6 +154,10 @@ pub struct SettingRow {
     /// A sub-option, drawn indented under the row before it (the grow-left
     /// rows under "Wider world view", design 2.4.1).
     pub indent: bool,
+    /// The plain sentence the page shows while the row has the focus
+    /// (design 10.2.1 for the gem map's rows); `None` when the label says
+    /// enough.
+    pub help: Option<String>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]

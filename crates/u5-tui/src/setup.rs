@@ -399,7 +399,8 @@ fn wizard_rows(
 ) -> Vec<u5_bevy_setup::SettingRow> {
     use u5_bevy_setup::{RowKind, RowRole, RowValue, SettingRow};
     use u5_runtime::enhancements::{
-        CHEATS_SWITCH, CatalogueRow, OptionDefault, OptionKind, SettingValue, Tier, named_stops,
+        CHEATS_SWITCH, CatalogueRow, OptionDefault, OptionKind, SettingValue, Tier, help_line,
+        named_stops,
     };
 
     /// Small number ranges become a choice; larger ones stay in the file.
@@ -521,6 +522,7 @@ fn wizard_rows(
                 value,
                 default,
                 indent: parent.is_some(),
+                help: help_line(key).map(str::to_string),
             },
         ));
     }

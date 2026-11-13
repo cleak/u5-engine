@@ -34,7 +34,7 @@ pub use equivalence::{
     TraceStep, check_equivalence, compare_runs, parse_matrix, plan_configurations,
     run_equivalence_suite, run_trace, terminal_features,
 };
-pub use gem_map::{GEM_MAP_TOKEN, TerminalGemMap};
+pub use gem_map::{GEM_MAP_TOKEN, GemPng, TerminalGemMap};
 pub use intro_loop::run_intro_menu_loop;
 pub use play_loop::{
     ENHANCEMENT_TOKEN_PREFIX, FreeTextLineInput, NoScriptTokenHooks, PlayObserver,

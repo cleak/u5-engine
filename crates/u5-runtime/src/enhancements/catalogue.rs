@@ -962,7 +962,7 @@ pub const OPTIONS: &[OptionSpec] = &[
     // preferences in no preset (foundation 1.4.2).
     gem_map_option(
         "gem_map.labels",
-        "Names on the gem map (only places you have found)",
+        "Names on the gem map",
         OptionKind::Bool,
         OptionDefault::Bool(true),
         GEM_G5,
@@ -976,7 +976,7 @@ pub const OPTIONS: &[OptionSpec] = &[
     ),
     gem_map_option(
         "gem_map.map_brightness",
-        "Gem map dimming (names stay bright)",
+        "Gem map dimming",
         OptionKind::Int { min: 25, max: 100 },
         OptionDefault::Int(70),
         GEM_G2,
@@ -1044,6 +1044,24 @@ pub fn named_stops(key: &str) -> Option<&'static [i64]> {
         // 10.2.10: the default 70 first, then the brighter and darker
         // steps.
         "gem_map.map_brightness" => Some(&[70, 85, 100, 55, 40, 25]),
+        _ => None,
+    }
+}
+
+/// A row's help line: the plain sentence a settings page shows under the
+/// row it describes (design 10.2.1 for the gem map). `None` for a row
+/// whose label says enough.
+pub fn help_line(key: &str) -> Option<&'static str> {
+    match key {
+        // 10.2.1, word for word.
+        "gem_map.enhanced" => Some(
+            "Using a gem shows a full-screen map with real tiles. It shows more ground than the original gem.",
+        ),
+        "gem_map.labels" => Some(
+            "Marks what the map shows. Names appear only once you have found the place yourself.",
+        ),
+        "gem_map.map_brightness" => Some("How dark the map is drawn. Names stay bright."),
+        "gem_map.brightness_link" => Some("Use the same darkness as the other maps."),
         _ => None,
     }
 }

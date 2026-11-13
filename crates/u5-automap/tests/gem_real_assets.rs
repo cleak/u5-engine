@@ -650,3 +650,110 @@ fn real_assets_render_labels() {
         }
     }
 }
+
+/// With `U5_MOCKUP_PROFILE` naming a game copy: the profile of 10.6 on the
+/// player's own files. Each mockup scene's full open (the shown set, the
+/// map, the marks and labels from `U5_GEM_KNOWLEDGE`, the marker) at 16:9
+/// and 21:9 stays under 8 ms in the player's (optimised) build; a debug
+/// build only reports its numbers (M3-17).
+#[test]
+fn real_assets_open_and_render_under_8_ms() {
+    use std::time::{Duration, Instant};
+    use u5_automap::StaticMaps;
+    use u5_automap::gem::{DungeonInputs, TownInputs, town_world_plane};
+    use u5_runtime::enhancements::GlyphPolicy;
+    let Some(dir) = env_dir("U5_MOCKUP_PROFILE") else {
+        eprintln!("skipped: set U5_MOCKUP_PROFILE");
+        return;
+    };
+    let atlas = u5_runtime::load_tile_atlas(&dir, TileGraphicsDepth::Ega16).unwrap();
+    let art = MapArt::build(&atlas).with_fonts(
+        u5_runtime::load_ibm_ch_font(&dir).unwrap(),
+        u5_runtime::load_runes_ch_font(&dir).unwrap(),
+    );
+    let know = demo_knowledge();
+    let outdoors = real_world(&dir, (76, 108), (12, 6));
+    let britain = real_britain(&dir);
+    let despise = real_despise(&dir);
+    let mut maps = StaticMaps::new(&dir);
+    let world = maps
+        .world_map(town_world_plane(&britain).unwrap())
+        .unwrap()
+        .to_vec();
+    let t = on();
+    let mut out = GemImage::default();
+    let mut slowest = Duration::ZERO;
+    for canvas in [CANVASES[1], CANVASES[2]] {
+        for (name, state) in [("O", &outdoors), ("T", &britain), ("D", &despise)] {
+            let mut open_and_render = || {
+                let view = GemViewState::open_all(
+                    state,
+                    canvas,
+                    100,
+                    TownInputs {
+                        know: Some(&know),
+                        world: Some(&world),
+                        surroundings: true,
+                    },
+                    DungeonInputs {
+                        know: Some(&know),
+                        glyphs: GlyphPolicy::Perceived,
+                    },
+                );
+                assert_ne!(
+                    render_gem_map(state, &know, &art, &t, &view, &mut out),
+                    GemRender::Cleared
+                );
+            };
+            open_and_render();
+            let took = (0..20)
+                .map(|_| {
+                    let start = Instant::now();
+                    open_and_render();
+                    start.elapsed()
+                })
+                .max()
+                .unwrap();
+            eprintln!(
+                "real {name}, {}x{}: open + render worst {took:?}",
+                canvas.w, canvas.h
+            );
+            slowest = slowest.max(took);
+        }
+    }
+    if cfg!(debug_assertions) {
+        return;
+    }
+    // The whole world, outdoors on both planes: the party every 8 cells,
+    // the widest canvas, the same record. The worst cell is the budget.
+    for plane in [WorldPlane::Britannia, WorldPlane::Underworld] {
+        let mut worst = Duration::ZERO;
+        let mut sampled = 0;
+        for y in (4..256).step_by(8) {
+            for x in (4..256).step_by(8) {
+                // A start on water or a wall is refused: the next cell.
+                let Ok(mut state) = PlayState::load_scene(
+                    &dir,
+                    u5_runtime::PlayOptions {
+                        target: u5_runtime::PlayTarget::World(plane),
+                        start: Some((x, y)),
+                        clock: u5_runtime::GameClock::new(12, 0).unwrap(),
+                        ..u5_runtime::PlayOptions::default()
+                    },
+                ) else {
+                    continue;
+                };
+                sampled += 1;
+                state.active_view_overlay = gem_overlay();
+                let start = Instant::now();
+                let view = GemViewState::open(&state, CANVASES[2], 100);
+                render_gem_map(&state, &know, &art, &t, &view, &mut out);
+                worst = worst.max(start.elapsed());
+            }
+        }
+        eprintln!("real {plane:?} sweep, {sampled} cells, 688x240: worst {worst:?}");
+        assert!(sampled > 100, "{plane:?}: {sampled}");
+        slowest = slowest.max(worst);
+    }
+    assert!(slowest < Duration::from_millis(8), "{slowest:?}");
+}

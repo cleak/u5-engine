@@ -98,6 +98,13 @@ pub struct CliArgs {
     /// `--play` or `--route-smoke` run (Phase B design 10.3.6). Ignored
     /// under the parity lock.
     pub gem_map: bool,
+    /// `--gem-map-png <dir>`: with `--gem-map` in `--play`, write the
+    /// enhanced gem map as a PNG into this folder each time a gem view
+    /// opens (design 10.3.6). A test aid.
+    pub gem_map_png: Option<PathBuf>,
+    /// `--gem-map-canvas WxH`: the canvas of those PNGs; the classic
+    /// 320x200 when not given.
+    pub gem_map_canvas: Option<(u32, u32)>,
     /// `--show-settings`: print the resolved settings and exit.
     pub show_settings: bool,
     /// `--settings`: open the setup window's Enhancements page, then start
@@ -248,6 +255,8 @@ where
     let mut enhancements: Vec<CliSetting> = Vec::new();
     let mut parity_lock = false;
     let mut gem_map = false;
+    let mut gem_map_png: Option<PathBuf> = None;
+    let mut gem_map_canvas: Option<(u32, u32)> = None;
     let mut show_settings = false;
     let mut settings = false;
     let mut args = args.into_iter().map(Into::into);
@@ -669,6 +678,34 @@ where
             // before its row ships (design 10.3.6); `--no-gem-map` stays
             // with the catalogue's aliases.
             "--gem-map" => gem_map = true,
+            "--gem-map-png" => {
+                let value = args.next().ok_or_else(|| {
+                    io::Error::new(
+                        io::ErrorKind::InvalidInput,
+                        "--gem-map-png requires a folder for the PNG files",
+                    )
+                })?;
+                if gem_map_png.replace(PathBuf::from(value)).is_some() {
+                    return Err(io::Error::new(
+                        io::ErrorKind::InvalidInput,
+                        "--gem-map-png may only be supplied once",
+                    ));
+                }
+            }
+            "--gem-map-canvas" => {
+                let value = args.next().ok_or_else(|| {
+                    io::Error::new(
+                        io::ErrorKind::InvalidInput,
+                        "--gem-map-canvas requires WxH, e.g. 512x240",
+                    )
+                })?;
+                if gem_map_canvas.replace(parse_gem_canvas(&value)?).is_some() {
+                    return Err(io::Error::new(
+                        io::ErrorKind::InvalidInput,
+                        "--gem-map-canvas may only be supplied once",
+                    ));
+                }
+            }
             "--show-settings" => show_settings = true,
             "--settings" => settings = true,
             _ if arg.starts_with("--") => {
@@ -723,6 +760,8 @@ where
             enhancements: Vec::new(),
             parity_lock: false,
             gem_map: false,
+            gem_map_png: None,
+            gem_map_canvas: None,
             show_settings: false,
             settings: false,
             settings_file: false,
@@ -1053,10 +1092,26 @@ where
         enhancements,
         parity_lock,
         gem_map,
+        gem_map_png,
+        gem_map_canvas,
         show_settings,
         settings,
         settings_file: false,
     };
+    if args.gem_map_canvas.is_some() && args.gem_map_png.is_none() {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "--gem-map-canvas sets the size of the --gem-map-png pictures; give --gem-map-png too",
+        ));
+    }
+    if args.gem_map_png.is_some()
+        && (!args.gem_map || !args.play || args.visual || args.is_qa_mode())
+    {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "--gem-map-png writes the enhanced gem map of a --gem-map run; it needs --gem-map with --play or --play-script",
+        ));
+    }
     if args.gem_map {
         if args.is_qa_mode() && !args.route_smoke {
             return Err(io::Error::new(
@@ -1178,6 +1233,36 @@ impl CliCommand {
     }
 }
 
+/// The smallest canvas `--gem-map-canvas` takes: the classic gem canvas
+/// (below it the window shows the 1.0.1 view, design 10.2.11).
+pub const GEM_PNG_MIN_CANVAS: (u32, u32) = (320, 200);
+/// The largest side `--gem-map-canvas` takes.
+pub const GEM_PNG_MAX_SIDE: u32 = 4096;
+
+/// `WxH` for `--gem-map-canvas`, from 320x200 up to 4096 a side.
+pub fn parse_gem_canvas(value: &str) -> io::Result<(u32, u32)> {
+    let invalid = || {
+        io::Error::new(
+            io::ErrorKind::InvalidInput,
+            format!(
+                "--gem-map-canvas takes WxH from {}x{} to {GEM_PNG_MAX_SIDE}x{GEM_PNG_MAX_SIDE}, got `{value}`",
+                GEM_PNG_MIN_CANVAS.0, GEM_PNG_MIN_CANVAS.1
+            ),
+        )
+    };
+    let (w, h) = value.trim().split_once(['x', 'X']).ok_or_else(invalid)?;
+    let w: u32 = w.trim().parse().map_err(|_| invalid())?;
+    let h: u32 = h.trim().parse().map_err(|_| invalid())?;
+    if w < GEM_PNG_MIN_CANVAS.0
+        || h < GEM_PNG_MIN_CANVAS.1
+        || w > GEM_PNG_MAX_SIDE
+        || h > GEM_PNG_MAX_SIDE
+    {
+        return Err(invalid());
+    }
+    Ok((w, h))
+}
+
 pub const CLI_USAGE: &str = "\
 Ultima V clean-room verification and playable harness.
 
@@ -1231,6 +1316,12 @@ OPTIONS:
         --gem-map             With --play or --route-smoke, keep the enhanced
                               gem map's record of discoveries (beside the save
                               in --play); @gemmap in a script prints its counts.
+        --gem-map-png <DIR>   With --gem-map and --play, write the enhanced gem
+                              map as a PNG into DIR each time a gem view opens
+                              (a test aid; the terminal draws no map).
+        --gem-map-canvas <WxH>
+                              The canvas of those PNGs, from 320x200 (the
+                              default) up, e.g. 512x240 for 16:9.
         --equivalence-suite <OUT>
                               Run every route smoke case with every
                               enhancement off, then under Classic and each

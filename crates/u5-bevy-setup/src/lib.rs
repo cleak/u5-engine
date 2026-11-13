@@ -539,6 +539,10 @@ pub fn page_for(model: &WizardModel, host: &dyn WizardHost) -> Page {
     }
 }
 
+/// The help line's text while the focused row has none: one space, so the
+/// line keeps its height.
+pub const HELP_PLACEHOLDER: &str = " ";
+
 /// The label of the Cheats group, which says what it does to a game.
 pub const CHEATS_GROUP: &str = "Cheats (changes your game)";
 
@@ -619,6 +623,18 @@ pub fn settings_page(page: &SettingsPage) -> Page {
         "Changes apply when the game starts.".to_string(),
         LineStyle::Dim,
     ));
+    // The focused row's help line (design 10.2.1). The line is kept, blank,
+    // while a row without one has the focus, so the rows below never jump.
+    if page.rows.iter().any(|row| row.help.is_some()) {
+        let help = match focused {
+            Some(FocusItem::Row(index)) => page.rows.get(index).and_then(|row| row.help.clone()),
+            _ => None,
+        };
+        lines.push((
+            help.unwrap_or_else(|| HELP_PLACEHOLDER.to_string()),
+            LineStyle::Body,
+        ));
+    }
     let button = |label: &str, action: Action, item: FocusItem| {
         let text = if focused == Some(item) {
             format!("> {label} <")

@@ -188,7 +188,11 @@ fn dispatch(mut args: CliArgs) -> io::Result<()> {
         return run_visual(args);
     }
     if args.play {
-        let session = TerminalSession::for_play(&args.game_dir, gem_map_on(&args));
+        let gem_map = gem_map_on(&args);
+        let mut session = TerminalSession::for_play(&args.game_dir, gem_map);
+        if let (Some(dir), Some(record)) = (args.gem_map_png.as_deref(), session.gem_map.take()) {
+            session.gem_map = Some(record.with_png(gem_png(&args, dir)));
+        }
         return run_play_loop_with(
             &args.game_dir,
             args.play_options,
@@ -199,6 +203,20 @@ fn dispatch(mut args: CliArgs) -> io::Result<()> {
         );
     }
     run_report(&args.game_dir)
+}
+
+/// `--gem-map-png`'s writer at the canvas `--gem-map-canvas` names (the
+/// classic 320x200 without it).
+fn gem_png(args: &CliArgs, dir: &std::path::Path) -> u5_tui::GemPng {
+    let (w, h) = args
+        .gem_map_canvas
+        .unwrap_or(u5_tui::cli::GEM_PNG_MIN_CANVAS);
+    u5_tui::GemPng::terminal(
+        dir,
+        u5_automap::gem::GemCanvas { w, h },
+        &args.game_dir,
+        args.raster_depth,
+    )
 }
 
 /// Whether `--gem-map` keeps the record in this terminal run: never under

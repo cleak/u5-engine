@@ -265,8 +265,8 @@ map over the whole window instead of the original's small square:
     secret doors are drawn as wall and hidden traps as passage until you
     find them. `gem-faithful` draws what the original gem draws, which
     gives secret doors and hidden pits away on sight.
-- **Names and "?".** `gem_map.labels`, **"Names on the gem map (only
-  places you have found)"**, on by default. A place, sign, shop, ladder,
+- **Names and "?".** `gem_map.labels`, **"Names on the gem map"**, on by
+  default. A place, sign, shop, ladder,
   exit, fountain or chest you have found gets a coloured ring and its name
   (`Sign`, never its text; a shop's trade; `Ladder up`, `Exit` ...). Where
   the map draws something you have not found yet, a grey "?" marks it and
@@ -277,8 +277,8 @@ map over the whole window instead of the original's small square:
   On 4:3 the land beside a town is too narrow for names, so places there
   keep only their rings and the town's exits only their arrows. Off, no
   ring, "?" or name is drawn; what you have found is still remembered.
-- **Dimming.** `gem_map.map_brightness`, **"Gem map dimming (names stay
-  bright)"**, 25 to 100, is 70 by default: the map is drawn at 70% light so
+- **Dimming.** `gem_map.map_brightness`, **"Gem map dimming"**, 25 to
+  100, is 70 by default: the map is drawn at 70% light so
   the party box stands out. `gem_map.brightness_link`, **"Follow map
   brightness"**, off by default, uses `display.map_brightness`, **"Map
   brightness (full map, gem map)"**, instead while that is below 100, so one
@@ -289,6 +289,15 @@ map over the whole window instead of the original's small square:
   never holds a key: a key pressed while it runs closes the view at once,
   as in the original, and the fade turns round.
 - On a window smaller than 320x200 the original view is shown.
+- On the setup window's Enhancements page these rows are in the **Maps**
+  group, under "Enhanced gem map"; the line above the rows says what the
+  focused row does, and "Gem map dimming" offers 70%, 85%, 100%, 55%, 40%
+  and 25%.
+- For tests, a terminal run with `--play --gem-map --gem-map-png <DIR>`
+  writes the map a window would show, with the default `[gem_map]`
+  settings, as a PNG into `DIR` each time a gem view opens, at
+  `--gem-map-canvas WxH` (320x200 when not given). Without `--gem-map`, or
+  under the parity lock, nothing is written.
 
 Nothing here changes the game: the gem is spent by the game itself, the
 original view is still drawn underneath, and the game's state, random
@@ -400,9 +409,9 @@ one that types keys must change it exactly as typing those keys would:
 | display.map_brightness | Map brightness (full map, gem map) | int 25..100 = 100 | a, F | feature | - | - | yes |
 | display.vignette | Edge darkening | int 0..50 = 0 | a, F | feature | --vignette | - | later (chapter 9 P3) |
 | display.composite_halo | Keep a thin black outline around sprites | bool = true | a, F | feature | - | - | yes |
-| gem_map.labels | Names on the gem map (only places you have found) | bool = true | a, F | feature | - | - | yes |
+| gem_map.labels | Names on the gem map | bool = true | a, F | feature | - | - | yes |
 | gem_map.brightness_link | Follow map brightness | bool = false | a, F | feature | - | - | yes |
-| gem_map.map_brightness | Gem map dimming (names stay bright) | int 25..100 = 70 | a, F | feature | - | - | yes |
+| gem_map.map_brightness | Gem map dimming | int 25..100 = 70 | a, F | feature | - | - | yes |
 | gem_map.sweep | Fade the gem map in and out | bool = true | a, F | feature | - | - | yes |
 | gem_map.town_surroundings | Show the land around a town | bool = true | a, F | feature | - | - | yes |
 | gem_map.dungeon_stack | Show every dungeon level you have seen | bool = true | a, F | feature | - | - | yes |

@@ -85,8 +85,9 @@ fn rows_and_presets_come_from_the_catalogue_and_the_file() {
     // preset row) and the `[keys]` chords. In this build the shipped rows
     // with a page row are chapter 2's: scaling, fullscreen, vsync, the fill
     // (P1, P2) and the wider view with its sub-options indented under it
-    // (P8), plus chapter 9's brightness (P1) and sprite compositing with
-    // its halo (P5). `display.raster` has none while both its values draw the same;
+    // (P8), plus chapter 9's brightness (P1), map brightness (P2) and
+    // sprite compositing with its halo (P5), and chapter 10's gem map
+    // (G2-G5). `display.raster` has none while both its values draw the same;
     // the fill's colour and bezel path stay in the file.
     for row in &settings.rows {
         assert!(!row.key.starts_with("keys."), "{}", row.key);
@@ -97,7 +98,7 @@ fn rows_and_presets_come_from_the_catalogue_and_the_file() {
         TOGGLES
             .iter()
             .filter(|spec| spec.is_shipped() && !spec.driven)
-            .all(|spec| spec.key.starts_with("display."))
+            .all(|spec| spec.key.starts_with("display.") || spec.key.starts_with("gem_map."))
     );
     let keys: Vec<&str> = settings.rows.iter().map(|row| row.key.as_str()).collect();
     assert_eq!(
@@ -120,7 +121,26 @@ fn rows_and_presets_come_from_the_catalogue_and_the_file() {
             "display.vsync",
             "display.brightness",
             "display.brightness_scope",
+            "display.map_brightness",
+            // Chapter 10 (G2-G5, M3-17): the Maps group, the main toggle
+            // and its nine sub-options under it.
+            "gem_map.enhanced",
+            "gem_map.labels",
+            "gem_map.brightness_link",
+            "gem_map.map_brightness",
+            "gem_map.sweep",
+            "gem_map.town_surroundings",
+            "gem_map.dungeon_stack",
+            "gem_map.wrap_rows",
+            "gem_map.level_paging",
+            "gem_map.glyphs",
         ]
+    );
+    assert!(
+        settings
+            .rows
+            .iter()
+            .all(|row| (row.group == "Maps") == row.key.starts_with("gem_map."))
     );
     // The wider view's row carries its plain label and tag; its six
     // sub-options, and only they, are indented under it.
@@ -140,9 +160,11 @@ fn rows_and_presets_come_from_the_catalogue_and_the_file() {
     // Chapter 9: the halo sits under compositing (P5) and the scope under
     // the brightness row (P1).
     assert_eq!(
-        indented[6..],
+        indented[6..8],
         ["display.composite_halo", "display.brightness_scope"]
     );
+    // Chapter 10: every gem map sub-option sits under "Enhanced gem map".
+    assert_eq!(indented[8..], keys[19..]);
     // Recommended turns compositing on (P5); Everything also sets sharp
     // scaling and the F11 key (2.2.1).
     let values = |key: &str| {
@@ -166,6 +188,7 @@ fn rows_and_presets_come_from_the_catalogue_and_the_file() {
             "(\"display.fullscreen_key\", Switch(false))",
             "(\"display.scale_mode\", Choice(\"fit\"))",
             "(\"display.sprite_composite\", Switch(false))",
+            "(\"gem_map.enhanced\", Switch(false))",
         ]
     );
     assert_eq!(
@@ -174,6 +197,7 @@ fn rows_and_presets_come_from_the_catalogue_and_the_file() {
             "(\"display.fullscreen_key\", Switch(false))",
             "(\"display.scale_mode\", Choice(\"fit\"))",
             "(\"display.sprite_composite\", Switch(true))",
+            "(\"gem_map.enhanced\", Switch(false))",
         ]
     );
     assert_eq!(
@@ -182,6 +206,8 @@ fn rows_and_presets_come_from_the_catalogue_and_the_file() {
             "(\"display.fullscreen_key\", Switch(true))",
             "(\"display.scale_mode\", Choice(\"sharp\"))",
             "(\"display.sprite_composite\", Switch(true))",
+            // Chapter 10: the catalogue puts the gem map in Everything only.
+            "(\"gem_map.enhanced\", Switch(true))",
         ]
     );
 
@@ -233,6 +259,129 @@ fn the_brightness_row_offers_the_named_stops() {
     let (offered, value, _) = choices("game_dir = \"/g\"\n[display]\nbrightness = 65\n");
     assert_eq!(offered, stops(&["65"]));
     assert_eq!(value, RowValue::Choice("65".into()));
+}
+
+/// The gem map's rows (build plan M3-17, design 10.2.1, 10.4.1): from the
+/// catalogue, in the Maps group, the sub-options indented under "Enhanced
+/// gem map", with the help lines of 10.2.1 word for word.
+#[test]
+fn the_gem_map_rows_carry_the_help_lines_of_10_2_1() {
+    let scratch = Scratch::new("gem-help");
+    fs::write(scratch.config(), "game_dir = \"/g\"\n").unwrap();
+    let settings = wizard_settings(&scratch.config(), false);
+    let row = |key: &str| {
+        settings
+            .rows
+            .iter()
+            .find(|row| row.key == key)
+            .unwrap_or_else(|| panic!("a {key} row"))
+            .clone()
+    };
+    // 10.2.1's table: (key, row text, help line).
+    let table = [
+        (
+            "gem_map.enhanced",
+            "Enhanced gem map",
+            "Using a gem shows a full-screen map with real tiles. It shows more ground than the original gem.",
+        ),
+        (
+            "gem_map.labels",
+            "Names on the gem map",
+            "Marks what the map shows. Names appear only once you have found the place yourself.",
+        ),
+        (
+            "gem_map.map_brightness",
+            "Gem map dimming",
+            "How dark the map is drawn. Names stay bright.",
+        ),
+        (
+            "gem_map.brightness_link",
+            "Follow map brightness",
+            "Use the same darkness as the other maps.",
+        ),
+    ];
+    for (key, label, help) in table {
+        let row = row(key);
+        assert_eq!(row.label, label, "{key}");
+        assert_eq!(row.help.as_deref(), Some(help), "{key}");
+        assert_eq!(row.group, "Maps", "{key}");
+        assert_eq!(row.indent, key != "gem_map.enhanced", "{key}");
+    }
+    // The other gem rows (10.4.1) have no help line of their own.
+    for row in settings.rows.iter().filter(|row| {
+        row.key.starts_with("gem_map.") && !table.iter().any(|(key, _, _)| *key == row.key)
+    }) {
+        assert_eq!(row.help, None, "{}", row.key);
+    }
+    // The sub-options follow the main row, in catalogue order.
+    let at = |key: &str| settings.rows.iter().position(|row| row.key == key).unwrap();
+    let main = at("gem_map.enhanced");
+    let subs: Vec<&str> = settings.rows[main + 1..]
+        .iter()
+        .take_while(|row| row.indent)
+        .map(|row| row.key.as_str())
+        .collect();
+    assert_eq!(
+        subs,
+        [
+            "gem_map.labels",
+            "gem_map.brightness_link",
+            "gem_map.map_brightness",
+            "gem_map.sweep",
+            "gem_map.town_surroundings",
+            "gem_map.dungeon_stack",
+            "gem_map.wrap_rows",
+            "gem_map.level_paging",
+            "gem_map.glyphs",
+        ]
+    );
+    // No help line names anything of the game (the no-spoiler rule).
+    for row in &settings.rows {
+        if let Some(help) = &row.help {
+            assert!(!help.contains("Underworld"), "{}", row.key);
+        }
+    }
+}
+
+/// The gem map's dimming row (build plan D-M2.4, M3-17): its 25..100
+/// range offers the named stops, the default 70 first, and the stored
+/// value when it is not a stop.
+#[test]
+fn the_gem_map_dimming_row_offers_the_named_stops() {
+    use u5_bevy_setup::RowKind;
+
+    let choices = |text: &str| {
+        let scratch = Scratch::new("gem-stops");
+        fs::write(scratch.config(), text).unwrap();
+        let settings = wizard_settings(&scratch.config(), false);
+        let row = settings
+            .rows
+            .iter()
+            .find(|row| row.key == "gem_map.map_brightness")
+            .expect("a gem map dimming row")
+            .clone();
+        let RowKind::Choice(choices) = &row.kind else {
+            panic!("the dimming row is a choice: {:?}", row.kind);
+        };
+        (choices.clone(), row.value, row.default)
+    };
+    let stops = |extra: &[&str]| {
+        ["70", "85", "100", "55", "40", "25"]
+            .iter()
+            .chain(extra)
+            .map(|n| (n.to_string(), format!("{n}%")))
+            .collect::<Vec<_>>()
+    };
+    let (offered, value, default) = choices("game_dir = \"/g\"\n");
+    assert_eq!(offered, stops(&[]));
+    assert_eq!(value, RowValue::Choice("70".into()));
+    assert_eq!(default, RowValue::Choice("70".into()));
+    let (offered, value, _) = choices("game_dir = \"/g\"\n[gem_map]\nmap_brightness = 40\n");
+    assert_eq!(offered, stops(&[]));
+    assert_eq!(value, RowValue::Choice("40".into()));
+    let (offered, value, _) = choices("game_dir = \"/g\"\n[gem_map]\nmap_brightness = 63\n");
+    assert_eq!(offered, stops(&["63"]));
+    assert_eq!(value, RowValue::Choice("63".into()));
 }
 
 #[test]

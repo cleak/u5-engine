@@ -337,6 +337,8 @@ struct SettingsHost {
     fail_save: bool,
     /// Adds an indented sub-option under the Display row.
     sub_row: bool,
+    /// Gives the first row ("Sharp scaling") a help line.
+    help: bool,
     saved: Mutex<Vec<SettingsChanges>>,
 }
 
@@ -347,6 +349,7 @@ impl SettingsHost {
             preset: 0,
             fail_save: false,
             sub_row: false,
+            help: false,
             saved: Mutex::new(Vec::new()),
         }
     }
@@ -363,6 +366,7 @@ fn switch(key: &str, label: &str, group: &str, role: RowRole, on: bool) -> Setti
         value: RowValue::Switch(on),
         default: RowValue::Switch(false),
         indent: false,
+        help: None,
     }
 }
 
@@ -493,6 +497,9 @@ impl WizardHost for SettingsHost {
         if self.preset == 1 {
             // Recommended as stored has display.sharp off.
             rows.rows[0].value = RowValue::Switch(false);
+        }
+        if self.help {
+            rows.rows[0].help = Some("Keeps every pixel square.".to_string());
         }
         Some(rows)
     }
@@ -902,6 +909,48 @@ fn save_stores_only_changed_keys() {
     let mut closed = WizardModel::settings_only(&failing);
     closed.apply(Action::Quit, &failing);
     assert_eq!(closed.outcome, Some(WizardOutcome::Cancelled));
+}
+
+/// A row's help line (design 10.2.1, build plan M3-17) shows while the row
+/// has the focus. The line stays, blank, while another item has it, so the
+/// rows never move; a page with no help lines has no such line.
+#[test]
+fn the_focused_rows_help_line_shows_under_the_notes() {
+    let help_lines = |model: &WizardModel, host: &dyn WizardHost| {
+        page_for(model, host)
+            .lines
+            .into_iter()
+            .skip_while(|(text, _)| text != "Changes apply when the game starts.")
+            .skip(1)
+            .collect::<Vec<_>>()
+    };
+    let plain = SettingsHost::new();
+    let model = WizardModel::settings_only(&plain);
+    assert!(help_lines(&model, &plain).is_empty());
+
+    let host = SettingsHost {
+        help: true,
+        ..SettingsHost::new()
+    };
+    let mut model = WizardModel::settings_only(&host);
+    // The focus starts on a preset: the line is there, blank.
+    assert_eq!(
+        help_lines(&model, &host),
+        [(HELP_PLACEHOLDER.to_string(), LineStyle::Body)]
+    );
+    let sharp = row_of(&model, "display.sharp");
+    while page(&model).focused() != Some(FocusItem::Row(sharp)) {
+        model.apply(Action::FocusNext, &host);
+    }
+    assert_eq!(
+        help_lines(&model, &host),
+        [("Keeps every pixel square.".to_string(), LineStyle::Body)]
+    );
+    model.apply(Action::FocusNext, &host);
+    assert_eq!(
+        help_lines(&model, &host),
+        [(HELP_PLACEHOLDER.to_string(), LineStyle::Body)]
+    );
 }
 
 #[test]

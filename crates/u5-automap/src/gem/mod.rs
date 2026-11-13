@@ -23,7 +23,8 @@
 //!   L2, D10.4, M3-16);
 //! - [`shown`]: the shown set, the cells drawn and their tiles, cached per
 //!   open in [`GemViewState`] (10.2.3, D-M3.5, M3-10);
-//! - [`raster`]: [`render_gem_map`], the CPU raster (10.3.4, M3-10).
+//! - [`raster`]: [`render_gem_map`], the CPU raster (10.3.4, M3-10);
+//! - `timing_tests`: the probe, observe and render budgets (10.6, M3-17).
 
 pub mod dungeon;
 pub mod features;
@@ -81,3 +82,7 @@ pub use shown::{
     GemShown, GemViewState, OutdoorShown, TownInputs, TownPart, TownShown, gem_view_open,
     town_part, town_world_plane,
 };
+
+#[cfg(test)]
+#[path = "timing_tests.rs"]
+mod timing_tests;
