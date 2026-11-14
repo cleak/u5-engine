@@ -13,17 +13,39 @@
 //!   the foundation's `apply_pending_changes` applies at the row's point
 //!   and stores through the host's sink.
 //!
-//! M4-07 draws the pages from this view.
+//! - [`settings_tabs`] (M4-07): the four tabs' rows from that view (3.2.7):
+//!   - Audio: Volume (a slider in steps of 5), Mute and Mute on focus
+//!     loss;
+//!   - Display: every `[display]` row the generator lists, in its order,
+//!     each sub-option indented under its parent (the grow-left rows under
+//!     "Wider world view"), chapter 9's rows among them, and no Tile
+//!     graphics row (the generator leaves `display.raster` out);
+//!   - Game: its rows greyed until they arrive (M4-13), with the game's
+//!     live Sound and Buffer values;
+//!   - Enhancements: the preset row (the preset in force, or Custom), then
+//!     every row in its group under the group's heading; the Cheats group
+//!     only while the catalogue has cheat rows and the lock is off
+//!     (D-M4.9).
+//!
+//!   Labels come from the wording table ([`t::setting_label`]); the
+//!   catalogue's longer label, or its help line, is the footer's help. A
+//!   spoiler row ([`is_spoiler_row`]) starts its label and help with
+//!   "Spoiler:".
+//! - [`menu_setting_commands`] also carries out a preset choice: every row
+//!   the preset governs takes its value, each queued as a change.
 
 use bevy::prelude::*;
-use u5_runtime::enhancements::page::{RowKind, RowValue, SettingRow, SettingsRows};
+use u5_runtime::enhancements::page::{
+    MixLabel, RowKind, RowValue, SettingRow, SettingsPage, SettingsRows,
+};
 use u5_runtime::enhancements::{
-    ApplyAt, FeatureToggles, LockState, ResolvedEnhancements, RowNote, SettingValue, apply_value,
-    row_notes, settings_page_rows,
+    ApplyAt, CatalogueRow, FeatureToggles, LockState, OptionKind, Phase, ResolvedEnhancements,
+    RowNote, SETTING_GROUPS, SettingValue, Tag, Toggle, apply_value, help_line, row_notes,
+    settings_page_rows_in,
 };
 
 use super::MenuCommandEvent;
-use super::pages::MenuCommand;
+use super::pages::{MenuCommand, Row, RowAction, RowKind as MenuRowKind, Shown};
 use super::text as t;
 use crate::enh::{
     EnhLaunch, LiveSettings, PendingSettingChanges, PendingToggleChanges, queue_setting_change,
@@ -72,8 +94,26 @@ pub fn settings_view(
     toggles: &PendingToggleChanges,
     settings: &PendingSettingChanges,
 ) -> SettingsView {
+    settings_view_in(
+        live,
+        launch,
+        toggles,
+        settings,
+        u5_runtime::enhancements::SHIPPED_PHASES,
+    )
+}
+
+/// [`settings_view`] for a build that has shipped the phases `shipped`
+/// ([`super::MenuShell::shipped`]).
+pub fn settings_view_in(
+    live: &LiveSettings,
+    launch: FeatureToggles,
+    toggles: &PendingToggleChanges,
+    settings: &PendingSettingChanges,
+    shipped: &[Phase],
+) -> SettingsView {
     let chosen = chosen_with_queued(live, toggles, settings);
-    let page = settings_page_rows(&chosen, chosen.lock != LockState::Off, Vec::new());
+    let page = settings_page_rows_in(&chosen, chosen.lock != LockState::Off, Vec::new(), shipped);
     let notes = row_notes(&page.rows, &live.now, launch);
     SettingsView { page, notes }
 }
@@ -99,6 +139,13 @@ pub fn note_words(note: RowNote) -> Vec<&'static str> {
 /// one place, by number for a number row (left is lower), stopping at the
 /// ends as the cursor does. `None` when nothing changes.
 pub fn stepped(row: &SettingRow, step: i8) -> Option<RowValue> {
+    if let (Some(range), RowValue::Choice(value), true) =
+        (int_range(&row.key), &row.value, step != 0)
+    {
+        let next = number_step(range, value.parse().ok()?, step);
+        let next = RowValue::Choice(next.to_string());
+        return (next != row.value).then_some(next);
+    }
     let next = match (&row.kind, &row.value) {
         (RowKind::Switch, RowValue::Switch(on)) => RowValue::Switch(match step {
             0 => !on,
@@ -128,6 +175,38 @@ pub fn stepped(row: &SettingRow, step: i8) -> Option<RowValue> {
     (next != row.value).then_some(next)
 }
 
+/// The smallest step a number row takes in the menu (3.2.7: the volume in
+/// steps of 5, the brightness slider in 5% steps).
+pub const NUMBER_STEP: i64 = 5;
+
+/// The range and step of the number setting `key`; `None` for any other
+/// key.
+pub fn int_range(key: &str) -> Option<(i64, i64, i64)> {
+    match CatalogueRow::find(key)? {
+        CatalogueRow::Option(spec) => match spec.kind {
+            OptionKind::Int { min, max, step } => Some((min, max, step)),
+            _ => None,
+        },
+        CatalogueRow::Toggle(_) => None,
+    }
+}
+
+/// A number row's value one step down (`step` < 0) or up from `value`:
+/// to the next multiple of the step ([`NUMBER_STEP`] or the catalogue's,
+/// whichever is larger), within the row's range. A value between steps
+/// goes to the step beside it.
+pub fn number_step((min, max, step): (i64, i64, i64), value: i64, dir: i8) -> i64 {
+    let s = step.max(NUMBER_STEP);
+    let next = if dir > 0 {
+        (value.div_euclid(s) + 1) * s
+    } else if value.rem_euclid(s) != 0 {
+        value.div_euclid(s) * s
+    } else {
+        value - s
+    };
+    next.clamp(min, max)
+}
+
 /// The value to queue for the reducer's `command`, if it is a change of a
 /// setting row in `view`.
 pub fn command_change(
@@ -148,20 +227,220 @@ pub fn command_change(
 /// becomes a queued change, applied by the foundation at the row's point.
 pub(crate) fn menu_setting_commands(
     mut commands: EventReader<MenuCommandEvent>,
+    shell: Res<super::MenuShell>,
     live: Res<LiveSettings>,
     launch: Res<EnhLaunch>,
     mut toggles: ResMut<PendingToggleChanges>,
     mut settings: ResMut<PendingSettingChanges>,
 ) {
     for MenuCommandEvent(command) in commands.read() {
-        if !matches!(command, MenuCommand::Flip(_) | MenuCommand::Step(..)) {
+        if !matches!(
+            command,
+            MenuCommand::Flip(_) | MenuCommand::Step(..) | MenuCommand::Preset(_)
+        ) {
             continue;
         }
-        let view = settings_view(&live, launch.0.enhancements.toggles, &toggles, &settings);
-        if let Some((key, value)) = command_change(&view, *command) {
+        let view = settings_view_in(
+            &live,
+            launch.0.enhancements.toggles,
+            &toggles,
+            &settings,
+            shell.shipped,
+        );
+        for (key, value) in command_changes(&view, *command) {
             queue_setting_change(key, value, &mut toggles, &mut settings);
         }
     }
+}
+
+/// Every change the reducer's `command` makes on the rows of `view`: a
+/// setting row's one ([`command_change`]), or a preset's, which gives every
+/// row it governs its value (the rows already there are left alone).
+pub fn command_changes(
+    view: &SettingsView,
+    command: MenuCommand,
+) -> Vec<(&'static str, SettingValue)> {
+    let MenuCommand::Preset(index) = command else {
+        return command_change(view, command).into_iter().collect();
+    };
+    let Some(preset) = view.page.presets.get(usize::from(index)) else {
+        return Vec::new();
+    };
+    preset
+        .values
+        .iter()
+        .filter_map(|(key, value)| {
+            let (row, _) = view.row(key)?;
+            let key = CatalogueRow::find(key)?.key();
+            (row.value != *value).then(|| (key, value.to_setting(key)))
+        })
+        .collect()
+}
+
+/// The game's own values the Game tab shows (3.2.7): Sound and Buffer as
+/// the game holds them now.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
+pub struct GameValues {
+    pub sound_on: bool,
+    pub buffer_on: bool,
+}
+
+/// The Audio tab's rows, in order (3.2.7).
+pub const AUDIO_KEYS: [&str; 3] = ["audio.volume", "audio.muted", "audio.mute_on_focus_loss"];
+
+/// Cells a sub-option is set in under its parent.
+pub const SUB_INDENT: u8 = 2;
+/// Cells a row is set in under its group's heading on the Extras tab.
+pub const GROUP_INDENT: u8 = 1;
+
+/// Whether the row `key` may show what the player has not found (U17,
+/// 3.2.7): a `Tag::SpoilerRisk` row, or one of [`t::SPOILER_KEYS`].
+pub fn is_spoiler_row(key: &str) -> bool {
+    t::SPOILER_KEYS.contains(&key)
+        || CatalogueRow::find(key).is_some_and(|row| row.tags().contains(&Tag::SpoilerRisk))
+}
+
+/// How a row's value shows: a switch as a check box, a number as a percent
+/// with its slider filled over the row's range, a word as itself.
+fn row_kind(key: &str, value: &RowValue) -> MenuRowKind {
+    match value {
+        RowValue::Switch(on) => MenuRowKind::Check { on: *on },
+        RowValue::Choice(text) => MenuRowKind::Value(shown(key, text)),
+    }
+}
+
+fn shown(key: &str, text: &str) -> Shown {
+    match CatalogueRow::find(key) {
+        Some(CatalogueRow::Option(spec)) => match spec.kind {
+            OptionKind::Int { min, max, .. } => text.parse::<i64>().map_or(Shown::Blank, |v| {
+                let fill = if max > min {
+                    ((v - min) * 100 / (max - min)).clamp(0, 100)
+                } else {
+                    100
+                };
+                Shown::Percent {
+                    value: v.clamp(0, 255) as u8,
+                    fill: fill as u8,
+                }
+            }),
+            OptionKind::Enum(words) => words
+                .iter()
+                .find(|word| **word == text)
+                .map_or(Shown::Blank, |word| Shown::Word(word)),
+            _ => Shown::Blank,
+        },
+        _ => Shown::Blank,
+    }
+}
+
+/// The menu's row for the generator's `row` with its `note`, set in by
+/// `indent` cells; `None` for a key the catalogue does not have.
+pub fn setting_row(row: &SettingRow, note: RowNote, indent: u8) -> Option<Row> {
+    let entry = CatalogueRow::find(&row.key)?;
+    let key = entry.key();
+    let label = t::setting_label(key).unwrap_or(entry.label());
+    let help = t::setting_help(key)
+        .or_else(|| help_line(key))
+        .or((entry.label() != label).then_some(entry.label()));
+    let tag = match note.apply {
+        ApplyAt::Frame => None,
+        ApplyAt::IdlePrompt => Some(t::NEXT_PROMPT),
+        ApplyAt::NextLaunch => Some(t::NEXT_LAUNCH),
+    };
+    let mut out = Row {
+        tag,
+        by_cli: note.by_cli,
+        ..Row::item(label, RowAction::Setting(key))
+            .indented(indent)
+            .with_help(help)
+    };
+    out.kind = row_kind(key, &row.value);
+    Some(out)
+}
+
+/// The static name of the generator's group `name`.
+fn group_label(name: &str) -> &'static str {
+    SETTING_GROUPS
+        .iter()
+        .find(|(group, _)| *group == name)
+        .map_or("", |(group, _)| group)
+}
+
+/// The rows of the four tabs, by [`super::pages::SettingsTab::index`], for
+/// the settings in `view` and the game's own values `game` (none before
+/// play).
+pub fn settings_tabs(view: &SettingsView, game: Option<GameValues>) -> [Vec<Row>; 4] {
+    let rows = &view.page.rows;
+    let notes = &view.notes;
+    let ordinary = || {
+        rows.iter()
+            .zip(notes)
+            .filter(|(row, _)| !row.role.is_cheat_group())
+    };
+    let sub = |row: &SettingRow| if row.indent { SUB_INDENT } else { 0 };
+
+    let audio = AUDIO_KEYS
+        .iter()
+        .filter_map(|key| view.row(key))
+        .filter_map(|(row, note)| setting_row(row, note, 0))
+        .collect();
+
+    let display = ordinary()
+        .filter(|(row, _)| row.key.starts_with("display."))
+        .filter_map(|(row, note)| setting_row(row, *note, sub(row)))
+        .collect();
+
+    let word = |on: bool| Shown::Word(if on { t::ON } else { t::OFF });
+    let live = |on: Option<bool>| on.map_or(Shown::Blank, word);
+    let chosen = &view.page.rows;
+    let switch = |key: &str, default: bool| {
+        chosen
+            .iter()
+            .find(|row| row.key == key)
+            .map_or(default, |row| row.value == RowValue::Switch(true))
+    };
+    let game_rows = [
+        Row::shown(t::SOUND, "", live(game.map(|g| g.sound_on))),
+        Row::shown(t::BUFFER, "", live(game.map(|g| g.buffer_on))),
+        Row::check(
+            t::START_SOUND_OFF,
+            "",
+            switch(Toggle::AudioStartSoundOff.key(), false),
+        ),
+        Row::check(
+            t::START_BUFFER_ON,
+            "",
+            switch(Toggle::AudioStartBufferOn.key(), false),
+        ),
+        Row::check(t::CONFIRM_UNSAVED, "", switch("menu.confirm_unsaved", true)),
+        Row::shown(t::PACING, "", Shown::Word(t::RESERVED)),
+    ]
+    .into_iter()
+    .map(|row| Row {
+        action: RowAction::None,
+        ..row.greyed(t::GAME_LATER)
+    })
+    .collect();
+
+    let page = SettingsPage::new(view.page.clone());
+    let current = match page.mix() {
+        MixLabel::Preset(at) => Some(at as u8),
+        MixLabel::Custom(_) => None,
+    };
+    let mut extras =
+        vec![Row::preset(current, view.page.presets.len() as u8).with_help(Some(t::PRESET_HELP))];
+    let mut group = None;
+    for (row, note) in ordinary() {
+        if group != Some(row.group.as_str()) {
+            group = Some(row.group.as_str());
+            extras.push(Row::header(group_label(&row.group)));
+        }
+        extras.extend(setting_row(row, *note, GROUP_INDENT + sub(row)));
+    }
+    if page.shows_cheats() {
+        extras.push(Row::item(t::CHEATS_GROUP, RowAction::None).greyed(t::CHEATS_GROUP_HELP));
+    }
+    [audio, display, game_rows, extras]
 }
 
 #[cfg(test)]

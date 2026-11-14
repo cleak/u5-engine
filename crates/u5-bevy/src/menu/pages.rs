@@ -16,11 +16,15 @@
 //! value, and on the Settings page switch its tab when the row has no
 //! value; Tab opens the full map only while its door is in the menu
 //! (D-M4.9). A greyed row can be selected, so its reason shows, but gives
-//! no command. Text ([`MenuInput::Text`]) is for the slot name field
-//! (M4-10); no page here reads it.
+//! no command. A greyed value row cannot change, so Left and Right switch
+//! the tab on it. Group headings ([`RowKind::Header`]) are never selected:
+//! the cursor passes over them ([`settle`]). On the Extras tab's preset row
+//! Left and Right choose the preset before or after the one in force
+//! ([`MenuCommand::Preset`]). Text ([`MenuInput::Text`]) is for the slot
+//! name field (M4-10); no page here reads it.
 //!
-//! The rows of the Settings tabs come from the shell snapshot; M4-06 and
-//! M4-07 build them from the catalogue.
+//! The rows of the Settings tabs come from the shell snapshot, which the
+//! plugin fills from the catalogue (`settings::settings_tabs`, M4-07).
 
 use bevy::prelude::*;
 
@@ -108,6 +112,22 @@ pub enum RowAction {
     /// A setting, by its catalogue key: a check box flips it, a value
     /// steps it.
     Setting(&'static str),
+    /// The Enhancements tab's preset row: Left and Right choose a preset.
+    Preset,
+    /// Nothing: a group heading, or a row shown only for its value.
+    None,
+}
+
+/// How a value row shows its value (3.2.7).
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum Shown {
+    /// No value drawn.
+    Blank,
+    /// A word: a choice's value ("fit"), or the game's own "On" and "Off".
+    Word(&'static str),
+    /// A percent with its slider, filled to `fill` percent of the row's
+    /// range (`[####----]  70%`).
+    Percent { value: u8, fill: u8 },
 }
 
 /// How a row shows its state and which keys it takes.
@@ -118,7 +138,13 @@ pub enum RowKind {
     /// A check box: Space or Enter flips it.
     Check { on: bool },
     /// A value: Left and Right step it.
-    Value,
+    Value(Shown),
+    /// A group heading on the Enhancements tab: never selected; the
+    /// cursor passes over it.
+    Header,
+    /// The preset row (3.2.7): the presets, the one in force (`None` for
+    /// Custom). Left and Right choose the one before or after it.
+    Preset { current: Option<u8>, count: u8 },
 }
 
 /// One row of a page.
@@ -131,40 +157,66 @@ pub struct Row {
     pub enabled: bool,
     /// Why a greyed row is greyed, shown in its help line.
     pub reason: Option<&'static str>,
+    /// Cells the label is set in from the margin: a group's rows and a
+    /// sub-option under its parent (3.2.7).
+    pub indent: u8,
+    /// The apply point when it is not the next frame: "next prompt" or
+    /// "next launch" (3.4.1, D-M4.4).
+    pub tag: Option<&'static str>,
+    /// The command line set this row for this run (3.3.6).
+    pub by_cli: bool,
+    /// The sentence the footer shows while the row is selected.
+    pub help: Option<&'static str>,
 }
 
 impl Row {
-    /// An enabled item.
-    pub const fn item(label: &'static str, action: RowAction) -> Self {
+    const fn new(label: &'static str, action: RowAction, kind: RowKind) -> Self {
         Self {
             label,
             action,
-            kind: RowKind::Item,
+            kind,
             enabled: true,
             reason: None,
+            indent: 0,
+            tag: None,
+            by_cli: false,
+            help: None,
         }
+    }
+
+    /// An enabled item.
+    pub const fn item(label: &'static str, action: RowAction) -> Self {
+        Self::new(label, action, RowKind::Item)
     }
 
     /// An enabled check box for the setting `key`.
     pub const fn check(label: &'static str, key: &'static str, on: bool) -> Self {
-        Self {
-            label,
-            action: RowAction::Setting(key),
-            kind: RowKind::Check { on },
-            enabled: true,
-            reason: None,
-        }
+        Self::new(label, RowAction::Setting(key), RowKind::Check { on })
     }
 
-    /// An enabled value row for the setting `key`.
+    /// An enabled value row for the setting `key`, its value not shown.
     pub const fn value(label: &'static str, key: &'static str) -> Self {
-        Self {
-            label,
-            action: RowAction::Setting(key),
-            kind: RowKind::Value,
-            enabled: true,
-            reason: None,
-        }
+        Self::shown(label, key, Shown::Blank)
+    }
+
+    /// An enabled value row for the setting `key` showing `shown`.
+    pub const fn shown(label: &'static str, key: &'static str, shown: Shown) -> Self {
+        Self::new(label, RowAction::Setting(key), RowKind::Value(shown))
+    }
+
+    /// A group heading.
+    pub const fn header(label: &'static str) -> Self {
+        Self::new(label, RowAction::None, RowKind::Header)
+    }
+
+    /// The preset row: `count` presets, `current` in force (`None`:
+    /// Custom).
+    pub const fn preset(current: Option<u8>, count: u8) -> Self {
+        Self::new(
+            super::text::PRESET,
+            RowAction::Preset,
+            RowKind::Preset { current, count },
+        )
     }
 
     /// The row greyed for `reason`.
@@ -172,6 +224,49 @@ impl Row {
         self.enabled = false;
         self.reason = Some(reason);
         self
+    }
+
+    /// The row set in by `cells`.
+    pub const fn indented(mut self, cells: u8) -> Self {
+        self.indent = cells;
+        self
+    }
+
+    /// The row with its footer sentence.
+    pub const fn with_help(mut self, help: Option<&'static str>) -> Self {
+        self.help = help;
+        self
+    }
+
+    /// Whether the cursor can rest on the row: anything but a heading.
+    pub const fn selectable(&self) -> bool {
+        !matches!(self.kind, RowKind::Header)
+    }
+}
+
+/// Where the cursor rests on `rows` when it was asked for `cursor`: that
+/// row, or the next row it can rest on below it, or above it; 0 for a
+/// page with none.
+pub fn settle(rows: &[Row], cursor: usize) -> usize {
+    let cursor = cursor.min(rows.len().saturating_sub(1));
+    (cursor..rows.len())
+        .find(|i| rows[*i].selectable())
+        .or_else(|| (0..cursor).rev().find(|i| rows[*i].selectable()))
+        .unwrap_or(cursor)
+}
+
+/// The next row the cursor can rest on from `cursor` going down (`step`
+/// 1) or up (-1), stopping at the ends.
+fn step_cursor(rows: &[Row], cursor: usize, step: i8) -> usize {
+    if step > 0 {
+        (cursor + 1..rows.len())
+            .find(|i| rows[*i].selectable())
+            .unwrap_or(cursor)
+    } else {
+        (0..cursor)
+            .rev()
+            .find(|i| rows[*i].selectable())
+            .unwrap_or(cursor)
     }
 }
 
@@ -330,6 +425,9 @@ pub enum MenuCommand {
     Flip(&'static str),
     /// Step the setting with this catalogue key down (-1) or up (1).
     Step(&'static str, i8),
+    /// Choose the preset at this place of the preset row (3.2.7): every
+    /// row it governs takes its value.
+    Preset(u8),
 }
 
 /// Applies `input` to `model` for the shell in `snap` and returns the
@@ -340,18 +438,20 @@ pub fn reduce(model: &mut MenuModel, input: MenuInput, snap: &ShellSnapshot) -> 
     };
     let state = model.current();
     let rows = page_rows(state.page, snap);
-    let cursor = state.cursor.min(rows.len().saturating_sub(1));
+    let cursor = settle(&rows, state.cursor);
     model.top_mut().cursor = cursor;
-    let selected = rows.get(cursor).filter(|row| row.enabled);
+    let selected = rows
+        .get(cursor)
+        .filter(|row| row.enabled && row.selectable());
     let command = match key.key {
         KeyCode::F12 => Some(MenuCommand::Close),
         KeyCode::Escape => (!model.pop()).then_some(MenuCommand::Close),
         KeyCode::ArrowUp => {
-            model.top_mut().cursor = cursor.saturating_sub(1);
+            model.top_mut().cursor = step_cursor(&rows, cursor, -1);
             None
         }
         KeyCode::ArrowDown => {
-            model.top_mut().cursor = (cursor + 1).min(rows.len().saturating_sub(1));
+            model.top_mut().cursor = step_cursor(&rows, cursor, 1);
             None
         }
         KeyCode::Enter | KeyCode::NumpadEnter => selected.and_then(|row| choose(model, row)),
@@ -361,10 +461,17 @@ pub fn reduce(model: &mut MenuModel, input: MenuInput, snap: &ShellSnapshot) -> 
         }),
         KeyCode::ArrowLeft | KeyCode::ArrowRight => {
             let step = if key.key == KeyCode::ArrowLeft { -1 } else { 1 };
-            let value = rows.get(cursor).filter(|row| row.kind == RowKind::Value);
+            // A greyed value cannot change, so on it the keys switch the
+            // tab as on a row without a value.
+            let value = rows.get(cursor).filter(|row| {
+                row.enabled && matches!(row.kind, RowKind::Value(_) | RowKind::Preset { .. })
+            });
             match (value, state.page) {
-                (Some(row), _) => match (row.enabled, row.action) {
-                    (true, RowAction::Setting(key)) => Some(MenuCommand::Step(key, step)),
+                (Some(row), _) => match (row.enabled, row.action, row.kind) {
+                    (true, RowAction::Setting(key), _) => Some(MenuCommand::Step(key, step)),
+                    (true, RowAction::Preset, RowKind::Preset { current, count }) => {
+                        preset_step(current, count, step).map(MenuCommand::Preset)
+                    }
                     _ => None,
                 },
                 (None, Page::Settings(tab)) => {
@@ -404,7 +511,23 @@ fn choose(model: &mut MenuModel, row: &Row) -> Option<MenuCommand> {
         (RowAction::QuitToTitle, _) => Some(MenuCommand::QuitToTitle),
         (RowAction::QuitToDesktop, _) => Some(MenuCommand::QuitToDesktop),
         (RowAction::Setting(key), RowKind::Check { .. }) => Some(MenuCommand::Flip(key)),
-        (RowAction::Setting(_), _) => None,
+        (RowAction::Setting(_) | RowAction::Preset | RowAction::None, _) => None,
+    }
+}
+
+/// The preset Left (`step` -1) or Right (1) chooses on the preset row: the
+/// one before or after `current`, stopping at the ends. From Custom, Left
+/// chooses the last preset and Right the first, as if Custom sat past
+/// both ends; `None` when nothing changes.
+fn preset_step(current: Option<u8>, count: u8, step: i8) -> Option<u8> {
+    if count == 0 {
+        return None;
+    }
+    match current {
+        None if step < 0 => Some(count - 1),
+        None => Some(0),
+        Some(at) if step < 0 => at.checked_sub(1),
+        Some(at) => (at + 1 < count).then_some(at + 1),
     }
 }
 

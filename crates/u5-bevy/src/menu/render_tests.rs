@@ -11,10 +11,11 @@ use u5_runtime::test_fixtures::{open_grid, open_world_grid, test_state, world_st
 use u5_runtime::{CH_FONT_LEN, IBM_CH_FILE, PlayState, parse_ch_font};
 
 use super::*;
-use crate::enh::VisualLaunchConfig;
 use crate::enh::equivalence::{FRAME, Owner, Scene, Shell, TimedKey};
 use crate::enh::overlay::OverlayState;
+use crate::enh::{LiveSettings, PendingSettingChanges, PendingToggleChanges, VisualLaunchConfig};
 use crate::menu::pages::{MenuModel, SettingsTab};
+use crate::menu::settings::{settings_tabs, settings_view};
 
 // ---------------------------------------------------------------------------
 // Helpers.
@@ -270,7 +271,7 @@ impl Game {
     fn expected(&self, picture: &MenuPicture, column: ColumnView) -> MenuImage {
         let world = self.world();
         let state = world.resource::<MenuState>().model().unwrap().current();
-        let snap = snapshot(world.resource::<MenuShell>(), world.resource::<MenuDoors>());
+        let snap = crate::menu::world_snapshot(world);
         let drawn = render_page(&block_font(), picture, column, state, &snap);
         sweep_image_over(&drawn.image, drawn.panel, self.view().sweep.step, CLEAR)
     }
@@ -325,14 +326,59 @@ fn kit_top_menu(
     img
 }
 
-/// An empty Settings tab as the kit draws it: the wide panel with a
-/// four-row footer box, the tab strip and "Esc: back".
-fn kit_settings(picture: &MenuPicture, column: ColumnView, tab: usize) -> MenuImage {
+/// A Settings tab as the kit draws it, from its primitives: the wide
+/// panel with a four-row footer box, the tab's rows for `launch` (the
+/// shared generator's, as a fresh run shows them) from the list's second
+/// row with the bar on the first, the first row's help in the footer, the
+/// tab strip and "Esc: back". Tabs without a preset row only.
+fn kit_settings(
+    picture: &MenuPicture,
+    column: ColumnView,
+    tab: usize,
+    launch: &VisualLaunchConfig,
+) -> MenuImage {
     let font = block_font();
+    let view = settings_view(
+        &LiveSettings::at_launch(&launch.enhancements),
+        launch.enhancements.toggles,
+        &PendingToggleChanges::default(),
+        &PendingSettingChanges::default(),
+    );
+    let rows = settings_tabs(&view, None)[tab].clone();
     let rect = panel_rect(PageShape::Wide, picture, column);
     let panel = Panel::new(rect).divider(rect.bottom() - 5);
     let mut img = MenuImage::for_picture(picture);
     draw_panel(&mut img, &panel);
+    let boxes = panel.boxes();
+    let (list, footer) = (boxes[0], boxes[1]);
+    let visible = (list.h - 2) as usize;
+    assert!(!rows.is_empty());
+    for (i, row) in rows.iter().take(visible).enumerate() {
+        let line = setting_line(row, list.w);
+        draw_row(
+            &mut img,
+            &font,
+            list,
+            list.row + 1 + i as u32,
+            &line,
+            i == 0,
+        );
+    }
+    if rows.len() > visible {
+        // The list goes on below: the mark on the divider's band.
+        draw_scroll_mark(
+            &mut img,
+            &font,
+            list.right() - 1,
+            rect.bottom() - 5,
+            Scroll::Down,
+        );
+    }
+    let help = rows[0].help.expect("the first row's help");
+    for (i, line) in t::wrap(help, (footer.w - 2) as usize).iter().enumerate() {
+        let l = Line::new(footer.w).text(1, line, Ink::Help);
+        draw_row(&mut img, &font, footer, footer.row + i as u32, &l, false);
+    }
     draw_tab_strip(&mut img, &font, rect, &t::SETTINGS_TABS, tab);
     draw_footer_tab(&mut img, &font, rect, t::KEY_BACK);
     img
@@ -610,7 +656,7 @@ fn the_shell_draws_exactly_the_kit_s_pages() {
         let (_, bytes) = game.picture().unwrap();
         assert_eq!(
             bytes,
-            kit_settings(&picture, column, 1).rgba,
+            kit_settings(&picture, column, 1, &launch).rgba,
             "Settings, Display tab, at {window:?}"
         );
         assert_eq!(game.view().sweep.step, None, "page changes are instant");

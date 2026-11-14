@@ -181,16 +181,23 @@ fn a_step_moves_one_place_and_stops_at_the_ends() {
     let RowKind::Choice(choices) = &brightness.kind else {
         panic!("brightness is a choice");
     };
-    // Listed 100 first (9.2.1), but stepped by number.
+    // Listed 100 first (9.2.1). Left and Right step the slider by 5%
+    // (3.2.7, M4-07); Flip walks the named stops.
     assert_eq!(choices[0].0, "100");
     assert_eq!(brightness.value, RowValue::Choice("100".into()));
     assert_eq!(stepped(brightness, 1), None, "stops at the top");
-    assert_eq!(stepped(brightness, -1), Some(RowValue::Choice("85".into())));
+    assert_eq!(stepped(brightness, -1), Some(RowValue::Choice("95".into())));
     assert_eq!(stepped(brightness, 0), Some(RowValue::Choice("85".into())));
     let mut lowest = brightness.clone();
     lowest.value = RowValue::Choice("25".into());
     assert_eq!(stepped(&lowest, -1), None, "stops at the bottom");
+    assert_eq!(stepped(&lowest, 1), Some(RowValue::Choice("30".into())));
     assert_eq!(stepped(&lowest, 0), Some(RowValue::Choice("100".into())));
+    // A value between steps goes to the step beside it.
+    let mut between = brightness.clone();
+    between.value = RowValue::Choice("72".into());
+    assert_eq!(stepped(&between, -1), Some(RowValue::Choice("70".into())));
+    assert_eq!(stepped(&between, 1), Some(RowValue::Choice("75".into())));
     let scale = rows
         .iter()
         .find(|row| row.key == "display.scale_mode")

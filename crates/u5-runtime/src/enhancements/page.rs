@@ -22,8 +22,8 @@
 //!   `feature_wanted`), so the menu can switch them on in play.
 
 use super::catalogue::{
-    ApplyAt, CatalogueRow, FeatureToggles, OptionDefault, OptionKind, PRESETS, Preset, Tier,
-    Toggle, help_line, named_stops,
+    ApplyAt, CatalogueRow, FeatureToggles, OptionDefault, OptionKind, PRESETS, Phase, Preset,
+    SHIPPED_PHASES, Tier, Toggle, help_line, named_stops,
 };
 use super::display::RASTER_KEY;
 use super::resolve::{CHEATS_SWITCH, ResolveInput, ResolvedEnhancements, checked_value, resolve};
@@ -506,9 +506,17 @@ const MAX_NUMBER_CHOICES: i64 = 10;
 /// page's preset row, and the `[keys]` chords) and free-form values
 /// (colours, paths, lists) are left to `config.toml`.
 pub fn settings_rows(resolved: &ResolvedEnhancements) -> Vec<SettingRow> {
+    settings_rows_in(resolved, SHIPPED_PHASES)
+}
+
+/// [`settings_rows`] as a build that has shipped the phases `shipped`
+/// would list them: the rows of those phases only. Every page uses
+/// [`SHIPPED_PHASES`]; the menu's tests use this to see the rows of a
+/// phase that ships later in the milestone (build plan M4-07).
+pub fn settings_rows_in(resolved: &ResolvedEnhancements, shipped: &[Phase]) -> Vec<SettingRow> {
     // (group, parent row key for a sub-option, row)
     let mut rows: Vec<(usize, Option<&'static str>, SettingRow)> = Vec::new();
-    for row in CatalogueRow::all().filter(|row| row.is_shipped()) {
+    for row in CatalogueRow::all().filter(|row| shipped.contains(&row.ships())) {
         let (kind, value, default, tier) = match row {
             CatalogueRow::Toggle(spec) => (
                 RowKind::Switch,
@@ -600,7 +608,7 @@ pub fn settings_rows(resolved: &ResolvedEnhancements) -> Vec<SettingRow> {
             CatalogueRow::Option(spec) => spec
                 .parent
                 .map(|toggle| toggle.spec())
-                .filter(|parent| parent.is_shipped())
+                .filter(|parent| shipped.contains(&parent.ships))
                 .map(|parent| parent.key),
             CatalogueRow::Toggle(_) => None,
         };
@@ -712,7 +720,18 @@ pub fn settings_page_rows(
     locked: bool,
     notes: Vec<String>,
 ) -> SettingsRows {
-    let rows = settings_rows(resolved);
+    settings_page_rows_in(resolved, locked, notes, SHIPPED_PHASES)
+}
+
+/// [`settings_page_rows`] for a build that has shipped the phases
+/// `shipped` ([`settings_rows_in`]).
+pub fn settings_page_rows_in(
+    resolved: &ResolvedEnhancements,
+    locked: bool,
+    notes: Vec<String>,
+    shipped: &[Phase],
+) -> SettingsRows {
+    let rows = settings_rows_in(resolved, shipped);
     let presets = PRESETS
         .iter()
         .map(|preset| preset_choice(*preset, &rows))

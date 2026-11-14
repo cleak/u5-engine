@@ -29,6 +29,11 @@
 //!   apply point and command-line mark, and `Flip` and `Step` on a setting
 //!   row queued as a change the foundation applies at that point.
 //!
+//! - M4-07 fills the pages: the Settings tabs' rows ([`settings::settings_tabs`])
+//!   in every snapshot the pages are built from, the preset row, and Leave
+//!   the game, which writes `AppExit` as the window's close button does and
+//!   saves nothing.
+//!
 //! - M4-05 draws it ([`render`]): the page in the frame kit on a picture
 //!   the size of the presented frame or canvas, an `ImageNode` exactly over
 //!   the frame sprite, a full-window dim under it, and the open and close
@@ -47,8 +52,9 @@ pub mod text;
 
 use std::collections::VecDeque;
 
+use bevy::ecs::system::SystemParam;
 use bevy::prelude::*;
-use u5_runtime::enhancements::Toggle;
+use u5_runtime::enhancements::{Phase, SHIPPED_PHASES, Toggle};
 
 use self::pages::{MenuCommand, MenuDoors, MenuInput, MenuModel, ShellSnapshot, reduce};
 use crate::enh::input::{
@@ -59,7 +65,10 @@ use crate::enh::overlay::{
     close_when_not_idle,
 };
 use crate::enh::toast::Toasts;
-use crate::enh::{EnhSet, VisualLaunchConfig, feature_wanted, toggle_on};
+use crate::enh::{
+    EnhLaunch, EnhSet, LiveSettings, PendingSettingChanges, PendingToggleChanges,
+    VisualLaunchConfig, feature_wanted, toggle_on,
+};
 use crate::{VisualIntroState, VisualState};
 
 /// The two toggles that bring the plugin (3.4.2).
@@ -96,6 +105,7 @@ impl Plugin for MenuPlugin {
         app.insert_resource(MenuShell {
             intro_shell,
             slots: self.slots,
+            shipped: SHIPPED_PHASES,
         })
         .init_resource::<MenuState>()
         .init_resource::<MenuDoors>()
@@ -110,10 +120,12 @@ impl Plugin for MenuPlugin {
         )
         .add_systems(
             Update,
-            settings::menu_setting_commands
+            (
+                settings::menu_setting_commands.before(crate::enh::apply_pending_changes),
+                quit_to_desktop,
+            )
                 .run_if(on_event::<MenuCommandEvent>)
                 .after(menu_input)
-                .before(crate::enh::apply_pending_changes)
                 .in_set(EnhSet::Apply),
         )
         .add_systems(
@@ -155,6 +167,10 @@ pub struct MenuShell {
     pub intro_shell: bool,
     /// Save and Load are offered.
     pub slots: bool,
+    /// The catalogue phases this build has shipped, whose rows the Settings
+    /// tabs list: [`SHIPPED_PHASES`]. Tests and the review shots add the
+    /// menu's own phases, which ship at the end of the milestone (M4-13).
+    pub shipped: &'static [Phase],
 }
 
 /// The open menu's model; `None` while the menu is closed.
@@ -201,7 +217,7 @@ fn menu_actions(
     }
 }
 
-/// The shell state the pages read now.
+/// The shell state the pages read now, without the Settings rows.
 pub(crate) fn snapshot(shell: &MenuShell, doors: &MenuDoors) -> ShellSnapshot {
     ShellSnapshot {
         intro_shell: shell.intro_shell,
@@ -213,6 +229,88 @@ pub(crate) fn snapshot(shell: &MenuShell, doors: &MenuDoors) -> ShellSnapshot {
     }
 }
 
+/// What the pages are built from: the shell, the doors, the settings in
+/// play with the changes still queued, and the game's own values.
+#[derive(SystemParam)]
+pub(crate) struct SnapshotInputs<'w> {
+    shell: Res<'w, MenuShell>,
+    doors: Res<'w, MenuDoors>,
+    live: Option<Res<'w, LiveSettings>>,
+    launch: Option<Res<'w, EnhLaunch>>,
+    toggles: Option<Res<'w, PendingToggleChanges>>,
+    settings: Option<Res<'w, PendingSettingChanges>>,
+    visual: Option<Res<'w, VisualState>>,
+}
+
+impl SnapshotInputs<'_> {
+    /// The pages' snapshot, the Settings tabs' rows included (M4-07).
+    pub(crate) fn snapshot(&self) -> ShellSnapshot {
+        full_snapshot(
+            &self.shell,
+            &self.doors,
+            self.live.as_deref(),
+            self.launch.as_deref(),
+            self.toggles.as_deref(),
+            self.settings.as_deref(),
+            self.visual.as_deref(),
+        )
+    }
+}
+
+/// [`SnapshotInputs::snapshot`] read straight from `world`, for tests.
+#[cfg(test)]
+pub(crate) fn world_snapshot(world: &World) -> ShellSnapshot {
+    full_snapshot(
+        world.resource::<MenuShell>(),
+        world.resource::<MenuDoors>(),
+        world.get_resource::<LiveSettings>(),
+        world.get_resource::<EnhLaunch>(),
+        world.get_resource::<PendingToggleChanges>(),
+        world.get_resource::<PendingSettingChanges>(),
+        world.get_resource::<VisualState>(),
+    )
+}
+
+fn full_snapshot(
+    shell: &MenuShell,
+    doors: &MenuDoors,
+    live: Option<&LiveSettings>,
+    launch: Option<&EnhLaunch>,
+    toggles: Option<&PendingToggleChanges>,
+    settings: Option<&PendingSettingChanges>,
+    visual: Option<&VisualState>,
+) -> ShellSnapshot {
+    let mut snap = snapshot(shell, doors);
+    if let (Some(live), Some(launch), Some(toggles), Some(settings)) =
+        (live, launch, toggles, settings)
+    {
+        let view = settings::settings_view_in(
+            live,
+            launch.0.enhancements.toggles,
+            toggles,
+            settings,
+            shell.shipped,
+        );
+        let game = visual.map(|visual| settings::GameValues {
+            sound_on: visual.state.music_enabled,
+            buffer_on: visual.state.typeahead_buffer_enabled,
+        });
+        snap.settings = settings::settings_tabs(&view, game);
+    }
+    snap
+}
+
+/// Leave the game (3.2.5): the app exits as the window's close button
+/// makes it, and nothing is saved. The unsaved-progress check comes with
+/// M4-13.
+fn quit_to_desktop(mut commands: EventReader<MenuCommandEvent>, mut exit: EventWriter<AppExit>) {
+    for MenuCommandEvent(command) in commands.read() {
+        if *command == MenuCommand::QuitToDesktop {
+            exit.write(AppExit::Success);
+        }
+    }
+}
+
 /// Hands this frame's menu keys to the reducer and carries out what it
 /// asks: the frame's typed text first, then its keys, each in order. It
 /// runs every frame so that keys meant for another overlay are read and
@@ -221,8 +319,7 @@ fn menu_input(
     mut keys: EventReader<OverlayKey>,
     mut text: EventReader<OverlayText>,
     mut state: ResMut<MenuState>,
-    shell: Res<MenuShell>,
-    doors: Res<MenuDoors>,
+    pages: SnapshotInputs,
     mut requests: EventWriter<OverlayRequest>,
     mut commands: EventWriter<MenuCommandEvent>,
 ) {
@@ -235,7 +332,10 @@ fn menu_input(
     let Some(model) = state.model.as_mut() else {
         return;
     };
-    let snap = snapshot(&shell, &doors);
+    if inputs.is_empty() {
+        return;
+    }
+    let snap = pages.snapshot();
     for input in inputs {
         for command in reduce(model, input, &snap) {
             match command {
@@ -350,3 +450,6 @@ mod plugin_tests;
 
 #[cfg(test)]
 mod review_tests;
+
+#[cfg(test)]
+mod pages_settings_tests;

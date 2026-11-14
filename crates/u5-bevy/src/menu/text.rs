@@ -192,12 +192,14 @@ pub const AUDIO_HELP: &str =
 pub const SOUND: &str = "Sound (Ctrl-S)";
 /// See [`SOUND`].
 pub const BUFFER: &str = "Buffer (Ctrl-B)";
-/// See [`SOUND`].
-pub const START_SOUND_OFF: &str = "Begin with sound off";
-/// See [`SOUND`].
-pub const START_BUFFER_ON: &str = "Begin with buffer on";
-/// See [`SOUND`].
-pub const CONFIRM_UNSAVED: &str = "Warn of unsaved play";
+/// See [`SOUND`]. Also this key's row on the Extras tab, where it sits in
+/// its group: at most [`SETTINGS_LABEL`] less one cell.
+pub const START_SOUND_OFF: &str = "Sound off at start";
+/// See [`START_SOUND_OFF`].
+pub const START_BUFFER_ON: &str = "Buffer on at start";
+/// See [`SOUND`]. Also this key's row on the Extras tab, a sub-option
+/// there: at most [`SETTINGS_LABEL`] less three cells.
+pub const CONFIRM_UNSAVED: &str = "Warn if unsaved";
 /// See [`SOUND`].
 pub const PACING: &str = "Pacing...";
 /// The game's own On and Off, as the game prints them.
@@ -211,6 +213,21 @@ pub const RESERVED: &str = "(later)";
 pub const PRESET: &str = "Preset:";
 /// A preset after a later change.
 pub const CUSTOM: &str = "Custom";
+/// The preset row's help.
+pub const PRESET_HELP: &str =
+    "Left and Right choose a preset. It sets every feature below; a later change shows Custom.";
+
+/// Why the Game tab's rows are greyed until they arrive (M4-13).
+pub const GAME_LATER: &str = "These come in a later build.";
+/// A tab with no rows in this build.
+pub const NOTHING_HERE: &str = "Nothing to set here yet.";
+/// The footer line of a row whose change waits for the next prompt, when
+/// its row has no room for the tag.
+pub const NOTE_NEXT_PROMPT: &str = "Takes hold at the next prompt.";
+/// See [`NOTE_NEXT_PROMPT`].
+pub const NOTE_NEXT_LAUNCH: &str = "Takes hold at the next launch.";
+/// The collapsed Cheats group's help (chapter 7 fills the group).
+pub const CHEATS_GROUP_HELP: &str = "The cheats come in a later build.";
 
 /// A row's apply point when it is not the next frame (3.4.1, D-M4.4).
 pub const NEXT_PROMPT: &str = "next prompt";
@@ -221,6 +238,86 @@ pub const SET_BY_COMMAND_LINE: &str = "(set by command line)";
 
 /// The word a row that can show undiscovered things starts with (U17).
 pub const SPOILER: &str = "Spoiler:";
+
+/// The rows of 3.2.7's spoiler list that the catalogue has, besides every
+/// `Tag::SpoilerRisk` row: a value of theirs shows what the player has not
+/// found. Their labels and help start with [`SPOILER`]. The list's other
+/// keys (the journal's tiers and clues, the automap's reveal options, the
+/// quest landmarks, Teleport) join it as their rows arrive.
+pub const SPOILER_KEYS: &[&str] = &["gem_map.glyphs"];
+
+/// The Settings label of the catalogue row `key` (3.2.7): the catalogue's
+/// own label made to fit the label column ([`SETTINGS_LABEL`] cells less
+/// the row's indent; the Extras tab sets a group's rows in one cell and a
+/// sub-option three). The catalogue label, which says more, is the row's
+/// footer help when the row has no help line of its own. `None` for a key
+/// with no row here.
+pub fn setting_label(key: &str) -> Option<&'static str> {
+    Some(match key {
+        "enhancements.freeze_overlays" => "Pause behind menus",
+        // [display], chapter 2.
+        "display.scale_mode" => "Scaling",
+        "display.pixel_aspect" => "Pixel shape",
+        "display.fullscreen" => "Fullscreen",
+        "display.fullscreen_key" => "Fullscreen on F11",
+        "display.pillar_fill" => "Bars beside picture",
+        "display.grow_left" => "Wider world view",
+        "display.grow_left_light" => "Daylight reach",
+        "display.crawl" => "Messages over map",
+        "display.typed_colour" => "Cyan typed text",
+        "display.ribbon_hp_colours" => "Health colours",
+        "display.dither" => "Fade effects",
+        "display.centre_party" => "Centre the party",
+        "display.vsync" => "Wait for vsync",
+        // [display], chapter 9.
+        "display.brightness" => "Brightness",
+        "display.brightness_scope" => "Brightness covers",
+        "display.map_brightness" => "Map brightness",
+        "display.vignette" => "Edge darkening",
+        "display.sprite_composite" => "Sprites on terrain",
+        "display.composite_halo" => "Sprite outlines",
+        // [gem_map], chapter 10.
+        "gem_map.enhanced" => "Enhanced gem map",
+        "gem_map.labels" => "Names on the map",
+        "gem_map.brightness_link" => "Match map dimming",
+        "gem_map.map_brightness" => "Gem map dimming",
+        "gem_map.sweep" => "Fade in and out",
+        "gem_map.town_surroundings" => "Land around towns",
+        "gem_map.dungeon_stack" => "Every level seen",
+        "gem_map.wrap_rows" => "Wrapped edge",
+        "gem_map.level_paging" => "Level paging",
+        "gem_map.glyphs" => "Spoiler: symbols",
+        // [menu] and [audio], chapter 3.
+        "menu.overlay" => "Menu overlay (F12)",
+        "menu.title_layer" => "Title menu (F12)",
+        "menu.named_slots" => "Named save slots",
+        "menu.quicksave" => "Quick slot",
+        "menu.confirm_unsaved" => CONFIRM_UNSAVED,
+        "menu.quit_to_title" => "Return to title",
+        "audio.volume" => VOLUME,
+        "audio.muted" => MUTE,
+        "audio.mute_on_focus_loss" => MUTE_ON_FOCUS_LOSS,
+        "audio.start_sound_off" => START_SOUND_OFF,
+        "audio.start_buffer_on" => START_BUFFER_ON,
+        // [input], chapter 3 Phase 5.
+        "input.gamepad" => "Gamepad",
+        "input.mouse" => "Mouse",
+        "input.extra_bindings" => "Extra key bindings",
+        _ => return None,
+    })
+}
+
+/// The menu's own help for the row `key`, where the catalogue's would not
+/// do: a spoiler row's, which starts with [`SPOILER`] and says what it
+/// shows.
+pub fn setting_help(key: &str) -> Option<&'static str> {
+    match key {
+        "gem_map.glyphs" => Some(
+            "Spoiler: gem-faithful draws secret doors and hidden pits as soon as they are in sight.",
+        ),
+        _ => None,
+    }
+}
 /// The collapsed cheats group's header (3.2.7).
 pub const CHEATS_GROUP: &str = "Cheats (changes thy game)";
 

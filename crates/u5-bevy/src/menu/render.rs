@@ -47,9 +47,11 @@ use u5_runtime::FixedCellFont;
 use super::frame::Scroll;
 use super::frame::*;
 use super::geometry::{CellRect, MenuPicture, PageShape, menu_picture, panel_rect};
-use super::pages::{Page, PageState, Row, RowKind, ShellSnapshot, page_rows};
+use super::pages::{
+    Page, PageState, Row, RowKind, SettingsTab, ShellSnapshot, Shown, page_rows, settle,
+};
 use super::text as t;
-use super::{MenuDoors, MenuShell, MenuState, snapshot};
+use super::{MenuState, SnapshotInputs};
 use crate::VisualState;
 use crate::display::Display;
 use crate::display::effects::{STEP_SLACK, SWEEP_STEPS};
@@ -59,6 +61,7 @@ use crate::enh::gem_map::view::{GEM_BEFORE_Z, GEM_NODE_Z};
 use crate::enh::overlay::{CloseReason, OverlayChanged, OverlayId};
 use crate::enh::present::PresentHost;
 use crate::enh::side::FrameImageSize;
+use u5_runtime::enhancements::PRESETS;
 
 /// The menu node's layer: the gem map's, above the frame sprite, the side
 /// fill and the side panels, below the toasts.
@@ -107,9 +110,11 @@ pub fn first_shown(cursor: usize, len: usize, visible: usize) -> usize {
         .min(len - visible)
 }
 
-/// The rows `bx` shows of `rows`, below its margin row, from `first`;
-/// their lines from `line`, the selected one as the selection bar, with
-/// the scroll marks on the bands above (`upper`) and below (`lower`).
+/// The rows `bx` shows of `rows`, between its top and bottom margin rows,
+/// from `first`; their lines from `line`, the selected one (if it is in
+/// this list) as the selection bar, with the scroll marks on the bands
+/// above (`upper`) and below (`lower`). The margin rows keep the bar off
+/// the rules above and below the list: it never merges with them.
 #[allow(clippy::too_many_arguments)]
 fn draw_list(
     img: &mut MenuImage,
@@ -118,14 +123,14 @@ fn draw_list(
     upper: u32,
     lower: u32,
     rows: &[Row],
-    cursor: usize,
+    cursor: Option<usize>,
     line: impl Fn(&Row, u32) -> Line,
 ) {
-    let visible = (bx.h - 1) as usize;
-    let first = first_shown(cursor, rows.len(), visible);
+    let visible = list_rows(bx);
+    let first = first_shown(cursor.unwrap_or(0), rows.len(), visible);
     for (i, row) in rows.iter().enumerate().skip(first).take(visible) {
         let at = bx.row + 1 + (i - first) as u32;
-        draw_row(img, font, bx, at, &line(row, bx.w), i == cursor);
+        draw_row(img, font, bx, at, &line(row, bx.w), Some(i) == cursor);
     }
     if first > 0 {
         draw_scroll_mark(img, font, bx.right() - 1, upper, Scroll::Up);
@@ -135,14 +140,15 @@ fn draw_list(
     }
 }
 
-/// `text` wrapped into the footer box `bx` in the help ink, "Spoiler:" in
-/// brown; lines past the box are dropped.
-fn draw_help(img: &mut MenuImage, font: &FixedCellFont, bx: CellRect, text: &str) {
-    for (i, line) in t::wrap(text, (bx.w - 2) as usize)
-        .iter()
-        .take(bx.h as usize)
-        .enumerate()
-    {
+/// The rows a list box shows: all but its two margin rows.
+pub fn list_rows(bx: CellRect) -> usize {
+    bx.h.saturating_sub(2) as usize
+}
+
+/// `lines` (already wrapped) in the footer box `bx` in the help ink,
+/// "Spoiler:" in brown; lines past the box are dropped.
+fn draw_help_lines(img: &mut MenuImage, font: &FixedCellFont, bx: CellRect, lines: &[String]) {
+    for (i, line) in lines.iter().take(bx.h as usize).enumerate() {
         let mut l = Line::new(bx.w).text(1, line, Ink::Help);
         if let Some(at) = line.find(t::SPOILER) {
             l = l.text(1 + at as u32, t::SPOILER, Ink::Accent);
@@ -151,24 +157,123 @@ fn draw_help(img: &mut MenuImage, font: &FixedCellFont, bx: CellRect, text: &str
     }
 }
 
+/// `text` wrapped into the footer box `bx` in the help ink, "Spoiler:" in
+/// brown; lines past the box are dropped.
+fn draw_help(img: &mut MenuImage, font: &FixedCellFont, bx: CellRect, text: &str) {
+    draw_help_lines(img, font, bx, &t::wrap(text, (bx.w - 2) as usize));
+}
+
 /// A top-menu row: its label after the margin cell, grey when disabled.
 pub fn top_line(row: &Row, w: u32) -> Line {
     let line = Line::new(w).text(1, row.label, Ink::Plain);
     if row.enabled { line } else { line.greyed() }
 }
 
-/// A Settings row: its label after the margin cell ("Spoiler:" in brown),
-/// a check box at [`VALUE_COL`], grey when disabled. Values and apply tags
-/// come with the Settings pages (M4-06, M4-07).
-pub fn setting_line(row: &Row, w: u32) -> Line {
-    let mut line = Line::new(w).text(1, row.label, Ink::Plain);
-    if let Some(at) = row.label.find(t::SPOILER) {
-        line = line.text(1 + at as u32, t::SPOILER, Ink::Accent);
+/// Cells inside a slider's brackets (3.2.7: `[#######---]`).
+pub const SLIDER_INNER: u32 = 8;
+
+/// The cells a row's value takes from [`VALUE_COL`].
+fn value_cells(row: &Row, w: u32) -> u32 {
+    match row.kind {
+        RowKind::Check { .. } => 3,
+        RowKind::Value(Shown::Word(word)) => word.len() as u32,
+        // The slider, and its percent ending at the row's last text cell.
+        RowKind::Value(Shown::Percent { .. }) => w - 1 - VALUE_COL,
+        _ => 0,
     }
-    if let RowKind::Check { on } = row.kind {
-        line = line.check(VALUE_COL, on);
+}
+
+/// Whether a row's apply tag fits after its value, with a blank between,
+/// ending at the row's last text cell; a tag that does not fit is said in
+/// the footer instead.
+pub fn tag_fits(row: &Row, w: u32) -> bool {
+    let Some(tag) = row.tag else {
+        return true;
+    };
+    let start = w - 1 - tag.len() as u32;
+    let used = value_cells(row, w);
+    VALUE_COL + used < start
+}
+
+/// The label cells a row has: from its indent to one blank before the
+/// value column.
+pub fn label_room(row: &Row) -> usize {
+    (VALUE_COL - 2).saturating_sub(u32::from(row.indent)) as usize
+}
+
+/// A Settings row (3.2.7): a group heading in light grey; otherwise its
+/// label after the margin cell and its indent ("Spoiler:" in brown), its
+/// value at [`VALUE_COL`] (a check box, a word, or a slider with its
+/// percent), and its apply tag ending at the last text cell when it fits.
+/// The collapsed Cheats group is "+" and its heading, "Cheats" in brown.
+/// A disabled row is grey.
+pub fn setting_line(row: &Row, w: u32) -> Line {
+    if row.kind == RowKind::Header {
+        return Line::new(w).text(1, row.label, Ink::Help);
+    }
+    if row.label == t::CHEATS_GROUP {
+        return Line::new(w)
+            .text(1, "+", Ink::Plain)
+            .text(3, t::CHEATS_GROUP, Ink::Plain)
+            .text(3, "Cheats", Ink::Accent);
+    }
+    let at = 1 + u32::from(row.indent);
+    let label = t::cut(row.label, label_room(row));
+    let mut line = Line::new(w).text(at, &label, Ink::Plain);
+    if label.starts_with(t::SPOILER) {
+        line = line.text(at, t::SPOILER, Ink::Accent);
+    }
+    line = match row.kind {
+        RowKind::Check { on } => line.check(VALUE_COL, on),
+        RowKind::Value(Shown::Word(word)) => line.text(VALUE_COL, word, Ink::Plain),
+        RowKind::Value(Shown::Percent { value, fill }) => line
+            .slider(VALUE_COL, SLIDER_INNER, fill)
+            .right(w - 2, &format!("{value}%"), Ink::Help),
+        _ => line,
+    };
+    if let Some(tag) = row.tag
+        && tag_fits(row, w)
+    {
+        line = line.right(w - 2, tag, Ink::Help);
     }
     if row.enabled { line } else { line.greyed() }
+}
+
+/// The footer's lines for the selected `row` of a Settings tab, wrapped to
+/// `width`, at most `rows` of them: the reason a greyed row is greyed, or
+/// the row's help ("Spoiler:" first on a spoiler row); then, on their own
+/// lines, the apply point when the row had no room for its tag, and the
+/// command-line mark. Help that does not fit gives way to those.
+pub fn setting_help(
+    row: Option<&Row>,
+    fallback: Option<&str>,
+    width: usize,
+    rows: usize,
+) -> Vec<String> {
+    let Some(row) = row else {
+        return fallback
+            .map(|text| t::wrap(text, width))
+            .unwrap_or_default();
+    };
+    let mut notes = Vec::new();
+    if !tag_fits(row, width as u32 + 2) {
+        notes.extend(row.tag.map(|tag| {
+            if tag == t::NEXT_PROMPT {
+                t::NOTE_NEXT_PROMPT
+            } else {
+                t::NOTE_NEXT_LAUNCH
+            }
+        }));
+    }
+    if row.by_cli {
+        notes.push(t::SET_BY_COMMAND_LINE);
+    }
+    let text = row.reason.or(row.help).or(fallback);
+    let mut lines = text.map(|text| t::wrap(text, width)).unwrap_or_default();
+    let notes: Vec<String> = notes.iter().flat_map(|note| t::wrap(note, width)).collect();
+    lines.truncate(rows.saturating_sub(notes.len()));
+    lines.extend(notes);
+    lines
 }
 
 /// The help the footer shows for the selected row: its reason when it is
@@ -194,7 +299,14 @@ fn top_page(
     let boxes = panel.boxes();
     let (list, footer) = (boxes[0], boxes[1]);
     draw_list(
-        &mut img, font, list, rect.row, divider, rows, cursor, top_line,
+        &mut img,
+        font,
+        list,
+        rect.row,
+        divider,
+        rows,
+        Some(cursor),
+        top_line,
     );
     match selected_reason(rows, cursor) {
         Some(reason) => draw_help(&mut img, font, footer, reason),
@@ -213,8 +325,85 @@ fn top_page(
     }
 }
 
+/// The first cell of the first preset on the preset row: after "Preset:"
+/// and two blanks, as the sheet sets it.
+pub const PRESET_COL: u32 = 1 + t::PRESET.len() as u32 + 2;
+
+/// Where the preset row puts each of `words` (the presets, then "Custom"):
+/// `(line, cell)`, one after another from [`PRESET_COL`] with two blanks
+/// between, on to the next line at [`PRESET_COL`] when a word would pass
+/// the last text cell of a `w`-cell row.
+pub fn preset_places(words: &[&str], w: u32) -> Vec<(u32, u32)> {
+    let mut places = Vec::with_capacity(words.len());
+    let (mut line, mut col) = (0, PRESET_COL);
+    for word in words {
+        if col + word.len() as u32 > w - 1 && col > PRESET_COL {
+            line += 1;
+            col = PRESET_COL;
+        }
+        places.push((line, col));
+        col += word.len() as u32 + 2;
+    }
+    places
+}
+
+/// The preset row in its box (3.2.7): "Preset:", the presets and "Custom".
+/// The one in force is white, the others light grey, and "Custom" dark grey
+/// while a preset is in force (it cannot be chosen). With the cursor on
+/// the row the one in force is drawn in inverse video with a blank either
+/// side, as a dialog's button.
+fn draw_preset_row(
+    img: &mut MenuImage,
+    font: &FixedCellFont,
+    bx: CellRect,
+    labels: &[&str],
+    current: Option<u8>,
+    selected: bool,
+) {
+    let mut words: Vec<&str> = labels.to_vec();
+    words.push(t::CUSTOM);
+    let places = preset_places(&words, bx.w);
+    let custom = words.len() - 1;
+    let chosen = current.map_or(custom, usize::from);
+    // The two text lines between the box's margin rows.
+    let mut lines: Vec<Line> = (0..PRESET_LINES).map(|_| Line::new(bx.w)).collect();
+    lines[0] = lines[0].clone().text(1, t::PRESET, Ink::Plain);
+    for (i, (word, (line, col))) in words.iter().zip(&places).enumerate() {
+        let ink = if i == chosen {
+            Ink::Plain
+        } else if i == custom {
+            Ink::Grey
+        } else {
+            Ink::Help
+        };
+        if let Some(l) = lines.get_mut(*line as usize) {
+            *l = l.clone().text(*col, word, ink);
+        }
+    }
+    for (i, line) in lines.iter().enumerate() {
+        draw_row(img, font, bx, bx.row + 1 + i as u32, line, false);
+    }
+    if selected && let Some((line, col)) = places.get(chosen).copied() {
+        let len = words[chosen].len() as u32 + 2;
+        let Some(row) = lines.get(line as usize) else {
+            return;
+        };
+        let mut bar = Line::new(len);
+        bar.cells
+            .copy_from_slice(&row.cells[(col - 1) as usize..(col - 1 + len) as usize]);
+        draw_line(img, font, bx.col + col - 1, bx.row + 1 + line, &bar, true);
+    }
+}
+
+/// Text lines of the Extras tab's preset row.
+pub const PRESET_LINES: u32 = 2;
+/// Rows of the Extras tab's preset box: its two lines between a margin row
+/// above and below, so the bar on a preset never merges with a rule.
+pub const PRESET_ROWS: u32 = PRESET_LINES + 2;
+
 /// A Settings page (3.2.7): the wide panel with the tab strip, its rows, a
-/// footer box for the selected row's help and the "Esc: back" tab.
+/// footer box for the selected row's help and the "Esc: back" tab. The
+/// Extras tab puts its preset row in a box of its own above the list.
 fn settings_page(
     font: &FixedCellFont,
     picture: &MenuPicture,
@@ -222,27 +411,56 @@ fn settings_page(
     tab: usize,
     rows: &[Row],
     cursor: usize,
+    presets: &[&str],
 ) -> Drawn {
     let rect = panel_rect(PageShape::Wide, picture, column);
     let lower = rect.bottom() - SETTINGS_FOOTER_ROWS - 1;
-    let panel = Panel::new(rect).divider(lower);
+    let preset = match rows.first() {
+        Some(Row {
+            kind: RowKind::Preset { current, .. },
+            ..
+        }) => Some(*current),
+        _ => None,
+    };
+    let upper = rect.row + 1 + PRESET_ROWS;
+    let panel = match preset {
+        Some(_) => Panel::new(rect).divider(upper).divider(lower),
+        None => Panel::new(rect).divider(lower),
+    };
     let mut img = MenuImage::for_picture(picture);
     draw_panel(&mut img, &panel);
     let boxes = panel.boxes();
-    let (list, footer) = (boxes[0], boxes[1]);
+    let (list, footer) = (boxes[boxes.len() - 2], boxes[boxes.len() - 1]);
+    let (listed, list_cursor, top) = match preset {
+        Some(current) => {
+            draw_preset_row(&mut img, font, boxes[0], presets, current, cursor == 0);
+            (&rows[1..], cursor.checked_sub(1), upper)
+        }
+        None => (rows, Some(cursor), rect.row),
+    };
+    if listed.is_empty() {
+        let line = Line::new(list.w).text(1, t::NOTHING_HERE, Ink::Help);
+        draw_row(&mut img, font, list, list.row + 1, &line, false);
+    }
     draw_list(
         &mut img,
         font,
         list,
-        rect.row,
+        top,
         lower,
-        rows,
-        cursor,
+        listed,
+        list_cursor,
         setting_line,
     );
-    if let Some(reason) = selected_reason(rows, cursor) {
-        draw_help(&mut img, font, footer, reason);
-    }
+    // The Audio tab's own help shows under a row with none (3.2.7).
+    let fallback = (tab == SettingsTab::Audio.index()).then_some(t::AUDIO_HELP);
+    let help = setting_help(
+        rows.get(cursor),
+        fallback,
+        (footer.w - 2) as usize,
+        footer.h as usize,
+    );
+    draw_help_lines(&mut img, font, footer, &help);
     draw_tab_strip(&mut img, font, rect, &t::SETTINGS_TABS, tab);
     draw_footer_tab(&mut img, font, rect, t::KEY_BACK);
     Drawn {
@@ -261,10 +479,13 @@ pub fn render_page(
     snap: &ShellSnapshot,
 ) -> Drawn {
     let rows = page_rows(state.page, snap);
-    let cursor = state.cursor.min(rows.len().saturating_sub(1));
+    let cursor = settle(&rows, state.cursor);
     match state.page {
         Page::Top => top_page(font, picture, column, &rows, cursor),
-        Page::Settings(tab) => settings_page(font, picture, column, tab.index(), &rows, cursor),
+        Page::Settings(tab) => {
+            let presets: Vec<&str> = PRESETS.iter().map(|preset| preset.label()).collect();
+            settings_page(font, picture, column, tab.index(), &rows, cursor, &presets)
+        }
     }
 }
 
@@ -452,8 +673,7 @@ fn upload(
 pub(crate) fn menu_render(
     mut changed: EventReader<OverlayChanged>,
     state: Res<MenuState>,
-    shell: Res<MenuShell>,
-    doors: Res<MenuDoors>,
+    pages: SnapshotInputs,
     inputs: PictureInputs,
     time: Res<Time>,
     mut view: ResMut<MenuView>,
@@ -485,7 +705,7 @@ pub(crate) fn menu_render(
         view.sweep.tick(time.delta());
     }
     if let (Some(model), Some(visual)) = (state.model(), inputs.visual.as_deref()) {
-        let snap = snapshot(&shell, &doors);
+        let snap = pages.snapshot();
         let (picture, column) = inputs.picture();
         let current = model.current();
         let key = DrawKey {

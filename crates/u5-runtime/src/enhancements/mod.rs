@@ -107,7 +107,8 @@ pub use matrix::{
 pub use menu::{AudioSettings, INPUT_KEYS, MenuSettings, QuitToTitle, START_KEYS};
 pub use page::{
     DORMANT_WITH_MENU, RowNote, SETTING_GROUPS, apply_value, dormant_install, effective_apply,
-    preset_choice, row_notes, settings_page_rows, settings_rows,
+    preset_choice, row_notes, settings_page_rows, settings_page_rows_in, settings_rows,
+    settings_rows_in,
 };
 pub use resolve::{
     CHEATS_SWITCH, KeyBindings, PRESET_KEY, PresetLabel, ResolveInput, ResolvedEnhancements,

@@ -165,8 +165,26 @@ fn menu_picture(shell: &mut Shell) -> (Option<(UVec2, Vec<u8>)>, bool) {
 /// The picture as the window shows it: the game, the backdrop's dim, the
 /// menu over both.
 fn composed(shell: &mut Shell) -> (u32, u32, Vec<u8>) {
-    let (size, game) = game_picture(shell);
+    let (mut size, mut game) = game_picture(shell);
     let (menu, backdrop) = menu_picture(shell);
+    // A prescaled presentation (`scale_mode = sharp`) shows the canvas
+    // scaled up; the menu is drawn on the canvas's own grid. Sample the
+    // presented picture at each canvas pixel's centre.
+    if let Some((msize, _)) = &menu
+        && *msize != size
+    {
+        let mut small = Vec::with_capacity((msize.x * msize.y * 4) as usize);
+        for y in 0..msize.y {
+            for x in 0..msize.x {
+                let gx = ((2 * x + 1) * size.x) / (2 * msize.x);
+                let gy = ((2 * y + 1) * size.y) / (2 * msize.y);
+                let i = ((gy * size.x + gx) * 4) as usize;
+                small.extend_from_slice(&game[i..i + 4]);
+            }
+        }
+        size = *msize;
+        game = small;
+    }
     let mut out = game;
     if backdrop {
         let mut dim = MenuImage::new(size.x, size.y);
@@ -368,6 +386,7 @@ fn menu_shell_review_shots() {
             app.insert_resource(MenuShell {
                 intro_shell: true,
                 slots: false,
+                shipped: u5_runtime::enhancements::SHIPPED_PHASES,
             });
         });
         shell.app.world_mut().spawn(Window {
@@ -473,6 +492,233 @@ fn menu_shell_review_shots() {
                 shell.step(&[]);
             }
         }
+        eprintln!("{}: written", case.label);
+    }
+}
+
+/// The M4-07 render check: every Settings tab in the real shell over the
+/// same real frames, for the user to hold beside the M4-01 sheet (build
+/// plan M4-07). As [`menu_shell_review_shots`], review output only and
+/// `#[ignore]`d; `U5_MENU_SHOTS` names the output folder. The menu's own
+/// phases are listed as shipped (they ship in M4-13), so the Audio tab and
+/// the menu's rows show; their values are the defaults.
+#[test]
+#[ignore = "review output: needs U5_MOCKUP_PROFILE and U5_MENU_SHOTS"]
+fn settings_review_shots() {
+    use super::pages::{Page, RowKind, SettingsTab, page_rows};
+    use super::world_snapshot;
+
+    let (Some(profile), Some(out)) = (
+        configured_test_dir("U5_MOCKUP_PROFILE"),
+        configured_test_dir("U5_MENU_SHOTS"),
+    ) else {
+        eprintln!("skipped: set U5_MOCKUP_PROFILE and U5_MENU_SHOTS");
+        return;
+    };
+    fs::create_dir_all(&out).unwrap();
+    let game = unique_scratch_dir("menu-settings-shots");
+    for entry in fs::read_dir(&profile).unwrap() {
+        let entry = entry.unwrap();
+        if entry.file_type().unwrap().is_file() {
+            copy_asset_writable(&entry.path(), &game.join(entry.file_name())).unwrap();
+        }
+    }
+    let scene = Scene::from_game_dir(&game).unwrap();
+    let cases = [&CASES[0], &CASES[1], &CASES[2], &CASES[3]];
+    for case in cases {
+        let mut options = load_play_options_from_save(&game).unwrap();
+        options.target = PlayTarget::from_key("BRITANNIA").unwrap();
+        options.saved_active_objects = None;
+        options.start = Some((74, 111));
+        options.clock = GameClock::new(11, 50).unwrap();
+        let state = PlayState::load_scene(&game, options).unwrap();
+        let walk = [
+            KeyCode::ArrowUp,
+            KeyCode::ArrowUp,
+            KeyCode::ArrowRight,
+            KeyCode::ArrowRight,
+            KeyCode::ArrowUp,
+        ];
+        let mut timeline = Timeline::new(10 + walk.len() * 30 + 80);
+        for (index, key) in walk.iter().enumerate() {
+            timeline.game_tap(10 + index * 30, *key);
+        }
+        if case.column {
+            let at = 10 + walk.len() * 30 + 10;
+            for (frame, key, state) in [
+                (at, KeyCode::ControlLeft, ButtonState::Pressed),
+                (at, KeyCode::KeyP, ButtonState::Pressed),
+                (at + 1, KeyCode::KeyP, ButtonState::Released),
+                (at + 1, KeyCode::ControlLeft, ButtonState::Released),
+            ] {
+                timeline.event(frame, key, state, false, Owner::Feature);
+            }
+        }
+        let mut shell = Shell::new(state, &scene, &launch(case.grow), |app| {
+            app.insert_resource(MenuShell {
+                intro_shell: true,
+                slots: false,
+                shipped: super::pages_settings_tests::with_menu_phases(),
+            });
+        });
+        shell.app.world_mut().spawn(Window {
+            resolution: WindowResolution::new(case.window.0 as f32, case.window.1 as f32),
+            ..default()
+        });
+        for index in 0..timeline.len() {
+            shell.step(timeline.frame(index));
+        }
+        let w = Writer {
+            out: &out,
+            label: case.label,
+        };
+        let tap = |shell: &mut Shell, key: KeyCode| {
+            for state in [ButtonState::Pressed, ButtonState::Released] {
+                shell.step(&[crate::enh::equivalence::TimedKey {
+                    key,
+                    state,
+                    repeat: false,
+                    owner: Owner::Game,
+                }]);
+            }
+        };
+        let current = |shell: &Shell| {
+            shell
+                .app
+                .world()
+                .resource::<MenuState>()
+                .model()
+                .unwrap()
+                .current()
+        };
+        // Down (or up) to the row labelled `label` on the page showing.
+        let to = |shell: &mut Shell, label: &str| {
+            let page = current(shell).page;
+            let rows = page_rows(page, &world_snapshot(shell.app.world()));
+            let at = rows
+                .iter()
+                .position(|row| row.label == label)
+                .unwrap_or_else(|| panic!("no row {label} on {page:?}"));
+            for _ in 0..rows.len() {
+                let cursor = current(shell).cursor;
+                if cursor == at {
+                    break;
+                }
+                tap(
+                    shell,
+                    if cursor < at {
+                        KeyCode::ArrowDown
+                    } else {
+                        KeyCode::ArrowUp
+                    },
+                );
+            }
+            assert_eq!(current(shell).cursor, at, "{label}");
+        };
+        // A whole shot, its 4x and the panel's close-ups.
+        let shot = |shell: &mut Shell, name: &str, divider_rows: &[u32]| {
+            let picture = composed(shell);
+            w.shot(name, &picture);
+            save_png(
+                &out.join(format!("{}-{name}-4x.png", case.label)),
+                picture.0 * 4,
+                picture.1 * 4,
+                &scaled(picture.0, picture.1, &picture.2, 4),
+            );
+            let drawn = shell
+                .app
+                .world()
+                .resource::<MenuView>()
+                .drawn()
+                .unwrap()
+                .clone();
+            for (i, rows) in divider_rows.iter().enumerate() {
+                for (part, area) in closeups(drawn.panel, *rows) {
+                    if i > 0 && !part.starts_with("junction") {
+                        continue;
+                    }
+                    let part = if i > 0 {
+                        format!("upper-{part}")
+                    } else {
+                        part.to_string()
+                    };
+                    w.closeup(&format!("{name}-{part}"), &picture, area);
+                }
+            }
+        };
+        let open = |shell: &mut Shell| {
+            tap(shell, KeyCode::F12);
+            while shell
+                .app
+                .world()
+                .resource::<MenuView>()
+                .sweep
+                .step
+                .is_some()
+            {
+                shell.step(&[]);
+            }
+        };
+
+        open(&mut shell);
+        shot(&mut shell, "top", &[4]);
+        to(&mut shell, crate::menu::text::SETTINGS);
+        tap(&mut shell, KeyCode::Enter);
+        assert_eq!(current(&shell).page, Page::Settings(SettingsTab::Audio));
+        shot(&mut shell, "audio", &[5]);
+        to(&mut shell, crate::menu::text::MUTE);
+        shot(&mut shell, "audio-mute", &[5]);
+
+        tap(&mut shell, KeyCode::ArrowRight);
+        assert_eq!(current(&shell).page, Page::Settings(SettingsTab::Display));
+        shot(&mut shell, "display", &[5]);
+        to(&mut shell, "Wider world view");
+        shot(&mut shell, "display-grow", &[5]);
+        to(&mut shell, "Brightness");
+        for _ in 0..6 {
+            tap(&mut shell, KeyCode::ArrowLeft);
+        }
+        shell.step(&[]);
+        shot(&mut shell, "display-brightness", &[5]);
+        to(&mut shell, "Fullscreen");
+
+        tap(&mut shell, KeyCode::ArrowRight);
+        assert_eq!(current(&shell).page, Page::Settings(SettingsTab::Game));
+        shot(&mut shell, "game", &[5]);
+        tap(&mut shell, KeyCode::ArrowRight);
+        assert_eq!(
+            current(&shell).page,
+            Page::Settings(SettingsTab::Enhancements)
+        );
+        // The panel's height, for the upper divider's close-ups.
+        let panel_h = shell
+            .app
+            .world()
+            .resource::<MenuView>()
+            .drawn()
+            .unwrap()
+            .panel
+            .h;
+        let upper = panel_h - 1 - (1 + super::render::PRESET_ROWS);
+        shot(&mut shell, "extras-preset", &[5, upper]);
+        to(&mut shell, "Messages over map");
+        shot(&mut shell, "extras", &[5, upper]);
+        to(&mut shell, "Spoiler: symbols");
+        shot(&mut shell, "extras-spoiler", &[5, upper]);
+        let rows = page_rows(current(&shell).page, &world_snapshot(shell.app.world()));
+        assert!(matches!(rows[0].kind, RowKind::Preset { .. }));
+        to(&mut shell, crate::menu::text::PRESET);
+        tap(&mut shell, KeyCode::ArrowRight);
+        shell.step(&[]);
+        shot(&mut shell, "extras-recommended", &[5, upper]);
+        tap(&mut shell, KeyCode::ArrowRight);
+        shell.step(&[]);
+        shot(&mut shell, "extras-everything", &[5, upper]);
+        to(&mut shell, "Sprites on terrain");
+        tap(&mut shell, KeyCode::Space);
+        shell.step(&[]);
+        to(&mut shell, crate::menu::text::PRESET);
+        shot(&mut shell, "extras-custom", &[5, upper]);
         eprintln!("{}: written", case.label);
     }
 }
