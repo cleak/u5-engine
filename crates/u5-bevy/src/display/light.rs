@@ -156,7 +156,12 @@ pub(crate) fn add_light(app: &mut App, settings: &DisplaySettings) {
     let menu = app
         .world()
         .get_resource::<crate::enh::Toggles>()
-        .is_some_and(|toggles| crate::enh::input::menu_overlay_on(toggles.0));
+        .is_some_and(|toggles| {
+            u5_runtime::enhancements::dormant_install(
+                toggles.0,
+                u5_runtime::enhancements::Toggle::DisplayBrightness,
+            )
+        });
     let step = BrightnessStep::of(&settings.light);
     if step.is_none() && !menu {
         return;

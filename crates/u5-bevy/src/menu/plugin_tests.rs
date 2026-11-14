@@ -742,7 +742,8 @@ fn the_off_census_finds_no_menu() {
 /// plugin. Of the table's plugins M4-04 builds `MenuPlugin`; the overlay
 /// also keeps the display chapter's plugin it has brought since M1 (its
 /// rows can change in play, 2.3.4, so it stands in for `VsyncPlugin`
-/// until M4-08), and either menu toggle brings the
+/// until M4-08) and the gem map's, installed dormant (M4-06, D-M4.4), and
+/// either menu toggle brings the
 /// router, the overlay model and the toasts the menu runs on. Every
 /// other chapter 3 toggle adds nothing yet.
 #[test]
@@ -762,6 +763,8 @@ fn each_chapter_3_toggle_alone_adds_only_its_own_plugin() {
                 "u5_bevy::display",
                 // The display plugin's presentation host.
                 "u5_bevy::enh::present::",
+                // The gem map, installed dormant (D-M4.4).
+                "u5_bevy::enh::gem_map",
                 "u5_bevy::menu::",
             ],
             TITLE_LAYER => &[

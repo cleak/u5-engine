@@ -51,11 +51,12 @@ use bevy::prelude::*;
 use bevy::window::{MonitorSelection, PresentMode, WindowMode};
 use u5_runtime::enhancements::{
     BezelMailbox, DISPLAY_TOGGLES, DisplaySettings, FeatureToggles, LockState, PillarFill,
+    ResolvedEnhancements,
 };
 
 use crate::EnhSet;
-use crate::enh::VisualLaunchConfig;
 use crate::enh::input::{EnhAction, EnhActionEvent};
+use crate::enh::{LiveSettings, VisualLaunchConfig};
 
 pub mod composite;
 pub mod crawl;
@@ -95,6 +96,22 @@ impl DisplayPlugin {
 impl Plugin for DisplayPlugin {
     fn build(&self, app: &mut App) {
         app.insert_resource(Display(self.settings.clone()));
+        // The menu overlay changes settings in play (M4-06, D-M4.4): the
+        // display follows the foundation's live settings, and its
+        // `follow_*` systems react to the change.
+        let menu = app
+            .world()
+            .get_resource::<crate::enh::Toggles>()
+            .is_some_and(|toggles| crate::enh::input::menu_overlay_on(toggles.0));
+        if menu {
+            app.add_systems(
+                Update,
+                follow_live_settings
+                    .run_if(resource_changed::<LiveSettings>)
+                    .after(crate::enh::apply_pending_changes)
+                    .in_set(EnhSet::Apply),
+            );
+        }
         // Scaling, fullscreen, the side fill and the grow-left compositor
         // register here, each only when its setting asks for it and in an
         // `EnhSet`, as their packages land (2.3.4).
@@ -106,6 +123,32 @@ impl Plugin for DisplayPlugin {
         light::add_light(app, &self.settings);
         composite::add_composite(app, &self.settings);
     }
+}
+
+/// A change in play ([`LiveSettings`], the menu overlay) replaces the
+/// display settings, keeping the bezel picture the host decoded while the
+/// fill stays a bezel (2.3.3). Written only when something changed, so the
+/// `follow_*` systems see only real changes.
+fn follow_live_settings(live: Res<LiveSettings>, mut display: ResMut<Display>) {
+    let settings = live_display(&live.now, &display.0);
+    if settings != display.0 {
+        display.0 = settings;
+    }
+}
+
+/// The `[display]` settings of `live`, with the bezel picture `current`
+/// shows when both are a bezel.
+pub(crate) fn live_display(
+    live: &ResolvedEnhancements,
+    current: &DisplaySettings,
+) -> DisplaySettings {
+    let mut settings = live.display();
+    if let (PillarFill::Bezel(image), PillarFill::Bezel(shown)) =
+        (&mut settings.pillar_fill, &current.pillar_fill)
+    {
+        image.clone_from(shown);
+    }
+    settings
 }
 
 /// The window the session wants: borderless fullscreen or not (the

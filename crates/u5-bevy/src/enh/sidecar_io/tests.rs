@@ -272,7 +272,7 @@ fn a_save_made_while_the_feature_was_off_gives_no_stamp() {
     game.app.insert_resource(Toggles(FeatureToggles::CLASSIC));
     shifted_tap(&mut game, KeyCode::KeyQ);
     shifted_tap(&mut game, KeyCode::KeyY);
-    // Back on, as `apply_pending_toggles` does it.
+    // Back on, as `apply_pending_changes` does it.
     game.app.insert_resource(Toggles(only(T)));
     game.app
         .world_mut()

@@ -24,6 +24,11 @@
 //! - The QA key script (D-M4.6) is fed one key per frame, only while the
 //!   menu is open ([`script_input`]).
 //!
+//! - M4-06 adds the settings plumbing ([`settings`]): the Settings rows
+//!   from the generator the setup wizard uses, each with its effective
+//!   apply point and command-line mark, and `Flip` and `Step` on a setting
+//!   row queued as a change the foundation applies at that point.
+//!
 //! - M4-05 draws it ([`render`]): the page in the frame kit on a picture
 //!   the size of the presented frame or canvas, an `ImageNode` exactly over
 //!   the frame sprite, a full-window dim under it, and the open and close
@@ -37,6 +42,7 @@ pub mod geometry;
 pub mod host;
 pub mod pages;
 pub mod render;
+pub mod settings;
 pub mod text;
 
 use std::collections::VecDeque;
@@ -101,6 +107,14 @@ impl Plugin for MenuPlugin {
                 .chain()
                 .in_set(EnhSet::Apply)
                 .before(apply_overlay_requests),
+        )
+        .add_systems(
+            Update,
+            settings::menu_setting_commands
+                .run_if(on_event::<MenuCommandEvent>)
+                .after(menu_input)
+                .before(crate::enh::apply_pending_changes)
+                .in_set(EnhSet::Apply),
         )
         .add_systems(
             Update,

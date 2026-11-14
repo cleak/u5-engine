@@ -21271,7 +21271,7 @@ mod tests {
         let apply = "u5_bevy::tests::enh_probe_apply";
         let feed = "u5_bevy::tests::enh_probe_feed";
         let layout = "u5_bevy::tests::enh_probe_layout";
-        let pending = "u5_bevy::enh::apply_pending_toggles";
+        let pending = "u5_bevy::enh::apply_pending_changes";
         assert_slot(order, apply, &[], drivers, label);
         assert_slot(order, pending, &[], drivers, label);
         assert_slot(order, feed, &[apply, pending], drivers, label);

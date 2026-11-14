@@ -320,47 +320,17 @@ impl u5_bevy_setup::WizardHost for DesktopWizardHost {
     }
 }
 
-/// The Enhancements page's groups, in order (design 1.2.2), by the section
-/// of a setting's key. A section not listed goes after Combat.
-#[cfg(feature = "visual")]
-const SETTING_GROUPS: &[(&str, &[&str])] = &[
-    ("Display", &["display"]),
-    ("Maps", &["automap", "gem_map"]),
-    ("Journal", &["journal"]),
-    ("Menu and saves", &["menu", "input", "enhancements"]),
-    ("Audio", &["audio"]),
-    ("Combat", &["combat"]),
-    ("Other", &[]),
-    ("Cheats", &["cheats"]),
-];
-
-#[cfg(feature = "visual")]
-fn setting_group(key: &str) -> usize {
-    let section = key.split('.').next().unwrap_or(key);
-    SETTING_GROUPS
-        .iter()
-        .position(|(_, sections)| sections.contains(&section))
-        .unwrap_or_else(|| {
-            SETTING_GROUPS
-                .iter()
-                .position(|(name, _)| *name == "Other")
-                .unwrap_or(0)
-        })
-}
-
 /// What the Enhancements page shows for the settings in `config.toml`.
 ///
-/// Rows are the catalogue's shipped rows that a page can edit: every
-/// toggle, and every on/off, word-choice or small-number setting. The
-/// foundation's own keys (the file format, the preset, which is the
-/// page's preset row, and the `[keys]` chords) and free-form values
-/// (colours, paths, lists) are left to `config.toml`. Values are the
+/// The rows are the shared generator's
+/// (`u5_runtime::enhancements::settings_rows`, design D-M4.5), the same
+/// rows the menu overlay shows for the same resolution. Values are the
 /// file's, resolved without the command line or the lock: the page edits
 /// the file for later launches.
 #[cfg(feature = "visual")]
 pub fn wizard_settings(config: &Path, locked: bool) -> u5_bevy_setup::SettingsRows {
     use crate::enhancement_settings::resolve_launch;
-    use u5_runtime::enhancements::{LockState, PRESETS};
+    use u5_runtime::enhancements::{LockState, settings_page_rows};
 
     let settings = resolve_launch(Some(config), &[], LockState::Off);
     let mut notes = settings.warnings.clone();
@@ -373,219 +343,7 @@ pub fn wizard_settings(config: &Path, locked: bool) -> u5_bevy_setup::SettingsRo
             u5_host_desktop::settings::backup_path(config).display()
         ));
     }
-    let rows = wizard_rows(&settings.resolved);
-    let presets = PRESETS
-        .iter()
-        .map(|preset| preset_choice(*preset, &rows))
-        .collect();
-    let preset = PRESETS
-        .iter()
-        .position(|preset| *preset == settings.resolved.preset.base())
-        .unwrap_or(0);
-    u5_bevy_setup::SettingsRows {
-        rows,
-        presets,
-        preset,
-        locked,
-        notes,
-    }
-}
-
-/// The page's rows for one resolution, grouped in [`SETTING_GROUPS`]
-/// order and in catalogue order within a group.
-#[cfg(feature = "visual")]
-fn wizard_rows(
-    resolved: &u5_runtime::enhancements::ResolvedEnhancements,
-) -> Vec<u5_bevy_setup::SettingRow> {
-    use u5_bevy_setup::{RowKind, RowRole, RowValue, SettingRow};
-    use u5_runtime::enhancements::{
-        CHEATS_SWITCH, CatalogueRow, OptionDefault, OptionKind, SettingValue, Tier, help_line,
-        named_stops,
-    };
-
-    /// Small number ranges become a choice; larger ones stay in the file.
-    const MAX_NUMBER_CHOICES: i64 = 10;
-
-    // (group, parent row key for a sub-option, row)
-    let mut rows: Vec<(usize, Option<&'static str>, SettingRow)> = Vec::new();
-    for row in CatalogueRow::all().filter(|row| row.is_shipped()) {
-        let (kind, value, default, tier) = match row {
-            CatalogueRow::Toggle(spec) => (
-                RowKind::Switch,
-                RowValue::Switch(resolved.toggles.on(spec.toggle)),
-                RowValue::Switch(false),
-                spec.tier,
-            ),
-            CatalogueRow::Option(spec) => {
-                if spec.class.is_none() && spec.key != CHEATS_SWITCH {
-                    continue;
-                }
-                // `display.raster` has no row while both of its values draw
-                // the same tiles (Phase B design 2.4.1); it stays in the file
-                // and `--raster-depth`.
-                if spec.key == u5_runtime::enhancements::RASTER_KEY {
-                    continue;
-                }
-                let kind = match spec.kind {
-                    OptionKind::Bool => RowKind::Switch,
-                    OptionKind::Enum(words) => RowKind::Choice(
-                        words
-                            .iter()
-                            .filter(|word| spec.value_is_shipped(word))
-                            .map(|word| (word.to_string(), word.to_string()))
-                            .collect(),
-                    ),
-                    OptionKind::Int { min, max, step }
-                        if (max - min) / step < MAX_NUMBER_CHOICES =>
-                    {
-                        RowKind::Choice(
-                            (min..=max)
-                                .step_by(step as usize)
-                                .map(|number| (number.to_string(), number.to_string()))
-                                .collect(),
-                        )
-                    }
-                    // A longer range offers its named stops (build plan
-                    // D-M2.4), and the stored value when it is not one.
-                    // The stops are percents (design 9.2.1).
-                    OptionKind::Int { .. } => {
-                        let Some(stops) = named_stops(spec.key) else {
-                            continue;
-                        };
-                        let mut numbers = stops.to_vec();
-                        if let Some(SettingValue::Int(stored)) = resolved.values.get(spec.key)
-                            && !numbers.contains(stored)
-                        {
-                            numbers.push(*stored);
-                        }
-                        RowKind::Choice(
-                            numbers
-                                .iter()
-                                .map(|number| (number.to_string(), format!("{number}%")))
-                                .collect(),
-                        )
-                    }
-                    _ => continue,
-                };
-                let as_row = |value: &SettingValue| match value {
-                    SettingValue::Bool(flag) => RowValue::Switch(*flag),
-                    SettingValue::Int(number) => RowValue::Choice(number.to_string()),
-                    other => RowValue::Choice(other.to_string()),
-                };
-                let default = match spec.default {
-                    OptionDefault::Bool(flag) => RowValue::Switch(flag),
-                    OptionDefault::Int(number) => RowValue::Choice(number.to_string()),
-                    OptionDefault::Str(text) => RowValue::Choice(text.to_string()),
-                    OptionDefault::List(_) => continue,
-                };
-                let value = resolved
-                    .values
-                    .get(spec.key)
-                    .map_or_else(|| default.clone(), as_row);
-                (kind, value, default, spec.tier)
-            }
-        };
-        let key = row.key();
-        let role = if key == CHEATS_SWITCH {
-            RowRole::AllowCheats
-        } else if key.starts_with("cheats.") && tier == Tier::Cheat {
-            RowRole::Cheat
-        } else if key.starts_with("cheats.") {
-            RowRole::WatchState
-        } else {
-            RowRole::Setting
-        };
-        let group = setting_group(key);
-        // A sub-option whose parent has a row of its own (the grow-left
-        // rows under `display.grow_left`; `display.brightness_scope` under
-        // the valued `display.brightness`, whose driven switch shares its
-        // key) sits indented under it. One whose parent has no row stays
-        // where it is, unindented (below).
-        let parent = match row {
-            CatalogueRow::Option(spec) => spec
-                .parent
-                .map(|toggle| toggle.spec())
-                .filter(|parent| parent.is_shipped())
-                .map(|parent| parent.key),
-            CatalogueRow::Toggle(_) => None,
-        };
-        rows.push((
-            group,
-            parent,
-            SettingRow {
-                key: key.to_string(),
-                label: row.label().to_string(),
-                group: SETTING_GROUPS[group].0.to_string(),
-                tags: row
-                    .tags()
-                    .iter()
-                    .map(|tag| tag.label().to_string())
-                    .collect(),
-                kind,
-                role,
-                value,
-                default,
-                indent: parent.is_some(),
-                help: help_line(key).map(str::to_string),
-            },
-        ));
-    }
-    rows.sort_by_key(|(group, _, _)| *group);
-    // A parent without a row of its own leaves its sub-options at the top
-    // level.
-    let keys: Vec<String> = rows.iter().map(|(_, _, row)| row.key.clone()).collect();
-    for (_, parent, row) in rows.iter_mut() {
-        if parent.is_some_and(|parent| !keys.iter().any(|key| key == parent)) {
-            *parent = None;
-            row.indent = false;
-        }
-    }
-    // Each sub-option moves to just under its parent, in catalogue order.
-    let (subs, tops): (Vec<_>, Vec<_>) = rows.into_iter().partition(|(_, p, _)| p.is_some());
-    let mut ordered = Vec::with_capacity(tops.len() + subs.len());
-    for (_, _, row) in tops {
-        let key = row.key.clone();
-        ordered.push(row);
-        ordered.extend(
-            subs.iter()
-                .filter(|(_, parent, _)| *parent == Some(key.as_str()))
-                .map(|(_, _, sub)| sub.clone()),
-        );
-    }
-    ordered
-}
-
-/// A preset as the page sees it: the value it gives every page row any
-/// preset names. Rows no preset names (preferences, cheats) are not
-/// listed, so choosing a preset leaves them alone (design 1.4.2).
-#[cfg(feature = "visual")]
-fn preset_choice(
-    preset: u5_runtime::enhancements::Preset,
-    rows: &[u5_bevy_setup::SettingRow],
-) -> u5_bevy_setup::PresetChoice {
-    use u5_runtime::enhancements::{CliSetting, LockState, PRESETS};
-
-    let governed: Vec<&str> = PRESETS
-        .iter()
-        .flat_map(|preset| preset.shipped_entries().map(|(entry, _)| entry.key))
-        .collect();
-    let applied = crate::enhancement_settings::resolve_launch(
-        None,
-        &[CliSetting::Preset(preset)],
-        LockState::Off,
-    );
-    let applied_rows = wizard_rows(&applied.resolved);
-    let values = applied_rows
-        .into_iter()
-        .filter(|row| governed.contains(&row.key.as_str()))
-        .filter(|row| rows.iter().any(|page_row| page_row.key == row.key))
-        .map(|row| (row.key, row.value))
-        .collect();
-    u5_bevy_setup::PresetChoice {
-        key: preset.key().to_string(),
-        label: preset.label().to_string(),
-        values,
-    }
+    settings_page_rows(&settings.resolved, locked, notes)
 }
 
 /// Store what the Enhancements page changed in `config.toml`, key by key,
@@ -596,28 +354,14 @@ pub fn save_wizard_settings(
     config: &Path,
     changes: &u5_bevy_setup::SettingsChanges,
 ) -> Result<(), String> {
-    use u5_bevy_setup::RowValue;
-    use u5_runtime::enhancements::{
-        CatalogueRow, OptionKind, PRESET_KEY, SettingValue, SettingsSink,
-    };
+    use u5_runtime::enhancements::{PRESET_KEY, SettingValue, SettingsSink};
 
     let mut stored = Vec::new();
     if let Some(preset) = &changes.preset {
         stored.push((PRESET_KEY.to_string(), SettingValue::Str(preset.clone())));
     }
     for (key, value) in &changes.values {
-        let value = match value {
-            RowValue::Switch(flag) => SettingValue::Bool(*flag),
-            RowValue::Choice(text) => match CatalogueRow::find(key) {
-                Some(CatalogueRow::Option(spec)) if matches!(spec.kind, OptionKind::Int { .. }) => {
-                    text.parse()
-                        .map(SettingValue::Int)
-                        .unwrap_or_else(|_| SettingValue::Str(text.clone()))
-                }
-                _ => SettingValue::Str(text.clone()),
-            },
-        };
-        stored.push((key.clone(), value));
+        stored.push((key.clone(), value.to_setting(key)));
     }
     if stored.is_empty() {
         return Ok(());

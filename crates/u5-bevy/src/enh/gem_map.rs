@@ -109,7 +109,7 @@ impl GemMap {
     }
 
     /// The toggles changed in play from `before` to `after` (called by the
-    /// foundation's `apply_pending_toggles`). Turning the gem map on reads
+    /// foundation's `apply_pending_changes`). Turning the gem map on reads
     /// the record of the save on disk at the next frame.
     pub(super) fn toggles_changed(&mut self, before: FeatureToggles, after: FeatureToggles) {
         if after.on(GEM) && !before.on(GEM) {

@@ -113,6 +113,19 @@ impl SettingValues {
         self.0.iter().map(|(key, value)| (*key, value))
     }
 
+    /// Puts `value` on `key`, as a setting changed in play does. False,
+    /// and nothing changes, when the table has no such key. The value is
+    /// not checked here; see [`checked_value`].
+    pub fn set(&mut self, key: &str, value: SettingValue) -> bool {
+        match self.0.iter_mut().find(|(k, _)| *k == key) {
+            Some((_, slot)) => {
+                *slot = value;
+                true
+            }
+            None => false,
+        }
+    }
+
     /// Values as given, unchecked: for tests of a typed view's own guards.
     #[cfg(test)]
     pub(crate) fn from_pairs(pairs: Vec<(&'static str, SettingValue)>) -> Self {
@@ -151,9 +164,21 @@ pub struct ResolvedEnhancements {
     pub lock: LockState,
     /// For the log and `--show-settings`.
     pub notes: Vec<SettingNote>,
+    /// The keys this launch's command line set, in catalogue spelling and
+    /// first-set order: the settings pages mark their rows "(set by
+    /// command line)" (design 3.3.6). `--preset` (or `--set
+    /// enhancements.preset=...`) marks [`PRESET_KEY`] and clears the marks
+    /// of the keys it puts back; a value the resolver refused marks
+    /// nothing. Empty under the lock and for the stored settings alone.
+    pub cli_keys: Vec<&'static str>,
 }
 
 impl ResolvedEnhancements {
+    /// Whether the command line set `key` for this launch.
+    pub fn set_by_cli(&self, key: &str) -> bool {
+        self.cli_keys.contains(&key)
+    }
+
     /// Every key at its default: the 1.0.1 game.
     pub fn classic() -> Self {
         Catalogue::BUILT_IN.classic(LockState::Off)
@@ -321,6 +346,14 @@ impl<'a> Catalogue<'a> {
     }
 }
 
+/// What a command-line setting named, for its "(set by command line)"
+/// mark.
+#[derive(Clone, Copy)]
+enum Marked {
+    Preset,
+    Row(Row),
+}
+
 /// A resolution in progress: one value per catalogue row.
 struct State<'a> {
     cat: Catalogue<'a>,
@@ -328,6 +361,7 @@ struct State<'a> {
     options: Vec<SettingValue>,
     base: Preset,
     notes: Vec<SettingNote>,
+    cli_keys: Vec<&'static str>,
 }
 
 impl<'a> State<'a> {
@@ -338,6 +372,35 @@ impl<'a> State<'a> {
             options: cat.options.iter().map(default_value).collect(),
             base: Preset::Classic,
             notes: Vec::new(),
+            cli_keys: Vec::new(),
+        }
+    }
+
+    /// Marks `key` as set by the command line (once).
+    fn mark_cli(&mut self, key: &'static str) {
+        if !self.cli_keys.contains(&key) {
+            self.cli_keys.push(key);
+        }
+    }
+
+    /// A preset from the command line: the preset row is marked, and the
+    /// keys it puts back lose the marks earlier flags gave them.
+    fn mark_cli_preset(&mut self) {
+        let cat = self.cat;
+        let governed: Vec<&str> = cat
+            .presets
+            .iter()
+            .flat_map(|(_, entries)| entries.iter().map(|entry| entry.key))
+            .collect();
+        self.cli_keys.retain(|key| !governed.contains(key));
+        self.mark_cli(PRESET_KEY);
+    }
+
+    /// The catalogue spelling of `row`'s key.
+    fn row_key(&self, row: Row) -> &'static str {
+        match row {
+            Row::Toggle(index) => self.cat.toggles[index].key,
+            Row::Option(index) => self.cat.options[index].key,
         }
     }
 
@@ -392,13 +455,32 @@ impl<'a> State<'a> {
     }
 
     fn apply_cli(&mut self, setting: &CliSetting) {
+        let notes = self.notes.len();
+        let marked = self.apply_cli_value(setting);
+        // A refused value leaves a note and the default: nothing to mark.
+        if let Some(marked) = marked
+            && self.notes.len() == notes
+        {
+            match marked {
+                Marked::Preset => self.mark_cli_preset(),
+                Marked::Row(row) => {
+                    let key = self.row_key(row);
+                    self.mark_cli(key);
+                }
+            }
+        }
+    }
+
+    /// [`Self::apply_cli`] without the marks: what the setting named.
+    fn apply_cli_value(&mut self, setting: &CliSetting) -> Option<Marked> {
         match setting {
-            CliSetting::Preset(preset) => self.apply_preset(*preset),
+            CliSetting::Preset(preset) => {
+                self.apply_preset(*preset);
+                Some(Marked::Preset)
+            }
             CliSetting::Enable(key) | CliSetting::Disable(key) => {
                 let on = matches!(setting, CliSetting::Enable(_));
-                let Some(row) = self.lookup(key) else {
-                    return;
-                };
+                let row = self.lookup(key)?;
                 match row {
                     Row::Toggle(index) => self.toggles[index] = on,
                     Row::Option(index) if self.cat.options[index].kind == OptionKind::Bool => {
@@ -416,20 +498,20 @@ impl<'a> State<'a> {
                         key: self.cat.options[index].key,
                     }),
                 }
+                Some(Marked::Row(row))
             }
             CliSetting::Set { key, value } => {
                 if key == PRESET_KEY {
                     self.set_preset(SettingValue::Str(value.clone()));
-                    return;
+                    return Some(Marked::Preset);
                 }
-                let Some(row) = self.lookup(key) else {
-                    return;
-                };
+                let row = self.lookup(key)?;
                 let value = match row {
                     Row::Toggle(_) => bool_text(value),
                     Row::Option(index) => typed_text(self.cat.options[index].kind, value),
                 };
                 self.set_value(row, value);
+                Some(Marked::Row(row))
             }
         }
     }
@@ -538,6 +620,17 @@ impl<'a> State<'a> {
     /// The cheat gate and capability forcing, then the resolved types.
     fn finish(mut self, caps: HostCapabilities, lock: LockState) -> ResolvedEnhancements {
         self.enforce(caps);
+        // A key forced back to its default holds no command-line value.
+        let forced: Vec<&str> =
+            self.notes
+                .iter()
+                .filter_map(|note| match note {
+                    SettingNote::CheatsNotAllowed { key }
+                    | SettingNote::Unsupported { key, .. } => Some(*key),
+                    _ => None,
+                })
+                .collect();
+        self.cli_keys.retain(|key| !forced.contains(key));
         let toggles = self.bits();
         let preset = self.label(toggles, caps);
         let cat = self.cat;
@@ -564,6 +657,7 @@ impl<'a> State<'a> {
             preset,
             lock,
             notes: self.notes,
+            cli_keys: self.cli_keys,
         }
     }
 
@@ -688,6 +782,38 @@ fn names_function_key(chord: &str) -> bool {
         return false;
     };
     number.parse::<u8>().is_ok_and(|n| (1..=24).contains(&n))
+}
+
+impl OptionSpec {
+    /// The row's default as a value.
+    pub fn default_value(&self) -> SettingValue {
+        default_value(self)
+    }
+}
+
+/// `value` for the shipped valued setting `key`, checked as the resolver
+/// checks a stored value (a number in range, a word of the row, a later
+/// value refused). `None` for a bad value or no such shipped row.
+pub fn checked_value(key: &str, value: SettingValue) -> Option<SettingValue> {
+    let cat = Catalogue::BUILT_IN;
+    let Some(Row::Option(index)) = cat.find(key) else {
+        return None;
+    };
+    let spec = &cat.options[index];
+    if !cat.is_shipped(spec.ships) {
+        return None;
+    }
+    let parsed = parse_value(spec, value).ok()?;
+    match &parsed {
+        SettingValue::Str(word)
+            if spec
+                .value_ships(word)
+                .is_some_and(|phase| !cat.is_shipped(phase)) =>
+        {
+            None
+        }
+        _ => Some(parsed),
+    }
 }
 
 fn default_value(spec: &OptionSpec) -> SettingValue {

@@ -113,12 +113,16 @@ fn sidecar_toggles() -> FeatureToggles {
     toggles
 }
 
-/// Adds the watcher when a sidecar feature is on and the host gave a save
-/// folder; otherwise adds nothing. Called from [`super::EnhancementsPlugin`].
+/// Adds the watcher when a sidecar feature's plugin is added (its toggle
+/// on, or installed dormant with the menu overlay, D-M4.4) and the host
+/// gave a save folder; otherwise adds nothing. It runs only while a
+/// sidecar feature is on. Called from [`super::EnhancementsPlugin`].
 pub(super) fn add_save_watcher(app: &mut App, toggles: FeatureToggles, save_dir: Option<&Path>) {
-    if sidecar_feature_on(toggles)
-        && let Some(save_dir) = save_dir
-    {
+    let wanted = sidecar_feature_on(toggles)
+        || sidecar_toggles()
+            .iter_on()
+            .any(|toggle| super::feature_wanted(toggles, toggle));
+    if wanted && let Some(save_dir) = save_dir {
         install_save_watcher(app, save_dir.to_path_buf(), sidecar_toggles());
     }
 }

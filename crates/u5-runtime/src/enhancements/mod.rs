@@ -18,6 +18,10 @@
 //!   [`ResolvedEnhancements::menu`] with [`MenuSettings`] and
 //!   [`QuitToTitle`], and [`ResolvedEnhancements::audio`] with
 //!   [`AudioSettings`] (design 3.3.3).
+//! - [`page`]: the settings pages' rows, shared by the setup wizard and
+//!   the menu overlay ([`settings_rows`], [`preset_choice`]), the page
+//!   model ([`page::SettingsPage`]) and the rows' notes: the effective
+//!   apply point and the command-line mark (design 3.2.7, 3.3.6).
 //! - [`catalogue`]: the toggle and option catalogue, effect classes, apply
 //!   points, preset tiers, shipping phases and the three presets
 //!   (design 1.3.2, 1.4.1 and 1.4.2).
@@ -60,6 +64,7 @@ pub mod idle;
 pub mod light;
 pub mod matrix;
 pub mod menu;
+pub mod page;
 pub mod resolve;
 pub mod sidecar;
 pub mod source;
@@ -100,9 +105,13 @@ pub use matrix::{
     covering_array, matrix_tsv, pairwise_factors, toggle_matrix,
 };
 pub use menu::{AudioSettings, INPUT_KEYS, MenuSettings, QuitToTitle, START_KEYS};
+pub use page::{
+    DORMANT_WITH_MENU, RowNote, SETTING_GROUPS, apply_value, dormant_install, effective_apply,
+    preset_choice, row_notes, settings_page_rows, settings_rows,
+};
 pub use resolve::{
     CHEATS_SWITCH, KeyBindings, PRESET_KEY, PresetLabel, ResolveInput, ResolvedEnhancements,
-    SettingValues, resolve, resolve_as_shipped,
+    SettingValues, checked_value, resolve, resolve_as_shipped,
 };
 pub use sidecar::{
     CONTAINER_MAGIC, CONTAINER_VERSION, Container, ContainerError, Freshness,

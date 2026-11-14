@@ -13,8 +13,12 @@
 //! - Inside it, a feature plugin is added only when
 //!   [`feature_wanted`] says so, and every one of its systems carries
 //!   `run_if(toggle_on(T))`.
-//! - The foundation's own `apply_pending_toggles` runs only while
-//!   [`PendingToggleChanges`] holds something.
+//! - The foundation's own `apply_pending_changes` runs only while
+//!   [`PendingToggleChanges`] or [`PendingSettingChanges`] holds
+//!   something. Each change applies at its effective point
+//!   (`u5_runtime::enhancements::effective_apply`, D-M4.4): the
+//!   catalogue's, or the next launch when its plugin was not installed at
+//!   launch.
 //! - The hotkey router ([`input`]) is added only while some key is bound.
 //! - The overlay model ([`overlay`]) is added only while an overlay feature
 //!   is on. The idle predicate ([`idle`]) is a run condition and adds
@@ -70,7 +74,8 @@ use bevy::input::InputSystem;
 use bevy::prelude::*;
 use u5_runtime::enhancements::{
     ApplyAt, BezelImage, BezelMailbox, FeatureToggles, IdlePromptKind, LockState,
-    ResolvedEnhancements, SettingValue, SettingsSink, Toggle,
+    ResolvedEnhancements, SettingValue, SettingsSink, Toggle, apply_value, dormant_install,
+    effective_apply,
 };
 
 use self::idle::IdleProbe;
@@ -236,7 +241,7 @@ pub enum EnhSet {
 }
 
 /// The toggles in force, changed in play only by
-/// `apply_pending_toggles`. Exists only while [`EnhancementsPlugin`] is
+/// `apply_pending_changes`. Exists only while [`EnhancementsPlugin`] is
 /// in the app.
 #[derive(Resource, Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Toggles(pub FeatureToggles);
@@ -247,20 +252,85 @@ pub fn toggle_on(t: Toggle) -> impl Fn(Option<Res<Toggles>>) -> bool + Clone {
 }
 
 /// Changes requested in play (by the menu), applied at the toggle's
-/// [`ApplyAt`] point by `apply_pending_toggles`.
+/// effective [`ApplyAt`] point by `apply_pending_changes`.
 #[derive(Resource, Debug, Default, PartialEq, Eq)]
 pub struct PendingToggleChanges(pub Vec<(Toggle, bool)>);
+
+/// Valued changes requested in play (by the menu), such as
+/// `display.brightness` or `display.scale_mode`, by catalogue key (build
+/// plan D-M4.4). Applied by the same rule as [`PendingToggleChanges`] to
+/// [`LiveSettings`], which the display chapter's `Display` resource
+/// follows, and its `follow_*` systems react; stored through the host's
+/// [`SettingsSink`].
+#[derive(Resource, Debug, Default, PartialEq, Eq)]
+pub struct PendingSettingChanges(pub Vec<(&'static str, SettingValue)>);
+
+/// The settings of this run as changes in play leave them. Exists only
+/// while [`EnhancementsPlugin`] is in the app.
+#[derive(Resource, Clone, Debug, PartialEq, Eq)]
+pub struct LiveSettings {
+    /// In force now: the launch's resolution with every change applied in
+    /// play since. Its toggles always equal [`Toggles`].
+    pub now: ResolvedEnhancements,
+    /// What the player chose: `now` with the changes stored for the next
+    /// launch too. The menu's rows show these values, each with its apply
+    /// point; changes still waiting for the idle prompt are in the queues.
+    pub chosen: ResolvedEnhancements,
+}
+
+impl LiveSettings {
+    /// A run's settings at launch.
+    pub fn at_launch(resolved: &ResolvedEnhancements) -> Self {
+        Self {
+            now: resolved.clone(),
+            chosen: resolved.clone(),
+        }
+    }
+}
+
+/// Puts a stored change on a resolution: a toggle's switch, or a value.
+fn choose(resolved: &mut ResolvedEnhancements, key: &str, value: &SettingValue) {
+    match (u5_runtime::enhancements::CatalogueRow::find(key), value) {
+        (Some(u5_runtime::enhancements::CatalogueRow::Toggle(spec)), SettingValue::Bool(on)) => {
+            resolved.toggles.set(spec.toggle, *on);
+        }
+        _ => {
+            apply_value(resolved, key, value.clone());
+        }
+    }
+}
+
+/// Queues a change of the setting `key` made in play: a toggle's switch to
+/// [`PendingToggleChanges`], any other value to [`PendingSettingChanges`].
+/// A flag for a valued toggle (such as `display.brightness`) has no meaning
+/// here and is queued as given, to be refused when applied.
+pub fn queue_setting_change(
+    key: &'static str,
+    value: SettingValue,
+    toggles: &mut PendingToggleChanges,
+    settings: &mut PendingSettingChanges,
+) {
+    match (u5_runtime::enhancements::CatalogueRow::find(key), &value) {
+        (Some(u5_runtime::enhancements::CatalogueRow::Toggle(spec)), SettingValue::Bool(on)) => {
+            toggles.0.push((spec.toggle, *on));
+        }
+        _ => settings.0.push((key, value)),
+    }
+}
 
 /// The rest of the launch config, for the foundation's own systems and
 /// later feature plugins.
 #[derive(Resource, Clone, Debug)]
 pub struct EnhLaunch(pub VisualLaunchConfig);
 
-/// Whether a feature plugin for `t` is added at launch: its toggle is on.
-/// Chapter 3's menu overlay adds a second arm, for toggles the menu can
-/// switch on later (any toggle not applied at the next launch).
+/// Whether a feature plugin for `t` is added at launch: its toggle is on,
+/// or (the second arm, D-M4.4) the menu overlay is on and `t`'s dormant
+/// install is proven inert, so the menu can switch it on later
+/// (`u5_runtime::enhancements::DORMANT_WITH_MENU`: the side fill,
+/// brightness, compositing and the gem map). Every other feature off at
+/// launch applies at the next launch.
 pub fn feature_wanted(toggles: FeatureToggles, t: Toggle) -> bool {
-    toggles.on(t)
+    toggles.on(t) || dormant_install(toggles, t)
 }
 
 /// The foundation plugin. Add it through [`add_enhancements`], which leaves
@@ -280,11 +350,13 @@ impl Plugin for EnhancementsPlugin {
         configure_enh_sets(app);
         app.insert_resource(Toggles(self.launch.enhancements.toggles))
             .init_resource::<PendingToggleChanges>()
+            .init_resource::<PendingSettingChanges>()
+            .insert_resource(LiveSettings::at_launch(&self.launch.enhancements))
             .insert_resource(EnhLaunch(self.launch.clone()))
             .add_systems(
                 Update,
-                apply_pending_toggles
-                    .run_if(toggle_changes_pending)
+                apply_pending_changes
+                    .run_if(changes_pending)
                     .in_set(EnhSet::Apply),
             );
         input::add_input_router(
@@ -346,23 +418,37 @@ fn configure_enh_sets(app: &mut App) {
         );
 }
 
-fn toggle_changes_pending(pending: Res<PendingToggleChanges>) -> bool {
-    !pending.0.is_empty()
+fn changes_pending(
+    toggles: Res<PendingToggleChanges>,
+    settings: Res<PendingSettingChanges>,
+) -> bool {
+    !toggles.0.is_empty() || !settings.0.is_empty()
 }
 
-/// Applies pending toggle changes at their [`ApplyAt`] point and stores
-/// the changed keys through the host's sink.
+/// Applies pending changes at their effective [`ApplyAt`] point
+/// (`effective_apply` for the launch's toggles) and stores the changed
+/// keys through the host's sink, toggles first, each queue in request
+/// order:
 ///
 /// - `Frame`: applied now.
 /// - `IdlePrompt`: held until the game waits at the exploration command
 ///   prompt with nothing pending (the idle predicate, design 1.3.7).
-/// - `NextLaunch`: stored only.
+/// - `NextLaunch`: stored only. This is also the point of a change whose
+///   plugin was not installed at launch (grow-left, or scaling from a
+///   faithful launch): it changes nothing now.
 ///
+/// A valued change goes to [`LiveSettings`], with the switch of a valued
+/// toggle; a refused value is dropped with a warning and stored nowhere.
 /// When the toggles changed, the [`KeyMap`] is rebuilt, so a feature
 /// switched off releases its keys in the same frame, and the save watcher
 /// is told, so a sidecar feature switched on starts from the save on disk.
-fn apply_pending_toggles(
+/// The display chapter's `Display` follows [`LiveSettings`] (its
+/// `follow_live_settings`, present while the menu overlay is on).
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn apply_pending_changes(
     mut pending: ResMut<PendingToggleChanges>,
+    mut pending_settings: ResMut<PendingSettingChanges>,
+    mut live: ResMut<LiveSettings>,
     mut toggles: ResMut<Toggles>,
     launch: Res<EnhLaunch>,
     keymap: Option<ResMut<KeyMap>>,
@@ -372,28 +458,46 @@ fn apply_pending_toggles(
 ) {
     let before = toggles.0;
     let at_idle_prompt = idle.view().at(&[IdlePromptKind::Exploration]);
-    let stored = drain_pending_toggles(
+    let launch_toggles = launch.0.enhancements.toggles;
+    let mut now = before;
+    let mut stored = drain_pending_toggles(
         &mut pending.0,
-        &mut toggles.0,
-        |t| t.spec().apply,
+        &mut now,
+        |t| effective_apply(t.key(), launch_toggles),
         at_idle_prompt,
     );
-    if toggles.0 != before
-        && let Some(mut keymap) = keymap
-    {
-        for note in keymap.rebuild(&launch.0.enhancements.keys, toggles.0) {
-            warn!("{note}");
+    let mut next = live.now.clone();
+    next.toggles = now;
+    stored.extend(drain_pending_settings(
+        &mut pending_settings.0,
+        &mut next,
+        |key| effective_apply(key, launch_toggles),
+        at_idle_prompt,
+    ));
+    if next != live.now {
+        live.now = next;
+    }
+    if !stored.is_empty() {
+        let mut chosen = live.chosen.clone();
+        for (key, value) in &stored {
+            choose(&mut chosen, key, value);
         }
+        live.chosen = chosen;
     }
-    if toggles.0 != before
-        && let Some(mut save_watch) = save_watch
-    {
-        save_watch.toggles_changed(before, toggles.0);
-    }
-    if toggles.0 != before
-        && let Some(mut gem_map) = gem_map
-    {
-        gem_map.toggles_changed(before, toggles.0);
+    let after = live.now.toggles;
+    if after != before {
+        toggles.0 = after;
+        if let Some(mut keymap) = keymap {
+            for note in keymap.rebuild(&launch.0.enhancements.keys, after) {
+                warn!("{note}");
+            }
+        }
+        if let Some(mut save_watch) = save_watch {
+            save_watch.toggles_changed(before, after);
+        }
+        if let Some(mut gem_map) = gem_map {
+            gem_map.toggles_changed(before, after);
+        }
     }
     if stored.is_empty() {
         return;
@@ -405,7 +509,33 @@ fn apply_pending_toggles(
     }
 }
 
-/// The pure part of [`apply_pending_toggles`]: applies or holds each change
+/// The pure part of [`apply_pending_changes`] for valued changes: applies
+/// or holds each change on `live` and returns the settings to store, in
+/// request order. A refused value is dropped and stored nowhere.
+fn drain_pending_settings(
+    pending: &mut Vec<(&'static str, SettingValue)>,
+    live: &mut ResolvedEnhancements,
+    apply_at: impl Fn(&str) -> ApplyAt,
+    at_idle_prompt: bool,
+) -> Vec<(String, SettingValue)> {
+    let mut stored = Vec::new();
+    pending.retain(|(key, value)| {
+        let checked = match apply_at(key) {
+            ApplyAt::Frame => apply_value(live, key, value.clone()),
+            ApplyAt::IdlePrompt if at_idle_prompt => apply_value(live, key, value.clone()),
+            ApplyAt::IdlePrompt => return true,
+            ApplyAt::NextLaunch => u5_runtime::enhancements::checked_value(key, value.clone()),
+        };
+        match checked {
+            Some(value) => stored.push((key.to_string(), value)),
+            None => warn!("enhancements: {key} cannot be set to {value}"),
+        }
+        false
+    });
+    stored
+}
+
+/// The pure part of [`apply_pending_changes`] for toggles: applies or holds each change
 /// and returns the settings to store, in request order. `at_idle_prompt`
 /// releases the changes held for the idle prompt.
 fn drain_pending_toggles(
@@ -609,5 +739,90 @@ mod tests {
         let mut on = FeatureToggles::CLASSIC;
         on.set(T, true);
         assert!(feature_wanted(on, T));
+    }
+
+    /// D-M4.4: the second arm installs only the proven-inert features, and
+    /// only with the menu overlay on.
+    #[test]
+    fn the_second_arm_installs_the_dormant_features_with_the_menu() {
+        let mut menu = FeatureToggles::CLASSIC;
+        menu.set(Toggle::MenuOverlay, true);
+        for spec in u5_runtime::enhancements::TOGGLES {
+            let dormant = u5_runtime::enhancements::DORMANT_WITH_MENU.contains(&spec.toggle);
+            assert_eq!(
+                feature_wanted(menu, spec.toggle),
+                dormant || spec.toggle == Toggle::MenuOverlay,
+                "{}",
+                spec.key
+            );
+            assert!(
+                !feature_wanted(FeatureToggles::CLASSIC, spec.toggle),
+                "{}",
+                spec.key
+            );
+        }
+    }
+
+    #[test]
+    fn pending_settings_apply_at_their_point() {
+        let key = "display.brightness";
+        let mut live = ResolvedEnhancements::classic();
+        let mut pending = vec![(key, SettingValue::Int(70))];
+        let stored =
+            drain_pending_settings(&mut pending, &mut live, |_| ApplyAt::IdlePrompt, false);
+        assert!(stored.is_empty(), "nothing is stored before it applies");
+        assert_eq!(pending.len(), 1);
+        assert_eq!(live, ResolvedEnhancements::classic());
+
+        let stored = drain_pending_settings(&mut pending, &mut live, |_| ApplyAt::IdlePrompt, true);
+        assert!(pending.is_empty());
+        assert_eq!(stored, [(key.to_string(), SettingValue::Int(70))]);
+        assert_eq!(live.values.int(key), Some(70));
+        assert!(live.toggles.on(Toggle::DisplayBrightness));
+
+        let mut pending = vec![(key, SettingValue::Int(85))];
+        let stored =
+            drain_pending_settings(&mut pending, &mut live, |_| ApplyAt::NextLaunch, false);
+        assert_eq!(stored, [(key.to_string(), SettingValue::Int(85))]);
+        assert_eq!(live.values.int(key), Some(70), "stored only");
+
+        // A refused value is dropped and stored nowhere.
+        let mut pending = vec![(key, SettingValue::Int(3)), (key, SettingValue::Int(100))];
+        let stored = drain_pending_settings(&mut pending, &mut live, |_| ApplyAt::Frame, false);
+        assert!(pending.is_empty());
+        assert_eq!(stored, [(key.to_string(), SettingValue::Int(100))]);
+        assert!(!live.toggles.on(Toggle::DisplayBrightness));
+    }
+
+    #[test]
+    fn a_queued_change_goes_to_its_queue() {
+        let mut toggles = PendingToggleChanges::default();
+        let mut settings = PendingSettingChanges::default();
+        queue_setting_change(
+            "display.sprite_composite",
+            SettingValue::Bool(true),
+            &mut toggles,
+            &mut settings,
+        );
+        queue_setting_change(
+            "display.brightness",
+            SettingValue::Int(70),
+            &mut toggles,
+            &mut settings,
+        );
+        queue_setting_change(
+            "display.composite_halo",
+            SettingValue::Bool(false),
+            &mut toggles,
+            &mut settings,
+        );
+        assert_eq!(toggles.0, [(Toggle::DisplaySpriteComposite, true)]);
+        assert_eq!(
+            settings.0,
+            [
+                ("display.brightness", SettingValue::Int(70)),
+                ("display.composite_halo", SettingValue::Bool(false)),
+            ]
+        );
     }
 }

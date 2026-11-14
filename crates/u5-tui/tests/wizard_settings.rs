@@ -492,3 +492,37 @@ fn desktop_host_feeds_the_settings_only_wizard() {
     );
     assert_eq!(host.settings_rows().unwrap().preset, 1);
 }
+
+/// Build plan D-M4.5: for the same file the menu overlay's Settings rows
+/// are the wizard's rows, presets and starting preset.
+#[test]
+fn the_menu_shows_the_wizards_rows_for_the_same_file() {
+    use u5_runtime::enhancements::LockState;
+    let scratch = Scratch::new("menu-rows");
+    fs::write(
+        scratch.config(),
+        "game_dir = \"/g\"\n[enhancements]\npreset = \"recommended\"\n\
+         [display]\nbrightness = 70\ncomposite_halo = false\n",
+    )
+    .unwrap();
+    let wizard = wizard_settings(&scratch.config(), false);
+    let file =
+        u5_tui::enhancement_settings::resolve_launch(Some(&scratch.config()), &[], LockState::Off);
+    let live = u5_bevy::enh::LiveSettings::at_launch(&file.resolved);
+    let menu = u5_bevy::menu::settings::settings_view(
+        &live,
+        file.resolved.toggles,
+        &Default::default(),
+        &Default::default(),
+    );
+    assert_eq!(menu.page.rows, wizard.rows);
+    assert_eq!(menu.page.presets, wizard.presets);
+    assert_eq!(menu.page.preset, wizard.preset);
+    let brightness = menu
+        .page
+        .rows
+        .iter()
+        .find(|row| row.key == "display.brightness")
+        .unwrap();
+    assert_eq!(brightness.value, RowValue::Choice("70".into()));
+}

@@ -4511,6 +4511,7 @@ version = "1.0.1"
 dependencies = [
  "bevy",
  "u5-gamedata",
+ "u5-runtime",
 ]
 
 [[package]]
