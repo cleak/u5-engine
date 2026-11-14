@@ -15,6 +15,7 @@ pub mod help;
 pub mod paths;
 pub mod pipeline;
 pub mod settings;
+pub mod slots;
 
 use std::io::Write as _;
 
@@ -23,14 +24,18 @@ pub use discovery::{DesktopDiscovery, looks_like_ultima};
 pub use help::HOW_TO_GET_THE_FILES;
 pub use paths::{
     CONFIG_ENV, DATA_DIR_ENV, DesktopPaths, GAME_DIR_ENV, HostEnv, Platform, RUNTIME_DIR_ENV,
-    WORKING_SET_FILES, is_working_set_file, legacy_temp_runtime_root, migrate_legacy_runtime_root,
-    runtime_root, saves_root, work_key,
+    SAVE_IMAGE_LEN, SIDECAR_DIR_NAME, WORKING_SET_FILES, is_working_set_file,
+    legacy_temp_runtime_root, migrate_legacy_runtime_root, runtime_root, saves_root, work_key,
 };
 pub use pipeline::{
     CHOSEN_FOLDER_LIMITS, DesktopHost, Origin, ReadyGameData, Resolution, ResolveRequest,
     SetupError, WizardNeed, has_every_required_file_exactly, managed_directory_name,
 };
 pub use settings::ConfigDocument;
+pub use slots::{
+    SlotDetails, SlotError, SlotId, SlotInfo, SlotMeta, SlotOrigin, SlotStore, SlotTarget,
+    StoreRequest,
+};
 
 /// The runtime save-mirror root for this process, migrating saves from the
 /// old temp-folder location on first use. Returns the root and, when a

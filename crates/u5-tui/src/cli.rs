@@ -21,6 +21,7 @@ use u5_runtime::enhancements::{CliSetting, Preset, Toggle};
 
 use crate::enhancement_settings::{check_cli_key, cli_alias_usage, find_cli_alias};
 use crate::runtime_game_dir::prepare_writable_game_dir;
+pub use crate::slot_commands::SlotCommand;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct CreateCharacterCommand {
@@ -119,6 +120,10 @@ pub struct CliArgs {
     /// a setting, so it is allowed under the parity lock. A slot restore
     /// relaunches with `--boot-key J`.
     pub boot_key: Option<u8>,
+    /// `--slots`, `--slot-save NAME` or `--slot-load NAME` (design 3.2.9):
+    /// the slot commands without the overlay. Each needs
+    /// `menu.named_slots` and is refused under the parity lock.
+    pub slot_command: Option<SlotCommand>,
 }
 
 impl CliArgs {
@@ -142,6 +147,7 @@ impl CliArgs {
             || self.create_character_interactive
             || self.write_seed
             || self.show_settings
+            || self.slot_command.is_some()
     }
 
     /// Whether this is a QA mode: route smoke, the equivalence suite, the
@@ -265,6 +271,7 @@ where
     let mut show_settings = false;
     let mut settings = false;
     let mut boot_key: Option<u8> = None;
+    let mut slot_command: Option<SlotCommand> = None;
     let mut args = args.into_iter().map(Into::into);
     while let Some(arg) = args.next() {
         match arg.as_str() {
@@ -728,6 +735,33 @@ where
                     ));
                 }
             }
+            "--slots" | "--slot-save" | "--slot-load" => {
+                let command = match arg.as_str() {
+                    "--slots" => SlotCommand::List,
+                    flag => {
+                        let name = args
+                            .next()
+                            .filter(|name| !name.trim().is_empty())
+                            .ok_or_else(|| {
+                                io::Error::new(
+                                    io::ErrorKind::InvalidInput,
+                                    format!("{flag} requires a slot name"),
+                                )
+                            })?;
+                        if flag == "--slot-save" {
+                            SlotCommand::Save(name)
+                        } else {
+                            SlotCommand::Load(name)
+                        }
+                    }
+                };
+                if slot_command.replace(command).is_some() {
+                    return Err(io::Error::new(
+                        io::ErrorKind::InvalidInput,
+                        "give only one of --slots, --slot-save and --slot-load",
+                    ));
+                }
+            }
             _ if arg.starts_with("--") => {
                 let Some(alias) = find_cli_alias(&arg) else {
                     return Err(io::Error::new(
@@ -786,6 +820,7 @@ where
             settings: false,
             settings_file: false,
             boot_key: None,
+            slot_command: None,
         };
         return Ok(CliCommand {
             args,
@@ -1119,6 +1154,7 @@ where
         settings,
         settings_file: false,
         boot_key,
+        slot_command,
     };
     if args.gem_map_canvas.is_some() && args.gem_map_png.is_none() {
         return Err(io::Error::new(
@@ -1175,6 +1211,19 @@ where
             io::ErrorKind::InvalidInput,
             "--boot-key types a key as the window opens; it applies to the windowed game (the default launch or --visual-playable) only",
         ));
+    }
+    if let Some(command) = &args.slot_command {
+        let mut rest = args.clone();
+        rest.slot_command = None;
+        if rest.has_mode() || rest.setup || rest.settings || rest.boot_key.is_some() {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                format!(
+                    "{} cannot be combined with a mode flag, --setup, --settings or --boot-key",
+                    command.flag()
+                ),
+            ));
+        }
     }
     if !args.enhancements.is_empty() && args.is_qa_mode() {
         return Err(io::Error::new(
@@ -1373,6 +1422,13 @@ OPTIONS:
         --boot-key <C>        Type C as the window opens, as if held at boot:
                               J goes straight to Journey Onward. Allowed with
                               --parity-lock.
+        --slots               List the save slots of the game's working save.
+        --slot-save <NAME>    Copy the current working save into the slot NAME
+                              (a new one unless a slot has that name).
+        --slot-load <NAME>    Make the working save exactly the slot NAME, then
+                              start the game in it (Journey Onward at boot).
+                              The slot commands need menu.named_slots and are
+                              not available under --parity-lock.
         --save-frame <PATH>   Render the current viewport (after running
                               --play-script if given) to a PNG and exit.
                               Useful for verifying movement without a desktop.

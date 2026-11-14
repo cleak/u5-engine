@@ -187,6 +187,16 @@ pub const WORKING_SET_FILES: [&str; 6] = [
     ".u5-engine-town-npc-mutations",
 ];
 
+/// The per-save enhancement sidecar folder beside `SAVED.GAM` (design
+/// 1.3.10), the engine's `SIDECAR_DIR`. A save slot copies it whole as
+/// opaque bytes (3.3.5, D3.9); u5-tui pins the two names together.
+pub const SIDECAR_DIR_NAME: &str = ".u5-engine-enh";
+
+/// The length of a `SAVED.GAM` image, the engine's `SAVED_GAM_LEN`
+/// (`formats/saved-gam.md §1`); u5-tui pins the two together. A slot
+/// whose copy has another length is damaged (3.2.3).
+pub const SAVE_IMAGE_LEN: u64 = 4192;
+
 /// Whether `name` is one of [`WORKING_SET_FILES`], ignoring ASCII case.
 pub fn is_working_set_file(name: &str) -> bool {
     WORKING_SET_FILES

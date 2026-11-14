@@ -8,9 +8,10 @@
 //!
 //! - **Arguments.** The original command line, with any old `--boot-key`
 //!   dropped and the new one appended. One-shot setup steps that already
-//!   ran are dropped too (`--settings`, and `--setup` with the folder it
-//!   set up, which `config.toml` now names), so the relaunch neither
-//!   reopens a window the player closed nor turns into another mode.
+//!   ran are dropped too (`--settings`, `--slot-load NAME`, and `--setup`
+//!   with the folder it set up, which `config.toml` now names), so the
+//!   relaunch neither reopens a window the player closed, restores a slot
+//!   twice, nor turns into another mode.
 //! - **Unix.** The process is replaced with `exec`, keeping the PID and
 //!   the terminal.
 //! - **Elsewhere.** The executable is started again, not waited for, and
@@ -45,11 +46,14 @@ impl From<SpawnFailed> for io::Error {
 }
 
 const BOOT_KEY_FLAG: &str = "--boot-key";
+/// A launch by `--slot-load NAME` already restored that slot; restoring it
+/// again on a relaunch would undo the load the relaunch is for.
+const SLOT_LOAD_FLAG: &str = "--slot-load";
 
 /// The relaunch's arguments (without the program name): `argv` in order,
-/// less any old `--boot-key C`, `--settings` and `--setup` (and, with
-/// `--setup`, the folder `setup_dir` it was given, as `--game-dir DIR` or
-/// a bare `DIR`), then `--boot-key` and `boot_key` when there is one.
+/// less any old `--boot-key C`, `--slot-load NAME`, `--settings` and
+/// `--setup` (and, with `--setup`, the folder `setup_dir` it was given, as
+/// `--game-dir DIR` or a bare `DIR`), then `--boot-key` and `boot_key` when there is one.
 pub fn relaunch_args(
     argv: &[OsString],
     boot_key: Option<u8>,
@@ -61,7 +65,7 @@ pub fn relaunch_args(
     let mut out = Vec::with_capacity(argv.len() + 2);
     let mut args = argv.iter().peekable();
     while let Some(arg) = args.next() {
-        if arg == BOOT_KEY_FLAG {
+        if arg == BOOT_KEY_FLAG || arg == SLOT_LOAD_FLAG {
             args.next();
             continue;
         }
@@ -214,6 +218,20 @@ mod tests {
                 Some(dir)
             ),
             os(&["--visual-playable", "/games/u5", "--boot-key", "J"])
+        );
+    }
+
+    /// A launch by `--slot-load` restored its slot once; a later relaunch
+    /// (a load in play) must not restore it again.
+    #[test]
+    fn a_slot_load_is_not_repeated() {
+        assert_eq!(
+            relaunch_args(
+                &os(&["--slot-load", "Despise", "--named-slots"]),
+                Some(b'J'),
+                None
+            ),
+            os(&["--named-slots", "--boot-key", "J"])
         );
     }
 

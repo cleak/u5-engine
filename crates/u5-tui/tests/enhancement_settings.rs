@@ -497,14 +497,15 @@ fn qa_modes_never_resolve() {
         }
     }
     // In main.rs only the two visual play launches resolve, through one
-    // helper; dispatch and every QA path do not.
+    // helper, and the slot commands, which need `menu.named_slots` (design
+    // 3.2.9) and are no QA mode; dispatch and every QA path do not.
     let main = crate_source("src/main.rs");
     let resolving: Vec<String> = top_level_items(&main)
         .iter()
         .filter(|item| RESOLVE_NAMES.iter().any(|name| item.contains(name)))
         .map(|item| item_name(item).to_string())
         .collect();
-    assert_eq!(resolving, ["launch_config"]);
+    assert_eq!(resolving, ["run_slot_command", "launch_config"]);
     let callers: Vec<String> = top_level_items(&main)
         .iter()
         .filter(|item| item.contains("launch_config(&args)"))
@@ -528,12 +529,16 @@ fn only_the_default_launch_reads_the_file() {
 
     let main = crate_source("src/main.rs");
     assert_eq!(main.matches(read).count(), 1);
-    assert_eq!(main.matches("settings_file = true").count(), 1);
-    let marker = top_level_items(&main)
+    // The default launch, and `--slot-load`, which restores a slot and then
+    // is the default launch with the boot `J` (design 3.2.9).
+    assert_eq!(main.matches("settings_file = true").count(), 2);
+    let markers: Vec<String> = top_level_items(&main)
         .into_iter()
-        .find(|item| item.contains("settings_file = true"))
-        .unwrap();
-    assert_eq!(item_name(&marker), "run");
+        .filter(|item| item.contains("settings_file = true"))
+        .collect();
+    let names: Vec<&str> = markers.iter().map(|item| item_name(item)).collect();
+    assert_eq!(names, ["run", "run_slot_command"]);
+    let marker = &markers[0];
     assert!(marker.contains("if default_launch {\n        args.intro = true;"));
 
     for file in [

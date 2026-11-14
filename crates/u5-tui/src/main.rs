@@ -4,20 +4,21 @@ use std::io;
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
-use u5_runtime::enhancements::LockState;
+use u5_runtime::enhancements::{LockState, MenuSettings};
 use u5_runtime::{
     Direction, DiskPromptSession, PlayOptions, PlayState, audit_location_dat_files,
     location_audit_report_text, run_report,
 };
 use u5_tui::{
-    CliArgs, PARITY_LOCK_LINE, ReadyGameData, SETTINGS_WINDOW_FLAG, SETUP_WINDOW_FLAG,
-    TerminalFeature, TerminalGemMap, TerminalSession, WizardMode, cli_usage,
-    compare_manifest_files, describe_failure, lock_state_for_process, open_settings_page,
-    parse_cli_command, prepare_writable_game_dir, resolve_game_data, run_audio_suite,
-    run_create_character_command, run_equivalence_suite, run_interactive_create_character,
-    run_intro_menu_loop, run_play_loop_with, run_route_smoke, run_route_smoke_with, run_save_frame,
-    run_save_frame_suite, run_save_screen, run_settings_window_child, run_setup_window_child,
-    run_show_settings,
+    CliArgs, CliCommand, PARITY_LOCK_LINE, ReadyGameData, SETTINGS_WINDOW_FLAG, SETUP_WINDOW_FLAG,
+    SlotCommand, TerminalFeature, TerminalGemMap, TerminalSession, WizardMode, cli_usage,
+    compare_manifest_files, describe_failure, load_from_slot, lock_state_for_process,
+    open_settings_page, open_slot_store, parse_cli_command, prepare_writable_game_dir,
+    resolve_game_data, run_audio_suite, run_create_character_command, run_equivalence_suite,
+    run_interactive_create_character, run_intro_menu_loop, run_play_loop_with, run_route_smoke,
+    run_route_smoke_with, run_save_frame, run_save_frame_suite, run_save_screen,
+    run_settings_window_child, run_setup_window_child, run_show_settings, save_to_slot,
+    slot_command_gate, slot_listing,
 };
 
 fn main() -> ExitCode {
@@ -56,6 +57,9 @@ fn run(argv: Vec<String>, game_data: &mut Option<ReadyGameData>) -> io::Result<(
     {
         return Ok(());
     }
+    if let Some(slot) = command.args.slot_command.clone() {
+        return run_slot_command(command, slot, game_data);
+    }
     if !command.args.needs_game_data() {
         return dispatch(command.finish(PathBuf::new())?, None);
     }
@@ -93,6 +97,70 @@ fn run(argv: Vec<String>, game_data: &mut Option<ReadyGameData>) -> io::Result<(
         args.settings_file = true;
     }
     dispatch(args, setup_dir.as_deref())
+}
+
+/// `--slots`, `--slot-save NAME` and `--slot-load NAME` (Phase B design
+/// 3.2.9, 3.3.5). Refused under the parity lock before anything is read,
+/// so a harness never changes a working set by accident, and without
+/// `menu.named_slots`. The slots belong to the working folder the game
+/// itself would play from. `--slot-load` restores the slot and then starts
+/// the windowed game with the boot `J`, the original Journey Onward path.
+fn run_slot_command(
+    command: CliCommand,
+    slot: SlotCommand,
+    game_data: &mut Option<ReadyGameData>,
+) -> io::Result<()> {
+    let lock = lock_state_for_process(command.args.parity_lock);
+    let menu = if lock == LockState::Off {
+        let env = u5_host_desktop::HostEnv::from_process();
+        let path = u5_host_desktop::paths::config_file(&env);
+        u5_tui::enhancement_settings::resolve_launch(Some(&path), &command.args.enhancements, lock)
+            .resolved
+            .menu()
+    } else {
+        MenuSettings::default()
+    };
+    slot_command_gate(&slot, lock, &menu)
+        .map_err(|line| io::Error::new(io::ErrorKind::PermissionDenied, line))?;
+    let load = matches!(slot, SlotCommand::Load(_));
+    if load && !cfg!(feature = "visual") {
+        return Err(io::Error::new(
+            io::ErrorKind::Unsupported,
+            "--slot-load starts the windowed game; it needs a build with --features visual",
+        ));
+    }
+    let ready = resolve_game_data(
+        command.explicit_game_dir.clone(),
+        false,
+        WizardMode::for_visual(load),
+    )
+    .map_err(io::Error::other)?;
+    let source = ready.data_dir.clone();
+    *game_data = Some(ready);
+    let mut args = command.finish(source.clone())?;
+    args.game_dir = prepare_writable_game_dir(&args.game_dir)?;
+    let store = open_slot_store(&args.game_dir, &source).map_err(io::Error::other)?;
+    match slot {
+        SlotCommand::List => {
+            print!("{}", slot_listing(&store.list().map_err(io::Error::other)?));
+            Ok(())
+        }
+        SlotCommand::Save(name) => {
+            let saved = save_to_slot(&store, &name).map_err(io::Error::other)?;
+            println!("Saved to \"{}\".", saved.display_name());
+            Ok(())
+        }
+        SlotCommand::Load(name) => {
+            let loaded = load_from_slot(&store, &name).map_err(io::Error::other)?;
+            println!("Loaded \"{}\".", loaded.display_name());
+            args.slot_command = None;
+            args.intro = true;
+            args.visual = true;
+            args.boot_key = Some(b'J');
+            args.settings_file = true;
+            run_visual_intro(args, None)
+        }
+    }
 }
 
 /// `setup_dir`: the folder a `--setup DIR` on this command line set up,

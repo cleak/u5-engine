@@ -16,6 +16,7 @@ pub mod route_smoke;
 pub mod runtime_game_dir;
 pub mod save_frame;
 pub mod setup;
+pub mod slot_commands;
 pub mod visual_manifest;
 
 pub use audio_suite::{AudioSuiteCase, audio_suite_cases, run_audio_suite};
@@ -79,6 +80,10 @@ pub use setup::{
     SETTINGS_WINDOW_FLAG, SETUP_WINDOW_FLAG, WizardMode, describe_failure, expand_path,
     no_data_message, open_settings_page, resolve_game_data, run_settings_window_child,
     run_setup_window_child, run_terminal_wizard,
+};
+pub use slot_commands::{
+    SLOTS_PARITY_LOCKED, SlotCommand, load_from_slot, open_slot_store, save_to_slot,
+    slot_command_gate, slot_listing, validate_working_set, working_set_details,
 };
 pub use u5_host_desktop::{ReadyGameData, WizardNeed};
 pub use visual_manifest::{ManifestCompareReport, compare_manifest_files, compare_manifest_text};
