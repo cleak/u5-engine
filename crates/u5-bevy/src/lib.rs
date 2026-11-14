@@ -21434,6 +21434,35 @@ mod tests {
         assert!(app.world().contains_resource::<enh::Toggles>());
     }
 
+    /// The menu offers Quit to title only in the intro-capable shell; the
+    /// `--visual` harness shell gets the short menu (design 3.2.1).
+    #[test]
+    fn the_menu_knows_which_shell_it_is_in() {
+        let mut launch = VisualLaunchConfig::classic();
+        launch
+            .enhancements
+            .toggles
+            .set(u5_runtime::enhancements::Toggle::MenuOverlay, true);
+        let intro = read_only_intro_state_for_local_assets(Path::new("."), VisualIntroPanel::Menu);
+        let mut app = headless_builder_app();
+        build_visual_intro_app(&mut app, intro, builder_screenshot_config(), &launch);
+        assert!(app.is_plugin_added::<menu::MenuPlugin>());
+        assert!(app.world().resource::<menu::MenuShell>().intro_shell);
+
+        let font = parse_ch_font(&vec![0x00; CH_FONT_LEN], IBM_CH_FILE).unwrap();
+        let bootstrap = Bootstrap {
+            game_dir: PathBuf::from("."),
+            state: test_state(open_grid(), 1, 1),
+            atlas: synthetic_tile_atlas(TileGraphicsDepth::Ega16),
+            text_font: font.clone(),
+            rune_font: font,
+        };
+        let mut app = headless_builder_app();
+        build_visual_app(&mut app, bootstrap, builder_screenshot_config(), &launch);
+        assert!(app.is_plugin_added::<menu::MenuPlugin>());
+        assert!(!app.world().resource::<menu::MenuShell>().intro_shell);
+    }
+
     #[test]
     fn intro_runtime_keeps_gameplay_drivers_after_journey_handoff() {
         let mut app = App::new();

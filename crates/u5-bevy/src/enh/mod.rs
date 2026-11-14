@@ -37,6 +37,8 @@
 //!   a display toggle or the menu overlay is on.
 //! - The gem map's plugin ([`gem_map`]) is added only while
 //!   `gem_map.enhanced` is on at launch.
+//! - The menu's plugin ([`crate::menu::MenuPlugin`]) is added only while
+//!   `menu.overlay` or `menu.title_layer` is on at launch.
 //!
 //! The Bevy half of the trajectory-equivalence harness (`equivalence`,
 //! test-only) runs the real `--visual` app headless, feature on against
@@ -302,6 +304,7 @@ impl Plugin for EnhancementsPlugin {
             self.launch.enhancements.toggles,
             self.launch.save_dir.as_deref(),
         );
+        crate::menu::add_menu(app, &self.launch);
         gem_map::add_gem_map(app, &self.launch);
         crate::display::add_display(app, &self.launch);
     }

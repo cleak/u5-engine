@@ -370,7 +370,7 @@ fn map_overlay(
         }
     }
     for key in keys.read() {
-        if key.0 == KeyCode::Escape
+        if key.key == KeyCode::Escape
             && let Some(id) = state.open()
         {
             requests.write(OverlayRequest::Close(id));

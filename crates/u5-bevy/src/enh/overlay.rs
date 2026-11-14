@@ -33,7 +33,7 @@ use super::toast::{Toasts, install_shell_services};
 use crate::{EmulatorLoadLatency, SpeakerQueue, SpeakerVoice, VisualState};
 
 /// Refusal toasts (1.2.6): one plain line each.
-const MENU_REFUSED: &str = "The menu opens at the command prompt.";
+const MENU_REFUSED: &str = crate::menu::text::OPENS_AT_PROMPT;
 const JOURNAL_REFUSED: &str = "The journal opens at the command prompt.";
 const MAP_REFUSED: &str = "The map opens at the command prompt.";
 const CHEATS_REFUSED: &str = "The cheats page opens at a command prompt.";

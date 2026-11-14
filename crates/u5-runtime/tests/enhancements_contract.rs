@@ -87,6 +87,8 @@ const ENHANCEMENT_MODULES: &[&str] = &[
     "crates/u5-bevy/src/enh",
     "crates/u5-bevy/src/display.rs",
     "crates/u5-bevy/src/display",
+    "crates/u5-bevy/src/menu.rs",
+    "crates/u5-bevy/src/menu",
     "crates/u5-automap/src",
 ];
 
@@ -145,6 +147,12 @@ fn engine_enhancement_modules_hold_no_host_code() {
             .iter()
             .any(|path| path.ends_with("u5-bevy/src/display.rs")),
         "the scan must see the shell's display module"
+    );
+    assert!(
+        files
+            .iter()
+            .any(|path| path.ends_with("u5-bevy/src/menu/pages.rs")),
+        "the scan must see the menu module (chapter 3)"
     );
     for path in files {
         let source = fs::read_to_string(&path).unwrap();

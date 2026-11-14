@@ -31,7 +31,10 @@
 //!
 //! **Modal input.** While an overlay is open ([`KeyLatch::set_modal`]) the
 //! router resets every key every frame (OS key repeat presses a reset key
-//! again) and forwards each press as an [`OverlayKey`]. Modifier keys are
+//! again) and forwards each press as an [`OverlayKey`], with the Shift and
+//! Ctrl that were down when it was pressed. Each printable ASCII character
+//! the keyboard layout typed goes out as an [`OverlayText`] too, so a name
+//! field reads what the player's layout types (D-M4.2). Modifier keys are
 //! left alone: they map to no byte, and the game must see them as they are
 //! when the overlay closes. Keys held when an overlay opens or closes are
 //! ignored until released.
@@ -495,9 +498,36 @@ impl KeyMap {
 #[derive(Event, Clone, Copy, Debug, PartialEq, Eq)]
 pub struct EnhActionEvent(pub EnhAction);
 
-/// Every key pressed while an overlay is open, for that overlay.
+/// Every key pressed while an overlay is open, for that overlay, OS repeat
+/// included, with the Shift and Ctrl held when it went down (D-M4.2).
 #[derive(Event, Clone, Copy, Debug, PartialEq, Eq)]
-pub struct OverlayKey(pub KeyCode);
+pub struct OverlayKey {
+    pub key: KeyCode,
+    pub shift: bool,
+    pub ctrl: bool,
+}
+
+impl OverlayKey {
+    /// `key` with no modifier.
+    pub const fn plain(key: KeyCode) -> Self {
+        Self {
+            key,
+            shift: false,
+            ctrl: false,
+        }
+    }
+}
+
+/// A printable ASCII character (space to `~`) the keyboard layout typed
+/// while an overlay is open, sent after that frame's [`OverlayKey`]s
+/// (D-M4.2). A press with Ctrl or Alt held types no text.
+#[derive(Event, Clone, Copy, Debug, PartialEq, Eq)]
+pub struct OverlayText(pub char);
+
+/// The printable ASCII characters of a key event's `text`, in order.
+pub(crate) fn printable_ascii(text: &str) -> impl Iterator<Item = char> + '_ {
+    text.chars().filter(|ch| (' '..='~').contains(ch))
+}
 
 /// A modal hotkey that broke the order rule and went to the game, which
 /// drops it as 1.0.1 does. The toast explains (1.2.6).
@@ -583,6 +613,7 @@ pub(super) fn install_input_router(app: &mut App, keymap: KeyMap) {
         .init_resource::<KeyLatch>()
         .add_event::<EnhActionEvent>()
         .add_event::<OverlayKey>()
+        .add_event::<OverlayText>()
         .add_event::<HotkeyFellThrough>()
         .add_systems(PreUpdate, enh_input_router.in_set(EnhSet::Input));
 }
@@ -600,6 +631,9 @@ struct FrameKeys {
     /// `ButtonInput` by the time the router runs; the event stream still
     /// says Ctrl was down when P went down.
     mods_at_press: HashMap<KeyCode, Mods>,
+    /// The printable characters typed this frame, in event order, with the
+    /// modifiers down when each was typed. Latched keys type nothing.
+    text: Vec<(char, Mods)>,
 }
 
 /// Ctrl, Shift and Alt, left or right.
@@ -642,6 +676,7 @@ pub(crate) fn enh_input_router(
     visual: Option<Res<VisualState>>,
     mut actions: EventWriter<EnhActionEvent>,
     mut overlay_keys: EventWriter<OverlayKey>,
+    mut overlay_text: EventWriter<OverlayText>,
     mut fell_through: EventWriter<HotkeyFellThrough>,
 ) {
     let latch = &mut *latch;
@@ -671,11 +706,16 @@ pub(crate) fn enh_input_router(
             let key = event.key_code;
             match event.state {
                 ButtonState::Pressed => {
-                    frame
-                        .mods_at_press
-                        .entry(key)
-                        .or_insert_with(|| Mods::of_down(&latch.down));
+                    let mods = Mods::of_down(&latch.down);
+                    frame.mods_at_press.entry(key).or_insert(mods);
                     latch.down.insert(key);
+                    if !latch.held.contains(&key)
+                        && let Some(text) = event.text.as_deref()
+                    {
+                        frame
+                            .text
+                            .extend(printable_ascii(text).map(|ch| (ch, mods)));
+                    }
                     if latch.held.contains(&key) {
                         frame.ignored.insert(key);
                     } else if event.repeat {
@@ -693,11 +733,36 @@ pub(crate) fn enh_input_router(
         frame.repeated.retain(|key| !fresh.contains(key));
     }
     let typed = keys_pressed_in_typed_order(&keyboard, key_events.as_deref(), &mut key_cursor);
+    let held = Mods {
+        ctrl: keyboard.any_pressed([KeyCode::ControlLeft, KeyCode::ControlRight]),
+        shift: keyboard.any_pressed([KeyCode::ShiftLeft, KeyCode::ShiftRight]),
+        alt: keyboard.any_pressed([KeyCode::AltLeft, KeyCode::AltRight]),
+    };
+    // The modifiers held now, or down when the key went down this frame.
+    let mods_of = |key: KeyCode| {
+        frame
+            .mods_at_press
+            .get(&key)
+            .map_or(held, |at_press| held.or(*at_press))
+    };
 
     if latch.modal {
         for key in &typed {
             if !is_modifier(*key) && !frame.ignored.contains(key) && !latch.held.contains(key) {
-                overlay_keys.write(OverlayKey(*key));
+                let mods = mods_of(*key);
+                overlay_keys.write(OverlayKey {
+                    key: *key,
+                    shift: mods.shift,
+                    ctrl: mods.ctrl,
+                });
+            }
+        }
+        // A Ctrl or Alt chord is a command, not text, whatever the layout
+        // made of it.
+        for (ch, mods) in &frame.text {
+            let mods = mods.or(held);
+            if !mods.ctrl && !mods.alt {
+                overlay_text.write(OverlayText(*ch));
             }
         }
         let all: Vec<KeyCode> = keyboard
@@ -719,11 +784,6 @@ pub(crate) fn enh_input_router(
     if keymap.is_empty() {
         return;
     }
-    let held = Mods {
-        ctrl: keyboard.any_pressed([KeyCode::ControlLeft, KeyCode::ControlRight]),
-        shift: keyboard.any_pressed([KeyCode::ShiftLeft, KeyCode::ShiftRight]),
-        alt: keyboard.any_pressed([KeyCode::AltLeft, KeyCode::AltRight]),
-    };
     // A modifier maps to no byte and is dropped at the read, so it is not
     // a key "ahead" of the hotkey.
     let queue_empty =
@@ -734,11 +794,7 @@ pub(crate) fn enh_input_router(
             continue;
         }
         let first_of_frame = std::mem::replace(&mut first, false);
-        // The modifiers held now, or down when the key went down this frame.
-        let mods = frame
-            .mods_at_press
-            .get(&key)
-            .map_or(held, |at_press| held.or(*at_press));
+        let mods = mods_of(key);
         let Some(action) = keymap.action(KeyChord {
             key,
             ctrl: mods.ctrl,

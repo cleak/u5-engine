@@ -4,7 +4,10 @@
 //! and confirmations) and [`Toasts::note`] (5 s, staleness and write
 //! errors). A toast is one line, and the newest replaces the one showing.
 //! Every text is a `&'static str` constant in its feature module, and a
-//! toast never names anything the player has not found (1.4.7).
+//! toast never names anything the player has not found (1.4.7). A toast
+//! that carries a name ([`Toasts::short_text`], [`Toasts::note_text`],
+//! D-M4.7) is built with `format!` from such a constant; only a slot name
+//! the player typed or the OS's own error text is ever put into one.
 //!
 //! The toast is drawn by a `bevy_ui` node with its own CPU-built image, in
 //! the window margin when one exists and otherwise as a strip over the
@@ -18,6 +21,7 @@
 //! ([`install_shell_services`]): with every such feature off no toast or
 //! badge resource, node or system exists.
 
+use std::borrow::Cow;
 use std::time::Duration;
 
 use bevy::image::ImageSampler;
@@ -60,9 +64,9 @@ impl ToastKind {
     }
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 struct Toast {
-    text: &'static str,
+    text: Cow<'static, str>,
     kind: ToastKind,
     /// Real time shown so far, counted from the frame after it was posted.
     shown: Duration,
@@ -88,9 +92,28 @@ impl Toasts {
         self.post(text, ToastKind::Note);
     }
 
+    /// Shows `text` for 2 s, replacing any toast that shows: a
+    /// confirmation that carries a name, such as a slot's (D-M4.7). `text`
+    /// is a `&'static str` template of the feature's text module filled
+    /// with `format!`; only a slot name the player typed or an OS error is
+    /// ever put into one.
+    pub fn short_text(&mut self, text: String) {
+        self.post_text(Cow::Owned(text), ToastKind::Short);
+    }
+
+    /// Shows `text` for 5 s, replacing any toast that shows: a note that
+    /// carries a name or an OS reason. See [`Toasts::short_text`].
+    pub fn note_text(&mut self, text: String) {
+        self.post_text(Cow::Owned(text), ToastKind::Note);
+    }
+
     /// Shows `text` for `kind`'s time, replacing any toast that shows. The
     /// same text posted again starts its time again.
     pub fn post(&mut self, text: &'static str, kind: ToastKind) {
+        self.post_text(Cow::Borrowed(text), kind);
+    }
+
+    fn post_text(&mut self, text: Cow<'static, str>, kind: ToastKind) {
         self.current = Some(Toast {
             text,
             kind,
@@ -100,13 +123,13 @@ impl Toasts {
     }
 
     /// The text that shows, if any.
-    pub fn current(&self) -> Option<&'static str> {
-        self.current.map(|toast| toast.text)
+    pub fn current(&self) -> Option<&str> {
+        self.current.as_ref().map(|toast| toast.text.as_ref())
     }
 
     /// The kind of the toast that shows, if any.
     pub fn kind(&self) -> Option<ToastKind> {
-        self.current.map(|toast| toast.kind)
+        self.current.as_ref().map(|toast| toast.kind)
     }
 
     /// Ages the toast by one frame's real time and drops it when its time
@@ -165,7 +188,7 @@ fn tick_toasts(time: Res<Time<Real>>, mut toasts: ResMut<Toasts>) {
 /// The toast strip's node, and the text its image shows.
 #[derive(Component, Debug)]
 pub struct ToastStrip {
-    text: &'static str,
+    text: String,
 }
 
 /// Where the strip sits, in logical window pixels. One text row of the
@@ -295,7 +318,7 @@ fn draw_toast(
     let mut drawn = false;
     for (entity, strip, mut node) in &mut strips {
         match (showing, window) {
-            (Some(text), Some(window)) if text == strip.text && !drawn => {
+            (Some(text), Some(window)) if text == strip.text.as_str() && !drawn => {
                 place(&mut node, toast_strip_rect(window, layout, text.len()));
                 drawn = true;
             }
@@ -313,7 +336,9 @@ fn draw_toast(
     place(&mut node, toast_strip_rect(window, layout, text.len()));
     commands.spawn((
         Name::new("enh toast"),
-        ToastStrip { text },
+        ToastStrip {
+            text: text.to_string(),
+        },
         node,
         ImageNode::new(image),
         GlobalZIndex(i32::MAX - 1),

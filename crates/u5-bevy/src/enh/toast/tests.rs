@@ -44,8 +44,11 @@ fn toasts(app: &mut App) -> Mut<'_, Toasts> {
     app.world_mut().resource_mut::<Toasts>()
 }
 
-fn showing(app: &App) -> Option<&'static str> {
-    app.world().resource::<Toasts>().current()
+fn showing(app: &App) -> Option<String> {
+    app.world()
+        .resource::<Toasts>()
+        .current()
+        .map(str::to_string)
 }
 
 /// Frames on which the toast posted before the first one shows.
@@ -61,11 +64,11 @@ fn frames_shown(app: &mut App) -> usize {
     frames
 }
 
-fn strips(app: &mut App) -> Vec<(&'static str, Node)> {
+fn strips(app: &mut App) -> Vec<(String, Node)> {
     let mut query = app.world_mut().query::<(&ToastStrip, &Node)>();
     query
         .iter(app.world())
-        .map(|(strip, node)| (strip.text, node.clone()))
+        .map(|(strip, node)| (strip.text.clone(), node.clone()))
         .collect()
 }
 
@@ -140,6 +143,34 @@ fn the_newest_toast_replaces_the_one_showing() {
     assert_eq!(toasts.kind(), Some(ToastKind::Note));
 }
 
+/// D-M4.7: a toast that carries a name is a `String` filled from a
+/// `&'static str` template; it times and replaces like any other.
+#[test]
+fn a_toast_with_a_name_is_built_from_a_template() {
+    use crate::menu::text::{SAVED_TO, SLOT_WRITE_FAILED, fill};
+    let mut line = Toasts::default();
+    line.short_text(fill(SAVED_TO, &["Despise"]));
+    assert_eq!(line.current(), Some("Saved to \"Despise\"."));
+    assert_eq!(line.kind(), Some(ToastKind::Short));
+    line.note_text(fill(SLOT_WRITE_FAILED, &["Despise", "disk full"]));
+    assert_eq!(
+        line.current(),
+        Some("Saved the game, but could not write \"Despise\": disk full.")
+    );
+    assert_eq!(line.kind(), Some(ToastKind::Note));
+    line.short(REFUSED);
+    assert_eq!(line.current(), Some(REFUSED), "a constant replaces it");
+
+    let mut app = app(Some(Vec2::new(1920.0, 1080.0)));
+    frame(&mut app);
+    toasts(&mut app).short_text(fill(SAVED_TO, &["quick"]));
+    frame(&mut app);
+    let drawn = strips(&mut app);
+    assert_eq!(drawn.len(), 1);
+    assert_eq!(drawn[0].0, "Saved to \"quick\".");
+    assert_eq!(frames_shown(&mut app), 119, "2 s, as a constant's");
+}
+
 /// 2 s for refusals and confirmations, 5 s for notes, counted in real
 /// frames under manual time.
 #[test]
@@ -162,9 +193,9 @@ fn a_toast_shows_for_its_time_under_manual_time() {
         .resource_mut::<Time<Real>>()
         .update_with_duration(Duration::from_secs(10));
     app.update();
-    assert_eq!(showing(&app), Some(SAVED));
+    assert_eq!(showing(&app).as_deref(), Some(SAVED));
     frame(&mut app);
-    assert_eq!(showing(&app), Some(SAVED));
+    assert_eq!(showing(&app).as_deref(), Some(SAVED));
 }
 
 /// A toast posted while one shows replaces it and starts its own time, and
@@ -177,7 +208,7 @@ fn a_replacing_toast_starts_its_own_time() {
     for _ in 0..200 {
         frame(&mut app);
     }
-    assert_eq!(showing(&app), Some(WRITE_FAILED));
+    assert_eq!(showing(&app).as_deref(), Some(WRITE_FAILED));
     toasts(&mut app).short(REFUSED);
     assert_eq!(frames_shown(&mut app), 120);
 
@@ -199,7 +230,7 @@ fn a_toast_ages_in_real_time() {
     for _ in 0..119 {
         frame(&mut app);
     }
-    assert_eq!(showing(&app), Some(REFUSED));
+    assert_eq!(showing(&app).as_deref(), Some(REFUSED));
     frame(&mut app);
     assert_eq!(showing(&app), None);
     assert_eq!(app.world().resource::<Time>().elapsed(), Duration::ZERO);
@@ -365,5 +396,5 @@ fn nothing_draws_without_a_window() {
     toasts(&mut app).short(REFUSED);
     frame(&mut app);
     assert!(strips(&mut app).is_empty());
-    assert_eq!(showing(&app), Some(REFUSED));
+    assert_eq!(showing(&app).as_deref(), Some(REFUSED));
 }

@@ -458,6 +458,20 @@ impl Keys {
         self.event(key, ButtonState::Pressed, false);
     }
 
+    /// A press whose keyboard layout typed `text`, as the window sends it.
+    fn typed(&mut self, key_code: KeyCode, text: &str, repeat: bool) {
+        let world = self.app.world_mut();
+        world.resource_mut::<ButtonInput<KeyCode>>().press(key_code);
+        world.send_event(KeyboardInput {
+            key_code,
+            logical_key: Key::Character(text.into()),
+            state: ButtonState::Pressed,
+            text: Some(text.into()),
+            repeat,
+            window: Entity::PLACEHOLDER,
+        });
+    }
+
     fn repeat(&mut self, key: KeyCode) {
         self.event(key, ButtonState::Pressed, true);
     }
@@ -646,9 +660,15 @@ fn while_modal_every_key_belongs_to_the_overlay() {
         [KeyCode::ShiftLeft],
         "only the modifier stays"
     );
+    // Shift is held: each key carries it (D-M4.2).
+    let shifted = |key| OverlayKey {
+        key,
+        shift: true,
+        ctrl: false,
+    };
     assert_eq!(
         keys.events::<OverlayKey>(),
-        [OverlayKey(KeyCode::KeyA), OverlayKey(KeyCode::ArrowUp)]
+        [shifted(KeyCode::KeyA), shifted(KeyCode::ArrowUp)]
     );
     assert_eq!(keys.actions(), []);
     assert!(keys.pressed(KeyCode::ShiftLeft));
@@ -656,12 +676,16 @@ fn while_modal_every_key_belongs_to_the_overlay() {
     // OS repeat of the held arrow: forwarded, still never pressed.
     keys.repeat(KeyCode::ArrowUp);
     assert_eq!(keys.frame(), []);
-    assert_eq!(keys.events::<OverlayKey>(), [OverlayKey(KeyCode::ArrowUp)]);
+    assert_eq!(keys.events::<OverlayKey>(), [shifted(KeyCode::ArrowUp)]);
     assert!(!keys.pressed(KeyCode::ArrowUp));
     // A bound key goes to the overlay too.
+    keys.release(KeyCode::ShiftLeft);
     keys.press(KeyCode::Tab);
     keys.frame();
-    assert_eq!(keys.events::<OverlayKey>(), [OverlayKey(KeyCode::Tab)]);
+    assert_eq!(
+        keys.events::<OverlayKey>(),
+        [OverlayKey::plain(KeyCode::Tab)]
+    );
     assert_eq!(keys.actions(), []);
     keys.release(KeyCode::Tab);
     keys.release(KeyCode::KeyA);
@@ -686,6 +710,119 @@ fn while_modal_every_key_belongs_to_the_overlay() {
         keys.frame(),
         [KeyCode::ArrowUp],
         "a fresh press is the game's"
+    );
+}
+
+/// D-M4.2: while modal, each printable ASCII character the layout types
+/// goes out as an `OverlayText` after the frame's keys, with Shift and Ctrl
+/// on the keys; a Ctrl or Alt chord types nothing; latched keys type
+/// nothing; and with no overlay open no text event is sent at all.
+#[test]
+fn while_modal_typed_text_goes_to_the_overlay() {
+    let text = |keys: &Keys| -> String {
+        keys.events::<OverlayText>()
+            .into_iter()
+            .map(|t| t.0)
+            .collect()
+    };
+    let mut keys = Keys::new(all_defaults_bound());
+    // Not modal: the game's keys, and no text.
+    keys.typed(KeyCode::KeyQ, "q", false);
+    assert_eq!(keys.frame(), [KeyCode::KeyQ]);
+    assert_eq!(text(&keys), "");
+    keys.release(KeyCode::KeyQ);
+    keys.frame();
+
+    keys.set_modal(true);
+    keys.frame();
+    keys.typed(KeyCode::KeyD, "d", false);
+    keys.typed(KeyCode::Digit1, "1", false);
+    keys.typed(KeyCode::Space, " ", false);
+    assert_eq!(keys.frame(), []);
+    assert_eq!(text(&keys), "d1 ");
+    assert_eq!(
+        keys.events::<OverlayKey>(),
+        [
+            OverlayKey::plain(KeyCode::KeyD),
+            OverlayKey::plain(KeyCode::Digit1),
+            OverlayKey::plain(KeyCode::Space)
+        ]
+    );
+    // OS repeat types again.
+    keys.typed(KeyCode::KeyD, "d", true);
+    keys.frame();
+    assert_eq!(text(&keys), "d");
+    for key in [KeyCode::KeyD, KeyCode::Digit1, KeyCode::Space] {
+        keys.release(key);
+    }
+    keys.frame();
+
+    // Shift: the layout's capital, and the key says Shift.
+    keys.press(KeyCode::ShiftRight);
+    keys.typed(KeyCode::KeyD, "D", false);
+    keys.frame();
+    assert_eq!(text(&keys), "D");
+    assert_eq!(
+        keys.events::<OverlayKey>(),
+        [OverlayKey {
+            key: KeyCode::KeyD,
+            shift: true,
+            ctrl: false
+        }]
+    );
+    keys.release(KeyCode::ShiftRight);
+    keys.release(KeyCode::KeyD);
+    keys.frame();
+
+    // Ctrl: a command, not text, whatever the layout sent.
+    keys.press(KeyCode::ControlLeft);
+    keys.typed(KeyCode::KeyS, "s", false);
+    keys.frame();
+    assert_eq!(text(&keys), "");
+    assert_eq!(
+        keys.events::<OverlayKey>(),
+        [OverlayKey {
+            key: KeyCode::KeyS,
+            shift: false,
+            ctrl: true
+        }]
+    );
+    keys.release(KeyCode::ControlLeft);
+    keys.release(KeyCode::KeyS);
+    keys.frame();
+    keys.press(KeyCode::AltLeft);
+    keys.typed(KeyCode::KeyS, "s", false);
+    keys.frame();
+    assert_eq!(text(&keys), "");
+    keys.release(KeyCode::AltLeft);
+    keys.release(KeyCode::KeyS);
+    keys.frame();
+
+    // Only printable ASCII: control characters and other letters are not
+    // text (the key still goes to the overlay).
+    keys.typed(KeyCode::Enter, "\r", false);
+    keys.typed(KeyCode::KeyE, "é", false);
+    keys.frame();
+    assert_eq!(text(&keys), "");
+    assert_eq!(keys.events::<OverlayKey>().len(), 2);
+    keys.release(KeyCode::Enter);
+    keys.release(KeyCode::KeyE);
+    keys.frame();
+
+    // A key held when the overlay closes and opens again is latched: its
+    // repeat types nothing.
+    keys.typed(KeyCode::KeyZ, "z", false);
+    keys.frame();
+    keys.set_modal(false);
+    keys.frame();
+    keys.set_modal(true);
+    keys.typed(KeyCode::KeyZ, "z", true);
+    assert_eq!(keys.frame(), []);
+    assert_eq!(text(&keys), "");
+    assert_eq!(keys.events::<OverlayKey>(), []);
+    assert_eq!(
+        printable_ascii("a\u{7}~\u{7f}é ").collect::<String>(),
+        "a~ "
     );
 }
 
