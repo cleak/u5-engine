@@ -48,8 +48,10 @@ use super::frame::Scroll;
 use super::frame::*;
 use super::geometry::{CellRect, MenuPicture, PageShape, menu_picture, panel_rect};
 use super::pages::{
-    Page, PageState, Row, RowKind, SettingsTab, ShellSnapshot, Shown, page_rows, settle,
+    Dialog, Page, PageState, Row, RowKind, SettingsTab, ShellSnapshot, Shown, SlotList, page_rows,
+    settle,
 };
+use super::render_slots;
 use super::text as t;
 use super::{MenuState, SnapshotInputs};
 use crate::VisualState;
@@ -126,16 +128,33 @@ fn draw_list(
     cursor: Option<usize>,
     line: impl Fn(&Row, u32) -> Line,
 ) {
+    let lines: Vec<Line> = rows.iter().map(|row| line(row, bx.w)).collect();
+    draw_lines(img, font, bx, upper, lower, &lines, cursor);
+}
+
+/// `lines` (each `bx.w` cells) in the list box `bx`, as [`draw_list`]
+/// draws a page's rows: between the box's margin rows, scrolled so line
+/// `cursor` is in sight and drawn as the selection bar, with the scroll
+/// marks on the bands above (`upper`) and below (`lower`).
+pub(super) fn draw_lines(
+    img: &mut MenuImage,
+    font: &FixedCellFont,
+    bx: CellRect,
+    upper: u32,
+    lower: u32,
+    lines: &[Line],
+    cursor: Option<usize>,
+) {
     let visible = list_rows(bx);
-    let first = first_shown(cursor.unwrap_or(0), rows.len(), visible);
-    for (i, row) in rows.iter().enumerate().skip(first).take(visible) {
+    let first = first_shown(cursor.unwrap_or(0), lines.len(), visible);
+    for (i, line) in lines.iter().enumerate().skip(first).take(visible) {
         let at = bx.row + 1 + (i - first) as u32;
-        draw_row(img, font, bx, at, &line(row, bx.w), Some(i) == cursor);
+        draw_row(img, font, bx, at, line, Some(i) == cursor);
     }
     if first > 0 {
         draw_scroll_mark(img, font, bx.right() - 1, upper, Scroll::Up);
     }
-    if first + visible < rows.len() {
+    if first + visible < lines.len() {
         draw_scroll_mark(img, font, bx.right() - 1, lower, Scroll::Down);
     }
 }
@@ -159,7 +178,7 @@ fn draw_help_lines(img: &mut MenuImage, font: &FixedCellFont, bx: CellRect, line
 
 /// `text` wrapped into the footer box `bx` in the help ink, "Spoiler:" in
 /// brown; lines past the box are dropped.
-fn draw_help(img: &mut MenuImage, font: &FixedCellFont, bx: CellRect, text: &str) {
+pub(super) fn draw_help(img: &mut MenuImage, font: &FixedCellFont, bx: CellRect, text: &str) {
     draw_help_lines(img, font, bx, &t::wrap(text, (bx.w - 2) as usize));
 }
 
@@ -290,6 +309,7 @@ fn top_page(
     column: ColumnView,
     rows: &[Row],
     cursor: usize,
+    turns_since_save: Option<u64>,
 ) -> Drawn {
     let rect = panel_rect(PageShape::Narrow, picture, column);
     let divider = rect.bottom() - TOP_FOOTER_ROWS - 1;
@@ -310,9 +330,14 @@ fn top_page(
     );
     match selected_reason(rows, cursor) {
         Some(reason) => draw_help(&mut img, font, footer, reason),
-        // On the footer's second row, as the sheet has it: the first is
-        // the last-save line's (M4-10).
+        // The last-save line on the footer's first row, once the session
+        // has one (3.3.5 "Unsaved progress"), and the world's line on the
+        // second, as the sheet has them.
         None => {
+            if let Some(line) = last_save_line(turns_since_save) {
+                let last = Line::new(footer.w).text(1, &line, Ink::Help);
+                draw_row(&mut img, font, footer, footer.row, &last, false);
+            }
             let waits = Line::new(footer.w).text(1, t::WAITING, Ink::Help);
             draw_row(&mut img, font, footer, footer.row + 1, &waits, false);
         }
@@ -323,6 +348,16 @@ fn top_page(
         image: img,
         panel: rect,
     }
+}
+
+/// The top menu's last-save line for `turns` since the last save or load
+/// this session: `None` before the first.
+pub fn last_save_line(turns: Option<u64>) -> Option<String> {
+    Some(match turns? {
+        0 => t::LAST_SAVE_NOW.to_string(),
+        1 => t::LAST_SAVE_ONE.to_string(),
+        n => t::fill(t::LAST_SAVE_TURNS, &[&n.min(t::LAST_SAVE_MAX).to_string()]),
+    })
 }
 
 /// The first cell of the first preset on the preset row: after "Preset:"
@@ -478,14 +513,40 @@ pub fn render_page(
     state: PageState,
     snap: &ShellSnapshot,
 ) -> Drawn {
+    render_page_with(font, picture, column, state, snap, "", 0)
+}
+
+/// [`render_page`] with the name field holding `field` and its cursor at
+/// the game's prompt-cursor frame `cursor_frame`.
+pub fn render_page_with(
+    font: &FixedCellFont,
+    picture: &MenuPicture,
+    column: ColumnView,
+    state: PageState,
+    snap: &ShellSnapshot,
+    field: &str,
+    cursor_frame: u64,
+) -> Drawn {
     let rows = page_rows(state.page, snap);
     let cursor = settle(&rows, state.cursor);
     match state.page {
-        Page::Top => top_page(font, picture, column, &rows, cursor),
+        Page::Top => top_page(font, picture, column, &rows, cursor, snap.turns_since_save),
         Page::Settings(tab) => {
             let presets: Vec<&str> = PRESETS.iter().map(|preset| preset.label()).collect();
             settings_page(font, picture, column, tab.index(), &rows, cursor, &presets)
         }
+        Page::Save => render_slots::save_page(font, picture, column, snap, state.cursor),
+        Page::Load => render_slots::load_page(font, picture, column, snap, state.cursor),
+        Page::Dialog(dialog) => render_slots::dialog_page(
+            font,
+            picture,
+            column,
+            snap,
+            dialog,
+            state.cursor,
+            field,
+            cursor_frame,
+        ),
     }
 }
 
@@ -558,6 +619,13 @@ struct DrawKey {
     rows: Vec<Row>,
     picture: MenuPicture,
     column_shown: bool,
+    /// What the slot pages and the top menu's footer show besides rows.
+    slots: SlotList,
+    quicksave: bool,
+    turns_since_save: Option<u64>,
+    field: String,
+    /// The name field's cursor glyph, while the name field shows.
+    cursor_glyph: Option<u8>,
 }
 
 /// What the menu shows and how far its sweep is. Exists while the menu
@@ -708,14 +776,29 @@ pub(crate) fn menu_render(
         let snap = pages.snapshot();
         let (picture, column) = inputs.picture();
         let current = model.current();
+        let cursor_frame = visual.prompt_cursor_frame;
+        let naming = matches!(current.page, Page::Dialog(Dialog::Name(_)));
         let key = DrawKey {
             state: current,
             rows: page_rows(current.page, &snap),
             picture,
             column_shown: column.shown(),
+            slots: snap.slot_list.clone(),
+            quicksave: snap.quicksave,
+            turns_since_save: snap.turns_since_save,
+            field: model.field().to_string(),
+            cursor_glyph: naming.then(|| u5_runtime::prompt_cursor_glyph(cursor_frame)),
         };
         if view.drawn.as_ref().map(|(drawn_from, _)| drawn_from) != Some(&key) {
-            let drawn = render_page(&visual.text_font, &picture, column, current, &snap);
+            let drawn = render_page_with(
+                &visual.text_font,
+                &picture,
+                column,
+                current,
+                &snap,
+                model.field(),
+                cursor_frame,
+            );
             view.drawn = Some((key, drawn));
             view.renders += 1;
         }

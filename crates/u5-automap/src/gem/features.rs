@@ -95,7 +95,7 @@ const CODEX_CELL: (u8, u8) = (233, 233);
 /// unnamed dwellings are `Hut` (10.2.7). The two castles carry the
 /// approved map's short names (the mockups' README and the 10.2.4 sketch:
 /// `Castle British`, `Blackthorn`), so the label fits beside the castle.
-const PLACE_NAMES: [&str; 32] = [
+pub(crate) const PLACE_NAMES: [&str; 32] = [
     "Moonglow",
     "Britain",
     "Jhelom",

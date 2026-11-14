@@ -250,8 +250,14 @@ fn enter_chooses_each_top_item() {
             let mut model = model_on(Page::Top, cursor);
             let got = reduce(&mut model, key(enter), &snap);
             assert_eq!(got, want.into_iter().collect::<Vec<_>>(), "row {cursor}");
+            // Settings, Save and Load are pages; Save and Load also ask
+            // the slot plugin to list the slots.
             let pushed = model.current().page != Page::Top;
-            assert_eq!(pushed, want.is_none(), "row {cursor}");
+            let page = matches!(
+                want,
+                None | Some(MenuCommand::OpenSave | MenuCommand::OpenLoad)
+            );
+            assert_eq!(pushed, page, "row {cursor}");
         }
     }
 }

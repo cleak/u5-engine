@@ -55,10 +55,14 @@ pub const QUIT_TO_TITLE: &str = "Return to the title";
 pub const QUIT_TO_DESKTOP: &str = "Leave the game";
 
 /// Footer: turns since the last save or load this session; `{}` is the
-/// count.
-pub const LAST_SAVE_TURNS: &str = "Saved {} turns ago.";
-/// Footer: saved on this very turn.
-pub const LAST_SAVE_NOW: &str = "Just saved.";
+/// count, at most [`LAST_SAVE_MAX`], so the line fits a narrow page.
+pub const LAST_SAVE_TURNS: &str = "{} turns unsaved.";
+/// Footer: one turn since the last save or load.
+pub const LAST_SAVE_ONE: &str = "1 turn unsaved.";
+/// The largest count [`LAST_SAVE_TURNS`] shows.
+pub const LAST_SAVE_MAX: u64 = 99_999;
+/// Footer: the working save holds this very turn (just saved or loaded).
+pub const LAST_SAVE_NOW: &str = "Thy game is saved.";
 /// Footer: nothing saved or loaded yet this session.
 pub const LAST_SAVE_NONE: &str = "Not saved this session.";
 /// Footer: the world is Live behind the menu (U1).
@@ -98,14 +102,31 @@ pub const LOAD_TITLE: &str = "Load a game";
 pub const DAMAGED: &str = "Damaged";
 /// Shown in the thumbnail box of a slot imported from a DOS save.
 pub const IMPORTED: &str = "Imported";
-/// The details line of a slot saved after cheats (chapter 7).
-pub const SAVED_WITH_CHEATS: &str = "Saved with cheats";
+/// The details line of a slot saved after cheats (chapter 7): at most
+/// the details box's 16 text cells.
+pub const SAVED_WITH_CHEATS: &str = "Cheats were used";
 /// The one-cell cheats mark on the slot's row.
 pub const CHEATS_MARK: &str = "C";
 /// The details line with the turn count; `{}` is the turn.
 pub const TURN: &str = "Turn {}";
 /// An empty slot list.
 pub const NO_SLOTS: &str = "No saves yet.";
+/// The dialog while the host restores a slot (3.3.9).
+pub const LOADING: &str = "Loading...";
+/// The name field's prompt for a rename (F2).
+pub const RENAME_PROMPT: &str = "A new name for this save:";
+
+/// A slot's game date in the lists, `year/month/day` (3.2.2).
+pub fn slot_date(clock: [u16; 5]) -> String {
+    let [year, month, day, ..] = clock;
+    format!("{year}/{month:02}/{day:02}")
+}
+
+/// A slot's game date and time in its details (3.2.3).
+pub fn slot_when(clock: [u16; 5]) -> String {
+    let [.., hour, minute] = clock;
+    format!("{} {hour:02}:{minute:02}", slot_date(clock))
+}
 
 // --- Dialogs (3.2.2, 3.2.3, 3.2.5, 3.2.6) --------------------------------
 
@@ -334,10 +355,23 @@ pub const SAVE_FAILED: &str = "Save failed; the slot was not changed.";
 /// The working save was written but the slot copy failed; `{}` the name,
 /// `{}` the reason.
 pub const SLOT_WRITE_FAILED: &str = "Saved the game, but could not write \"{}\": {}.";
+/// The slot copy of a save to a new, unnamed slot failed; `{}` the
+/// reason.
+pub const SLOT_WRITE_FAILED_NEW: &str = "Saved the game, but could not write the new slot: {}.";
 /// Another copy holds the slot lock.
 pub const SLOTS_BUSY: &str = "The saves are busy (another copy of the game?).";
 /// A restore failed and was rolled back; `{}` the name, `{}` the reason.
 pub const LOAD_FAILED: &str = "Could not load \"{}\": {}. Thy game is unchanged.";
+/// A rename (F2) went through; `{}` is the new name.
+pub const RENAMED: &str = "Renamed to \"{}\".";
+/// A rename failed; `{}` the name, `{}` the reason.
+pub const RENAME_FAILED: &str = "Could not rename \"{}\": {}.";
+/// A slot was deleted; `{}` is its name.
+pub const DELETED: &str = "Deleted \"{}\".";
+/// A delete failed; `{}` the name, `{}` the reason.
+pub const DELETE_FAILED: &str = "Could not delete \"{}\": {}.";
+/// The host could not list the slots; `{}` the reason.
+pub const LIST_FAILED: &str = "Could not read the saves: {}.";
 
 /// `template` with each `{}` replaced by the next of `args`, in order. A
 /// template with fewer holes than `args` ignores the rest.
@@ -398,6 +432,7 @@ pub const NARROW_LABELS: &[&str] = &[
     NEW_SLOT,
     NAME_PROMPT,
     LAST_SAVE_NOW,
+    LAST_SAVE_ONE,
     NO_SLOTS,
 ];
 
@@ -435,6 +470,9 @@ pub const DIALOG_TEMPLATES: &[&str] = &[
     QUIT_TO_DESKTOP_ASK,
     UNSAVED_TURNS,
     UNSAVED_SESSION,
+    NAME_PROMPT,
+    RENAME_PROMPT,
+    LOADING,
 ];
 
 /// The longest slot name (3.2.2).

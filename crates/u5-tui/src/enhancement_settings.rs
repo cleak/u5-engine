@@ -489,8 +489,9 @@ pub fn visual_launch_config(
         settings_sink,
         save_dir: Some(save_dir.to_path_buf()),
         bezel: bezel.image,
-        // The slot host arrives with the slot pages (M4-11); the boot key
-        // is the caller's (`--boot-key`).
+        // The slot host and the boot key are the caller's
+        // (`attach_menu_host`, `--boot-key`): only it knows the source
+        // folder slots must stay out of.
         menu_host: None,
         boot_key: None,
         menu_script,

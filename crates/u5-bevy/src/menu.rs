@@ -48,6 +48,13 @@
 //!   the check of the working save and the thumbnail ([`thumb`]). It is in
 //!   the app only with named slots and a slot store.
 //!
+//! - M4-11 adds the Save and Load pages ([`slots`], drawn by
+//!   [`render_slots`]): the host's slot store behind [`host::MenuHost`],
+//!   the save through the handshake and the host's worker, the load by
+//!   relaunch with the boot `J`, rename and delete, and the turns since
+//!   the last save or load ([`unsaved`]). [`slots::SlotPlugin`] is in the
+//!   app only with named slots and a slot store.
+//!
 //! The world stays Live (U1): the menu acts on the game only through the
 //! overlay model, which hands keys back on close with held keys latched.
 
@@ -58,17 +65,25 @@ pub mod host;
 pub mod inject;
 pub mod pages;
 pub mod render;
+pub mod render_slots;
 pub mod settings;
+pub mod slots;
 pub mod text;
 pub mod thumb;
+pub mod unsaved;
 
 use std::collections::VecDeque;
+use std::path::PathBuf;
+use std::sync::Arc;
 
 use bevy::ecs::system::SystemParam;
 use bevy::prelude::*;
 use u5_runtime::enhancements::{Phase, SHIPPED_PHASES, Toggle};
 
+use self::host::MenuHost;
 use self::pages::{MenuCommand, MenuDoors, MenuInput, MenuModel, ShellSnapshot, reduce};
+use self::slots::{SlotListing, SlotPlugin};
+use self::unsaved::{SaveTracker, install_save_tracker};
 use crate::enh::input::{
     EnhAction, EnhActionEvent, HotkeyFellThrough, KeyChord, OverlayKey, OverlayText,
 };
@@ -94,9 +109,11 @@ const TITLE_LAYER: Toggle = Toggle::MenuTitleLayer;
 pub(crate) fn add_menu(app: &mut App, launch: &VisualLaunchConfig) {
     let toggles = launch.enhancements.toggles;
     if feature_wanted(toggles, OVERLAY) || feature_wanted(toggles, TITLE_LAYER) {
+        let slots = launch.enhancements.menu().named_slots;
         app.add_plugins(MenuPlugin {
-            slots: launch.enhancements.menu().named_slots && launch.menu_host.is_some(),
+            host: launch.menu_host.clone().filter(|_| slots),
             script: launch.menu_script.clone().unwrap_or_default(),
+            save_dir: launch.save_dir.clone(),
         });
     }
 }
@@ -104,10 +121,13 @@ pub(crate) fn add_menu(app: &mut App, launch: &VisualLaunchConfig) {
 /// The menu's feature plugin: the page model, the doors and the systems
 /// that wire them to the overlay model.
 pub struct MenuPlugin {
-    /// Named slots are on and the host keeps a slot store.
-    slots: bool,
+    /// The host's slot store, while named slots are on.
+    host: Option<Arc<dyn MenuHost>>,
     /// The QA key script (D-M4.6), empty without one.
     script: Vec<char>,
+    /// The folder the host chose for the save files, for the save watcher
+    /// the unsaved-progress count reads.
+    save_dir: Option<PathBuf>,
 }
 
 impl Plugin for MenuPlugin {
@@ -117,7 +137,7 @@ impl Plugin for MenuPlugin {
         let intro_shell = app.world().contains_resource::<VisualIntroState>();
         app.insert_resource(MenuShell {
             intro_shell,
-            slots: self.slots,
+            slots: self.host.is_some(),
             shipped: SHIPPED_PHASES,
         })
         .init_resource::<MenuState>()
@@ -158,8 +178,9 @@ impl Plugin for MenuPlugin {
                 .chain()
                 .in_set(EnhSet::Present),
         );
-        if self.slots {
-            inject::install_slot_save(app);
+        install_save_tracker(app, self.save_dir.clone());
+        if let Some(host) = &self.host {
+            app.add_plugins(SlotPlugin { host: host.clone() });
         }
         if !self.script.is_empty() {
             app.insert_resource(MenuScript(self.script.iter().copied().collect()))
@@ -242,6 +263,9 @@ pub(crate) fn snapshot(shell: &MenuShell, doors: &MenuDoors) -> ShellSnapshot {
         save_available: false,
         doors: doors.0.clone(),
         settings: Default::default(),
+        quicksave: false,
+        slot_list: Default::default(),
+        turns_since_save: None,
     }
 }
 
@@ -257,6 +281,8 @@ pub(crate) struct SnapshotInputs<'w> {
     settings: Option<Res<'w, PendingSettingChanges>>,
     visual: Option<Res<'w, VisualState>>,
     owner: Option<Res<'w, SyntheticInputOwner>>,
+    listing: Option<Res<'w, SlotListing>>,
+    tracker: Option<Res<'w, SaveTracker>>,
 }
 
 impl SnapshotInputs<'_> {
@@ -271,6 +297,8 @@ impl SnapshotInputs<'_> {
             self.settings.as_deref(),
             self.visual.as_deref(),
             self.owner.as_deref(),
+            self.listing.as_deref(),
+            self.tracker.as_deref(),
         )
     }
 }
@@ -287,6 +315,8 @@ pub(crate) fn world_snapshot(world: &World) -> ShellSnapshot {
         world.get_resource::<PendingSettingChanges>(),
         world.get_resource::<VisualState>(),
         world.get_resource::<SyntheticInputOwner>(),
+        world.get_resource::<SlotListing>(),
+        world.get_resource::<SaveTracker>(),
     )
 }
 
@@ -300,8 +330,20 @@ fn full_snapshot(
     settings: Option<&PendingSettingChanges>,
     visual: Option<&VisualState>,
     owner: Option<&SyntheticInputOwner>,
+    listing: Option<&SlotListing>,
+    tracker: Option<&SaveTracker>,
 ) -> ShellSnapshot {
     let mut snap = snapshot(shell, doors);
+    if let Some(listing) = listing {
+        snap.slot_list = listing.slots.clone();
+    }
+    snap.turns_since_save = visual
+        .zip(tracker)
+        .and_then(|(visual, tracker)| tracker.turns_since(visual.state.turn));
+    snap.quicksave = live.map_or_else(
+        || launch.is_some_and(|launch| launch.0.enhancements.menu().quicksave),
+        |live| live.now.menu().quicksave,
+    );
     // The menu is open only at the idle exploration prompt, so `can_save`'s
     // idle half holds while the pages are built (3.2.2).
     snap.save_available = visual
@@ -481,3 +523,6 @@ mod pages_settings_tests;
 
 #[cfg(test)]
 mod inject_review_tests;
+
+#[cfg(test)]
+mod render_slots_tests;

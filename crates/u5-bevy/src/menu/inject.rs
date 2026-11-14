@@ -211,7 +211,7 @@ fn idle_for_save(probe: &IdleProbe, overlay: Option<&OverlayState>) -> bool {
 
 /// Steps 1 and 2.
 #[allow(clippy::too_many_arguments)]
-fn begin_slot_save(
+pub(crate) fn begin_slot_save(
     mut requests: EventReader<SlotSaveRequest>,
     mut handshake: ResMut<SlotSaveHandshake>,
     mut owner: ResMut<SyntheticInputOwner>,
@@ -275,7 +275,7 @@ fn save_prompt_open(visual: &VisualState) -> bool {
 
 /// Steps 3 and 4, after the input driver has read this frame's keys.
 #[allow(clippy::too_many_arguments)]
-fn advance_slot_save(
+pub(crate) fn advance_slot_save(
     time: Res<Time>,
     mut handshake: ResMut<SlotSaveHandshake>,
     mut owner: ResMut<SyntheticInputOwner>,

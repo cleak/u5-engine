@@ -508,7 +508,7 @@ fn qa_modes_never_resolve() {
     assert_eq!(resolving, ["run_slot_command", "launch_config"]);
     let callers: Vec<String> = top_level_items(&main)
         .iter()
-        .filter(|item| item.contains("launch_config(&args)"))
+        .filter(|item| item.contains("launch_config(&args, source)"))
         .map(|item| item_name(item).to_string())
         .collect();
     assert_eq!(callers, ["run_visual", "run_visual_intro"]);

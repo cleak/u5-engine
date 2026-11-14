@@ -15,13 +15,13 @@
 use std::io;
 use std::path::Path;
 
+use u5_automap::gem::slot_place_text;
 use u5_host_desktop::{
     HostEnv, SlotDetails, SlotError, SlotInfo, SlotOrigin, SlotStore, SlotTarget, StoreRequest,
 };
 use u5_runtime::enhancements::{LockState, MenuSettings, Toggle};
 use u5_runtime::{
-    PlayState, SAVE_AVATAR_NAME_OFFSET, SAVE_CHARACTER_NAME_LEN, SAVED_GAM_FILENAME,
-    load_play_options_from_save, read_save_image_file, save_image_has_active_avatar,
+    SAVED_GAM_FILENAME, read_save_image_file, save_image_has_active_avatar, save_image_summary,
 };
 
 /// One slot command from the command line.
@@ -94,38 +94,35 @@ pub fn validate_working_set(dir: &Path) -> Result<(), String> {
     Ok(())
 }
 
-/// What an import shows, read from the working save without running Q:
-/// the Avatar's name from the image, and the place and clock of the state
-/// it loads into. The turn counter is not part of a save, so an import
-/// records 0. A save that cannot be loaded keeps the name only.
+/// What an import shows, read from the working save without running Q
+/// (3.3.5 "Imports and CLI"): the Avatar's name, the clock, and the place
+/// as published words (D-M4.8), all from the save image itself. The turn
+/// counter is not part of a save, so an import records 0.
 pub fn working_set_details(dir: &Path) -> io::Result<SlotDetails> {
     let image = read_save_image_file(&dir.join(SAVED_GAM_FILENAME), SAVED_GAM_FILENAME)?;
-    if !save_image_has_active_avatar(&image) {
+    let summary = save_image_summary(&image)?;
+    let Some(avatar) = summary
+        .avatar
+        .filter(|_| save_image_has_active_avatar(&image))
+    else {
         return Err(io::Error::new(
             io::ErrorKind::InvalidData,
             "the working save has no active game to copy",
         ));
-    }
-    let name = &image[SAVE_AVATAR_NAME_OFFSET..SAVE_AVATAR_NAME_OFFSET + SAVE_CHARACTER_NAME_LEN];
-    let end = name.iter().position(|b| *b == 0).unwrap_or(name.len());
-    let avatar = String::from_utf8_lossy(&name[..end]).trim().to_string();
-    let mut details = SlotDetails {
-        avatar,
-        ..SlotDetails::default()
     };
-    if let Ok(state) = load_play_options_from_save(dir).and_then(|o| PlayState::load_scene(dir, o))
-    {
-        let clock = state.clock;
-        details.place = state.area_status_label();
-        details.clock = [
+    let clock = summary.clock;
+    Ok(SlotDetails {
+        avatar: avatar.trim().to_string(),
+        place: slot_place_text(summary.target, summary.floor),
+        clock: [
             clock.year,
             u16::from(clock.month),
             u16::from(clock.day),
             u16::from(clock.hour),
             u16::from(clock.minute),
-        ];
-    }
-    Ok(details)
+        ],
+        ..SlotDetails::default()
+    })
 }
 
 /// `--slot-save NAME`: into the newest slot of that name, or a new one.
@@ -206,6 +203,7 @@ pub fn slot_line(slot: &SlotInfo) -> String {
 mod tests {
     use super::*;
     use u5_runtime::enhancements::LockReason;
+    use u5_runtime::{SAVE_AVATAR_NAME_OFFSET, SAVE_SCENE_OFFSET, SAVE_Z_OFFSET};
 
     fn slots_on() -> MenuSettings {
         MenuSettings {
@@ -333,6 +331,38 @@ mod tests {
         let error = load_from_slot(&store, "Nowhere").unwrap_err();
         assert_eq!(error, "There is no slot named Nowhere");
         assert!(std::fs::read_dir(&source).unwrap().next().is_none());
+    }
+
+    /// An import's place is the published words of D-M4.8, read from the
+    /// save image: a town by its name, a dungeon with its level, the
+    /// plane outdoors, plain words for an unnamed dwelling.
+    #[test]
+    fn an_import_names_its_place_in_published_words() {
+        let dir = scratch("import-place");
+        let mut image = vec![0u8; u5_runtime::SAVED_GAM_LEN];
+        image[SAVE_AVATAR_NAME_OFFSET..SAVE_AVATAR_NAME_OFFSET + 4].copy_from_slice(b"Ann\0");
+        for (scene, z, want) in [
+            (0u8, 0u8, "Britannia"),
+            (0, 0xff, "Underworld"),
+            (2, 0, "Britain"),
+            (14, 0, "a dwelling"),
+            (34, 1, "Despise level 2"),
+        ] {
+            image[SAVE_SCENE_OFFSET] = scene;
+            image[SAVE_Z_OFFSET] = z;
+            std::fs::write(dir.join(SAVED_GAM_FILENAME), &image).unwrap();
+            let details = working_set_details(&dir).unwrap();
+            assert_eq!(details.place, want, "scene {scene} z {z}");
+            assert_eq!(details.avatar, "Ann");
+            assert_eq!(details.turn, 0);
+        }
+        image[SAVE_AVATAR_NAME_OFFSET] = 0;
+        std::fs::write(dir.join(SAVED_GAM_FILENAME), &image).unwrap();
+        assert!(
+            working_set_details(&dir).is_err(),
+            "an empty save is no game"
+        );
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     /// The three flags parse as their own mode and combine only with

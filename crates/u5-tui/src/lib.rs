@@ -10,6 +10,8 @@ pub mod equivalence;
 pub mod gem_equivalence;
 pub mod gem_map;
 pub mod intro_loop;
+#[cfg(feature = "visual")]
+pub mod menu_host;
 pub mod play_loop;
 pub mod relaunch;
 pub mod route_smoke;
@@ -45,6 +47,8 @@ pub use gem_equivalence::{
 };
 pub use gem_map::{GEM_MAP_TOKEN, GemPng, TerminalGemMap};
 pub use intro_loop::run_intro_menu_loop;
+#[cfg(feature = "visual")]
+pub use menu_host::{DesktopMenuHost, attach_menu_host, relaunch_after_shell};
 pub use play_loop::{
     ENHANCEMENT_TOKEN_PREFIX, FreeTextLineInput, NoScriptTokenHooks, PlayObserver,
     ScriptTokenHooks, ScriptTokenIntercept, TerminalSaveWatch, TerminalSession, ansi_function_key,

@@ -21,13 +21,38 @@
 //! the cursor passes over them ([`settle`]). On the Extras tab's preset row
 //! Left and Right choose the preset before or after the one in force
 //! ([`MenuCommand::Preset`]). Text ([`MenuInput::Text`]) is for the slot
-//! name field (M4-10); no page here reads it.
+//! name field only.
 //!
 //! The rows of the Settings tabs come from the shell snapshot, which the
 //! plugin fills from the catalogue (`settings::settings_tabs`, M4-07).
+//!
+//! **The slot pages** (3.2.2, 3.2.3; plan M4-11) list the slots the host
+//! keeps ([`ShellSnapshot::slot_list`]), which the slot plugin refreshes
+//! when Save or Load opens and after each change:
+//!
+//! - Save: "A new slot..." (the name field), the quick slot while
+//!   `menu.quicksave` is on (it never asks), then every slot that is not
+//!   damaged (it asks before writing over it). Choosing one gives
+//!   [`MenuCommand::SaveSlot`]; the slot plugin types the game's own `Q`
+//!   and `Y`, and the menu closes.
+//! - Load: every slot, damaged ones greyed. Enter on one that is not
+//!   damaged shows "Loading..." and gives [`MenuCommand::LoadSlot`]; F2
+//!   renames a slot (not the quick one); Delete asks, then deletes.
+//! - The name field takes printable ASCII typed text only, up to
+//!   [`t::SLOT_NAME_MAX`] characters; Backspace takes the last one off.
+//!   Enter saves (an empty name becomes "Slot N"; a rename needs a name),
+//!   Escape goes back.
+//! - The dialogs' buttons are chosen with Left and Right, the second
+//!   (No, Cancel) first; Enter presses the chosen one.
+//!
+//! Slots are named by their place in the snapshot's list; the plugin
+//! checks the place still holds a slot before it acts.
+
+use std::sync::Arc;
 
 use bevy::prelude::*;
 
+use super::host::SlotInfo;
 use super::text as t;
 use crate::enh::input::{OverlayKey, OverlayText};
 use crate::enh::overlay::OverlayId;
@@ -90,6 +115,91 @@ pub enum Page {
     Top,
     /// Settings, on one of its tabs (3.2.7).
     Settings(SettingsTab),
+    /// Save: where to save (3.2.2).
+    Save,
+    /// Load: the slots and the selected one's details (3.2.3).
+    Load,
+    /// A dialog over the page below it.
+    Dialog(Dialog),
+}
+
+/// A dialog of the slot pages. A slot is named by its place in
+/// [`ShellSnapshot::slot_list`].
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum Dialog {
+    /// The name field (3.2.2).
+    Name(NameFor),
+    /// "Write over ...?" before saving over a slot.
+    Overwrite(u16),
+    /// "Delete ...?" before deleting a slot.
+    Delete(u16),
+    /// "Loading...", while the host restores the slot (3.3.9).
+    Loading(u16),
+}
+
+/// What the name field names.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum NameFor {
+    /// A new slot.
+    New,
+    /// The slot at this place, renamed (F2).
+    Rename(u16),
+}
+
+/// The second of a dialog's two buttons (No, Cancel): where its cursor
+/// starts, so Enter at once never writes over or deletes anything.
+pub const SECOND_BUTTON: usize = 1;
+
+/// One listed slot: what the host said, and its thumbnail decoded.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct SlotEntry {
+    /// The host's listing, without the PNG bytes.
+    pub info: SlotInfo,
+    /// The 80x50 RGBA thumbnail, when the slot has one that decodes.
+    pub thumb: Option<Vec<u8>>,
+}
+
+/// The slots as last listed, the quick slot first and then newest first.
+/// Shared, so a snapshot copies a pointer.
+pub type SlotList = Arc<Vec<SlotEntry>>;
+
+/// A row of the Save page.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum SaveChoice {
+    /// "A new slot...": the name field.
+    New,
+    /// The quick slot: saves at once.
+    Quick,
+    /// The slot at this place in the list: asks first.
+    Existing(u16),
+}
+
+/// The Save page's rows for `snap` (3.2.2): a new slot, the quick slot
+/// while `menu.quicksave` is on, then every other slot that is not
+/// damaged, in the list's order.
+pub fn save_choices(snap: &ShellSnapshot) -> Vec<SaveChoice> {
+    let mut rows = vec![SaveChoice::New];
+    if snap.quicksave {
+        rows.push(SaveChoice::Quick);
+    }
+    rows.extend(
+        snap.slot_list
+            .iter()
+            .enumerate()
+            .filter(|(_, slot)| !slot.info.quick && slot.info.damaged.is_none())
+            .map(|(i, _)| SaveChoice::Existing(i as u16)),
+    );
+    rows
+}
+
+/// The quick slot as listed, if it exists.
+pub fn quick_slot(snap: &ShellSnapshot) -> Option<&SlotEntry> {
+    snap.slot_list.iter().find(|slot| slot.info.quick)
+}
+
+/// Whether `ch` may go in a slot name: printable ASCII (3.2.2).
+pub fn name_char(ch: char) -> bool {
+    (' '..='~').contains(&ch)
 }
 
 /// What a row does when chosen.
@@ -97,9 +207,9 @@ pub enum Page {
 pub enum RowAction {
     /// Close the menu.
     Resume,
-    /// Open the Save page (M4-10).
+    /// Open the Save page.
     Save,
-    /// Open the Load page (M4-11).
+    /// Open the Load page.
     Load,
     /// Close the menu and open another overlay.
     Door(OverlayId),
@@ -288,6 +398,13 @@ pub struct ShellSnapshot {
     /// The rows of each Settings tab, by [`SettingsTab::index`] (M4-06 and
     /// M4-07 fill them).
     pub settings: [Vec<Row>; 4],
+    /// `menu.quicksave`: the Save page offers the quick slot.
+    pub quicksave: bool,
+    /// The slots as the host last listed them (M4-11).
+    pub slot_list: SlotList,
+    /// Turns since the last save or load this session (3.3.5 "Unsaved
+    /// progress"); `None` before the first.
+    pub turns_since_save: Option<u64>,
 }
 
 /// The rows of `page` for the shell in `snap`.
@@ -295,6 +412,8 @@ pub fn page_rows(page: Page, snap: &ShellSnapshot) -> Vec<Row> {
     match page {
         Page::Top => top_rows(snap),
         Page::Settings(tab) => snap.settings[tab.index()].clone(),
+        // The slot pages draw their own lines from the slot list.
+        Page::Save | Page::Load | Page::Dialog(_) => Vec::new(),
     }
 }
 
@@ -339,6 +458,9 @@ pub struct PageState {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct MenuModel {
     stack: Vec<PageState>,
+    /// The name field's text: printable ASCII, at most
+    /// [`t::SLOT_NAME_MAX`] characters.
+    field: String,
 }
 
 impl Default for MenuModel {
@@ -355,7 +477,13 @@ impl MenuModel {
                 page: Page::Top,
                 cursor: 0,
             }],
+            field: String::new(),
         }
+    }
+
+    /// The name field's text.
+    pub fn field(&self) -> &str {
+        &self.field
     }
 
     /// The page showing.
@@ -373,7 +501,23 @@ impl MenuModel {
     }
 
     fn push(&mut self, page: Page) {
-        self.stack.push(PageState { page, cursor: 0 });
+        self.push_at(page, 0);
+    }
+
+    fn push_at(&mut self, page: Page, cursor: usize) {
+        self.stack.push(PageState { page, cursor });
+    }
+
+    /// Keeps the page's cursor within `len` rows (a list that shrank).
+    pub(crate) fn clamp_cursor(&mut self, len: usize) {
+        let top = self.top_mut();
+        top.cursor = top.cursor.min(len.saturating_sub(1));
+    }
+
+    /// Goes back one page, as Escape does: for the slot plugin, which
+    /// takes a dialog down when what it asked for failed.
+    pub(crate) fn back(&mut self) -> bool {
+        self.pop()
     }
 
     /// Goes back one page; false on the top page.
@@ -413,10 +557,19 @@ pub enum MenuCommand {
     Close,
     /// Close the menu and open this overlay in its place.
     OpenDoor(OverlayId),
-    /// Open the Save page (M4-10).
+    /// The Save page opened: list the slots.
     OpenSave,
-    /// Open the Load page (M4-11).
+    /// The Load page opened: list the slots.
     OpenLoad,
+    /// Save to this row of the Save page; a new slot takes the name
+    /// field's text (M4-11).
+    SaveSlot(SaveChoice),
+    /// Load the slot at this place of the list.
+    LoadSlot(u16),
+    /// Rename the slot at this place to the name field's text.
+    RenameSlot(u16),
+    /// Delete the slot at this place.
+    DeleteSlot(u16),
     /// Restart at the title (M4-13).
     QuitToTitle,
     /// Close the game (M4-07).
@@ -433,6 +586,183 @@ pub enum MenuCommand {
 /// Applies `input` to `model` for the shell in `snap` and returns the
 /// commands it gives (at most one). See the module notes for the keys.
 pub fn reduce(model: &mut MenuModel, input: MenuInput, snap: &ShellSnapshot) -> Vec<MenuCommand> {
+    let state = model.current();
+    let command = match state.page {
+        Page::Save => reduce_save(model, input, snap),
+        Page::Load => reduce_load(model, input, snap),
+        Page::Dialog(dialog) => reduce_dialog(model, dialog, input),
+        Page::Top | Page::Settings(_) => return reduce_list(model, input, snap),
+    };
+    command.into_iter().collect()
+}
+
+/// The slot pages' common keys: F12 closes, Escape goes back, Up and Down
+/// move the cursor over `len` rows. `None` for any other key.
+fn common_key(model: &mut MenuModel, key: KeyCode, len: usize) -> Option<Option<MenuCommand>> {
+    let cursor = model.current().cursor.min(len.saturating_sub(1));
+    model.top_mut().cursor = cursor;
+    match key {
+        KeyCode::F12 => Some(Some(MenuCommand::Close)),
+        KeyCode::Escape => Some((!model.pop()).then_some(MenuCommand::Close)),
+        KeyCode::ArrowUp => {
+            model.top_mut().cursor = cursor.saturating_sub(1);
+            Some(None)
+        }
+        KeyCode::ArrowDown => {
+            model.top_mut().cursor = (cursor + 1).min(len.saturating_sub(1));
+            Some(None)
+        }
+        _ => None,
+    }
+}
+
+fn is_enter(key: KeyCode) -> bool {
+    matches!(key, KeyCode::Enter | KeyCode::NumpadEnter)
+}
+
+/// The Save page (3.2.2).
+fn reduce_save(
+    model: &mut MenuModel,
+    input: MenuInput,
+    snap: &ShellSnapshot,
+) -> Option<MenuCommand> {
+    let MenuInput::Key(key) = input else {
+        return None;
+    };
+    let choices = save_choices(snap);
+    if let Some(command) = common_key(model, key.key, choices.len()) {
+        return command;
+    }
+    if !is_enter(key.key) {
+        return None;
+    }
+    match *choices.get(model.current().cursor)? {
+        SaveChoice::New => {
+            model.field.clear();
+            model.push(Page::Dialog(Dialog::Name(NameFor::New)));
+            None
+        }
+        SaveChoice::Quick => Some(MenuCommand::SaveSlot(SaveChoice::Quick)),
+        SaveChoice::Existing(at) => {
+            model.push_at(Page::Dialog(Dialog::Overwrite(at)), SECOND_BUTTON);
+            None
+        }
+    }
+}
+
+/// The Load page (3.2.3).
+fn reduce_load(
+    model: &mut MenuModel,
+    input: MenuInput,
+    snap: &ShellSnapshot,
+) -> Option<MenuCommand> {
+    let MenuInput::Key(key) = input else {
+        return None;
+    };
+    if let Some(command) = common_key(model, key.key, snap.slot_list.len()) {
+        return command;
+    }
+    let at = model.current().cursor;
+    let slot = snap.slot_list.get(at)?;
+    let place = at as u16;
+    let damaged = slot.info.damaged.is_some();
+    match key.key {
+        k if is_enter(k) && !damaged => {
+            model.push(Page::Dialog(Dialog::Loading(place)));
+            Some(MenuCommand::LoadSlot(place))
+        }
+        KeyCode::F2 if !damaged && !slot.info.quick => {
+            model.field = slot.info.name.chars().filter(|ch| name_char(*ch)).collect();
+            model.field.truncate(t::SLOT_NAME_MAX);
+            model.push(Page::Dialog(Dialog::Name(NameFor::Rename(place))));
+            None
+        }
+        KeyCode::Delete => {
+            model.push_at(Page::Dialog(Dialog::Delete(place)), SECOND_BUTTON);
+            None
+        }
+        _ => None,
+    }
+}
+
+/// The dialogs: the name field and the two questions. "Loading..." takes
+/// no key: the restore runs on the next frame and the app ends.
+fn reduce_dialog(model: &mut MenuModel, dialog: Dialog, input: MenuInput) -> Option<MenuCommand> {
+    if let Dialog::Loading(_) = dialog {
+        return None;
+    }
+    if let Dialog::Name(purpose) = dialog {
+        return reduce_name(model, purpose, input);
+    }
+    let MenuInput::Key(key) = input else {
+        return None;
+    };
+    match key.key {
+        KeyCode::F12 => Some(MenuCommand::Close),
+        KeyCode::Escape => {
+            model.pop();
+            None
+        }
+        KeyCode::ArrowLeft => {
+            model.top_mut().cursor = 0;
+            None
+        }
+        KeyCode::ArrowRight => {
+            model.top_mut().cursor = SECOND_BUTTON;
+            None
+        }
+        k if is_enter(k) => {
+            let first = model.current().cursor == 0;
+            model.pop();
+            match dialog {
+                Dialog::Overwrite(at) if first => {
+                    Some(MenuCommand::SaveSlot(SaveChoice::Existing(at)))
+                }
+                Dialog::Delete(at) if first => Some(MenuCommand::DeleteSlot(at)),
+                _ => None,
+            }
+        }
+        _ => None,
+    }
+}
+
+/// The name field (3.2.2): typed printable ASCII up to the cap, Backspace,
+/// Enter and Escape. Every other key is ignored, so a letter's key press
+/// (its text arrives as [`MenuInput::Text`]) does nothing of its own.
+fn reduce_name(model: &mut MenuModel, purpose: NameFor, input: MenuInput) -> Option<MenuCommand> {
+    let key = match input {
+        MenuInput::Text(ch) => {
+            if name_char(ch) && model.field.len() < t::SLOT_NAME_MAX {
+                model.field.push(ch);
+            }
+            return None;
+        }
+        MenuInput::Key(key) => key.key,
+    };
+    match key {
+        KeyCode::F12 => Some(MenuCommand::Close),
+        KeyCode::Escape => {
+            model.pop();
+            None
+        }
+        KeyCode::Backspace => {
+            model.field.pop();
+            None
+        }
+        k if is_enter(k) => match purpose {
+            NameFor::New => Some(MenuCommand::SaveSlot(SaveChoice::New)),
+            NameFor::Rename(at) if !model.field.trim().is_empty() => {
+                model.pop();
+                Some(MenuCommand::RenameSlot(at))
+            }
+            NameFor::Rename(_) => None,
+        },
+        _ => None,
+    }
+}
+
+/// The top menu and the Settings tabs.
+fn reduce_list(model: &mut MenuModel, input: MenuInput, snap: &ShellSnapshot) -> Vec<MenuCommand> {
     let MenuInput::Key(key) = input else {
         return Vec::new();
     };
@@ -484,7 +814,7 @@ pub fn reduce(model: &mut MenuModel, input: MenuInput, snap: &ShellSnapshot) -> 
                     }
                     None
                 }
-                (None, Page::Top) => None,
+                (None, _) => None,
             }
         }
         KeyCode::Tab => snap
@@ -501,8 +831,14 @@ pub fn reduce(model: &mut MenuModel, input: MenuInput, snap: &ShellSnapshot) -> 
 fn choose(model: &mut MenuModel, row: &Row) -> Option<MenuCommand> {
     match (row.action, row.kind) {
         (RowAction::Resume, _) => Some(MenuCommand::Close),
-        (RowAction::Save, _) => Some(MenuCommand::OpenSave),
-        (RowAction::Load, _) => Some(MenuCommand::OpenLoad),
+        (RowAction::Save, _) => {
+            model.push(Page::Save);
+            Some(MenuCommand::OpenSave)
+        }
+        (RowAction::Load, _) => {
+            model.push(Page::Load);
+            Some(MenuCommand::OpenLoad)
+        }
         (RowAction::Door(id), _) => Some(MenuCommand::OpenDoor(id)),
         (RowAction::Settings, _) => {
             model.push(Page::Settings(SettingsTab::Audio));

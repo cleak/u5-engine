@@ -496,6 +496,13 @@ impl SlotStore {
         })
     }
 
+    /// A slot's `thumb.png` bytes, when it has one. Read without the lock:
+    /// a store replaces a slot's folder whole by a rename, so the file is
+    /// either the old one or the new one.
+    pub fn thumbnail(&self, id: &SlotId) -> Option<Vec<u8>> {
+        fs::read(self.slot_dir(id).join(THUMB_FILE)).ok()
+    }
+
     /// Deletes a slot, damaged or not.
     pub fn delete(&self, id: &SlotId) -> Result<(), SlotError> {
         self.locked(|store| {

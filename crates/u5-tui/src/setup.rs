@@ -582,6 +582,8 @@ pub fn run_default_launch(
     );
     let mut launch = crate::enhancement_settings::visual_launch_config(settings, &game_dir);
     launch.boot_key = boot_key;
+    crate::menu_host::attach_menu_host(&mut launch, &game_dir, &ready.data_dir);
+    let host = launch.menu_host.clone();
     // `display.raster` feeds the 1.0.1 launch parameter (design 2.4.1).
     let depth = crate::enhancement_settings::launch_raster_depth(
         u5_runtime::TileGraphicsDepth::Ega16,
@@ -589,12 +591,8 @@ pub fn run_default_launch(
     );
     let exit = u5_bevy::run_visual_intro_loop_with(&game_dir, depth, launch)
         .map_err(|error| describe_failure(&error, Some(&ready)))?;
-    match exit.relaunch {
-        None => Ok(()),
-        Some(asked) => {
-            crate::relaunch::relaunch(asked.boot_key, None).map_err(|failed| failed.to_string())
-        }
-    }
+    crate::menu_host::relaunch_after_shell(exit, host.as_ref(), None)
+        .map_err(|error| error.to_string())
 }
 
 /// Entry point of the `u5-engine-gui` binary (no console on Windows).

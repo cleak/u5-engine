@@ -34,6 +34,7 @@ pub mod knowledge;
 pub mod labels;
 pub mod layout;
 pub mod payload;
+pub mod place;
 pub mod probe;
 pub mod probe_more;
 pub mod raster;
@@ -65,6 +66,7 @@ pub use payload::{
     AttachOutcome, EmptyReason, PayloadError, attach, attach_payload, decode_payload,
     encode_payload,
 };
+pub use place::{UNNAMED_DWELLING, slot_place_text};
 pub use probe::{
     KnowEvents, KnowProbe, TOWN_LINK_TILES, attach_events, edge_side, observe_command,
     observe_commands, probe,

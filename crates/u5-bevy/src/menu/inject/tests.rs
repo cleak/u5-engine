@@ -19,15 +19,9 @@ use u5_runtime::z_stats::{YesNoPromptKind, YesNoPromptSession};
 use super::*;
 use crate::enh::VisualLaunchConfig;
 use crate::enh::equivalence::{FrameRecord, Owner, Scene, Shell, Timeline};
-use crate::menu::host::MenuHost;
+use crate::menu::host::NoStore;
 use crate::menu::thumb::{THUMB_HEIGHT, THUMB_WIDTH, box_filter};
 use crate::{TypedKey, drive_visual};
-
-/// A slot store that stores nothing: the handshake needs only that there
-/// is one.
-struct NoStore;
-
-impl MenuHost for NoStore {}
 
 /// A scratch game folder with a save template and the two mirrors the
 /// Q-save stages through. Removed on drop.

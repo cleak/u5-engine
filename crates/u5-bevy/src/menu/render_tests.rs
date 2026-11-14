@@ -293,8 +293,9 @@ fn node_rect(node: &Node) -> Rect {
 
 /// The top menu exactly as the kit draws it, from its primitives: the
 /// narrow panel with a three-row footer box, the rows from the second row
-/// of the list, "The game waits." on the footer's second row and the
-/// two tabs.
+/// of the list, the last-save line on the footer's first row (a fresh run
+/// is at the turn it loaded: "Thy game is saved."), "The game waits." on
+/// its second row and the two tabs.
 fn kit_top_menu(
     picture: &MenuPicture,
     column: ColumnView,
@@ -319,6 +320,8 @@ fn kit_top_menu(
             i == cursor,
         );
     }
+    let last = Line::new(footer.w).text(1, t::LAST_SAVE_NOW, Ink::Help);
+    draw_row(&mut img, &font, footer, footer.row, &last, false);
     let waits = Line::new(footer.w).text(1, t::WAITING, Ink::Help);
     draw_row(&mut img, &font, footer, footer.row + 1, &waits, false);
     draw_title_tab(&mut img, &font, rect, t::MENU_TITLE);

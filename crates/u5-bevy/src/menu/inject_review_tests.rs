@@ -25,17 +25,13 @@ use u5_runtime::enhancements::{SHIPPED_PHASES, Toggle};
 use u5_runtime::test_fixtures::{configured_test_dir, copy_asset_writable, unique_scratch_dir};
 use u5_runtime::{GameClock, PlayState, PlayTarget, load_play_options_from_save};
 
-use super::host::MenuHost;
+use super::host::NoStore;
 use super::inject::{SlotSaveFinished, SlotSaveRequest};
 use super::render::{MenuView, frame_rect};
 use super::review_tests::{CASES, crop, launch, save_png, scaled, window_shot};
 use super::thumb::{THUMB_HEIGHT, THUMB_WIDTH};
 use super::{MenuShell, MenuState};
 use crate::enh::equivalence::{Owner, Scene, Shell, TimedKey, Timeline};
-
-struct NoStore;
-
-impl MenuHost for NoStore {}
 
 fn key(shell: &mut Shell, key: KeyCode, state: ButtonState) {
     shell.step(&[TimedKey {
