@@ -24,6 +24,11 @@
 //! - The QA key script (D-M4.6) is fed one key per frame, only while the
 //!   menu is open ([`script_input`]).
 //!
+//! - M4-05 draws it ([`render`]): the page in the frame kit on a picture
+//!   the size of the presented frame or canvas, an `ImageNode` exactly over
+//!   the frame sprite, a full-window dim under it, and the open and close
+//!   sweep.
+//!
 //! The world stays Live (U1): the menu acts on the game only through the
 //! overlay model, which hands keys back on close with held keys latched.
 
@@ -31,6 +36,7 @@ pub mod frame;
 pub mod geometry;
 pub mod host;
 pub mod pages;
+pub mod render;
 pub mod text;
 
 use std::collections::VecDeque;
@@ -87,6 +93,7 @@ impl Plugin for MenuPlugin {
         })
         .init_resource::<MenuState>()
         .init_resource::<MenuDoors>()
+        .init_resource::<render::MenuView>()
         .add_event::<MenuCommandEvent>()
         .add_systems(
             Update,
@@ -102,6 +109,15 @@ impl Plugin for MenuPlugin {
                 menu_fell_through.run_if(toggle_on(OVERLAY)),
             )
                 .in_set(EnhSet::Observe),
+        )
+        .add_systems(
+            Update,
+            (
+                render::menu_render,
+                render::place_overlay.run_if(render::place_due),
+            )
+                .chain()
+                .in_set(EnhSet::Present),
         );
         if !self.script.is_empty() {
             app.insert_resource(MenuScript(self.script.iter().copied().collect()))
@@ -172,7 +188,7 @@ fn menu_actions(
 }
 
 /// The shell state the pages read now.
-fn snapshot(shell: &MenuShell, doors: &MenuDoors) -> ShellSnapshot {
+pub(crate) fn snapshot(shell: &MenuShell, doors: &MenuDoors) -> ShellSnapshot {
     ShellSnapshot {
         intro_shell: shell.intro_shell,
         slots: shell.slots,
@@ -317,3 +333,6 @@ mod sheet_tests;
 
 #[cfg(test)]
 mod plugin_tests;
+
+#[cfg(test)]
+mod review_tests;

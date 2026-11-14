@@ -765,6 +765,18 @@ pub fn panel_step(panel: CellRect, x: u32, y: u32) -> u8 {
 /// elsewhere; outside it the menu (the backdrop) as it is. Opening runs
 /// `k` up from 1, closing down from 7.
 pub fn sweep_image(full: &MenuImage, panel: CellRect, k: Option<u8>) -> MenuImage {
+    sweep_image_over(full, panel, k, DIM)
+}
+
+/// [`sweep_image`] with `hidden` for the panel pixels not yet shown: the
+/// backdrop's [`DIM`] in an image that carries its own backdrop, [`CLEAR`]
+/// in the shell's, whose backdrop is a node of its own.
+pub fn sweep_image_over(
+    full: &MenuImage,
+    panel: CellRect,
+    k: Option<u8>,
+    hidden: [u8; 4],
+) -> MenuImage {
     let mut out = full.clone();
     let Some(k) = k else {
         return out;
@@ -773,7 +785,7 @@ pub fn sweep_image(full: &MenuImage, panel: CellRect, k: Option<u8>) -> MenuImag
     for y in y0..=y1.min(full.h - 1) {
         for x in x0..=x1.min(full.w - 1) {
             if panel_step(panel, x, y) > k {
-                out.set(x, y, DIM);
+                out.set(x, y, hidden);
             }
         }
     }
