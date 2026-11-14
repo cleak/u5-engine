@@ -62,6 +62,8 @@ pub mod endgame_narrative_frame;
 pub mod endgame_tableau_frame;
 pub mod endmsg_io;
 pub mod enhancements;
+// The slot save's read of a save image (Phase B design 3.3.5).
+pub use enhancements::{SaveImageSummary, save_image_summary};
 pub mod equipment;
 pub mod fire_flicker;
 pub mod fonts_io;

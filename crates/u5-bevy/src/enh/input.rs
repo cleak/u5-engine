@@ -38,6 +38,12 @@
 //! left alone: they map to no byte, and the game must see them as they are
 //! when the overlay closes. Keys held when an overlay opens or closes are
 //! ignored until released.
+//!
+//! **Swallowing.** While the menu's slot save holds the synthetic-key token
+//! ([`SyntheticOwner::MenuSlotSave`], chapter 3.3.5 step 5) the router
+//! resets every key as in modal input but sends nothing: no key reaches the
+//! game, an overlay or a hotkey until the save has finished. Keys held
+//! when it starts or ends are latched in the same way.
 
 use std::collections::{HashMap, HashSet};
 use std::fmt;
@@ -49,6 +55,7 @@ use bevy::prelude::*;
 use u5_runtime::enhancements::{CHEATS_SWITCH, FeatureToggles, KeyBindings, Toggle};
 
 use super::EnhSet;
+use super::synthetic::{SyntheticInputOwner, SyntheticOwner};
 use crate::{
     VisualState, key_code_to_input_byte, key_code_to_line_input_byte, keys_pressed_in_typed_order,
 };
@@ -674,6 +681,7 @@ pub(crate) fn enh_input_router(
     keymap: Res<KeyMap>,
     mut latch: ResMut<KeyLatch>,
     visual: Option<Res<VisualState>>,
+    synthetic: Option<Res<SyntheticInputOwner>>,
     mut actions: EventWriter<EnhActionEvent>,
     mut overlay_keys: EventWriter<OverlayKey>,
     mut overlay_text: EventWriter<OverlayText>,
@@ -688,16 +696,20 @@ pub(crate) fn enh_input_router(
         latch.down.clear();
         latch.held.clear();
     }
-    // An overlay opened or closed since the last run: what is held now is
-    // ignored until released.
-    if latch.modal != latch.was_modal {
+    // The menu's slot save types for the player: every key is swallowed.
+    let swallowing =
+        synthetic.is_some_and(|owner| owner.holder() == Some(SyntheticOwner::MenuSlotSave));
+    let modal = latch.modal || swallowing;
+    // An overlay opened or closed, or a save started or ended, since the
+    // last run: what is held now is ignored until released.
+    if modal != latch.was_modal {
         latch.held = latch
             .down
             .iter()
             .copied()
             .filter(|key| !is_modifier(*key))
             .collect();
-        latch.was_modal = latch.modal;
+        latch.was_modal = modal;
     }
     let mut frame = FrameKeys::default();
     if let Some(events) = key_events.as_deref() {
@@ -746,8 +758,9 @@ pub(crate) fn enh_input_router(
             .map_or(held, |at_press| held.or(*at_press))
     };
 
-    if latch.modal {
-        for key in &typed {
+    if modal {
+        let send = !swallowing;
+        for key in typed.iter().filter(|_| send) {
             if !is_modifier(*key) && !frame.ignored.contains(key) && !latch.held.contains(key) {
                 let mods = mods_of(*key);
                 overlay_keys.write(OverlayKey {
@@ -759,7 +772,7 @@ pub(crate) fn enh_input_router(
         }
         // A Ctrl or Alt chord is a command, not text, whatever the layout
         // made of it.
-        for (ch, mods) in &frame.text {
+        for (ch, mods) in frame.text.iter().filter(|_| send) {
             let mods = mods.or(held);
             if !mods.ctrl && !mods.alt {
                 overlay_text.write(OverlayText(*ch));

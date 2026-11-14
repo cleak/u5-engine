@@ -325,6 +325,8 @@ pub const CHEATS_GROUP: &str = "Cheats (changes thy game)";
 
 /// F12 away from the command prompt.
 pub const OPENS_AT_PROMPT: &str = "The menu opens at the command prompt.";
+/// A slot save is under way: the menu typed `Q` and waits for the game.
+pub const SAVING: &str = "Saving...";
 /// A slot save finished; `{}` is the slot's name.
 pub const SAVED_TO: &str = "Saved to \"{}\".";
 /// The Q save failed.

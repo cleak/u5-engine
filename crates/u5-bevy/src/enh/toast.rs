@@ -31,6 +31,7 @@ use bevy::render::render_resource::{Extent3d, TextureDimension, TextureFormat};
 use u5_runtime::{CH_CELL_SIDE, FixedCellFont};
 
 use super::EnhSet;
+use super::present::PresentHost;
 use super::side::{PanelSide, SideLayout};
 use crate::{VISUAL_PLAY_FRAME_HEIGHT, VISUAL_PLAY_FRAME_WIDTH, VisualState, fitted_display_size};
 
@@ -192,8 +193,8 @@ pub struct ToastStrip {
 }
 
 /// Where the strip sits, in logical window pixels. One text row of the
-/// frame high, in the frame's cell size, and in the window margin when one
-/// exists (1.3.7):
+/// picture high, in the picture's cell size, and in the window margin when
+/// one exists (1.3.7):
 ///
 /// 1. the band above the frame, when a row fits there, centred on the
 ///    frame;
@@ -204,23 +205,48 @@ pub struct ToastStrip {
 /// A line wider than the frame shrinks to the frame's width. The frame is
 /// where [`SideLayout`] puts it while it owns the frame, otherwise the
 /// fitted 4:3 frame in the middle of the window.
+#[cfg(test)]
 pub(crate) fn toast_strip_rect(window: Vec2, layout: Option<&SideLayout>, cells: usize) -> Rect {
-    let frame = layout.and_then(|layout| layout.frame).unwrap_or_else(|| {
-        let size = fitted_display_size(VISUAL_PLAY_FRAME_WIDTH, VISUAL_PLAY_FRAME_HEIGHT, window);
-        Rect::from_center_size(window / 2.0, size)
-    });
-    let cell = Vec2::new(
-        frame.width() / FRAME_COLUMNS as f32,
-        frame.height() / FRAME_ROWS as f32,
-    );
+    toast_strip_rect_on(window, layout, None, cells)
+}
+
+/// [`toast_strip_rect`] over the picture the window shows: `picture` is the
+/// presented frame sprite's rectangle and its image's size in pixels (the
+/// 320x200 frame, or the grow-left canvas). The strip takes that picture's
+/// cell size, and over the frame or in the band it starts on a whole cell
+/// of the picture's grid, so its text lines up with the game's (M4-10).
+pub(crate) fn toast_strip_rect_on(
+    window: Vec2,
+    layout: Option<&SideLayout>,
+    picture: Option<(Rect, UVec2)>,
+    cells: usize,
+) -> Rect {
+    let (frame, columns, rows) = match picture {
+        Some((rect, size)) if size.x >= CH_CELL_SIDE as u32 && size.y >= CH_CELL_SIDE as u32 => (
+            rect,
+            size.x / CH_CELL_SIDE as u32,
+            size.y / CH_CELL_SIDE as u32,
+        ),
+        _ => {
+            let frame = layout.and_then(|layout| layout.frame).unwrap_or_else(|| {
+                let size =
+                    fitted_display_size(VISUAL_PLAY_FRAME_WIDTH, VISUAL_PLAY_FRAME_HEIGHT, window);
+                Rect::from_center_size(window / 2.0, size)
+            });
+            (frame, FRAME_COLUMNS, FRAME_ROWS)
+        }
+    };
+    let cell = Vec2::new(frame.width() / columns as f32, frame.height() / rows as f32);
     let natural = Vec2::new(cell.x * cells.max(1) as f32, cell.y);
     let size = natural * (frame.width() / natural.x).min(1.0);
     let at = |top_left: Vec2| Rect::from_corners(top_left, top_left + size);
+    // Centred on the frame, on a whole cell of its grid.
+    let centred_x = {
+        let spare = (columns as usize).saturating_sub(cells.max(1));
+        frame.min.x + (spare / 2) as f32 * cell.x
+    };
     if frame.min.y >= size.y {
-        return at(Vec2::new(
-            frame.center().x - size.x / 2.0,
-            frame.min.y - size.y,
-        ));
+        return at(Vec2::new(centred_x, frame.min.y - size.y));
     }
     let granted = |side: PanelSide| {
         layout.is_some_and(|layout| {
@@ -239,7 +265,7 @@ pub(crate) fn toast_strip_rect(window: Vec2, layout: Option<&SideLayout>, cells:
             return at(Vec2::new((from + to - size.x) / 2.0, frame.min.y));
         }
     }
-    at(Vec2::new(frame.center().x - size.x / 2.0, frame.min.y))
+    at(Vec2::new(centred_x, frame.min.y))
 }
 
 /// The strip's pixels: `text` in the frame's own font, one cell per byte,
@@ -300,16 +326,34 @@ fn place(node: &mut Node, rect: Rect) {
 /// follows the window size every frame. It reads the play frame's font, so
 /// nothing draws before gameplay; the title layer brings its own font with
 /// chapter 3.
+#[allow(clippy::too_many_arguments)]
 fn draw_toast(
     mut commands: Commands,
     toasts: Res<Toasts>,
     visual: Option<Res<VisualState>>,
     layout: Option<Res<SideLayout>>,
+    present: Option<Res<PresentHost>>,
     windows: Query<&Window>,
+    sprites: Query<(&Sprite, &Transform)>,
     mut images: ResMut<Assets<Image>>,
     mut strips: Query<(Entity, &ToastStrip, &mut Node)>,
 ) {
     let layout = layout.as_deref();
+    // The picture the window shows: the presented canvas or frame sprite.
+    let picture = windows.single().ok().and_then(|window| {
+        let presented = present.as_deref().and_then(PresentHost::presented);
+        let faithful = visual.as_deref().map(|visual| &visual.image_handle);
+        let (sprite, transform) = sprites.iter().find(|(sprite, _)| {
+            Some(&sprite.image) == presented || Some(&sprite.image) == faithful
+        })?;
+        let size = sprite.custom_size? * transform.scale.truncate();
+        let centre = Vec2::new(
+            window.resolution.width() / 2.0 + transform.translation.x,
+            window.resolution.height() / 2.0 - transform.translation.y,
+        );
+        let pixels = images.get(&sprite.image)?.size();
+        Some((Rect::from_center_size(centre, size), pixels))
+    });
     let showing = toasts.current();
     let window = windows
         .single()
@@ -319,7 +363,10 @@ fn draw_toast(
     for (entity, strip, mut node) in &mut strips {
         match (showing, window) {
             (Some(text), Some(window)) if text == strip.text.as_str() && !drawn => {
-                place(&mut node, toast_strip_rect(window, layout, text.len()));
+                place(
+                    &mut node,
+                    toast_strip_rect_on(window, layout, picture, text.len()),
+                );
                 drawn = true;
             }
             _ => commands.entity(entity).despawn(),
@@ -333,7 +380,10 @@ fn draw_toast(
     };
     let image = images.add(strip_image(&visual.text_font, text));
     let mut node = Node::default();
-    place(&mut node, toast_strip_rect(window, layout, text.len()));
+    place(
+        &mut node,
+        toast_strip_rect_on(window, layout, picture, text.len()),
+    );
     commands.spawn((
         Name::new("enh toast"),
         ToastStrip {

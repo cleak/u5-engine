@@ -398,3 +398,49 @@ fn nothing_draws_without_a_window() {
     assert!(strips(&mut app).is_empty());
     assert_eq!(showing(&app).as_deref(), Some(REFUSED));
 }
+
+#[test]
+fn the_strip_takes_the_pictures_cells_and_sits_on_its_grid() {
+    // 4:3, 1600x1200: a 9-cell line over the frame starts on cell 15, not
+    // at 15.5 cells.
+    let window = Vec2::new(1600.0, 1200.0);
+    let frame = Rect::from_corners(Vec2::ZERO, window);
+    let rect = toast_strip_rect_on(window, None, Some((frame, UVec2::new(320, 200))), 9);
+    assert_near(
+        rect.min,
+        Vec2::new(15.0 * 40.0, 0.0),
+        "4:3 corner on the grid",
+    );
+    assert_near(rect.size(), Vec2::new(9.0 * 40.0, 48.0), "4:3 size");
+
+    // A grow-left canvas, 512x240 at 5x in a 2560x1440 window: the strip
+    // takes the canvas's cell (the 320x200 frame's would be larger), sits
+    // in the band above it and starts on a whole canvas cell.
+    let canvas = Rect::from_center_size(window_centre(2560.0, 1440.0), Vec2::new(2560.0, 1200.0));
+    let rect = toast_strip_rect_on(
+        Vec2::new(2560.0, 1440.0),
+        None,
+        Some((canvas, UVec2::new(512, 240))),
+        9,
+    );
+    let cell = 2560.0 / 64.0;
+    assert_near(
+        rect.size(),
+        Vec2::new(9.0 * cell, 1200.0 / 30.0),
+        "canvas size",
+    );
+    let offset = (rect.min.x - canvas.min.x) / cell;
+    assert!(
+        (offset - offset.round()).abs() < 1e-3,
+        "on the canvas grid: {offset}"
+    );
+    assert_near(
+        rect.min,
+        Vec2::new(canvas.min.x + 27.0 * cell, canvas.min.y - cell),
+        "canvas corner, in the band",
+    );
+}
+
+fn window_centre(w: f32, h: f32) -> Vec2 {
+    Vec2::new(w, h) / 2.0
+}

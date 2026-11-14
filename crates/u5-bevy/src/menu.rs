@@ -43,6 +43,11 @@
 //!   and `FocusMutePlugin`, each added by its own 3.4.2 condition (they
 //!   work without the overlay), so the Audio tab's rows apply at once.
 //!
+//! - M4-10 adds the slot save's handshake ([`inject`]): the predicate that
+//!   enables Save, the `Q`-then-`Y` typing through the synthetic-key owner,
+//!   the check of the working save and the thumbnail ([`thumb`]). It is in
+//!   the app only with named slots and a slot store.
+//!
 //! The world stays Live (U1): the menu acts on the game only through the
 //! overlay model, which hands keys back on close with held keys latched.
 
@@ -50,10 +55,12 @@ pub mod audio;
 pub mod frame;
 pub mod geometry;
 pub mod host;
+pub mod inject;
 pub mod pages;
 pub mod render;
 pub mod settings;
 pub mod text;
+pub mod thumb;
 
 use std::collections::VecDeque;
 
@@ -69,6 +76,7 @@ use crate::enh::overlay::{
     OverlayChanged, OverlayId, OverlayRequest, OverlayState, apply_overlay_requests,
     close_when_not_idle,
 };
+use crate::enh::synthetic::SyntheticInputOwner;
 use crate::enh::toast::Toasts;
 use crate::enh::{
     EnhLaunch, EnhSet, LiveSettings, PendingSettingChanges, PendingToggleChanges,
@@ -150,6 +158,9 @@ impl Plugin for MenuPlugin {
                 .chain()
                 .in_set(EnhSet::Present),
         );
+        if self.slots {
+            inject::install_slot_save(app);
+        }
         if !self.script.is_empty() {
             app.insert_resource(MenuScript(self.script.iter().copied().collect()))
                 .add_systems(
@@ -227,7 +238,7 @@ pub(crate) fn snapshot(shell: &MenuShell, doors: &MenuDoors) -> ShellSnapshot {
     ShellSnapshot {
         intro_shell: shell.intro_shell,
         slots: shell.slots,
-        // `save_command_available` arrives with the Save page (M4-10).
+        // Filled from the game by `full_snapshot` (M4-10).
         save_available: false,
         doors: doors.0.clone(),
         settings: Default::default(),
@@ -245,6 +256,7 @@ pub(crate) struct SnapshotInputs<'w> {
     toggles: Option<Res<'w, PendingToggleChanges>>,
     settings: Option<Res<'w, PendingSettingChanges>>,
     visual: Option<Res<'w, VisualState>>,
+    owner: Option<Res<'w, SyntheticInputOwner>>,
 }
 
 impl SnapshotInputs<'_> {
@@ -258,6 +270,7 @@ impl SnapshotInputs<'_> {
             self.toggles.as_deref(),
             self.settings.as_deref(),
             self.visual.as_deref(),
+            self.owner.as_deref(),
         )
     }
 }
@@ -273,9 +286,11 @@ pub(crate) fn world_snapshot(world: &World) -> ShellSnapshot {
         world.get_resource::<PendingToggleChanges>(),
         world.get_resource::<PendingSettingChanges>(),
         world.get_resource::<VisualState>(),
+        world.get_resource::<SyntheticInputOwner>(),
     )
 }
 
+#[allow(clippy::too_many_arguments)]
 fn full_snapshot(
     shell: &MenuShell,
     doors: &MenuDoors,
@@ -284,8 +299,13 @@ fn full_snapshot(
     toggles: Option<&PendingToggleChanges>,
     settings: Option<&PendingSettingChanges>,
     visual: Option<&VisualState>,
+    owner: Option<&SyntheticInputOwner>,
 ) -> ShellSnapshot {
     let mut snap = snapshot(shell, doors);
+    // The menu is open only at the idle exploration prompt, so `can_save`'s
+    // idle half holds while the pages are built (3.2.2).
+    snap.save_available = visual
+        .is_some_and(|visual| owner.is_some_and(|owner| inject::can_save(visual, owner, true)));
     if let (Some(live), Some(launch), Some(toggles), Some(settings)) =
         (live, launch, toggles, settings)
     {
@@ -458,3 +478,6 @@ mod review_tests;
 
 #[cfg(test)]
 mod pages_settings_tests;
+
+#[cfg(test)]
+mod inject_review_tests;

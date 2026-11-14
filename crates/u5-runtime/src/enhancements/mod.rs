@@ -46,6 +46,9 @@
 //! - [`idle`]: the idle-prompt predicate's runtime half,
 //!   [`PlayState::idle_command_prompt`](crate::PlayState::idle_command_prompt)
 //!   (design 1.3.7).
+//! - [`save`]: the slot save's two reads,
+//!   [`PlayState::save_command_available`](crate::PlayState::save_command_available)
+//!   and [`save_image_summary`] (design 3.3.4, 3.3.5).
 //! - [`sidecar`]: per-save sidecars: the [`SaveWatcher`] that detects a save
 //!   from outside the runtime and its [`SaveStamp`] (design 1.3.9), and the
 //!   [`SidecarStore`] that keeps each feature's file beside the save, with
@@ -66,6 +69,7 @@ pub mod matrix;
 pub mod menu;
 pub mod page;
 pub mod resolve;
+pub mod save;
 pub mod sidecar;
 pub mod source;
 pub mod sprite_mask;
@@ -114,6 +118,7 @@ pub use resolve::{
     CHEATS_SWITCH, KeyBindings, PRESET_KEY, PresetLabel, ResolveInput, ResolvedEnhancements,
     SettingValues, checked_value, resolve, resolve_as_shipped,
 };
+pub use save::{SaveImageSummary, save_image_summary};
 pub use sidecar::{
     CONTAINER_MAGIC, CONTAINER_VERSION, Container, ContainerError, Freshness,
     SAVE_META_PAYLOAD_VERSION, SIDECAR_DIR, SIDECAR_FILES, SIDECAR_KEYS, SaveMeta, SaveStamp,

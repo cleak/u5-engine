@@ -41,14 +41,14 @@ use crate::enh::equivalence::{Owner, Scene, Shell, Timeline};
 use crate::enh::present::PresentHost;
 use bevy::prelude::*;
 
-fn save_png(path: &Path, w: u32, h: u32, rgba: &[u8]) {
+pub(super) fn save_png(path: &Path, w: u32, h: u32, rgba: &[u8]) {
     image::RgbaImage::from_raw(w, h, rgba.to_vec())
         .unwrap()
         .save(path)
         .unwrap();
 }
 
-fn scaled(w: u32, h: u32, rgba: &[u8], k: u32) -> Vec<u8> {
+pub(super) fn scaled(w: u32, h: u32, rgba: &[u8], k: u32) -> Vec<u8> {
     let mut out = Vec::with_capacity((w * h * k * k * 4) as usize);
     for y in 0..h * k {
         for x in 0..w * k {
@@ -59,7 +59,7 @@ fn scaled(w: u32, h: u32, rgba: &[u8], k: u32) -> Vec<u8> {
     out
 }
 
-fn crop(
+pub(super) fn crop(
     w: u32,
     h: u32,
     rgba: &[u8],
@@ -76,14 +76,14 @@ fn crop(
     (cw, ch, out)
 }
 
-struct Case {
-    label: &'static str,
-    window: (u32, u32),
-    grow: bool,
-    column: bool,
+pub(super) struct Case {
+    pub(super) label: &'static str,
+    pub(super) window: (u32, u32),
+    pub(super) grow: bool,
+    pub(super) column: bool,
 }
 
-const CASES: [Case; 5] = [
+pub(super) const CASES: [Case; 5] = [
     Case {
         label: "43-1600x1200",
         window: (1600, 1200),
@@ -116,7 +116,7 @@ const CASES: [Case; 5] = [
     },
 ];
 
-fn launch(grow: bool) -> VisualLaunchConfig {
+pub(super) fn launch(grow: bool) -> VisualLaunchConfig {
     let cli: Vec<CliSetting> = if grow {
         vec![CliSetting::Enable("display.grow_left".into())]
     } else {
@@ -137,7 +137,7 @@ fn launch(grow: bool) -> VisualLaunchConfig {
 
 /// The picture the window shows under the menu: the presented image, or
 /// the faithful frame without a pipeline.
-fn game_picture(shell: &Shell) -> (UVec2, Vec<u8>) {
+pub(super) fn game_picture(shell: &Shell) -> (UVec2, Vec<u8>) {
     let world = shell.app.world();
     let handle = world
         .get_resource::<PresentHost>()
@@ -164,7 +164,7 @@ fn menu_picture(shell: &mut Shell) -> (Option<(UVec2, Vec<u8>)>, bool) {
 
 /// The picture as the window shows it: the game, the backdrop's dim, the
 /// menu over both.
-fn composed(shell: &mut Shell) -> (u32, u32, Vec<u8>) {
+pub(super) fn composed(shell: &mut Shell) -> (u32, u32, Vec<u8>) {
     let (mut size, mut game) = game_picture(shell);
     let (menu, backdrop) = menu_picture(shell);
     // A prescaled presentation (`scale_mode = sharp`) shows the canvas
@@ -208,7 +208,7 @@ fn composed(shell: &mut Shell) -> (u32, u32, Vec<u8>) {
 /// The whole window as the nodes place it: black, the frame sprite
 /// sampled nearest over its rectangle, the backdrop over everything and
 /// the menu node over the sprite's rectangle.
-fn window_shot(shell: &mut Shell) -> (u32, u32, Vec<u8>) {
+pub(super) fn window_shot(shell: &mut Shell) -> (u32, u32, Vec<u8>) {
     let (size, game) = game_picture(shell);
     let (menu, backdrop) = menu_picture(shell);
     let world = shell.app.world_mut();
@@ -233,6 +233,23 @@ fn window_shot(shell: &mut Shell) -> (u32, u32, Vec<u8>) {
             px(node.left) + px(node.width),
             px(node.top) + px(node.height),
         ));
+    }
+    let mut toast = None;
+    let mut strips =
+        world.query_filtered::<(&ImageNode, &Node), With<crate::enh::toast::ToastStrip>>();
+    if let Some((image, node)) = strips.iter(world).next() {
+        let px = |v: Val| match v {
+            Val::Px(px) => px,
+            _ => panic!(),
+        };
+        let rect = Rect::new(
+            px(node.left),
+            px(node.top),
+            px(node.left) + px(node.width),
+            px(node.top) + px(node.height),
+        );
+        let image = world.resource::<Assets<Image>>().get(&image.image).unwrap();
+        toast = Some((rect, image.size(), image.data.clone().unwrap()));
     }
     let (ww, wh) = (
         window.resolution.physical_width(),
@@ -269,6 +286,16 @@ fn window_shot(shell: &mut Shell) -> (u32, u32, Vec<u8>) {
                 && src != CLEAR
             {
                 blend(&mut pixel, src);
+            }
+            // The toast strip is the top node (M4-10 shots show it).
+            if let Some((r, tsize, rgba)) = toast.as_ref() {
+                let (lx, ly) = ((x as f32 + 0.5) / scale, (y as f32 + 0.5) / scale);
+                if r.contains(Vec2::new(lx, ly)) {
+                    let u = (((lx - r.min.x) / r.width()) * tsize.x as f32) as u32;
+                    let v = (((ly - r.min.y) / r.height()) * tsize.y as f32) as u32;
+                    let i = ((v.min(tsize.y - 1) * tsize.x + u.min(tsize.x - 1)) * 4) as usize;
+                    pixel = [rgba[i], rgba[i + 1], rgba[i + 2], 0xff];
+                }
             }
             out.extend_from_slice(&pixel);
         }
