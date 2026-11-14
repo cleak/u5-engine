@@ -695,3 +695,133 @@ fn window_systems_are_absent_while_the_window_keys_are_default() {
         );
     }
 }
+
+// --- The vsync row with the menu (M4-08). --------------------------------
+
+/// A launch with the menu overlay, resolved with chapter 3's Phase 1 rows
+/// shipped (they ship in M4-13), plus `cli`.
+fn menu_launch(cli: &[CliSetting]) -> VisualLaunchConfig {
+    let mut all = vec![CliSetting::Enable("menu.overlay".into())];
+    all.extend_from_slice(cli);
+    VisualLaunchConfig {
+        enhancements: resolve_as_shipped(
+            ResolveInput {
+                stored: None,
+                cli: &all,
+                lock: LockState::Off,
+                caps: HostCapabilities::ALL,
+            },
+            &[u5_runtime::enhancements::MENU_P1],
+        ),
+        ..VisualLaunchConfig::classic()
+    }
+}
+
+/// When the window was last written.
+fn window_changed_at(shell: &mut Shell) -> bevy::ecs::component::Tick {
+    let world = shell.app.world_mut();
+    let mut windows = world.query::<(Entity, &Window)>();
+    let (window, _) = windows.single(world).unwrap();
+    world
+        .entity(window)
+        .get_change_ticks::<Window>()
+        .unwrap()
+        .changed
+}
+
+/// The menu changes `display.vsync` as a row does.
+fn choose_vsync(shell: &mut Shell, on: bool) {
+    let world = shell.app.world_mut();
+    let mut toggles = world
+        .remove_resource::<crate::enh::PendingToggleChanges>()
+        .unwrap();
+    let mut settings = world
+        .remove_resource::<crate::enh::PendingSettingChanges>()
+        .unwrap();
+    crate::enh::queue_setting_change(
+        "display.vsync",
+        u5_runtime::enhancements::SettingValue::Bool(on),
+        &mut toggles,
+        &mut settings,
+    );
+    world.insert_resource(toggles);
+    world.insert_resource(settings);
+    shell.step(&[]);
+}
+
+#[test]
+fn the_menu_brings_the_window_wish_and_leaves_the_default_window_alone() {
+    let launch = menu_launch(&[]);
+    assert!(launch.enhancements.toggles.on(Toggle::MenuOverlay));
+    let mut shell = windowed_shell(&launch);
+    assert_eq!(
+        shell.app.world().resource::<WindowWish>(),
+        &WindowWish {
+            fullscreen: false,
+            vsync: true
+        }
+    );
+    let opened = window_changed_at(&mut shell);
+    for _ in 0..10 {
+        shell.step(&[]);
+    }
+    assert_eq!(
+        window_mode(&mut shell),
+        (WindowMode::Windowed, PresentMode::Fifo)
+    );
+    assert_eq!(
+        window_changed_at(&mut shell),
+        opened,
+        "the default window is never written"
+    );
+    // A change of another display row does not write it either.
+    let mut settings = shell.app.world().resource::<Display>().0.clone();
+    settings.scale_mode = ScaleMode::Stretch;
+    shell.app.world_mut().insert_resource(Display(settings));
+    shell.step(&[]);
+    assert_eq!(window_changed_at(&mut shell), opened);
+}
+
+#[test]
+fn the_vsync_row_applies_at_once_as_fifo_or_auto_no_vsync() {
+    let mut shell = windowed_shell(&menu_launch(&[]));
+    shell.step(&[]);
+    choose_vsync(&mut shell, false);
+    assert_eq!(
+        window_mode(&mut shell),
+        (WindowMode::Windowed, PresentMode::AutoNoVsync),
+        "off: the next frame"
+    );
+    choose_vsync(&mut shell, true);
+    assert_eq!(
+        window_mode(&mut shell),
+        (WindowMode::Windowed, PresentMode::Fifo)
+    );
+    // Launched with vsync off, the menu turns it back on.
+    let mut shell = windowed_shell(&menu_launch(&[CliSetting::Disable("display.vsync".into())]));
+    shell.step(&[]);
+    assert_eq!(window_mode(&mut shell).1, PresentMode::AutoNoVsync);
+    choose_vsync(&mut shell, true);
+    assert_eq!(window_mode(&mut shell).1, PresentMode::Fifo);
+}
+
+#[test]
+fn without_the_menu_or_a_window_key_there_is_no_window_wish() {
+    for launch in [
+        VisualLaunchConfig::classic(),
+        shipped_launch(&[set("display.scale_mode", "sharp")]),
+        menu_launch(&[CliSetting::Disable("menu.overlay".into())]),
+    ] {
+        let shell = shell(&launch, |_| {});
+        assert!(!shell.app.world().contains_resource::<WindowWish>());
+    }
+    // The parity lock forces the default even with the menu asked for.
+    let mut locked = menu_launch(&[CliSetting::Disable("display.vsync".into())]);
+    locked.enhancements.lock = LockState::Locked(LockReason::QaEnv);
+    let shell = shell(&locked, |_| {});
+    assert!(!shell.app.world().contains_resource::<WindowWish>());
+    assert_eq!(
+        initial_window(window_1_0_1(), &locked).present_mode,
+        PresentMode::Fifo
+    );
+}

@@ -13,3 +13,8 @@ u5-runtime = { workspace = true }
 u5-automap = { workspace = true }
 bevy = { workspace = true }
 image = { workspace = true }
+
+[dev-dependencies]
+# An idle sink for the output-gain tests (M4-08); the version Bevy's audio
+# already uses, so nothing new is built.
+rodio = { version = "0.20", default-features = false }

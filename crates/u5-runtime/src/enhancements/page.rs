@@ -801,22 +801,33 @@ pub fn catalogue_apply(key: &str) -> ApplyAt {
 ///
 /// - the scale policy and pixel shape: a launch away from the faithful
 ///   fit (either of them, or the grow-left canvas);
-/// - the window keys: a launch with one of them on, until M4-08 installs
-///   the window wish with the menu; the F11 key only with itself on;
+/// - the window keys (fullscreen and vsync): a launch with one of them on,
+///   or with the menu overlay, which installs the window wish (M4-08,
+///   3.3.8); the F11 key only with itself on;
+/// - the output gain (volume and the player's mute): `VolumePlugin`'s
+///   condition (3.4.2), the overlay or either of them, or focus mute,
+///   which brings it;
+/// - focus mute: `FocusMutePlugin`'s condition, itself or the overlay;
 /// - the grow-left layout: only with itself on;
 /// - every other feature: on at launch, or installed dormant
 ///   ([`dormant_install`]).
 pub fn installed_at_launch(feature: Toggle, launch: FeatureToggles) -> bool {
     use Toggle::*;
+    let any = |set: &[Toggle]| set.iter().any(|t| launch.on(*t));
     match feature {
         DisplayScaleMode | DisplayPixelAspect => {
-            [DisplayScaleMode, DisplayPixelAspect, DisplayGrowLeft]
-                .iter()
-                .any(|t| launch.on(*t))
+            any(&[DisplayScaleMode, DisplayPixelAspect, DisplayGrowLeft])
         }
-        DisplayFullscreen | DisplayVsync => [DisplayFullscreen, DisplayFullscreenKey, DisplayVsync]
-            .iter()
-            .any(|t| launch.on(*t)),
+        DisplayFullscreen | DisplayVsync => any(&[
+            DisplayFullscreen,
+            DisplayFullscreenKey,
+            DisplayVsync,
+            MenuOverlay,
+        ]),
+        AudioVolume | AudioMuted => {
+            any(&[MenuOverlay, AudioVolume, AudioMuted, AudioMuteOnFocusLoss])
+        }
+        AudioMuteOnFocusLoss => any(&[MenuOverlay, AudioMuteOnFocusLoss]),
         _ => launch.on(feature) || dormant_install(launch, feature),
     }
 }

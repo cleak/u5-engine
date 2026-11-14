@@ -39,9 +39,14 @@
 //!   the frame sprite, a full-window dim under it, and the open and close
 //!   sweep.
 //!
+//! - M4-08 adds the output gain and focus mute ([`audio`]): `VolumePlugin`
+//!   and `FocusMutePlugin`, each added by its own 3.4.2 condition (they
+//!   work without the overlay), so the Audio tab's rows apply at once.
+//!
 //! The world stays Live (U1): the menu acts on the game only through the
 //! overlay model, which hands keys back on close with held keys latched.
 
+pub mod audio;
 pub mod frame;
 pub mod geometry;
 pub mod host;

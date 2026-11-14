@@ -9,7 +9,9 @@
 //! - borderless fullscreen and F11 (M1-03): [`WindowWish`], flipped by the
 //!   router's `ToggleFullscreen` and put on the window by
 //!   `apply_window_mode`, present only while `fullscreen`, `fullscreen_key`
-//!   or `vsync` is away from its default;
+//!   or `vsync` is away from its default, or the menu overlay is on (M4-08:
+//!   its vsync row applies at once; the window is written only when it
+//!   differs from the wish);
 //! - [`DisplayPlugin`], added inside the foundation's
 //!   [`EnhancementsPlugin`](crate::EnhancementsPlugin) only when a display
 //!   toggle is on at launch or the menu overlay is on (so the menu could
@@ -116,7 +118,7 @@ impl Plugin for DisplayPlugin {
         // register here, each only when its setting asks for it and in an
         // `EnhSet`, as their packages land (2.3.4).
         scale::add_scale(app, &self.settings);
-        add_window_mode(app, &self.settings);
+        add_window_mode(app, &self.settings, menu);
         fill::add_fill(app, &self.settings, self.bezel_updates.clone());
         grow::add_grow(app, &self.settings);
         // Chapter 9 (D-M2.2): the `[brightness]` and `[composite]` steps.
@@ -154,7 +156,8 @@ pub(crate) fn live_display(
 /// The window the session wants: borderless fullscreen or not (the
 /// `display.fullscreen` setting, flipped by F11 for the session), and vsync.
 /// Exists only while a window key is away from its default
-/// ([`window_keys_on`]).
+/// ([`window_keys_on`]) or the menu overlay is on (M4-08, 3.3.8), so the
+/// menu's vsync and fullscreen rows apply at once.
 #[derive(Resource, Clone, Copy, Debug, PartialEq, Eq)]
 pub struct WindowWish {
     pub fullscreen: bool,
@@ -195,11 +198,14 @@ pub fn window_keys_on(settings: &DisplaySettings) -> bool {
     settings.fullscreen || settings.fullscreen_key || !settings.vsync
 }
 
-/// The window systems (2.3.4), only for a window key away from its default:
-/// `follow_window_settings` and `apply_window_mode` in `EnhSet::Apply`, and
-/// `display_actions` for F11 while the router sends actions.
-fn add_window_mode(app: &mut App, settings: &DisplaySettings) {
-    if !window_keys_on(settings) {
+/// The window systems (2.3.4), only for a window key away from its default
+/// or with the menu overlay (`menu`, M4-08: its vsync row applies at once,
+/// 3.3.8): `follow_window_settings` and `apply_window_mode` in
+/// `EnhSet::Apply`, and `display_actions` for F11 while the router sends
+/// actions. `apply_window_mode` writes only a field that differs from the
+/// wish, so with every key at its default the window is never written.
+fn add_window_mode(app: &mut App, settings: &DisplaySettings, menu: bool) {
+    if !window_keys_on(settings) && !menu {
         return;
     }
     app.insert_resource(WindowWish::of(settings));
@@ -224,6 +230,8 @@ fn add_window_mode(app: &mut App, settings: &DisplaySettings) {
             apply_window_mode.run_if(resource_changed::<WindowWish>),
         )
             .chain()
+            // A change in the menu reaches the window in the same frame.
+            .after(follow_live_settings)
             .in_set(EnhSet::Apply),
     );
 }

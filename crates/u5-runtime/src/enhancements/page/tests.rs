@@ -239,7 +239,7 @@ fn the_dormant_features_apply_in_play_only_with_the_menu() {
             Toggle::DisplaySpriteComposite,
             Toggle::GemMapEnhanced,
         ],
-        "D-M4.4's list; the window wish and audio join in M4-08"
+        "D-M4.4's list; the window wish and audio follow their own conditions (M4-08)"
     );
     for toggle in DORMANT_WITH_MENU {
         assert!(dormant_install(menu_only(), *toggle));
@@ -276,17 +276,47 @@ fn keys_read_at_launch_and_next_launch_rows_never_apply_in_play() {
 }
 
 #[test]
-fn the_window_keys_need_a_window_key_at_launch_until_m4_08() {
-    assert_eq!(
-        effective_apply("display.vsync", menu_only()),
-        ApplyAt::NextLaunch
-    );
-    let window = toggles(&[Toggle::MenuOverlay, Toggle::DisplayFullscreen]);
+fn the_window_keys_apply_at_once_with_the_menu() {
+    // M4-08: the menu installs the window wish, so vsync and fullscreen
+    // apply on the next frame.
+    for key in ["display.vsync", "display.fullscreen"] {
+        assert_eq!(effective_apply(key, menu_only()), ApplyAt::Frame, "{key}");
+        assert_eq!(
+            effective_apply(key, FeatureToggles::CLASSIC),
+            ApplyAt::NextLaunch,
+            "{key} without the menu"
+        );
+    }
+    let window = toggles(&[Toggle::DisplayFullscreen]);
     assert_eq!(effective_apply("display.vsync", window), ApplyAt::Frame);
     assert_eq!(
-        effective_apply("display.fullscreen_key", window),
+        effective_apply("display.fullscreen_key", menu_only()),
         ApplyAt::NextLaunch,
         "F11 needs its own binding at launch"
+    );
+}
+
+#[test]
+fn the_audio_rows_follow_their_plugins_conditions() {
+    // 3.4.2: `VolumePlugin` with the overlay, a volume, the mute or focus
+    // mute (which brings it); `FocusMutePlugin` with the overlay or itself.
+    for key in ["audio.volume", "audio.muted", "audio.mute_on_focus_loss"] {
+        assert_eq!(effective_apply(key, menu_only()), ApplyAt::Frame, "{key}");
+        assert_eq!(
+            effective_apply(key, FeatureToggles::CLASSIC),
+            ApplyAt::NextLaunch,
+            "{key} without the menu"
+        );
+    }
+    let focus = toggles(&[Toggle::AudioMuteOnFocusLoss]);
+    assert_eq!(effective_apply("audio.volume", focus), ApplyAt::Frame);
+    assert_eq!(effective_apply("audio.muted", focus), ApplyAt::Frame);
+    let muted = toggles(&[Toggle::AudioMuted]);
+    assert_eq!(effective_apply("audio.volume", muted), ApplyAt::Frame);
+    assert_eq!(
+        effective_apply("audio.mute_on_focus_loss", muted),
+        ApplyAt::NextLaunch,
+        "the gain alone does not bring focus mute"
     );
 }
 

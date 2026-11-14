@@ -4501,6 +4501,7 @@ version = "1.0.1"
 dependencies = [
  "bevy",
  "image",
+ "rodio",
  "u5-automap",
  "u5-runtime",
 ]

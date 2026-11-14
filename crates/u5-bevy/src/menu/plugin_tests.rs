@@ -731,21 +731,25 @@ fn the_off_census_finds_no_menu() {
     let (app, systems) = systems_of(&rest);
     assert!(app.is_plugin_added::<EnhancementsPlugin>());
     assert_no_menu(&app, "every other toggle");
+    // The audio plugins (M4-08) are their own toggles' (3.4.2), not the
+    // menu's: they live beside it and work without it.
     assert!(
-        systems.iter().all(|name| !name.contains("::menu::")),
+        systems
+            .iter()
+            .all(|name| !name.contains("::menu::") || name.contains("::menu::audio::")),
         "{systems:?}"
     );
 }
 
 /// The 3.4.2 table, row by row: each chapter 3 toggle alone, beside a
 /// stand-in toggle that brings only the foundation, adds only its own
-/// plugin. Of the table's plugins M4-04 builds `MenuPlugin`; the overlay
-/// also keeps the display chapter's plugin it has brought since M1 (its
-/// rows can change in play, 2.3.4, so it stands in for `VsyncPlugin`
-/// until M4-08) and the gem map's, installed dormant (M4-06, D-M4.4), and
-/// either menu toggle brings the
-/// router, the overlay model and the toasts the menu runs on. Every
-/// other chapter 3 toggle adds nothing yet.
+/// plugin. Of the table's plugins M4-04 builds `MenuPlugin` and M4-08
+/// `VolumePlugin` and `FocusMutePlugin` (their own census is in
+/// `audio_tests`); the overlay also keeps the display chapter's plugin it
+/// has brought since M1, whose window wish serves as `VsyncPlugin`
+/// (M4-08), and the gem map's, installed dormant (M4-06, D-M4.4), and
+/// either menu toggle brings the router, the overlay model and the toasts
+/// the menu runs on. Every other chapter 3 toggle adds nothing yet.
 #[test]
 fn each_chapter_3_toggle_alone_adds_only_its_own_plugin() {
     let stand_in = Toggle::EnhancementsFreezeOverlays;
@@ -773,8 +777,13 @@ fn each_chapter_3_toggle_alone_adds_only_its_own_plugin() {
                 "u5_bevy::enh::toast::",
                 "u5_bevy::menu::",
             ],
+            // `VolumePlugin` and `FocusMutePlugin` (M4-08).
+            Toggle::AudioVolume | Toggle::AudioMuted | Toggle::AudioMuteOnFocusLoss => {
+                &["u5_bevy::menu::audio::"]
+            }
             _ => &[],
         };
+        let audio_only = allowed == ["u5_bevy::menu::audio::"];
         for name in &added {
             let path = name.split_once(' ').map_or(name.as_str(), |(_, path)| path);
             assert!(
@@ -784,6 +793,9 @@ fn each_chapter_3_toggle_alone_adds_only_its_own_plugin() {
         }
         if allowed.is_empty() {
             assert!(added.is_empty(), "{toggle:?}: {added:?}");
+            assert_no_menu(&app, spec.key);
+        } else if audio_only {
+            assert!(!added.is_empty(), "{toggle:?}");
             assert_no_menu(&app, spec.key);
         } else {
             assert!(app.is_plugin_added::<MenuPlugin>(), "{toggle:?}");

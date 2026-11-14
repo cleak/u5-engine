@@ -43,6 +43,10 @@
 //!   `gem_map.enhanced` is on at launch.
 //! - The menu's plugin ([`crate::menu::MenuPlugin`]) is added only while
 //!   `menu.overlay` or `menu.title_layer` is on at launch.
+//! - The output gain and focus mute ([`crate::menu::audio`]) are added
+//!   only by their own conditions (design 3.4.2): the overlay, a volume
+//!   below 100 or the player's mute for the gain; focus mute or the
+//!   overlay for focus mute.
 //!
 //! The Bevy half of the trajectory-equivalence harness (`equivalence`,
 //! test-only) runs the real `--visual` app headless, feature on against
@@ -377,6 +381,7 @@ impl Plugin for EnhancementsPlugin {
             self.launch.save_dir.as_deref(),
         );
         crate::menu::add_menu(app, &self.launch);
+        crate::menu::audio::add_audio(app, &self.launch);
         gem_map::add_gem_map(app, &self.launch);
         crate::display::add_display(app, &self.launch);
     }
