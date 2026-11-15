@@ -6,7 +6,9 @@
 //! - the limits table, every value cited to the specification and reusing
 //!   the engine's own anchored constants, so the cheats and the game can
 //!   never disagree;
-//! - [`CheatEdit`] and [`apply_cheat_edit`], the quick actions;
+//! - [`CheatEdit`] and [`apply_cheat_edit`], the quick actions and the
+//!   Edit party and stores edits ([`MemberEdit`], [`StoresEdit`],
+//!   [`StoredStatus`]), with [`apply_cheat_edits`] for the page's Apply;
 //! - [`EngagedLocks`], [`StoreFields`], the `apply_*_lock` functions and
 //!   [`apply_locks`];
 //! - the slot-0 mirror-coherent stat setters;
@@ -137,8 +139,7 @@ pub const fn cheat_mana_target(class_byte: u8, intelligence: u8) -> Option<u8> {
 // The edit API (7.3.3).
 // ---------------------------------------------------------------------------
 
-/// A quick action (7.2.4). Edit party and stores adds its variants in
-/// M8-03.
+/// A quick action (7.2.4), or an Edit party and stores edit (7.2.6).
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum CheatEdit {
     HealAll,
@@ -146,9 +147,104 @@ pub enum CheatEdit {
     ResurrectAll,
     MaxGold,
     MaxFood,
-    RefillArrows { quarrels: bool },
+    RefillArrows {
+        quarrels: bool,
+    },
     MaxReagents,
-    RepairHull { parked: bool },
+    RepairHull {
+        parked: bool,
+    },
+    /// The changed fields of one travelling member.
+    Member {
+        slot: usize,
+        fields: MemberEdit,
+    },
+    /// The changed shared counters.
+    Stores(StoresEdit),
+    /// `[L]`: the camp's level recomputation from experience, with maximum
+    /// HP set to `30 * level` (7.2.6).
+    RecomputeLevel {
+        slot: usize,
+    },
+}
+
+/// The fields of one member an edit sets; `None` leaves a field exactly as
+/// it is, so an untouched out-of-range value is preserved (7.2.6).
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct MemberEdit {
+    pub strength: Option<u8>,
+    pub dexterity: Option<u8>,
+    pub intelligence: Option<u8>,
+    pub hp: Option<u16>,
+    pub mana: Option<u8>,
+    pub experience: Option<u16>,
+    pub status: Option<StoredStatus>,
+}
+
+impl MemberEdit {
+    /// Whether no field is set.
+    pub fn is_empty(&self) -> bool {
+        *self == Self::default()
+    }
+}
+
+/// A status the editor may choose (7.2.6). Ashes (`A`) is shown and
+/// preserved but cannot be chosen, and charmed (`C`) is a display override
+/// that is never stored (`formats/saved-gam.md §3.2`).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum StoredStatus {
+    Good,
+    Poisoned,
+    Sleeping,
+    Dead,
+}
+
+impl StoredStatus {
+    /// The choices, in the editor's order.
+    pub const ALL: [StoredStatus; 4] = [
+        StoredStatus::Good,
+        StoredStatus::Poisoned,
+        StoredStatus::Sleeping,
+        StoredStatus::Dead,
+    ];
+
+    /// The stored status letter.
+    pub const fn byte(self) -> u8 {
+        match self {
+            StoredStatus::Good => b'G',
+            StoredStatus::Poisoned => b'P',
+            StoredStatus::Sleeping => b'S',
+            StoredStatus::Dead => b'D',
+        }
+    }
+
+    /// The choice a stored letter is, if it is one.
+    pub fn of_byte(byte: u8) -> Option<Self> {
+        Self::ALL.into_iter().find(|status| status.byte() == byte)
+    }
+}
+
+/// The shared counters an edit sets; `None` leaves a counter as it is.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct StoresEdit {
+    pub food: Option<u16>,
+    pub gold: Option<u16>,
+    pub keys: Option<u8>,
+    pub gems: Option<u8>,
+    pub torches: Option<u8>,
+    /// Item 27.
+    pub arrows: Option<u8>,
+    /// Item 29.
+    pub quarrels: Option<u8>,
+    /// In the mixing order of `formats/saved-gam.md §7`.
+    pub reagents: [Option<u8>; REAGENT_COUNT],
+}
+
+impl StoresEdit {
+    /// Whether no counter is set.
+    pub fn is_empty(&self) -> bool {
+        *self == Self::default()
+    }
 }
 
 /// Why an edit did nothing.
@@ -236,7 +332,12 @@ pub fn apply_cheat_edit(
         return Err(CheatRefusal::NotAtIdlePrompt);
     }
     let in_combat = state.combat_active;
-    if in_combat && matches!(edit, CheatEdit::CurePoison | CheatEdit::ResurrectAll) {
+    let writes_status = match edit {
+        CheatEdit::CurePoison | CheatEdit::ResurrectAll => true,
+        CheatEdit::Member { fields, .. } => fields.status.is_some(),
+        _ => false,
+    };
+    if in_combat && writes_status {
         return Err(CheatRefusal::InCombat);
     }
     let mut members_touched = 0u8;
@@ -297,6 +398,17 @@ pub fn apply_cheat_edit(
             }
             boarded || parked_changed
         }
+        CheatEdit::Member { slot, fields } => {
+            let changed = edit_member(state, *slot, fields)?;
+            members_touched = u8::from(changed);
+            changed
+        }
+        CheatEdit::Stores(stores) => edit_stores(state, stores)?,
+        CheatEdit::RecomputeLevel { slot } => {
+            let changed = recompute_level(state, *slot)?;
+            members_touched = u8::from(changed);
+            changed
+        }
     };
     if !changed {
         return Err(CheatRefusal::NothingToDo);
@@ -306,6 +418,211 @@ pub fn apply_cheat_edit(
         members_touched,
         panel_refresh: true,
     })
+}
+
+/// The page's Apply: every edit in order, as one change (7.2.6). The edits
+/// run on a copy, so a refusal anywhere leaves `state` exactly as it was;
+/// an edit that changes nothing is skipped. When none changes anything the
+/// result is [`CheatRefusal::NothingToDo`], so the session stays untainted.
+pub fn apply_cheat_edits(
+    state: &mut PlayState,
+    edits: &[CheatEdit],
+) -> Result<EditReport, CheatRefusal> {
+    if state.idle_command_prompt().is_none() {
+        return Err(CheatRefusal::NotAtIdlePrompt);
+    }
+    let mut draft = state.clone();
+    let mut report = EditReport::default();
+    for edit in edits {
+        match apply_cheat_edit(&mut draft, edit) {
+            Ok(one) => {
+                report.changed = true;
+                report.panel_refresh = true;
+                report.members_touched = report.members_touched.saturating_add(one.members_touched);
+            }
+            Err(CheatRefusal::NothingToDo) => {}
+            Err(refusal) => return Err(refusal),
+        }
+    }
+    if !report.changed {
+        return Err(CheatRefusal::NothingToDo);
+    }
+    *state = draft;
+    Ok(report)
+}
+
+/// Checks `value` against an inclusive range.
+fn check_range(value: u32, min: u32, max: u32) -> Result<(), CheatRefusal> {
+    if (min..=max).contains(&value) {
+        Ok(())
+    } else {
+        Err(CheatRefusal::OutOfRange { min, max })
+    }
+}
+
+/// The range a member's current HP may be set to: `1..=max` while the
+/// member lives, none once Dead or Ashes (7.2.6).
+pub fn member_hp_range(status: u8, max_hp: u16) -> Option<(u16, u16)> {
+    (!dead_or_ashes(status)).then_some((1, max_hp))
+}
+
+/// Checks every field of a member edit against the limits table and the
+/// member as the edit leaves it, before anything is written.
+fn check_member(
+    state: &PlayState,
+    slot: usize,
+    fields: &MemberEdit,
+) -> Result<PartyMember, CheatRefusal> {
+    let member = *state.party.get(slot).ok_or(CheatRefusal::NoSuchMember)?;
+    for stat in [fields.strength, fields.dexterity, fields.intelligence]
+        .into_iter()
+        .flatten()
+    {
+        CheatLimit::PrimaryStat.check(u32::from(stat))?;
+    }
+    if let Some(experience) = fields.experience {
+        CheatLimit::Experience.check(u32::from(experience))?;
+    }
+    if fields.status.is_some() && member.status == b'A' {
+        // Ashes is preserved: it cannot be changed, as it cannot be chosen.
+        return Err(CheatRefusal::NothingToDo);
+    }
+    let status = fields.status.map_or(member.status, StoredStatus::byte);
+    let none = CheatRefusal::OutOfRange { min: 0, max: 0 };
+    if let Some(hp) = fields.hp {
+        let (min, max) = member_hp_range(status, member.max_hp).ok_or(none)?;
+        check_range(u32::from(hp), u32::from(min), u32::from(max))?;
+    }
+    if let Some(mana) = fields.mana {
+        let intelligence = match fields.intelligence {
+            Some(value) => value,
+            None => member_stat(state, slot, PrimaryStat::Intelligence).unwrap_or(0),
+        };
+        let target = cheat_mana_target(member.class_byte, intelligence).ok_or(none)?;
+        check_range(u32::from(mana), 0, u32::from(target))?;
+    }
+    Ok(member)
+}
+
+/// Writes one member's edit, every mirror together (7.3.3 step 3). The
+/// status goes first: `D` sets HP to 0, and a living status on a member
+/// with no HP (a Dead member made Good) sets HP to max, the Resurrect all
+/// rule; a typed HP then overrides it.
+fn edit_member(
+    state: &mut PlayState,
+    slot: usize,
+    fields: &MemberEdit,
+) -> Result<bool, CheatRefusal> {
+    let before = check_member(state, slot, fields)?;
+    let experience_before = state.party_experience.get(slot).copied();
+    let stats_before = [
+        PrimaryStat::Strength,
+        PrimaryStat::Dexterity,
+        PrimaryStat::Intelligence,
+    ]
+    .map(|stat| member_stat(state, slot, stat));
+    for (stat, value) in [
+        (PrimaryStat::Strength, fields.strength),
+        (PrimaryStat::Dexterity, fields.dexterity),
+        (PrimaryStat::Intelligence, fields.intelligence),
+    ] {
+        if let Some(value) = value {
+            set_member_stat(state, slot, stat, value)?;
+        }
+    }
+    if let Some(experience) = fields.experience
+        && let Some(cell) = state.party_experience.get_mut(slot)
+    {
+        *cell = experience;
+    }
+    let member = &mut state.party[slot];
+    if let Some(status) = fields.status {
+        member.status = status.byte();
+        if status == StoredStatus::Dead {
+            member.hp = 0;
+        } else if member.hp == 0 {
+            member.hp = member.max_hp;
+        }
+    }
+    if let Some(hp) = fields.hp {
+        member.hp = hp;
+    }
+    if let Some(mana) = fields.mana {
+        member.mana = mana;
+    }
+    let stats_after = [
+        PrimaryStat::Strength,
+        PrimaryStat::Dexterity,
+        PrimaryStat::Intelligence,
+    ]
+    .map(|stat| member_stat(state, slot, stat));
+    Ok(state.party[slot] != before
+        || stats_after != stats_before
+        || state.party_experience.get(slot).copied() != experience_before)
+}
+
+/// Writes the changed shared counters, after checking every one.
+fn edit_stores(state: &mut PlayState, stores: &StoresEdit) -> Result<bool, CheatRefusal> {
+    for word in [stores.food, stores.gold].into_iter().flatten() {
+        CheatLimit::Food.check(u32::from(word))?;
+    }
+    let bytes = [
+        stores.keys,
+        stores.gems,
+        stores.torches,
+        stores.arrows,
+        stores.quarrels,
+    ];
+    for byte in bytes.into_iter().chain(stores.reagents).flatten() {
+        CheatLimit::ByteStock.check(u32::from(byte))?;
+    }
+    fn put<T: PartialEq + Copy>(cell: &mut T, value: Option<T>) -> bool {
+        match value {
+            Some(value) if *cell != value => {
+                *cell = value;
+                true
+            }
+            _ => false,
+        }
+    }
+    let mut changed = put(&mut state.food, stores.food);
+    changed |= put(&mut state.gold, stores.gold);
+    changed |= put(&mut state.keys, stores.keys);
+    changed |= put(&mut state.gems, stores.gems);
+    changed |= put(&mut state.torches, stores.torches);
+    changed |= put(
+        &mut state.equipment_stock[EQUIPMENT_ID_ARROWS],
+        stores.arrows,
+    );
+    changed |= put(
+        &mut state.equipment_stock[EQUIPMENT_ID_QUARRELS],
+        stores.quarrels,
+    );
+    for (count, value) in state.reagents.iter_mut().zip(stores.reagents) {
+        changed |= put(count, value);
+    }
+    Ok(changed)
+}
+
+/// `[L]`: level from experience, maximum HP `30 * level`, and current HP
+/// the same for a living member (a Dead or Ashes member keeps 0 HP, so the
+/// living test stays consistent). No stat reward is applied (7.2.6).
+fn recompute_level(state: &mut PlayState, slot: usize) -> Result<bool, CheatRefusal> {
+    let experience = *state
+        .party_experience
+        .get(slot)
+        .ok_or(CheatRefusal::NoSuchMember)?;
+    let member = state
+        .party
+        .get_mut(slot)
+        .ok_or(CheatRefusal::NoSuchMember)?;
+    let before = *member;
+    member.level = cheat_level_for_experience(experience);
+    member.max_hp = cheat_hp_for_level(member.level);
+    if !dead_or_ashes(member.status) {
+        member.hp = member.max_hp;
+    }
+    Ok(*member != before)
 }
 
 /// Raises the boarded frigate's hull to [`CHEAT_HULL_TARGET`], then

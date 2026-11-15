@@ -8,6 +8,8 @@
 //!   class (c) change goes through. It drains the page's queue in order,
 //!   applies the engaged locks once per lock epoch, marks the session
 //!   tainted and repaints the frame (7.3.4, 7.3.5).
+//! - [`edit`]: Edit party and stores, the draft behind the page's edit
+//!   face, sent on Apply as one change (7.2.6).
 //! - [`page`]: the Cheats page, `OverlayId::Cheats`, opened by the
 //!   `[keys] cheats` chord through the foundation's router, with its result
 //!   line and the "Allow cheats?" confirmation (7.2.1, 7.2.3).
@@ -27,6 +29,7 @@
 //! watch on there is no session and no `cheat_apply` work.
 
 pub mod apply;
+pub mod edit;
 pub mod marker;
 pub mod page;
 

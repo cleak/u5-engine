@@ -800,6 +800,10 @@ fn the_engine_group_holds_the_prng_and_the_turn() {
     assert_eq!(WatchField::Reagent(7).label(), "Reagent 8");
 }
 
+// --- Edit party and stores (M8-03) ------------------------------------------------
+
+mod edit;
+
 // --- clean-room and zero-footprint checks -----------------------------------------
 
 /// The module's own code (its tests excluded).

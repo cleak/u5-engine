@@ -23,7 +23,8 @@
 
 use bevy::prelude::*;
 use u5_runtime::cheats::{
-    CheatEdit, CheatRefusal, EditReport, EngagedLocks, apply_cheat_edit, apply_locks,
+    CheatEdit, CheatRefusal, EditReport, EngagedLocks, apply_cheat_edit, apply_cheat_edits,
+    apply_locks,
 };
 use u5_runtime::enhancements::{CheatToggles, LockPermissions};
 use u5_runtime::{Area, PlayState, REAGENT_COUNT, TransportState};
@@ -180,12 +181,16 @@ impl LockKind {
 }
 
 /// What the page asked for.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub enum CheatAction {
     Quick(QuickAction),
     /// A lock was checked: it applies once at once, without moving the
     /// epoch (7.3.4).
     LockNow(LockKind),
+    /// Edit party and stores' Apply: every changed field, applied as one
+    /// change (7.2.6). An empty list is the empty Apply: `NothingToDo`,
+    /// and the session stays untainted.
+    Edit(Vec<CheatEdit>),
 }
 
 /// The lock epoch: one per turn and one per combat round (7.3.4).
@@ -306,6 +311,7 @@ pub(super) fn cheat_apply(
     let state = &mut visual.state;
     let mut changed = false;
     let mut result = None;
+    let mut edit_applied = false;
     for action in std::mem::take(&mut session.queued) {
         match action {
             CheatAction::Quick(quick) => {
@@ -330,14 +336,33 @@ pub(super) fn cheat_apply(
                 changed |= apply_locks(state, &engaged_locks(&only, &cheats));
                 result = Some(format!("{} {LOCK_ON}", lock.label()));
             }
+            CheatAction::Edit(edits) => {
+                if !cheats.allows(cheats.stat_edit) {
+                    result = Some(CHEAT_OFF.to_string());
+                    continue;
+                }
+                match apply_cheat_edits(state, &edits) {
+                    Ok(report) => {
+                        changed |= report.changed;
+                        edit_applied = true;
+                        result = Some(super::edit::applied_result());
+                    }
+                    Err(refusal) => result = Some(refusal_result(refusal)),
+                }
+            }
         }
     }
     if epoch_due {
         changed |= apply_locks(state, &locks);
     }
     session.last_epoch = Some(epoch);
-    if let (Some(text), Some(mut page)) = (result, page) {
-        page.set_result(text);
+    if let Some(mut page) = page {
+        if edit_applied {
+            page.refresh_edit(state);
+        }
+        if let Some(text) = result {
+            page.set_result(text);
+        }
     }
     if !changed {
         return;

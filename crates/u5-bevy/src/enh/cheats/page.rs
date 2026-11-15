@@ -23,6 +23,12 @@
 //! or Ctrl+F12 closes it. Every action goes through `cheat_apply`; this
 //! module never writes the game.
 //!
+//! **Edit party and stores** (7.2.6). `[E]` turns the page to its edit
+//! face, drawn with the same kit: the member table, the selected member's
+//! fields, the stores and the help, each in its own box, with the draft's
+//! changed values in the brown accent. The draft and its keys are
+//! [`super::edit`]'s; Esc goes back to the main face.
+//!
 //! **The confirmation** (7.2.1). "Allow cheats?" is a dialog of the same
 //! kit; `Y` asks the foundation to turn `cheats.enabled` on at the next
 //! idle prompt, `N` or Esc cancels.
@@ -38,6 +44,10 @@ use u5_runtime::{
 };
 
 use super::apply::{LockKind, QuickAction, lock_off_result};
+use super::edit::{
+    CURSOR, EDIT_DIVIDERS, EDIT_ENTRY, EDIT_FOOTER, EDIT_TITLE, EditDraft, EditOutcome, Ink,
+    MORE_HEADING, RESULT_ROW,
+};
 use super::{CheatAction, CheatSession, MarkerState, Toggles, cheat_toggles, page_available};
 use crate::enh::PendingToggleChanges;
 use crate::enh::input::OverlayKey;
@@ -131,6 +141,8 @@ pub enum PageMode {
     Main,
     /// The "Allow cheats?" confirmation (7.2.1).
     Confirm,
+    /// Edit party and stores (7.2.6).
+    Edit,
 }
 
 /// The page: its face, its result line and its picture. Exists while some
@@ -143,6 +155,8 @@ pub struct CheatPage {
     /// The picture last drawn, and what it showed.
     image: Option<Handle<Image>>,
     drawn: Option<PageView>,
+    /// The edit face's draft, while it shows.
+    edit: Option<EditDraft>,
 }
 
 impl CheatPage {
@@ -168,9 +182,29 @@ impl CheatPage {
         self.image.as_ref()
     }
 
+    /// The edit face's draft, while it shows.
+    pub fn edit(&self) -> Option<&EditDraft> {
+        self.edit.as_ref()
+    }
+
     pub(super) fn open_main(&mut self) {
         self.mode = PageMode::Main;
         self.result = None;
+        self.edit = None;
+    }
+
+    /// `[E]`: the edit face, on a fresh draft of `state`.
+    pub(super) fn open_edit(&mut self, state: &PlayState) {
+        self.mode = PageMode::Edit;
+        self.result = None;
+        self.edit = Some(EditDraft::of(state));
+    }
+
+    /// After an Apply: the draft starts again from the game as it now is.
+    pub(super) fn refresh_edit(&mut self, state: &PlayState) {
+        if let Some(draft) = &self.edit {
+            self.edit = Some(draft.refreshed(state));
+        }
     }
 
     pub(super) fn open_confirm(&mut self) {
@@ -190,6 +224,7 @@ pub(super) fn page_keys(
     mut page: ResMut<CheatPage>,
     mut session: Option<ResMut<CheatSession>>,
     mut pending: Option<ResMut<PendingToggleChanges>>,
+    visual: Option<Res<VisualState>>,
     mut requests: EventWriter<OverlayRequest>,
 ) {
     if overlay.open() != Some(OverlayId::Cheats) {
@@ -220,6 +255,14 @@ pub(super) fn page_keys(
             }
             return;
         }
+        if page.mode == PageMode::Edit && !(key == KeyCode::F12 && ctrl) {
+            if !cheats.allows(cheats.stat_edit) {
+                page.open_main();
+                continue;
+            }
+            edit_key(&mut page, key, session.as_deref_mut());
+            continue;
+        }
         if close {
             requests.write(OverlayRequest::Close(OverlayId::Cheats));
             return;
@@ -227,7 +270,11 @@ pub(super) fn page_keys(
         let Some(session) = session.as_mut() else {
             continue;
         };
-        if let Some(quick) = QuickAction::ALL
+        if key == KeyCode::KeyE && cheats.allows(cheats.stat_edit) {
+            if let Some(visual) = visual.as_ref() {
+                page.open_edit(&visual.state);
+            }
+        } else if let Some(quick) = QuickAction::ALL
             .into_iter()
             .find(|quick| quick.key() == key && quick.allowed(&cheats))
         {
@@ -244,6 +291,98 @@ pub(super) fn page_keys(
     }
 }
 
+/// The digit a key types, if any.
+fn digit_of_key(key: KeyCode) -> Option<u8> {
+    Some(match key {
+        KeyCode::Digit0 | KeyCode::Numpad0 => 0,
+        KeyCode::Digit1 | KeyCode::Numpad1 => 1,
+        KeyCode::Digit2 | KeyCode::Numpad2 => 2,
+        KeyCode::Digit3 | KeyCode::Numpad3 => 3,
+        KeyCode::Digit4 | KeyCode::Numpad4 => 4,
+        KeyCode::Digit5 | KeyCode::Numpad5 => 5,
+        KeyCode::Digit6 | KeyCode::Numpad6 => 6,
+        KeyCode::Digit7 | KeyCode::Numpad7 => 7,
+        KeyCode::Digit8 | KeyCode::Numpad8 => 8,
+        KeyCode::Digit9 | KeyCode::Numpad9 => 9,
+        _ => return None,
+    })
+}
+
+/// One key on the edit face (7.2.6). Only Apply reaches the session, as a
+/// queued [`CheatAction::Edit`].
+fn edit_key(page: &mut CheatPage, key: KeyCode, session: Option<&mut CheatSession>) {
+    use u5_runtime::cheats::StoredStatus;
+    let Some(draft) = page.edit.as_mut() else {
+        page.mode = PageMode::Main;
+        return;
+    };
+    let typing = draft.typing().is_some();
+    let outcome = match key {
+        KeyCode::Escape if typing => {
+            draft.cancel_typing();
+            EditOutcome::Quiet
+        }
+        KeyCode::Escape => EditOutcome::Back,
+        KeyCode::Enter | KeyCode::NumpadEnter => draft.enter(),
+        KeyCode::Backspace => {
+            draft.backspace();
+            EditOutcome::Quiet
+        }
+        _ if typing && digit_of_key(key).is_some() => {
+            draft.type_digit(digit_of_key(key).unwrap_or(0));
+            EditOutcome::Quiet
+        }
+        _ => {
+            // Any other key ends typing without taking the digits.
+            draft.cancel_typing();
+            match key {
+                KeyCode::ArrowUp => {
+                    draft.move_field(-1);
+                    EditOutcome::Quiet
+                }
+                KeyCode::ArrowDown => {
+                    draft.move_field(1);
+                    EditOutcome::Quiet
+                }
+                KeyCode::ArrowLeft => draft.step(-1),
+                KeyCode::ArrowRight => draft.step(1),
+                KeyCode::PageUp => draft.step(-10),
+                KeyCode::PageDown => draft.step(10),
+                KeyCode::KeyL => draft.recompute_level(),
+                KeyCode::KeyU => draft.undo_all(),
+                KeyCode::KeyA => draft.apply(),
+                KeyCode::KeyG | KeyCode::KeyP | KeyCode::KeyS | KeyCode::KeyD
+                    if draft.field() == super::edit::Field::Status =>
+                {
+                    draft.status_key(match key {
+                        KeyCode::KeyG => StoredStatus::Good,
+                        KeyCode::KeyP => StoredStatus::Poisoned,
+                        KeyCode::KeyS => StoredStatus::Sleeping,
+                        _ => StoredStatus::Dead,
+                    })
+                }
+                _ => match digit_of_key(key) {
+                    Some(digit @ 1..=6) => {
+                        draft.pick_member(usize::from(digit - 1));
+                        EditOutcome::Quiet
+                    }
+                    _ => EditOutcome::Quiet,
+                },
+            }
+        }
+    };
+    match outcome {
+        EditOutcome::Quiet => {}
+        EditOutcome::Say(text) => page.result = Some(text),
+        EditOutcome::Apply(edits) => {
+            if let Some(session) = session {
+                session.queued.push(CheatAction::Edit(edits));
+            }
+        }
+        EditOutcome::Back => page.open_main(),
+    }
+}
+
 // ---------------------------------------------------------------------------
 // What the page shows.
 
@@ -254,6 +393,9 @@ struct Run {
     row: u32,
     text: String,
     ink: u8,
+    /// Pixels right of the cell: the edit face's `>` cursor sits one
+    /// pixel in, clear of the box's rule.
+    nudge: u32,
 }
 
 /// Everything the page draws, compared frame to frame so the picture is
@@ -339,6 +481,54 @@ fn dialog_rect(page: CellRect) -> CellRect {
     )
 }
 
+/// The EGA index of an edit-face ink.
+const fn ink_index(ink: Ink) -> u8 {
+    match ink {
+        Ink::Text => INK,
+        Ink::Help => HELP,
+        Ink::Dim => GREY,
+        Ink::Accent => ACCENT,
+    }
+}
+
+/// The edit face's view: the draft's runs on the panel, the `>` cursor
+/// nudged clear of the rule, and the result line.
+fn edit_view(
+    picture: (u32, u32),
+    rect: CellRect,
+    edit: Option<&EditDraft>,
+    result: Option<&str>,
+) -> PageView {
+    let mut runs: Vec<Run> = edit
+        .map(EditDraft::runs)
+        .unwrap_or_default()
+        .into_iter()
+        .map(|run| Run {
+            col: rect.col + 1 + run.col,
+            row: rect.row + run.row,
+            nudge: u32::from(run.text == CURSOR),
+            text: run.text,
+            ink: ink_index(run.ink),
+        })
+        .collect();
+    if let Some(line) =
+        result.and_then(|result| wrap(result, (rect.w - 4) as usize).into_iter().next())
+    {
+        runs.push(Run {
+            col: rect.col + 2,
+            row: rect.row + RESULT_ROW,
+            text: line,
+            ink: INK,
+            nudge: 0,
+        });
+    }
+    PageView {
+        picture,
+        mode: PageMode::Edit,
+        runs,
+    }
+}
+
 /// Builds the view of the page.
 fn page_view(
     picture: (u32, u32),
@@ -347,15 +537,20 @@ fn page_view(
     session: Option<&CheatSession>,
     state: Option<&PlayState>,
     result: Option<&str>,
+    edit: Option<&EditDraft>,
 ) -> PageView {
     let rect = page_rect(picture.0, picture.1);
     let mut runs = Vec::new();
+    if mode == PageMode::Edit {
+        return edit_view(picture, rect, edit, result);
+    }
     let mut put = |col: u32, row: u32, text: &str, ink: u8| {
         runs.push(Run {
             col,
             row,
             text: text.to_string(),
             ink,
+            nudge: 0,
         });
     };
     if mode == PageMode::Confirm {
@@ -418,6 +613,11 @@ fn page_view(
             }
             row += 1;
         }
+    }
+    if cheats.allows(cheats.stat_edit) {
+        row += 1;
+        put(left, row, MORE_HEADING, HELP);
+        put(left + MORE_HEADING.len() as u32 + 2, row, EDIT_ENTRY, INK);
     }
     if let Some(result) = result {
         let width = (rect.w - 4) as usize;
@@ -541,7 +741,12 @@ fn draw_panel(img: &mut PageImage, rect: CellRect, dividers: &[u32]) {
 
 /// One 8x8 mask at a cell: set bits in `fg`, clear bits in `bg` when given.
 fn draw_mask(img: &mut PageImage, mask: [u8; 8], col: u32, row: u32, fg: u8, bg: Option<u8>) {
-    let (bx, by) = (col * CELL, row * CELL);
+    draw_mask_at(img, mask, (col * CELL, row * CELL), fg, bg);
+}
+
+/// One 8x8 mask at a pixel.
+fn draw_mask_at(img: &mut PageImage, mask: [u8; 8], at: (u32, u32), fg: u8, bg: Option<u8>) {
+    let (bx, by) = at;
     for (gy, bits) in mask.iter().enumerate() {
         for gx in 0..CH_CELL_SIDE {
             let index = if bits & (0x80 >> gx) != 0 {
@@ -565,15 +770,15 @@ fn glyph(font: &FixedCellFont, code: u8) -> [u8; 8] {
 }
 
 fn draw_text(img: &mut PageImage, font: &FixedCellFont, col: u32, row: u32, text: &str, ink: u8) {
+    draw_run(img, font, (col, row, 0), text, ink);
+}
+
+/// Text from a cell, `nudge` pixels to its right.
+fn draw_run(img: &mut PageImage, font: &FixedCellFont, at: (u32, u32, u32), text: &str, ink: u8) {
+    let (col, row, nudge) = at;
     for (i, byte) in text.bytes().enumerate() {
-        draw_mask(
-            img,
-            glyph(font, byte),
-            col + i as u32,
-            row,
-            ink,
-            Some(PAPER),
-        );
+        let x = (col + i as u32) * CELL + nudge;
+        draw_mask_at(img, glyph(font, byte), (x, row * CELL), ink, Some(PAPER));
     }
 }
 
@@ -628,6 +833,11 @@ pub(crate) fn draw_page(view: &PageView, font: &FixedCellFont) -> PageImage {
             draw_tab(&mut img, font, rect, rect.row, TITLE, ACCENT);
             draw_tab(&mut img, font, rect, rect.bottom(), FOOTER, INK);
         }
+        PageMode::Edit => {
+            draw_panel(&mut img, rect, &EDIT_DIVIDERS);
+            draw_tab(&mut img, font, rect, rect.row, EDIT_TITLE, ACCENT);
+            draw_tab(&mut img, font, rect, rect.bottom(), EDIT_FOOTER, INK);
+        }
         PageMode::Confirm => {
             let dialog = dialog_rect(rect);
             draw_panel(&mut img, dialog, &[]);
@@ -635,7 +845,13 @@ pub(crate) fn draw_page(view: &PageView, font: &FixedCellFont) -> PageImage {
         }
     }
     for run in &view.runs {
-        draw_text(&mut img, font, run.col, run.row, &run.text, run.ink);
+        draw_run(
+            &mut img,
+            font,
+            (run.col, run.row, run.nudge),
+            &run.text,
+            run.ink,
+        );
     }
     dim_backdrop(&mut img);
     img
@@ -743,6 +959,7 @@ pub(super) fn page_present(
         session.as_deref(),
         Some(&visual.state),
         page.result.as_deref(),
+        page.edit.as_ref(),
     );
     if page.drawn.as_ref() != Some(&view) || page.image.is_none() {
         let image = rgba_image(draw_page(&view, &visual.text_font));
@@ -794,7 +1011,15 @@ pub(crate) fn page_view_for_tests(
     cheats: &CheatToggles,
     session: &CheatSession,
 ) -> PageView {
-    page_view(picture, PageMode::Main, cheats, Some(session), None, None)
+    page_view(
+        picture,
+        PageMode::Main,
+        cheats,
+        Some(session),
+        None,
+        None,
+        None,
+    )
 }
 
 #[cfg(test)]
