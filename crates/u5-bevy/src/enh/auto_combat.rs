@@ -156,6 +156,11 @@ pub struct AutoCombatShell {
     /// The `sound_effect_serial` range the last auto key produced, open
     /// until the shell is quiet again (Phase 4d).
     pub cue_span: Option<CueSpan>,
+    /// Whether the last command prompt or cursor seen was auto's, so a key
+    /// at a prompt that is neither (a picker, a line prompt, the round
+    /// between turns) stops auto only when it followed auto's own turn, and
+    /// never when it is the player's own menu for a member not handed over.
+    pub last_prompt_auto: bool,
 }
 
 /// The `sound_effect_serial` range one auto key produced (design 6.3.4,
@@ -191,6 +196,7 @@ impl AutoCombatShell {
             handing_back: None,
             foes_remained: true,
             cue_span: None,
+            last_prompt_auto: false,
         }
     }
 
@@ -247,6 +253,7 @@ impl AutoCombatShell {
         self.engaged = AutoEngagement::default();
         self.fight = AutoFightRuntime::default();
         self.fed = None;
+        self.last_prompt_auto = false;
     }
 
     /// Auto gives the prompt back for `reason`: nothing stays engaged, and
@@ -261,22 +268,28 @@ impl AutoCombatShell {
         self.fight.owns_open_attempt && matches!(auto_prompt(state), AutoPrompt::Cursor { .. })
     }
 
+    /// Whether auto owns the command prompt or cursor open now; `None` at
+    /// any other prompt.
+    fn owns_prompt(&self, state: &PlayState) -> Option<bool> {
+        match auto_prompt(state) {
+            AutoPrompt::Cursor { .. } => Some(self.fight.owns_open_attempt),
+            AutoPrompt::Command { .. } => Some(!matches!(
+                plan_next_auto_key(state, &self.settings, &self.engaged, &self.fight),
+                AutoPlan::NotOurs
+            )),
+            AutoPrompt::None | AutoPrompt::Other => None,
+        }
+    }
+
     /// Whether auto is running, so a key the player presses stops it: it
     /// owns the prompt open now, its attempt is open, or the fight is
-    /// between prompts. A prompt or cursor of a member not handed over is
-    /// the player's.
+    /// between prompts after auto's own turn. A prompt, cursor, picker or
+    /// line prompt of a member not handed over is the player's.
     fn running(&self, state: &PlayState) -> bool {
         if !self.engaged.any() || !state.combat_active {
             return false;
         }
-        match auto_prompt(state) {
-            AutoPrompt::Cursor { .. } => self.fight.owns_open_attempt,
-            AutoPrompt::Command { .. } => !matches!(
-                plan_next_auto_key(state, &self.settings, &self.engaged, &self.fight),
-                AutoPlan::NotOurs
-            ),
-            AutoPrompt::None | AutoPrompt::Other => true,
-        }
+        self.owns_prompt(state).unwrap_or(self.last_prompt_auto)
     }
 
     /// Applies one hotkey to the engagement against `state`, and returns
@@ -696,6 +709,11 @@ fn auto_combat_observe(mut shell: ResMut<AutoCombatShell>, visual: Option<Res<Vi
         observe_after_auto_key(state, key, &mut shell.fight);
     }
     if state.combat_active {
+        if let Some(ours) = shell.owns_prompt(state)
+            && shell.last_prompt_auto != ours
+        {
+            shell.last_prompt_auto = ours;
+        }
         let foes = combat_side_census(&state.combat_actors).foes_remain();
         shell.foes_remained = foes;
         if shell.engaged.any() && shell.fed.is_none() && !shell.attempt_open(state) {
@@ -711,6 +729,9 @@ fn auto_combat_observe(mut shell: ResMut<AutoCombatShell>, visual: Option<Res<Vi
     let foes_remained = std::mem::replace(&mut shell.foes_remained, true);
     shell.fight = AutoFightRuntime::default();
     shell.fed = None;
+    if shell.last_prompt_auto {
+        shell.last_prompt_auto = false;
+    }
     if !shell.engaged.any() || shell.handing_back.is_some() {
         return;
     }

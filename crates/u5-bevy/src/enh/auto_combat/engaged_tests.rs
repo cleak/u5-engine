@@ -644,3 +644,29 @@ fn hand_back_toasts_use_fixed_words_and_member_names_only() {
         hand_back_toast(HandBack::Hurt(1), &named, &mut names)
     ));
 }
+
+#[test]
+fn a_key_in_the_players_own_menu_never_stops_auto() {
+    // Member 1 is handed over; the open prompt is neither a command prompt
+    // nor a cursor (a picker, a line prompt, or the round between turns).
+    let mut state = arena();
+    state.pending_combat_actor_slot = None;
+    assert!(matches!(auto_prompt(&state), AutoPrompt::Other));
+    let mut shell = AutoCombatShell::new(CombatSettings::default());
+    shell.engaged.members[0] = true;
+    // After a member not handed over had the prompt, that menu is the
+    // player's: a key there does not stop auto.
+    shell.last_prompt_auto = false;
+    assert!(!shell.running(&state));
+    // After auto's own turn, the fight is between prompts: a key stops it.
+    shell.last_prompt_auto = true;
+    assert!(shell.running(&state));
+    // At auto's own command prompt it runs whatever came before.
+    let ours = arena();
+    shell.last_prompt_auto = false;
+    assert!(matches!(auto_prompt(&ours), AutoPrompt::Command { .. }));
+    assert!(shell.running(&ours));
+    // Handing back clears it.
+    shell.hand_back(HandBack::Interrupted);
+    assert!(!shell.last_prompt_auto);
+}

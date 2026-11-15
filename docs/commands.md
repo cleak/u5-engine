@@ -106,8 +106,8 @@ and Space), one at a time, and never a key you could not have typed. The
 first key you press while it runs gives the prompt back: by default the key
 is dropped (`combat.interrupt = "swallow"`), or it goes to the game
 (`"deliver"`). If an attack's target cursor is open, auto finishes that
-attack first and the keys you typed follow in order. A badge in the margin
-shows while anyone is handed over.
+attack first and the keys you typed follow in order. A short note confirms
+each change of who is handed over.
 
 In the terminal frontend there are no chords. A line in a play script, or
 typed at the interactive prompt, does the same:
