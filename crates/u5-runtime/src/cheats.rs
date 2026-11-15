@@ -670,20 +670,6 @@ impl WatchField {
     pub fn label(self) -> String {
         let member = |slot: u8, what: &str| format!("Party {} {what}", u32::from(slot) + 1);
         match self {
-            WatchField::Turn => "Turn".to_string(),
-            WatchField::Clock => "Clock".to_string(),
-            WatchField::Area => "Area".to_string(),
-            WatchField::Position => "Position".to_string(),
-            WatchField::Facing => "Facing".to_string(),
-            WatchField::Transport => "Transport".to_string(),
-            WatchField::Hull => "Hull".to_string(),
-            WatchField::Wind => "Wind".to_string(),
-            WatchField::Food => "Food".to_string(),
-            WatchField::Gold => "Gold".to_string(),
-            WatchField::Keys => "Keys".to_string(),
-            WatchField::Gems => "Gems".to_string(),
-            WatchField::Torches => "Torches".to_string(),
-            WatchField::Arrows => "Arrows".to_string(),
             WatchField::Reagent(index) => format!("Reagent {}", u32::from(index) + 1),
             WatchField::MemberStatus(slot) => member(slot, "status"),
             WatchField::MemberHp(slot) => member(slot, "HP"),
@@ -694,13 +680,35 @@ impl WatchField {
             WatchField::MemberInt(slot) => member(slot, "INT"),
             WatchField::MemberXp(slot) => member(slot, "XP"),
             WatchField::MemberLevel(slot) => member(slot, "level"),
-            WatchField::PartySize => "Party size".to_string(),
-            WatchField::ActivePlayer => "Active member".to_string(),
-            WatchField::MoralStanding => "Standing".to_string(),
-            WatchField::LightCounters => "Light".to_string(),
-            WatchField::ActiveEffect => "Effect".to_string(),
-            WatchField::Prng => "Random state".to_string(),
+            fixed => fixed.fixed_label().unwrap_or_default().to_string(),
         }
+    }
+
+    /// The label of a field that names no slot.
+    const fn fixed_label(self) -> Option<&'static str> {
+        Some(match self {
+            WatchField::Turn => "Turn",
+            WatchField::Clock => "Clock",
+            WatchField::Area => "Area",
+            WatchField::Position => "Position",
+            WatchField::Facing => "Facing",
+            WatchField::Transport => "Transport",
+            WatchField::Hull => "Hull",
+            WatchField::Wind => "Wind",
+            WatchField::Food => "Food",
+            WatchField::Gold => "Gold",
+            WatchField::Keys => "Keys",
+            WatchField::Gems => "Gems",
+            WatchField::Torches => "Torches",
+            WatchField::Arrows => "Arrows",
+            WatchField::PartySize => "Party size",
+            WatchField::ActivePlayer => "Active member",
+            WatchField::MoralStanding => "Standing",
+            WatchField::LightCounters => "Light",
+            WatchField::ActiveEffect => "Effect",
+            WatchField::Prng => "Random state",
+            _ => return None,
+        })
     }
 }
 
