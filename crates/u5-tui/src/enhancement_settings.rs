@@ -1064,7 +1064,42 @@ mod tests {
         // shipped rows with aliases so far.
         assert_eq!(find_cli_alias("--preset"), None);
         assert_eq!(find_cli_alias("--no-preset"), None);
-        assert_eq!(find_cli_alias("--quest-journal"), None);
+        // The journal's aliases (chapter 5, M5-01) are catalogue rows that
+        // stay hidden until their phases ship, so the parser knows them only
+        // then.
+        let journal_shipped = CatalogueRow::find("journal.page").unwrap().is_shipped();
+        for (flag, key, on) in [
+            ("--quest-journal", "journal.page", true),
+            ("--no-quest-journal", "journal.page", false),
+            ("--journal-side-panel", "journal.side_panel", true),
+            ("--no-journal-side-panel", "journal.side_panel", false),
+        ] {
+            let alias = CliAlias::Switch { key, on };
+            assert_eq!(
+                find_cli_alias_in(CatalogueRow::all(), flag),
+                Some(alias),
+                "{flag}"
+            );
+            assert_eq!(
+                find_cli_alias(flag),
+                journal_shipped.then_some(alias),
+                "{flag}"
+            );
+        }
+        assert_eq!(
+            find_cli_alias_in(CatalogueRow::all(), "--spoilers"),
+            Some(CliAlias::Valued {
+                key: "journal.spoiler_tier"
+            })
+        );
+        assert_eq!(
+            find_cli_alias_in(CatalogueRow::all(), "--no-spoilers"),
+            None
+        );
+        assert_eq!(
+            find_cli_alias_in(CatalogueRow::all(), "--quest-journa"),
+            None
+        );
         assert_eq!(
             find_cli_alias("--grow-left"),
             Some(CliAlias::Switch {

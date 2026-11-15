@@ -122,6 +122,7 @@ pub mod predicates;
 pub mod prng;
 pub mod pth;
 pub mod quest_flags;
+pub mod quest_journal;
 pub mod question_io;
 pub mod report;
 pub mod rest_camp;

@@ -39,6 +39,7 @@ use super::display::{
     RASTER_WORDS, SCALE_MODE_WORDS,
 };
 use super::gem_map::GLYPH_WORDS;
+use super::journal::{MANTRA_WORDS, PANEL_SIDE_WORDS};
 use super::source::Capability;
 
 /// The three effect classes (user requirement, 2026-11-01).
@@ -151,6 +152,12 @@ pub const GEM_G3: Phase = Phase::new(10, "G3");
 pub const GEM_G4: Phase = Phase::new(10, "G4");
 /// Chapter 10, G5: marks and labels (`gem_map.labels`).
 pub const GEM_G5: Phase = Phase::new(10, "G5");
+/// Chapter 5, Phase 3: the Ctrl+J journal page (`journal.page`,
+/// `spoiler_tier` and `mantras`; build plan M5-01). Hidden until M5-06.
+pub const JOURNAL_P3: Phase = Phase::new(5, "Phase 3");
+/// Chapter 5, Phase 3b: the journal side panel (`journal.side_panel` and
+/// `side_panel_side`; build plan M5-01). Hidden until M5-06.
+pub const JOURNAL_P3B: Phase = Phase::new(5, "Phase 3b");
 
 /// Every phase that has shipped in this build. Shipping a phase is adding
 /// it here, in the package that completes it; its rows then become
@@ -405,6 +412,33 @@ toggles! {
         ships: GEM_G2,
         tags: &[],
         cli_aliases: &["--gem-map"],
+        soft_deps: &[],
+        needs: &[],
+        driven: false,
+    },
+    // `[journal]`, chapter 5 (design 5.4.1). Both are class (a), applied at
+    // the next frame, independent of each other, and hidden until their
+    // phase ships (U13).
+    JournalPage = "journal.page" {
+        label: "Quest journal page (Ctrl+J)",
+        class: EffectClass::Presentation,
+        apply: ApplyAt::Frame,
+        tier: Tier::Feature,
+        ships: JOURNAL_P3,
+        tags: &[],
+        cli_aliases: &["--quest-journal"],
+        soft_deps: &[],
+        needs: &[],
+        driven: false,
+    },
+    JournalSidePanel = "journal.side_panel" {
+        label: "Quest journal side panel",
+        class: EffectClass::Presentation,
+        apply: ApplyAt::Frame,
+        tier: Tier::Feature,
+        ships: JOURNAL_P3B,
+        tags: &[],
+        cli_aliases: &["--journal-side-panel"],
         soft_deps: &[],
         needs: &[],
         driven: false,
@@ -686,6 +720,35 @@ const fn gem_map_option(
         cli_aliases: &[],
         toggle: None,
         parent: Some(Toggle::GemMapEnhanced),
+        needs: &[],
+        switch: None,
+    }
+}
+
+/// A `[journal]` sub-option (design 5.4.1): class (a), feature tier,
+/// applied at the next frame, inert while `parent` is off.
+const fn journal_option(
+    key: &'static str,
+    label: &'static str,
+    kind: OptionKind,
+    default: OptionDefault,
+    ships: Phase,
+    parent: Toggle,
+) -> OptionSpec {
+    OptionSpec {
+        key,
+        label,
+        kind,
+        default,
+        class: Some(EffectClass::Presentation),
+        apply: ApplyAt::Frame,
+        tier: Tier::Feature,
+        deviation_values: &[],
+        ships,
+        tags: &[],
+        cli_aliases: &[],
+        toggle: None,
+        parent: Some(parent),
         needs: &[],
         switch: None,
     }
@@ -1028,6 +1091,38 @@ pub const OPTIONS: &[OptionSpec] = &[
             GEM_G4,
         )
     },
+    // `[journal]`, chapter 5 (design 5.4.1): the sub-options of the page and
+    // the panel, inert while their toggle is off. Tiers 3 and 4 are the
+    // labelled spoiler tiers: deviation tier, in no preset (1.4.7).
+    OptionSpec {
+        deviation_values: &["3", "4"],
+        cli_aliases: &["--spoilers"],
+        ..journal_option(
+            "journal.spoiler_tier",
+            "Spoiler tier: 1 progress, 2 goals you have been given, 3 Spoiler: hints, \
+             4 Spoiler: hints and answers you have used",
+            OptionKind::Int { min: 1, max: 4 },
+            OptionDefault::Int(2),
+            JOURNAL_P3,
+            Toggle::JournalPage,
+        )
+    },
+    journal_option(
+        "journal.mantras",
+        "Mantras at tier 4: masked until you select one, or never shown",
+        OptionKind::Enum(MANTRA_WORDS),
+        OptionDefault::Str("reveal"),
+        JOURNAL_P3,
+        Toggle::JournalPage,
+    ),
+    journal_option(
+        "journal.side_panel_side",
+        "Side of the journal panel",
+        OptionKind::Enum(PANEL_SIDE_WORDS),
+        OptionDefault::Str("auto"),
+        JOURNAL_P3B,
+        Toggle::JournalSidePanel,
+    ),
 ];
 
 /// The named stops of a long `Int` row (build plan D-M2.4): the values a

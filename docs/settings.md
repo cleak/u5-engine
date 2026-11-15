@@ -396,6 +396,8 @@ one that types keys must change it exactly as typing those keys would:
 | display.grow_left | Wider world view (shows more than the original) | bool = false | a, F | deviation, wider view | --grow-left | - | yes |
 | display.sprite_composite | Sprites over terrain (no black boxes) | bool = false | a, F | feature | --sprite-composite | - | yes |
 | gem_map.enhanced | Enhanced gem map | bool = false | a, P | feature | --gem-map | - | yes |
+| journal.page | Quest journal page (Ctrl+J) | bool = false | a, F | feature | --quest-journal | - | later (chapter 5 Phase 3) |
+| journal.side_panel | Quest journal side panel | bool = false | a, F | feature | --journal-side-panel | - | later (chapter 5 Phase 3b) |
 | enhancements.schema | Settings file format version | int 1..1 = 1 | -, L | feature | - | - | yes |
 | enhancements.preset | Preset | enum classic\|recommended\|everything = classic | -, P | feature | --preset | - | yes |
 | keys.menu | Open the menu | chord = F12 | -, F | feature | - | a keyboard | later (chapter 1 P5) |
@@ -437,4 +439,7 @@ one that types keys must change it exactly as typing those keys would:
 | gem_map.wrap_rows | Show the dungeon's wrapped edge | bool = true | a, F | feature | - | - | yes |
 | gem_map.level_paging | Page through dungeon levels (PgUp, PgDn) | bool = true | a, F | feature | - | - | yes |
 | gem_map.glyphs | Dungeon symbols (gem-faithful is a spoiler: shows secret doors and hidden pits on sight) | enum perceived\|gem-faithful = perceived | a, F | feature (deviation: gem-faithful) | - | - | yes |
+| journal.spoiler_tier | Spoiler tier: 1 progress, 2 goals you have been given, 3 Spoiler: hints, 4 Spoiler: hints and answers you have used | int 1..4 = 2 | a, F | feature (deviation: 3, 4) | --spoilers | - | later (chapter 5 Phase 3) |
+| journal.mantras | Mantras at tier 4: masked until you select one, or never shown | enum reveal\|never = reveal | a, F | feature | - | - | later (chapter 5 Phase 3) |
+| journal.side_panel_side | Side of the journal panel | enum auto\|left\|right = auto | a, F | feature | - | - | later (chapter 5 Phase 3b) |
 <!-- END GENERATED -->
