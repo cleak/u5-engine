@@ -555,11 +555,7 @@ fn paint(font: &FixedCellFont, model: Option<&JournalModel>) -> Vec<u8> {
     paint_page(
         &mut rgba,
         font,
-        &PageView {
-            model,
-            section: model.and_then(|model| model.sections.first()),
-            tab_strip: false,
-        },
+        &PageView::new(model, model.and_then(|model| model.sections.first())),
     );
     rgba
 }
@@ -575,10 +571,10 @@ const BLUE: Rgb = BAND;
 fn the_frame_bands_rules_and_corners_are_the_game_s() {
     let rgba = paint(&blank_font(), None);
     // Bands on all four sides, rules inside them.
-    for (x, y) in [(3, 100), (316, 100), (40, 3), (60, 196)] {
+    for (x, y) in [(3, 100), (316, 100), (40, 3), (20, 196)] {
         assert_eq!(pixel(&rgba, x, y), BLUE, "band at ({x}, {y})");
     }
-    for (x, y) in [(7, 100), (312, 100), (50, 7), (50, 192), (290, 192)] {
+    for (x, y) in [(7, 100), (312, 100), (50, 7), (20, 192), (300, 192)] {
         assert_eq!(pixel(&rgba, x, y), WHITE, "rule at ({x}, {y})");
     }
     assert_eq!(pixel(&rgba, 100, 100), BLACK, "interior");
@@ -689,10 +685,12 @@ fn text_sits_on_the_grid_inside_the_frame() {
     assert_eq!(BROWN, [0xAA, 0x55, 0x00], "brown #AA5500, not slot 6");
     assert_eq!(pixel(&rgba, 3, 100), BLUE, "the band is not painted over");
     assert_eq!(pixel(&rgba, RULE_RIGHT_X, 100), WHITE, "nor the rule");
-    let body = (BODY_FIRST_ROW as usize + 1) * 8;
-    assert_eq!(pixel(&rgba, LABEL_COLUMN as usize * 8, body), WHITE);
+    // The first row is selected: white on the blue bar.
+    let columns = columns(SectionId::Virtues, SpoilerTier::Goals, None);
+    let body = ROWS_FIRST_ROW as usize * 8;
+    assert_eq!(pixel(&rgba, columns.label as usize * 8, body), WHITE);
     assert_eq!(
-        pixel(&rgba, MARK_COLUMN as usize * 8, body),
+        pixel(&rgba, columns.mark.unwrap() as usize * 8, body),
         ega(model.sections[0].rows[0].mark.colour)
     );
 }

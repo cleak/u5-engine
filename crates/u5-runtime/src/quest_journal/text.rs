@@ -303,6 +303,50 @@ pub const ENDGAME_DOOM_LINE: &str = "The final room lies at the bottom of Doom."
 pub const ENDGAME_AMULET_LINE: &str = "The Amulet helps the party through unholy darkness.";
 pub const ENDGAME_BOX_LINE: &str = "The last scene asks for it.";
 
+// --- The page's cells (5.2.4; build plan M5-04). -----------------------
+//
+// The page is 36 cells wide inside its frame, so a few cells use shorter
+// words than the report. The full sentence is always in the selected row's
+// detail lines.
+
+/// A virtue's phase in the tier 4 table, where the 8-cell mantra column
+/// leaves the phase 11 cells (the 5.2.4 sketch's short words).
+pub const fn phase_cell(phase: ShrineQuestState) -> &'static str {
+    match phase {
+        ShrineQuestState::NotStarted => "",
+        ShrineQuestState::Ordained => "Read Codex",
+        ShrineQuestState::CodexRead => "Return",
+        ShrineQuestState::Complete => "Complete",
+    }
+}
+
+/// A shard-only Shadowlord row's label on the page: the shard's virtue word
+/// alone, beside the Shard column (never the Shadowlord's name).
+pub const fn shard_cell_label(slot: usize) -> &'static str {
+    match slot {
+        0 => "Falsehood",
+        1 => "Hatred",
+        _ => "Cowardice",
+    }
+}
+
+/// The page's Shard column.
+pub const SHARD_CARRIED_CELL: &str = CARRIED;
+pub const SHARD_DESTROYED_CELL: &str = "Destroyed";
+
+/// The column headings of the sections with more than one column.
+pub const HEAD_VIRTUE: &str = "Virtue";
+pub const HEAD_MANTRA: &str = "Mantra";
+pub const HEAD_QUEST: &str = "Quest";
+pub const HEAD_DUNGEON: &str = "Dungeon";
+pub const HEAD_ENTRANCE: &str = "Entrance";
+pub const HEAD_NAME: &str = "Name";
+pub const HEAD_STATE: &str = "State";
+pub const HEAD_SHARD: &str = "Shard";
+
+/// A masked tier 4 answer (5.2.7): exactly the 8-cell mantra width.
+pub const HIDDEN: &str = "[hidden]";
+
 // --- The offline report (5.2.11). --------------------------------------
 
 /// The report's first words; the tier and its name follow.
