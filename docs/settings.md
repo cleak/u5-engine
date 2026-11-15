@@ -396,6 +396,9 @@ one that types keys must change it exactly as typing those keys would:
 | display.grow_left | Wider world view (shows more than the original) | bool = false | a, F | deviation, wider view | --grow-left | - | yes |
 | display.sprite_composite | Sprites over terrain (no black boxes) | bool = false | a, F | feature | --sprite-composite | - | yes |
 | gem_map.enhanced | Enhanced gem map | bool = false | a, P | feature | --gem-map | - | yes |
+| combat.auto | Auto-combat | bool = false | b, F | feature | --auto-combat | - | later (chapter 6 3c) |
+| combat.allies | Auto-combat for allied creatures | bool = false | b, P | feature | --auto-combat-allies | - | later (chapter 6 5) |
+| combat.fast_forward | Fast-forward auto-combat (shorter sounds and pauses) | bool = false | b, P | deviation | --auto-combat-fast-forward | - | later (chapter 6 4d) |
 | enhancements.schema | Settings file format version | int 1..1 = 1 | -, L | feature | - | - | yes |
 | enhancements.preset | Preset | enum classic\|recommended\|everything = classic | -, P | feature | --preset | - | yes |
 | keys.menu | Open the menu | chord = F12 | -, F | feature | - | a keyboard | later (chapter 1 P5) |
@@ -437,4 +440,16 @@ one that types keys must change it exactly as typing those keys would:
 | gem_map.wrap_rows | Show the dungeon's wrapped edge | bool = true | a, F | feature | - | - | yes |
 | gem_map.level_paging | Page through dungeon levels (PgUp, PgDn) | bool = true | a, F | feature | - | - | yes |
 | gem_map.glyphs | Dungeon symbols (gem-faithful is a spoiler: shows secret doors and hidden pits on sight) | enum perceived\|gem-faithful = perceived | a, F | feature (deviation: gem-faithful) | - | - | yes |
+| combat.tactic | Auto-combat tactic | enum fight\|support\|magic = fight | b, P | feature | - | - | later (chapter 6 3c) |
+| combat.targeting | Which foe auto-combat attacks | enum nearest\|weakest = nearest | b, P | feature | - | - | later (chapter 6 3c) |
+| combat.interrupt | A key pressed during auto-combat: drop it, or pass it to the game | enum swallow\|deliver = swallow | b, F | feature | - | - | later (chapter 6 3c) |
+| combat.step_ms | Pause between auto-combat keys, in milliseconds | int 0..2000 = 150 | b, P | feature | - | - | later (chapter 6 3c) |
+| combat.pause_below_hp | Hand a member back below this health, in percent (0 = never) | int 0..100 = 25 | b, P | feature | - | - | later (chapter 6 3c) |
+| combat.action_cap | Most auto-combat actions in one fight | int 20..1000 = 200 | b, P | feature | - | - | later (chapter 6 3c) |
+| combat.victory | When the fight is won: stop, or leave the battle | enum stop\|exit = stop | b, P | feature | - | - | later (chapter 6 3c) |
+| combat.keep_between_fights | Keep auto-combat on for the next fight | bool = false | b, P | feature | - | - | later (chapter 6 3c) |
+| combat.pause_on_focus_loss | Pause auto-combat while the window is in the background | bool = true | b, P | feature | - | - | later (chapter 6 3c) |
+| combat.potions | Let auto-combat drink potions | bool = false | b, P | feature | - | - | later (chapter 6 3c) |
+| combat.mp_reserve | Magic auto-combat keeps back: none, or one healing spell | enum none\|heal = heal | b, P | feature | - | - | later (chapter 6 3c) |
+| combat.spells | Spells auto-combat may cast | list of IL\|GP\|AZ\|AN\|M\|AY\|AS\|ACX\|HR\|IW\|KX\|IMX\|LV\|FV\|FGI\|GIN\|GIZ\|IP\|AG\|IS\|GIS\|PU\|DP\|QW\|BIX\|AEP\|EIP\|MV\|IZ\|RT\|IPVY\|AQW\|AI\|AWY\|AEX\|BRX\|LS\|CX\|IQX\|IQW\|HIN\|CIQ\|CIM\|CKX\|CGIV\|FHI\|PRV\|AT = [] | b, P | feature | - | - | later (chapter 6 3c) |
 <!-- END GENERATED -->

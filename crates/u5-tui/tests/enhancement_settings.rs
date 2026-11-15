@@ -568,3 +568,151 @@ fn an_explicit_path_launch_reads_no_display_settings() {
         }
     );
 }
+
+// --- [combat] (chapter 6, M7) ---
+
+/// Chapter 6's keys (M7-01): the generic flags name them now; the three
+/// `--auto-combat` aliases parse once their phases ship the rows, and until
+/// then are unknown options like any hidden alias.
+#[test]
+fn combat_keys_parse_and_the_aliases_wait_for_their_phases() {
+    let args = parse_cli_args([
+        "--enable",
+        "combat.auto",
+        "--set",
+        "combat.step_ms=300",
+        "--disable",
+        "combat.pause_on_focus_loss",
+    ])
+    .unwrap();
+    assert_eq!(
+        args.enhancements,
+        [
+            CliSetting::Enable("combat.auto".into()),
+            CliSetting::Set {
+                key: "combat.step_ms".into(),
+                value: "300".into()
+            },
+            CliSetting::Disable("combat.pause_on_focus_loss".into()),
+        ]
+    );
+    for (alias, key) in [
+        ("auto-combat", "combat.auto"),
+        ("auto-combat-allies", "combat.allies"),
+        ("auto-combat-fast-forward", "combat.fast_forward"),
+    ] {
+        let shipped = u5_runtime::enhancements::CatalogueRow::find(key)
+            .unwrap()
+            .is_shipped();
+        let on = format!("--{alias}");
+        let off = format!("--no-{alias}");
+        if shipped {
+            let args = parse_cli_args([on.as_str()]).unwrap();
+            assert_eq!(args.enhancements, [CliSetting::Enable(key.into())]);
+            let args = parse_cli_args([off.as_str()]).unwrap();
+            assert_eq!(args.enhancements, [CliSetting::Disable(key.into())]);
+        } else {
+            assert!(parse_error(&[&on]).contains("unknown option"), "{on}");
+            assert!(parse_error(&[&off]).contains("unknown option"), "{off}");
+        }
+    }
+    assert!(parse_error(&["--set", "combat.speed=3"]).contains("unknown setting"));
+}
+
+/// `[combat]` from a real `config.toml` (design 6.2.8): `auto = "yes"`
+/// falls back to off with a note, the rest of the section still loads,
+/// and `game_dir` is untouched. As this build ships, every key reads "not
+/// available" and the defaults are used.
+#[test]
+fn a_malformed_combat_key_falls_back_and_keeps_game_dir() {
+    use u5_host_desktop::ConfigDocument;
+    use u5_runtime::enhancements::catalogue::{COMBAT_P3C, COMBAT_P4D, COMBAT_P5};
+    use u5_runtime::enhancements::{
+        HostCapabilities, LockState, ResolveInput, SettingsSource, resolve_as_shipped,
+    };
+    use u5_tui::enhancement_settings::{TomlSource, resolve_launch};
+
+    let scratch = Scratch::new("combat");
+    let path = scratch.config();
+    let text = "game_dir = \"/g\"\n[combat]\nauto = \"yes\"\nstep_ms = 400\nspells = [\"GP\"]\n";
+    fs::write(&path, text).unwrap();
+    let doc = ConfigDocument::load(&path).unwrap();
+    let source = TomlSource::new(&doc);
+    let resolved = resolve_as_shipped(
+        ResolveInput {
+            stored: Some(&source as &dyn SettingsSource),
+            cli: &[],
+            lock: LockState::Off,
+            caps: HostCapabilities::ALL,
+        },
+        &[COMBAT_P3C, COMBAT_P4D, COMBAT_P5],
+    );
+    let combat = resolved.combat();
+    assert!(!combat.auto);
+    assert_eq!(combat.step_ms, 400);
+    assert_eq!(combat.spell_allow_list, ["GP"]);
+    let notes: Vec<String> = resolved.notes.iter().map(ToString::to_string).collect();
+    assert_eq!(notes.len(), 1, "{notes:?}");
+    assert!(notes[0].starts_with("combat.auto = "), "{notes:?}");
+    assert_eq!(doc.get("game_dir").unwrap().as_str(), Some("/g"));
+
+    let settings = resolve_launch(Some(&path), &[], LockState::Off);
+    assert_eq!(settings.resolved.combat(), Default::default());
+    let notes: Vec<String> = settings
+        .resolved
+        .notes
+        .iter()
+        .map(ToString::to_string)
+        .collect();
+    assert_eq!(
+        notes,
+        [
+            "combat.auto: not available in this build",
+            "combat.step_ms: not available in this build",
+            "combat.spells: not available in this build",
+        ]
+    );
+    // Reading never rewrites the file.
+    assert_eq!(fs::read_to_string(&path).unwrap(), text);
+}
+
+/// Each auto-combat key's script token is one the script reader turns into
+/// that key's dispatcher char (design 6.3.5), so an `@auto` run and its
+/// `--auto-combat-log` replay cannot drift.
+#[test]
+fn auto_combat_script_tokens_reach_the_dispatcher_as_their_char() {
+    use u5_runtime::auto_combat::AutoKey;
+    use u5_runtime::input_codes::InputDirection;
+    use u5_tui::play_loop::{ansi_navigation_key, is_return_token};
+
+    for direction in [
+        InputDirection::North,
+        InputDirection::South,
+        InputDirection::East,
+        InputDirection::West,
+        InputDirection::Northwest,
+        InputDirection::Northeast,
+        InputDirection::Southwest,
+        InputDirection::Southeast,
+    ] {
+        let key = AutoKey::Cursor(direction);
+        assert_eq!(
+            ansi_navigation_key(key.script_token()),
+            Some(key.input_char()),
+            "{key:?}"
+        );
+        if direction.is_cardinal() {
+            assert_eq!(AutoKey::Step(direction).script_token(), key.script_token());
+        }
+    }
+    assert!(is_return_token(AutoKey::Confirm.script_token()));
+    assert_eq!(AutoKey::Pass.script_token(), "pass");
+    // `A` and the bare Escape byte are one-char tokens that reach the
+    // dispatcher as they are.
+    for key in [AutoKey::Attack, AutoKey::Cancel] {
+        let mut chars = key.script_token().chars();
+        assert_eq!(chars.next(), Some(key.input_char()), "{key:?}");
+        assert_eq!(chars.next(), None, "{key:?}");
+        assert_eq!(ansi_navigation_key(key.script_token()), None);
+    }
+}

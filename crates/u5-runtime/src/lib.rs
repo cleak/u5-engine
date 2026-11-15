@@ -24,6 +24,7 @@ pub mod active_object_io;
 pub mod animation;
 pub mod audio;
 pub mod audio_render;
+pub mod auto_combat;
 pub mod blackthorn;
 pub mod blackthorn_session;
 pub mod boot;

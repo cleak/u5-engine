@@ -14,6 +14,9 @@
 //! - [`gem_map`]: chapter 10's `[gem_map]` typed view,
 //!   [`ResolvedEnhancements::gem_map`] and [`GemMapToggles`], and the
 //!   [`GlyphPolicy`] chapter 4 shares (design 10.3.2, 10.4.1).
+//! - [`combat`]: chapter 6's `[combat]` typed view,
+//!   [`ResolvedEnhancements::combat`], returning
+//!   [`CombatSettings`](crate::auto_combat::CombatSettings) (design 6.3.1).
 //! - [`catalogue`]: the toggle and option catalogue, effect classes, apply
 //!   points, preset tiers, shipping phases and the three presets
 //!   (design 1.3.2, 1.4.1 and 1.4.2).
@@ -49,6 +52,7 @@
 //! `u5_bevy::VisualLaunchConfig`.
 
 pub mod catalogue;
+pub mod combat;
 pub mod digest;
 pub mod display;
 pub mod gem_map;

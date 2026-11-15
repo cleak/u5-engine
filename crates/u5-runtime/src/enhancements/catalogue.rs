@@ -34,12 +34,16 @@
 //! [`settings_table`] renders the catalogue as the table in
 //! `docs/settings.md`; a test keeps the two equal.
 
+use super::combat::{
+    INTERRUPT_WORDS, MP_RESERVE_WORDS, TACTIC_WORDS, TARGETING_WORDS, VICTORY_WORDS,
+};
 use super::display::{
     BRIGHTNESS_SCOPE_WORDS, GROW_LEFT_LIGHT_WORDS, PILLAR_FILL_WORDS, PIXEL_ASPECT_WORDS,
     RASTER_WORDS, SCALE_MODE_WORDS,
 };
 use super::gem_map::GLYPH_WORDS;
 use super::source::Capability;
+use crate::constants::SPELL_CODES;
 
 /// The three effect classes (user requirement, 2026-11-01).
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -151,6 +155,13 @@ pub const GEM_G3: Phase = Phase::new(10, "G3");
 pub const GEM_G4: Phase = Phase::new(10, "G4");
 /// Chapter 10, G5: marks and labels (`gem_map.labels`).
 pub const GEM_G5: Phase = Phase::new(10, "G5");
+/// Chapter 6, Phase 3c: auto-combat in Bevy (`combat.auto` and its
+/// options; build plan M7).
+pub const COMBAT_P3C: Phase = Phase::new(6, "3c");
+/// Chapter 6, Phase 4d: fast-forward cues (`combat.fast_forward`).
+pub const COMBAT_P4D: Phase = Phase::new(6, "4d");
+/// Chapter 6, Phase 5: allied creatures (`combat.allies`), out of M7.
+pub const COMBAT_P5: Phase = Phase::new(6, "5");
 
 /// Every phase that has shipped in this build. Shipping a phase is adding
 /// it here, in the package that completes it; its rows then become
@@ -167,6 +178,8 @@ pub const SHIPPED_PHASES: &[Phase] = &[
     GEM_G3,
     GEM_G4,
     GEM_G5,
+    // M7 [combat]: COMBAT_P3C and COMBAT_P4D ship with their packages;
+    // COMBAT_P5 stays out of M7.
 ];
 
 /// A soft dependency (design 1.4.5): what a feature prefers to have, and
@@ -176,6 +189,13 @@ pub struct SoftDep {
     pub prefers: &'static str,
     pub fallback: &'static str,
 }
+
+/// `combat.allies` and `combat.fast_forward` change only what auto-combat
+/// does, so without `combat.auto` they are inert (6.4.1).
+const AUTO_SUB_TOGGLE: SoftDep = SoftDep {
+    prefers: "combat.auto",
+    fallback: "inert",
+};
 
 /// One boolean toggle's catalogue row.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -406,6 +426,45 @@ toggles! {
         tags: &[],
         cli_aliases: &["--gem-map"],
         soft_deps: &[],
+        needs: &[],
+        driven: false,
+    },
+    // --- [combat] (chapter 6, M7) ---
+    // Design 6.2.8 and 6.4.1. Class (b), input-driven. `allies` and
+    // `fast_forward` are sub-toggles, inert while `combat.auto` is off.
+    CombatAuto = "combat.auto" {
+        label: "Auto-combat",
+        class: EffectClass::InputDriven,
+        apply: ApplyAt::Frame,
+        tier: Tier::Feature,
+        ships: COMBAT_P3C,
+        tags: &[],
+        cli_aliases: &["--auto-combat"],
+        soft_deps: &[],
+        needs: &[],
+        driven: false,
+    },
+    CombatAllies = "combat.allies" {
+        label: "Auto-combat for allied creatures",
+        class: EffectClass::InputDriven,
+        apply: ApplyAt::IdlePrompt,
+        tier: Tier::Feature,
+        ships: COMBAT_P5,
+        tags: &[],
+        cli_aliases: &["--auto-combat-allies"],
+        soft_deps: &[AUTO_SUB_TOGGLE],
+        needs: &[],
+        driven: false,
+    },
+    CombatFastForward = "combat.fast_forward" {
+        label: "Fast-forward auto-combat (shorter sounds and pauses)",
+        class: EffectClass::InputDriven,
+        apply: ApplyAt::IdlePrompt,
+        tier: Tier::Deviation,
+        ships: COMBAT_P4D,
+        tags: &[],
+        cli_aliases: &["--auto-combat-fast-forward"],
+        soft_deps: &[AUTO_SUB_TOGGLE],
         needs: &[],
         driven: false,
     },
@@ -686,6 +745,34 @@ const fn gem_map_option(
         cli_aliases: &[],
         toggle: None,
         parent: Some(Toggle::GemMapEnhanced),
+        needs: &[],
+        switch: None,
+    }
+}
+
+/// A `[combat]` option (design 6.2.8, 6.4.1): class (b), feature tier,
+/// applied at the next idle prompt, inert while `combat.auto` is off, and
+/// shipped with Phase 3c.
+const fn combat_option(
+    key: &'static str,
+    label: &'static str,
+    kind: OptionKind,
+    default: OptionDefault,
+) -> OptionSpec {
+    OptionSpec {
+        key,
+        label,
+        kind,
+        default,
+        class: Some(EffectClass::InputDriven),
+        apply: ApplyAt::IdlePrompt,
+        tier: Tier::Feature,
+        deviation_values: &[],
+        ships: COMBAT_P3C,
+        tags: &[],
+        cli_aliases: &[],
+        toggle: None,
+        parent: Some(Toggle::CombatAuto),
         needs: &[],
         switch: None,
     }
@@ -1028,6 +1115,84 @@ pub const OPTIONS: &[OptionSpec] = &[
             GEM_G4,
         )
     },
+    // --- [combat] (chapter 6, M7) ---
+    // The twelve options of 6.2.8. `interrupt` applies at the next frame,
+    // the rest at the next idle prompt.
+    combat_option(
+        "combat.tactic",
+        "Auto-combat tactic",
+        OptionKind::Enum(TACTIC_WORDS),
+        OptionDefault::Str("fight"),
+    ),
+    combat_option(
+        "combat.targeting",
+        "Which foe auto-combat attacks",
+        OptionKind::Enum(TARGETING_WORDS),
+        OptionDefault::Str("nearest"),
+    ),
+    OptionSpec {
+        apply: ApplyAt::Frame,
+        ..combat_option(
+            "combat.interrupt",
+            "A key pressed during auto-combat: drop it, or pass it to the game",
+            OptionKind::Enum(INTERRUPT_WORDS),
+            OptionDefault::Str("swallow"),
+        )
+    },
+    combat_option(
+        "combat.step_ms",
+        "Pause between auto-combat keys, in milliseconds",
+        OptionKind::Int { min: 0, max: 2000 },
+        OptionDefault::Int(150),
+    ),
+    combat_option(
+        "combat.pause_below_hp",
+        "Hand a member back below this health, in percent (0 = never)",
+        OptionKind::Int { min: 0, max: 100 },
+        OptionDefault::Int(25),
+    ),
+    combat_option(
+        "combat.action_cap",
+        "Most auto-combat actions in one fight",
+        OptionKind::Int { min: 20, max: 1000 },
+        OptionDefault::Int(200),
+    ),
+    combat_option(
+        "combat.victory",
+        "When the fight is won: stop, or leave the battle",
+        OptionKind::Enum(VICTORY_WORDS),
+        OptionDefault::Str("stop"),
+    ),
+    combat_option(
+        "combat.keep_between_fights",
+        "Keep auto-combat on for the next fight",
+        OptionKind::Bool,
+        OptionDefault::Bool(false),
+    ),
+    combat_option(
+        "combat.pause_on_focus_loss",
+        "Pause auto-combat while the window is in the background",
+        OptionKind::Bool,
+        OptionDefault::Bool(true),
+    ),
+    combat_option(
+        "combat.potions",
+        "Let auto-combat drink potions",
+        OptionKind::Bool,
+        OptionDefault::Bool(false),
+    ),
+    combat_option(
+        "combat.mp_reserve",
+        "Magic auto-combat keeps back: none, or one healing spell",
+        OptionKind::Enum(MP_RESERVE_WORDS),
+        OptionDefault::Str("heal"),
+    ),
+    combat_option(
+        "combat.spells",
+        "Spells auto-combat may cast",
+        OptionKind::List(&SPELL_CODES),
+        OptionDefault::List(&[]),
+    ),
 ];
 
 /// The named stops of a long `Int` row (build plan D-M2.4): the values a

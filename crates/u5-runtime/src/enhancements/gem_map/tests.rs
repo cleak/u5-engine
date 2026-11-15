@@ -153,15 +153,16 @@ fn the_main_toggle_matches_the_design() {
     assert_eq!(spec.cli_aliases, ["--gem-map"]);
     assert!(spec.tags.is_empty() && spec.needs.is_empty() && spec.soft_deps.is_empty());
     assert_eq!(spec.label, "Enhanced gem map");
-    // It is the only `[gem_map]` toggle; it is the last catalogue bit, so
-    // no earlier toggle's bit moved.
+    // It is the only `[gem_map]` toggle; it took the next free catalogue
+    // bit, so no earlier toggle's bit moved (later chapters append after
+    // it).
     let gem_toggles: Vec<&str> = TOGGLES
         .iter()
         .filter(|spec| spec.key.starts_with("gem_map."))
         .map(|spec| spec.key)
         .collect();
     assert_eq!(gem_toggles, [ENHANCED_KEY]);
-    assert_eq!(TOGGLES.last().unwrap().toggle, Toggle::GemMapEnhanced);
+    assert_eq!(Toggle::GemMapEnhanced as usize, 12);
 }
 
 #[test]
