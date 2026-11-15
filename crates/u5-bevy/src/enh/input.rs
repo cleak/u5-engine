@@ -43,7 +43,7 @@ use bevy::ecs::event::EventCursor;
 use bevy::input::ButtonState;
 use bevy::input::keyboard::{KeyboardFocusLost, KeyboardInput};
 use bevy::prelude::*;
-use u5_runtime::enhancements::{CHEATS_SWITCH, FeatureToggles, KeyBindings, Toggle};
+use u5_runtime::enhancements::{CheatToggles, FeatureToggles, KeyBindings, Toggle};
 
 use super::EnhSet;
 use crate::{
@@ -162,12 +162,10 @@ impl EnhAction {
     /// chord is bound.
     pub fn enabled(self, toggles: FeatureToggles) -> bool {
         match self {
-            // Any effective cheat, the read-only state watch included. The
-            // resolver has already turned off every state-altering cheat
-            // without the section switch.
-            EnhAction::OpenCheats => toggles
-                .iter_on()
-                .any(|toggle| toggle.key().starts_with("cheats.") && toggle.key() != CHEATS_SWITCH),
+            // Any effective cheat, the read-only state watch included
+            // (D-M8.5): `refill_quarrels` or `remember_locks` alone enables
+            // nothing, so it binds nothing.
+            EnhAction::OpenCheats => CheatToggles::from_toggles(toggles).any_on(),
             _ => self
                 .feature_keys()
                 .iter()

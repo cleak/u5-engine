@@ -166,7 +166,11 @@ fn no_host_exists_while_no_step_is_registered() {
     // sprite compositing, whose `[composite]` step is its own (M2-06,
     // display/composite tests).
     for spec in TOGGLES.iter().filter(|spec| {
-        spec.toggle != Toggle::DisplayGrowLeft && spec.toggle != Toggle::DisplaySpriteComposite
+        spec.toggle != Toggle::DisplayGrowLeft
+            && spec.toggle != Toggle::DisplaySpriteComposite
+            // The cheats page brings the toasts (M8-02), which need a
+            // real-time clock this app does not have.
+            && !spec.toggle.key().starts_with("cheats.")
     }) {
         every.enhancements.toggles.set(spec.toggle, true);
     }

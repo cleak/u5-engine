@@ -12,7 +12,7 @@
 //! without the switch. Under the parity lock the view is
 //! [`CheatToggles::default`], every field false (7.4.5).
 
-use super::catalogue::Toggle;
+use super::catalogue::{FeatureToggles, Toggle};
 use super::resolve::ResolvedEnhancements;
 use super::source::LockState;
 
@@ -101,15 +101,12 @@ impl CheatToggles {
     }
 }
 
-impl ResolvedEnhancements {
-    /// The `[cheats]` section as [`CheatToggles`] (7.3.2). A row that has
-    /// not shipped has already been resolved to off (U13), and the parity
-    /// lock gives the default, every field false (7.4.5).
-    pub fn cheats(&self) -> CheatToggles {
-        if matches!(self.lock, LockState::Locked(_)) {
-            return CheatToggles::default();
-        }
-        let on = |toggle: Toggle| self.toggles.on(toggle);
+impl CheatToggles {
+    /// The view of a bare toggle set, as the shell holds the toggles in
+    /// force. Every class (c) entry is masked by `enabled`. The parity
+    /// lock is the caller's: a locked launch has no toggles on at all.
+    pub fn from_toggles(toggles: FeatureToggles) -> Self {
+        let on = |toggle: Toggle| toggles.on(toggle);
         let enabled = on(Toggle::CheatsEnabled);
         let gated = |toggle: Toggle| enabled && on(toggle);
         CheatToggles {
@@ -139,6 +136,18 @@ impl ResolvedEnhancements {
             teleport: gated(Toggle::CheatsTeleport),
             state_watch: on(Toggle::CheatsStateWatch),
         }
+    }
+}
+
+impl ResolvedEnhancements {
+    /// The `[cheats]` section as [`CheatToggles`] (7.3.2). A row that has
+    /// not shipped has already been resolved to off (U13), and the parity
+    /// lock gives the default, every field false (7.4.5).
+    pub fn cheats(&self) -> CheatToggles {
+        if matches!(self.lock, LockState::Locked(_)) {
+            return CheatToggles::default();
+        }
+        CheatToggles::from_toggles(self.toggles)
     }
 }
 

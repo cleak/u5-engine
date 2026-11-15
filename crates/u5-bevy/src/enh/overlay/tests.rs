@@ -262,10 +262,10 @@ fn no_overlay_model_while_no_overlay_feature_is_on() {
     let mut launch = VisualLaunchConfig::classic();
     // ...except the grow-left layout, whose `[grow-left compose]` step,
     // frame fit and canvas size are its own (M1-09, display/grow tests).
-    for spec in TOGGLES
-        .iter()
-        .filter(|spec| spec.toggle != Toggle::DisplayGrowLeft)
-    {
+    // The cheats page is an overlay feature (M8-02), checked below.
+    for spec in TOGGLES.iter().filter(|spec| {
+        spec.toggle != Toggle::DisplayGrowLeft && !spec.toggle.key().starts_with("cheats.")
+    }) {
         launch.enhancements.toggles.set(spec.toggle, true);
     }
     assert!(!overlay_feature_on(launch.enhancements.toggles));
@@ -283,6 +283,10 @@ fn no_overlay_model_while_no_overlay_feature_is_on() {
     assert!(!has_system(&mut app, "close_when_not_idle"));
     // An overlay feature binds its opener; the model follows it.
     assert_eq!(Toggle::from_key("automap.fullscreen_map"), None);
+    let mut cheats = launch.enhancements.toggles;
+    cheats.set(Toggle::CheatsEnabled, true);
+    cheats.set(Toggle::CheatsMaxGold, true);
+    assert!(overlay_feature_on(cheats));
 }
 
 #[test]

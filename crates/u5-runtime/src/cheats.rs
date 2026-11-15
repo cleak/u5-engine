@@ -162,16 +162,23 @@ pub enum CheatRefusal {
     NoSuchMember,
 }
 
+/// The page's result line for each refusal (engine text).
+const REFUSED_NOT_NOW: &str = "Not now";
+const REFUSED_IN_COMBAT: &str = "Not during combat";
+const REFUSED_NOT_ABOARD: &str = "Not aboard a ship";
+const REFUSED_NOTHING: &str = "Nothing to change";
+const REFUSED_NO_MEMBER: &str = "No such member";
+
 impl CheatRefusal {
     /// The page's result line for this refusal (engine text).
     pub fn message(self) -> String {
         match self {
-            CheatRefusal::NotAtIdlePrompt => "Not now".to_string(),
-            CheatRefusal::InCombat => "Not during combat".to_string(),
-            CheatRefusal::NotAboard => "Not aboard a ship".to_string(),
-            CheatRefusal::NothingToDo => "Nothing to change".to_string(),
+            CheatRefusal::NotAtIdlePrompt => REFUSED_NOT_NOW.to_string(),
+            CheatRefusal::InCombat => REFUSED_IN_COMBAT.to_string(),
+            CheatRefusal::NotAboard => REFUSED_NOT_ABOARD.to_string(),
+            CheatRefusal::NothingToDo => REFUSED_NOTHING.to_string(),
             CheatRefusal::OutOfRange { min, max } => format!("Range {min}..{max}"),
-            CheatRefusal::NoSuchMember => "No such member".to_string(),
+            CheatRefusal::NoSuchMember => REFUSED_NO_MEMBER.to_string(),
         }
     }
 }

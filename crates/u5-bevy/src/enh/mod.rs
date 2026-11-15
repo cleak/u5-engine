@@ -37,6 +37,8 @@
 //!   a display toggle or the menu overlay is on.
 //! - The gem map's plugin ([`gem_map`]) is added only while
 //!   `gem_map.enhanced` is on at launch.
+//! - The cheats plugin ([`cheats`]) is added only while a cheat or the
+//!   watch is effectively on at launch, or the menu overlay is on.
 //!
 //! The Bevy half of the trajectory-equivalence harness (`equivalence`,
 //! test-only) runs the real `--visual` app headless, feature on against
@@ -48,6 +50,7 @@
 //! and never name a faithful system. The faithful systems themselves are
 //! not edited.
 
+pub mod cheats;
 #[cfg(test)]
 pub(crate) mod equivalence;
 pub mod gem_map;
@@ -239,6 +242,7 @@ impl Plugin for EnhancementsPlugin {
             self.launch.save_dir.as_deref(),
         );
         gem_map::add_gem_map(app, &self.launch);
+        cheats::add_cheats(app, &self.launch);
         crate::display::add_display(app, &self.launch);
     }
 }

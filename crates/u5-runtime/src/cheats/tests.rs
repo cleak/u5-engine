@@ -823,10 +823,10 @@ fn the_module_names_no_trainer_offsets_or_game_text() {
     }
 }
 
-/// 7.4.2: `cheats::` is referenced only by tests (the plugin arrives in
-/// M8-02).
+/// 7.4.2: `cheats::` is referenced only by the shell's cheats plugin
+/// (`u5-bevy/src/enh/cheats/`, added from `enh/mod.rs`) and by tests.
 #[test]
-fn nothing_but_tests_calls_the_module() {
+fn only_the_plugin_and_tests_call_the_module() {
     let crates = workspace_file("crates");
     let mut offenders = Vec::new();
     let mut stack = vec![crates];
@@ -846,7 +846,10 @@ fn nothing_but_tests_calls_the_module() {
                 || text.ends_with("/tests.rs")
                 || text.ends_with("_tests.rs");
             let is_module = text.ends_with("u5-runtime/src/cheats.rs");
-            if is_test || is_module {
+            let is_plugin = text.contains("u5-bevy/src/enh/cheats/")
+                || text.ends_with("u5-bevy/src/enh/cheats.rs")
+                || text.ends_with("u5-bevy/src/enh/mod.rs");
+            if is_test || is_module || is_plugin {
                 continue;
             }
             if fs::read_to_string(&path).unwrap().contains("cheats::") {
@@ -856,6 +859,6 @@ fn nothing_but_tests_calls_the_module() {
     }
     assert!(
         offenders.is_empty(),
-        "cheats:: used outside tests: {offenders:?}"
+        "cheats:: used outside the plugin and tests: {offenders:?}"
     );
 }

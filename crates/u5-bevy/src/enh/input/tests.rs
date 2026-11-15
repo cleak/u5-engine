@@ -287,7 +287,11 @@ fn bindings_follow_their_features() {
         .collect();
     assert_eq!(
         enabled,
-        [EnhAction::ToggleFullscreen, EnhAction::ToggleColumn]
+        [
+            EnhAction::ToggleFullscreen,
+            EnhAction::ToggleColumn,
+            EnhAction::OpenCheats
+        ]
     );
     let (map, notes) = KeyMap::for_toggles(&default_keys(), every);
     assert!(notes.is_empty());

@@ -74,10 +74,11 @@ fn no_toast_or_badge_unless_a_feature_installs_them() {
     let mut launch = VisualLaunchConfig::classic();
     // ...except the grow-left layout, whose `[grow-left compose]` step,
     // frame fit and canvas size are its own (M1-09, display/grow tests).
-    for spec in TOGGLES
-        .iter()
-        .filter(|spec| spec.toggle != Toggle::DisplayGrowLeft)
-    {
+    // ...and the cheats page, an overlay feature, whose refusals are toasts
+    // (M8-02).
+    for spec in TOGGLES.iter().filter(|spec| {
+        spec.toggle != Toggle::DisplayGrowLeft && !spec.toggle.key().starts_with("cheats.")
+    }) {
         launch.enhancements.toggles.set(spec.toggle, true);
     }
     for launch in [VisualLaunchConfig::classic(), launch] {
