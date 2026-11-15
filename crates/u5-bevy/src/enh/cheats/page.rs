@@ -48,6 +48,14 @@ use super::edit::{
     CURSOR, EDIT_DIVIDERS, EDIT_ENTRY, EDIT_FOOTER, EDIT_TITLE, EditDraft, EditOutcome, Ink,
     MORE_HEADING, RESULT_ROW,
 };
+use super::teleport::{
+    TELEPORT_DIVIDERS, TELEPORT_ENTRY, TELEPORT_FOOTER, TELEPORT_RESULT_ROW, TELEPORT_TITLE,
+    TeleportForm, TeleportOutcome, teleport_key,
+};
+use super::watch::{
+    WATCH_DIVIDERS, WATCH_ENTRY, WATCH_FOOTER, WATCH_RESULT_ROW, WatchFolder, WatchLog,
+    WatchOutcome, watch_key, watch_runs, watch_title,
+};
 use super::{CheatAction, CheatSession, MarkerState, Toggles, cheat_toggles, page_available};
 use crate::enh::PendingToggleChanges;
 use crate::enh::input::OverlayKey;
@@ -143,6 +151,10 @@ pub enum PageMode {
     Confirm,
     /// Edit party and stores (7.2.6).
     Edit,
+    /// Teleport, the page's one spoiler face (7.2.7).
+    Teleport,
+    /// The change watch (7.2.8).
+    Watch,
 }
 
 /// The page: its face, its result line and its picture. Exists while some
@@ -157,6 +169,8 @@ pub struct CheatPage {
     drawn: Option<PageView>,
     /// The edit face's draft, while it shows.
     edit: Option<EditDraft>,
+    /// The Teleport face's form, while it shows.
+    teleport: Option<TeleportForm>,
 }
 
 impl CheatPage {
@@ -191,6 +205,32 @@ impl CheatPage {
         self.mode = PageMode::Main;
         self.result = None;
         self.edit = None;
+        self.teleport = None;
+    }
+
+    /// The Teleport face's form, while it shows.
+    pub fn teleport(&self) -> Option<&TeleportForm> {
+        self.teleport.as_ref()
+    }
+
+    /// `[T]`: the Teleport face, its places read from the game files now.
+    pub(super) fn open_teleport(&mut self, state: &PlayState, game_dir: &std::path::Path) {
+        self.mode = PageMode::Teleport;
+        self.result = None;
+        self.teleport = Some(TeleportForm::open(state, game_dir));
+    }
+
+    /// After a teleport: the form plans again from where the party is.
+    pub(super) fn refresh_teleport(&mut self, state: &PlayState, game_dir: &std::path::Path) {
+        if let Some(form) = &mut self.teleport {
+            form.replan(state, game_dir);
+        }
+    }
+
+    /// `[W]`: the Watch face.
+    pub(super) fn open_watch(&mut self) {
+        self.mode = PageMode::Watch;
+        self.result = None;
     }
 
     /// `[E]`: the edit face, on a fresh draft of `state`.
@@ -225,6 +265,8 @@ pub(super) fn page_keys(
     mut session: Option<ResMut<CheatSession>>,
     mut pending: Option<ResMut<PendingToggleChanges>>,
     visual: Option<Res<VisualState>>,
+    mut watch: Option<ResMut<WatchLog>>,
+    folder: Option<Res<WatchFolder>>,
     mut requests: EventWriter<OverlayRequest>,
 ) {
     if overlay.open() != Some(OverlayId::Cheats) {
@@ -263,14 +305,45 @@ pub(super) fn page_keys(
             edit_key(&mut page, key, session.as_deref_mut());
             continue;
         }
+        let ctrl_f12 = key == KeyCode::F12 && ctrl;
+        if page.mode == PageMode::Teleport && !ctrl_f12 {
+            if !cheats.allows(cheats.teleport) {
+                page.open_main();
+                continue;
+            }
+            teleport_page_key(&mut page, key, session.as_deref_mut(), visual.as_deref());
+            continue;
+        }
+        if page.mode == PageMode::Watch && !ctrl_f12 {
+            match watch.as_deref_mut().filter(|_| cheats.state_watch) {
+                None => page.open_main(),
+                Some(log) => {
+                    let folder = folder.as_ref().map(|folder| folder.0.as_path());
+                    match watch_key(log, key, folder, std::time::SystemTime::now()) {
+                        WatchOutcome::Quiet => {}
+                        WatchOutcome::Say(text) => page.result = Some(text),
+                        WatchOutcome::Back => page.open_main(),
+                    }
+                }
+            }
+            continue;
+        }
         if close {
             requests.write(OverlayRequest::Close(OverlayId::Cheats));
             return;
         }
+        if key == KeyCode::KeyW && cheats.state_watch && watch.is_some() {
+            page.open_watch();
+            continue;
+        }
         let Some(session) = session.as_mut() else {
             continue;
         };
-        if key == KeyCode::KeyE && cheats.allows(cheats.stat_edit) {
+        if key == KeyCode::KeyT && cheats.allows(cheats.teleport) {
+            if let Some(visual) = visual.as_ref() {
+                page.open_teleport(&visual.state, &visual.game_dir);
+            }
+        } else if key == KeyCode::KeyE && cheats.allows(cheats.stat_edit) {
             if let Some(visual) = visual.as_ref() {
                 page.open_edit(&visual.state);
             }
@@ -288,6 +361,30 @@ pub(super) fn page_keys(
                 page.result = Some(lock_off_result(lock));
             }
         }
+    }
+}
+
+/// One key on the Teleport face (7.2.7). Only Enter on a ready plan
+/// reaches the session, as a queued [`CheatAction::Teleport`].
+fn teleport_page_key(
+    page: &mut CheatPage,
+    key: KeyCode,
+    session: Option<&mut CheatSession>,
+    visual: Option<&VisualState>,
+) {
+    let (Some(form), Some(visual)) = (page.teleport.as_mut(), visual) else {
+        page.open_main();
+        return;
+    };
+    match teleport_key(form, key, &visual.state, &visual.game_dir) {
+        TeleportOutcome::Quiet => {}
+        TeleportOutcome::Say(text) => page.result = Some(text),
+        TeleportOutcome::Go(target) => {
+            if let Some(session) = session {
+                session.queued.push(CheatAction::Teleport(target));
+            }
+        }
+        TeleportOutcome::Back => page.open_main(),
     }
 }
 
@@ -405,6 +502,8 @@ pub(crate) struct PageView {
     picture: (u32, u32),
     mode: PageMode,
     runs: Vec<Run>,
+    /// The Watch face's title tab, which says when it is paused.
+    title: String,
 }
 
 /// The panel's rectangle in cells.
@@ -491,17 +590,25 @@ const fn ink_index(ink: Ink) -> u8 {
     }
 }
 
-/// The edit face's view: the draft's runs on the panel, the `>` cursor
-/// nudged clear of the rule, and the result line.
-fn edit_view(
+/// The faces the page may show besides the main one.
+#[derive(Clone, Copy, Default)]
+pub(crate) struct Faces<'a> {
+    pub edit: Option<&'a EditDraft>,
+    pub teleport: Option<&'a TeleportForm>,
+    pub watch: Option<&'a WatchLog>,
+}
+
+/// A face's view: its runs on the panel, the `>` cursor nudged clear of the
+/// rule, and the result line on `result_row`.
+fn face_view(
     picture: (u32, u32),
     rect: CellRect,
-    edit: Option<&EditDraft>,
-    result: Option<&str>,
+    mode: PageMode,
+    face: Vec<super::edit::EditRun>,
+    result: (Option<&str>, u32),
 ) -> PageView {
-    let mut runs: Vec<Run> = edit
-        .map(EditDraft::runs)
-        .unwrap_or_default()
+    let (result, result_row) = result;
+    let mut runs: Vec<Run> = face
         .into_iter()
         .map(|run| Run {
             col: rect.col + 1 + run.col,
@@ -516,7 +623,7 @@ fn edit_view(
     {
         runs.push(Run {
             col: rect.col + 2,
-            row: rect.row + RESULT_ROW,
+            row: rect.row + result_row,
             text: line,
             ink: INK,
             nudge: 0,
@@ -524,8 +631,9 @@ fn edit_view(
     }
     PageView {
         picture,
-        mode: PageMode::Edit,
+        mode,
         runs,
+        title: String::new(),
     }
 }
 
@@ -537,12 +645,30 @@ fn page_view(
     session: Option<&CheatSession>,
     state: Option<&PlayState>,
     result: Option<&str>,
-    edit: Option<&EditDraft>,
+    faces: Faces<'_>,
 ) -> PageView {
     let rect = page_rect(picture.0, picture.1);
     let mut runs = Vec::new();
-    if mode == PageMode::Edit {
-        return edit_view(picture, rect, edit, result);
+    match mode {
+        PageMode::Edit => {
+            let face = faces.edit.map(EditDraft::runs).unwrap_or_default();
+            return face_view(picture, rect, mode, face, (result, RESULT_ROW));
+        }
+        PageMode::Teleport => {
+            let face = faces
+                .teleport
+                .zip(state)
+                .map(|(form, state)| form.runs(state))
+                .unwrap_or_default();
+            return face_view(picture, rect, mode, face, (result, TELEPORT_RESULT_ROW));
+        }
+        PageMode::Watch => {
+            let face = faces.watch.map(watch_runs).unwrap_or_default();
+            let mut view = face_view(picture, rect, mode, face, (result, WATCH_RESULT_ROW));
+            view.title = watch_title(faces.watch).to_string();
+            return view;
+        }
+        PageMode::Main | PageMode::Confirm => {}
     }
     let mut put = |col: u32, row: u32, text: &str, ink: u8| {
         runs.push(Run {
@@ -563,6 +689,7 @@ fn page_view(
             picture,
             mode,
             runs,
+            title: String::new(),
         };
     }
     let (left, right) = (rect.col + 2, rect.col + SECOND_COL);
@@ -614,10 +741,30 @@ fn page_view(
             row += 1;
         }
     }
-    if cheats.allows(cheats.stat_edit) {
+    let more: Vec<&str> = [
+        (cheats.allows(cheats.stat_edit), EDIT_ENTRY),
+        (cheats.allows(cheats.teleport), TELEPORT_ENTRY),
+        (cheats.state_watch, WATCH_ENTRY),
+    ]
+    .into_iter()
+    .filter_map(|(on, entry)| on.then_some(entry))
+    .collect();
+    if !more.is_empty() {
         row += 1;
         put(left, row, MORE_HEADING, HELP);
-        put(left + MORE_HEADING.len() as u32 + 2, row, EDIT_ENTRY, INK);
+        // The entries flow after the heading, two cells apart, and wrap
+        // under the first.
+        let first = left + MORE_HEADING.len() as u32 + 2;
+        let end = rect.right() - 1;
+        let mut col = first;
+        for entry in more {
+            if col > first && col + entry.len() as u32 > end {
+                row += 1;
+                col = first;
+            }
+            put(col, row, entry, INK);
+            col += entry.len() as u32 + 2;
+        }
     }
     if let Some(result) = result {
         let width = (rect.w - 4) as usize;
@@ -630,6 +777,7 @@ fn page_view(
         picture,
         mode,
         runs,
+        title: String::new(),
     }
 }
 
@@ -838,6 +986,16 @@ pub(crate) fn draw_page(view: &PageView, font: &FixedCellFont) -> PageImage {
             draw_tab(&mut img, font, rect, rect.row, EDIT_TITLE, ACCENT);
             draw_tab(&mut img, font, rect, rect.bottom(), EDIT_FOOTER, INK);
         }
+        PageMode::Teleport => {
+            draw_panel(&mut img, rect, &TELEPORT_DIVIDERS);
+            draw_tab(&mut img, font, rect, rect.row, TELEPORT_TITLE, ACCENT);
+            draw_tab(&mut img, font, rect, rect.bottom(), TELEPORT_FOOTER, INK);
+        }
+        PageMode::Watch => {
+            draw_panel(&mut img, rect, &WATCH_DIVIDERS);
+            draw_tab(&mut img, font, rect, rect.row, &view.title, ACCENT);
+            draw_tab(&mut img, font, rect, rect.bottom(), WATCH_FOOTER, INK);
+        }
         PageMode::Confirm => {
             let dialog = dialog_rect(rect);
             draw_panel(&mut img, dialog, &[]);
@@ -938,6 +1096,7 @@ pub(super) fn page_present(
     toggles: Option<Res<Toggles>>,
     session: Option<Res<CheatSession>>,
     visual: Option<Res<VisualState>>,
+    watch: Option<Res<WatchLog>>,
     windows: Query<&Window>,
     sprites: Query<(&Sprite, &Transform)>,
     mut images: ResMut<Assets<Image>>,
@@ -959,7 +1118,11 @@ pub(super) fn page_present(
         session.as_deref(),
         Some(&visual.state),
         page.result.as_deref(),
-        page.edit.as_ref(),
+        Faces {
+            edit: page.edit.as_ref(),
+            teleport: page.teleport.as_ref(),
+            watch: watch.as_deref(),
+        },
     );
     if page.drawn.as_ref() != Some(&view) || page.image.is_none() {
         let image = rgba_image(draw_page(&view, &visual.text_font));
@@ -1018,7 +1181,7 @@ pub(crate) fn page_view_for_tests(
         Some(session),
         None,
         None,
-        None,
+        Faces::default(),
     )
 }
 

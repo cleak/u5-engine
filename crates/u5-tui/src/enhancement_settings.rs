@@ -484,8 +484,15 @@ pub fn visual_launch_config(
         enhancements: settings.resolved,
         settings_sink,
         save_dir: Some(save_dir.to_path_buf()),
+        watch_dir: Some(watch_log_dir()),
         bezel: bezel.image,
     }
+}
+
+/// The change watch's log folder, `<data_base>/watch/` (design 7.2.8).
+#[cfg(feature = "visual")]
+fn watch_log_dir() -> PathBuf {
+    DesktopPaths::from_env(&HostEnv::from_process()).watch_dir()
 }
 
 /// `--show-settings`: the settings the default launch would use, with this
@@ -1400,6 +1407,9 @@ mod tests {
         assert!(launch.enhancements.is_classic());
         assert!(launch.settings_sink.is_some());
         assert_eq!(launch.save_dir.as_deref(), Some(save_dir.as_path()));
+        // The watch's folder is the host's, under its data base.
+        let host = DesktopPaths::from_env(&HostEnv::from_process());
+        assert_eq!(launch.watch_dir, Some(host.data_base.join("watch")));
 
         // A launch that does not read the file stores nothing.
         let launch = visual_launch_config(resolve_launch(None, &[], LockState::Off), &save_dir);

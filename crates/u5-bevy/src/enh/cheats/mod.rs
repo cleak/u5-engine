@@ -13,6 +13,11 @@
 //! - [`page`]: the Cheats page, `OverlayId::Cheats`, opened by the
 //!   `[keys] cheats` chord through the foundation's router, with its result
 //!   line and the "Allow cheats?" confirmation (7.2.1, 7.2.3).
+//! - [`teleport`]: the Teleport face, the page's one spoiler face (7.2.7);
+//!   Enter queues the move for `cheat_apply`.
+//! - [`watch`]: the change watch, `watch_record` in `EnhSet::Observe`
+//!   under its own `state_watch` condition, read-only, and its face
+//!   (7.2.8, 7.3.8).
 //! - [`marker`]: the modified marker, `SaveMeta { cheats_used }` in the
 //!   foundation's META sidecar, written on each new save of a tainted
 //!   session and read when gameplay starts (7.3.7, D-M8.1).
@@ -32,6 +37,8 @@ pub mod apply;
 pub mod edit;
 pub mod marker;
 pub mod page;
+pub mod teleport;
+pub mod watch;
 
 use bevy::prelude::*;
 use u5_runtime::enhancements::{CheatToggles, FeatureToggles, Toggle};
@@ -44,6 +51,7 @@ use crate::VisualState;
 pub use apply::{CheatAction, LockEpoch, LockKind, QuickAction};
 pub use marker::MarkerState;
 pub use page::{CheatPage, PageMode};
+pub use watch::{WATCH_CAPACITY, WatchFolder, WatchLog};
 
 /// The section switch: every system that changes the game runs under it.
 const SWITCH: Toggle = Toggle::CheatsEnabled;
@@ -72,6 +80,9 @@ pub fn cheats_wanted(launch: &VisualLaunchConfig) -> bool {
 /// watcher.
 pub(super) fn add_cheats(app: &mut App, launch: &VisualLaunchConfig) {
     if cheats_wanted(launch) {
+        if let Some(dir) = &launch.watch_dir {
+            app.insert_resource(WatchFolder(dir.clone()));
+        }
         app.add_plugins(CheatsPlugin);
     }
 }
@@ -178,6 +189,14 @@ impl Plugin for CheatsPlugin {
             )
             .add_systems(
                 Update,
+                watch::watch_record
+                    .in_set(EnhSet::Observe)
+                    .run_if(toggle_on(Toggle::CheatsStateWatch))
+                    .run_if(resource_exists::<watch::WatchLog>)
+                    .run_if(resource_exists::<VisualState>),
+            )
+            .add_systems(
+                Update,
                 page::page_present
                     .in_set(EnhSet::Present)
                     .run_if(page::page_present_due),
@@ -194,10 +213,17 @@ fn cheats_sync(
     toggles: Res<Toggles>,
     session: Option<Res<CheatSession>>,
     page: Option<Res<CheatPage>>,
+    watch: Option<Res<WatchLog>>,
     overlay: Option<Res<OverlayState>>,
     mut requests: EventWriter<OverlayRequest>,
 ) {
     let cheats = cheat_toggles(toggles.0);
+    // The watch's log exists while `state_watch` is on (7.3.8).
+    match (cheats.state_watch, watch.is_some()) {
+        (true, false) => commands.insert_resource(WatchLog::default()),
+        (false, true) => commands.remove_resource::<WatchLog>(),
+        _ => {}
+    }
     match (cheats.any_state_altering(), session.is_some()) {
         (true, false) => commands.insert_resource(CheatSession {
             attach_requested: true,

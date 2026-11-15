@@ -328,3 +328,127 @@ fn edit_page_review_shots() {
     );
     let _ = std::fs::remove_dir_all(game);
 }
+
+/// The M8-05 review shots: the main page's More row, the Teleport face
+/// (a castle floor, Doom with its warning, Britannia) and the Watch face,
+/// drawn by the real shell over a real frame. Skipped unless
+/// `U5_MOCKUP_PROFILE` names a game copy and `U5_CHEATS_M805_SHOTS` a
+/// folder; nothing is committed.
+#[test]
+fn teleport_and_watch_review_shots() {
+    let (Some(profile), Some(out)) = (
+        configured_test_dir("U5_MOCKUP_PROFILE"),
+        configured_test_dir("U5_CHEATS_M805_SHOTS"),
+    ) else {
+        eprintln!("skipped: set U5_MOCKUP_PROFILE and U5_CHEATS_M805_SHOTS");
+        return;
+    };
+    let game = unique_scratch_dir("cheats-m805-review-shots");
+    for entry in std::fs::read_dir(&profile).unwrap() {
+        let entry = entry.unwrap();
+        if entry.file_type().unwrap().is_file() {
+            copy_asset_writable(&entry.path(), &game.join(entry.file_name())).unwrap();
+        }
+    }
+    let scene = Scene::from_game_dir(&game).unwrap();
+    let state = PlayState::load_scene(
+        &game,
+        PlayOptions {
+            target: PlayTarget::Town(GameScene::from_key("TOWNE:1").unwrap()),
+            floor: 0,
+            start: Some((15, 17)),
+            clock: GameClock::new(10, 0).unwrap(),
+            ..PlayOptions::default()
+        },
+    )
+    .unwrap();
+    let mut launch = every_cheat_launch();
+    for toggle in [
+        Toggle::CheatsStatEdit,
+        Toggle::CheatsTeleport,
+        Toggle::CheatsStateWatch,
+    ] {
+        launch.enhancements.toggles.set(toggle, true);
+    }
+    let mut shell = Shell::new(state, &scene, &launch, |_| {});
+    shell.app.world_mut().spawn(Window {
+        resolution: WindowResolution::new(1600.0, 1200.0),
+        ..default()
+    });
+    let mut walk = Timeline::new(40);
+    walk.game_tap(4, KeyCode::ArrowDown)
+        .game_tap(12, KeyCode::ArrowRight)
+        .game_tap(20, KeyCode::Space);
+    for frame in 0..walk.len() {
+        shell.step(walk.frame(frame));
+    }
+    let mut timeline = Timeline::new(90);
+    timeline.event(
+        2,
+        KeyCode::ControlLeft,
+        ButtonState::Pressed,
+        false,
+        Owner::Feature,
+    );
+    timeline.feature_tap(3, KeyCode::F12);
+    timeline.event(
+        5,
+        KeyCode::ControlLeft,
+        ButtonState::Released,
+        false,
+        Owner::Feature,
+    );
+    // Main (frame 8), [T] on the town (14); Right: Dungeon, Down, Left:
+    // Doom (24); Right: Britannia (30); Esc, [W] (40); Esc, H, W (50).
+    timeline.feature_tap(10, KeyCode::KeyT);
+    timeline.feature_tap(16, KeyCode::ArrowRight);
+    timeline.feature_tap(18, KeyCode::ArrowDown);
+    timeline.feature_tap(20, KeyCode::ArrowLeft);
+    timeline.feature_tap(26, KeyCode::ArrowUp);
+    timeline.feature_tap(28, KeyCode::ArrowRight);
+    timeline.feature_tap(32, KeyCode::Escape);
+    timeline.feature_tap(34, KeyCode::KeyH);
+    timeline.feature_tap(38, KeyCode::KeyW);
+    let mut shots = Vec::new();
+    for frame in 0..timeline.len() {
+        shell.step(timeline.frame(frame));
+        match frame {
+            8 => shots.push(("main-more", composite(&shell))),
+            14 => shots.push(("teleport-town", composite(&shell))),
+            24 => shots.push(("teleport-doom", composite(&shell))),
+            30 => shots.push(("teleport-britannia", composite(&shell))),
+            _ => {}
+        }
+    }
+    shots.push(("watch", composite(&shell)));
+    for (name, img) in &shots {
+        img.save(out.join(format!("engine-{name}-320x200.png")))
+            .unwrap();
+        scaled(img, 4)
+            .save(out.join(format!("engine-{name}-4x.png")))
+            .unwrap();
+    }
+    for (shot, prefix) in [(1, "teleport"), (2, "doom"), (4, "watch")] {
+        let img = &shots[shot].1;
+        for (name, x, y, w, h) in [
+            ("corner-top-left", 0, 0, 64, 40),
+            ("corner-bottom-right", 256, 160, 64, 40),
+            ("title-tab", 72, 0, 176, 24),
+            ("footer-tab", 72, 176, 176, 24),
+            ("dividers-left", 0, 16, 48, 152),
+            ("dividers-right", 272, 16, 48, 152),
+            ("top", 0, 0, 320, 72),
+            ("middle", 0, 64, 320, 80),
+            ("bottom", 0, 128, 320, 72),
+        ] {
+            crop4(img, x, y, w, h)
+                .save(out.join(format!("closeup-{prefix}-{name}.png")))
+                .unwrap();
+        }
+    }
+    assert_eq!(
+        shell.app.world().resource::<CheatPage>().mode(),
+        PageMode::Watch
+    );
+    let _ = std::fs::remove_dir_all(game);
+}

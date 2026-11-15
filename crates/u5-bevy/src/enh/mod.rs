@@ -97,6 +97,9 @@ pub struct VisualLaunchConfig {
     /// The folder the host chose for the save files. The engine never
     /// derives OS paths itself.
     pub save_dir: Option<PathBuf>,
+    /// The folder the host chose for saved change-watch logs,
+    /// `<data_base>/watch/` (design 7.2.8). `None`: the watch cannot save.
+    pub watch_dir: Option<PathBuf>,
     /// `display.bezel_image`, decoded by the host at launch (design 2.3.3).
     /// `None` when the fill is not a bezel or the file could not be used;
     /// the engine then shows black bars.
@@ -114,6 +117,7 @@ impl VisualLaunchConfig {
             enhancements: ResolvedEnhancements::classic(),
             settings_sink: None,
             save_dir: None,
+            watch_dir: None,
             bezel: None,
             bezel_updates: None,
         }

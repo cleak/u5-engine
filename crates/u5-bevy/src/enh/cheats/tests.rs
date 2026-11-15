@@ -824,3 +824,6 @@ fn the_page_is_drawn_in_the_kit_s_colours_on_the_cell_grid() {
     let all = page::page_view_for_tests((320, 200), &cheats, &session);
     assert!(all.texts().contains(&"[x] 1 Health".to_string()));
 }
+
+#[path = "faces_tests.rs"]
+mod faces;

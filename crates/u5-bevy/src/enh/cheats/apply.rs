@@ -23,13 +23,14 @@
 
 use bevy::prelude::*;
 use u5_runtime::cheats::{
-    CheatEdit, CheatRefusal, EditReport, EngagedLocks, apply_cheat_edit, apply_cheat_edits,
-    apply_locks,
+    CheatEdit, CheatRefusal, EditReport, EngagedLocks, TeleportPlan, TeleportTarget,
+    apply_cheat_edit, apply_cheat_edits, apply_locks, commit_teleport, plan_teleport,
 };
 use u5_runtime::enhancements::{CheatToggles, LockPermissions};
 use u5_runtime::{Area, PlayState, REAGENT_COUNT, TransportState};
 
 use super::page::CheatPage;
+use super::teleport::{LOAD_FAILED, TELEPORTED, refusal_text};
 use super::{CheatSession, Toggles, cheat_toggles};
 use crate::VisualState;
 use crate::enh::toast::ShellBadges;
@@ -191,6 +192,8 @@ pub enum CheatAction {
     /// change (7.2.6). An empty list is the empty Apply: `NothingToDo`,
     /// and the session stays untainted.
     Edit(Vec<CheatEdit>),
+    /// Teleport's Enter (7.2.7): planned again here, then committed.
+    Teleport(TeleportTarget),
 }
 
 /// The lock epoch: one per turn and one per combat round (7.3.4).
@@ -308,10 +311,12 @@ pub(super) fn cheat_apply(
     }
     // Only now is the state borrowed for writing, so an idle frame with
     // nothing to do leaves `VisualState` unchanged.
+    let game_dir = visual.game_dir.clone();
     let state = &mut visual.state;
     let mut changed = false;
     let mut result = None;
     let mut edit_applied = false;
+    let mut teleported = false;
     for action in std::mem::take(&mut session.queued) {
         match action {
             CheatAction::Quick(quick) => {
@@ -350,6 +355,15 @@ pub(super) fn cheat_apply(
                     Err(refusal) => result = Some(refusal_result(refusal)),
                 }
             }
+            CheatAction::Teleport(target) => {
+                if !cheats.allows(cheats.teleport) {
+                    result = Some(CHEAT_OFF.to_string());
+                    continue;
+                }
+                result = Some(teleport(state, &game_dir, target).to_string());
+                teleported = true;
+                changed |= result.as_deref() == Some(TELEPORTED);
+            }
         }
     }
     if epoch_due {
@@ -359,6 +373,9 @@ pub(super) fn cheat_apply(
     if let Some(mut page) = page {
         if edit_applied {
             page.refresh_edit(state);
+        }
+        if teleported {
+            page.refresh_teleport(state, &game_dir);
         }
         if let Some(text) = result {
             page.set_result(text);
@@ -372,6 +389,22 @@ pub(super) fn cheat_apply(
         badges.modified = true;
     }
     repaint(&mut visual, &mut images, session);
+}
+
+/// Plans `target` again at the prompt and commits it: the result line.
+/// A refusal or a load failure changes nothing (7.2.10).
+fn teleport(
+    state: &mut PlayState,
+    game_dir: &std::path::Path,
+    target: TeleportTarget,
+) -> &'static str {
+    match plan_teleport(state, game_dir, target) {
+        plan @ TeleportPlan::Ready { .. } => match commit_teleport(state, game_dir, &plan) {
+            Ok(()) => TELEPORTED,
+            Err(_) => LOAD_FAILED,
+        },
+        TeleportPlan::Refused(refusal) => refusal_text(&refusal),
+    }
 }
 
 /// The result line when a lock is unchecked.
