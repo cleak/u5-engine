@@ -16,7 +16,7 @@ use crate::{ActiveObject, test_fixtures};
 const SKELETON_CLASS: u8 = 33;
 
 /// Every roster position handed over.
-fn whole_party() -> AutoEngagement {
+pub(super) fn whole_party() -> AutoEngagement {
     AutoEngagement {
         members: [true; 6],
         until_done: false,
@@ -25,7 +25,7 @@ fn whole_party() -> AutoEngagement {
 
 /// A fight under way on open ground: member 0 (roster 0) prompted at
 /// (2, 5), no foes yet. Add them with [`add_monster`].
-fn arena() -> PlayState {
+pub(super) fn arena() -> PlayState {
     let mut state = test_fixtures::test_state(test_fixtures::open_grid(), 5, 5);
     state.combat_active = true;
     state.combat_round_loop_prologue_ran = true;
@@ -43,7 +43,7 @@ fn arena() -> PlayState {
     state
 }
 
-fn add_party_member(state: &mut PlayState, slot: usize, x: u8, y: u8, extra_flags: u8) {
+pub(super) fn add_party_member(state: &mut PlayState, slot: usize, x: u8, y: u8, extra_flags: u8) {
     state.active_objects[slot] = ActiveObject {
         type_byte: 0x80,
         tile: 0x80,
@@ -63,7 +63,7 @@ fn add_party_member(state: &mut PlayState, slot: usize, x: u8, y: u8, extra_flag
     ]);
 }
 
-fn add_monster(state: &mut PlayState, slot: usize, x: u8, y: u8, extra_flags: u8) {
+pub(super) fn add_monster(state: &mut PlayState, slot: usize, x: u8, y: u8, extra_flags: u8) {
     state.active_objects[slot] = ActiveObject {
         type_byte: 0x90,
         tile: 0x90,
@@ -83,15 +83,15 @@ fn add_monster(state: &mut PlayState, slot: usize, x: u8, y: u8, extra_flags: u8
     ]);
 }
 
-fn plan(state: &PlayState, fight: &AutoFightRuntime) -> AutoPlan {
+pub(super) fn plan(state: &PlayState, fight: &AutoFightRuntime) -> AutoPlan {
     plan_next_auto_key(state, &CombatSettings::default(), &whole_party(), fight)
 }
 
-fn plan_fresh(state: &PlayState) -> AutoPlan {
+pub(super) fn plan_fresh(state: &PlayState) -> AutoPlan {
     plan(state, &AutoFightRuntime::default())
 }
 
-fn scenario_input(key: AutoKey) -> CombatScenarioInput {
+pub(super) fn scenario_input(key: AutoKey) -> CombatScenarioInput {
     match key {
         AutoKey::Attack => CombatScenarioInput::Attack,
         AutoKey::Pass => CombatScenarioInput::Pass,

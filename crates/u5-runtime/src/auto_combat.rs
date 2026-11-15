@@ -11,7 +11,7 @@
 //! Nothing here is stored in [`PlayState`](crate::PlayState), and nothing
 //! here reads the transcript. The command-prompt planner
 //! [`plan_next_auto_key`] and the observer [`observe_after_auto_key`] are
-//! build plan M7-02; the targeting cursor is M7-03.
+//! build plan M7-02; the targeting cursor (an auto-owned attempt) is M7-03.
 
 use crate::combat_actor::{
     COMBAT_PARTY_ACTOR_SLOTS, CombatActorDescriptor, CombatArenaFieldKind,
@@ -19,6 +19,8 @@ use crate::combat_actor::{
     combat_arena_range, combat_side_census, combat_slot_prompted_by_player_command_handler,
     combat_target_groups_are_hostile, find_combat_ai_target,
 };
+use crate::combat_arena::COMBAT_ARENA_SIDE;
+use crate::combat_targeting::combat_targeting_cursor_step;
 use crate::constants::OOL_SLOTS;
 use crate::enhancements::idle::IdlePromptKind;
 use crate::input_codes::{InputDirection, input_direction_code};
@@ -340,21 +342,150 @@ fn owned_command_roster(state: &PlayState, slot: usize, engaged: &AutoEngagement
 }
 
 /// Pure: reads live state, draws nothing, mutates nothing (6.3.2).
+///
+/// A pending [`AutoFightRuntime::stopping`] never cuts an auto-owned
+/// targeting attempt short (6.2.4): the cursor keeps being planned until
+/// the `A` walk closes, and the hand-back is reported at the next prompt.
 pub fn plan_next_auto_key(
     state: &PlayState,
     settings: &CombatSettings,
     engaged: &AutoEngagement,
     fight: &AutoFightRuntime,
 ) -> AutoPlan {
-    match auto_prompt(state) {
+    let prompt = auto_prompt(state);
+    if let AutoPrompt::Cursor { slot } = prompt
+        && fight.owns_open_attempt
+    {
+        return plan_cursor(state, fight, slot);
+    }
+    if let Some(reason) = fight.stopping {
+        return AutoPlan::HandBack(reason);
+    }
+    match prompt {
         AutoPrompt::Command { slot, .. } => match owned_command_roster(state, slot, engaged) {
             Some(_) => plan_command_prompt(state, settings, fight, slot),
             None => AutoPlan::NotOurs,
         },
-        // The targeting cursor is planned by build plan M7-03; until then
-        // an open cursor is left to the human.
+        // A cursor the player opened is the player's.
         AutoPrompt::Cursor { .. } | AutoPrompt::None | AutoPrompt::Other => AutoPlan::NotOurs,
     }
+}
+
+/// The eight cursor moves in the order the search tries them: the
+/// cardinals, then the diagonals (`systems/combat.md` 8.2).
+const CURSOR_MOVES: [InputDirection; 8] = [
+    InputDirection::West,
+    InputDirection::East,
+    InputDirection::North,
+    InputDirection::South,
+    InputDirection::Northwest,
+    InputDirection::Northeast,
+    InputDirection::Southwest,
+    InputDirection::Southeast,
+];
+
+/// An auto-owned targeting attempt (6.3.3): re-pick the target among the
+/// eligible occupants within this attempt's `max_range`, Confirm only on
+/// that occupant's cell, Cancel when nothing is in reach, otherwise one
+/// cursor move along a shortest path. Never Space; never Enter on the
+/// attacker's own cell.
+fn plan_cursor(state: &PlayState, fight: &AutoFightRuntime, slot: usize) -> AutoPlan {
+    let Some(session) = state.active_combat_targeting.as_ref() else {
+        return AutoPlan::HandBack(HandBack::UnexpectedPrompt);
+    };
+    let side = COMBAT_ARENA_SIDE as u8;
+    let in_arena = |cell: (u8, u8)| cell.0 < side && cell.1 < side;
+    // An attempt auto did not open, or a session the engine never builds.
+    if fight.turn_slot != Some(slot)
+        || session.attempt().is_none()
+        || !in_arena(session.attacker)
+        || !in_arena(session.cursor)
+        || combat_arena_range(
+            session.attacker.0,
+            session.attacker.1,
+            session.cursor.0,
+            session.cursor.1,
+        ) > session.max_range
+    {
+        return AutoPlan::HandBack(HandBack::UnexpectedPrompt);
+    }
+    // Cursor keys that keep changing nothing: give the attempt up, which
+    // spends it exactly as a human's Escape does.
+    if fight.no_progress >= NO_PROGRESS_BUDGET {
+        return AutoPlan::Key(AutoKey::Cancel);
+    }
+    let Some(target) = cursor_target(state, slot, session.attacker, session.max_range) else {
+        return AutoPlan::Key(AutoKey::Cancel);
+    };
+    if session.cursor == target {
+        return AutoPlan::Key(AutoKey::Confirm);
+    }
+    match cursor_path_first_move(session.cursor, target, session.attacker, session.max_range) {
+        Some(direction) => AutoPlan::Key(AutoKey::Cursor(direction)),
+        None => AutoPlan::Key(AutoKey::Cancel),
+    }
+}
+
+/// The cell of the target this attempt should strike: the nearest eligible
+/// hostile (the command prompt's rule, suppression filter on) among those
+/// within `max_range` of the attacker whose cell
+/// `combat_targeting_occupant_at` resolves to that very slot, never the
+/// attacker's own cell.
+fn cursor_target(
+    state: &PlayState,
+    slot: usize,
+    attacker: (u8, u8),
+    max_range: u8,
+) -> Option<(u8, u8)> {
+    let acting_group = state.combat_target_group_for_slot(slot);
+    let mut views = auto_candidate_views(state, acting_group);
+    for (candidate, view) in views.iter_mut().enumerate() {
+        let reachable = state.combat_actor_cell(candidate).is_some_and(|cell| {
+            cell != attacker
+                && combat_arena_range(attacker.0, attacker.1, cell.0, cell.1) <= max_range
+                && state.combat_targeting_occupant_at(cell) == Some(candidate)
+        });
+        view.suppressed = view.suppressed || !reachable;
+    }
+    let target = find_combat_ai_target(&views, slot, acting_group, false).slot?;
+    state.combat_actor_cell(target)
+}
+
+/// A breadth-first search over cursor cells from `cursor` to `target`,
+/// with the engine's own `combat_targeting_cursor_step` as the move
+/// function, so the 11x11 bounds and the range clamp are exactly the
+/// engine's. Returns the first move of a shortest path.
+fn cursor_path_first_move(
+    cursor: (u8, u8),
+    target: (u8, u8),
+    attacker: (u8, u8),
+    max_range: u8,
+) -> Option<InputDirection> {
+    let index = |cell: (u8, u8)| usize::from(cell.1) * COMBAT_ARENA_SIDE + usize::from(cell.0);
+    let mut first: [Option<InputDirection>; COMBAT_ARENA_SIDE * COMBAT_ARENA_SIDE] =
+        [None; COMBAT_ARENA_SIDE * COMBAT_ARENA_SIDE];
+    let mut seen = [false; COMBAT_ARENA_SIDE * COMBAT_ARENA_SIDE];
+    let mut queue = std::collections::VecDeque::new();
+    seen[index(cursor)] = true;
+    queue.push_back(cursor);
+    while let Some(cell) = queue.pop_front() {
+        for direction in CURSOR_MOVES {
+            let Some(next) = combat_targeting_cursor_step(cell, attacker, max_range, direction)
+            else {
+                continue;
+            };
+            if seen[index(next)] {
+                continue;
+            }
+            seen[index(next)] = true;
+            first[index(next)] = first[index(cell)].or(Some(direction));
+            if next == target {
+                return first[index(next)];
+            }
+            queue.push_back(next);
+        }
+    }
+    None
 }
 
 /// The Fight tactic at an owned command prompt (6.2.3, 6.3.3).
@@ -637,6 +768,8 @@ pub fn observe_after_auto_key(state: &PlayState, key: AutoKey, fight: &mut AutoF
     fight.last_print = Some(after);
 }
 
+#[cfg(test)]
+mod cursor_tests;
 #[cfg(test)]
 mod planner_tests;
 #[cfg(test)]
