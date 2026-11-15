@@ -241,6 +241,7 @@ impl Plugin for EnhancementsPlugin {
         );
         gem_map::add_gem_map(app, &self.launch);
         journal::clues::add_clue_log(app, &self.launch);
+        journal::highlight::add_highlight(app, &self.launch);
         crate::quest_journal_view::add_quest_journal(app, &self.launch);
         crate::display::add_display(app, &self.launch);
     }

@@ -40,8 +40,8 @@ use std::sync::Arc;
 
 use bevy::prelude::*;
 use u5_runtime::enhancements::clues::{
-    ClueLog, ConversationSnapshot, DialogKey, EncodeOptions, JOURNAL_PAYLOAD_VERSION, NpcKey,
-    Reconciled, RecordAddr, TestInputs, Turn, TurnAttributor, TurnContext, encode_payload,
+    ClueEntry, ClueLog, ConversationSnapshot, DialogKey, EncodeOptions, JOURNAL_PAYLOAD_VERSION,
+    NpcKey, Reconciled, RecordAddr, TestInputs, Turn, TurnAttributor, TurnContext, encode_payload,
     game_minute, reconcile, test_inputs,
 };
 use u5_runtime::enhancements::{
@@ -95,6 +95,9 @@ pub struct ClueObserver {
     session: Option<ObservedSession>,
     /// Session-only mode: what was asked in this conversation.
     asked: Vec<(NpcKey, DialogKey, RecordAddr)>,
+    /// The same turns as whole entries, with their test bits, for the
+    /// highlighting of 8.3.10 (M6-05).
+    asked_entries: Vec<ClueEntry>,
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -120,6 +123,11 @@ impl ClueObserver {
     /// in the conversation in progress.
     pub fn asked(&self) -> &[(NpcKey, DialogKey, RecordAddr)] {
         &self.asked
+    }
+
+    /// The session-only asked set as entries (test bits included).
+    pub fn asked_entries(&self) -> &[ClueEntry] {
+        &self.asked_entries
     }
 
     /// Turns dropped in the conversation in progress (8.3.4 item 10).
@@ -531,7 +539,10 @@ fn clue_observe_post(
                 Some(log) => {
                     log.log.fold(entry);
                 }
-                None => observer.asked.push((entry.npc, entry.dialog, entry.record)),
+                None => {
+                    observer.asked.push((entry.npc, entry.dialog, entry.record));
+                    observer.asked_entries.push(entry);
+                }
             }
         }
     }
@@ -566,6 +577,7 @@ fn clue_eviction_toast(mut log: ResMut<ClueLogResource>, toasts: Option<ResMut<T
 fn end_session(observer: &mut ClueObserver) {
     observer.session = None;
     observer.asked.clear();
+    observer.asked_entries.clear();
 }
 
 /// Writes the log after each new save (8.3.7). A new character's stamp

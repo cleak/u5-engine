@@ -12,6 +12,8 @@
 //! - [`reconcile`]: what a sidecar read gives the log, by freshness.
 //! - [`dependence`]: which state an answer can depend on, and the
 //!   asked-state rule (8.3.13).
+//! - [`highlight`]: which words of the conversation window to mark
+//!   (8.3.10).
 //!
 //! `ClueLog` is a shell resource in `u5-bevy`, never a `PlayState` field.
 //! Everything here is pure: no RNG, no file, no session method.
@@ -19,6 +21,7 @@
 pub mod attribute;
 pub mod codec;
 pub mod dependence;
+pub mod highlight;
 pub mod reconcile;
 
 pub use attribute::{
@@ -32,6 +35,10 @@ pub use codec::{
 pub use dependence::{
     AskedState, Dependence, MAX_TESTS, Test, TestInputs, asked_state, block_count,
     declaration_index, evaluate, record_dependence,
+};
+pub use highlight::{
+    Asked, HighlightRow, HighlightSession, Mark, Span, highlight_spans, is_prompt_or_echo_row,
+    phase_suppresses, topic_keyword,
 };
 pub use reconcile::{ReconcileNote, Reconciled, reconcile};
 
