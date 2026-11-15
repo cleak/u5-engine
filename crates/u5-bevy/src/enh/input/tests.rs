@@ -287,7 +287,14 @@ fn bindings_follow_their_features() {
         .collect();
     assert_eq!(
         enabled,
-        [EnhAction::ToggleFullscreen, EnhAction::ToggleColumn]
+        [
+            EnhAction::ToggleFullscreen,
+            EnhAction::ToggleColumn,
+            // M7: `combat.auto`.
+            EnhAction::AutoMember,
+            EnhAction::AutoParty,
+            EnhAction::AutoUntilDone,
+        ]
     );
     let (map, notes) = KeyMap::for_toggles(&default_keys(), every);
     assert!(notes.is_empty());

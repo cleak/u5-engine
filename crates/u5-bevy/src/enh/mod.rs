@@ -37,6 +37,8 @@
 //!   a display toggle or the menu overlay is on.
 //! - The gem map's plugin ([`gem_map`]) is added only while
 //!   `gem_map.enhanced` is on at launch.
+//! - Automatic combat's plugin ([`auto_combat`]) is added only while
+//!   `combat.auto` is on at launch.
 //!
 //! The Bevy half of the trajectory-equivalence harness (`equivalence`,
 //! test-only) runs the real `--visual` app headless, feature on against
@@ -240,6 +242,7 @@ impl Plugin for EnhancementsPlugin {
             self.launch.save_dir.as_deref(),
         );
         gem_map::add_gem_map(app, &self.launch);
+        auto_combat::add_auto_combat(app, &self.launch);
         crate::display::add_display(app, &self.launch);
     }
 }

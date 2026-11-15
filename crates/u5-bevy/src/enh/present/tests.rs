@@ -164,9 +164,12 @@ fn no_host_exists_while_no_step_is_registered() {
     // ...except the grow-left layout, whose `[grow-left compose]` step,
     // frame fit and canvas size are its own (M1-09, display/grow tests), and
     // sprite compositing, whose `[composite]` step is its own (M2-06,
-    // display/composite tests).
+    // display/composite tests). Auto-combat brings the toast line, whose
+    // real-time tick this bare app has no clock for (M7-05).
     for spec in TOGGLES.iter().filter(|spec| {
-        spec.toggle != Toggle::DisplayGrowLeft && spec.toggle != Toggle::DisplaySpriteComposite
+        spec.toggle != Toggle::DisplayGrowLeft
+            && spec.toggle != Toggle::DisplaySpriteComposite
+            && spec.toggle != Toggle::CombatAuto
     }) {
         every.enhancements.toggles.set(spec.toggle, true);
     }
