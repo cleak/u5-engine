@@ -1086,8 +1086,8 @@ mod tests {
     fn aliases_come_from_shipped_rows_only() {
         // `--preset` is parsed by `cli.rs` itself; the display rows of
         // chapter 2 P1, P2 and P8, chapter 9 P1's `--brightness`, P5's
-        // `--sprite-composite` and chapter 10 G2's `--gem-map` are the only
-        // shipped rows with aliases so far.
+        // `--sprite-composite`, chapter 10 G2's `--gem-map` and chapter 3's
+        // Phases 1-4 (M4-13) are the shipped rows with aliases so far.
         assert_eq!(find_cli_alias("--preset"), None);
         assert_eq!(find_cli_alias("--no-preset"), None);
         assert_eq!(find_cli_alias("--quest-journal"), None);
@@ -1110,12 +1110,21 @@ mod tests {
                 "--grow-left,",
                 "--sprite-composite,",
                 "--gem-map,",
+                "--menu-overlay,",
+                "--title-layer,",
+                "--named-slots,",
+                "--mute,",
+                "--mute-on-focus-loss,",
+                "--start-sound-off,",
+                "--start-buffer-on,",
                 "--scale-mode",
                 "--pixel-aspect",
                 "--pillar-fill",
                 "--bezel-image",
                 "--vsync,",
-                "--brightness"
+                "--brightness",
+                "--confirm-unsaved,",
+                "--volume"
             ]
         );
         for row in CatalogueRow::all().filter(|row| row.is_shipped()) {

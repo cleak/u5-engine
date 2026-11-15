@@ -366,11 +366,13 @@ fn the_rows_are_chapter_3s_in_the_designs_order() {
 }
 
 #[test]
-fn no_chapter_3_phase_ships_yet() {
+fn m4_ships_phases_1_to_4_only() {
+    // M4-13 ships the menu's Phases 1-4; the optional 5 and 7 are not in M4.
     for phase in [MENU_P1, MENU_P2, MENU_P3, MENU_P4, MENU_P5, MENU_P7] {
         assert_eq!(phase.chapter, 3);
-        assert!(!SHIPPED_PHASES.contains(&phase), "{phase:?}");
-        assert!(!phase.is_shipped());
+        let shipped = M4_PHASES.contains(&phase);
+        assert_eq!(SHIPPED_PHASES.contains(&phase), shipped, "{phase:?}");
+        assert_eq!(phase.is_shipped(), shipped, "{phase:?}");
     }
     assert_eq!(
         [MENU_P1, MENU_P2, MENU_P3, MENU_P4, MENU_P5, MENU_P7].map(|phase| phase.name),
@@ -378,8 +380,10 @@ fn no_chapter_3_phase_ships_yet() {
             "Phase 1", "Phase 2", "Phase 3", "Phase 4", "Phase 5", "Phase 7"
         ]
     );
+    // Every row but Phase 5's `input.*` is visible (U13).
     for row in CatalogueRow::all().filter(|row| is_chapter_3(row.key())) {
-        assert!(!row.is_shipped(), "{} is hidden (U13)", row.key());
+        let hidden = INPUT_KEYS.contains(&row.key());
+        assert_eq!(row.is_shipped(), !hidden, "{}", row.key());
     }
 }
 
@@ -658,11 +662,11 @@ fn input_rows_are_not_available_in_this_build() {
 }
 
 #[test]
-fn every_row_is_not_available_in_this_build() {
-    // The build as it ships today: every chapter 3 key resolves to its
+fn only_the_phase_5_rows_are_not_available_in_this_build() {
+    // The build as it ships: every `input.*` key (Phase 5) resolves to its
     // default with the note, and the game stays Classic.
     let cli: Vec<CliSetting> = CatalogueRow::all()
-        .filter(|row| is_chapter_3(row.key()))
+        .filter(|row| is_chapter_3(row.key()) && !row.ships().is_shipped())
         .map(|row| match row {
             CatalogueRow::Toggle(spec) => enable(spec.key),
             CatalogueRow::Option(spec) => set(
@@ -688,6 +692,14 @@ fn every_row_is_not_available_in_this_build() {
     assert!(resolved.is_classic());
     assert_eq!(resolved.menu(), MenuSettings::default());
     assert_eq!(resolved.audio(), AudioSettings::default());
+    assert_eq!(cli.len(), INPUT_KEYS.len());
+    // Every other chapter 3 key resolves as asked, with no note.
+    let resolved = resolve(input(
+        None,
+        &[enable(OVERLAY_KEY), enable(START_SOUND_OFF_KEY)],
+    ));
+    assert!(resolved.notes.is_empty(), "{:?}", note_lines(&resolved));
+    assert!(resolved.menu().overlay && resolved.audio().start_sound_off);
 }
 
 #[test]
@@ -745,21 +757,24 @@ fn each_toggle_alone_turns_on_only_itself() {
 
 #[test]
 fn presets_skip_hidden_rows_and_never_set_the_start_keys() {
-    // In this build every chapter 3 row is hidden: no preset turns one on.
+    // The build as it ships (M4-13): no preset sets a start key, and only
+    // Everything sets a chapter 3 row.
     for preset in PRESETS {
         let resolved = resolve(input(None, &[CliSetting::Preset(*preset)]));
-        assert_eq!(resolved.menu(), MenuSettings::default(), "{preset:?}");
-        assert_eq!(resolved.audio(), AudioSettings::default(), "{preset:?}");
-        for toggle in preset.toggles().iter_on() {
-            assert!(
-                !is_chapter_3(toggle.key()),
-                "{preset:?} sets {}",
-                toggle.key()
-            );
+        let audio = resolved.audio();
+        assert!(!audio.types_start_keys(), "{preset:?}");
+        if *preset != Preset::Everything {
+            assert_eq!(resolved.menu(), MenuSettings::default(), "{preset:?}");
+            assert_eq!(audio, AudioSettings::default(), "{preset:?}");
         }
+        assert_eq!(
+            resolved,
+            shipped(None, &[CliSetting::Preset(*preset)]),
+            "{preset:?}: the shipped build is the M4 build"
+        );
     }
-    // Once the M4 phases ship, Everything sets the four feature toggles of
-    // 3.4.1 and nothing else of this chapter: no preference, no start key.
+    // Everything sets the four feature toggles of 3.4.1 and nothing else
+    // of this chapter: no preference, no start key.
     let resolved = shipped(None, &[CliSetting::Preset(Preset::Everything)]);
     let menu = resolved.menu();
     assert!(menu.overlay && menu.named_slots && menu.title_layer);
@@ -838,19 +853,19 @@ fn the_lock_gives_the_defaults() {
 // --- The docs table. ---------------------------------------------------
 
 #[test]
-fn the_docs_table_lists_every_row_as_later() {
+fn the_docs_table_lists_the_m4_rows_as_shipped() {
     let table = settings_table();
     for line in [
-        "| menu.overlay | Menu on F12 at the command prompt | bool = false | b, L | feature | --menu-overlay | - | later (chapter 3 Phase 1) |",
-        "| menu.title_layer | Menu on F12 at the title screen | bool = false | b, L | feature | --title-layer | - | later (chapter 3 Phase 3) |",
-        "| menu.named_slots | Named save slots | bool = false | b, P | feature | --named-slots | - | later (chapter 3 Phase 2) |",
-        "| audio.muted | Mute | bool = false | a, F | feature | --mute | - | later (chapter 3 Phase 1) |",
-        "| audio.start_sound_off | Begin with the game's sound off (types Ctrl-S once) | bool = false | b, L | deviation | --start-sound-off | - | later (chapter 3 Phase 4) |",
+        "| menu.overlay | Menu on F12 at the command prompt | bool = false | b, L | feature | --menu-overlay | - | yes |",
+        "| menu.title_layer | Menu on F12 at the title screen | bool = false | b, L | feature | --title-layer | - | yes |",
+        "| menu.named_slots | Named save slots | bool = false | b, P | feature | --named-slots | - | yes |",
+        "| audio.muted | Mute | bool = false | a, F | feature | --mute | - | yes |",
+        "| audio.start_sound_off | Begin with the game's sound off (types Ctrl-S once) | bool = false | b, L | deviation | --start-sound-off | - | yes |",
         "| input.gamepad | Play with a gamepad | bool = false | b, F | feature | - | a gamepad | later (chapter 3 Phase 5) |",
-        "| menu.quicksave | A quick save slot | bool = true | b, P | feature | - | - | later (chapter 3 Phase 2) |",
-        "| menu.confirm_unsaved | Ask before leaving with unsaved play | bool = true | a, F | feature | --confirm-unsaved | - | later (chapter 3 Phase 4) |",
-        "| menu.quit_to_title | Return to the title by restarting, or in the window (later) | enum relaunch\\|in-app = relaunch (in-app later, chapter 3 Phase 7) | b, L | feature | - | - | later (chapter 3 Phase 3) |",
-        "| audio.volume | Volume in percent (output only; 100 is the original) | int 0..100 by 5 = 100 | a, F | feature | --volume | - | later (chapter 3 Phase 1) |",
+        "| menu.quicksave | A quick save slot | bool = true | b, P | feature | - | - | yes |",
+        "| menu.confirm_unsaved | Ask before leaving with unsaved play | bool = true | a, F | feature | --confirm-unsaved | - | yes |",
+        "| menu.quit_to_title | Return to the title by restarting, or in the window (later) | enum relaunch\\|in-app = relaunch (in-app later, chapter 3 Phase 7) | b, L | feature | - | - | yes |",
+        "| audio.volume | Volume in percent (output only; 100 is the original) | int 0..100 by 5 = 100 | a, F | feature | --volume | - | yes |",
     ] {
         assert!(table.contains(&format!("{line}\n")), "missing: {line}");
     }

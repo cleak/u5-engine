@@ -204,7 +204,8 @@ fn menu_keys_never_reach_the_game() {
     }
     game.release(KeyCode::ArrowUp).frame();
     // The short menu: Resume, Settings, Leave the game. Down and Enter open
-    // Settings; Left and Right walk its tabs; other keys do nothing.
+    // Settings; Left and Right walk its tabs from a row without a value;
+    // other keys do nothing.
     for key in [
         KeyCode::KeyA,
         KeyCode::KeyQ,
@@ -214,6 +215,8 @@ fn menu_keys_never_reach_the_game() {
         KeyCode::F11,
         KeyCode::ArrowDown,
         KeyCode::Enter,
+        // Off the Volume slider, whose Right steps it.
+        KeyCode::ArrowDown,
         KeyCode::ArrowRight,
         KeyCode::ArrowRight,
         KeyCode::ArrowLeft,
@@ -585,7 +588,7 @@ fn with_only_the_title_layer_f12_in_play_opens_nothing() {
 #[test]
 fn the_qa_script_feeds_one_key_per_frame_while_open() {
     let mut launch = launch_with(&[OVERLAY]);
-    launch.menu_script = Some("↓\r→↓\u{1b}↓\r".chars().collect());
+    launch.menu_script = Some("↓\r↓→\u{1b}↓\r".chars().collect());
     let mut game = Driver::new(&launch);
     let left = |game: &Driver| game.world().resource::<MenuScript>().0.len();
     game.frames(30);
@@ -605,8 +608,11 @@ fn the_qa_script_feeds_one_key_per_frame_while_open() {
     };
     assert_eq!(game.page(), settings(SettingsTab::Audio, 0));
     game.frame();
+    // Off the Volume slider, whose Right steps it, onto a check box.
+    assert_eq!(game.page(), settings(SettingsTab::Audio, 1));
+    game.frame();
     assert_eq!(game.page(), settings(SettingsTab::Display, 0));
-    game.frame().frame();
+    game.frame();
     assert_eq!(game.page(), top(1), "Escape went back");
     game.frame();
     assert_eq!(game.page(), top(2));
@@ -731,12 +737,13 @@ fn the_off_census_finds_no_menu() {
     let (app, systems) = systems_of(&rest);
     assert!(app.is_plugin_added::<EnhancementsPlugin>());
     assert_no_menu(&app, "every other toggle");
-    // The audio plugins (M4-08) are their own toggles' (3.4.2), not the
-    // menu's: they live beside it and work without it.
+    // The audio plugins (M4-08) and the start keys (M4-13) are their own
+    // toggles' (3.4.2), not the menu's: they live beside it and work
+    // without it.
     assert!(
-        systems
-            .iter()
-            .all(|name| !name.contains("::menu::") || name.contains("::menu::audio::")),
+        systems.iter().all(|name| !name.contains("::menu::")
+            || name.contains("::menu::audio::")
+            || name.contains("::menu::start_keys::")),
         "{systems:?}"
     );
 }
@@ -749,7 +756,9 @@ fn the_off_census_finds_no_menu() {
 /// has brought since M1, whose window wish serves as `VsyncPlugin`
 /// (M4-08), and the gem map's, installed dormant (M4-06, D-M4.4), and
 /// either menu toggle brings the router, the overlay model and the toasts
-/// the menu runs on. Every other chapter 3 toggle adds nothing yet.
+/// the menu runs on, and the overlay the synthetic-key feed its Game tab
+/// types through. The start preferences add `StartKeysPlugin` and that
+/// feed (M4-13). Every other chapter 3 toggle adds nothing yet.
 #[test]
 fn each_chapter_3_toggle_alone_adds_only_its_own_plugin() {
     let stand_in = Toggle::EnhancementsFreezeOverlays;
@@ -770,6 +779,9 @@ fn each_chapter_3_toggle_alone_adds_only_its_own_plugin() {
                 // The gem map, installed dormant (D-M4.4).
                 "u5_bevy::enh::gem_map",
                 "u5_bevy::menu::",
+                // The feed the Game tab's Sound and Buffer type through
+                // (M4-13).
+                "u5_bevy::enh::synthetic::",
             ],
             TITLE_LAYER => &[
                 "u5_bevy::enh::input::",
@@ -781,9 +793,15 @@ fn each_chapter_3_toggle_alone_adds_only_its_own_plugin() {
             Toggle::AudioVolume | Toggle::AudioMuted | Toggle::AudioMuteOnFocusLoss => {
                 &["u5_bevy::menu::audio::"]
             }
+            // `StartKeysPlugin` (M4-13) and the synthetic-key feed it types
+            // through.
+            Toggle::AudioStartSoundOff | Toggle::AudioStartBufferOn => {
+                &["u5_bevy::menu::start_keys::", "u5_bevy::enh::synthetic::"]
+            }
             _ => &[],
         };
-        let audio_only = allowed == ["u5_bevy::menu::audio::"];
+        let own_plugin_only = allowed == ["u5_bevy::menu::audio::"]
+            || allowed.first() == Some(&"u5_bevy::menu::start_keys::");
         for name in &added {
             let path = name.split_once(' ').map_or(name.as_str(), |(_, path)| path);
             assert!(
@@ -794,7 +812,7 @@ fn each_chapter_3_toggle_alone_adds_only_its_own_plugin() {
         if allowed.is_empty() {
             assert!(added.is_empty(), "{toggle:?}: {added:?}");
             assert_no_menu(&app, spec.key);
-        } else if audio_only {
+        } else if own_plugin_only {
             assert!(!added.is_empty(), "{toggle:?}");
             assert_no_menu(&app, spec.key);
         } else {

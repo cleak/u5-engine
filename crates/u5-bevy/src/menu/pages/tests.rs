@@ -422,3 +422,164 @@ fn tab_opens_the_map_only_through_its_door() {
         );
     }
 }
+
+// ---------------------------------------------------------------------------
+// The unsaved-progress question (3.2.6; plan M4-13).
+
+/// The default shell with one loadable slot, and `unsaved`.
+fn leaving_shell(unsaved: Option<Unsaved>) -> ShellSnapshot {
+    ShellSnapshot {
+        slot_list: Arc::new(vec![SlotEntry {
+            info: SlotInfo {
+                name: "Before the bridge".into(),
+                ..SlotInfo::default()
+            },
+            thumb: None,
+        }]),
+        unsaved,
+        ..full_shell()
+    }
+}
+
+fn enter() -> MenuInput {
+    key(KeyCode::Enter)
+}
+
+/// The model on the top menu with the cursor on `label`.
+fn top_on(label: &str, snap: &ShellSnapshot) -> MenuModel {
+    let at = page_rows(Page::Top, snap)
+        .iter()
+        .position(|row| row.label == label)
+        .unwrap();
+    model_on(Page::Top, at)
+}
+
+#[test]
+fn nothing_is_asked_when_the_turn_has_not_moved() {
+    let snap = leaving_shell(None);
+    let mut model = top_on(t::QUIT_TO_TITLE, &snap);
+    assert_eq!(
+        reduce(&mut model, enter(), &snap),
+        [MenuCommand::QuitToTitle]
+    );
+    let mut model = top_on(t::QUIT_TO_DESKTOP, &snap);
+    assert_eq!(
+        reduce(&mut model, enter(), &snap),
+        [MenuCommand::QuitToDesktop]
+    );
+    let mut model = model_on(Page::Load, 0);
+    assert_eq!(
+        reduce(&mut model, enter(), &snap),
+        [MenuCommand::LoadSlot(0)]
+    );
+    assert_eq!(model.current().page, Page::Dialog(Dialog::Loading(0)));
+}
+
+#[test]
+fn load_and_both_quits_ask_first_when_the_turn_moved() {
+    for unsaved in [Unsaved::Turns(37), Unsaved::Turns(1), Unsaved::Session] {
+        let snap = leaving_shell(Some(unsaved));
+        let cases = [
+            (top_on(t::QUIT_TO_TITLE, &snap), Leave::Title),
+            (top_on(t::QUIT_TO_DESKTOP, &snap), Leave::Desktop),
+            (model_on(Page::Load, 0), Leave::Load(0)),
+        ];
+        for (mut model, what) in cases {
+            let below = model.current();
+            assert_eq!(reduce(&mut model, enter(), &snap), [], "{what:?}");
+            assert_eq!(
+                model.current(),
+                PageState {
+                    page: Page::Dialog(Dialog::Unsaved(what)),
+                    cursor: SECOND_BUTTON,
+                },
+                "{what:?}: the question, on its second button"
+            );
+            // Enter at once loses nothing: it goes back.
+            assert_eq!(reduce(&mut model, enter(), &snap), [], "{what:?}");
+            assert_eq!(model.current(), below, "{what:?}");
+            // Escape goes back too.
+            reduce(&mut model, enter(), &snap);
+            assert_eq!(reduce(&mut model, key(KeyCode::Escape), &snap), []);
+            assert_eq!(model.current(), below, "{what:?}");
+            // The first button carries it out.
+            reduce(&mut model, enter(), &snap);
+            reduce(&mut model, key(KeyCode::ArrowLeft), &snap);
+            let expected = match what {
+                Leave::Load(at) => MenuCommand::LoadSlot(at),
+                Leave::Title => MenuCommand::QuitToTitle,
+                Leave::Desktop => MenuCommand::QuitToDesktop,
+            };
+            assert_eq!(reduce(&mut model, enter(), &snap), [expected], "{what:?}");
+            if let Leave::Load(at) = what {
+                assert_eq!(model.current().page, Page::Dialog(Dialog::Loading(at)));
+                assert_eq!(model.stack().len(), 3, "Loading... over the Load page");
+            }
+        }
+    }
+}
+
+#[test]
+fn the_title_layer_never_asks() {
+    // Before play there is nothing to lose: the snapshot holds no
+    // unsaved progress there (`menu::unsaved`), so Quit leaves at once.
+    let snap = leaving_shell(None);
+    let mut model = MenuModel::title();
+    model.top_mut().cursor = page_rows(Page::Title, &snap)
+        .iter()
+        .position(|row| row.action == RowAction::QuitToDesktop)
+        .unwrap();
+    assert_eq!(
+        reduce(&mut model, enter(), &snap),
+        [MenuCommand::QuitToDesktop]
+    );
+}
+
+// ---------------------------------------------------------------------------
+// The Game tab's Sound and Buffer (3.2.7 "Game"; plan M4-13).
+
+fn game_shell() -> ShellSnapshot {
+    let mut snap = full_shell();
+    snap.settings[SettingsTab::Game.index()] = vec![
+        Row {
+            action: RowAction::GameKey(GameKey::Sound),
+            ..Row::shown(t::SOUND, "", Shown::Word(t::ON))
+        },
+        Row {
+            action: RowAction::GameKey(GameKey::Buffer),
+            ..Row::shown(t::BUFFER, "", Shown::Word(t::OFF))
+        },
+        Row {
+            action: RowAction::GameKey(GameKey::Buffer),
+            ..Row::shown(t::BUFFER, "", Shown::Blank).greyed("A reason.")
+        },
+    ];
+    snap
+}
+
+#[test]
+fn enter_on_sound_or_buffer_types_the_game_key() {
+    let snap = game_shell();
+    for (at, key_) in [(0, GameKey::Sound), (1, GameKey::Buffer)] {
+        let mut model = model_on(Page::Settings(SettingsTab::Game), at);
+        assert_eq!(
+            reduce(&mut model, enter(), &snap),
+            [MenuCommand::TypeGameKey(key_)]
+        );
+        // Space does not, and Left and Right switch the tab: the value
+        // changes only by the game's own key.
+        let mut model = model_on(Page::Settings(SettingsTab::Game), at);
+        assert_eq!(reduce(&mut model, key(KeyCode::Space), &snap), []);
+        assert_eq!(reduce(&mut model, key(KeyCode::ArrowRight), &snap), []);
+        assert_eq!(
+            model.current().page,
+            Page::Settings(SettingsTab::Enhancements)
+        );
+        let mut model = model_on(Page::Settings(SettingsTab::Game), at);
+        reduce(&mut model, key(KeyCode::ArrowLeft), &snap);
+        assert_eq!(model.current().page, Page::Settings(SettingsTab::Display));
+    }
+    // Greyed (before play), it types nothing.
+    let mut model = model_on(Page::Settings(SettingsTab::Game), 2);
+    assert_eq!(reduce(&mut model, enter(), &snap), []);
+}

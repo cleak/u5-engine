@@ -22,7 +22,7 @@ use u5_runtime::{FixedCellFont, prompt_cursor_glyph};
 use super::frame::*;
 use super::geometry::{CellRect, MenuPicture, PageShape, panel_rect};
 use super::pages::{
-    Dialog, NameFor, SaveChoice, ShellSnapshot, SlotEntry, quick_slot, save_choices,
+    Dialog, Leave, NameFor, SaveChoice, ShellSnapshot, SlotEntry, quick_slot, save_choices,
 };
 use super::render::{Drawn, draw_help, draw_lines};
 use super::text as t;
@@ -371,5 +371,20 @@ pub fn dialog_page(
             )
         }
         Dialog::Loading(_) => loading_dialog(font, picture, column),
+        Dialog::Unsaved(what) => {
+            let (ask, buttons) = match what {
+                Leave::Load(at) => (
+                    t::fill(t::LOAD_ASK, &[slot_name(snap, at)]),
+                    [t::LOAD_BUTTON, t::CANCEL],
+                ),
+                Leave::Title => (t::QUIT_TO_TITLE_ASK.to_string(), [t::YES, t::NO]),
+                Leave::Desktop => (t::QUIT_TO_DESKTOP_ASK.to_string(), [t::YES, t::NO]),
+            };
+            let mut text = t::wrap(&ask, t::DIALOG_TEXT);
+            if let Some(unsaved) = snap.unsaved {
+                text.extend(t::wrap(&t::unsaved_line(unsaved), t::DIALOG_TEXT));
+            }
+            question(font, picture, column, &text, buttons, cursor)
+        }
     }
 }

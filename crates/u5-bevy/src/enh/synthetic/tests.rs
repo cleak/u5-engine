@@ -1,7 +1,7 @@
 //! The synthetic-key owner: one holder at a time, no feed while an overlay
 //! is open, and fed keys are typed keys (design 1.3.7, plan M0-13).
 
-use u5_runtime::enhancements::TOGGLES;
+use u5_runtime::enhancements::{TOGGLES, Toggle};
 
 use super::*;
 use crate::enh::configure_enh_sets;
@@ -78,16 +78,35 @@ fn only_the_holder_queues_and_its_keys_go_with_it() {
     assert!(!token.may_feed(false));
 }
 
+/// The features that type keys: the overlay (its Game tab's Sound and
+/// Buffer) and the two start preferences (M4-13). Named slots type through
+/// the overlay's slot store, which a bare launch has none of.
+const TYPING: [Toggle; 3] = [
+    Toggle::MenuOverlay,
+    Toggle::AudioStartSoundOff,
+    Toggle::AudioStartBufferOn,
+];
+
 #[test]
 fn no_token_unless_a_feature_installs_it() {
     let mut launch = VisualLaunchConfig::classic();
-    for spec in TOGGLES {
+    for spec in TOGGLES.iter().filter(|spec| !TYPING.contains(&spec.toggle)) {
         launch.enhancements.toggles.set(spec.toggle, true);
     }
     for launch in [VisualLaunchConfig::classic(), launch] {
         let mut app = App::new();
         add_enhancements(&mut app, &launch);
         assert!(!app.world().contains_resource::<SyntheticInputOwner>());
+    }
+    for toggle in TYPING {
+        let mut launch = VisualLaunchConfig::classic();
+        launch.enhancements.toggles.set(toggle, true);
+        let mut app = App::new();
+        add_enhancements(&mut app, &launch);
+        assert!(
+            app.world().contains_resource::<SyntheticInputOwner>(),
+            "{toggle:?}"
+        );
     }
     let mut app = App::new();
     install_synthetic_input(&mut app);

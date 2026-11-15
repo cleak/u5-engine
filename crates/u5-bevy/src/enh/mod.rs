@@ -382,6 +382,7 @@ impl Plugin for EnhancementsPlugin {
         );
         crate::menu::add_menu(app, &self.launch);
         crate::menu::audio::add_audio(app, &self.launch);
+        crate::menu::start_keys::add_start_keys(app, &self.launch);
         gem_map::add_gem_map(app, &self.launch);
         crate::display::add_display(app, &self.launch);
     }

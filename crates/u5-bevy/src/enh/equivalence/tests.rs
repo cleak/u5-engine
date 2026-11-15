@@ -121,7 +121,8 @@ fn every_toggle_on_equals_the_off_run() {
 }
 
 /// Every row of the toggle matrix, resolved as a host resolves it, equals
-/// the off run.
+/// the off run; a row with a start preference equals the off run with the
+/// keys it typed typed by the player (M4-13).
 #[test]
 fn every_matrix_row_equals_the_off_run() {
     let timeline = walk(80);
@@ -139,8 +140,26 @@ fn every_matrix_row_equals_the_off_run() {
             ..VisualLaunchConfig::classic()
         };
         let on = run(&launch, &timeline);
-        assert!(on.fed.iter().all(Vec::is_empty), "{}", row.name);
-        assert_eq!(compare_shell_runs(&off, &on), [], "{}", row.name);
+        if on.fed.iter().all(Vec::is_empty) {
+            assert_eq!(compare_shell_runs(&off, &on), [], "{}", row.name);
+            continue;
+        }
+        // Only the start keys type at an idle prompt with no menu open
+        // (class (b), 3.4.3): the off run gets their keys as typed ones.
+        assert!(
+            launch.enhancements.audio().types_start_keys(),
+            "{} fed keys",
+            row.name
+        );
+        let replayed = run_shell(
+            town(),
+            &Scene::synthetic(),
+            &VisualLaunchConfig::classic(),
+            |_| {},
+            &timeline.without_feature(),
+            Some(&on.fed),
+        );
+        assert_eq!(compare_shell_runs(&replayed, &on), [], "{}", row.name);
     }
 }
 

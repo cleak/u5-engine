@@ -20,8 +20,9 @@
 //!     each sub-option indented under its parent (the grow-left rows under
 //!     "Wider world view"), chapter 9's rows among them, and no Tile
 //!     graphics row (the generator leaves `display.raster` out);
-//!   - Game: its rows greyed until they arrive (M4-13), with the game's
-//!     live Sound and Buffer values;
+//!   - Game ([`game_tab`], M4-13): Sound and Buffer with the game's live
+//!     values, which type the game's own key, the start preferences and
+//!     the unsaved warning, and Pacing, reserved;
 //!   - Enhancements: the preset row (the preset in force, or Custom), then
 //!     every row in its group under the group's heading; the Cheats group
 //!     only while the catalogue has cheat rows and the lock is off
@@ -40,12 +41,16 @@ use u5_runtime::enhancements::page::{
 };
 use u5_runtime::enhancements::{
     ApplyAt, CatalogueRow, FeatureToggles, LockState, OptionKind, Phase, ResolvedEnhancements,
-    RowNote, SETTING_GROUPS, SettingValue, Tag, Toggle, apply_value, help_line, row_notes,
+    RowNote, SETTING_GROUPS, SettingValue, Tag, apply_value, help_line, row_notes,
     settings_page_rows_in,
 };
 
+use u5_runtime::enhancements::menu::{
+    CONFIRM_UNSAVED_KEY, START_BUFFER_ON_KEY, START_SOUND_OFF_KEY,
+};
+
 use super::MenuCommandEvent;
-use super::pages::{MenuCommand, Row, RowAction, RowKind as MenuRowKind, Shown};
+use super::pages::{GameKey, MenuCommand, Row, RowAction, RowKind as MenuRowKind, Shown};
 use super::text as t;
 use crate::enh::{
     EnhLaunch, LiveSettings, PendingSettingChanges, PendingToggleChanges, queue_setting_change,
@@ -366,6 +371,55 @@ fn group_label(name: &str) -> &'static str {
         .map_or("", |(group, _)| group)
 }
 
+/// The Game tab's settings rows after Sound and Buffer, in order (3.2.7).
+pub const GAME_KEYS: [&str; 3] = [
+    START_SOUND_OFF_KEY,
+    START_BUFFER_ON_KEY,
+    CONFIRM_UNSAVED_KEY,
+];
+
+/// The Game tab (3.2.7 "Game"):
+///
+/// - Sound and Buffer with the game's live values; Enter closes the menu
+///   and types Ctrl-S or Ctrl-B ([`RowAction::GameKey`]). Before play
+///   (the title layer) there is no game to type to, and they are greyed.
+/// - The two start preferences and the unsaved warning, the generator's
+///   rows like every other setting (a row the generator does not list is
+///   left out).
+/// - Pacing, reserved and greyed.
+pub fn game_tab(view: &SettingsView, game: Option<GameValues>) -> Vec<Row> {
+    let word = |on: bool| Shown::Word(if on { t::ON } else { t::OFF });
+    let live = |label, key, on: Option<bool>| {
+        let row = Row {
+            action: RowAction::GameKey(key),
+            ..Row::shown(label, "", on.map_or(Shown::Blank, word))
+        };
+        let help = match key {
+            GameKey::Sound => t::SOUND_HELP,
+            GameKey::Buffer => t::BUFFER_HELP,
+        };
+        match on {
+            Some(_) => row.with_help(Some(help)),
+            None => row.greyed(t::GAME_IN_PLAY),
+        }
+    };
+    let mut rows = vec![
+        live(t::SOUND, GameKey::Sound, game.map(|g| g.sound_on)),
+        live(t::BUFFER, GameKey::Buffer, game.map(|g| g.buffer_on)),
+    ];
+    rows.extend(
+        GAME_KEYS
+            .iter()
+            .filter_map(|key| view.row(key))
+            .filter_map(|(row, note)| setting_row(row, note, 0)),
+    );
+    rows.push(Row {
+        action: RowAction::None,
+        ..Row::shown(t::PACING, "", Shown::Word(t::RESERVED)).greyed(t::PACING_LATER)
+    });
+    rows
+}
+
 /// The rows of the four tabs, by [`super::pages::SettingsTab::index`], for
 /// the settings in `view` and the game's own values `game` (none before
 /// play).
@@ -390,37 +444,7 @@ pub fn settings_tabs(view: &SettingsView, game: Option<GameValues>) -> [Vec<Row>
         .filter_map(|(row, note)| setting_row(row, *note, sub(row)))
         .collect();
 
-    let word = |on: bool| Shown::Word(if on { t::ON } else { t::OFF });
-    let live = |on: Option<bool>| on.map_or(Shown::Blank, word);
-    let chosen = &view.page.rows;
-    let switch = |key: &str, default: bool| {
-        chosen
-            .iter()
-            .find(|row| row.key == key)
-            .map_or(default, |row| row.value == RowValue::Switch(true))
-    };
-    let game_rows = [
-        Row::shown(t::SOUND, "", live(game.map(|g| g.sound_on))),
-        Row::shown(t::BUFFER, "", live(game.map(|g| g.buffer_on))),
-        Row::check(
-            t::START_SOUND_OFF,
-            "",
-            switch(Toggle::AudioStartSoundOff.key(), false),
-        ),
-        Row::check(
-            t::START_BUFFER_ON,
-            "",
-            switch(Toggle::AudioStartBufferOn.key(), false),
-        ),
-        Row::check(t::CONFIRM_UNSAVED, "", switch("menu.confirm_unsaved", true)),
-        Row::shown(t::PACING, "", Shown::Word(t::RESERVED)),
-    ]
-    .into_iter()
-    .map(|row| Row {
-        action: RowAction::None,
-        ..row.greyed(t::GAME_LATER)
-    })
-    .collect();
+    let game_rows = game_tab(view, game);
 
     let page = SettingsPage::new(view.page.clone());
     let current = match page.mix() {

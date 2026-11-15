@@ -187,6 +187,12 @@ pub const SHIPPED_PHASES: &[Phase] = &[
     GEM_G3,
     GEM_G4,
     GEM_G5,
+    // Chapter 3's menu, its slots, the title layer and the Game tab (build
+    // plan M4-13); `MENU_P5` and `MENU_P7` are optional and not in M4.
+    MENU_P1,
+    MENU_P2,
+    MENU_P3,
+    MENU_P4,
 ];
 
 /// A soft dependency (design 1.4.5): what a feature prefers to have, and

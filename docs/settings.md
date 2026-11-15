@@ -75,6 +75,15 @@ preferences.
 | `--sprite-composite`, `--no-sprite-composite` | `--enable` / `--disable display.sprite_composite`: draw people, monsters, ships and items over the terrain instead of in black boxes. `display.composite_halo` (on by default) keeps a thin black outline round each sprite. |
 | `--brightness PERCENT` | `--set display.brightness=PERCENT`: dim the map view, 25 to 100 (100 is the original colours; `--enable display.brightness` sets the suggested 70). `display.brightness_scope` chooses the map view (`map`) or the whole screen (`frame`). |
 | `--gem-map`, `--no-gem-map` | `--enable` / `--disable gem_map.enhanced`: using a gem shows a full-screen map with real tiles, wider than the original gem's. |
+| `--menu-overlay`, `--no-menu-overlay` | `--enable` / `--disable menu.overlay`: F12 at the command prompt opens a menu of saves and settings. The game's own keys are unchanged. Applies at the next launch. |
+| `--title-layer`, `--no-title-layer` | `--enable` / `--disable menu.title_layer`: F12 at the title screen opens a menu: continue, settings and quit. |
+| `--named-slots`, `--no-named-slots` | `--enable` / `--disable menu.named_slots`: keep many saves under names of your choosing (the menu's Save and Load pages, and `--slots`, `--slot-save NAME`, `--slot-load NAME`). `menu.quicksave` (on by default) adds a `quick` slot that saves without asking. |
+| `--confirm-unsaved`, `--no-confirm-unsaved` | `--enable` / `--disable menu.confirm_unsaved` (on by default): the menu's Load, Return to the title and Leave the game ask first when the turn has moved since the last save or load. |
+| `--volume PERCENT` | `--set audio.volume=PERCENT`: output loudness, 0 to 100 in steps of 5 (100 is the original). The game's own Sound On and Off stays Ctrl-S. |
+| `--mute`, `--no-mute` | `--enable` / `--disable audio.muted`: silence the output. Sounds keep their full length. |
+| `--mute-on-focus-loss`, `--no-mute-on-focus-loss` | `--enable` / `--disable audio.mute_on_focus_loss`: silent while another window has the focus. |
+| `--start-sound-off`, `--no-start-sound-off` | `--enable` / `--disable audio.start_sound_off`: type the game's Ctrl-S once, at the first command prompt of each launch, if the game's sound is still on. Works without the menu. |
+| `--start-buffer-on`, `--no-start-buffer-on` | `--enable` / `--disable audio.start_buffer_on`: type the game's Ctrl-B once, at the first command prompt of each launch, if the key buffer is still off. Works without the menu. |
 
 `config.toml` applies to the default launch (no game folder or mode on the
 command line); other launches use the command line alone. An unknown key on
@@ -403,13 +412,13 @@ one that types keys must change it exactly as typing those keys would:
 | display.grow_left | Wider world view (shows more than the original) | bool = false | a, F | deviation, wider view | --grow-left | - | yes |
 | display.sprite_composite | Sprites over terrain (no black boxes) | bool = false | a, F | feature | --sprite-composite | - | yes |
 | gem_map.enhanced | Enhanced gem map | bool = false | a, P | feature | --gem-map | - | yes |
-| menu.overlay | Menu on F12 at the command prompt | bool = false | b, L | feature | --menu-overlay | - | later (chapter 3 Phase 1) |
-| menu.title_layer | Menu on F12 at the title screen | bool = false | b, L | feature | --title-layer | - | later (chapter 3 Phase 3) |
-| menu.named_slots | Named save slots | bool = false | b, P | feature | --named-slots | - | later (chapter 3 Phase 2) |
-| audio.muted | Mute | bool = false | a, F | feature | --mute | - | later (chapter 3 Phase 1) |
-| audio.mute_on_focus_loss | Mute while the window is in the background | bool = false | a, F | feature | --mute-on-focus-loss | - | later (chapter 3 Phase 1) |
-| audio.start_sound_off | Begin with the game's sound off (types Ctrl-S once) | bool = false | b, L | deviation | --start-sound-off | - | later (chapter 3 Phase 4) |
-| audio.start_buffer_on | Begin with the key buffer on (types Ctrl-B once) | bool = false | b, L | deviation | --start-buffer-on | - | later (chapter 3 Phase 4) |
+| menu.overlay | Menu on F12 at the command prompt | bool = false | b, L | feature | --menu-overlay | - | yes |
+| menu.title_layer | Menu on F12 at the title screen | bool = false | b, L | feature | --title-layer | - | yes |
+| menu.named_slots | Named save slots | bool = false | b, P | feature | --named-slots | - | yes |
+| audio.muted | Mute | bool = false | a, F | feature | --mute | - | yes |
+| audio.mute_on_focus_loss | Mute while the window is in the background | bool = false | a, F | feature | --mute-on-focus-loss | - | yes |
+| audio.start_sound_off | Begin with the game's sound off (types Ctrl-S once) | bool = false | b, L | deviation | --start-sound-off | - | yes |
+| audio.start_buffer_on | Begin with the key buffer on (types Ctrl-B once) | bool = false | b, L | deviation | --start-buffer-on | - | yes |
 | input.gamepad | Play with a gamepad | bool = false | b, F | feature | - | a gamepad | later (chapter 3 Phase 5) |
 | input.mouse | Use the mouse in menus and to step | bool = false | b, F | feature | - | a mouse or pointer | later (chapter 3 Phase 5) |
 | input.extra_bindings | Extra key bindings | bool = false | b, F | feature | - | a keyboard | later (chapter 3 Phase 5) |
@@ -454,8 +463,8 @@ one that types keys must change it exactly as typing those keys would:
 | gem_map.wrap_rows | Show the dungeon's wrapped edge | bool = true | a, F | feature | - | - | yes |
 | gem_map.level_paging | Page through dungeon levels (PgUp, PgDn) | bool = true | a, F | feature | - | - | yes |
 | gem_map.glyphs | Dungeon symbols (gem-faithful is a spoiler: shows secret doors and hidden pits on sight) | enum perceived\|gem-faithful = perceived | a, F | feature (deviation: gem-faithful) | - | - | yes |
-| menu.quicksave | A quick save slot | bool = true | b, P | feature | - | - | later (chapter 3 Phase 2) |
-| menu.confirm_unsaved | Ask before leaving with unsaved play | bool = true | a, F | feature | --confirm-unsaved | - | later (chapter 3 Phase 4) |
-| menu.quit_to_title | Return to the title by restarting, or in the window (later) | enum relaunch\|in-app = relaunch (in-app later, chapter 3 Phase 7) | b, L | feature | - | - | later (chapter 3 Phase 3) |
-| audio.volume | Volume in percent (output only; 100 is the original) | int 0..100 by 5 = 100 | a, F | feature | --volume | - | later (chapter 3 Phase 1) |
+| menu.quicksave | A quick save slot | bool = true | b, P | feature | - | - | yes |
+| menu.confirm_unsaved | Ask before leaving with unsaved play | bool = true | a, F | feature | --confirm-unsaved | - | yes |
+| menu.quit_to_title | Return to the title by restarting, or in the window (later) | enum relaunch\|in-app = relaunch (in-app later, chapter 3 Phase 7) | b, L | feature | - | - | yes |
+| audio.volume | Volume in percent (output only; 100 is the original) | int 0..100 by 5 = 100 | a, F | feature | --volume | - | yes |
 <!-- END GENERATED -->

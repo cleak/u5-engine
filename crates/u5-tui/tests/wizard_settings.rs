@@ -87,7 +87,8 @@ fn rows_and_presets_come_from_the_catalogue_and_the_file() {
     // (P1, P2) and the wider view with its sub-options indented under it
     // (P8), plus chapter 9's brightness (P1), map brightness (P2) and
     // sprite compositing with its halo (P5), and chapter 10's gem map
-    // (G2-G5). `display.raster` has none while both its values draw the same;
+    // (G2-G5), and chapter 3's menu and audio rows (Phases 1-4, M4-13).
+    // `display.raster` has none while both its values draw the same;
     // the fill's colour and bezel path stay in the file.
     for row in &settings.rows {
         assert!(!row.key.starts_with("keys."), "{}", row.key);
@@ -98,7 +99,9 @@ fn rows_and_presets_come_from_the_catalogue_and_the_file() {
         TOGGLES
             .iter()
             .filter(|spec| spec.is_shipped() && !spec.driven)
-            .all(|spec| spec.key.starts_with("display.") || spec.key.starts_with("gem_map."))
+            .all(|spec| ["display.", "gem_map.", "menu.", "audio."]
+                .iter()
+                .any(|section| spec.key.starts_with(section)))
     );
     let keys: Vec<&str> = settings.rows.iter().map(|row| row.key.as_str()).collect();
     assert_eq!(
@@ -134,6 +137,19 @@ fn rows_and_presets_come_from_the_catalogue_and_the_file() {
             "gem_map.wrap_rows",
             "gem_map.level_paging",
             "gem_map.glyphs",
+            // Chapter 3 Phases 1-4 (M4-13): the menu and its sub-options,
+            // the title layer, the slots, then the audio rows.
+            "menu.overlay",
+            "menu.confirm_unsaved",
+            "menu.quit_to_title",
+            "menu.title_layer",
+            "menu.named_slots",
+            "menu.quicksave",
+            "audio.muted",
+            "audio.mute_on_focus_loss",
+            "audio.start_sound_off",
+            "audio.start_buffer_on",
+            "audio.volume",
         ]
     );
     assert!(
@@ -164,7 +180,17 @@ fn rows_and_presets_come_from_the_catalogue_and_the_file() {
         ["display.composite_halo", "display.brightness_scope"]
     );
     // Chapter 10: every gem map sub-option sits under "Enhanced gem map".
-    assert_eq!(indented[8..], keys[19..]);
+    assert_eq!(indented[8..17], keys[19..28]);
+    // Chapter 3: the overlay's warning and Return to the title, and the
+    // slots' quick slot.
+    assert_eq!(
+        indented[17..],
+        [
+            "menu.confirm_unsaved",
+            "menu.quit_to_title",
+            "menu.quicksave"
+        ]
+    );
     // Recommended turns compositing on (P5); Everything also sets sharp
     // scaling and the F11 key (2.2.1).
     let values = |key: &str| {
@@ -185,29 +211,43 @@ fn rows_and_presets_come_from_the_catalogue_and_the_file() {
     assert_eq!(
         values("classic"),
         [
+            "(\"audio.mute_on_focus_loss\", Switch(false))",
             "(\"display.fullscreen_key\", Switch(false))",
             "(\"display.scale_mode\", Choice(\"fit\"))",
             "(\"display.sprite_composite\", Switch(false))",
             "(\"gem_map.enhanced\", Switch(false))",
+            "(\"menu.named_slots\", Switch(false))",
+            "(\"menu.overlay\", Switch(false))",
+            "(\"menu.title_layer\", Switch(false))",
         ]
     );
     assert_eq!(
         values("recommended"),
         [
+            "(\"audio.mute_on_focus_loss\", Switch(false))",
             "(\"display.fullscreen_key\", Switch(false))",
             "(\"display.scale_mode\", Choice(\"fit\"))",
             "(\"display.sprite_composite\", Switch(true))",
             "(\"gem_map.enhanced\", Switch(false))",
+            "(\"menu.named_slots\", Switch(false))",
+            "(\"menu.overlay\", Switch(false))",
+            "(\"menu.title_layer\", Switch(false))",
         ]
     );
     assert_eq!(
         values("everything"),
         [
+            "(\"audio.mute_on_focus_loss\", Switch(true))",
             "(\"display.fullscreen_key\", Switch(true))",
             "(\"display.scale_mode\", Choice(\"sharp\"))",
             "(\"display.sprite_composite\", Switch(true))",
             // Chapter 10: the catalogue puts the gem map in Everything only.
             "(\"gem_map.enhanced\", Switch(true))",
+            // Chapter 3 (3.4.1): the menu, the slots, the title layer and
+            // focus mute are in Everything only.
+            "(\"menu.named_slots\", Switch(true))",
+            "(\"menu.overlay\", Switch(true))",
+            "(\"menu.title_layer\", Switch(true))",
         ]
     );
 

@@ -137,6 +137,40 @@ pub enum Dialog {
     Delete(u16),
     /// "Loading...", while the host restores the slot (3.3.9).
     Loading(u16),
+    /// "... will be lost.": asked before leaving play with unsaved
+    /// progress (3.2.6).
+    Unsaved(Leave),
+}
+
+/// What the unsaved-progress question guards (3.2.6).
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum Leave {
+    /// Load the slot at this place of the list.
+    Load(u16),
+    /// Return to the title.
+    Title,
+    /// Leave the game.
+    Desktop,
+}
+
+/// Play that leaving now would lose (3.2.6, 3.3.5 "Unsaved progress").
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum Unsaved {
+    /// The turn counter moved this many turns (at least one) since the
+    /// last save or load seen this session.
+    Turns(u64),
+    /// No save or load was seen this session.
+    Session,
+}
+
+/// One of the game's own switches the Game tab types (3.2.7 "Game", 3.3.8
+/// "Injection").
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum GameKey {
+    /// Ctrl-S, Sound On and Off.
+    Sound,
+    /// Ctrl-B, Buffer On and Off.
+    Buffer,
 }
 
 /// What the name field names.
@@ -230,6 +264,9 @@ pub enum RowAction {
     Setting(&'static str),
     /// The Enhancements tab's preset row: Left and Right choose a preset.
     Preset,
+    /// The Game tab's Sound or Buffer row: Enter closes the menu and types
+    /// the game's own key.
+    GameKey(GameKey),
     /// Nothing: a group heading, or a row shown only for its value.
     None,
 }
@@ -411,6 +448,10 @@ pub struct ShellSnapshot {
     /// Turns since the last save or load this session (3.3.5 "Unsaved
     /// progress"); `None` before the first.
     pub turns_since_save: Option<u64>,
+    /// What Load, Return to the title and Leave the game would lose, while
+    /// `menu.confirm_unsaved` is on and the game is in play; `None` when
+    /// they need not ask (3.2.6).
+    pub unsaved: Option<Unsaved>,
 }
 
 /// The rows of `page` for the shell in `snap`.
@@ -642,6 +683,9 @@ pub enum MenuCommand {
     /// Choose the preset at this place of the preset row (3.2.7): every
     /// row it governs takes its value.
     Preset(u8),
+    /// Close the menu and type the game's own key for `GameKey` at the
+    /// idle prompt (3.2.7 "Game").
+    TypeGameKey(GameKey),
 }
 
 /// Applies `input` to `model` for the shell in `snap` and returns the
@@ -728,10 +772,7 @@ fn reduce_load(
     let place = at as u16;
     let damaged = slot.info.damaged.is_some();
     match key.key {
-        k if is_enter(k) && !damaged => {
-            model.push(Page::Dialog(Dialog::Loading(place)));
-            Some(MenuCommand::LoadSlot(place))
-        }
+        k if is_enter(k) && !damaged => leave(model, Leave::Load(place), snap),
         KeyCode::F2 if !damaged && !slot.info.quick => {
             model.field = slot.info.name.chars().filter(|ch| name_char(*ch)).collect();
             model.field.truncate(t::SLOT_NAME_MAX);
@@ -780,6 +821,7 @@ fn reduce_dialog(model: &mut MenuModel, dialog: Dialog, input: MenuInput) -> Opt
                     Some(MenuCommand::SaveSlot(SaveChoice::Existing(at)))
                 }
                 Dialog::Delete(at) if first => Some(MenuCommand::DeleteSlot(at)),
+                Dialog::Unsaved(what) if first => Some(go(model, what)),
                 _ => None,
             }
         }
@@ -845,7 +887,7 @@ fn reduce_list(model: &mut MenuModel, input: MenuInput, snap: &ShellSnapshot) ->
             model.top_mut().cursor = step_cursor(&rows, cursor, 1);
             None
         }
-        KeyCode::Enter | KeyCode::NumpadEnter => selected.and_then(|row| choose(model, row)),
+        KeyCode::Enter | KeyCode::NumpadEnter => selected.and_then(|row| choose(model, row, snap)),
         KeyCode::Space => selected.and_then(|row| match (row.kind, row.action) {
             (RowKind::Check { .. }, RowAction::Setting(key)) => Some(MenuCommand::Flip(key)),
             _ => None,
@@ -854,8 +896,12 @@ fn reduce_list(model: &mut MenuModel, input: MenuInput, snap: &ShellSnapshot) ->
             let step = if key.key == KeyCode::ArrowLeft { -1 } else { 1 };
             // A greyed value cannot change, so on it the keys switch the
             // tab as on a row without a value.
+            // The game's own Sound and Buffer show a value but change only
+            // by their key (Enter), so on them too the keys switch the tab.
             let value = rows.get(cursor).filter(|row| {
-                row.enabled && matches!(row.kind, RowKind::Value(_) | RowKind::Preset { .. })
+                row.enabled
+                    && matches!(row.action, RowAction::Setting(_) | RowAction::Preset)
+                    && matches!(row.kind, RowKind::Value(_) | RowKind::Preset { .. })
             });
             match (value, state.page) {
                 (Some(row), _) => match (row.enabled, row.action, row.kind) {
@@ -889,7 +935,7 @@ fn reduce_list(model: &mut MenuModel, input: MenuInput, snap: &ShellSnapshot) ->
 }
 
 /// Enter on an enabled `row`: a page push or a command.
-fn choose(model: &mut MenuModel, row: &Row) -> Option<MenuCommand> {
+fn choose(model: &mut MenuModel, row: &Row, snap: &ShellSnapshot) -> Option<MenuCommand> {
     match (row.action, row.kind) {
         (RowAction::Resume, _) => Some(MenuCommand::Close),
         (RowAction::Continue(Some(at)), _) => {
@@ -910,10 +956,35 @@ fn choose(model: &mut MenuModel, row: &Row) -> Option<MenuCommand> {
             model.push(Page::Settings(SettingsTab::Audio));
             None
         }
-        (RowAction::QuitToTitle, _) => Some(MenuCommand::QuitToTitle),
-        (RowAction::QuitToDesktop, _) => Some(MenuCommand::QuitToDesktop),
+        (RowAction::QuitToTitle, _) => leave(model, Leave::Title, snap),
+        (RowAction::QuitToDesktop, _) => leave(model, Leave::Desktop, snap),
+        (RowAction::GameKey(key), _) => Some(MenuCommand::TypeGameKey(key)),
         (RowAction::Setting(key), RowKind::Check { .. }) => Some(MenuCommand::Flip(key)),
         (RowAction::Setting(_) | RowAction::Preset | RowAction::None, _) => None,
+    }
+}
+
+/// Load, Return to the title or Leave the game, chosen: with unsaved
+/// progress the question first, its second button (Cancel, No) chosen, so
+/// Enter at once loses nothing (3.2.6); otherwise at once.
+fn leave(model: &mut MenuModel, what: Leave, snap: &ShellSnapshot) -> Option<MenuCommand> {
+    if snap.unsaved.is_some() {
+        model.push_at(Page::Dialog(Dialog::Unsaved(what)), SECOND_BUTTON);
+        return None;
+    }
+    Some(go(model, what))
+}
+
+/// Carries out `what`: a load shows "Loading..." while the host restores
+/// the slot.
+fn go(model: &mut MenuModel, what: Leave) -> MenuCommand {
+    match what {
+        Leave::Load(at) => {
+            model.push(Page::Dialog(Dialog::Loading(at)));
+            MenuCommand::LoadSlot(at)
+        }
+        Leave::Title => MenuCommand::QuitToTitle,
+        Leave::Desktop => MenuCommand::QuitToDesktop,
     }
 }
 

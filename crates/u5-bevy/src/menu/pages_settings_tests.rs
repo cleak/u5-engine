@@ -21,8 +21,8 @@ use u5_runtime::test_fixtures::{
 };
 
 use super::pages::{
-    MenuCommand, MenuInput, MenuModel, Page, PageState, Row, RowAction, RowKind, SettingsTab,
-    ShellSnapshot, Shown, page_rows, reduce, settle,
+    GameKey, MenuCommand, MenuInput, MenuModel, Page, PageState, Row, RowAction, RowKind,
+    SettingsTab, ShellSnapshot, Shown, page_rows, reduce, settle,
 };
 use super::render::{SLIDER_INNER, VALUE_COL, label_room, setting_help, setting_line, tag_fits};
 use super::settings::*;
@@ -52,20 +52,10 @@ fn every_phase() -> &'static [Phase] {
     })
 }
 
-/// This build's phases and the menu's own Phases 1-4, which ship at the
-/// end of the milestone (M4-13).
+/// This build's phases, the menu's own Phases 1-4 among them since they
+/// shipped (M4-13).
 pub(super) fn with_menu_phases() -> &'static [Phase] {
-    static PHASES: OnceLock<Vec<Phase>> = OnceLock::new();
-    PHASES.get_or_init(|| {
-        let mut phases = SHIPPED_PHASES.to_vec();
-        phases.extend([
-            u5_runtime::enhancements::MENU_P1,
-            u5_runtime::enhancements::MENU_P2,
-            u5_runtime::enhancements::MENU_P3,
-            u5_runtime::enhancements::MENU_P4,
-        ]);
-        phases
-    })
+    SHIPPED_PHASES
 }
 
 fn resolved(cli: &[CliSetting]) -> ResolvedEnhancements {
@@ -118,15 +108,21 @@ fn key(code: KeyCode) -> MenuInput {
 // The rows of each tab (3.2.7).
 
 /// Audio: Volume with its slider, Mute and Mute on focus loss, as the
-/// catalogue holds them; none of them before the menu's Phase 1 ships.
+/// catalogue holds them; none of them in a build without the menu's
+/// Phase 1, which ships with M4-13.
 #[test]
 fn the_audio_tab_lists_volume_and_the_two_mutes() {
     let classic = ResolvedEnhancements::classic();
+    let before: Vec<Phase> = SHIPPED_PHASES
+        .iter()
+        .copied()
+        .filter(|phase| phase.chapter != 3)
+        .collect();
     assert!(
-        tabs(&classic, SHIPPED_PHASES)[SettingsTab::Audio.index()].is_empty(),
+        tabs(&classic, &before)[SettingsTab::Audio.index()].is_empty(),
         "hidden until Phase 1 ships"
     );
-    let audio = &tabs(&classic, with_menu_phases())[SettingsTab::Audio.index()];
+    let audio = &tabs(&classic, SHIPPED_PHASES)[SettingsTab::Audio.index()];
     assert_eq!(keys_of(audio), AUDIO_KEYS);
     assert_eq!(audio.len(), 3);
     assert_eq!(labels(audio), [t::VOLUME, t::MUTE, t::MUTE_ON_FOCUS_LOSS]);
@@ -281,59 +277,87 @@ fn the_display_tab_is_generated_from_the_catalogue() {
     assert!(tag_fits(grow, 38));
 }
 
-/// Game: the six rows of 3.2.7, greyed until they arrive (M4-13), with the
-/// game's own live Sound and Buffer values.
+/// Game (3.2.7; M4-13): Sound and Buffer with the game's own live values,
+/// which type their key; the start preferences and the unsaved warning as
+/// the generator's rows, with their apply points; Pacing reserved.
 #[test]
-fn the_game_tab_is_greyed_with_the_live_values() {
-    let view = view_of(&ResolvedEnhancements::classic(), with_menu_phases());
-    let game = &settings_tabs(
-        &view,
-        Some(GameValues {
-            sound_on: true,
-            buffer_on: false,
-        }),
-    )[SettingsTab::Game.index()];
-    assert_eq!(
-        labels(game),
-        [
-            t::SOUND,
-            t::BUFFER,
-            t::START_SOUND_OFF,
-            t::START_BUFFER_ON,
-            t::CONFIRM_UNSAVED,
-            t::PACING
-        ]
-    );
-    assert_eq!(game[0].kind, RowKind::Value(Shown::Word(t::ON)));
-    assert_eq!(game[1].kind, RowKind::Value(Shown::Word(t::OFF)));
-    assert_eq!(game[2].kind, RowKind::Check { on: false });
-    assert_eq!(game[3].kind, RowKind::Check { on: false });
-    assert_eq!(game[4].kind, RowKind::Check { on: true }, "the default");
-    assert_eq!(game[5].kind, RowKind::Value(Shown::Word(t::RESERVED)));
-    for row in game {
-        assert!(!row.enabled, "{row:?}");
-        assert_eq!(row.reason, Some(t::GAME_LATER));
-        assert_eq!(row.action, RowAction::None);
+fn the_game_tab_shows_the_live_values_and_the_preferences() {
+    let mut launch = ResolvedEnhancements::classic();
+    launch.toggles.set(Toggle::MenuOverlay, true);
+    let view = view_of(&launch, SHIPPED_PHASES);
+    for (sound_on, buffer_on) in [(true, false), (false, true)] {
+        let game = &settings_tabs(
+            &view,
+            Some(GameValues {
+                sound_on,
+                buffer_on,
+            }),
+        )[SettingsTab::Game.index()];
+        assert_eq!(
+            labels(game),
+            [
+                t::SOUND,
+                t::BUFFER,
+                t::START_SOUND_OFF,
+                t::START_BUFFER_ON,
+                t::CONFIRM_UNSAVED,
+                t::PACING
+            ]
+        );
+        let word = |on: bool| RowKind::Value(Shown::Word(if on { t::ON } else { t::OFF }));
+        assert_eq!(game[0].kind, word(sound_on));
+        assert_eq!(game[1].kind, word(buffer_on));
+        assert_eq!(game[0].action, RowAction::GameKey(GameKey::Sound));
+        assert_eq!(game[1].action, RowAction::GameKey(GameKey::Buffer));
+        assert!(game[0].enabled && game[1].enabled);
+        assert_eq!(game[0].help, Some(t::SOUND_HELP));
+        assert_eq!(game[1].help, Some(t::BUFFER_HELP));
+        assert_eq!(
+            keys_of(&game[2..5]),
+            [
+                "audio.start_sound_off",
+                "audio.start_buffer_on",
+                "menu.confirm_unsaved"
+            ]
+        );
+        assert_eq!(game[2].kind, RowKind::Check { on: false });
+        assert_eq!(game[3].kind, RowKind::Check { on: false });
+        assert_eq!(game[4].kind, RowKind::Check { on: true }, "the default");
+        // The start keys are typed at the first prompt of a process.
+        assert_eq!(game[2].tag, Some(t::NEXT_LAUNCH));
+        assert_eq!(game[3].tag, Some(t::NEXT_LAUNCH));
+        assert_eq!(game[4].tag, None, "the warning applies at once");
+        assert!(game[2..5].iter().all(|row| row.enabled));
+        assert_eq!(game[5].kind, RowKind::Value(Shown::Word(t::RESERVED)));
+        assert!(!game[5].enabled);
+        assert_eq!(game[5].reason, Some(t::PACING_LATER));
+        assert_eq!(game[5].action, RowAction::None);
     }
-    // Before play there are no live values.
+    // Before play (the title layer) there is no game to type to.
     let game = &settings_tabs(&view, None)[SettingsTab::Game.index()];
-    assert_eq!(game[0].kind, RowKind::Value(Shown::Blank));
-    // Every key on the greyed tab gives no command; Left and Right walk the
-    // tabs from any row.
+    for row in &game[..2] {
+        assert_eq!(row.kind, RowKind::Value(Shown::Blank));
+        assert!(!row.enabled);
+        assert_eq!(row.reason, Some(t::GAME_IN_PLAY));
+    }
+    // Left and Right walk the tabs from every row (none is a value Left
+    // and Right change); Enter and Space on a greyed row give nothing.
     let mut snap = ShellSnapshot::default();
     snap.settings[SettingsTab::Game.index()] = game.clone();
-    for cursor in 0..game.len() {
+    for (cursor, row) in game.iter().enumerate() {
         for (code, tab) in [
             (KeyCode::ArrowLeft, SettingsTab::Display),
             (KeyCode::ArrowRight, SettingsTab::Enhancements),
         ] {
             let mut model = on(Page::Settings(SettingsTab::Game), cursor);
             assert_eq!(reduce(&mut model, key(code), &snap), []);
-            assert_eq!(model.current().page, Page::Settings(tab));
+            assert_eq!(model.current().page, Page::Settings(tab), "{cursor}");
         }
-        for code in [KeyCode::Enter, KeyCode::Space] {
-            let mut model = on(Page::Settings(SettingsTab::Game), cursor);
-            assert_eq!(reduce(&mut model, key(code), &snap), []);
+        if !row.enabled {
+            for code in [KeyCode::Enter, KeyCode::Space] {
+                let mut model = on(Page::Settings(SettingsTab::Game), cursor);
+                assert_eq!(reduce(&mut model, key(code), &snap), []);
+            }
         }
     }
 }
@@ -632,6 +656,8 @@ fn a_preset_then_a_change_shows_custom() {
     let mut game = Game::new(&menu_launch(&sink), &Scene::synthetic());
     game.tap(KeyCode::F12);
     game.down_to(t::SETTINGS).tap(KeyCode::Enter);
+    // From a check box: Right on the Volume slider would step it.
+    game.down_to(t::MUTE);
     for _ in 0..3 {
         game.tap(KeyCode::ArrowRight);
     }
@@ -642,6 +668,17 @@ fn a_preset_then_a_change_shows_custom() {
             cursor: 0
         })
     );
+    // The menu overlay is a shipped toggle and on, which no preset but
+    // Everything has: Custom.
+    assert_eq!(
+        game.preset_row(),
+        RowKind::Preset {
+            current: None,
+            count: 3
+        }
+    );
+    // From Custom, Right chooses the first preset, Classic.
+    game.tap(KeyCode::ArrowRight).frames(2);
     assert_eq!(
         game.preset_row(),
         RowKind::Preset {
@@ -829,8 +866,8 @@ fn the_footer_says_the_help_and_the_notes() {
             t::SET_BY_COMMAND_LINE
         ]
     );
-    let greyed = row.greyed(t::GAME_LATER);
-    assert_eq!(setting_help(Some(&greyed), None, 36, 4)[0], t::GAME_LATER);
+    let greyed = row.greyed(t::PACING_LATER);
+    assert_eq!(setting_help(Some(&greyed), None, 36, 4)[0], t::PACING_LATER);
     assert_eq!(
         setting_help(None, Some(t::NOTHING_HERE), 36, 4),
         [t::NOTHING_HERE]
@@ -858,7 +895,10 @@ fn shown_texts() -> Vec<&'static str> {
         t::PRESET,
         t::CUSTOM,
         t::PRESET_HELP,
-        t::GAME_LATER,
+        t::GAME_IN_PLAY,
+        t::PACING_LATER,
+        t::SOUND_HELP,
+        t::BUFFER_HELP,
         t::NOTHING_HERE,
         t::NOTE_NEXT_PROMPT,
         t::NOTE_NEXT_LAUNCH,
@@ -1165,8 +1205,8 @@ fn leaving_the_game_saves_nothing() {
     let _ = fs::remove_dir_all(&dir);
 }
 
-/// The menu's own phases make the shell list their rows when a test asks
-/// (the review shots do); the plugin itself lists this build's.
+/// The plugin lists this build's rows, the menu's own among them since its
+/// phases shipped (M4-13); a test may still set the phases it lists.
 #[test]
 fn the_plugin_lists_this_build_s_rows() {
     let sink = Arc::new(RecordingSink::default());
@@ -1183,7 +1223,7 @@ fn the_plugin_lists_this_build_s_rows() {
     shell.step(&[]);
     let snap = super::world_snapshot(shell.app.world());
     assert_eq!(keys_of(&snap.settings[0]), AUDIO_KEYS);
-    assert!(game.snapshot().settings[0].is_empty());
+    assert_eq!(keys_of(&game.snapshot().settings[0]), AUDIO_KEYS);
 }
 
 // ---------------------------------------------------------------------------

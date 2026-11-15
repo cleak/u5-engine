@@ -68,6 +68,15 @@ impl SyntheticKey {
         }
     }
 
+    /// `key` typed with Ctrl, such as the game's Ctrl-S and Ctrl-B.
+    pub const fn ctrl(key: KeyCode) -> Self {
+        Self {
+            key,
+            shift: false,
+            control: true,
+        }
+    }
+
     fn typed(self) -> TypedKey {
         TypedKey {
             key: self.key,

@@ -30,7 +30,18 @@
 //!    [`SlotSaveHandshake::finish_store`]; otherwise it is released there.
 //!
 //! The handshake is in the app only with named slots and a slot store
-//! (3.4.2): without them none of this module runs.
+//! (3.4.2): without them none of it runs.
+//!
+//! **Sound and Buffer** (3.2.7 "Game", 3.3.8 "Injection"; plan M4-13): the
+//! Game tab's two rows type the game's own Ctrl-S or Ctrl-B. On a
+//! [`MenuCommand::TypeGameKey`] the menu closes, the token is taken as
+//! [`SyntheticOwner::MenuSlotSave`] and the one key is queued; the feed
+//! types it once the menu is closed, so the game prints its own `Sound Off`
+//! or `Buffer On` line. The token is released once the game has read the
+//! key; until then the router swallows physical keys, as for a save. The
+//! keys cost no turn (`commands.md §9`). This part is in the app with the
+//! overlay ([`install_game_keys`]); the start keys are
+//! [`super::start_keys`].
 
 use std::fs;
 use std::path::Path;
@@ -44,8 +55,10 @@ use u5_runtime::{
     save_image_summary,
 };
 
+use super::pages::{GameKey, MenuCommand};
 use super::text as t;
 use super::thumb::frame_thumbnail;
+use super::{MenuCommandEvent, menu_input};
 use crate::VisualState;
 use crate::enh::EnhSet;
 use crate::enh::idle::IdleProbe;
@@ -58,6 +71,21 @@ use crate::enh::toast::Toasts;
 /// The key that opens the save prompt and the key that answers it.
 pub const SAVE_KEY: SyntheticKey = SyntheticKey::plain(KeyCode::KeyQ);
 pub const YES_KEY: SyntheticKey = SyntheticKey::plain(KeyCode::KeyY);
+
+/// The game's Sound On and Off (`audio.md §3`) and Buffer On and Off
+/// (`input.md §6`), as a player types them.
+pub const SOUND_KEY: SyntheticKey = SyntheticKey::ctrl(KeyCode::KeyS);
+pub const BUFFER_KEY: SyntheticKey = SyntheticKey::ctrl(KeyCode::KeyB);
+
+impl GameKey {
+    /// The key it types.
+    pub const fn key(self) -> SyntheticKey {
+        match self {
+            GameKey::Sound => SOUND_KEY,
+            GameKey::Buffer => BUFFER_KEY,
+        }
+    }
+}
 
 /// How long a step may wait for the game before the handshake gives up. A
 /// step only waits for the game to read a key or to finish printing, so
@@ -362,6 +390,109 @@ pub(crate) fn advance_slot_save(
             }
         }
         SlotSavePhase::Idle | SlotSavePhase::Storing => {}
+    }
+}
+
+/// The Game tab's key on its way to the game (3.3.8 "Injection").
+#[derive(Resource, Debug, Default)]
+pub struct GameKeyInjection {
+    /// The key queued or typed and not yet read.
+    typing: Option<GameKey>,
+    /// Real time it has waited.
+    waited: Duration,
+}
+
+impl GameKeyInjection {
+    /// The key queued or typed and not yet read.
+    pub fn typing(&self) -> Option<GameKey> {
+        self.typing
+    }
+}
+
+/// Adds Sound and Buffer's typing, once. Called by the menu plugin while the
+/// overlay is on (the title layer alone has no prompt to type at).
+pub(crate) fn install_game_keys(app: &mut App) {
+    if app.world().contains_resource::<GameKeyInjection>() {
+        return;
+    }
+    install_synthetic_input(app);
+    app.init_resource::<GameKeyInjection>()
+        .add_systems(
+            Update,
+            type_game_key
+                .run_if(on_event::<MenuCommandEvent>)
+                .in_set(EnhSet::Apply)
+                .after(menu_input)
+                .before(apply_overlay_requests),
+        )
+        .add_systems(
+            Update,
+            game_key_read
+                .run_if(game_key_typing)
+                .in_set(EnhSet::Observe),
+        );
+}
+
+fn game_key_typing(injection: Res<GameKeyInjection>) -> bool {
+    injection.typing.is_some()
+}
+
+/// Whether the menu may type a game key now: the menu is open (so the game
+/// waits at the idle exploration prompt) and the token is free. A save
+/// under way holds it as the same owner, so a held token refuses too.
+pub(crate) fn can_type_game_key(owner: &SyntheticInputOwner, menu_open: bool) -> bool {
+    can_inject_command(owner, SyntheticOwner::MenuSlotSave, menu_open) && owner.holder().is_none()
+}
+
+/// A Sound or Buffer row chosen: close the menu and queue the key. The feed
+/// types it on the frame the menu has closed.
+fn type_game_key(
+    mut commands: EventReader<MenuCommandEvent>,
+    mut injection: ResMut<GameKeyInjection>,
+    mut owner: ResMut<SyntheticInputOwner>,
+    overlay: Option<Res<OverlayState>>,
+    visual: Option<Res<VisualState>>,
+    mut requests: EventWriter<OverlayRequest>,
+) {
+    for MenuCommandEvent(command) in commands.read() {
+        let MenuCommand::TypeGameKey(key) = *command else {
+            continue;
+        };
+        let menu_open = overlay
+            .as_deref()
+            .is_some_and(|overlay| overlay.open() == Some(OverlayId::Menu));
+        if injection.typing.is_some() || visual.is_none() || !can_type_game_key(&owner, menu_open) {
+            continue;
+        }
+        if owner.take(SyntheticOwner::MenuSlotSave).is_err()
+            || owner
+                .queue(SyntheticOwner::MenuSlotSave, [key.key()])
+                .is_err()
+        {
+            owner.release(SyntheticOwner::MenuSlotSave);
+            continue;
+        }
+        requests.write(OverlayRequest::Close(OverlayId::Menu));
+        *injection = GameKeyInjection {
+            typing: Some(key),
+            waited: Duration::ZERO,
+        };
+    }
+}
+
+/// Releases the token once the game has read the key (it waits in the
+/// queue while the speaker sounds, as a typed key would).
+fn game_key_read(
+    time: Res<Time>,
+    mut injection: ResMut<GameKeyInjection>,
+    mut owner: ResMut<SyntheticInputOwner>,
+    visual: Option<Res<VisualState>>,
+) {
+    injection.waited = injection.waited.saturating_add(time.delta());
+    let read = owner.queued() == 0 && visual.is_none_or(|visual| visual.typed_keys.is_empty());
+    if read || injection.waited >= STEP_LIMIT {
+        owner.release(SyntheticOwner::MenuSlotSave);
+        *injection = GameKeyInjection::default();
     }
 }
 

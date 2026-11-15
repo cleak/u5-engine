@@ -678,6 +678,7 @@ struct DrawKey {
     slots: SlotList,
     quicksave: bool,
     turns_since_save: Option<u64>,
+    unsaved: Option<super::pages::Unsaved>,
     field: String,
     /// The name field's cursor glyph, while the name field shows.
     cursor_glyph: Option<u8>,
@@ -885,6 +886,7 @@ pub(crate) fn menu_render(
             slots: snap.slot_list.clone(),
             quicksave: snap.quicksave,
             turns_since_save: snap.turns_since_save,
+            unsaved: snap.unsaved,
             field: model.field().to_string(),
             cursor_glyph: naming.then(|| u5_runtime::prompt_cursor_glyph(cursor_frame)),
         };

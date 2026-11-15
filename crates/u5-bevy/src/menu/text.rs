@@ -144,6 +144,8 @@ pub const QUIT_TO_TITLE_ASK: &str = "Return to the title?";
 pub const QUIT_TO_DESKTOP_ASK: &str = "Leave the game?";
 /// Unsaved progress since a save or load this session; `{}` is the turns.
 pub const UNSAVED_TURNS: &str = "{} turns since thy last save will be lost.";
+/// [`UNSAVED_TURNS`] for one turn.
+pub const UNSAVED_TURN: &str = "1 turn since thy last save will be lost.";
 /// Unsaved progress with no save or load yet this session.
 pub const UNSAVED_SESSION: &str = "Progress since this session began will be lost.";
 /// Dialog buttons.
@@ -227,6 +229,15 @@ pub const PACING: &str = "Pacing...";
 pub const ON: &str = "On";
 /// See [`ON`].
 pub const OFF: &str = "Off";
+
+/// The warning line of the unsaved-progress question (3.2.6).
+pub fn unsaved_line(unsaved: super::pages::Unsaved) -> String {
+    match unsaved {
+        super::pages::Unsaved::Turns(1) => UNSAVED_TURN.to_string(),
+        super::pages::Unsaved::Turns(turns) => fill(UNSAVED_TURNS, &[&turns.to_string()]),
+        super::pages::Unsaved::Session => UNSAVED_SESSION.to_string(),
+    }
+}
 /// A reserved row.
 pub const RESERVED: &str = "(later)";
 
@@ -238,8 +249,16 @@ pub const CUSTOM: &str = "Custom";
 pub const PRESET_HELP: &str =
     "Left and Right choose a preset. It sets every feature below; a later change shows Custom.";
 
-/// Why the Game tab's rows are greyed until they arrive (M4-13).
-pub const GAME_LATER: &str = "These come in a later build.";
+/// The Sound row's help (3.2.7 "Game").
+pub const SOUND_HELP: &str =
+    "Enter types Ctrl-S at the prompt, as thou wouldst, and the game answers.";
+/// The Buffer row's help.
+pub const BUFFER_HELP: &str =
+    "Enter types Ctrl-B at the prompt, as thou wouldst, and the game answers.";
+/// Why Sound and Buffer are greyed before play (the title layer).
+pub const GAME_IN_PLAY: &str = "These answer only while thou art playing.";
+/// Why the reserved Pacing row is greyed.
+pub const PACING_LATER: &str = "Pacing comes in a later build.";
 /// A tab with no rows in this build.
 pub const NOTHING_HERE: &str = "Nothing to set here yet.";
 /// The footer line of a row whose change waits for the next prompt, when
@@ -472,6 +491,7 @@ pub const DIALOG_TEMPLATES: &[&str] = &[
     QUIT_TO_TITLE_ASK,
     QUIT_TO_DESKTOP_ASK,
     UNSAVED_TURNS,
+    UNSAVED_TURN,
     UNSAVED_SESSION,
     NAME_PROMPT,
     RENAME_PROMPT,

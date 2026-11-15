@@ -651,7 +651,10 @@ fn the_shell_draws_exactly_the_kit_s_pages() {
             "the bar on Settings"
         );
 
-        game.tap(KeyCode::Enter).tap(KeyCode::ArrowRight);
+        // Off the Volume slider, whose Right steps it, onto Mute.
+        game.tap(KeyCode::Enter)
+            .tap(KeyCode::ArrowDown)
+            .tap(KeyCode::ArrowRight);
         assert_eq!(
             game.model().unwrap().current().page,
             Page::Settings(SettingsTab::Display)

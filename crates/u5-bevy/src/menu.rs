@@ -61,6 +61,13 @@
 //!   Return to the title, which asks the host to start the game again with
 //!   no key waiting, so the whole intro plays (3.2.5).
 //!
+//! - M4-13 adds the Game tab ([`settings::game_tab`]): Sound and Buffer
+//!   type the game's own Ctrl-S and Ctrl-B ([`inject::install_game_keys`]);
+//!   the start keys ([`start_keys`]), their own plugin that works without
+//!   the overlay; and the unsaved-progress question before Load, Return to
+//!   the title and Leave the game ([`pages::Unsaved`], 3.2.6). The menu's
+//!   phases ship with it.
+//!
 //! The world stays Live (U1): the menu acts on the game only through the
 //! overlay model, which hands keys back on close with held keys latched.
 
@@ -74,6 +81,7 @@ pub mod render;
 pub mod render_slots;
 pub mod settings;
 pub mod slots;
+pub mod start_keys;
 pub mod text;
 pub mod thumb;
 pub mod title;
@@ -88,7 +96,7 @@ use bevy::prelude::*;
 use u5_runtime::enhancements::{Phase, SHIPPED_PHASES, Toggle};
 
 use self::host::MenuHost;
-use self::pages::{MenuCommand, MenuDoors, MenuInput, MenuModel, ShellSnapshot, reduce};
+use self::pages::{MenuCommand, MenuDoors, MenuInput, MenuModel, ShellSnapshot, Unsaved, reduce};
 use self::slots::{SlotListing, SlotPlugin};
 use self::title::{TitleJourney, title_open};
 use self::unsaved::{SaveTracker, install_save_tracker};
@@ -119,6 +127,7 @@ pub(crate) fn add_menu(app: &mut App, launch: &VisualLaunchConfig) {
     if feature_wanted(toggles, OVERLAY) || feature_wanted(toggles, TITLE_LAYER) {
         let slots = launch.enhancements.menu().named_slots;
         app.add_plugins(MenuPlugin {
+            overlay: feature_wanted(toggles, OVERLAY),
             title_layer: feature_wanted(toggles, TITLE_LAYER),
             host: launch.menu_host.clone().filter(|_| slots),
             script: launch.menu_script.clone().unwrap_or_default(),
@@ -130,6 +139,9 @@ pub(crate) fn add_menu(app: &mut App, launch: &VisualLaunchConfig) {
 /// The menu's feature plugin: the page model, the doors and the systems
 /// that wire them to the overlay model.
 pub struct MenuPlugin {
+    /// `menu.overlay` was wanted at launch: the Game tab's Sound and Buffer
+    /// can type their keys.
+    overlay: bool,
     /// `menu.title_layer` was wanted at launch: the title layer's systems
     /// are in the app (with the intro).
     title_layer: bool,
@@ -205,6 +217,9 @@ impl Plugin for MenuPlugin {
                     .in_set(EnhSet::Apply),
             )
             .add_systems(Update, title::title_follow_intro.in_set(EnhSet::Observe));
+        }
+        if self.overlay {
+            inject::install_game_keys(app);
         }
         install_save_tracker(app, self.save_dir.clone());
         if let Some(host) = &self.host {
@@ -294,6 +309,7 @@ pub(crate) fn snapshot(shell: &MenuShell, doors: &MenuDoors) -> ShellSnapshot {
         quicksave: false,
         slot_list: Default::default(),
         turns_since_save: None,
+        unsaved: None,
     }
 }
 
@@ -368,6 +384,15 @@ fn full_snapshot(
     snap.turns_since_save = visual
         .zip(tracker)
         .and_then(|(visual, tracker)| tracker.turns_since(visual.state.turn));
+    let menu = live.map_or_else(
+        || launch.map(|launch| launch.0.enhancements.menu()),
+        |live| Some(live.now.menu()),
+    );
+    snap.unsaved = unsaved(
+        menu.is_some_and(|menu| menu.confirm_unsaved),
+        visual.is_some(),
+        snap.turns_since_save,
+    );
     snap.quicksave = live.map_or_else(
         || launch.is_some_and(|launch| launch.0.enhancements.menu().quicksave),
         |live| live.now.menu().quicksave,
@@ -395,9 +420,24 @@ fn full_snapshot(
     snap
 }
 
+/// What leaving now would lose (3.2.6): nothing to ask with the warning
+/// off or before play; otherwise the turns since the last save or load,
+/// none when the turn has not moved, and "this session" when no save or
+/// load was seen.
+pub fn unsaved(confirm: bool, in_play: bool, turns_since_save: Option<u64>) -> Option<Unsaved> {
+    if !confirm || !in_play {
+        return None;
+    }
+    match turns_since_save {
+        Some(0) => None,
+        Some(turns) => Some(Unsaved::Turns(turns)),
+        None => Some(Unsaved::Session),
+    }
+}
+
 /// Leave the game (3.2.5): the app exits as the window's close button
-/// makes it, and nothing is saved. The unsaved-progress check comes with
-/// M4-13.
+/// makes it, and nothing is saved. The reducer has asked first when there
+/// was unsaved progress (3.2.6).
 fn quit_to_desktop(mut commands: EventReader<MenuCommandEvent>, mut exit: EventWriter<AppExit>) {
     for MenuCommandEvent(command) in commands.read() {
         if *command == MenuCommand::QuitToDesktop {
@@ -408,8 +448,8 @@ fn quit_to_desktop(mut commands: EventReader<MenuCommandEvent>, mut exit: EventW
 
 /// Return to the title (3.2.5): the app ends asking its host to start the
 /// game again with the same arguments and no key waiting, so the whole
-/// intro plays. Nothing is saved. The unsaved-progress check comes with
-/// M4-13. Only the relaunch exists in this build (`menu.quit_to_title`'s
+/// intro plays. Nothing is saved. The reducer has asked first when there
+/// was unsaved progress (3.2.6). Only the relaunch exists in this build (`menu.quit_to_title`'s
 /// in-app choice is chapter 3 Phase 7), so it is used whatever that says.
 fn quit_to_title(
     mut commands: EventReader<MenuCommandEvent>,
@@ -591,3 +631,9 @@ mod inject_review_tests;
 
 #[cfg(test)]
 mod render_slots_tests;
+
+#[cfg(test)]
+mod game_tab_tests;
+
+#[cfg(test)]
+mod game_tab_review_tests;
