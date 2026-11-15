@@ -10,14 +10,14 @@ use u5_runtime::{
     location_audit_report_text, run_report,
 };
 use u5_tui::{
-    CliArgs, PARITY_LOCK_LINE, ReadyGameData, SETTINGS_WINDOW_FLAG, SETUP_WINDOW_FLAG,
-    TerminalFeature, TerminalGemMap, TerminalSession, WizardMode, cli_usage,
+    AutoLogForm, CliArgs, PARITY_LOCK_LINE, ReadyGameData, SETTINGS_WINDOW_FLAG, SETUP_WINDOW_FLAG,
+    TerminalAutoCombat, TerminalFeature, TerminalGemMap, TerminalSession, WizardMode, cli_usage,
     compare_manifest_files, describe_failure, lock_state_for_process, open_settings_page,
     parse_cli_command, prepare_writable_game_dir, resolve_game_data, run_audio_suite,
     run_create_character_command, run_equivalence_suite, run_interactive_create_character,
     run_intro_menu_loop, run_play_loop_with, run_route_smoke, run_route_smoke_with, run_save_frame,
     run_save_frame_suite, run_save_screen, run_settings_window_child, run_setup_window_child,
-    run_show_settings,
+    run_show_settings, terminal_combat_settings,
 };
 
 fn main() -> ExitCode {
@@ -197,6 +197,7 @@ fn dispatch(mut args: CliArgs) -> io::Result<()> {
         {
             session.gem_map = Some(record.with_png(gem_png(&args, dir)));
         }
+        let session = session.with_auto_combat(auto_combat_for_play(&args)?);
         return run_play_loop_with(
             &args.game_dir,
             args.play_options,
@@ -234,6 +235,24 @@ fn gem_map_on(args: &CliArgs) -> bool {
         return false;
     }
     true
+}
+
+/// Auto-combat for a terminal play run (design 6.2.6): the settings come
+/// from the command line only, and both terminal loops get them. Under the
+/// parity lock `--auto-combat` is ignored, with the lock's one line, and no
+/// `--auto-combat-log` file is created.
+fn auto_combat_for_play(args: &CliArgs) -> io::Result<Option<TerminalAutoCombat>> {
+    let lock = lock_state_for_process(args.parity_lock);
+    let settings = terminal_combat_settings(&args.enhancements, lock);
+    if lock != LockState::Off && terminal_combat_settings(&args.enhancements, LockState::Off).auto {
+        eprintln!("{PARITY_LOCK_LINE}");
+    }
+    let form = if args.play_script.is_some() {
+        AutoLogForm::Script
+    } else {
+        AutoLogForm::Stdin
+    };
+    TerminalAutoCombat::with_log(settings, args.auto_combat_log.as_deref(), form)
 }
 
 fn needs_writable_game_dir(args: &CliArgs) -> bool {

@@ -9,6 +9,7 @@ use std::io::{self, BufRead, Write};
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
+use u5_runtime::auto_combat::AutoKey;
 use u5_runtime::enhancements::{SaveStamp, SaveWatcher};
 use u5_runtime::stats_panel::transcribe_cell_frame_for_plain_text;
 use u5_runtime::{
@@ -93,6 +94,20 @@ pub trait PlayObserver {
     fn take_token(&mut self, _token: &str, _state: &PlayState) -> bool {
         false
     }
+    /// Auto-combat's `@auto` control line (design 6.2.6), before anything
+    /// else sees it: true when auto-combat took it. Nothing runs for it,
+    /// and the loop does not go back to its top.
+    fn take_auto_line(&mut self, _line: &str, _state: &PlayState) -> bool {
+        false
+    }
+    /// The key auto-combat answers the prompt now open with, when it owns
+    /// it (design 6.3.5); `None` leaves the prompt to the player.
+    fn auto_key(&mut self, _state: &PlayState) -> Option<AutoKey> {
+        None
+    }
+    /// A line or script command the player's side gave the game (not an
+    /// auto key, not a token a feature took), for `--auto-combat-log`.
+    fn typed_line(&mut self, _line: &str) {}
 }
 
 impl PlayObserver for TerminalSaveWatch {
@@ -107,6 +122,9 @@ impl PlayObserver for TerminalSaveWatch {
 pub struct TerminalSession {
     pub save_watch: Option<TerminalSaveWatch>,
     pub gem_map: Option<crate::gem_map::TerminalGemMap>,
+    /// Auto-combat (chapter 6), present only while `combat.auto` is on and
+    /// unlocked.
+    pub auto_combat: Option<crate::auto_combat::TerminalAutoCombat>,
 }
 
 impl TerminalSession {
@@ -120,12 +138,22 @@ impl TerminalSession {
         Self {
             save_watch: Some(TerminalSaveWatch::new(save_dir)),
             gem_map: Some(crate::gem_map::TerminalGemMap::for_save_dir(save_dir)),
+            auto_combat: None,
         }
+    }
+
+    /// This session with auto-combat, when it is on.
+    pub fn with_auto_combat(
+        mut self,
+        auto_combat: Option<crate::auto_combat::TerminalAutoCombat>,
+    ) -> Self {
+        self.auto_combat = auto_combat;
+        self
     }
 
     /// Whether nothing is on.
     pub fn is_empty(&self) -> bool {
-        self.save_watch.is_none() && self.gem_map.is_none()
+        self.save_watch.is_none() && self.gem_map.is_none() && self.auto_combat.is_none()
     }
 
     /// Gameplay starts on `state`: the features read their sidecars.
@@ -150,6 +178,34 @@ impl PlayObserver for TerminalSession {
             if let Some(stamp) = stamp {
                 gem_map.saved(&stamp);
             }
+        }
+        if let Some(auto) = self.auto_combat.as_mut() {
+            auto.after_command(state);
+        }
+    }
+
+    fn take_auto_line(&mut self, line: &str, state: &PlayState) -> bool {
+        match self.auto_combat.as_mut() {
+            Some(auto) if crate::auto_combat::TerminalAutoCombat::owns(line) => {
+                println!("{}", auto.control(line, state));
+                true
+            }
+            _ => false,
+        }
+    }
+
+    fn auto_key(&mut self, state: &PlayState) -> Option<AutoKey> {
+        let auto = self.auto_combat.as_mut()?;
+        let (key, note) = auto.next_key(state);
+        if let Some(note) = note {
+            println!("{note}");
+        }
+        key
+    }
+
+    fn typed_line(&mut self, line: &str) {
+        if let Some(auto) = self.auto_combat.as_mut() {
+            auto.log_typed(line);
         }
     }
 
@@ -189,6 +245,43 @@ fn token_taken(
         }
         _ => false,
     }
+}
+
+/// Whether auto-combat took `line`, an `@auto` control line. Only `@`
+/// lines are offered, and only when something watches.
+fn auto_line_taken(
+    observer: &mut Option<&mut dyn PlayObserver>,
+    line: &str,
+    state: &PlayState,
+) -> bool {
+    match observer {
+        Some(observer) if is_enhancement_token(line) => observer.take_auto_line(line.trim(), state),
+        _ => false,
+    }
+}
+
+fn auto_key(observer: &mut Option<&mut dyn PlayObserver>, state: &PlayState) -> Option<AutoKey> {
+    observer
+        .as_mut()
+        .and_then(|observer| observer.auto_key(state))
+}
+
+fn typed_line(observer: &mut Option<&mut dyn PlayObserver>, line: &str) {
+    if let Some(observer) = observer {
+        observer.typed_line(line);
+    }
+}
+
+/// The point at which auto-combat plans a script key (design 6.3.5): a
+/// fight that still owes turns that read no key walks them first, exactly
+/// as the next script command's own exploration-gate settle would. Every
+/// other state is left alone, so the gate pass a logged key's replay runs
+/// is the same pass, in the same order.
+pub fn settle_auto_planning_point(state: &mut PlayState, game_dir: &Path) -> io::Result<()> {
+    if state.combat_active && combat_awaits_automatic_turns(state) {
+        settle_play_script_exploration_gate(state, game_dir)?;
+    }
+    Ok(())
 }
 
 /// [`run_play_loop`] with the enhancements a terminal run keeps.
@@ -296,7 +389,7 @@ pub fn run_interactive_play_loop_watched<R: BufRead>(
 ) -> io::Result<()> {
     let mut input = String::new();
     let mut queued_input = VecDeque::new();
-    loop {
+    'play: loop {
         // The terminal shell has no animation pump, so a staged presentation
         // would never advance here. Print the rest of it at once rather than
         // stall: this shell is a harness, not a pacing reference.
@@ -338,45 +431,72 @@ pub fn run_interactive_play_loop_watched<R: BufRead>(
         }
         let (key, suffix) = if let Some(key) = queued_input.pop_front() {
             (key, String::new())
+        } else if let Some(key) = auto_key(&mut observer, state) {
+            // Auto-combat owns this prompt (design 6.3.5): its key goes in
+            // where a typed key would, after the same single wait pass.
+            println!("> auto {}", play_script_command_label(key.script_token()));
+            (key.input_char(), String::new())
         } else {
-            print!("> ");
-            io::stdout().flush()?;
-            input.clear();
-            if input_reader.read_line(&mut input)? == 0 {
-                break;
-            }
-            if !play_state_whole_line_reader(state) && token_taken(&mut observer, &input, state) {
-                continue;
-            }
-            if play_state_whole_line_reader(state) {
-                match free_text_line_input(&input) {
-                    FreeTextLineInput::Submit(key, suffix) => (key, suffix),
-                    FreeTextLineInput::Discard => continue,
-                    FreeTextLineInput::Key => match play_input_key_and_suffix(&input) {
-                        Some((key, suffix)) => (key, suffix),
-                        None => {
-                            handle_empty_play_input(state, game_dir)?;
-                            continue;
-                        }
-                    },
+            // An `@auto` control line is the shell's: the next line, or the
+            // first auto key, is read at this same point, with no second
+            // wait pass (design 6.2.6).
+            let mut auto = None;
+            loop {
+                print!("> ");
+                io::stdout().flush()?;
+                input.clear();
+                if input_reader.read_line(&mut input)? == 0 {
+                    break 'play;
                 }
-            } else if play_state_typeahead_setting_in_force(state) {
-                if let Some(keys) = play_input_typeahead_chars(&input) {
-                    let mut keys = keys.into_iter();
-                    let key = keys.next().expect("typeahead input is non-empty");
-                    queued_input.extend(keys);
-                    (key, String::new())
+                if play_state_whole_line_reader(state)
+                    || !auto_line_taken(&mut observer, &input, state)
+                {
+                    break;
+                }
+                auto = auto_key(&mut observer, state);
+                if auto.is_some() {
+                    break;
+                }
+            }
+            if let Some(key) = auto {
+                println!("> auto {}", play_script_command_label(key.script_token()));
+                (key.input_char(), String::new())
+            } else {
+                if !play_state_whole_line_reader(state) && token_taken(&mut observer, &input, state)
+                {
+                    continue;
+                }
+                typed_line(&mut observer, &input);
+                if play_state_whole_line_reader(state) {
+                    match free_text_line_input(&input) {
+                        FreeTextLineInput::Submit(key, suffix) => (key, suffix),
+                        FreeTextLineInput::Discard => continue,
+                        FreeTextLineInput::Key => match play_input_key_and_suffix(&input) {
+                            Some((key, suffix)) => (key, suffix),
+                            None => {
+                                handle_empty_play_input(state, game_dir)?;
+                                continue;
+                            }
+                        },
+                    }
+                } else if play_state_typeahead_setting_in_force(state) {
+                    if let Some(keys) = play_input_typeahead_chars(&input) {
+                        let mut keys = keys.into_iter();
+                        let key = keys.next().expect("typeahead input is non-empty");
+                        queued_input.extend(keys);
+                        (key, String::new())
+                    } else if let Some((key, suffix)) = play_input_key_and_suffix(&input) {
+                        (key, suffix)
+                    } else {
+                        handle_empty_play_input(state, game_dir)?;
+                        continue;
+                    }
                 } else if let Some((key, suffix)) = play_input_key_and_suffix(&input) {
                     (key, suffix)
                 } else {
                     handle_empty_play_input(state, game_dir)?;
                     continue;
                 }
-            } else if let Some((key, suffix)) = play_input_key_and_suffix(&input) {
-                (key, suffix)
-            } else {
-                handle_empty_play_input(state, game_dir)?;
-                continue;
             }
         };
         let effects_before = state.sound_effect_serial;
@@ -457,9 +577,37 @@ pub fn run_play_script_commands_watched(
             index + 1,
             play_script_command_label(command)
         );
+        if auto_line_taken(&mut observer, command, state) {
+            // Design 6.3.5: the token runs the autopilot one key at a time,
+            // each planned from the state the last one left, until it hands
+            // back.
+            let mut step = 0;
+            loop {
+                settle_auto_planning_point(state, game_dir)?;
+                let Some(key) = auto_key(&mut observer, state) else {
+                    break;
+                };
+                step += 1;
+                println!(
+                    "script[{}.{}]: auto {}",
+                    index + 1,
+                    step,
+                    play_script_command_label(key.script_token())
+                );
+                before_command(&mut observer, state);
+                let disposition = run_play_script_step(state, key.script_token(), game_dir)?;
+                after_command(&mut observer, state);
+                print_play_script_snapshot(state, tile_atlas)?;
+                if disposition == PlayInputDisposition::Quit {
+                    return Ok(());
+                }
+            }
+            continue;
+        }
         if token_taken(&mut observer, command, state) {
             continue;
         }
+        typed_line(&mut observer, command);
         // No pump in script mode either; see the interactive loop above.
         before_command(&mut observer, state);
         let disposition = run_play_script_step(state, command, game_dir)?;
@@ -558,6 +706,11 @@ pub enum ScriptTokenIntercept {
     /// A feature took the token and typed these commands in its place
     /// (effect class (b)). Each runs as an ordinary script command.
     Emit(Vec<String>),
+    /// A feature took the token and types its commands one at a time:
+    /// after each one has run, [`ScriptTokenHooks::next_command`] plans the
+    /// next from the state it left, until it answers `None` (auto-combat,
+    /// design 6.3.5). Each runs as an ordinary script command.
+    Drive,
 }
 
 /// Who may intercept `@` tokens before [`handle_play_script_command`] sees
@@ -579,6 +732,12 @@ pub trait ScriptTokenHooks {
         token: &str,
         state: &mut PlayState,
     ) -> ScriptTokenIntercept;
+
+    /// After [`ScriptTokenIntercept::Drive`] for the token at `index`: the
+    /// next command, planned from `state`, or `None` to end the token.
+    fn next_command(&mut self, _index: usize, _state: &PlayState) -> Option<String> {
+        None
+    }
 }
 
 /// Every toggle off: no token is intercepted, so the script runs as 1.0.1.
@@ -638,6 +797,22 @@ where
                 ScriptTokenIntercept::PassThrough => None,
                 ScriptTokenIntercept::Consumed => continue,
                 ScriptTokenIntercept::Emit(commands) => Some(commands),
+                ScriptTokenIntercept::Drive => {
+                    loop {
+                        settle_auto_planning_point(state, game_dir)?;
+                        let Some(command) = hooks.next_command(index, state) else {
+                            break;
+                        };
+                        hooks.before_command(state);
+                        let disposition = run_play_script_step(state, &command, game_dir)?;
+                        hooks.after_command(state);
+                        after_command(state, index, &command)?;
+                        if disposition == PlayInputDisposition::Quit {
+                            return Ok(());
+                        }
+                    }
+                    continue;
+                }
             }
         } else {
             None

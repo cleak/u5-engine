@@ -4,6 +4,7 @@
 //! and the play-script command harness. Game logic lives in `u5-runtime`.
 
 pub mod audio_suite;
+pub mod auto_combat;
 pub mod cli;
 pub mod enhancement_settings;
 pub mod equivalence;
@@ -18,6 +19,10 @@ pub mod setup;
 pub mod visual_manifest;
 
 pub use audio_suite::{AudioSuiteCase, audio_suite_cases, run_audio_suite};
+pub use auto_combat::{
+    AUTO_TOKEN, AutoCombatHooks, AutoControl, AutoLogForm, TerminalAutoCombat, auto_key_stdin_line,
+    hand_back_note, parse_auto_control, terminal_combat_settings,
+};
 pub use cli::{
     CLI_USAGE, CliArgs, CliCommand, CreateCharacterCommand, chargen_typed_name, cli_usage,
     parse_chargen_gender_arg, parse_chargen_winners_arg, parse_cli_args, parse_cli_command,
@@ -55,7 +60,7 @@ pub use play_loop::{
     replay_play_script_commands, replay_play_script_commands_hooked, run_interactive_play_loop,
     run_interactive_play_loop_watched, run_play_loop, run_play_loop_with, run_play_script_commands,
     run_play_script_commands_watched, run_play_script_step, run_terminal_input_wait_pass,
-    unclassified_escape_sequence,
+    settle_auto_planning_point, unclassified_escape_sequence,
 };
 pub use route_smoke::{
     NoRouteTrace, RouteSmokeCase, RouteSmokeExpectation, RouteSmokeFrameReport, RouteSmokeReport,
