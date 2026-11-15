@@ -13,14 +13,21 @@
 //!   [`apply_locks`];
 //! - the slot-0 mirror-coherent stat setters;
 //! - [`WatchField`], [`WatchValue`], [`watch_snapshot`] and [`watch_diff`],
-//!   the read-only change watch.
+//!   the read-only change watch;
+//! - [`plan_teleport`] and [`commit_teleport`], the teleport (7.3.6, D7.8,
+//!   D7.9; build plan M8-04).
 //!
-//! Every function here is deterministic: no I/O, no randomness, no clock
-//! or turn change. Nothing in the game calls this module; only the cheats
+//! Every function here except the teleport is deterministic: no I/O, no
+//! randomness, no clock or turn change. The teleport reads the game
+//! directory and, like any transit out of the overworld, writes the
+//! departing plane's `.OOL` mirror; it changes neither the clock nor the
+//! turn. Nothing in the game calls this module; only the cheats
 //! plugin in the shell does, and only while a cheat is on (7.4.2). Every
 //! label is engine text.
 
 use std::collections::BTreeMap;
+use std::io;
+use std::path::Path;
 
 use crate::*;
 
@@ -1267,6 +1274,296 @@ pub fn watch_diff(
         .filter(|(_, (old, new))| old != new)
         .map(|(field, (old, new))| (field, old, new))
         .collect()
+}
+
+// ---------------------------------------------------------------------------
+// Teleport (7.3.6, D7.8, D7.9).
+// ---------------------------------------------------------------------------
+
+/// Where a teleport goes.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum TeleportArea {
+    World(WorldPlane),
+    Location { scene: Scene, floor: i8 },
+    Dungeon { scene: DungeonScene, level: u8 },
+}
+
+/// A teleport destination cell.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct TeleportTarget {
+    pub area: TeleportArea,
+    pub x: usize,
+    pub y: usize,
+}
+
+/// The landing cell [`plan_teleport`] chose, or why there is none.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum TeleportPlan {
+    Ready {
+        target: TeleportTarget,
+        nudged: bool,
+    },
+    Refused(TeleportRefusal),
+}
+
+/// Why a teleport cannot run.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum TeleportRefusal {
+    NotAtIdlePrompt,
+    InCombat,
+    AboardVessel,
+    BadFloor,
+    OutOfBounds,
+    NoOpenCell,
+    LoadFailed(String),
+}
+
+/// The Chebyshev radius of the nudge search (D7.9).
+pub const TELEPORT_NUDGE_RADIUS: usize = 3;
+
+impl TeleportArea {
+    /// The side of the area's square map: the overworld is 256 cells, a
+    /// location 32 and a dungeon level 8 (the bounds of
+    /// [`gate_travel_destination`]).
+    pub fn side(self) -> usize {
+        match self {
+            TeleportArea::World(_) => WORLD_SIDE,
+            TeleportArea::Location { .. } => 32,
+            TeleportArea::Dungeon { .. } => DUNGEON_SIDE,
+        }
+    }
+
+    /// Whether the live state is already in this area.
+    pub fn is_current(self, area: Area) -> bool {
+        match (self, area) {
+            (TeleportArea::World(want), Area::World { plane }) => want == plane,
+            (
+                TeleportArea::Location { scene, floor },
+                Area::Town {
+                    scene: here,
+                    floor: here_floor,
+                },
+            ) => scene == here && floor == here_floor,
+            (
+                TeleportArea::Dungeon { scene, level },
+                Area::Dungeon {
+                    scene: here,
+                    level: here_level,
+                },
+            ) => scene == here && level == here_level,
+            _ => false,
+        }
+    }
+
+    fn scene_byte_and_z(self) -> (u8, u8) {
+        match self {
+            TeleportArea::World(WorldPlane::Britannia) => (0, 0),
+            // Any nonzero z names the Underworld; this is the byte a save
+            // of the plane records.
+            TeleportArea::World(WorldPlane::Underworld) => (0, u8::MAX),
+            TeleportArea::Location { scene, floor } => (scene.byte, floor as u8),
+            TeleportArea::Dungeon { scene, level } => (scene.byte, level),
+        }
+    }
+}
+
+impl TeleportTarget {
+    /// The target as a moonstone slot, so the moongate's own validation
+    /// checks it (7.3.6 step 2). `None` when a coordinate does not fit a
+    /// slot byte.
+    fn as_gate_slot(self) -> Option<MoonstoneGateSlot> {
+        let (scene, z) = self.area.scene_byte_and_z();
+        Some(MoonstoneGateSlot {
+            scene,
+            x: u8::try_from(self.x).ok()?,
+            y: u8::try_from(self.y).ok()?,
+            z,
+        })
+    }
+}
+
+/// Whether the party may land on `(x, y)` of `state`'s current area: open
+/// ground for its transport with no NPC or object on it; in a dungeon, an
+/// ordinary passage cell with no object (7.2.7).
+fn teleport_cell_open(state: &PlayState, x: usize, y: usize) -> bool {
+    let ground = match state.area {
+        Area::Dungeon { level, .. } => {
+            dungeon_cell_class_of(state.dungeon_cell(level, x, y)) == DungeonCellClass::Passage
+        }
+        _ => {
+            state.tile_walkable(state.current_area_tile(x, y))
+                && state.npc_at_current_floor(x, y).is_none()
+        }
+    };
+    ground && state.object_at_current_floor(x, y).is_none()
+}
+
+/// The cells at Chebyshev distance `radius` from `(x, y)` inside a
+/// `side`-cell map, rows top to bottom, then columns left to right.
+pub fn teleport_ring(x: usize, y: usize, radius: usize, side: usize) -> Vec<(usize, usize)> {
+    let (x, y, r) = (x as isize, y as isize, radius as isize);
+    let side = side as isize;
+    let mut cells = Vec::new();
+    for cy in (y - r)..=(y + r) {
+        for cx in (x - r)..=(x + r) {
+            let ring = (cx - x).abs().max((cy - y).abs()) == r;
+            if ring && (0..side).contains(&cx) && (0..side).contains(&cy) {
+                cells.push((cx as usize, cy as usize));
+            }
+        }
+    }
+    cells
+}
+
+/// The target cell if it is open, else the first open cell of rings 1..3.
+fn teleport_landing(
+    state: &PlayState,
+    want: TeleportTarget,
+) -> Result<(TeleportTarget, bool), TeleportRefusal> {
+    if teleport_cell_open(state, want.x, want.y) {
+        return Ok((want, false));
+    }
+    (1..=TELEPORT_NUDGE_RADIUS)
+        .flat_map(|radius| teleport_ring(want.x, want.y, radius, want.area.side()))
+        .find(|&(x, y)| teleport_cell_open(state, x, y))
+        .map(|(x, y)| (TeleportTarget { x, y, ..want }, true))
+        .ok_or(TeleportRefusal::NoOpenCell)
+}
+
+/// Read-only: validate a teleport and choose its landing cell (7.3.6).
+///
+/// A different area is probed on a scratch state built by
+/// [`PlayState::load_scene`] from the carried options, which writes no
+/// file; the scratch state is dropped.
+pub fn plan_teleport(state: &PlayState, game_dir: &Path, want: TeleportTarget) -> TeleportPlan {
+    match plan_teleport_inner(state, game_dir, want) {
+        Ok((target, nudged)) => TeleportPlan::Ready { target, nudged },
+        Err(refusal) => TeleportPlan::Refused(refusal),
+    }
+}
+
+fn plan_teleport_inner(
+    state: &PlayState,
+    game_dir: &Path,
+    want: TeleportTarget,
+) -> Result<(TeleportTarget, bool), TeleportRefusal> {
+    if state.idle_command_prompt().is_none() {
+        return Err(TeleportRefusal::NotAtIdlePrompt);
+    }
+    if state.combat_active {
+        return Err(TeleportRefusal::InCombat);
+    }
+    if matches!(
+        state.player.transport,
+        TransportState::Ship { .. } | TransportState::Skiff { .. }
+    ) {
+        return Err(TeleportRefusal::AboardVessel);
+    }
+    if want.x >= want.area.side() || want.y >= want.area.side() {
+        return Err(TeleportRefusal::OutOfBounds);
+    }
+    let slot = want.as_gate_slot().ok_or(TeleportRefusal::OutOfBounds)?;
+    if let GateTravelDestination::Invalid(_) | GateTravelDestination::Empty =
+        gate_travel_destination(slot)
+    {
+        return Err(match want.area {
+            TeleportArea::Dungeon { .. } => TeleportRefusal::BadFloor,
+            _ => TeleportRefusal::OutOfBounds,
+        });
+    }
+    let (target, floor, start) = match gate_travel_destination_in(game_dir, slot) {
+        Ok(GateTravelDestination::Ready {
+            target,
+            floor,
+            start,
+        }) => (target, floor, start),
+        Ok(_) => return Err(TeleportRefusal::BadFloor),
+        Err(err) => return Err(TeleportRefusal::LoadFailed(err.to_string())),
+    };
+    if want.area.is_current(state.area) {
+        return teleport_landing(state, want);
+    }
+    let scratch = PlayState::load_scene(game_dir, state.carried_play_options(target, floor, start))
+        .map_err(|err| TeleportRefusal::LoadFailed(err.to_string()))?;
+    teleport_landing(&scratch, want)
+}
+
+/// The scene load a teleport target names, through the moongate's own
+/// slot decoding.
+fn teleport_destination(target: TeleportTarget) -> io::Result<(PlayTarget, i8, (usize, usize))> {
+    match target.as_gate_slot().map(gate_travel_destination) {
+        Some(GateTravelDestination::Ready {
+            target,
+            floor,
+            start,
+        }) => Ok((target, floor, start)),
+        _ => Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "the teleport target is not a destination",
+        )),
+    }
+}
+
+/// Commit a [`TeleportPlan::Ready`] plan. No turn, no epilogue, no
+/// narration and no cue (7.2.7).
+///
+/// Inside one location floor or dungeon level the party is placed where
+/// it stands. Anything else, the overworld included, is the gate-travel
+/// rebuild without its gate-specific parts: the departing plane's `.OOL`
+/// is written, the carried options are loaded, the Underworld fixed
+/// objects are placed, a dungeon puts the party on foot, and the sound
+/// history, transcript, session settings and presentation flags carry.
+pub fn commit_teleport(
+    state: &mut PlayState,
+    game_dir: &Path,
+    plan: &TeleportPlan,
+) -> io::Result<()> {
+    let TeleportPlan::Ready { target, .. } = *plan else {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "a refused teleport plan cannot be committed",
+        ));
+    };
+    let (play_target, floor, start) = teleport_destination(target)?;
+    let same_area = target.area.is_current(state.area);
+    if same_area && !matches!(target.area, TeleportArea::World(_)) {
+        state.player.x = target.x;
+        state.player.y = target.y;
+        state.sync_player_object();
+        state.mark_visibility_dirty();
+        return Ok(());
+    }
+    // As a moongate warp within one plane: a gate already live on the
+    // landing cell is carried, any other is held back one command.
+    let arrival_gate_carried = same_area && {
+        let idx = world_cell_index(start.0, start.1);
+        state.natural_moongate_live_cells.contains(&idx)
+            && state.grid.get(idx).copied() == Some(NATURAL_MOONGATE_TERRAIN_TILE)
+    };
+    state.cache_current_world_overlay();
+    state.write_current_world_plane_object_table(game_dir, true)?;
+    let previous_turn = state.turn;
+    let options = state.carried_play_options(play_target, floor, start);
+    let mut next = PlayState::load_scene(game_dir, options)?;
+    next.turn = previous_turn;
+    next.world_overlays = state.world_overlays.clone();
+    if let PlayTarget::World(plane) = play_target {
+        next.place_underworld_fixed_objects(plane);
+        next.cache_current_world_overlay();
+    }
+    if matches!(play_target, PlayTarget::Dungeon(_)) {
+        next.force_foot_transport();
+    }
+    next.sync_player_object();
+    next.pending_town_arrest = None;
+    next.active_blackthorn = None;
+    state.carry_presentation_into(&mut next);
+    next.natural_moongate_hook_held_for_warp_arrival = !arrival_gate_carried
+        && next
+            .current_live_natural_moongate_cell_index()
+            .is_some_and(|idx| next.grid.get(idx).copied() == Some(NATURAL_MOONGATE_TERRAIN_TILE));
+    *state = next;
+    Ok(())
 }
 
 #[cfg(test)]
