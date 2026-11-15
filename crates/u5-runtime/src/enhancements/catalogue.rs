@@ -457,7 +457,7 @@ toggles! {
         driven: false,
     },
     CombatFastForward = "combat.fast_forward" {
-        label: "Fast-forward auto-combat (shorter sounds and pauses)",
+        label: "Faster fights: changes timing, so fights differ from normal pace",
         class: EffectClass::InputDriven,
         apply: ApplyAt::IdlePrompt,
         tier: Tier::Deviation,

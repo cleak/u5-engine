@@ -159,3 +159,35 @@ fn replay_script_puts_each_tokens_keys_in_its_place() {
         ["pass", "A", "enter", "x", "pass", "@gemmap"]
     );
 }
+
+/// Phase 4d (design 6.3.4; plan M7-07): the terminal has no cues, so
+/// `combat.fast_forward` changes nothing here. The shell never reads it,
+/// and the same lines give the same notes and keys with it on.
+#[test]
+fn fast_forward_leaves_the_terminal_unchanged() {
+    for source in [
+        include_str!("../auto_combat.rs"),
+        include_str!("../main.rs"),
+        include_str!("../lib.rs"),
+        include_str!("../play_loop.rs"),
+    ] {
+        assert!(!source.contains("fast_forward"));
+    }
+    let run = |fast_forward: bool| {
+        let mut state = test_state(open_grid(), 1, 1);
+        state.combat_active = true;
+        let mut auto = TerminalAutoCombat::new(CombatSettings {
+            fast_forward,
+            ..on()
+        })
+        .unwrap();
+        let mut seen = vec![auto.control("@auto until", &state)];
+        for _ in 0..3 {
+            seen.push(format!("{:?}", auto.next_key(&state)));
+        }
+        state.combat_active = false;
+        seen.push(format!("{:?}", auto.next_key(&state)));
+        (seen, auto.keys_typed(), auto.last_hand_back())
+    };
+    assert_eq!(run(true), run(false));
+}

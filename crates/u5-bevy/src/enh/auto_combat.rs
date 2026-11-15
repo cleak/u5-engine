@@ -39,6 +39,14 @@
 //!   same frame it was fed, victory and the action cap, and the reset when
 //!   the fight is over.
 //!
+//! Fast-forward (Phase 4d): each fed key opens a [`CueSpan`] of
+//! `sound_effect_serial`s, closed when the shell is quiet again. While one
+//! is open in "until done" with `fast_forward` on, `play_speaker_effects`
+//! asks [`AutoCombatShell::speaker_cue`] for each blocking cue and plays
+//! its first [`FAST_FORWARD_CUE`]; the order is unchanged. That one
+//! `Option<Res<AutoCombatShell>>` parameter is the chapter's only edit to a
+//! faithful system; with the shell absent it takes its 1.0.1 path.
+//!
 //! All but the detach run only while `combat.auto` is on. Nothing here
 //! writes the game state or draws: a planned key reaches the game only
 //! through `typed_keys`, the badge and toasts are the foundation's, and
@@ -54,6 +62,7 @@ use bevy::prelude::*;
 use bevy::window::WindowFocused;
 use u5_runtime::InputDirection;
 use u5_runtime::PlayState;
+use u5_runtime::audio::SpeakerProgram;
 use u5_runtime::auto_combat::{
     AutoEngagement, AutoFightRuntime, AutoKey, AutoPlan, AutoPrompt, CombatSettings, HandBack,
     InterruptMode, auto_prompt, observe_after_auto_key, plan_next_auto_key,
@@ -144,7 +153,30 @@ pub struct AutoCombatShell {
     /// the victory toast at a fight's end (the actor rows are cleared by
     /// then).
     pub foes_remained: bool,
+    /// The `sound_effect_serial` range the last auto key produced, open
+    /// until the shell is quiet again (Phase 4d).
+    pub cue_span: Option<CueSpan>,
 }
+
+/// The `sound_effect_serial` range one auto key produced (design 6.3.4,
+/// Phase 4d): every effect after `after`, through `through` once the shell
+/// is quiet again.
+///
+/// A key is fed only while the shell is quiet: no voice, nothing queued
+/// and every recorded effect already sent. So every effect the speaker
+/// receives while the span is open has a serial in it: the key's own cues
+/// and those of the round it set going, up to the next quiet frame.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct CueSpan {
+    /// The serial when the key was fed; the span holds the effects after it.
+    pub after: u64,
+    /// The last serial in the span, set when the shell is quiet again.
+    pub through: Option<u64>,
+}
+
+/// The fixed short envelope a blocking cue plays in fast-forward (Phase 4d):
+/// the cue's first 40 ms, then its stop.
+pub const FAST_FORWARD_CUE: Duration = Duration::from_millis(40);
 
 impl AutoCombatShell {
     pub fn new(settings: CombatSettings) -> Self {
@@ -158,6 +190,55 @@ impl AutoCombatShell {
             last_auto_key: None,
             handing_back: None,
             foes_remained: true,
+            cue_span: None,
+        }
+    }
+
+    /// Whether the speaker shortens blocking cues now: `fast_forward` and
+    /// "until done" are both set, and an auto key's span is open.
+    pub fn fast_forwards_cues(&self) -> bool {
+        self.settings.fast_forward
+            && self.engaged.until_done
+            && self.cue_span.is_some_and(|span| span.through.is_none())
+    }
+
+    /// The cue the speaker plays for `program` (Phase 4d). In fast-forward a
+    /// blocking cue plays its first [`FAST_FORWARD_CUE`] and stops; its
+    /// viewport inversion starts no later than half way through. Anything
+    /// else, and every cue outside fast-forward, is returned unchanged. The
+    /// caller has already built the program, so the jitter stream and the
+    /// cue order are the same as at normal pace.
+    pub(crate) fn speaker_cue(
+        &self,
+        program: SpeakerProgram,
+        viewport_flash: Option<Duration>,
+        audible: bool,
+        blocking: bool,
+    ) -> (SpeakerProgram, Option<Duration>) {
+        if !blocking || !self.fast_forwards_cues() {
+            return (program, viewport_flash);
+        }
+        let nanos = FAST_FORWARD_CUE.as_nanos() as u64;
+        (
+            program.truncated_at(nanos, audible),
+            viewport_flash.map(|start| start.min(FAST_FORWARD_CUE / 2)),
+        )
+    }
+
+    /// The span of the key fed now, at `serial`.
+    fn open_cue_span(&mut self, serial: u64) {
+        self.cue_span = Some(CueSpan {
+            after: serial,
+            through: None,
+        });
+    }
+
+    /// The shell is quiet at `serial`: an open span ends there.
+    fn close_cue_span(&mut self, serial: u64) {
+        if let Some(span) = self.cue_span.as_mut()
+            && span.through.is_none()
+        {
+            span.through = Some(serial);
         }
     }
 
@@ -537,6 +618,12 @@ fn auto_combat_feed(
     let Some(mut visual) = visual else {
         return;
     };
+    let speaker_busy = speaker_playing(speaker_queue.as_deref(), &speaker_voices)
+        || visual.sound_effect_cursor != visual.state.sound_effect_serial;
+    let quiet = shell_quiescent(&visual, speaker_busy, load_holding(load_latency.as_deref()));
+    if quiet {
+        shell.close_cue_span(visual.state.sound_effect_serial);
+    }
     let overlay_open = overlay.is_some_and(|overlay| overlay.is_open());
     if let Some(reason) = shell.handing_back {
         if overlay_open || keys_waiting(&visual) {
@@ -564,8 +651,6 @@ fn auto_combat_feed(
     let byte_pressed = keyboard
         .get_just_pressed()
         .any(|key| !is_modifier(*key) && byte_of(*key, shift, control, line).is_some());
-    let speaker_busy = speaker_playing(speaker_queue.as_deref(), &speaker_voices)
-        || visual.sound_effect_cursor != visual.state.sound_effect_serial;
     let ready = !overlay_open
         && token.free_or(ME)
         && !shell.focus_paused
@@ -574,7 +659,7 @@ fn auto_combat_feed(
             .is_none_or(|last| now.saturating_sub(last) >= step)
         && !keys_waiting(&visual)
         && !byte_pressed
-        && shell_quiescent(&visual, speaker_busy, load_holding(load_latency.as_deref()));
+        && quiet;
     if !ready {
         return;
     }
@@ -586,6 +671,7 @@ fn auto_combat_feed(
             }
             record_print_before_auto_key(&visual.state, &mut shell.fight);
             visual.typed_keys.push_back(auto_typed_key(key));
+            shell.open_cue_span(visual.state.sound_effect_serial);
             shell.fed = Some(key);
             shell.last_auto_key = Some(now);
         }
@@ -675,6 +761,8 @@ pub(crate) fn auto_typed_key(key: AutoKey) -> TypedKey {
 
 #[cfg(test)]
 mod engaged_tests;
+#[cfg(test)]
+mod fast_forward_tests;
 #[cfg(test)]
 mod feed_tests;
 #[cfg(test)]

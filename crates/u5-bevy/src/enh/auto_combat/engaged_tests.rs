@@ -50,21 +50,25 @@ fn record_feed(app: &mut App) {
 }
 
 /// The arena with a one-hit skeleton, so a fight ends in a few turns.
-fn weak_arena() -> PlayState {
+pub(super) fn weak_arena() -> PlayState {
     let mut state = arena();
     state.combat_actors[16].hp_or_wound = 1;
     state
 }
 
 /// The settings of a fast engaged test: no pause between keys, no HP stop.
-fn fast(settings: &mut CombatSettings) {
+pub(super) fn fast(settings: &mut CombatSettings) {
     settings.step_ms = 0;
     settings.pause_below_hp_percent = 0;
 }
 
 /// An engaged-test game from `state` in `scene`: auto on, `settings`
 /// applied, the feed recorded.
-fn game_in(state: PlayState, scene: &Scene, settings: impl FnOnce(&mut CombatSettings)) -> Game {
+pub(super) fn game_in(
+    state: PlayState,
+    scene: &Scene,
+    settings: impl FnOnce(&mut CombatSettings),
+) -> Game {
     let mut shell = Shell::new(state, scene, &launch(true), |_| {});
     settings(
         &mut shell
@@ -99,7 +103,7 @@ impl Game {
     }
 
     /// Engages with `chord` and runs only the chord's press frame.
-    fn engage(&mut self, chord: Chord) {
+    pub(super) fn engage(&mut self, chord: Chord) {
         chord.tap(&mut self.timeline, self.frame, Owner::Feature);
         self.frames(1);
     }
@@ -124,7 +128,7 @@ impl Game {
 
     /// Runs until auto is no longer engaged nor handing back, checking
     /// each frame, at most `limit` frames.
-    fn run_until_handed_back(&mut self, limit: usize) {
+    pub(super) fn run_until_handed_back(&mut self, limit: usize) {
         for _ in 0..limit {
             self.frames(1);
             assert!(self.fed_now().len() <= 1, "frame {}", self.frame);

@@ -398,7 +398,7 @@ one that types keys must change it exactly as typing those keys would:
 | gem_map.enhanced | Enhanced gem map | bool = false | a, P | feature | --gem-map | - | yes |
 | combat.auto | Auto-combat | bool = false | b, F | feature | --auto-combat | - | later (chapter 6 3c) |
 | combat.allies | Auto-combat for allied creatures | bool = false | b, P | feature | --auto-combat-allies | - | later (chapter 6 5) |
-| combat.fast_forward | Fast-forward auto-combat (shorter sounds and pauses) | bool = false | b, P | deviation | --auto-combat-fast-forward | - | later (chapter 6 4d) |
+| combat.fast_forward | Faster fights: changes timing, so fights differ from normal pace | bool = false | b, P | deviation | --auto-combat-fast-forward | - | later (chapter 6 4d) |
 | enhancements.schema | Settings file format version | int 1..1 = 1 | -, L | feature | - | - | yes |
 | enhancements.preset | Preset | enum classic\|recommended\|everything = classic | -, P | feature | --preset | - | yes |
 | keys.menu | Open the menu | chord = F12 | -, F | feature | - | a keyboard | later (chapter 1 P5) |

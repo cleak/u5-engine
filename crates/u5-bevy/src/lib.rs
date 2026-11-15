@@ -10320,6 +10320,9 @@ fn play_speaker_effects(
         Option<&SpeakerVoiceInterruptible>,
         Option<&AudioSink>,
     )>,
+    // Design 6.3.4, Phase 4d: absent (auto-combat off or locked), the 1.0.1
+    // path below is unchanged.
+    auto_combat: Option<Res<enh::auto_combat::AutoCombatShell>>,
 ) {
     let mut cut_voices: Vec<Entity> = Vec::new();
     for queued_effect in queued.read() {
@@ -10346,6 +10349,15 @@ fn play_speaker_effects(
                 viewport_flash_start(effect, &program, queued_effect.audible)
             }
             _ => None,
+        };
+        let (program, viewport_flash) = match auto_combat.as_deref() {
+            Some(auto) => auto.speaker_cue(
+                program,
+                viewport_flash,
+                queued_effect.audible,
+                queued_effect.interruptible.is_none(),
+            ),
+            None => (program, viewport_flash),
         };
         pending.0.push_back(QueuedSpeakerProgram {
             program,
