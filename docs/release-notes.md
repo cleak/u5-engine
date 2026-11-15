@@ -169,5 +169,20 @@ All of it is off unless you turn it on (`--menu-overlay`, `--named-slots`,
 - **Not tested on Windows or macOS.** The manual checks of this release
   (the mute when the window loses the focus or is minimised, the restart
   after a load from both `u5-engine` and `u5-engine-gui`, the slot folder,
-  typing a slot name on a non-US keyboard layout) were made on Linux only.
+  typing a slot name on a non-US keyboard layout) were made on Linux only,
+  under X11; this build's window does not open as a native Wayland client,
+  so on a Wayland desktop it runs through XWayland.
+
+Checks behind it: every menu and audio setting alone, every pair of them
+and of the wider view, sprites over terrain and the gem map, and every
+setting on but the cheats, each with the menu opened, used and closed
+during walks in town, outdoors, in a dungeon and in a conversation, play
+exactly as the original, frame for frame, on the random numbers, the
+clock and the save files (the keys the menu types count as typed keys); a
+no-spoiler suite saves through the menu from a fresh character, after
+walks, in a dungeon and in the Underworld; the route smoke is unchanged
+from 1.0.1; two full paired DOSBox sweeps found no difference from the
+original that was not a random draw the original makes too; and a paired
+run with every one of these settings on in the configuration file ran
+under the parity lock, with no menu, and matched the original.
 

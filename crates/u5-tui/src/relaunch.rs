@@ -157,6 +157,31 @@ mod tests {
         );
     }
 
+    /// The windowed binary reads the boot key wherever the relaunch put it,
+    /// after any argument it otherwise ignores (found in M4-14's manual
+    /// check: a launch given a folder relaunched into the whole intro).
+    #[test]
+    fn the_windowed_binary_finds_the_relaunch_s_boot_key() {
+        use crate::setup::gui_boot_key;
+        let strings = |args: Vec<OsString>| -> Vec<String> {
+            args.into_iter()
+                .map(|arg| arg.into_string().unwrap())
+                .collect()
+        };
+        for argv in [
+            os(&[]),
+            os(&["/games/u5"]),
+            os(&["--boot-key", "x", "/games/u5"]),
+        ] {
+            let args = strings(relaunch_args(&argv, Some(b'J'), None));
+            assert_eq!(gui_boot_key(&args), Ok(Some(b'J')), "{argv:?}");
+            let none = strings(relaunch_args(&argv, None, None));
+            assert_eq!(gui_boot_key(&none), Ok(None), "{argv:?}");
+        }
+        assert!(gui_boot_key(&["--boot-key".to_string()]).is_err());
+        assert!(gui_boot_key(&["--boot-key".to_string(), "JJ".to_string()]).is_err());
+    }
+
     #[test]
     fn a_bare_launch_gains_only_the_boot_key() {
         assert_eq!(

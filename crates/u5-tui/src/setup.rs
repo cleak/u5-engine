@@ -622,21 +622,13 @@ pub fn run_gui_main() -> ExitCode {
         }
     }
     let force_setup = first.as_deref() == Some("--setup");
-    // `--boot-key C`, which a relaunch after a slot restore passes (design
-    // 3.3.5); a bad key is reported like any other startup error.
-    let boot_key = match first.as_deref() {
-        Some("--boot-key") => match args.next().as_deref().map(crate::cli::parse_boot_key) {
-            Some(Ok(key)) => Some(key),
-            Some(Err(error)) => {
-                report_gui_error(&error.to_string());
-                return ExitCode::FAILURE;
-            }
-            None => {
-                report_gui_error("--boot-key requires one key, e.g. J");
-                return ExitCode::FAILURE;
-            }
-        },
-        _ => None,
+    let rest: Vec<String> = first.into_iter().chain(args).collect();
+    let boot_key = match gui_boot_key(&rest) {
+        Ok(key) => key,
+        Err(message) => {
+            report_gui_error(&message);
+            return ExitCode::FAILURE;
+        }
     };
     // This binary takes no settings flags; the stored settings apply.
     match run_default_launch(force_setup, &[], boot_key) {
@@ -645,6 +637,22 @@ pub fn run_gui_main() -> ExitCode {
             report_gui_error(&message);
             ExitCode::FAILURE
         }
+    }
+}
+
+/// The windowed binary's `--boot-key C` (design 3.3.5), which a relaunch
+/// after a slot restore passes: looked for anywhere in `args`, since a
+/// relaunch appends it after whatever else the launch was given and this
+/// binary ignores the rest. A bad or missing key is an error to report.
+pub fn gui_boot_key(args: &[String]) -> Result<Option<u8>, String> {
+    let Some(at) = args.iter().position(|arg| arg == "--boot-key") else {
+        return Ok(None);
+    };
+    match args.get(at + 1) {
+        Some(value) => crate::cli::parse_boot_key(value)
+            .map(Some)
+            .map_err(|error| error.to_string()),
+        None => Err("--boot-key requires one key, e.g. J".to_string()),
     }
 }
 
