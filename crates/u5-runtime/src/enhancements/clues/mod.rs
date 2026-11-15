@@ -7,6 +7,7 @@
 //! the answer met (8.3.13). Names, keywords and replies are read at
 //! runtime from the player's own `.TLK` files and are never stored here.
 //!
+//! - [`attribute`]: which record answered each typed line (8.3.4).
 //! - [`codec`]: the `QJRN` payload, version 1 (8.3.7).
 //! - [`reconcile`]: what a sidecar read gives the log, by freshness.
 //! - [`dependence`]: which state an answer can depend on, and the
@@ -15,10 +16,15 @@
 //! `ClueLog` is a shell resource in `u5-bevy`, never a `PlayState` field.
 //! Everything here is pure: no RNG, no file, no session method.
 
+pub mod attribute;
 pub mod codec;
 pub mod dependence;
 pub mod reconcile;
 
+pub use attribute::{
+    ConversationSnapshot, Turn, TurnAttributor, TurnContext, attribute_turns, game_minute,
+    inline_turn_record, test_inputs,
+};
 pub use codec::{
     CLUE_ENTRY_LEN, CodecError, EncodeOptions, JOURNAL_PAYLOAD_VERSION, MAX_PAYLOAD_LEN,
     decode_payload, encode_payload,

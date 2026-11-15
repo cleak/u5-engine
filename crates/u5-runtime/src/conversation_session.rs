@@ -799,6 +799,8 @@ impl ConversationSession {
             // with an early key-abort, and returns to the keyword prompt.
             // That loop is the `0x83` timed pause's shape, so it rides the
             // same hold.
+            #[cfg(test)]
+            top_level_probe::record(TlkKeywordLookup::Rebuke);
             out.set_framed_text(TLK_RESERVED_REBUKE_MESSAGE);
             debug_assert_eq!(
                 u16::from(TLK_RESERVED_REBUKE_PAUSE_LIMIT),
@@ -817,6 +819,12 @@ impl ConversationSession {
                 .find_ordinary_keyword_response_index(&input_upper)
                 .unwrap_or(usize::MAX),
         };
+        #[cfg(test)]
+        top_level_probe::record(match (kind, field_idx) {
+            (TlkPlayerInputKind::EmptyByeShortcut, _) => TlkKeywordLookup::EmptyLine,
+            (_, usize::MAX) => TlkKeywordLookup::NoMatch,
+            (_, field) => TlkKeywordLookup::Field(field),
+        });
         if field_idx == usize::MAX {
             // Framed like a response stream, quotes included. `conversation.md
             // §6` step 7 writes the literal without quote characters, and
@@ -991,6 +999,11 @@ impl ConversationSession {
         self.recruit_speaker_pending()
     }
 
+    // The clue log's observer (Phase B design 8.3.4 step 3, 8.7) does not
+    // run this scan: it calls the pure `tlk_keyword_lookup` on the echoed
+    // line. Both reach `tlk_ordinary_keyword_response_index`, and test T4
+    // (`enhancements/clues/attribute`) checks through `top_level_probe`
+    // that they pick the same record. Keep the two on that one function.
     fn find_ordinary_keyword_response_index(&self, input_upper: &[u8]) -> Option<usize> {
         tlk_ordinary_keyword_response_index(Some(&self.fields), &self.decoded_fields, input_upper)
     }
@@ -1615,6 +1628,28 @@ fn make_inputs<'a>(
         yield_on_pause: false,
         mark_holds: true,
         yield_on_ask: true,
+    }
+}
+
+/// Test-only probe of the record the session's top-level scan selected
+/// (Phase B design 8.6, T4): the last submit at the keyword prompt on this
+/// thread, as a [`TlkKeywordLookup`]. Nothing outside tests compiles it.
+#[cfg(test)]
+pub(crate) mod top_level_probe {
+    use super::TlkKeywordLookup;
+    use std::cell::Cell;
+
+    thread_local! {
+        static LAST: Cell<Option<TlkKeywordLookup>> = const { Cell::new(None) };
+    }
+
+    pub(crate) fn record(lookup: TlkKeywordLookup) {
+        LAST.with(|last| last.set(Some(lookup)));
+    }
+
+    /// The last record selected, cleared by the read.
+    pub(crate) fn take() -> Option<TlkKeywordLookup> {
+        LAST.with(Cell::take)
     }
 }
 

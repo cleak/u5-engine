@@ -165,12 +165,12 @@ fn no_host_exists_while_no_step_is_registered() {
     // frame fit and canvas size are its own (M1-09, display/grow tests), and
     // sprite compositing, whose `[composite]` step is its own (M2-06,
     // display/composite tests).
-    // ...and the quest journal, whose page is an overlay and whose panel
-    // claims side space (M5, quest_journal_view tests).
+    // ...and the `[journal]` keys, whose page is an overlay and whose panel
+    // claims side space (M5, quest_journal_view tests; M6, enh/journal).
     for spec in TOGGLES.iter().filter(|spec| {
         spec.toggle != Toggle::DisplayGrowLeft
             && spec.toggle != Toggle::DisplaySpriteComposite
-            && !matches!(spec.toggle, Toggle::JournalPage | Toggle::JournalSidePanel)
+            && !spec.toggle.key().starts_with("journal.")
     }) {
         every.enhancements.toggles.set(spec.toggle, true);
     }

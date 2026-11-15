@@ -53,6 +53,7 @@ pub(crate) mod equivalence;
 pub mod gem_map;
 pub mod idle;
 pub mod input;
+pub mod journal;
 pub mod overlay;
 pub mod present;
 pub mod side;
@@ -239,6 +240,7 @@ impl Plugin for EnhancementsPlugin {
             self.launch.save_dir.as_deref(),
         );
         gem_map::add_gem_map(app, &self.launch);
+        journal::clues::add_clue_log(app, &self.launch);
         crate::quest_journal_view::add_quest_journal(app, &self.launch);
         crate::display::add_display(app, &self.launch);
     }

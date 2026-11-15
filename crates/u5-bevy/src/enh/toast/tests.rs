@@ -369,6 +369,8 @@ fn nothing_draws_without_a_window() {
 }
 
 /// The quest journal's two toggles (M5).
+/// Chapters 5 and 8's `[journal]` keys: their page, panel and clue log
+/// are tested in their own suites.
 fn is_journal(toggle: Toggle) -> bool {
-    matches!(toggle, Toggle::JournalPage | Toggle::JournalSidePanel)
+    toggle.key().starts_with("journal.")
 }

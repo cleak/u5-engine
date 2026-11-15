@@ -756,6 +756,8 @@ fn panel_text_is_plain() {
 }
 
 /// The quest journal's two toggles (M5).
+/// Chapters 5 and 8's `[journal]` keys: their page, panel and clue log
+/// are tested in their own suites.
 fn is_journal(toggle: Toggle) -> bool {
-    matches!(toggle, Toggle::JournalPage | Toggle::JournalSidePanel)
+    toggle.key().starts_with("journal.")
 }
