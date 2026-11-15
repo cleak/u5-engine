@@ -48,6 +48,7 @@
 //! and never name a faithful system. The faithful systems themselves are
 //! not edited.
 
+pub mod auto_combat;
 #[cfg(test)]
 pub(crate) mod equivalence;
 pub mod gem_map;
