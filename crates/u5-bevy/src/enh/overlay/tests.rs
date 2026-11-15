@@ -262,9 +262,11 @@ fn no_overlay_model_while_no_overlay_feature_is_on() {
     let mut launch = VisualLaunchConfig::classic();
     // ...except the grow-left layout, whose `[grow-left compose]` step,
     // frame fit and canvas size are its own (M1-09, display/grow tests).
+    // ...and the quest journal, whose page is an overlay and whose panel
+    // claims side space (M5, quest_journal_view tests).
     for spec in TOGGLES
         .iter()
-        .filter(|spec| spec.toggle != Toggle::DisplayGrowLeft)
+        .filter(|spec| spec.toggle != Toggle::DisplayGrowLeft && !is_journal(spec.toggle))
     {
         launch.enhancements.toggles.set(spec.toggle, true);
     }
@@ -663,4 +665,9 @@ fn the_last_frame_copy_reads_the_presented_frame_only() {
         ),
         None
     );
+}
+
+/// The quest journal's two toggles (M5).
+fn is_journal(toggle: Toggle) -> bool {
+    matches!(toggle, Toggle::JournalPage | Toggle::JournalSidePanel)
 }

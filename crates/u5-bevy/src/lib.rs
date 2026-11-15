@@ -225,6 +225,10 @@ pub mod display;
 /// under Classic.
 pub mod enh;
 
+/// The quest journal page (Phase B design chapter 5): its plugin, inside the
+/// foundation's plugin, and absent unless a journal toggle is on.
+pub mod quest_journal_view;
+
 pub use enh::{EnhSet, EnhancementsPlugin, ShellExit, VisualLaunchConfig};
 
 /// The on-screen size of a logical frame at `scale`, aspect-corrected.

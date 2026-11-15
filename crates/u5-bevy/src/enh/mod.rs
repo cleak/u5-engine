@@ -239,6 +239,7 @@ impl Plugin for EnhancementsPlugin {
             self.launch.save_dir.as_deref(),
         );
         gem_map::add_gem_map(app, &self.launch);
+        crate::quest_journal_view::add_quest_journal(app, &self.launch);
         crate::display::add_display(app, &self.launch);
     }
 }

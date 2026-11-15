@@ -74,9 +74,11 @@ fn no_toast_or_badge_unless_a_feature_installs_them() {
     let mut launch = VisualLaunchConfig::classic();
     // ...except the grow-left layout, whose `[grow-left compose]` step,
     // frame fit and canvas size are its own (M1-09, display/grow tests).
+    // ...and the quest journal, whose page is an overlay and whose panel
+    // claims side space (M5, quest_journal_view tests).
     for spec in TOGGLES
         .iter()
-        .filter(|spec| spec.toggle != Toggle::DisplayGrowLeft)
+        .filter(|spec| spec.toggle != Toggle::DisplayGrowLeft && !is_journal(spec.toggle))
     {
         launch.enhancements.toggles.set(spec.toggle, true);
     }
@@ -364,4 +366,9 @@ fn nothing_draws_without_a_window() {
     frame(&mut app);
     assert!(strips(&mut app).is_empty());
     assert_eq!(showing(&app), Some(REFUSED));
+}
+
+/// The quest journal's two toggles (M5).
+fn is_journal(toggle: Toggle) -> bool {
+    matches!(toggle, Toggle::JournalPage | Toggle::JournalSidePanel)
 }
