@@ -1278,12 +1278,14 @@ fn check_menu(script: &Script, config: &Config, on: &Trace) {
         "{what}: the fed keys {fed:?}"
     );
     let count = |which| fed.iter().filter(|key| **key == which).count();
-    // Buffer starts off, so its start key always types.
-    assert_eq!(
-        count(buffer),
-        usize::from(config.enabled("audio.start_buffer_on")),
-        "{what}: Ctrl-B"
-    );
+    // Buffer starts off, so its start key types wherever the script comes
+    // to the exploration prompt, and nowhere else.
+    let wanted = usize::from(config.enabled("audio.start_buffer_on"));
+    if script.menu_ok {
+        assert_eq!(count(buffer), wanted, "{what}: Ctrl-B");
+    } else {
+        assert!(count(buffer) <= wanted, "{what}: Ctrl-B");
+    }
     // Sound once per time the menu was used for it; the start key types
     // its Ctrl-S only while the game's sound is still on, so not when the
     // menu turned it off first.
@@ -1300,7 +1302,9 @@ fn check_menu(script: &Script, config: &Config, on: &Trace) {
         "{what}: Ctrl-S {} times, the menu used {times} times",
         count(sound)
     );
-    if start == 1 && times == 0 {
+    // The start keys type at the idle exploration prompt, which a combat
+    // never reaches.
+    if start == 1 && times == 0 && script.menu_ok {
         assert_eq!(count(sound), 1, "{what}: the start key");
     }
 }
