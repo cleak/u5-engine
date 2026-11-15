@@ -3129,7 +3129,6 @@ impl PlayState {
         floor: i8,
         start: (usize, usize),
     ) -> io::Result<()> {
-        let prior_sound_serial = self.sound_effect_serial;
         // `overworld.md §4`/§5 step 1: a warp within one plane keeps the
         // chunks the old and new windows share, so a gate the refresh had
         // already stamped on the destination cell is still live there; any
@@ -3151,6 +3150,65 @@ impl PlayState {
         // (playtest L04).
         self.write_current_world_plane_object_table(game_dir, true)?;
         let previous_turn = self.turn;
+        let options = self.carried_play_options(target, floor, start);
+
+        let mut next = Self::load_scene(game_dir, options)?;
+        next.turn = previous_turn;
+        next.world_overlays = self.world_overlays.clone();
+        if let PlayTarget::World(plane) = target {
+            // `catalogs/quest-graph.md §5`: the shards and the Amulet are
+            // placed "by the outdoor setup pass that runs whenever the party
+            // is on a non-surface outdoor plane", and `overworld.md §9`'s
+            // warp ends in a normal scene entry, so a moonstone transit into
+            // the Underworld runs the same pass the falls do (playtest G29).
+            next.place_underworld_fixed_objects(plane);
+            next.cache_current_world_overlay();
+        }
+        if matches!(target, PlayTarget::Dungeon(_)) {
+            next.force_foot_transport();
+        }
+        next.sync_player_object();
+        next.pending_town_arrest = None;
+        next.active_blackthorn = None;
+        // `commands.md §8.1`: a command "never prints tile ids,
+        // coordinates, active-object slot numbers, terrain-class names".
+        // This named a scene key and a cell, which is three of the four.
+        // Nothing in `overworld.md`'s Gate Travel contract gives the
+        // transit a line of its own - `audio.md §8.3` gives it a *cue*,
+        // and the arrival is what the player sees - so the slot is left
+        // as the caller set it.
+        next.push_diagnostic(format!(
+            "Gate Travel phase {phase} -> {} at ({}, {}).",
+            target.key(),
+            start.0,
+            start.1
+        ));
+        self.carry_presentation_into(&mut next);
+        // `overworld.md §5` (draw order items 4 and 5) and §9: the entry
+        // pass stamps no gate, so a warp that lands on a gate cell it did
+        // not carry across gives the player one command before the §9.2
+        // hook can fire. This engine's entry refresh has already stamped
+        // it, so hold the hook back for that command (playtest P23-01).
+        next.natural_moongate_hook_held_for_warp_arrival = !arrival_gate_carried
+            && next
+                .current_live_natural_moongate_cell_index()
+                .is_some_and(|idx| {
+                    next.grid.get(idx).copied() == Some(NATURAL_MOONGATE_TERRAIN_TILE)
+                });
+        *self = next;
+        Ok(())
+    }
+
+    /// Every session field a scene rebuild carries (chapter 7 D7.8): the
+    /// `PlayOptions` that [`Self::apply_gate_travel`] and the teleport cheat
+    /// hand to [`Self::load_scene`]. A dungeon target arrives on foot; any
+    /// other keeps the live transport.
+    pub(crate) fn carried_play_options(
+        &self,
+        target: PlayTarget,
+        floor: i8,
+        start: (usize, usize),
+    ) -> PlayOptions {
         // `overworld.md §9.2` (issue #299 Q26): "Transport therefore
         // survives a transit unchanged. The vehicle in use is not a separate
         // object - it is the party's transport marker - so a party on a horse
@@ -3273,38 +3331,14 @@ impl PlayState {
         if let PlayTarget::World(plane) = target {
             options.saved_active_objects = self.world_overlays.get(plane);
         }
+        options
+    }
 
-        let mut next = Self::load_scene(game_dir, options)?;
-        next.turn = previous_turn;
-        next.world_overlays = self.world_overlays.clone();
-        if let PlayTarget::World(plane) = target {
-            // `catalogs/quest-graph.md §5`: the shards and the Amulet are
-            // placed "by the outdoor setup pass that runs whenever the party
-            // is on a non-surface outdoor plane", and `overworld.md §9`'s
-            // warp ends in a normal scene entry, so a moonstone transit into
-            // the Underworld runs the same pass the falls do (playtest G29).
-            next.place_underworld_fixed_objects(plane);
-            next.cache_current_world_overlay();
-        }
-        if matches!(target, PlayTarget::Dungeon(_)) {
-            next.force_foot_transport();
-        }
-        next.sync_player_object();
-        next.pending_town_arrest = None;
-        next.active_blackthorn = None;
-        // `commands.md §8.1`: a command "never prints tile ids,
-        // coordinates, active-object slot numbers, terrain-class names".
-        // This named a scene key and a cell, which is three of the four.
-        // Nothing in `overworld.md`'s Gate Travel contract gives the
-        // transit a line of its own - `audio.md §8.3` gives it a *cue*,
-        // and the arrival is what the player sees - so the slot is left
-        // as the caller set it.
-        next.push_diagnostic(format!(
-            "Gate Travel phase {phase} -> {} at ({}, {}).",
-            target.key(),
-            start.0,
-            start.1
-        ));
+    /// The post-load carry of a scene rebuild (chapter 7 D7.8): the sound
+    /// history and its serials, the presentation flags, the session settings
+    /// and the message window. `next` is the freshly loaded destination.
+    pub(crate) fn carry_presentation_into(&mut self, next: &mut PlayState) {
+        let prior_sound_serial = self.sound_effect_serial;
         // `audio.md §2` keeps one serial speaker, and the frontend reads it
         // through a monotonic serial. A scene rebuild constructs `next` from
         // scratch, so its history is numbered from 1 and collides with this
@@ -3362,19 +3396,6 @@ impl PlayState {
         next.message_window_top_offset = self.message_window_top_offset;
         next.message_row_open_mid_line = self.message_row_open_mid_line;
         next.pending_command_echo = None;
-        // `overworld.md §5` (draw order items 4 and 5) and §9: the entry
-        // pass stamps no gate, so a warp that lands on a gate cell it did
-        // not carry across gives the player one command before the §9.2
-        // hook can fire. This engine's entry refresh has already stamped
-        // it, so hold the hook back for that command (playtest P23-01).
-        next.natural_moongate_hook_held_for_warp_arrival = !arrival_gate_carried
-            && next
-                .current_live_natural_moongate_cell_index()
-                .is_some_and(|idx| {
-                    next.grid.get(idx).copied() == Some(NATURAL_MOONGATE_TERRAIN_TILE)
-                });
-        *self = next;
-        Ok(())
     }
 
     pub fn turn_dungeon(&mut self, clockwise: bool) -> MoveOutcome {

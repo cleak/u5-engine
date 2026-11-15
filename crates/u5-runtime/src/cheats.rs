@@ -1271,3 +1271,6 @@ pub fn watch_diff(
 
 #[cfg(test)]
 mod tests;
+
+#[cfg(test)]
+mod teleport_tests;
