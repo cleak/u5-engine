@@ -121,6 +121,8 @@ pub enum Page {
     Load,
     /// A dialog over the page below it.
     Dialog(Dialog),
+    /// The title layer (3.2.4), over the title menu before play.
+    Title,
 }
 
 /// A dialog of the slot pages. A slot is named by its place in
@@ -207,6 +209,10 @@ pub fn name_char(ch: char) -> bool {
 pub enum RowAction {
     /// Close the menu.
     Resume,
+    /// The title layer's Continue (3.2.4): load the slot at this place of
+    /// the list, or with `None` press the game's own Journey Onward on the
+    /// working save.
+    Continue(Option<u16>),
     /// Open the Save page.
     Save,
     /// Open the Load page.
@@ -215,7 +221,7 @@ pub enum RowAction {
     Door(OverlayId),
     /// Open the Settings page.
     Settings,
-    /// Restart at the title (M4-13).
+    /// Restart at the title (M4-12).
     QuitToTitle,
     /// Close the game (M4-07).
     QuitToDesktop,
@@ -411,6 +417,7 @@ pub struct ShellSnapshot {
 pub fn page_rows(page: Page, snap: &ShellSnapshot) -> Vec<Row> {
     match page {
         Page::Top => top_rows(snap),
+        Page::Title => title_rows(snap),
         Page::Settings(tab) => snap.settings[tab.index()].clone(),
         // The slot pages draw their own lines from the slot list.
         Page::Save | Page::Load | Page::Dialog(_) => Vec::new(),
@@ -443,6 +450,37 @@ fn top_rows(snap: &ShellSnapshot) -> Vec<Row> {
     rows.push(Row::item(t::QUIT_TO_TITLE, RowAction::QuitToTitle));
     rows.push(Row::item(t::QUIT_TO_DESKTOP, RowAction::QuitToDesktop));
     rows
+}
+
+/// The title layer (3.2.4). With slots: Continue (the newest slot that
+/// can be loaded), Load, Settings and Quit; without: Continue, which
+/// presses the game's own Journey Onward on the working save, Settings and
+/// Quit. With slots but none to load, Continue is the plain one.
+fn title_rows(snap: &ShellSnapshot) -> Vec<Row> {
+    let mut rows = vec![Row::item(
+        t::CONTINUE,
+        RowAction::Continue(snap.slots.then(|| newest_slot(snap)).flatten()),
+    )];
+    if snap.slots {
+        rows.push(Row::item(t::LOAD, RowAction::Load));
+    }
+    rows.push(Row::item(t::SETTINGS, RowAction::Settings));
+    rows.push(Row::item(t::QUIT, RowAction::QuitToDesktop));
+    rows
+}
+
+/// The place in the list of the newest slot that is not damaged: the
+/// latest save time, the first listed on a tie.
+pub fn newest_slot(snap: &ShellSnapshot) -> Option<u16> {
+    snap.slot_list
+        .iter()
+        .enumerate()
+        .filter(|(_, slot)| slot.info.damaged.is_none())
+        .fold(None::<(usize, u64)>, |best, (at, slot)| match best {
+            Some((_, time)) if time >= slot.info.saved_at_unix => best,
+            _ => Some((at, slot.info.saved_at_unix)),
+        })
+        .map(|(at, _)| at as u16)
 }
 
 /// One page on the stack, with its cursor.
@@ -489,6 +527,25 @@ impl MenuModel {
     /// The page showing.
     pub fn current(&self) -> PageState {
         *self.stack.last().expect("the top page is never popped")
+    }
+
+    /// The title layer as it opens (3.2.4): its first row, Continue,
+    /// selected.
+    pub fn title() -> Self {
+        Self {
+            stack: vec![PageState {
+                page: Page::Title,
+                cursor: 0,
+            }],
+            field: String::new(),
+        }
+    }
+
+    /// Whether this is the title layer rather than the menu in play.
+    pub fn is_title(&self) -> bool {
+        self.stack
+            .first()
+            .is_some_and(|base| base.page == Page::Title)
     }
 
     /// Every page on the stack, the top menu first.
@@ -570,10 +627,14 @@ pub enum MenuCommand {
     RenameSlot(u16),
     /// Delete the slot at this place.
     DeleteSlot(u16),
-    /// Restart at the title (M4-13).
+    /// Restart at the title: the game starts again with no key waiting,
+    /// so the whole intro plays (3.2.5; M4-12).
     QuitToTitle,
     /// Close the game (M4-07).
     QuitToDesktop,
+    /// The title layer's Continue without a slot: close the layer and press
+    /// the game's own Journey Onward (`J`) on the working save (3.2.4).
+    JourneyOnward,
     /// Flip the check box of the setting with this catalogue key.
     Flip(&'static str),
     /// Step the setting with this catalogue key down (-1) or up (1).
@@ -591,7 +652,7 @@ pub fn reduce(model: &mut MenuModel, input: MenuInput, snap: &ShellSnapshot) -> 
         Page::Save => reduce_save(model, input, snap),
         Page::Load => reduce_load(model, input, snap),
         Page::Dialog(dialog) => reduce_dialog(model, dialog, input),
-        Page::Top | Page::Settings(_) => return reduce_list(model, input, snap),
+        Page::Top | Page::Title | Page::Settings(_) => return reduce_list(model, input, snap),
     };
     command.into_iter().collect()
 }
@@ -831,6 +892,11 @@ fn reduce_list(model: &mut MenuModel, input: MenuInput, snap: &ShellSnapshot) ->
 fn choose(model: &mut MenuModel, row: &Row) -> Option<MenuCommand> {
     match (row.action, row.kind) {
         (RowAction::Resume, _) => Some(MenuCommand::Close),
+        (RowAction::Continue(Some(at)), _) => {
+            model.push(Page::Dialog(Dialog::Loading(at)));
+            Some(MenuCommand::LoadSlot(at))
+        }
+        (RowAction::Continue(None), _) => Some(MenuCommand::JourneyOnward),
         (RowAction::Save, _) => {
             model.push(Page::Save);
             Some(MenuCommand::OpenSave)

@@ -48,13 +48,13 @@ use super::frame::Scroll;
 use super::frame::*;
 use super::geometry::{CellRect, MenuPicture, PageShape, menu_picture, panel_rect};
 use super::pages::{
-    Dialog, Page, PageState, Row, RowKind, SettingsTab, ShellSnapshot, Shown, SlotList, page_rows,
-    settle,
+    Dialog, Page, PageState, Row, RowAction, RowKind, SettingsTab, ShellSnapshot, Shown, SlotList,
+    page_rows, settle,
 };
 use super::render_slots;
 use super::text as t;
+use super::title::TitleFont;
 use super::{MenuState, SnapshotInputs};
-use crate::VisualState;
 use crate::display::Display;
 use crate::display::effects::{STEP_SLACK, SWEEP_STEPS};
 use crate::display::grow::column::{ColumnState, ColumnView, page_mode_active};
@@ -63,6 +63,7 @@ use crate::enh::gem_map::view::{GEM_BEFORE_Z, GEM_NODE_Z};
 use crate::enh::overlay::{CloseReason, OverlayChanged, OverlayId};
 use crate::enh::present::PresentHost;
 use crate::enh::side::FrameImageSize;
+use crate::{VisualIntroState, VisualState};
 use u5_runtime::enhancements::PRESETS;
 
 /// The menu node's layer: the gem map's, above the frame sprite, the side
@@ -350,6 +351,59 @@ fn top_page(
     }
 }
 
+/// The label the title layer shows for `row`: Continue names the slot it
+/// loads and the game date it was saved on (3.2.4), the others their own.
+pub fn title_label(row: &Row, snap: &ShellSnapshot) -> String {
+    match row.action {
+        RowAction::Continue(Some(at)) => match snap.slot_list.get(usize::from(at)) {
+            Some(slot) => t::continue_label(&slot.info.name, &t::slot_date(slot.info.clock)),
+            None => row.label.to_string(),
+        },
+        _ => row.label.to_string(),
+    }
+}
+
+/// The title layer (3.2.4): the title menu's own frame and place, its rows
+/// centred as the title menu centres its own, the selected one in the
+/// title menu's tight highlight (the label and a blank either side), the
+/// "Ultima V" and "F12: close" tabs.
+fn title_page(
+    font: &FixedCellFont,
+    picture: &MenuPicture,
+    column: ColumnView,
+    rows: &[Row],
+    cursor: usize,
+    snap: &ShellSnapshot,
+) -> Drawn {
+    let rect = panel_rect(PageShape::Title, picture, column);
+    let panel = Panel::new(rect);
+    let mut img = MenuImage::for_picture(picture);
+    draw_panel(&mut img, &panel);
+    let bx = panel.boxes()[0];
+    for (i, row) in rows.iter().enumerate().take(list_rows(bx)) {
+        let label = t::cut(&title_label(row, snap), (bx.w - 2) as usize);
+        let len = label.len() as u32;
+        let at = (bx.w - len) / 2;
+        let at_row = bx.row + 1 + i as u32;
+        let line = Line::new(bx.w).text(at, &label, Ink::Plain);
+        let line = if row.enabled { line } else { line.greyed() };
+        draw_row(&mut img, font, bx, at_row, &line, false);
+        if i == cursor {
+            let bar_len = len + 2;
+            let mut bar = Line::new(bar_len);
+            bar.cells
+                .copy_from_slice(&line.cells[(at - 1) as usize..(at - 1 + bar_len) as usize]);
+            draw_line(&mut img, font, bx.col + at - 1, at_row, &bar, true);
+        }
+    }
+    draw_title_tab(&mut img, font, rect, t::TITLE_LAYER_TITLE);
+    draw_footer_tab(&mut img, font, rect, t::KEY_CLOSE);
+    Drawn {
+        image: img,
+        panel: rect,
+    }
+}
+
 /// The top menu's last-save line for `turns` since the last save or load
 /// this session: `None` before the first.
 pub fn last_save_line(turns: Option<u64>) -> Option<String> {
@@ -531,6 +585,7 @@ pub fn render_page_with(
     let cursor = settle(&rows, state.cursor);
     match state.page {
         Page::Top => top_page(font, picture, column, &rows, cursor, snap.turns_since_save),
+        Page::Title => title_page(font, picture, column, &rows, cursor, snap),
         Page::Settings(tab) => {
             let presets: Vec<&str> = PRESETS.iter().map(|preset| preset.label()).collect();
             settings_page(font, picture, column, tab.index(), &rows, cursor, &presets)
@@ -628,11 +683,27 @@ struct DrawKey {
     cursor_glyph: Option<u8>,
 }
 
+/// A sweep the title layer asks for. The layer opens and closes outside
+/// the overlay model (D-M4.3), so it tells the renderer itself, as an
+/// [`OverlayChanged`] tells it for the menu in play.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum TitleSweep {
+    /// The layer opened: sweep in.
+    Open,
+    /// The layer closed by a key: sweep out.
+    Close,
+    /// The layer closed because the game moved on (a load, the idle
+    /// preview): gone that frame.
+    Stop,
+}
+
 /// What the menu shows and how far its sweep is. Exists while the menu
 /// plugin is in the app.
 #[derive(Resource, Debug, Default)]
 pub struct MenuView {
     pub sweep: MenuSweep,
+    /// The title layer's sweep asked for this frame.
+    pub(crate) title_sweep: Option<TitleSweep>,
     /// The page last drawn, kept through the close sweep.
     drawn: Option<(DrawKey, Drawn)>,
     /// The node's picture and the draw and step it was composed from.
@@ -698,6 +769,13 @@ impl PictureInputs<'_, '_> {
     }
 }
 
+/// What the title layer's picture is drawn from before play.
+#[derive(SystemParam)]
+pub(crate) struct TitleInputs<'w> {
+    font: Option<Res<'w, TitleFont>>,
+    intro: Option<Res<'w, VisualIntroState>>,
+}
+
 fn rgba_image(w: u32, h: u32, rgba: Vec<u8>) -> Image {
     let mut image = Image::new(
         Extent3d {
@@ -743,6 +821,7 @@ pub(crate) fn menu_render(
     state: Res<MenuState>,
     pages: SnapshotInputs,
     inputs: PictureInputs,
+    title: TitleInputs,
     time: Res<Time>,
     mut view: ResMut<MenuView>,
     mut images: ResMut<Assets<Image>>,
@@ -769,14 +848,34 @@ pub(crate) fn menu_render(
             _ => {}
         }
     }
+    if let Some(change) = view.title_sweep.take() {
+        match change {
+            TitleSweep::Open => view.sweep.start_open(),
+            TitleSweep::Close => view.sweep.start_close(),
+            TitleSweep::Stop => view.sweep.stop(),
+        }
+        started = true;
+    }
     if !started {
         view.sweep.tick(time.delta());
     }
-    if let (Some(model), Some(visual)) = (state.model(), inputs.visual.as_deref()) {
+    // The game's font and the prompt cursor's frame in play; at the title
+    // the layer's own copy of the font and the title menu's cursor passes.
+    let source = match (inputs.visual.as_deref(), title.font.as_deref()) {
+        (Some(visual), _) => Some((&visual.text_font, visual.prompt_cursor_frame)),
+        (None, Some(font)) => Some((
+            &font.0,
+            title
+                .intro
+                .as_deref()
+                .map_or(0, |intro| intro.menu_cursor_pass),
+        )),
+        (None, None) => None,
+    };
+    if let (Some(model), Some((font, cursor_frame))) = (state.model(), source) {
         let snap = pages.snapshot();
         let (picture, column) = inputs.picture();
         let current = model.current();
-        let cursor_frame = visual.prompt_cursor_frame;
         let naming = matches!(current.page, Page::Dialog(Dialog::Name(_)));
         let key = DrawKey {
             state: current,
@@ -791,7 +890,7 @@ pub(crate) fn menu_render(
         };
         if view.drawn.as_ref().map(|(drawn_from, _)| drawn_from) != Some(&key) {
             let drawn = render_page_with(
-                &visual.text_font,
+                font,
                 &picture,
                 column,
                 current,
@@ -904,6 +1003,7 @@ pub(crate) fn place_overlay(
     mut commands: Commands,
     view: Res<MenuView>,
     visual: Option<Res<VisualState>>,
+    intro: Option<Res<VisualIntroState>>,
     present: Option<Res<PresentHost>>,
     windows: Query<&Window>,
     sprites: Query<(&Sprite, &Transform)>,
@@ -913,9 +1013,16 @@ pub(crate) fn place_overlay(
     let rect = windows.single().ok().and_then(|window| {
         let presented = present.as_deref().and_then(PresentHost::presented);
         let faithful = visual.as_deref().map(|visual| &visual.image_handle);
+        // Before play the frame sprite shows the intro's picture.
+        let title = intro
+            .as_deref()
+            .and_then(|intro| intro.image_handle.as_ref());
         let frame = sprites
             .iter()
-            .find(|(sprite, _)| Some(&sprite.image) == presented || Some(&sprite.image) == faithful)
+            .find(|(sprite, _)| {
+                let image = Some(&sprite.image);
+                image == presented || image == faithful || image == title
+            })
             .or_else(|| sprites.iter().next());
         let (sprite, transform) = frame?;
         frame_rect(window, sprite, transform)

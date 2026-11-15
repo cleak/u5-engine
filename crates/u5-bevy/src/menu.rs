@@ -55,6 +55,12 @@
 //!   the last save or load ([`unsaved`]). [`slots::SlotPlugin`] is in the
 //!   app only with named slots and a slot store.
 //!
+//! - M4-12 adds the title layer ([`title`]): the menu key at the title menu
+//!   opens its own page outside the overlay model (D-M4.3), whose Continue
+//!   and Load type the title menu's `J` after the slot is restored; and
+//!   Return to the title, which asks the host to start the game again with
+//!   no key waiting, so the whole intro plays (3.2.5).
+//!
 //! The world stays Live (U1): the menu acts on the game only through the
 //! overlay model, which hands keys back on close with held keys latched.
 
@@ -70,6 +76,7 @@ pub mod settings;
 pub mod slots;
 pub mod text;
 pub mod thumb;
+pub mod title;
 pub mod unsaved;
 
 use std::collections::VecDeque;
@@ -83,6 +90,7 @@ use u5_runtime::enhancements::{Phase, SHIPPED_PHASES, Toggle};
 use self::host::MenuHost;
 use self::pages::{MenuCommand, MenuDoors, MenuInput, MenuModel, ShellSnapshot, reduce};
 use self::slots::{SlotListing, SlotPlugin};
+use self::title::{TitleJourney, title_open};
 use self::unsaved::{SaveTracker, install_save_tracker};
 use crate::enh::input::{
     EnhAction, EnhActionEvent, HotkeyFellThrough, KeyChord, OverlayKey, OverlayText,
@@ -91,11 +99,11 @@ use crate::enh::overlay::{
     OverlayChanged, OverlayId, OverlayRequest, OverlayState, apply_overlay_requests,
     close_when_not_idle,
 };
-use crate::enh::synthetic::SyntheticInputOwner;
+use crate::enh::synthetic::{SyntheticInputOwner, install_synthetic_input};
 use crate::enh::toast::Toasts;
 use crate::enh::{
-    EnhLaunch, EnhSet, LiveSettings, PendingSettingChanges, PendingToggleChanges,
-    VisualLaunchConfig, feature_wanted, toggle_on,
+    EnhLaunch, EnhSet, LiveSettings, PendingSettingChanges, PendingToggleChanges, Relaunch,
+    ShellExit, ShellExitSlot, VisualLaunchConfig, feature_wanted, toggle_on,
 };
 use crate::{VisualIntroState, VisualState};
 
@@ -111,6 +119,7 @@ pub(crate) fn add_menu(app: &mut App, launch: &VisualLaunchConfig) {
     if feature_wanted(toggles, OVERLAY) || feature_wanted(toggles, TITLE_LAYER) {
         let slots = launch.enhancements.menu().named_slots;
         app.add_plugins(MenuPlugin {
+            title_layer: feature_wanted(toggles, TITLE_LAYER),
             host: launch.menu_host.clone().filter(|_| slots),
             script: launch.menu_script.clone().unwrap_or_default(),
             save_dir: launch.save_dir.clone(),
@@ -121,6 +130,9 @@ pub(crate) fn add_menu(app: &mut App, launch: &VisualLaunchConfig) {
 /// The menu's feature plugin: the page model, the doors and the systems
 /// that wire them to the overlay model.
 pub struct MenuPlugin {
+    /// `menu.title_layer` was wanted at launch: the title layer's systems
+    /// are in the app (with the intro).
+    title_layer: bool,
     /// The host's slot store, while named slots are on.
     host: Option<Arc<dyn MenuHost>>,
     /// The QA key script (D-M4.6), empty without one.
@@ -144,6 +156,7 @@ impl Plugin for MenuPlugin {
         .init_resource::<MenuDoors>()
         .init_resource::<render::MenuView>()
         .add_event::<MenuCommandEvent>()
+        .add_event::<TitleJourney>()
         .add_systems(
             Update,
             (menu_actions.run_if(toggle_on(OVERLAY)), menu_input)
@@ -156,6 +169,7 @@ impl Plugin for MenuPlugin {
             (
                 settings::menu_setting_commands.before(crate::enh::apply_pending_changes),
                 quit_to_desktop,
+                quit_to_title,
             )
                 .run_if(on_event::<MenuCommandEvent>)
                 .after(menu_input)
@@ -178,6 +192,20 @@ impl Plugin for MenuPlugin {
                 .chain()
                 .in_set(EnhSet::Present),
         );
+        if self.title_layer && intro_shell {
+            install_synthetic_input(app);
+            app.add_systems(
+                Update,
+                (
+                    title::title_actions
+                        .run_if(toggle_on(TITLE_LAYER))
+                        .before(menu_input),
+                    title::title_commands.after(menu_input),
+                )
+                    .in_set(EnhSet::Apply),
+            )
+            .add_systems(Update, title::title_follow_intro.in_set(EnhSet::Observe));
+        }
         install_save_tracker(app, self.save_dir.clone());
         if let Some(host) = &self.host {
             app.add_plugins(SlotPlugin { host: host.clone() });
@@ -232,8 +260,8 @@ pub struct MenuCommandEvent(pub MenuCommand);
 #[derive(Resource, Debug, Default)]
 struct MenuScript(VecDeque<char>);
 
-fn menu_open(overlay: Option<Res<OverlayState>>) -> bool {
-    overlay.is_some_and(|overlay| overlay.open() == Some(OverlayId::Menu))
+fn menu_open(overlay: Option<Res<OverlayState>>, state: Res<MenuState>) -> bool {
+    overlay.is_some_and(|overlay| overlay.open() == Some(OverlayId::Menu)) || title_open(&state)
 }
 
 fn script_left(script: Res<MenuScript>) -> bool {
@@ -378,6 +406,42 @@ fn quit_to_desktop(mut commands: EventReader<MenuCommandEvent>, mut exit: EventW
     }
 }
 
+/// Return to the title (3.2.5): the app ends asking its host to start the
+/// game again with the same arguments and no key waiting, so the whole
+/// intro plays. Nothing is saved. The unsaved-progress check comes with
+/// M4-13. Only the relaunch exists in this build (`menu.quit_to_title`'s
+/// in-app choice is chapter 3 Phase 7), so it is used whatever that says.
+fn quit_to_title(
+    mut commands: EventReader<MenuCommandEvent>,
+    exit_slot: Option<Res<ShellExitSlot>>,
+    mut exit: EventWriter<AppExit>,
+    mut toasts: Option<ResMut<Toasts>>,
+) {
+    for MenuCommandEvent(command) in commands.read() {
+        if *command != MenuCommand::QuitToTitle {
+            continue;
+        }
+        match exit_slot.as_deref() {
+            Some(slot) => {
+                slot.set(quit_to_title_exit());
+                exit.write(AppExit::Success);
+            }
+            None => {
+                if let Some(toasts) = toasts.as_deref_mut() {
+                    toasts.short(text::CANNOT_RESTART);
+                }
+            }
+        }
+    }
+}
+
+/// What Return to the title hands the host: a relaunch with no boot key.
+pub fn quit_to_title_exit() -> ShellExit {
+    ShellExit {
+        relaunch: Some(Relaunch { boot_key: None }),
+    }
+}
+
 /// Hands this frame's menu keys to the reducer and carries out what it
 /// asks: the frame's typed text first, then its keys, each in order. It
 /// runs every frame so that keys meant for another overlay are read and
@@ -406,7 +470,8 @@ fn menu_input(
     for input in inputs {
         for command in reduce(model, input, &snap) {
             match command {
-                MenuCommand::Close => {
+                // The title layer is not an overlay; it closes itself.
+                MenuCommand::Close if !model.is_title() => {
                     requests.write(OverlayRequest::Close(OverlayId::Menu));
                 }
                 MenuCommand::OpenDoor(id) => {

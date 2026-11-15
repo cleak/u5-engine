@@ -10102,48 +10102,7 @@ fn run_visual_intro_menu_app(
     // A host `--boot-key` (design 3.3.5) comes first; without one this
     // is the 1.0.1 expression.
     let queued_key = intro_boot_queued_key(launch.boot_key, &preset_keys);
-    let mut text_windows = TextWindowSystem::new();
-    let (font_slots, pre_flourish_outcome) = run_intro_pre_flourish_phase(
-        &game_dir,
-        DisplayDriverFamily::Ega,
-        &mut text_windows,
-        queued_key,
-    )
-    .unwrap_or_else(|err| panic!("intro pre-flourish phase failed: {err}"));
-
-    let intro = VisualIntroState {
-        game_dir,
-        raster_depth,
-        dispatch: UnifiedMenuDispatch::new(),
-        title_flourish_step: 0,
-        title_flourish_complete: false,
-        title_signature_progress: 0,
-        title_signature_complete: false,
-        title_presents_hold_ticks: 0,
-        title_card_hold_ticks: 0,
-        title_sequence_skipped: false,
-        pending_auto_return_to_view: false,
-        title_tick_frame: 0,
-        title_tick_visible_frame: 0,
-        surface: new_intro_display_buffer(),
-        modal_backing: None,
-        menu_idle_ticks: 0,
-        menu_idle_bios_ticks: 0,
-        menu_cursor_pass: 0,
-        menu_cursor_blanked: false,
-        message_waiting_for_key: false,
-        message: String::new(),
-        panel: VisualIntroPanel::Menu,
-        launch_result,
-        image_handle: None,
-        font_slots: Some(font_slots),
-        text_windows,
-        pending_pre_flourish_outcome: Some(pre_flourish_outcome),
-        title_tick_frames: None,
-        pending_reveal_clicks: Vec::new(),
-        pending_speaker_cancels: Vec::new(),
-        new_game_saves: 0,
-    };
+    let intro = new_visual_intro_state(game_dir, raster_depth, launch_result, queued_key);
     let mut app = App::new();
     app.add_plugins(DefaultPlugins.set(WindowPlugin {
         primary_window: Some(display::initial_window(
@@ -10183,6 +10142,59 @@ fn run_visual_intro_menu_app(
     shell_exit
 }
 
+/// The intro as the default player launch starts it on `game_dir`: the
+/// pre-flourish phase run (`systems/intro.md §3` step 2) with `queued_key`
+/// as the key waiting at boot, and every counter at its start.
+fn new_visual_intro_state(
+    game_dir: PathBuf,
+    raster_depth: TileGraphicsDepth,
+    launch_result: Arc<Mutex<Option<PlayOptions>>>,
+    queued_key: Option<u8>,
+) -> VisualIntroState {
+    let mut text_windows = TextWindowSystem::new();
+    let (font_slots, pre_flourish_outcome) = run_intro_pre_flourish_phase(
+        &game_dir,
+        DisplayDriverFamily::Ega,
+        &mut text_windows,
+        queued_key,
+    )
+    .unwrap_or_else(|err| panic!("intro pre-flourish phase failed: {err}"));
+
+    VisualIntroState {
+        game_dir,
+        raster_depth,
+        dispatch: UnifiedMenuDispatch::new(),
+        title_flourish_step: 0,
+        title_flourish_complete: false,
+        title_signature_progress: 0,
+        title_signature_complete: false,
+        title_presents_hold_ticks: 0,
+        title_card_hold_ticks: 0,
+        title_sequence_skipped: false,
+        pending_auto_return_to_view: false,
+        title_tick_frame: 0,
+        title_tick_visible_frame: 0,
+        surface: new_intro_display_buffer(),
+        modal_backing: None,
+        menu_idle_ticks: 0,
+        menu_idle_bios_ticks: 0,
+        menu_cursor_pass: 0,
+        menu_cursor_blanked: false,
+        message_waiting_for_key: false,
+        message: String::new(),
+        panel: VisualIntroPanel::Menu,
+        launch_result,
+        image_handle: None,
+        font_slots: Some(font_slots),
+        text_windows,
+        pending_pre_flourish_outcome: Some(pre_flourish_outcome),
+        title_tick_frames: None,
+        pending_reveal_clicks: Vec::new(),
+        pending_speaker_cancels: Vec::new(),
+        new_game_saves: 0,
+    }
+}
+
 /// The key the intro's pre-flourish poll sees as queued at boot
 /// (`systems/intro.md §3` step 6): the host's `--boot-key` when it gave
 /// one, else the first `U5_BEVY_PRESS` key, as in 1.0.1.
@@ -10205,6 +10217,17 @@ fn build_visual_intro_app(
     screenshot: ScreenshotConfig,
     launch: &VisualLaunchConfig,
 ) {
+    build_visual_intro_app_with_speaker(app, intro, screenshot, launch, SpeakerOutput::Device);
+}
+
+/// [`build_visual_intro_app`] with the speaker's waves sent to `speaker`.
+fn build_visual_intro_app_with_speaker(
+    app: &mut App,
+    intro: VisualIntroState,
+    screenshot: ScreenshotConfig,
+    launch: &VisualLaunchConfig,
+    speaker: SpeakerOutput,
+) {
     app.insert_resource(ClearColor(Color::BLACK))
         .insert_resource(intro)
         .insert_resource(VisualIntroAnimationPump::default())
@@ -10214,7 +10237,7 @@ fn build_visual_intro_app(
         .insert_resource(screenshot)
         .insert_resource(ScreenshotState::default())
         .add_systems(Startup, setup_intro);
-    add_speaker_audio(app);
+    add_speaker_audio_to(app, speaker);
     add_visual_intro_update_systems(app);
     enh::add_enhancements(app, launch);
 }
@@ -10269,16 +10292,6 @@ fn fit_display_to_window(windows: Query<&Window>, mut sprites: Query<&mut Sprite
     }
 }
 
-/// Register the PC-speaker backend on an app.
-///
-/// Both shells - `run_visual_app` and the intro app - call this so the single
-/// voice, the jitter stream, and the effect channel exist on either path. The
-/// intro needs it too: `audio.md §7.1`'s subtitle-ignition burst fires while
-/// `VisualIntroState`, not `VisualState`, owns the frame.
-fn add_speaker_audio(app: &mut App) {
-    add_speaker_audio_to(app, SpeakerOutput::Device);
-}
-
 /// Where the speaker's rendered waves go.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum SpeakerOutput {
@@ -10293,6 +10306,12 @@ enum SpeakerOutput {
     Silent,
 }
 
+/// Register the PC-speaker backend on an app, its waves sent to `output`.
+///
+/// Both shells - `run_visual_app` and the intro app - call this so the single
+/// voice, the jitter stream, and the effect channel exist on either path. The
+/// intro needs it too: `audio.md §7.1`'s subtitle-ignition burst fires while
+/// `VisualIntroState`, not `VisualState`, owns the frame.
 fn add_speaker_audio_to(app: &mut App, output: SpeakerOutput) {
     match output {
         SpeakerOutput::Device => app.add_audio_source::<VisualSoundWave>(),
@@ -10700,6 +10719,87 @@ fn visual_intro_accepts_preset_key(intro: &VisualIntroState, ch: char) -> bool {
         return true;
     }
     !matches!(intro.dispatch.tick_title(), UnifiedMenuStep::PresentTitle)
+}
+
+/// Whether the menu's title layer may open now (Phase B design 3.2.4,
+/// D-M4.3): the title menu itself is polling for a key. That is
+/// [`visual_intro_accepts_preset_key`] on the title menu, with no
+/// message waiting for its own key (`intro.md §7` step 8), no automatic
+/// Return-to-View preview still owed before the first poll (`intro.md §3`)
+/// and no load handed to gameplay. During the flourish and every other
+/// panel the layer stays shut and its key falls through to the intro.
+pub(crate) fn title_layer_can_open(intro: &VisualIntroState) -> bool {
+    matches!(intro.panel, VisualIntroPanel::Menu)
+        && visual_intro_accepts_preset_key(intro, 'J')
+        && !intro.message_waiting_for_key
+        && !intro.pending_auto_return_to_view
+        && intro
+            .launch_result
+            .lock()
+            .is_ok_and(|launched| launched.is_none())
+}
+
+/// The title menu's `J`, typed for the player by the title layer (owner
+/// `TitleJ`, design 3.2.4): the same [`step_visual_intro`] a typed key
+/// takes, so the game's own Journey Onward runs, its empty-save message
+/// and the emulator-profile load latency included. The intro's picture is
+/// redrawn as a typed key redraws it. Returns whether the intro took it.
+pub(crate) fn title_layer_press_journey_onward(
+    intro: &mut VisualIntroState,
+    images: &mut Assets<Image>,
+) -> bool {
+    if !step_visual_intro(intro, 'J') {
+        return false;
+    }
+    if intro.image_handle.is_some() {
+        let rgba = render_intro_frame(intro);
+        if let Some(handle) = intro.image_handle.as_ref() {
+            replace_visual_image_data(images, handle, rgba, "title layer journey onward");
+        }
+    }
+    true
+}
+
+/// An intro waiting at its title menu over `game_dir`, with no font slots
+/// and no picture, for the title layer's tests (no game assets needed
+/// unless a key reaches a subflow that reads them).
+#[cfg(test)]
+pub(crate) fn title_menu_intro_for_tests(game_dir: PathBuf) -> VisualIntroState {
+    let mut dispatch = UnifiedMenuDispatch::new();
+    dispatch.dismiss_title();
+    VisualIntroState {
+        game_dir,
+        raster_depth: TileGraphicsDepth::Ega16,
+        dispatch,
+        title_flourish_step: intro_title_flourish_total_steps(),
+        title_flourish_complete: true,
+        title_signature_progress: 0,
+        title_signature_complete: false,
+        title_presents_hold_ticks: 0,
+        title_card_hold_ticks: 0,
+        title_sequence_skipped: false,
+        pending_auto_return_to_view: false,
+        title_tick_frame: 0,
+        title_tick_visible_frame: 0,
+        surface: new_intro_display_buffer(),
+        modal_backing: None,
+        menu_idle_ticks: 0,
+        menu_idle_bios_ticks: 0,
+        menu_cursor_pass: 0,
+        menu_cursor_blanked: false,
+        message_waiting_for_key: false,
+        message: String::new(),
+        panel: VisualIntroPanel::Menu,
+        launch_result: Arc::new(Mutex::new(None)),
+        image_handle: None,
+        font_slots: None,
+        text_windows: TextWindowSystem::new(),
+        pending_pre_flourish_outcome: None,
+        title_tick_frames: None,
+        pending_reveal_clicks: Vec::new(),
+        pending_speaker_cancels: Vec::new(),
+        new_game_saves: 0,
+    }
 }
 
 struct Bootstrap {

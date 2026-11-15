@@ -24,6 +24,11 @@
 //!   command, so nothing touches the restored files before the app exits.
 //!   Any failure puts the working set back and says why; the session goes
 //!   on.
+//! - **Load at the title** (3.2.4; plan M4-12): the host restores the
+//!   slot after the same one frame of "Loading...", and the title layer
+//!   types the title menu's `J`, so the game's own Journey Onward loads
+//!   it (and says so when it holds no game). No relaunch: the intro is
+//!   still running. A failure says why and goes back a page.
 //! - **Rename and Delete** go to the host at once; they touch one small
 //!   file or folder.
 //!
@@ -44,12 +49,13 @@ use super::inject::{
 };
 use super::pages::{MenuCommand, SaveChoice, SlotEntry, SlotList};
 use super::text as t;
+use super::title::{TitleJourney, title_commands};
 use super::unsaved::SaveTracker;
 use super::{MenuCommandEvent, MenuState, menu_input};
-use crate::VisualState;
 use crate::enh::synthetic::SyntheticInputOwner;
 use crate::enh::toast::Toasts;
 use crate::enh::{EnhSet, Relaunch, ShellExit, ShellExitSlot};
+use crate::{VisualIntroState, VisualState};
 
 /// The key the restarted game finds waiting at boot after a load: the
 /// original early Journey Onward (`systems/intro.md §3` step 6).
@@ -81,7 +87,8 @@ impl Plugin for SlotPlugin {
                         .before(begin_slot_save),
                     run_pending_load
                         .run_if(load_pending)
-                        .after(slot_menu_commands),
+                        .after(slot_menu_commands)
+                        .before(title_commands),
                 )
                     .in_set(EnhSet::Apply),
             )
@@ -195,7 +202,7 @@ fn failure_toast(toasts: Option<&mut Toasts>, template: &str, name: &str, failur
 }
 
 /// Lists the slots again; a failure empties the list and says why.
-fn refresh(host: &dyn MenuHost, listing: &mut SlotListing, toasts: Option<&mut Toasts>) {
+pub(super) fn refresh(host: &dyn MenuHost, listing: &mut SlotListing, toasts: Option<&mut Toasts>) {
     match list_entries(host) {
         Ok(entries) => listing.slots = Arc::new(entries),
         Err(failure) => {
@@ -334,8 +341,10 @@ fn run_pending_load(
     mut job: ResMut<SlotJob>,
     host: Res<SlotHost>,
     visual: Option<Res<VisualState>>,
+    intro: Option<Res<VisualIntroState>>,
     exit_slot: Option<Res<ShellExitSlot>>,
     mut exit: EventWriter<AppExit>,
+    mut journeys: EventWriter<TitleJourney>,
     mut state: ResMut<MenuState>,
     mut tracker: Option<ResMut<SaveTracker>>,
     mut toasts: Option<ResMut<Toasts>>,
@@ -352,6 +361,23 @@ fn run_pending_load(
         return;
     };
     let name = load.entry.info.name.clone();
+    if visual.is_none() && intro.is_some() {
+        // At the title (3.2.4): the restored save is loaded by the game's
+        // own Journey Onward, which checks it and says so when it holds no
+        // game. The title layer types its `J`.
+        match host.0.restore_slot(&load.entry.info.id) {
+            Ok(()) => {
+                journeys.write(TitleJourney);
+            }
+            Err(failure) => {
+                failure_toast(toasts.as_deref_mut(), t::LOAD_FAILED, &name, &failure);
+                if let Some(model) = state.model.as_mut() {
+                    model.back();
+                }
+            }
+        }
+        return;
+    }
     let outcome = host.0.restore_slot(&load.entry.info.id).and_then(|()| {
         let checked = match visual.as_deref() {
             Some(visual) => check_restored(&visual.game_dir),

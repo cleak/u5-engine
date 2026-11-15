@@ -57,7 +57,8 @@ use u5_runtime::enhancements::{CHEATS_SWITCH, FeatureToggles, KeyBindings, Toggl
 use super::EnhSet;
 use super::synthetic::{SyntheticInputOwner, SyntheticOwner};
 use crate::{
-    VisualState, key_code_to_input_byte, key_code_to_line_input_byte, keys_pressed_in_typed_order,
+    VisualIntroState, VisualState, key_code_to_input_byte, key_code_to_line_input_byte,
+    keys_pressed_in_typed_order, title_layer_can_open,
 };
 
 /// Logged when a `[keys]` chord does not name a key.
@@ -572,7 +573,7 @@ impl KeyLatch {
     }
 }
 
-pub(super) fn is_modifier(key: KeyCode) -> bool {
+pub(crate) fn is_modifier(key: KeyCode) -> bool {
     matches!(
         key,
         KeyCode::ShiftLeft
@@ -681,6 +682,7 @@ pub(crate) fn enh_input_router(
     keymap: Res<KeyMap>,
     mut latch: ResMut<KeyLatch>,
     visual: Option<Res<VisualState>>,
+    intro: Option<Res<VisualIntroState>>,
     synthetic: Option<Res<SyntheticInputOwner>>,
     mut actions: EventWriter<EnhActionEvent>,
     mut overlay_keys: EventWriter<OverlayKey>,
@@ -799,8 +801,9 @@ pub(crate) fn enh_input_router(
     }
     // A modifier maps to no byte and is dropped at the read, so it is not
     // a key "ahead" of the hotkey.
-    let queue_empty =
-        visual.is_none_or(|visual| visual.typed_keys.iter().all(|typed| is_modifier(typed.key)));
+    let queue_empty = visual
+        .as_deref()
+        .is_none_or(|visual| visual.typed_keys.iter().all(|typed| is_modifier(typed.key)));
     let mut first = true;
     for key in typed {
         if frame.ignored.contains(&key) || is_modifier(key) {
@@ -817,6 +820,18 @@ pub(crate) fn enh_input_router(
             continue;
         };
         let repeat = frame.repeated.contains(&key);
+        // Before play the menu key is the title layer's, and only while the
+        // title menu itself polls for a key (D-M4.3). Otherwise (the
+        // flourish, a story page, a waiting message) it is left to the
+        // intro exactly as 1.0.1 has it, with no toast.
+        if action == EnhAction::OpenMenu
+            && visual.is_none()
+            && intro
+                .as_deref()
+                .is_some_and(|intro| !title_layer_can_open(intro))
+        {
+            continue;
+        }
         if action.is_modal() && !(first_of_frame && queue_empty) {
             // The game gets the key and drops it, as in 1.0.1.
             if !repeat {

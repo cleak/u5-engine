@@ -372,6 +372,9 @@ pub const DELETED: &str = "Deleted \"{}\".";
 pub const DELETE_FAILED: &str = "Could not delete \"{}\": {}.";
 /// The host could not list the slots; `{}` the reason.
 pub const LIST_FAILED: &str = "Could not read the saves: {}.";
+/// Return to the title in a window that cannot start the game again (a
+/// shell with no host to ask); never in the shipped shells.
+pub const CANNOT_RESTART: &str = "This window cannot start the game again.";
 
 /// `template` with each `{}` replaced by the next of `args`, in order. A
 /// template with fewer holes than `args` ignores the rest.
