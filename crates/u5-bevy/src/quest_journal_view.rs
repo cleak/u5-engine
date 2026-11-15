@@ -54,7 +54,7 @@ use bevy::image::ImageSampler;
 use bevy::prelude::*;
 use bevy::render::render_asset::RenderAssetUsages;
 use bevy::render::render_resource::{Extent3d, TextureDimension, TextureFormat};
-use u5_runtime::enhancements::clues::ClueLog;
+use u5_runtime::enhancements::clues::{ClueLog, text_body};
 use u5_runtime::enhancements::{JournalSettings, MantraDisplay, SpoilerTier, Toggle};
 use u5_runtime::gameplay_chrome::{
     CHROME_CORNER_PROFILE, ChromePalette, RibbonCapDirection, paint_ribbon_cap,
@@ -158,13 +158,13 @@ pub const BROWN: Rgb = STOCK_EGA_BROWN;
 pub const KEY_HELP: &str = "\u{18}\u{19} row  \u{1b}\u{1a} section  Esc close";
 pub const KEY_HELP_REVEAL: &str = "\u{18}\u{19} row  \u{1b}\u{1a} section  Enter reveal";
 
-/// One tab of the journal page. Chapter 8 adds Clues and Topics (and,
-/// later, Notes).
+/// One tab of the journal page. Chapter 8 adds Clues, Topics and Notes.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum JournalTab {
     Quests,
     Clues,
     Topics,
+    Notes,
 }
 
 impl JournalTab {
@@ -174,6 +174,7 @@ impl JournalTab {
             JournalTab::Quests => "Quests",
             JournalTab::Clues => "Clues",
             JournalTab::Topics => "Topics",
+            JournalTab::Notes => "Notes",
         }
     }
 
@@ -183,19 +184,29 @@ impl JournalTab {
             JournalTab::Quests => None,
             JournalTab::Clues => Some(CluesTab::Clues),
             JournalTab::Topics => Some(CluesTab::Topics),
+            JournalTab::Notes => Some(CluesTab::Notes),
         }
     }
 }
 
 /// The tabs, in strip order: Quests with `journal.page`, Clues and Topics
-/// with `journal.clues` (8.2.3).
+/// with `journal.clues` (8.2.3), Notes with `journal.notes` (which needs
+/// the log).
 pub fn tabs_for(page: bool, clues: bool) -> Vec<JournalTab> {
+    tabs_with_notes(page, clues, false)
+}
+
+/// [`tabs_for`] with the Notes tab when `notes` (and the log) is on.
+pub fn tabs_with_notes(page: bool, clues: bool, notes: bool) -> Vec<JournalTab> {
     let mut tabs = Vec::new();
     if page {
         tabs.push(JournalTab::Quests);
     }
     if clues {
         tabs.extend([JournalTab::Clues, JournalTab::Topics]);
+        if notes {
+            tabs.push(JournalTab::Notes);
+        }
     }
     tabs
 }
@@ -233,9 +244,10 @@ impl QuestJournalUi {
     pub fn new(settings: JournalSettings) -> Self {
         Self {
             settings,
-            tabs: tabs_for(
+            tabs: tabs_with_notes(
                 settings.page || settings.clues.quest_tracker,
                 settings.clues.clues,
+                settings.clues.notes,
             ),
             tab: 0,
             section: SectionId::Virtues,
@@ -247,7 +259,11 @@ impl QuestJournalUi {
             last_model: None,
             shown: false,
             dirty: true,
-            clue: clues::ClueUi::default(),
+            clue: clues::ClueUi {
+                text: settings.clues.text,
+                notes: settings.clues.notes,
+                ..clues::ClueUi::default()
+            },
             tracker: settings
                 .clues
                 .quest_tracker
@@ -615,6 +631,7 @@ fn follow_journal_toggle(
 ) {
     let page = toggles.0.on(Toggle::JournalPage);
     let clues = toggles.0.on(Toggle::JournalClues);
+    let notes = clues && toggles.0.on(Toggle::JournalNotes);
     let tracker = toggles.0.on(Toggle::JournalQuestTracker);
     match (page || clues || tracker, ui) {
         (true, None) => {
@@ -623,14 +640,17 @@ fn follow_journal_toggle(
                 .unwrap_or_default();
             settings.page = page;
             settings.clues.clues = clues;
+            settings.clues.notes = notes;
             settings.clues.quest_tracker = tracker;
             commands.insert_resource(QuestJournalUi::new(settings));
         }
         (true, Some(mut ui)) => {
-            let tabs = tabs_for(page || tracker, clues);
+            let tabs = tabs_with_notes(page || tracker, clues, notes);
             if ui.tabs != tabs || ui.settings.page != page {
                 ui.settings.page = page;
                 ui.settings.clues.clues = clues;
+                ui.settings.clues.notes = notes;
+                ui.clue.notes = notes;
                 ui.set_tabs(tabs);
             }
             if ui.tracker.is_some() != tracker {
@@ -688,14 +708,16 @@ pub(crate) fn journal_page_input(
             continue;
         }
         let clue_tab = ui.tab().clue_tab();
-        let searching = (clue_tab.is_some() && ui.clue.searching)
+        let searching = (clue_tab.is_some() && ui.clue.takes_escape())
             || (ui.tracker_mode() && ui.tracker.as_ref().is_some_and(|t| t.takes_escape()));
         let mantras = ui.settings.mantras;
         let tracker_mode = ui.tracker_mode();
         match key {
             KeyCode::KeyJ if ctrl => close = true,
             KeyCode::Escape if !searching && !tracker_mode => close = true,
-            KeyCode::Tab if ui.tabs.len() > 1 => ui.step_tab(if shift { -1 } else { 1 }),
+            KeyCode::Tab if ui.tabs.len() > 1 && !searching => {
+                ui.step_tab(if shift { -1 } else { 1 })
+            }
             key if clue_tab.is_some() => {
                 let tab = clue_tab.unwrap_or_default();
                 let log = log.as_mut().map(|log| log.log_mut());
@@ -873,7 +895,8 @@ pub(crate) fn paint_quest_journal_page(
         }
         Some(tab) => {
             let empty = ClueLog::new();
-            let log = log.as_ref().map_or(&empty, |log| log.log());
+            let log_res = log.as_deref();
+            let log = log_res.map_or(&empty, |log| log.log());
             if let Some(cache) = cache.as_mut() {
                 cache.load_log(&visual.game_dir, log);
             }
@@ -890,6 +913,35 @@ pub(crate) fn paint_quest_journal_page(
                 ui.clue.take_view(view);
                 ui.dirty = true;
             }
+            // The open clue's text (8.3.6): this session's rows, the kept
+            // rows, the static render or the replay line.
+            if let Some(entry) = ui.clue.reading.and_then(|index| log.entries().get(index)) {
+                let index = ui.clue.reading.unwrap_or_default();
+                let session = log_res.and_then(|log| log.session_text().rows(entry));
+                let kept = log
+                    .text()
+                    .iter()
+                    .find(|seen| usize::from(seen.entry) == index)
+                    .map(|seen| seen.rows.as_slice());
+                let avatar = visual
+                    .state
+                    .party_names
+                    .first()
+                    .and_then(|name| u5_runtime::party_name_to_string(name))
+                    .unwrap_or_default();
+                let body = text_body(
+                    ui.clue.text,
+                    entry,
+                    session,
+                    kept,
+                    source.fields(entry.dialog),
+                    &avatar,
+                );
+                if ui.clue.body.as_ref() != Some(&body) {
+                    ui.clue.body = Some(body);
+                    ui.dirty = true;
+                }
+            }
         }
     }
     if !ui.dirty {
@@ -905,7 +957,7 @@ pub(crate) fn paint_quest_journal_page(
     let Some(rgba) = image.data.as_mut() else {
         return;
     };
-    paint_page(rgba, &visual.text_font, &ui.view());
+    paint_page_with_runes(rgba, &visual.text_font, Some(&visual.rune_font), &ui.view());
     ui.dirty = false;
 }
 
@@ -1030,6 +1082,8 @@ pub struct Cell {
     pub ink: Rgb,
     /// Filled under `text` first; `None` keeps what is there.
     pub paper: Option<Paper>,
+    /// Drawn from `RUNES.CH` (a runic span of a clue's text).
+    pub runic: bool,
 }
 
 impl Cell {
@@ -1040,6 +1094,7 @@ impl Cell {
             text: text.into(),
             ink,
             paper: None,
+            runic: false,
         }
     }
 
@@ -1377,6 +1432,17 @@ pub fn key_help(view: &PageView<'_>) -> &'static str {
 /// join the side bands), the title tab, the key help tab and
 /// [`page_cells`].
 pub fn paint_page(rgba: &mut [u8], font: &FixedCellFont, view: &PageView<'_>) {
+    paint_page_with_runes(rgba, font, None, view);
+}
+
+/// [`paint_page`] with `RUNES.CH` for the cells marked runic (without it
+/// they draw from `font`).
+pub fn paint_page_with_runes(
+    rgba: &mut [u8],
+    font: &FixedCellFont,
+    runes: Option<&FixedCellFont>,
+    view: &PageView<'_>,
+) {
     debug_assert_eq!(rgba.len(), PAGE_WIDTH * PAGE_HEIGHT * 4);
     fill(rgba, 0, 0, PAGE_WIDTH - 1, PAGE_HEIGHT - 1, BLACK);
     paint_frame(rgba);
@@ -1420,7 +1486,11 @@ pub fn paint_page(rgba: &mut [u8], font: &FixedCellFont, view: &PageView<'_>) {
             Some(Paper::Mask) => fill(rgba, x0, y0, x1, y0 + CH_CELL_SIDE - 2, MASK_PAPER),
             None => {}
         }
-        put_text(rgba, font, &cell.text, cell.column, cell.row, cell.ink);
+        let face = match runes {
+            Some(runes) if cell.runic => runes,
+            _ => font,
+        };
+        put_text(rgba, face, &cell.text, cell.column, cell.row, cell.ink);
     }
 }
 

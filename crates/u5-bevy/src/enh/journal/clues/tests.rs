@@ -159,6 +159,7 @@ fn letter(c: char) -> KeyCode {
     match c {
         'a' => KeyCode::KeyA,
         'b' => KeyCode::KeyB,
+        'd' => KeyCode::KeyD,
         'e' => KeyCode::KeyE,
         'g' => KeyCode::KeyG,
         'i' => KeyCode::KeyI,
@@ -607,9 +608,21 @@ fn t6_source_scan_finds_no_writer_of_the_game() {
         format!("run_tlk_{}", "stream_from"),
     ];
     // Every source file of `enh/journal/` and `enhancements/clues/`.
-    let sources: [(&str, &str); 11] = [
+    let sources: [(&str, &str); 14] = [
         ("enh/journal.rs", include_str!("../../journal.rs")),
         ("enh/journal/clues.rs", include_str!("../clues.rs")),
+        (
+            "enh/journal/scrollback.rs",
+            include_str!("../scrollback.rs"),
+        ),
+        (
+            "clues/text.rs",
+            include_str!("../../../../../u5-runtime/src/enhancements/clues/text.rs"),
+        ),
+        (
+            "clues/scrollback.rs",
+            include_str!("../../../../../u5-runtime/src/enhancements/clues/scrollback.rs"),
+        ),
         ("enh/journal/clues/tests.rs", include_str!("tests.rs")),
         (
             "clues/mod.rs",
@@ -649,4 +662,182 @@ fn t6_source_scan_finds_no_writer_of_the_game() {
             assert!(!source.contains(pattern.as_str()), "{name} has {pattern}");
         }
     }
+}
+
+// ---------------------------------------------------------------------------
+// M6-04: the toast, misses, the session's text and TEXT after `kept`.
+
+fn with(mut toggles: FeatureToggles, extra: &[Toggle]) -> FeatureToggles {
+    for toggle in extra {
+        toggles.set(*toggle, true);
+    }
+    toggles
+}
+
+fn toast(game: &Game) -> Option<&'static str> {
+    game.app.world().resource::<Toasts>().current()
+}
+
+fn file_log(dir: &Path) -> ClueLog {
+    let bytes = fs::read(journal_file(dir)).unwrap();
+    decode_payload(&decode_container(&bytes).unwrap().payload).unwrap()
+}
+
+#[test]
+fn m6_04_one_toast_per_close_of_a_conversation_that_logged() {
+    let dir = save_dir();
+    let mut game = clue_game(
+        &dir,
+        with(toggles(true, false), &[Toggle::JournalClueToast]),
+    );
+    game.app.insert_resource(Toasts::default());
+    open_talk(&mut game);
+    say(&mut game, "gran");
+    say(&mut game, "mill");
+    assert_eq!(toast(&game), None, "nothing while the conversation runs");
+    say(&mut game, "");
+    assert!(game.visual().state.active_conversation.is_none());
+    assert_eq!(toast(&game), Some(CLUE_TOAST), "one toast at the close");
+    game.app.insert_resource(Toasts::default());
+    for _ in 0..5 {
+        game.frame();
+    }
+    assert_eq!(toast(&game), None, "once per close");
+    // A conversation that logged nothing says nothing.
+    open_talk(&mut game);
+    say(&mut game, "");
+    assert_eq!(toast(&game), None);
+    // And with the key off, no toast at all.
+    let mut quiet = clue_game(&dir, toggles(true, false));
+    quiet.app.insert_resource(Toasts::default());
+    open_talk(&mut quiet);
+    say(&mut quiet, "gran");
+    say(&mut quiet, "");
+    assert_eq!(toast(&quiet), None);
+}
+
+#[test]
+fn m6_04_misses_are_kept_only_with_the_key_and_never_in_the_file_otherwise() {
+    let dir = save_dir();
+    let mut game = clue_game(&dir, toggles(true, false));
+    open_talk(&mut game);
+    say(&mut game, "bole");
+    say(&mut game, "");
+    let log = game.app.world().resource::<ClueLogResource>().log();
+    assert!(log.misses().is_empty(), "no miss kept with the key off");
+    assert!(log.entries().is_empty());
+    save(&mut game);
+    assert!(file_log(&dir).misses().is_empty());
+
+    let dir = save_dir();
+    let mut game = clue_game(
+        &dir,
+        with(toggles(true, false), &[Toggle::JournalClueMisses]),
+    );
+    open_talk(&mut game);
+    say(&mut game, "bole");
+    say(&mut game, "gran");
+    say(&mut game, "");
+    let log = game.app.world().resource::<ClueLogResource>().log();
+    assert_eq!(log.misses().len(), 1);
+    assert_eq!(log.misses()[0].typed, b"BOLE");
+    assert_eq!(logged(&game), [RecordAddr::Pair(0)], "a miss is not a clue");
+    save(&mut game);
+    assert_eq!(file_log(&dir).misses().len(), 1, "MISSES with the key on");
+    // Turning the key off: the next save leaves MISSES out.
+    game.app.world_mut().resource_mut::<Toggles>().0 = toggles(true, false);
+    game.frame();
+    open_talk(&mut game);
+    say(&mut game, "mill");
+    say(&mut game, "");
+    // A different save, so a new stamp.
+    game.visual_mut().state.gold += 1;
+    save(&mut game);
+    assert!(file_log(&dir).misses().is_empty());
+}
+
+#[test]
+fn m6_04_live_text_keeps_the_rows_seen_in_ram_only() {
+    let dir = save_dir();
+    let mut game = clue_game(&dir, toggles(true, false));
+    game.app
+        .world_mut()
+        .resource_mut::<ClueLogResource>()
+        .set_text(ClueText::Live);
+    open_talk(&mut game);
+    say(&mut game, "gran");
+    say(&mut game, "");
+    let log = game.app.world().resource::<ClueLogResource>();
+    let entry = log.log().entries()[0];
+    let rows = log
+        .session_text()
+        .rows(&entry)
+        .expect("rows seen this session");
+    let seen: Vec<String> = rows
+        .iter()
+        .map(|row| row.bytes.iter().map(|b| char::from(*b)).collect())
+        .collect();
+    assert!(seen.iter().any(|row| row.contains("Old one.")), "{seen:?}");
+    save(&mut game);
+    let bytes = fs::read(journal_file(&dir)).unwrap();
+    assert!(
+        !bytes.windows(8).any(|w| w == b"Old one."),
+        "live text is never written"
+    );
+    assert!(file_log(&dir).text().is_empty());
+    // Off drops the session's rows.
+    game.app
+        .world_mut()
+        .resource_mut::<ClueLogResource>()
+        .set_text(ClueText::Off);
+    assert!(
+        game.app
+            .world()
+            .resource::<ClueLogResource>()
+            .session_text()
+            .is_empty()
+    );
+}
+
+#[test]
+fn t9_shell_text_is_dropped_at_the_save_after_leaving_kept() {
+    let dir = save_dir();
+    let mut game = clue_game(&dir, toggles(true, false));
+    // `kept` is not offered by the resolver until D8.1; the plumbing is
+    // driven directly here.
+    game.app
+        .world_mut()
+        .resource_mut::<ClueLogResource>()
+        .set_text(ClueText::Kept);
+    open_talk(&mut game);
+    say(&mut game, "gran");
+    say(&mut game, "");
+    save(&mut game);
+    let kept = file_log(&dir);
+    assert_eq!(kept.text().len(), 1, "TEXT written under kept");
+    game.app
+        .world_mut()
+        .resource_mut::<ClueLogResource>()
+        .set_text(ClueText::Live);
+    open_talk(&mut game);
+    say(&mut game, "mill");
+    say(&mut game, "");
+    game.visual_mut().state.gold += 1;
+    save(&mut game);
+    let after = file_log(&dir);
+    assert_eq!(after.entries().len(), 2, "the second save was written");
+    assert!(after.text().is_empty(), "TEXT dropped at the next save");
+    assert!(after.entries().iter().all(|entry| {
+        !entry
+            .flags
+            .has(u5_runtime::enhancements::clues::EntryFlags::HAS_TEXT)
+    }));
+    assert!(
+        game.app
+            .world()
+            .resource::<ClueLogResource>()
+            .log()
+            .text()
+            .is_empty()
+    );
 }

@@ -17,7 +17,7 @@ use std::collections::{BTreeMap, HashMap};
 
 use crate::enhancements::clues::{
     AskedState, ClueEntry, ClueLog, Dependence, DialogKey, EntryFlags, GameMinute, NpcKey,
-    RecordAddr, TestInputs, asked_state, game_minute, record_dependence,
+    RecordAddr, TestInputs, asked_state, game_minute, note_owner, record_dependence,
 };
 use crate::enhancements::journal::SpoilerTier;
 use crate::{Area, PlayState, decode_tlk_field, town_resident_name};
@@ -51,6 +51,12 @@ pub const UNKNOWN_TOPIC: &str = "?";
 /// A place with no gazetteer name.
 pub const ELSEWHERE: &str = "Elsewhere";
 pub const NO_CLUES: &str = "No clues logged yet.";
+/// The Notes tab's row for the save itself.
+pub const SAVE_NOTE: &str = "This save";
+/// A row whose note is not written yet.
+pub const NO_NOTE: &str = "No note yet. N writes one.";
+/// The prefix of a note in the details.
+pub const NOTE_PREFIX: &str = "Note: ";
 pub const NO_MATCHES: &str = "Nothing matches.";
 
 /// One of chapter 8's tabs.
@@ -59,6 +65,8 @@ pub enum CluesTab {
     #[default]
     Clues,
     Topics,
+    /// The player's notes (`journal.notes`, 8.2.4).
+    Notes,
 }
 
 /// The Clues tab's two views; `V` switches.
@@ -272,6 +280,8 @@ pub enum RowKind {
     Entry(usize),
     /// A line of text with nothing to act on.
     Note,
+    /// A row of the Notes tab: what the note is on (`note_owner`, owner).
+    Noted { owner_kind: u8, owner: u16 },
 }
 
 /// A row's mark column.
@@ -315,6 +325,25 @@ impl ClueRow {
     pub fn entry(&self) -> Option<usize> {
         match self.kind {
             RowKind::Entry(index) => Some(index),
+            RowKind::Noted {
+                owner_kind: note_owner::CLUE,
+                owner,
+            } => Some(usize::from(owner)),
+            _ => None,
+        }
+    }
+
+    /// What `N` writes a note on from this row: a clue, a person, or (on
+    /// the Notes tab) whatever the row is about.
+    pub fn note_owner(&self) -> Option<(u8, u16)> {
+        match &self.kind {
+            RowKind::Entry(index) => Some((note_owner::CLUE, u16::try_from(*index).ok()?)),
+            RowKind::Person(npc)
+            | RowKind::Group {
+                key: GroupKey::Person(npc),
+                ..
+            } => Some((note_owner::PERSON, note_owner::person(*npc))),
+            RowKind::Noted { owner_kind, owner } => Some((*owner_kind, *owner)),
             _ => None,
         }
     }
@@ -497,7 +526,8 @@ impl<'a> Facts<'a> {
 
     /// The selected entry's details: the `clue_text = off` body (8.2.3),
     /// then when, how often and the marks.
-    fn entry_detail(&self, entry: &ClueEntry) -> Vec<String> {
+    fn entry_detail(&self, index: usize) -> Vec<String> {
+        let entry = self.entry(index);
         // The description is on the person's own row and details.
         let body = format!(
             "You asked {} about {}.",
@@ -524,7 +554,11 @@ impl<'a> Facts<'a> {
                 facts.push(word.to_string());
             }
         }
-        vec![body, facts.join("  ")]
+        let mut detail = vec![body, facts.join("  ")];
+        if let Some(note) = self.clue_note(index) {
+            detail.push(format!("{NOTE_PREFIX}{note}"));
+        }
+        detail
     }
 
     fn entry_row(&self, index: usize, depth: u8, label: String) -> ClueRow {
@@ -536,7 +570,7 @@ impl<'a> Facts<'a> {
             label,
             count: (entry.count > 1).then_some(entry.count),
             right: date_label(entry.last),
-            detail: self.entry_detail(entry),
+            detail: self.entry_detail(index),
         }
     }
 
@@ -553,8 +587,24 @@ impl<'a> Facts<'a> {
         }
     }
 
-    /// Search over topic, name and place, ignoring case.
-    fn matches(&self, entry: &ClueEntry, search: &str) -> bool {
+    /// The player's note on a clue, by index.
+    fn clue_note(&self, index: usize) -> Option<&'a str> {
+        let owner = u16::try_from(index).ok()?;
+        self.log
+            .note_for(note_owner::CLUE, owner)
+            .map(|note| note.text.as_str())
+    }
+
+    fn person_note(&self, npc: NpcKey) -> Option<&'a str> {
+        self.log
+            .note_for(note_owner::PERSON, note_owner::person(npc))
+            .map(|note| note.text.as_str())
+    }
+
+    /// Search over topic, name, place and the player's notes, ignoring
+    /// case.
+    fn matches(&self, index: usize, search: &str) -> bool {
+        let entry = self.entry(index);
         search.is_empty()
             || [
                 self.topic(entry),
@@ -563,12 +613,21 @@ impl<'a> Facts<'a> {
             ]
             .iter()
             .any(|text| contains_ignoring_case(text, search))
+            || self
+                .clue_note(index)
+                .is_some_and(|note| contains_ignoring_case(note, search))
+            || self
+                .person_note(entry.npc)
+                .is_some_and(|note| contains_ignoring_case(note, search))
     }
 
     fn person_matches(&self, npc: NpcKey, search: &str) -> bool {
         search.is_empty()
             || contains_ignoring_case(&self.person(npc), search)
             || contains_ignoring_case(town_label(npc.scene), search)
+            || self
+                .person_note(npc)
+                .is_some_and(|note| contains_ignoring_case(note, search))
     }
 }
 
@@ -601,7 +660,7 @@ pub fn derive_clues(
         .copied()
         .filter(|index| {
             let entry = facts.entry(*index);
-            facts.passes(entry, query.filter) && facts.matches(entry, query.search)
+            facts.passes(entry, query.filter) && facts.matches(*index, query.search)
         })
         .collect();
     let searching = !query.search.trim().is_empty();
@@ -636,6 +695,7 @@ pub fn derive_clues(
             }
         }
         CluesTab::Topics => topic_rows(&facts, &visible, &is_open, &mut rows),
+        CluesTab::Notes => note_rows(&facts, query.search, &mut rows),
     }
     if rows.is_empty() {
         let text = if log.entries().is_empty() && !searching {
@@ -694,6 +754,9 @@ fn group_row(
             first = format!("{first}, {description}");
         }
         detail.insert(0, first);
+        if let Some(note) = facts.person_note(npc) {
+            detail.push(format!("{NOTE_PREFIX}{note}"));
+        }
     }
     ClueRow {
         kind: RowKind::Group { key, open, entries },
@@ -764,6 +827,9 @@ fn person_note_row(facts: &Facts<'_>, npc: NpcKey, depth: u8) -> ClueRow {
         detail[0] = format!("{}, {description}", detail[0]);
     }
     detail.push(NOTHING_LOGGED.to_string());
+    if let Some(note) = facts.person_note(npc) {
+        detail.push(format!("{NOTE_PREFIX}{note}"));
+    }
     ClueRow {
         kind: RowKind::Person(npc),
         depth,
@@ -890,7 +956,7 @@ fn place_rows(
                     let mut row = person_note_row(facts, npc, 1);
                     row.label = facts.person(npc);
                     row.right = plural(entries.len(), "topic");
-                    row.detail.pop();
+                    row.detail.retain(|line| line != NOTHING_LOGGED);
                     rows.push(row);
                     for index in entries {
                         rows.push(facts.entry_row(*index, 2, facts.topic(facts.entry(*index))));
@@ -941,6 +1007,61 @@ fn topic_rows(
                 rows.push(facts.entry_row(index, 1, label));
             }
         }
+    }
+}
+
+/// The Notes tab (8.2.4): the save's own note first (always listed, so `N`
+/// can write one), then the notes on people, then the notes on clues, each
+/// in the order written. Search keeps the rows whose label or note
+/// matches.
+fn note_rows(facts: &Facts<'_>, search: &str, rows: &mut Vec<ClueRow>) {
+    let save = facts.log.note_for(note_owner::SAVE, 0);
+    let mut listed = vec![(
+        note_owner::SAVE,
+        0,
+        SAVE_NOTE.to_string(),
+        save.map(|note| note.text.clone()),
+    )];
+    for kind in [note_owner::PERSON, note_owner::CLUE] {
+        for note in facts
+            .log
+            .notes()
+            .iter()
+            .filter(|note| note.owner_kind == kind)
+        {
+            let label = match kind {
+                note_owner::PERSON => facts.person_in_town(note_owner::person_of(note.owner)),
+                _ => match facts.log.entries().get(usize::from(note.owner)) {
+                    Some(entry) => format!("{} {}", facts.topic(entry), facts.person(entry.npc)),
+                    None => continue,
+                },
+            };
+            listed.push((kind, note.owner, label, Some(note.text.clone())));
+        }
+    }
+    for (owner_kind, owner, label, note) in listed {
+        let shown = note.clone().unwrap_or_else(|| NO_NOTE.to_string());
+        if !search.trim().is_empty()
+            && !contains_ignoring_case(&label, search)
+            && !note
+                .as_deref()
+                .is_some_and(|note| contains_ignoring_case(note, search))
+        {
+            continue;
+        }
+        let detail = match note {
+            Some(note) => vec![format!("{NOTE_PREFIX}{note}")],
+            None => vec![shown],
+        };
+        rows.push(ClueRow {
+            kind: RowKind::Noted { owner_kind, owner },
+            depth: 0,
+            mark: RowMark::None,
+            label,
+            count: None,
+            right: String::new(),
+            detail,
+        });
     }
 }
 

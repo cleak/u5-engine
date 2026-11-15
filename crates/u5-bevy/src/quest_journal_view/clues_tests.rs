@@ -5,9 +5,10 @@
 //! panel's clue lines, the eviction toast and the grid. Every blob is
 //! synthetic: invented words in the `formats/tlk.md` layout.
 
+use u5_runtime::enhancements::ClueText;
 use u5_runtime::enhancements::clues::{
-    ClueEntry, DialogKey, EncodeOptions, EntryFlags, GameMinute, MAX_ENTRIES, NpcKey, RecordAddr,
-    TestBits, encode_payload,
+    ClueEntry, DialogKey, EncodeOptions, EntryFlags, GameMinute, MAX_ENTRIES, NOTE_MAX_LEN, NpcKey,
+    REPLAY_LINE, RecordAddr, TestBits, TextBody, encode_payload,
 };
 use u5_runtime::quest_journal::clues::{CluesView, RowKind};
 
@@ -427,4 +428,243 @@ fn the_first_eviction_toasts_once() {
         game.app.world().resource::<Toasts>().current(),
         Some(CLUE_LOG_FULL)
     );
+}
+
+// ---------------------------------------------------------------------------
+// M6-04: notes and the clue's text on the page.
+
+fn type_word(game: &mut Game, word: &str) {
+    for c in word.chars() {
+        let key = match c {
+            'n' => KeyCode::KeyN,
+            'e' => KeyCode::KeyE,
+            's' => KeyCode::KeyS,
+            't' => KeyCode::KeyT,
+            ' ' => KeyCode::Space,
+            other => panic!("no key for {other:?}"),
+        };
+        tap(game, key);
+    }
+}
+
+#[test]
+fn m6_04_the_notes_tab_needs_the_key_and_the_log() {
+    use crate::quest_journal_view::tabs_with_notes;
+    assert_eq!(
+        tabs_with_notes(true, true, true),
+        [
+            JournalTab::Quests,
+            JournalTab::Clues,
+            JournalTab::Topics,
+            JournalTab::Notes
+        ]
+    );
+    assert_eq!(
+        tabs_with_notes(false, false, true),
+        [],
+        "notes need the clue log"
+    );
+    let game = clue_game(&[Toggle::JournalClues]);
+    assert!(!ui(&game).tabs().contains(&JournalTab::Notes));
+    let game = clue_game(&[Toggle::JournalClues, Toggle::JournalNotes]);
+    assert!(ui(&game).tabs().contains(&JournalTab::Notes));
+}
+
+#[test]
+fn m6_04_a_note_typed_on_the_page_round_trips_and_never_reaches_the_game() {
+    let mut game = clue_game(&[Toggle::JournalClues, Toggle::JournalNotes]);
+    chord(&mut game, KeyCode::ControlLeft, KeyCode::KeyJ);
+    assert!(open(&game));
+    tap(&mut game, KeyCode::Enter); // open the person
+    tap(&mut game, KeyCode::ArrowDown); // the first topic
+    tap(&mut game, KeyCode::KeyN);
+    assert!(ui(&game).clue.note.is_some());
+    type_word(&mut game, "nest");
+    tap(&mut game, KeyCode::Escape);
+    assert!(open(&game), "Esc cancels the note, not the page");
+    assert!(
+        log(&game).notes().is_empty(),
+        "a cancelled note is not kept"
+    );
+    tap(&mut game, KeyCode::KeyN);
+    type_word(&mut game, "nest");
+    game.press(KeyCode::ShiftLeft);
+    tap(&mut game, KeyCode::Slash);
+    game.release(KeyCode::ShiftLeft);
+    tap(&mut game, KeyCode::Enter);
+    assert!(
+        game.visual().typed_keys.is_empty(),
+        "never typed into the game"
+    );
+    let index = ui(&game)
+        .clue
+        .selected()
+        .and_then(|row| row.entry())
+        .unwrap();
+    let note = log(&game)
+        .note_for(
+            u5_runtime::enhancements::clues::note_owner::CLUE,
+            index as u16,
+        )
+        .unwrap();
+    assert_eq!(note.text, "nest?");
+    // Saved and read back as the sidecar would.
+    let bytes = encode_payload(log(&game), EncodeOptions::default()).unwrap();
+    let back = u5_runtime::enhancements::clues::decode_payload(&bytes).unwrap();
+    assert_eq!(back.notes(), log(&game).notes());
+    // N again edits it; the Notes tab lists it after the save's row.
+    tap(&mut game, KeyCode::KeyN);
+    assert_eq!(ui(&game).clue.note.as_ref().unwrap().text, "nest?");
+    tap(&mut game, KeyCode::Escape);
+    tap(&mut game, KeyCode::Tab);
+    tap(&mut game, KeyCode::Tab);
+    assert_eq!(ui(&game).tab(), JournalTab::Notes);
+    game.frame();
+    let rows = ui(&game).clue.rows();
+    assert_eq!(rows.len(), 2);
+    assert_eq!(rows[1].detail, ["Note: nest?"]);
+    // Enter on the save's row writes the save's note.
+    tap(&mut game, KeyCode::Enter);
+    type_word(&mut game, "test");
+    tap(&mut game, KeyCode::Enter);
+    assert_eq!(
+        log(&game)
+            .note_for(u5_runtime::enhancements::clues::note_owner::SAVE, 0)
+            .unwrap()
+            .text,
+        "test"
+    );
+}
+
+#[test]
+fn m6_04_n_writes_nothing_with_notes_off() {
+    let mut game = clue_game(&[Toggle::JournalClues]);
+    chord(&mut game, KeyCode::ControlLeft, KeyCode::KeyJ);
+    tap(&mut game, KeyCode::Enter);
+    tap(&mut game, KeyCode::ArrowDown);
+    tap(&mut game, KeyCode::KeyN);
+    assert!(ui(&game).clue.note.is_none());
+    assert!(log(&game).notes().is_empty());
+}
+
+/// A blob whose second pair branches on the name-known bit.
+fn branch_blob() -> Vec<Vec<u8>> {
+    let mut fields = blob();
+    let mut branch = text("Ah. ");
+    branch.extend([0x8C, 0x91]);
+    branch.extend(text("Hm."));
+    fields[8] = branch;
+    let mut rune = text("See ");
+    rune.push(0x8E);
+    rune.extend(text("abc"));
+    rune.push(0x8E);
+    fields[6] = rune;
+    fields.push(vec![0x90, 0x91]);
+    fields
+}
+
+#[test]
+fn m6_04_the_text_pane_renders_a_plain_record_and_replays_a_branch() {
+    let mut game = clue_game(&[Toggle::JournalClues]);
+    game.app
+        .world_mut()
+        .insert_resource(TlkLiveCache::with_blobs([(DIALOG, branch_blob())]));
+    game.app
+        .world_mut()
+        .resource_mut::<QuestJournalUi>()
+        .clue
+        .text = ClueText::Live;
+    chord(&mut game, KeyCode::ControlLeft, KeyCode::KeyJ);
+    tap(&mut game, KeyCode::Enter);
+    tap(&mut game, KeyCode::ArrowDown);
+    tap(&mut game, KeyCode::Enter);
+    game.frame();
+    let clue = &ui(&game).clue;
+    assert!(clue.reading.is_some());
+    let Some(TextBody::Rows(rows)) = &clue.body else {
+        panic!("a plain record renders statically: {:?}", clue.body);
+    };
+    assert!(
+        rows.iter().any(|row| row.runic != 0),
+        "the runic span: {rows:?}"
+    );
+    let cells = clue_cells(clue, u5_runtime::quest_journal::clues::CluesTab::Clues);
+    let runic: Vec<&Cell> = cells.iter().filter(|cell| cell.runic).collect();
+    assert_eq!(runic.len(), 1, "{cells:?}");
+    assert_eq!(runic[0].text, "abc");
+    for cell in cells.iter().filter(|cell| cell.row >= TEXT_PANE_FIRST_ROW) {
+        if cell.row <= BODY_LAST_ROW {
+            assert!(cell.column >= TEXT_PANE_COLUMN, "{cell:?}");
+            assert!(
+                cell.last_column() < TEXT_PANE_COLUMN as usize + 16,
+                "{cell:?}"
+            );
+        }
+    }
+    assert_eq!(
+        clue_key_help(clue, u5_runtime::quest_journal::clues::CluesTab::Clues),
+        KEY_HELP_READING
+    );
+    // Esc goes back to the list, not out of the page.
+    tap(&mut game, KeyCode::Escape);
+    assert!(open(&game));
+    assert!(ui(&game).clue.reading.is_none());
+    // The branch record: the replay line, never a guessed branch.
+    tap(&mut game, KeyCode::ArrowDown);
+    tap(&mut game, KeyCode::Enter);
+    game.frame();
+    assert_eq!(ui(&game).clue.body, Some(TextBody::Replay));
+    let cells = clue_cells(
+        &ui(&game).clue,
+        u5_runtime::quest_journal::clues::CluesTab::Clues,
+    );
+    assert!(cells.iter().any(|cell| cell.text == REPLAY_LINE));
+    // With clue_text off Enter only marks read.
+    tap(&mut game, KeyCode::Escape);
+    game.app
+        .world_mut()
+        .resource_mut::<QuestJournalUi>()
+        .clue
+        .text = ClueText::Off;
+    tap(&mut game, KeyCode::Enter);
+    assert!(ui(&game).clue.reading.is_none());
+}
+
+#[test]
+fn m6_04_note_and_text_cells_stay_on_the_grid() {
+    let long = "W".repeat(NOTE_MAX_LEN);
+    let mut clues = ClueUi {
+        notes: true,
+        note: Some(NoteEdit {
+            owner_kind: 0,
+            owner: 0,
+            text: long.clone(),
+        }),
+        ..ClueUi::default()
+    };
+    for text in [String::new(), "W".repeat(10), "W".repeat(30), long] {
+        clues.note.as_mut().unwrap().text = text;
+        for cell in clue_cells(&clues, u5_runtime::quest_journal::clues::CluesTab::Clues) {
+            assert!(cell.column >= TEXT_COLUMN, "{cell:?}");
+            assert!(cell.last_column() <= LAST_TEXT_COLUMN as usize, "{cell:?}");
+            assert!(
+                (DETAIL_FIRST_ROW..=DETAIL_LAST_ROW).contains(&cell.row)
+                    || cell.row < DETAIL_FIRST_ROW
+            );
+        }
+    }
+    for help in [
+        KEY_HELP_ENTRY_NOTES,
+        KEY_HELP_NOTES,
+        KEY_HELP_NOTE,
+        KEY_HELP_READING,
+        KEY_HELP_READING_NOTES,
+    ] {
+        assert!(help.chars().count() <= TEXT_CELLS, "{help}");
+    }
+    assert_eq!(note_char(KeyCode::KeyA, false), Some('a'));
+    assert_eq!(note_char(KeyCode::KeyA, true), Some('A'));
+    assert_eq!(note_char(KeyCode::Digit1, true), Some('!'));
+    assert_eq!(note_char(KeyCode::Digit1, false), Some('1'));
+    assert_eq!(note_char(KeyCode::F1, false), None);
 }

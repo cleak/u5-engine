@@ -136,16 +136,21 @@ pub enum SidePreference {
 
 /// A cell panel's text: a title and [`PANEL_BODY_ROWS`] rows of
 /// [`PANEL_COLUMNS`] IBM.CH codes. Shorter text is padded with spaces and
-/// longer text is cut.
+/// longer text is cut. A body row may mark cells as runic (chapter 8's
+/// scrollback): those draw from `RUNES.CH`, as the message window draws
+/// them.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct PanelRows {
     rows: Box<[[u8; PANEL_COLUMNS]; PANEL_TEXT_ROWS]>,
+    /// Bit `i` of row `r`: cell `i` is in the runic font.
+    runic: [u16; PANEL_TEXT_ROWS],
 }
 
 impl PanelRows {
     pub fn new(title: &str, rows: &[&str]) -> Self {
         let mut panel = Self {
             rows: Box::new([[b' '; PANEL_COLUMNS]; PANEL_TEXT_ROWS]),
+            runic: [0; PANEL_TEXT_ROWS],
         };
         panel.set(0, title);
         for (index, row) in rows.iter().take(PANEL_BODY_ROWS).enumerate() {
@@ -158,6 +163,23 @@ impl PanelRows {
         for (cell, byte) in self.rows[row].iter_mut().zip(text.bytes()) {
             *cell = byte;
         }
+    }
+
+    /// A title and body rows of raw cell codes, each with its runic mask.
+    pub fn with_glyph_rows(title: &str, rows: &[(&[u8], u16)]) -> Self {
+        let mut panel = Self::new(title, &[]);
+        for (index, (bytes, runic)) in rows.iter().take(PANEL_BODY_ROWS).enumerate() {
+            for (cell, byte) in panel.rows[index + 1].iter_mut().zip(bytes.iter()) {
+                *cell = *byte;
+            }
+            panel.runic[index + 1] = *runic;
+        }
+        panel
+    }
+
+    /// Body row `index`'s runic mask.
+    pub fn runic(&self, index: usize) -> u16 {
+        self.runic[index + 1]
     }
 
     pub fn title(&self) -> &[u8; PANEL_COLUMNS] {
@@ -215,7 +237,7 @@ impl PanelRegistry {
         self.0.is_empty()
     }
 
-    fn get(&self, kind: PanelKind) -> Option<&dyn SidePanelProvider> {
+    pub(crate) fn get(&self, kind: PanelKind) -> Option<&dyn SidePanelProvider> {
         self.0
             .iter()
             .find(|provider| provider.kind() == kind)
@@ -787,6 +809,17 @@ pub struct SidePanelNode {
 /// and rows in `font`, one cell per byte. A byte the font has no glyph for
 /// draws blank.
 pub fn render_cell_panel(font: &FixedCellFont, rows: &PanelRows, side: PanelSide) -> Vec<u8> {
+    render_cell_panel_with_runes(font, None, rows, side)
+}
+
+/// [`render_cell_panel`] with `RUNES.CH` for the cells a row marks runic
+/// (without it they draw from `font`).
+pub fn render_cell_panel_with_runes(
+    font: &FixedCellFont,
+    runes: Option<&FixedCellFont>,
+    rows: &PanelRows,
+    side: PanelSide,
+) -> Vec<u8> {
     let width = PANEL_WIDTH as usize;
     let mut rgba = PAPER.repeat(width * PANEL_HEIGHT as usize);
     let text_left = match side {
@@ -796,8 +829,12 @@ pub fn render_cell_panel(font: &FixedCellFont, rows: &PanelRows, side: PanelSide
     for (row, cells) in rows.rows.iter().enumerate() {
         let ink = if row == 0 { TITLE_INK } else { ROW_INK };
         for (cell, byte) in cells.iter().enumerate() {
+            let face = match runes {
+                Some(runes) if rows.runic[row] & (1 << cell) != 0 => runes,
+                _ => font,
+            };
             for line in 0..CH_CELL_SIDE {
-                let bits = font.glyph_row(*byte, line).unwrap_or(0);
+                let bits = face.glyph_row(*byte, line).unwrap_or(0);
                 for column in 0..CH_CELL_SIDE {
                     if bits & (0x80 >> column) == 0 {
                         continue;
@@ -857,6 +894,7 @@ pub(crate) fn draw_side_panels(
 ) {
     let state = visual.as_deref().map(|visual| &visual.state);
     let font = visual.as_deref().map(|visual| &visual.text_font);
+    let runes = visual.as_deref().map(|visual| &visual.rune_font);
     let mut wanted: Vec<(PanelKind, PanelSide, Rect, PanelContent)> = Vec::new();
     for (kind, rect) in &layout.granted {
         let (Some(provider), Some(side)) = (registry.get(*kind), layout.side_of(*kind)) else {
@@ -883,7 +921,7 @@ pub(crate) fn draw_side_panels(
         }
         match (&content, font) {
             (PanelContent::Cells(rows), Some(font)) => {
-                let rgba = render_cell_panel(font, rows, side);
+                let rgba = render_cell_panel_with_runes(font, runes, rows, side);
                 // Our own image is repainted in place; a provider's image
                 // (the node showed one before) is never written.
                 let own = !matches!(panel.drawn, PanelContent::Image(_));
@@ -901,9 +939,9 @@ pub(crate) fn draw_side_panels(
 
     for (kind, side, rect, content) in wanted {
         let image = match (&content, font) {
-            (PanelContent::Cells(rows), Some(font)) => {
-                images.add(panel_image(render_cell_panel(font, rows, side)))
-            }
+            (PanelContent::Cells(rows), Some(font)) => images.add(panel_image(
+                render_cell_panel_with_runes(font, runes, rows, side),
+            )),
             (PanelContent::Image(handle), _) => handle.clone(),
             (PanelContent::Cells(_), None) => continue,
         };

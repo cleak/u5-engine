@@ -27,6 +27,14 @@
 //! **Replays.** While a synthetic key source holds the input token (keys
 //! typed for the player, not by them) nothing is captured (D8.10).
 //!
+//! **M6-04.** With `clue_text = live` the rows of each answer are kept in
+//! RAM ([`ClueLogResource::session_text`]) for the clue's page; `kept`
+//! (D8.1, not offered yet) adds them to the log's TEXT section, and any
+//! other value drops TEXT at the next save. With `clue_misses` the lines
+//! nobody answered go to the MISSES section (no display until D8.14). With
+//! `clue_toast` one fixed toast says the log changed when a conversation
+//! that logged something closes.
+//!
 //! **Zero footprint.** The plugin is added only when `journal.clues` or
 //! `journal.clue_highlight` is on at launch, never under Classic or the
 //! parity lock (the foundation plugin itself is absent then); every
@@ -40,9 +48,10 @@ use std::sync::Arc;
 
 use bevy::prelude::*;
 use u5_runtime::enhancements::clues::{
-    ClueEntry, ClueLog, ConversationSnapshot, DialogKey, EncodeOptions, JOURNAL_PAYLOAD_VERSION,
-    NpcKey, Reconciled, RecordAddr, TestInputs, Turn, TurnAttributor, TurnContext, encode_payload,
-    game_minute, reconcile, test_inputs,
+    ClueEntry, ClueLog, ConversationSnapshot, DialogKey, EncodeOptions, FoldOutcome,
+    JOURNAL_PAYLOAD_VERSION, Miss, NpcKey, Reconciled, RecordAddr, SeenRows, SessionText,
+    TestInputs, Turn, TurnAttributor, TurnContext, encode_payload, game_minute, reconcile,
+    test_inputs,
 };
 use u5_runtime::enhancements::{
     ClueText, FeatureToggles, Freshness, SaveStamp, SidecarStore, TAG_JOURNAL, Toggle,
@@ -64,6 +73,9 @@ pub const HIGHLIGHT: Toggle = Toggle::JournalClueHighlight;
 /// Shown once when the log could not be written. The save is on disk and
 /// is never touched.
 pub const CLUE_WRITE_ERROR: &str = "Clue log: the clues could not be saved.";
+/// `clue_toast` (8.2.2): one fixed message when a conversation that logged
+/// something closes. R3.6: no names or counts.
+pub const CLUE_TOAST: &str = "Clue log updated";
 /// Shown once per log when the 4096-entry cap first evicts (8.2.9).
 pub const CLUE_LOG_FULL: &str = "Clue log full: the oldest unmarked clues make room.";
 /// Logged when a new character's old log could not be removed.
@@ -116,6 +128,8 @@ struct ObservedSession {
     attributor: TurnAttributor,
     /// The test inputs before the turn that is still open.
     open_pre: TestInputs,
+    /// A turn of this conversation went into the log (`clue_toast`).
+    logged: bool,
 }
 
 impl ClueObserver {
@@ -150,6 +164,11 @@ pub struct ClueLogResource {
     /// The file is from a newer build: never written over (R3.1).
     read_only: bool,
     read_requested: bool,
+    /// The rows seen this session (`clue_text = live`), RAM only. A read
+    /// of the file keeps them: they are what the player saw.
+    session_text: SessionText,
+    /// `journal.clue_text` in force.
+    text: ClueText,
 }
 
 impl Default for ClueLogResource {
@@ -159,17 +178,47 @@ impl Default for ClueLogResource {
             log: ClueLog::new(),
             read_only: false,
             read_requested: true,
+            session_text: SessionText::new(),
+            text: ClueText::Off,
         }
     }
 }
 
 impl ClueLogResource {
+    /// An empty log under `clue_text = text`, reading the file next frame.
+    pub fn with_text(text: ClueText) -> Self {
+        Self {
+            text,
+            ..Self::default()
+        }
+    }
+
+    /// `journal.clue_text` in force.
+    pub fn text(&self) -> ClueText {
+        self.text
+    }
+
+    /// `journal.clue_text` changed in play (the menu overlay). Leaving
+    /// `kept` drops TEXT at the next save; leaving `live`/`kept` for `off`
+    /// drops the session's rows.
+    pub fn set_text(&mut self, text: ClueText) {
+        if text == ClueText::Off {
+            self.session_text = SessionText::new();
+        }
+        self.text = text;
+    }
+
     pub fn log(&self) -> &ClueLog {
         &self.log
     }
 
     pub fn log_mut(&mut self) -> &mut ClueLog {
         &mut self.log
+    }
+
+    /// The rows seen this session, for `clue_text = live`.
+    pub fn session_text(&self) -> &SessionText {
+        &self.session_text
     }
 
     /// Whether the file on disk is from a newer build.
@@ -278,6 +327,7 @@ pub(crate) fn add_clue_log(app: &mut App, launch: &VisualLaunchConfig) {
     if observer_wanted(launch.enhancements.toggles) {
         app.add_plugins(ClueLogPlugin {
             toggles: launch.enhancements.toggles,
+            text: launch.enhancements.journal().clues.text,
         });
     }
 }
@@ -285,13 +335,15 @@ pub(crate) fn add_clue_log(app: &mut App, launch: &VisualLaunchConfig) {
 /// The clue log's plugin.
 pub struct ClueLogPlugin {
     pub toggles: FeatureToggles,
+    /// `journal.clue_text` at launch.
+    pub text: ClueText,
 }
 
 impl Plugin for ClueLogPlugin {
     fn build(&self, app: &mut App) {
         app.insert_resource(ClueObserver::default());
         if log_wanted(self.toggles) {
-            app.insert_resource(ClueLogResource::default())
+            app.insert_resource(ClueLogResource::with_text(self.text))
                 .insert_resource(TlkLiveCache::default());
         }
         app.add_systems(
@@ -348,6 +400,7 @@ impl Plugin for ClueLogPlugin {
 fn clue_lifecycle(
     mut commands: Commands,
     toggles: Res<Toggles>,
+    launch: Option<Res<EnhLaunch>>,
     observer: Option<Res<ClueObserver>>,
     log: Option<Res<ClueLogResource>>,
     cache: Option<Res<TlkLiveCache>>,
@@ -360,7 +413,11 @@ fn clue_lifecycle(
     }
     match (log_wanted(toggles), log.is_some()) {
         // The new log reads the save's file at the next frame.
-        (true, false) => commands.insert_resource(ClueLogResource::default()),
+        (true, false) => commands.insert_resource(ClueLogResource::with_text(
+            launch.map_or(ClueText::Off, |launch| {
+                launch.0.enhancements.journal().clues.text
+            }),
+        )),
         // Unsaved captures are dropped, as the game drops unsaved progress;
         // nothing is written.
         (false, true) => commands.remove_resource::<ClueLogResource>(),
@@ -445,6 +502,7 @@ fn clue_observe_post(
     visual: Res<VisualState>,
     toggles: Res<Toggles>,
     mut log: Option<ResMut<ClueLogResource>>,
+    mut toasts: Option<ResMut<Toasts>>,
 ) {
     let state = &visual.state;
     let observer = &mut *observer;
@@ -477,7 +535,8 @@ fn clue_observe_post(
             fields: &session.fields,
             decoded: &session.decoded,
             phase: pre.map(|pre| pre.snapshot.phase),
-            misses: false,
+            // Misses are kept only in the log, never in session-only mode.
+            misses: log.is_some() && toggles.0.on(Toggle::JournalClueMisses),
         };
         let entries = state.message_entries();
         let hold = state.pending_text_hold.is_some();
@@ -519,8 +578,9 @@ fn clue_observe_post(
         .session
         .as_ref()
         .is_some_and(|session| !same_person(session));
+    let text = log.as_ref().map_or(ClueText::Off, |log| log.text);
     if !closed.is_empty()
-        && let Some(session) = observer.session.as_ref()
+        && let Some(session) = observer.session.as_mut()
     {
         let slot = usize::from(session.npc.slot);
         let post = test_inputs(state, slot);
@@ -536,8 +596,32 @@ fn clue_observe_post(
                 at,
             );
             match log.as_deref_mut().filter(|_| logging) {
+                Some(log) if turn.record == RecordAddr::Miss => {
+                    log.log.add_miss(Miss {
+                        npc: session.npc,
+                        at,
+                        typed: turn.typed,
+                    });
+                }
                 Some(log) => {
-                    log.log.fold(entry);
+                    session.logged = true;
+                    let index = match log.log.fold(entry) {
+                        FoldOutcome::Folded(index)
+                        | FoldOutcome::Added(index)
+                        | FoldOutcome::Evicted(index) => Some(index),
+                        FoldOutcome::Full => None,
+                    };
+                    if text != ClueText::Off {
+                        log.session_text.remember(&entry, &turn.rows);
+                    }
+                    if text == ClueText::Kept
+                        && let Some(index) = index.and_then(|index| u16::try_from(index).ok())
+                    {
+                        log.log.keep_text(SeenRows {
+                            entry: index,
+                            rows: turn.rows,
+                        });
+                    }
                 }
                 None => {
                     observer.asked.push((entry.npc, entry.dialog, entry.record));
@@ -547,6 +631,16 @@ fn clue_observe_post(
         }
     }
     if ended {
+        let logged = observer
+            .session
+            .as_ref()
+            .is_some_and(|session| session.logged);
+        if logged
+            && toggles.0.on(Toggle::JournalClueToast)
+            && let Some(toasts) = toasts.as_mut()
+        {
+            toasts.note(CLUE_TOAST);
+        }
         end_session(observer);
     }
     // A conversation that opened this frame: its opening is not a turn.
@@ -560,6 +654,7 @@ fn clue_observe_post(
             decoded: session.decoded_fields.clone(),
             attributor: TurnAttributor::new(),
             open_pre: now.inputs,
+            logged: false,
         });
     }
 }
@@ -585,7 +680,6 @@ fn end_session(observer: &mut ClueObserver) {
 fn clue_sidecar_write(
     mut log: ResMut<ClueLogResource>,
     mut stamped: EventReader<SaveStamped>,
-    launch: Res<EnhLaunch>,
     watch: Res<SaveWatch>,
     toggles: Res<Toggles>,
     mut toasts: Option<ResMut<Toasts>>,
@@ -610,9 +704,13 @@ fn clue_sidecar_write(
             continue;
         };
         let options = EncodeOptions {
-            keep_text: launch.0.enhancements.journal().clues.text == ClueText::Kept,
+            keep_text: log.text == ClueText::Kept,
             keep_misses: toggles.0.on(Toggle::JournalClueMisses),
         };
+        // Leaving `kept` drops TEXT at this save (8.3.6).
+        if !options.keep_text {
+            log.log.drop_text();
+        }
         let written = encode_payload(&log.log, options)
             .map_err(|error| format!("{error:?}"))
             .and_then(|payload| {

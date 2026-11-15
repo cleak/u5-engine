@@ -23,6 +23,8 @@ pub mod codec;
 pub mod dependence;
 pub mod highlight;
 pub mod reconcile;
+pub mod scrollback;
+pub mod text;
 
 pub use attribute::{
     ConversationSnapshot, Turn, TurnAttributor, TurnContext, attribute_turns, game_minute,
@@ -41,6 +43,10 @@ pub use highlight::{
     phase_suppresses, topic_keyword,
 };
 pub use reconcile::{ReconcileNote, Reconciled, reconcile};
+pub use scrollback::{MAX_SCROLLBACK_ENTRIES, Scrollback};
+pub use text::{
+    REPLAY_LINE, SessionText, TextBody, TextKey, static_render, text_body, text_rows_of,
+};
 
 use crate::conversation_session::TlkKeywordLookup;
 
@@ -275,10 +281,28 @@ pub struct Link {
 
 /// What a player note is attached to (NOTES `owner_kind`).
 pub mod note_owner {
+    use super::NpcKey;
+
     pub const CLUE: u8 = 0;
     pub const PERSON: u8 = 1;
     pub const SAVE: u8 = 2;
+
+    /// A person's `owner`: the scene byte, then the slot.
+    pub fn person(npc: NpcKey) -> u16 {
+        u16::from(npc.scene) << 8 | u16::from(npc.slot)
+    }
+
+    /// The person a `PERSON` owner names.
+    pub fn person_of(owner: u16) -> NpcKey {
+        NpcKey {
+            scene: (owner >> 8) as u8,
+            slot: owner as u8,
+        }
+    }
 }
+
+/// The longest note the overlay field takes, in bytes (ASCII only).
+pub const NOTE_MAX_LEN: usize = 60;
 
 /// A player-authored note (NOTES).
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
@@ -523,6 +547,43 @@ impl ClueLog {
     /// Adds a player note.
     pub fn add_note(&mut self, note: Note) {
         self.notes.push(note);
+        self.dirty = true;
+    }
+
+    /// The player's note on `(owner_kind, owner)`, if any.
+    pub fn note_for(&self, owner_kind: u8, owner: u16) -> Option<&Note> {
+        self.notes
+            .iter()
+            .find(|note| note.owner_kind == owner_kind && note.owner == owner)
+    }
+
+    /// Sets the note on `(owner_kind, owner)`, replacing the one there;
+    /// blank text removes it. The text is cut to [`NOTE_MAX_LEN`] bytes.
+    /// A clue note on an entry that does not exist is ignored.
+    pub fn set_note(&mut self, owner_kind: u8, owner: u16, text: &str) {
+        if owner_kind == note_owner::CLUE && usize::from(owner) >= self.entries.len() {
+            return;
+        }
+        let mut text = text.trim().to_string();
+        while text.len() > NOTE_MAX_LEN {
+            text.pop();
+        }
+        let at = self
+            .notes
+            .iter()
+            .position(|note| note.owner_kind == owner_kind && note.owner == owner);
+        match (at, text.is_empty()) {
+            (Some(at), true) => {
+                self.notes.remove(at);
+            }
+            (Some(at), false) if self.notes[at].text != text => self.notes[at].text = text,
+            (Some(_), false) | (None, true) => return,
+            (None, false) => self.notes.push(Note {
+                owner_kind,
+                owner,
+                text,
+            }),
+        }
         self.dirty = true;
     }
 

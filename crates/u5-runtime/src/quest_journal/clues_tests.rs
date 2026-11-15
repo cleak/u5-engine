@@ -427,3 +427,82 @@ fn without_blobs_labels_fall_back_to_the_place() {
     let people = derive_open(&log(), &ctx(), ClueQuery::default());
     assert!(people.strings().all(|s| !s.contains("Hail")), "no greeting");
 }
+
+// --- M6-04: the Notes tab and notes in search. ----------------------------
+
+fn notes_query(search: &str) -> ClueQuery<'_> {
+    ClueQuery {
+        tab: CluesTab::Notes,
+        search,
+        ..ClueQuery::default()
+    }
+}
+
+#[test]
+fn m6_04_notes_tab_lists_the_save_then_people_then_clues() {
+    let source = source();
+    let mut log = log();
+    let empty = derive_clues(&log, &source, &ctx(), &notes_query(""));
+    assert_eq!(empty.rows.len(), 1, "only the save's own row");
+    assert_eq!(empty.rows[0].label, SAVE_NOTE);
+    assert_eq!(empty.rows[0].detail, [NO_NOTE]);
+    assert_eq!(
+        empty.rows[0].note_owner(),
+        Some((note_owner::SAVE, 0)),
+        "N writes the save's note from it"
+    );
+    log.set_note(note_owner::CLUE, 2, "ask about the nest");
+    log.set_note(note_owner::PERSON, note_owner::person(npc(YEW, 3)), "kind");
+    log.set_note(note_owner::SAVE, 0, "the long road");
+    let view = derive_clues(&log, &source, &ctx(), &notes_query(""));
+    let labels: Vec<&str> = view.rows.iter().map(|row| row.label.as_str()).collect();
+    assert_eq!(labels, [SAVE_NOTE, "Vorpelin (Yew)", "ROOK Vorpelin"]);
+    assert_eq!(view.rows[2].note_owner(), Some((note_owner::CLUE, 2)));
+    assert_eq!(view.rows[2].entry(), Some(2));
+    assert_eq!(view.rows[0].detail, ["Note: the long road"]);
+    // Search keeps the rows whose label or note matches.
+    let found = derive_clues(&log, &source, &ctx(), &notes_query("nest"));
+    assert_eq!(found.rows.len(), 1);
+    assert_eq!(found.rows[0].label, "ROOK Vorpelin");
+}
+
+#[test]
+fn m6_04_notes_show_on_their_clue_and_are_searched() {
+    let source = source();
+    let mut log = log();
+    log.set_note(note_owner::CLUE, 2, "ask about the nest");
+    let query = ClueQuery {
+        tab: CluesTab::Clues,
+        search: "nest",
+        ..ClueQuery::default()
+    };
+    let view = derive_clues(&log, &source, &ctx(), &query);
+    let rook = view
+        .rows
+        .iter()
+        .find(|row| row.entry() == Some(2))
+        .expect("search reaches the note");
+    assert_eq!(view.matches, 1);
+    assert!(
+        rook.detail
+            .iter()
+            .any(|line| line == "Note: ask about the nest")
+    );
+    // N on an entry row or a person writes on that clue or person.
+    assert_eq!(rook.note_owner(), Some((note_owner::CLUE, 2)));
+    let all = derive_clues(&log, &source, &ctx(), &ClueQuery::default());
+    let person = all
+        .rows
+        .iter()
+        .find(|row| {
+            matches!(
+                row.kind,
+                RowKind::Group {
+                    key: GroupKey::Person(_),
+                    ..
+                }
+            )
+        })
+        .unwrap();
+    assert!(matches!(person.note_owner(), Some((note_owner::PERSON, _))));
+}

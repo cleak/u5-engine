@@ -680,3 +680,245 @@ fn clue_tabs_review_shots() {
     image::imageops::overlay(&mut sheet, &panel, 320, 0);
     save("15-panel-clues", &sheet);
 }
+
+/// The M6-04 review shots: a note being written, the clue with its note,
+/// a clue's text (static render, and the replay line), the Notes tab, and
+/// the scrollback panel beside the play frame during a real conversation.
+/// Names, keywords and text are read live from the profile's own `.TLK`
+/// files; nothing is committed.
+#[test]
+fn clue_text_notes_and_scrollback_review_shots() {
+    use crate::enh::journal::clues::ClueLogResource;
+    use crate::enh::journal::scrollback::{ConversationPanelProvider, ScrollbackState};
+    use crate::enh::side::{
+        PanelContent, PanelSide, SidePanelProvider, render_cell_panel_with_runes,
+    };
+    use u5_runtime::enhancements::ClueText;
+    use u5_runtime::enhancements::clues::{
+        ClueEntry, DialogKey, GameMinute, NpcKey, RecordAddr, TestBits, game_minute, static_render,
+    };
+    let (Some(profile), Some(out)) = (
+        configured_test_dir("U5_MOCKUP_PROFILE"),
+        configured_test_dir("U5_JOURNAL_SHOTS"),
+    ) else {
+        eprintln!("skipped: set U5_MOCKUP_PROFILE and U5_JOURNAL_SHOTS");
+        return;
+    };
+    let game = unique_scratch_dir("clue-text-shots");
+    for entry in std::fs::read_dir(&profile).unwrap() {
+        let entry = entry.unwrap();
+        if entry.file_type().unwrap().is_file() {
+            copy_asset_writable(&entry.path(), &game.join(entry.file_name())).unwrap();
+        }
+    }
+    std::fs::create_dir_all(&out).unwrap();
+    let towne = u5_runtime::parse_tlk_raw(&game.join("TOWNE.TLK")).unwrap();
+    // A dialog whose first pair renders statically and whose pairs include
+    // one that does not (a branch), by id.
+    let mut ids: Vec<u16> = towne.keys().copied().collect();
+    ids.sort_unstable();
+    let pick = ids
+        .iter()
+        .copied()
+        .find(|id| {
+            let fields = &towne[id];
+            fields.len() >= 13
+                && static_render(fields, RecordAddr::Pair(0), "Avatar").is_some()
+                && (1..4).any(|k| static_render(fields, RecordAddr::Pair(k), "Avatar").is_none())
+        })
+        .or_else(|| ids.first().copied())
+        .unwrap();
+    let fields = towne[&pick].clone();
+    let replay_k = (1..4)
+        .find(|k| static_render(&fields, RecordAddr::Pair(*k), "Avatar").is_none())
+        .unwrap_or(1);
+    let scene = Scene::from_game_dir(&game).unwrap();
+    let state = PlayState::load_scene(
+        &game,
+        PlayOptions {
+            target: PlayTarget::Town(GameScene::from_key("TOWNE:1").unwrap()),
+            floor: 0,
+            start: Some((15, 17)),
+            clock: GameClock::new(10, 0).unwrap(),
+            ..PlayOptions::default()
+        },
+    )
+    .unwrap();
+    let now = game_minute(&state).0;
+    let npc = NpcKey { scene: 1, slot: 3 };
+    let dialog = DialogKey {
+        family: 0,
+        dialog_id: pick as u8,
+    };
+    let mut entries = vec![ClueEntry::heard(
+        npc,
+        dialog,
+        RecordAddr::Leading(0),
+        0,
+        TestBits::default(),
+        GameMinute(now - 30),
+    )];
+    for (k, minutes) in [(0u8, 20u32), (replay_k, 10)] {
+        entries.push(ClueEntry::heard(
+            npc,
+            dialog,
+            RecordAddr::Pair(k),
+            0,
+            TestBits::default(),
+            GameMinute(now - minutes),
+        ));
+    }
+    let save = |name: &str, picture: &image::RgbaImage| {
+        picture.save(out.join(format!("{name}.png"))).unwrap();
+        scaled(picture, 4)
+            .save(out.join(format!("{name}-4x.png")))
+            .unwrap();
+        display(picture, 3)
+            .save(out.join(format!("{name}-display-3x.png")))
+            .unwrap();
+    };
+    let mut launch = VisualLaunchConfig::classic();
+    for toggle in [Toggle::JournalClues, Toggle::JournalNotes] {
+        launch.enhancements.toggles.set(toggle, true);
+    }
+    let mut shell = Shell::new(state.clone(), &scene, &launch, |_| {});
+    for _ in 0..30 {
+        shell.step(&[]);
+    }
+    {
+        let world = shell.app.world_mut();
+        let mut log = world.resource_mut::<ClueLogResource>();
+        for entry in &entries {
+            log.log_mut().fold(*entry);
+        }
+        log.set_text(ClueText::Live);
+        world.resource_mut::<QuestJournalUi>().clue.text = ClueText::Live;
+    }
+    shell.step(&[]);
+    shell.step(&[
+        key(KeyCode::ControlLeft, ButtonState::Pressed),
+        key(KeyCode::KeyJ, ButtonState::Pressed),
+    ]);
+    shell.step(&[
+        key(KeyCode::KeyJ, ButtonState::Released),
+        key(KeyCode::ControlLeft, ButtonState::Released),
+    ]);
+    shell.step(&[]);
+    tap_key(&mut shell, KeyCode::Enter);
+    tap_key(&mut shell, KeyCode::ArrowDown);
+    tap_key(&mut shell, KeyCode::KeyN);
+    for code in [
+        KeyCode::KeyC,
+        KeyCode::KeyH,
+        KeyCode::KeyE,
+        KeyCode::KeyC,
+        KeyCode::KeyK,
+        KeyCode::Space,
+        KeyCode::KeyA,
+        KeyCode::KeyT,
+        KeyCode::Space,
+        KeyCode::KeyN,
+        KeyCode::KeyI,
+        KeyCode::KeyG,
+        KeyCode::KeyH,
+        KeyCode::KeyT,
+    ] {
+        tap_key(&mut shell, code);
+    }
+    shell.step(&[]);
+    save("20-note-writing", &page_picture(&shell));
+    tap_key(&mut shell, KeyCode::Enter);
+    shell.step(&[]);
+    save("21-clue-with-note", &page_picture(&shell));
+    tap_key(&mut shell, KeyCode::Enter);
+    shell.step(&[]);
+    shell.step(&[]);
+    save("22-text-static", &page_picture(&shell));
+    tap_key(&mut shell, KeyCode::Escape);
+    tap_key(&mut shell, KeyCode::ArrowDown);
+    tap_key(&mut shell, KeyCode::Enter);
+    shell.step(&[]);
+    shell.step(&[]);
+    save("23-text-replay", &page_picture(&shell));
+    tap_key(&mut shell, KeyCode::Escape);
+    tap_key(&mut shell, KeyCode::Tab);
+    tap_key(&mut shell, KeyCode::Tab);
+    shell.step(&[]);
+    save("24-notes-tab", &page_picture(&shell));
+
+    // The scrollback beside the frame: a person of the profile's own blob
+    // placed east of the party, then Talk, JOB and NAME typed through the
+    // game's keys.
+    let mut state = state;
+    state.player.facing = u5_runtime::Direction::East;
+    let (x, y) = (state.player.x as u8, state.player.y as u8);
+    state.load_scheduled_npcs(&[u5_runtime::NpcSlot {
+        slot: 1,
+        type_byte: 1,
+        dialog_id: pick as u8,
+        schedule: [0, 0, 0, x + 1, x + 1, x + 1, y, y, y, 0, 0, 0, 0, 8, 16, 20],
+        name: None,
+    }]);
+    let mut launch = VisualLaunchConfig::classic();
+    launch
+        .enhancements
+        .toggles
+        .set(Toggle::JournalClueScrollback, true);
+    let mut shell = Shell::new(state, &scene, &launch, |_| {});
+    for _ in 0..30 {
+        shell.step(&[]);
+    }
+    tap_key(&mut shell, KeyCode::KeyT);
+    tap_key(&mut shell, KeyCode::ArrowRight);
+    for _ in 0..40 {
+        shell.step(&[]);
+    }
+    for word in [
+        &[KeyCode::KeyJ, KeyCode::KeyO, KeyCode::KeyB][..],
+        &[KeyCode::KeyN, KeyCode::KeyA, KeyCode::KeyM, KeyCode::KeyE][..],
+    ] {
+        for code in word {
+            tap_key(&mut shell, *code);
+        }
+        tap_key(&mut shell, KeyCode::Enter);
+        for _ in 0..40 {
+            shell.step(&[]);
+        }
+    }
+    let world = shell.app.world();
+    let rows = world
+        .resource::<ScrollbackState>()
+        .scrollback()
+        .rows()
+        .map(<[_]>::to_vec);
+    eprintln!("scrollback rows: {}", rows.as_ref().map_or(0, Vec::len));
+    let provider = ConversationPanelProvider::new(std::sync::Arc::new(std::sync::Mutex::new(rows)));
+    let Some(PanelContent::Cells(cells)) = provider.snapshot(Some(&shell.visual().state)) else {
+        panic!("the scrollback shows rows");
+    };
+    let play = rgba_image(
+        320,
+        200,
+        world
+            .resource::<Assets<Image>>()
+            .get(&shell.visual().image_handle)
+            .unwrap()
+            .data
+            .clone()
+            .unwrap(),
+    );
+    let panel = rgba_image(
+        crate::enh::side::PANEL_WIDTH,
+        crate::enh::side::PANEL_HEIGHT,
+        render_cell_panel_with_runes(
+            &scene.text_font,
+            Some(&scene.rune_font),
+            &cells,
+            PanelSide::Right,
+        ),
+    );
+    let mut sheet = image::RgbaImage::new(320 + panel.width(), 200);
+    image::imageops::overlay(&mut sheet, &play, 0, 0);
+    image::imageops::overlay(&mut sheet, &panel, 320, 0);
+    save("25-scrollback", &sheet);
+}

@@ -960,3 +960,100 @@ fn evaluate_sets_one_bit_per_test_in_order() {
     assert_eq!(evaluate(&tests, &inputs(false, 50, 0, 6)), 0b0010);
     assert_eq!(evaluate(&[], &BASE), 0);
 }
+
+// --- M6-04: notes, misses and kept text through the codec. ----------------
+
+#[test]
+fn m6_04_notes_round_trip_through_the_codec() {
+    let mut log = ClueLog::new();
+    log.fold(entry(1));
+    log.fold(entry(2));
+    let person = note_owner::person(NpcKey { scene: 9, slot: 4 });
+    log.set_note(note_owner::CLUE, 1, "  check the glade at night ");
+    log.set_note(note_owner::PERSON, person, "owes me a favour");
+    log.set_note(note_owner::SAVE, 0, "before the long ride");
+    // A clue note on an entry that does not exist is ignored.
+    log.set_note(note_owner::CLUE, 9, "nowhere");
+    assert_eq!(log.notes().len(), 3);
+    assert_eq!(
+        log.note_for(note_owner::CLUE, 1).unwrap().text,
+        "check the glade at night"
+    );
+    assert_eq!(note_owner::person_of(person), NpcKey { scene: 9, slot: 4 });
+    let back = decode_payload(&encode_payload(&log, EncodeOptions::default()).unwrap()).unwrap();
+    assert_eq!(back.notes(), log.notes());
+    // Editing replaces, blank removes; a noted clue is protected.
+    let mut edited = back.clone();
+    edited.mark_saved();
+    edited.set_note(note_owner::CLUE, 1, "the glade, at dawn");
+    assert!(edited.is_dirty());
+    assert!(edited.is_protected(1));
+    edited.set_note(note_owner::SAVE, 0, "   ");
+    assert_eq!(edited.notes().len(), 2);
+    assert!(edited.note_for(note_owner::SAVE, 0).is_none());
+    let long = "x".repeat(NOTE_MAX_LEN + 20);
+    edited.set_note(note_owner::SAVE, 0, &long);
+    assert_eq!(
+        edited.note_for(note_owner::SAVE, 0).unwrap().text.len(),
+        NOTE_MAX_LEN
+    );
+    let again =
+        decode_payload(&encode_payload(&edited, EncodeOptions::default()).unwrap()).unwrap();
+    assert_eq!(again.notes(), edited.notes());
+}
+
+#[test]
+fn m6_04_misses_are_never_written_with_clue_misses_off() {
+    let mut log = ClueLog::new();
+    log.fold(entry(1));
+    log.add_miss(Miss {
+        npc: NPC,
+        at: GameMinute(5),
+        typed: b"XQMARKMISSWORD!!!".to_vec(),
+    });
+    assert_eq!(log.misses()[0].typed.len(), MISS_MAX_LEN);
+    let off = encode_payload(&log, EncodeOptions::default()).unwrap();
+    assert!(
+        !off.windows(5).any(|w| w == b"XQMAR"),
+        "the typed bytes are not in the file"
+    );
+    assert!(decode_payload(&off).unwrap().misses().is_empty());
+    let on = encode_payload(
+        &log,
+        EncodeOptions {
+            keep_misses: true,
+            ..EncodeOptions::default()
+        },
+    )
+    .unwrap();
+    assert_eq!(decode_payload(&on).unwrap().misses(), log.misses());
+}
+
+#[test]
+fn t9_text_is_dropped_after_leaving_kept() {
+    let mut log = ClueLog::new();
+    log.fold(entry(1));
+    log.keep_text(SeenRows {
+        entry: 0,
+        rows: vec![TextRow {
+            bytes: b"XQMARKROW".to_vec(),
+            runic: 0b10,
+        }],
+    });
+    let kept = EncodeOptions {
+        keep_text: true,
+        ..EncodeOptions::default()
+    };
+    // Saved under `kept`: the file holds the rows.
+    let mut read = decode_payload(&encode_payload(&log, kept).unwrap()).unwrap();
+    assert_eq!(read.text(), log.text());
+    assert!(read.entries()[0].flags.has(EntryFlags::HAS_TEXT));
+    // `clue_text` leaves `kept`: the next save drops TEXT, and the log read
+    // back from it has no rows and no entry claiming any.
+    read.drop_text();
+    let bytes = encode_payload(&read, EncodeOptions::default()).unwrap();
+    assert!(!bytes.windows(6).any(|w| w == b"XQMARK"));
+    let after = decode_payload(&bytes).unwrap();
+    assert!(after.text().is_empty());
+    assert!(!after.entries()[0].flags.has(EntryFlags::HAS_TEXT));
+}

@@ -34,12 +34,16 @@
 //!   as the transcript holds them (blank rows and prompt rows left out), and
 //!   the runic flag is set when any glyph is in the runic font.
 //!
-//! No row text leaves this module: a [`Turn`] carries the record, a hash,
-//! the runic flag and, for a miss only, the bytes the player typed.
+//! A [`Turn`] carries the record, a hash, the runic flag, for a miss the
+//! bytes the player typed, and the reply's rows as the window drew them.
+//! The rows stay in RAM: the shell keeps them only for `clue_text`
+//! (8.3.6), and they never reach the log's ids or the file unless
+//! `clue_text = kept`.
 
 use super::dependence::{TestInputs, declaration_index, record_dependence};
+use super::text::text_rows_of;
 use super::{ClueEntry, DialogKey, EntryFlags, GameMinute, NpcKey, RecordAddr, TestBits};
-use super::{MISS_MAX_LEN, record_of, variant_hash};
+use super::{MISS_MAX_LEN, TextRow, record_of, variant_hash};
 use crate::conversation_session::{ConversationSessionPhase, tlk_keyword_lookup};
 use crate::tlk_control_codes::{
     TLK_ASK_WHO_PROMPT, TLK_KEYWORD_PROMPT, TLK_KEYWORD_PROMPT_OPEN_LINE, TLK_SCOPED_PROMPT,
@@ -137,6 +141,8 @@ pub struct Turn {
     pub runic: bool,
     /// What the player typed, at most 15 bytes; only for a miss.
     pub typed: Vec<u8>,
+    /// The reply's rows as the window drew them (RAM only, 8.3.6).
+    pub rows: Vec<TextRow>,
 }
 
 impl Turn {
@@ -176,6 +182,8 @@ struct OpenTurn {
     record: Option<RecordAddr>,
     parent: Option<RecordAddr>,
     rows: Vec<Vec<u8>>,
+    /// The window rows of each entry in `rows`.
+    text: Vec<Vec<TextRow>>,
     runic: bool,
     typed: Vec<u8>,
 }
@@ -189,6 +197,7 @@ impl OpenTurn {
             variant: variant_hash(self.rows.iter().map(Vec::as_slice)),
             runic: self.runic,
             typed: self.typed,
+            rows: self.text.into_iter().flatten().collect(),
         })
     }
 }
@@ -240,6 +249,7 @@ impl TurnAttributor {
             && let Some(open) = self.open.as_mut()
         {
             open.rows.pop();
+            open.text.pop();
         }
         let mut first_echo = true;
         let mut frame_block: Option<u8> = None;
@@ -266,6 +276,7 @@ impl TurnAttributor {
                     record,
                     parent,
                     rows: Vec::new(),
+                    text: Vec::new(),
                     runic: false,
                     typed,
                 });
@@ -277,6 +288,7 @@ impl TurnAttributor {
             }
             if let Some(open) = self.open.as_mut() {
                 open.rows.push(entry.text.as_bytes().to_vec());
+                open.text.push(text_rows_of(entry));
                 open.runic |= entry
                     .glyphs
                     .iter()
