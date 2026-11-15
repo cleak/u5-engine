@@ -1471,21 +1471,63 @@ fn plan_teleport_inner(
             _ => TeleportRefusal::OutOfBounds,
         });
     }
-    let (target, floor, start) = match gate_travel_destination_in(game_dir, slot) {
-        Ok(GateTravelDestination::Ready {
-            target,
-            floor,
-            start,
-        }) => (target, floor, start),
+    let (target, floor) = match gate_travel_destination_in(game_dir, slot) {
+        Ok(GateTravelDestination::Ready { target, floor, .. }) => (target, floor),
         Ok(_) => return Err(TeleportRefusal::BadFloor),
         Err(err) => return Err(TeleportRefusal::LoadFailed(err.to_string())),
     };
     if want.area.is_current(state.area) {
         return teleport_landing(state, want);
     }
-    let scratch = PlayState::load_scene(game_dir, state.carried_play_options(target, floor, start))
-        .map_err(|err| TeleportRefusal::LoadFailed(err.to_string()))?;
-    teleport_landing(&scratch, want)
+    // `load_scene` refuses a start cell its own check finds blocked, so the
+    // scratch state is loaded at the first candidate it accepts, in the
+    // nudge order (D7.9). The landing cell chosen on it must itself load,
+    // or the commit would fail; a cell the load refuses is skipped.
+    let load = |cell: (usize, usize)| {
+        PlayState::load_scene(game_dir, state.carried_play_options(target, floor, cell))
+    };
+    let candidates: Vec<(usize, usize)> = std::iter::once((want.x, want.y))
+        .chain(
+            (1..=TELEPORT_NUDGE_RADIUS)
+                .flat_map(|radius| teleport_ring(want.x, want.y, radius, want.area.side())),
+        )
+        .collect();
+    let mut scratch = None;
+    for &cell in &candidates {
+        match load(cell) {
+            Ok(loaded) => {
+                scratch = Some((cell, loaded));
+                break;
+            }
+            Err(err) if teleport_start_refused(&err) => {}
+            Err(err) => return Err(TeleportRefusal::LoadFailed(err.to_string())),
+        }
+    }
+    let Some((loaded_at, scratch)) = scratch else {
+        return Err(TeleportRefusal::NoOpenCell);
+    };
+    for &(x, y) in &candidates {
+        if !teleport_cell_open(&scratch, x, y) {
+            continue;
+        }
+        if (x, y) != loaded_at {
+            match load((x, y)) {
+                Ok(_) => {}
+                Err(err) if teleport_start_refused(&err) => continue,
+                Err(err) => return Err(TeleportRefusal::LoadFailed(err.to_string())),
+            }
+        }
+        let nudged = (x, y) != (want.x, want.y);
+        return Ok((TeleportTarget { x, y, ..want }, nudged));
+    }
+    Err(TeleportRefusal::NoOpenCell)
+}
+
+/// Whether a scene load failed only because its start cell is blocked or
+/// out of range: the start checks report `InvalidInput`, while a missing or
+/// damaged file reports another kind.
+fn teleport_start_refused(err: &io::Error) -> bool {
+    err.kind() == io::ErrorKind::InvalidInput
 }
 
 /// The scene load a teleport target names, through the moongate's own

@@ -7,7 +7,8 @@ use std::path::Path;
 use super::*;
 use crate::test_fixtures::{
     debug_game_dir, dungeon_state, open_dungeon_record, open_grid, open_world_grid,
-    saved_game_seed_bytes, test_state, world_state, write_empty_ool_mirrors,
+    saved_game_seed_bytes, test_state, world_state, write_britannia_world_files,
+    write_empty_ool_mirrors,
 };
 use crate::text_hold::PendingTextHold;
 
@@ -643,5 +644,49 @@ fn a_dungeon_exit_follows_the_direct_entry_rule() {
     );
     assert_eq!((state.player.x, state.player.y), (240, 73));
     assert_eq!(state.player.transport, TransportState::Foot);
+    let _ = fs::remove_dir_all(dir);
+}
+
+/// D7.9 in another area: a target the scene load itself refuses as a start
+/// cell is nudged on the scratch state like any blocked cell, and the
+/// nudged plan commits. An area with no open cell near the target refuses
+/// with `NoOpenCell`, never `LoadFailed`.
+#[test]
+fn a_blocked_target_in_another_area_is_nudged() {
+    let dir = debug_game_dir();
+    let mut castle_dat = vec![16u8; 16 * TOWN_GRID_BYTES];
+    castle_dat[10 * 32 + 10] = BRIT_DEEP_WATER_TILE;
+    castle_dat[9 * 32 + 9] = BRIT_DEEP_WATER_TILE;
+    fs::write(dir.join("CASTLE.DAT"), &castle_dat).unwrap();
+    let mut state = britannia(5, 5);
+    let plan = plan_teleport(&state, &dir, at(castle(0), 10, 10));
+    assert_eq!(plan, ready(at(castle(0), 10, 9), true));
+    commit_teleport(&mut state, &dir, &plan).unwrap();
+    assert_eq!((state.player.x, state.player.y), (10, 9));
+
+    // Every cell within radius 3 is water.
+    for y in 7..=13 {
+        for x in 7..=13 {
+            castle_dat[y * 32 + x] = BRIT_DEEP_WATER_TILE;
+        }
+    }
+    fs::write(dir.join("CASTLE.DAT"), &castle_dat).unwrap();
+    let state = britannia(5, 5);
+    assert_eq!(
+        plan_teleport(&state, &dir, at(castle(0), 10, 10)),
+        TeleportPlan::Refused(TeleportRefusal::NoOpenCell)
+    );
+
+    // An all-water Britannia, reached from a town.
+    write_britannia_world_files(&dir, BRIT_DEEP_WATER_TILE);
+    let town = test_state(open_grid(), 20, 20);
+    assert_eq!(
+        plan_teleport(
+            &town,
+            &dir,
+            at(TeleportArea::World(WorldPlane::Britannia), 7, 7)
+        ),
+        TeleportPlan::Refused(TeleportRefusal::NoOpenCell)
+    );
     let _ = fs::remove_dir_all(dir);
 }
