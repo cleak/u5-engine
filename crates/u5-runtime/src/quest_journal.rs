@@ -29,6 +29,8 @@
 
 pub mod report;
 pub mod text;
+// Chapter 8 (M6-03): the Clues and Topics tabs.
+pub mod clues;
 
 use std::collections::HashMap;
 use std::io;

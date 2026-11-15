@@ -470,3 +470,213 @@ fn journal_side_panel_review_shots() {
         }
     }
 }
+
+/// The M6-03 review shots (build plan M6 point 5): the Clues tab (People,
+/// one group open) beside c04f's tab strip, the strip with the Quests tab,
+/// the Topics tab, the Place view, a search and the side panel's clue
+/// lines. Names and keywords are read live from the profile's own `.TLK`
+/// files; nothing is committed.
+#[test]
+fn clue_tabs_review_shots() {
+    use crate::enh::journal::clues::ClueLogResource;
+    use crate::enh::side::{PanelContent, PanelSide, SidePanelProvider, render_cell_panel};
+    use u5_runtime::enhancements::clues::{
+        ClueEntry, DialogKey, EntryFlags, GameMinute, NpcKey, RecordAddr, TestBits, game_minute,
+    };
+    let (Some(profile), Some(out)) = (
+        configured_test_dir("U5_MOCKUP_PROFILE"),
+        configured_test_dir("U5_JOURNAL_SHOTS"),
+    ) else {
+        eprintln!("skipped: set U5_MOCKUP_PROFILE and U5_JOURNAL_SHOTS");
+        return;
+    };
+    let game = unique_scratch_dir("clue-tab-shots");
+    for entry in std::fs::read_dir(&profile).unwrap() {
+        let entry = entry.unwrap();
+        if entry.file_type().unwrap().is_file() {
+            copy_asset_writable(&entry.path(), &game.join(entry.file_name())).unwrap();
+        }
+    }
+    std::fs::create_dir_all(&out).unwrap();
+    // Three dialogs of the town family with at least three topics, by id.
+    let towne = u5_runtime::parse_tlk_raw(&game.join("TOWNE.TLK")).unwrap();
+    let mut ids: Vec<u16> = towne
+        .iter()
+        .filter(|(_, fields)| fields.len() >= 11)
+        .map(|(id, _)| *id)
+        .collect();
+    ids.sort_unstable();
+    let scene = Scene::from_game_dir(&game).unwrap();
+    let mut state = PlayState::load_scene(
+        &game,
+        PlayOptions {
+            target: PlayTarget::Town(GameScene::from_key("TOWNE:1").unwrap()),
+            floor: 0,
+            start: Some((15, 17)),
+            clock: GameClock::new(10, 0).unwrap(),
+            ..PlayOptions::default()
+        },
+    )
+    .unwrap();
+    state.talk_branch_flags.insert(2, 1 << 5);
+    let now = game_minute(&state).0;
+    let mut entries = Vec::new();
+    for (person, id) in ids.iter().take(3).enumerate() {
+        let npc = NpcKey {
+            scene: 1,
+            slot: 2 + person as u8,
+        };
+        let dialog = DialogKey {
+            family: 0,
+            dialog_id: *id as u8,
+        };
+        let at = |minutes: u32| GameMinute(now - 2000 * (3 - person as u32) + minutes);
+        if person == 1 {
+            entries.push(ClueEntry::heard(
+                npc,
+                dialog,
+                RecordAddr::Leading(0),
+                0,
+                TestBits::default(),
+                at(0),
+            ));
+        }
+        for (k, minutes) in [(0, 1), (1, 3), (2, 7)] {
+            let mut entry = ClueEntry::heard(
+                npc,
+                dialog,
+                RecordAddr::Pair(k),
+                0,
+                TestBits::default(),
+                at(minutes),
+            );
+            if person == 1 && k == 1 {
+                entry.count = 2;
+                entry.flags.set(EntryFlags::RUNIC, true);
+            }
+            entries.push(entry);
+        }
+    }
+
+    let shell_with = |toggles: &[Toggle]| {
+        let mut launch = VisualLaunchConfig::classic();
+        for toggle in toggles {
+            launch.enhancements.toggles.set(*toggle, true);
+        }
+        let mut shell = Shell::new(state.clone(), &scene, &launch, |_| {});
+        for _ in 0..30 {
+            shell.step(&[]);
+        }
+        {
+            let mut log = shell.app.world_mut().resource_mut::<ClueLogResource>();
+            for entry in &entries {
+                log.log_mut().fold(*entry);
+            }
+            // The player starred one and read the first person's topics.
+            log.log_mut().set_flag(2, EntryFlags::STAR, true);
+        }
+        shell.step(&[]);
+        shell.step(&[
+            key(KeyCode::ControlLeft, ButtonState::Pressed),
+            key(KeyCode::KeyJ, ButtonState::Pressed),
+        ]);
+        shell.step(&[
+            key(KeyCode::KeyJ, ButtonState::Released),
+            key(KeyCode::ControlLeft, ButtonState::Released),
+        ]);
+        shell.step(&[]);
+        shell
+    };
+    let save = |name: &str, picture: &image::RgbaImage| {
+        picture.save(out.join(format!("{name}.png"))).unwrap();
+        scaled(picture, 4)
+            .save(out.join(format!("{name}-4x.png")))
+            .unwrap();
+        display(picture, 3)
+            .save(out.join(format!("{name}-display-3x.png")))
+            .unwrap();
+    };
+
+    // Clues only: People, the first group open, the cursor on a topic.
+    let mut shell = shell_with(&[Toggle::JournalClues]);
+    tap_key(&mut shell, KeyCode::Enter);
+    tap_key(&mut shell, KeyCode::ArrowDown);
+    tap_key(&mut shell, KeyCode::ArrowDown);
+    shell.step(&[]);
+    let people = page_picture(&shell);
+    save("10-clues-people", &people);
+    tap_key(&mut shell, KeyCode::Tab);
+    tap_key(&mut shell, KeyCode::Enter);
+    tap_key(&mut shell, KeyCode::ArrowDown);
+    shell.step(&[]);
+    save("12-topics", &page_picture(&shell));
+    tap_key(&mut shell, KeyCode::Tab);
+    tap_key(&mut shell, KeyCode::KeyV);
+    tap_key(&mut shell, KeyCode::Enter);
+    shell.step(&[]);
+    save("13-place", &page_picture(&shell));
+    tap_key(&mut shell, KeyCode::Slash);
+    tap_key(&mut shell, KeyCode::KeyA);
+    shell.step(&[]);
+    save("14-search", &page_picture(&shell));
+
+    // With the page: the three-tab strip.
+    let mut shell = shell_with(&[Toggle::JournalPage, Toggle::JournalClues]);
+    save("11-strip-quests", &page_picture(&shell));
+    tap_key(&mut shell, KeyCode::Tab);
+    tap_key(&mut shell, KeyCode::Enter);
+    shell.step(&[]);
+    save("11-strip-clues", &page_picture(&shell));
+
+    if let Some(c04f) = std::env::var_os("U5_C04F_SHOT") {
+        let c04f = image::open(c04f).unwrap().to_rgba8();
+        let c04f = image::imageops::resize(
+            &c04f,
+            c04f.width() * 2,
+            c04f.height() * 2,
+            image::imageops::FilterType::Nearest,
+        );
+        beside(&c04f, &display(&people, 2))
+            .save(out.join("10-clues-people-beside-c04f.png"))
+            .unwrap();
+    }
+
+    // The side panel with the clue lines and two pins.
+    let mut shell = shell_with(&[Toggle::JournalClues, Toggle::JournalSidePanel]);
+    tap_key(&mut shell, KeyCode::Escape);
+    {
+        let mut log = shell.app.world_mut().resource_mut::<ClueLogResource>();
+        log.log_mut().set_flag(1, EntryFlags::PANEL, true);
+        log.log_mut().set_flag(6, EntryFlags::PANEL, true);
+    }
+    for _ in 0..3 {
+        shell.step(&[]);
+    }
+    let world = shell.app.world();
+    let lines = world.resource::<JournalPanelClues>().0.clone();
+    eprintln!("panel clue lines: {:?}", lines.lock().unwrap());
+    let provider = JournalPanelProvider::with_clues(Default::default(), Default::default(), lines);
+    let Some(PanelContent::Cells(rows)) = provider.snapshot(Some(&shell.visual().state)) else {
+        panic!("the journal panel shows rows");
+    };
+    let play = rgba_image(
+        320,
+        200,
+        world
+            .resource::<Assets<Image>>()
+            .get(&shell.visual().image_handle)
+            .unwrap()
+            .data
+            .clone()
+            .unwrap(),
+    );
+    let panel = rgba_image(
+        crate::enh::side::PANEL_WIDTH,
+        crate::enh::side::PANEL_HEIGHT,
+        render_cell_panel(&scene.text_font, &rows, PanelSide::Right),
+    );
+    let mut sheet = image::RgbaImage::new(320 + panel.width(), 200);
+    image::imageops::overlay(&mut sheet, &play, 0, 0);
+    image::imageops::overlay(&mut sheet, &panel, 320, 0);
+    save("15-panel-clues", &sheet);
+}

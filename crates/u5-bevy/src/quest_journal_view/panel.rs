@@ -20,17 +20,26 @@
 //! page already shows everything): [`copy_journal_page_open`], in
 //! `EnhSet::Present` before the panel host, copies the overlay model's
 //! state into the provider.
+//!
+//! **Clues (M6-03, 8.2.5, 8.2.7).** While the clue log is on, the panel
+//! adds `Clues: N unread * M` and the clues pinned to it under `Pinned`
+//! (at most five), after the virtues. [`copy_journal_panel_clues`] derives
+//! those lines in `EnhSet::Present`; with the log off they are empty and
+//! the panel is chapter 5's.
 
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 
 use bevy::prelude::*;
 use u5_runtime::enhancements::{JournalPanelSide, Toggle};
+use u5_runtime::quest_journal::clues::{ClueContext, DialogSource, NoDialogs, panel_clue_lines};
 use u5_runtime::quest_journal::{
     QuestSnapshot, ShrineCondition, ShrinePhase, StatusMark, VirtueSummary, text,
 };
 use u5_runtime::{PlayState, SPECIAL_ITEM_WOODEN_BOX_INDEX, ShrineVirtue, VIRTUE_COUNT};
 
+use crate::VisualState;
+use crate::enh::journal::clues::{ClueLogResource, TlkLiveCache};
 use crate::enh::overlay::{OverlayId, OverlayState};
 use crate::enh::side::{
     PANEL_BODY_ROWS, PANEL_COLUMNS, PanelContent, PanelKind, PanelRegistry, PanelRows,
@@ -96,6 +105,11 @@ impl SidePanelModel {
 
     /// The panel's lines below the title, at most [`PANEL_BODY_ROWS`].
     pub fn lines(&self) -> Vec<String> {
+        self.lines_with(&[])
+    }
+
+    /// [`Self::lines`] with chapter 8's clue lines after the virtues (8.2.7).
+    pub fn lines_with(&self, clues: &[String]) -> Vec<String> {
         let mut lines = Vec::new();
         let summary = self.summary;
         if summary == VirtueSummary::default() {
@@ -122,6 +136,10 @@ impl SidePanelModel {
                 mark.glyph,
                 width = MARK_COLUMN
             ));
+        }
+        if !clues.is_empty() {
+            lines.push(String::new());
+            lines.extend(clues.iter().cloned());
         }
         let mut found = Vec::new();
         for (label, count) in [
@@ -153,7 +171,11 @@ impl SidePanelModel {
     }
 
     pub fn rows(&self) -> PanelRows {
-        let lines = self.lines();
+        self.rows_with(&[])
+    }
+
+    pub fn rows_with(&self, clues: &[String]) -> PanelRows {
+        let lines = self.lines_with(clues);
         let lines: Vec<&str> = lines.iter().map(String::as_str).collect();
         PanelRows::new(PANEL_TITLE, &lines)
     }
@@ -182,21 +204,37 @@ pub fn panel_side(side: JournalPanelSide) -> SidePreference {
 #[derive(Resource, Clone, Debug, Default)]
 pub struct JournalPanelPageOpen(pub Arc<AtomicBool>);
 
+/// The clue lines the panel shows, shared by the provider and
+/// [`copy_journal_panel_clues`]. Present exactly while the provider is.
+#[derive(Resource, Clone, Debug, Default)]
+pub struct JournalPanelClues(pub Arc<Mutex<Vec<String>>>);
+
 /// The journal's [`SidePanelProvider`] (`PanelKind::Journal`).
 pub struct JournalPanelProvider {
     side: SidePreference,
     /// Written in `EnhSet::Present` before the host runs.
     page_open: Arc<AtomicBool>,
-    /// The last model and its rows, so the rows are rebuilt only when the
-    /// model changes.
-    last: Mutex<Option<(SidePanelModel, PanelRows)>>,
+    /// The clue lines, written in `EnhSet::Present` before the host runs.
+    clues: Arc<Mutex<Vec<String>>>,
+    /// The last model, clue lines and rows, so the rows are rebuilt only
+    /// when they change.
+    last: Mutex<Option<(SidePanelModel, Vec<String>, PanelRows)>>,
 }
 
 impl JournalPanelProvider {
     pub fn new(side: JournalPanelSide, page_open: Arc<AtomicBool>) -> Self {
+        Self::with_clues(side, page_open, Arc::default())
+    }
+
+    pub fn with_clues(
+        side: JournalPanelSide,
+        page_open: Arc<AtomicBool>,
+        clues: Arc<Mutex<Vec<String>>>,
+    ) -> Self {
         Self {
             side: panel_side(side),
             page_open,
+            clues,
             last: Mutex::new(None),
         }
     }
@@ -219,15 +257,22 @@ impl SidePanelProvider for JournalPanelProvider {
             return None;
         }
         let model = SidePanelModel::from_play_state(state);
+        let clues = self
+            .clues
+            .lock()
+            .unwrap_or_else(|poison| poison.into_inner())
+            .clone();
         let mut last = self
             .last
             .lock()
             .unwrap_or_else(|poison| poison.into_inner());
         match &*last {
-            Some((shown, rows)) if *shown == model => Some(PanelContent::Cells(rows.clone())),
+            Some((shown, lines, rows)) if *shown == model && *lines == clues => {
+                Some(PanelContent::Cells(rows.clone()))
+            }
             _ => {
-                let rows = model.rows();
-                *last = Some((model, rows.clone()));
+                let rows = model.rows_with(&clues);
+                *last = Some((model, clues, rows.clone()));
                 Some(PanelContent::Cells(rows))
             }
         }
@@ -241,8 +286,47 @@ pub(crate) fn register_journal_panel(world: &mut World, side: JournalPanelSide) 
         return;
     };
     let flag = JournalPanelPageOpen::default();
-    registry.register(JournalPanelProvider::new(side, flag.0.clone()));
+    let clues = JournalPanelClues::default();
+    registry.register(JournalPanelProvider::with_clues(
+        side,
+        flag.0.clone(),
+        clues.0.clone(),
+    ));
     world.insert_resource(flag);
+    world.insert_resource(clues);
+}
+
+/// The panel's clue lines from the log, in `EnhSet::Present` before the
+/// panel host: empty while the log is off.
+pub(crate) fn copy_journal_panel_clues(
+    lines: Res<JournalPanelClues>,
+    log: Option<Res<ClueLogResource>>,
+    mut cache: Option<ResMut<TlkLiveCache>>,
+    visual: Option<Res<VisualState>>,
+) {
+    let wanted = match (log, visual) {
+        (Some(log), Some(visual)) => {
+            if let Some(cache) = cache.as_mut() {
+                cache.load_log(&visual.game_dir, log.log());
+            }
+            let source: &dyn DialogSource = match cache.as_deref() {
+                Some(cache) => cache,
+                None => &NoDialogs,
+            };
+            // The panel stays at tier 2 whatever the page uses (5.2.10).
+            let ctx = ClueContext::from_play_state(
+                &visual.state,
+                u5_runtime::enhancements::SpoilerTier::Goals,
+                false,
+            );
+            panel_clue_lines(log.log(), source, &ctx, PANEL_COLUMNS)
+        }
+        _ => Vec::new(),
+    };
+    let mut shown = lines.0.lock().unwrap_or_else(|poison| poison.into_inner());
+    if *shown != wanted {
+        *shown = wanted;
+    }
 }
 
 /// Copies `OverlayState::open == Some(OverlayId::Journal)` into the
@@ -273,12 +357,19 @@ pub(crate) fn follow_journal_panel_toggle(
                 .map(|launch| launch.0.enhancements.journal().side)
                 .unwrap_or_default();
             let flag = JournalPanelPageOpen::default();
-            registry.register(JournalPanelProvider::new(side, flag.0.clone()));
+            let clues = JournalPanelClues::default();
+            registry.register(JournalPanelProvider::with_clues(
+                side,
+                flag.0.clone(),
+                clues.0.clone(),
+            ));
             commands.insert_resource(flag);
+            commands.insert_resource(clues);
         }
         (false, true) => {
             registry.remove(PanelKind::Journal);
             commands.remove_resource::<JournalPanelPageOpen>();
+            commands.remove_resource::<JournalPanelClues>();
         }
         _ => {}
     }

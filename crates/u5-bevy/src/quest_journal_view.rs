@@ -41,17 +41,26 @@
 //! the foundation's cell-panel host; empty while the page is open, never
 //! above tier 2 and never a mantra.
 //!
-//! **Tabs (the M6 seam).** Chapter 8 turns the page into several tabs.
-//! [`QuestJournalUi`] keeps a tab list that holds only [`JournalTab::Quests`]
-//! here; no tab strip is drawn while there is one tab.
+//! **Tabs (M6-03).** Chapter 8 adds the Clues and Topics tabs
+//! ([`clues`]) while `journal.clues` is on; the Quests tab exists while
+//! `journal.page` is. With more than one tab the title band becomes the
+//! tab strip: one band tab, as the gameplay frame's `>Calm Winds<`, with
+//! the showing tab in white and the others in dark grey; Tab and Shift+Tab
+//! step through it. With `journal.page` off and `journal.clues` on, Ctrl+J
+//! opens the same page with only chapter 8's tabs. With `journal.clues`
+//! off the page is chapter 5's, pixel for pixel.
 
 use bevy::image::ImageSampler;
 use bevy::prelude::*;
 use bevy::render::render_asset::RenderAssetUsages;
 use bevy::render::render_resource::{Extent3d, TextureDimension, TextureFormat};
+use u5_runtime::enhancements::clues::ClueLog;
 use u5_runtime::enhancements::{JournalSettings, MantraDisplay, SpoilerTier, Toggle};
 use u5_runtime::gameplay_chrome::{
     CHROME_CORNER_PROFILE, ChromePalette, RibbonCapDirection, paint_ribbon_cap,
+};
+use u5_runtime::quest_journal::clues::{
+    ClueContext, CluesTab, DialogSource, NoDialogs, derive_clues,
 };
 use u5_runtime::quest_journal::{
     JournalModel, JournalRow, JournalSection, QuestSnapshot, RowKey, SectionId, ShrinePhase,
@@ -60,8 +69,10 @@ use u5_runtime::quest_journal::{
 use u5_runtime::{CH_CELL_SIDE, EGA_PALETTE_RGB, FixedCellFont, STOCK_EGA_BROWN};
 
 use crate::enh::input::{EnhAction, EnhActionEvent, OverlayKey, menu_overlay_on};
+use crate::enh::journal::clues::{ClueLogResource, TlkLiveCache};
 use crate::enh::overlay::{OverlayId, OverlayRequest, OverlayState, apply_overlay_requests};
 use crate::enh::side::{FrameImageSize, PanelRegistry, draw_side_panels};
+use crate::enh::toast::Toasts;
 use crate::enh::{EnhLaunch, EnhSet, Toggles, VisualLaunchConfig};
 use crate::{VISUAL_PLAY_FRAME_HEIGHT, VISUAL_PLAY_FRAME_WIDTH, VisualState};
 
@@ -146,13 +157,50 @@ pub const BROWN: Rgb = STOCK_EGA_BROWN;
 pub const KEY_HELP: &str = "\u{18}\u{19} row  \u{1b}\u{1a} section  Esc close";
 pub const KEY_HELP_REVEAL: &str = "\u{18}\u{19} row  \u{1b}\u{1a} section  Enter reveal";
 
-/// One tab of the journal page. Chapter 8 adds Clues, Topics and Notes.
+/// One tab of the journal page. Chapter 8 adds Clues and Topics (and,
+/// later, Notes).
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum JournalTab {
     Quests,
+    Clues,
+    Topics,
 }
 
-/// The page's state. Present exactly while `journal.page` is on.
+impl JournalTab {
+    /// The tab's name in the strip.
+    pub fn label(self) -> &'static str {
+        match self {
+            JournalTab::Quests => "Quests",
+            JournalTab::Clues => "Clues",
+            JournalTab::Topics => "Topics",
+        }
+    }
+
+    /// The chapter 8 tab this is, if any.
+    pub fn clue_tab(self) -> Option<CluesTab> {
+        match self {
+            JournalTab::Quests => None,
+            JournalTab::Clues => Some(CluesTab::Clues),
+            JournalTab::Topics => Some(CluesTab::Topics),
+        }
+    }
+}
+
+/// The tabs, in strip order: Quests with `journal.page`, Clues and Topics
+/// with `journal.clues` (8.2.3).
+pub fn tabs_for(page: bool, clues: bool) -> Vec<JournalTab> {
+    let mut tabs = Vec::new();
+    if page {
+        tabs.push(JournalTab::Quests);
+    }
+    if clues {
+        tabs.extend([JournalTab::Clues, JournalTab::Topics]);
+    }
+    tabs
+}
+
+/// The page's state. Present exactly while `journal.page` or
+/// `journal.clues` is on.
 #[derive(Resource, Debug)]
 pub struct QuestJournalUi {
     settings: JournalSettings,
@@ -173,13 +221,15 @@ pub struct QuestJournalUi {
     /// Whether the page was showing on the last frame.
     shown: bool,
     dirty: bool,
+    /// The clue tabs' state (session only).
+    clue: clues::ClueUi,
 }
 
 impl QuestJournalUi {
     pub fn new(settings: JournalSettings) -> Self {
         Self {
             settings,
-            tabs: vec![JournalTab::Quests],
+            tabs: tabs_for(settings.page, settings.clues.clues),
             tab: 0,
             section: SectionId::Virtues,
             cursor: 0,
@@ -190,6 +240,34 @@ impl QuestJournalUi {
             last_model: None,
             shown: false,
             dirty: true,
+            clue: clues::ClueUi::default(),
+        }
+    }
+
+    /// The clue tabs' state.
+    pub fn clue_ui(&self) -> &clues::ClueUi {
+        &self.clue
+    }
+
+    /// The tabs change with the keys in play; the page goes back to the
+    /// first tab when the one showing went.
+    fn set_tabs(&mut self, tabs: Vec<JournalTab>) {
+        let showing = self.tabs.get(self.tab).copied();
+        self.tab = showing
+            .and_then(|tab| tabs.iter().position(|t| *t == tab))
+            .unwrap_or(0);
+        self.tabs = tabs;
+        self.clue.reset_position();
+        self.dirty = true;
+    }
+
+    /// Tab/Shift+Tab with a strip: the next or previous tab, wrapping.
+    fn step_tab(&mut self, step: isize) {
+        let count = self.tabs.len() as isize;
+        if count > 1 {
+            self.tab = (self.tab as isize + step).rem_euclid(count) as usize;
+            self.clue.reset_position();
+            self.dirty = true;
         }
     }
 
@@ -204,7 +282,10 @@ impl QuestJournalUi {
 
     /// The tab showing.
     pub fn tab(&self) -> JournalTab {
-        self.tabs[self.tab]
+        self.tabs
+            .get(self.tab)
+            .copied()
+            .unwrap_or(JournalTab::Quests)
     }
 
     /// Whether a tab strip is drawn: only with more than one tab.
@@ -385,6 +466,10 @@ impl QuestJournalUi {
             revealed: &self.revealed,
             mantras: self.settings.mantras,
             tab_strip: self.tabs.len() > 1,
+            tabs: &self.tabs,
+            tab: self.tab(),
+            clues: Some(&self.clue),
+            strip_spoilers: self.settings.tier.is_spoiler() || self.settings.clues.spoiler_risk(),
         }
     }
 }
@@ -399,9 +484,11 @@ pub fn masked_answer(section: SectionId, row: &JournalRow, mantras: MantraDispla
 #[derive(Component, Debug)]
 pub struct JournalPageSprite;
 
-/// Whether the journal plugin belongs in an app with these settings.
+/// Whether the journal plugin belongs in an app with these settings: the
+/// page, the side panel, the clue log's tabs or the menu overlay.
 pub fn journal_wanted(launch: &VisualLaunchConfig) -> bool {
-    launch.enhancements.journal().any_on() || menu_overlay_on(launch.enhancements.toggles)
+    let journal = launch.enhancements.journal();
+    journal.any_on() || journal.clues.clues || menu_overlay_on(launch.enhancements.toggles)
 }
 
 /// Adds [`QuestJournalPlugin`] when [`journal_wanted`]. Called from the
@@ -421,7 +508,7 @@ pub struct QuestJournalPlugin {
 
 impl Plugin for QuestJournalPlugin {
     fn build(&self, app: &mut App) {
-        if self.settings.page {
+        if self.settings.page || self.settings.clues.clues {
             app.insert_resource(QuestJournalUi::new(self.settings));
         }
         // The side panel (5.3.5): a provider in the foundation's registry
@@ -431,11 +518,19 @@ impl Plugin for QuestJournalPlugin {
         }
         app.add_systems(
             Update,
-            panel::copy_journal_page_open
+            (
+                panel::copy_journal_page_open.run_if(resource_exists::<JournalPanelPageOpen>),
+                panel::copy_journal_panel_clues
+                    .run_if(resource_exists::<panel::JournalPanelClues>)
+                    // Also the frame the log goes, to clear the lines. The
+                    // removal check runs first so it sees the log exist.
+                    .run_if(
+                        resource_removed::<ClueLogResource>.or(resource_exists::<ClueLogResource>),
+                    ),
+            )
                 .in_set(EnhSet::Present)
                 .after(EnhSet::Observe)
-                .before(draw_side_panels)
-                .run_if(resource_exists::<JournalPanelPageOpen>),
+                .before(draw_side_panels),
         );
         if app.world().contains_resource::<PanelRegistry>() {
             app.add_systems(
@@ -476,23 +571,34 @@ impl Plugin for QuestJournalPlugin {
     }
 }
 
-/// Inserts or removes [`QuestJournalUi`] when `journal.page` changes in
-/// play (from the menu overlay), with the launch's other settings.
+/// Inserts or removes [`QuestJournalUi`] when `journal.page` or
+/// `journal.clues` changes in play (from the menu overlay), with the
+/// launch's other settings, and keeps its tabs in step.
 fn follow_journal_toggle(
     mut commands: Commands,
     toggles: Res<Toggles>,
     launch: Option<Res<EnhLaunch>>,
-    ui: Option<Res<QuestJournalUi>>,
+    ui: Option<ResMut<QuestJournalUi>>,
     mut images: ResMut<Assets<Image>>,
 ) {
-    let on = toggles.0.on(Toggle::JournalPage);
-    match (on, ui) {
+    let page = toggles.0.on(Toggle::JournalPage);
+    let clues = toggles.0.on(Toggle::JournalClues);
+    match (page || clues, ui) {
         (true, None) => {
             let mut settings = launch
                 .map(|launch| launch.0.enhancements.journal())
                 .unwrap_or_default();
-            settings.page = true;
+            settings.page = page;
+            settings.clues.clues = clues;
             commands.insert_resource(QuestJournalUi::new(settings));
+        }
+        (true, Some(mut ui)) => {
+            let tabs = tabs_for(page, clues);
+            if ui.tabs != tabs {
+                ui.settings.page = page;
+                ui.settings.clues.clues = clues;
+                ui.set_tabs(tabs);
+            }
         }
         (false, Some(ui)) => {
             if let Some(entity) = ui.page_entity {
@@ -509,7 +615,9 @@ fn follow_journal_toggle(
 
 /// Opens the page on the router's Ctrl+J, closes it on Esc or Ctrl+J while
 /// it is open (5.2.2). Only the overlay model opens it, at the idle
-/// exploration prompt; elsewhere it refuses with a toast.
+/// exploration prompt; elsewhere it refuses with a toast. On a clue tab the
+/// keys go to [`clues::ClueUi::key`]; Tab steps through the strip.
+#[allow(clippy::too_many_arguments)]
 pub(crate) fn journal_page_input(
     mut actions: EventReader<EnhActionEvent>,
     mut keys: EventReader<OverlayKey>,
@@ -517,6 +625,8 @@ pub(crate) fn journal_page_input(
     state: Res<OverlayState>,
     mut ui: ResMut<QuestJournalUi>,
     mut requests: EventWriter<OverlayRequest>,
+    mut log: Option<ResMut<ClueLogResource>>,
+    mut toasts: Option<ResMut<Toasts>>,
 ) {
     let open = state.open() == Some(OverlayId::Journal);
     for EnhActionEvent(action) in actions.read() {
@@ -535,9 +645,25 @@ pub(crate) fn journal_page_input(
         if !open || close {
             continue;
         }
+        let clue_tab = ui.tab().clue_tab();
+        let searching = clue_tab.is_some() && ui.clue.searching;
         match key {
-            KeyCode::Escape => close = true,
             KeyCode::KeyJ if ctrl => close = true,
+            KeyCode::Escape if !searching => close = true,
+            KeyCode::Tab if ui.tabs.len() > 1 => ui.step_tab(if shift { -1 } else { 1 }),
+            key if clue_tab.is_some() => {
+                let tab = clue_tab.unwrap_or_default();
+                let log = log.as_mut().map(|log| log.log_mut());
+                match ui.clue.key(tab, *key, shift, log) {
+                    clues::KeyOutcome::Used => {}
+                    clues::KeyOutcome::Unused => continue,
+                    clues::KeyOutcome::Refused(text) => {
+                        if let Some(toasts) = toasts.as_mut() {
+                            toasts.note(text);
+                        }
+                    }
+                }
+            }
             KeyCode::ArrowUp => ui.move_cursor(-1),
             KeyCode::ArrowDown => ui.move_cursor(1),
             KeyCode::PageUp => ui.page(-1),
@@ -558,6 +684,7 @@ pub(crate) fn journal_page_input(
     if close {
         requests.write(OverlayRequest::Close(OverlayId::Journal));
         ui.revealed.clear();
+        ui.clue.close();
         ui.dirty = true;
     }
 }
@@ -594,8 +721,9 @@ fn page_image() -> Image {
 }
 
 /// Spawns the page sprite on first use, shows it while the journal is the
-/// open overlay, re-derives the model while it is open and repaints the
-/// image only when something changed.
+/// open overlay, re-derives the model (or a clue tab's rows) while it is
+/// open and repaints the image only when something changed.
+#[allow(clippy::too_many_arguments)]
 pub(crate) fn paint_quest_journal_page(
     mut commands: Commands,
     mut ui: ResMut<QuestJournalUi>,
@@ -603,6 +731,9 @@ pub(crate) fn paint_quest_journal_page(
     visual: Option<Res<VisualState>>,
     mut images: ResMut<Assets<Image>>,
     mut sprites: Query<&mut Visibility, With<JournalPageSprite>>,
+    log: Option<Res<ClueLogResource>>,
+    mut cache: Option<ResMut<TlkLiveCache>>,
+    toggles: Option<Res<Toggles>>,
 ) {
     let ui = &mut *ui;
     if ui.page_entity.is_none() {
@@ -654,12 +785,36 @@ pub(crate) fn paint_quest_journal_page(
     let Some(visual) = visual else {
         return;
     };
-    let model = derive(
-        &QuestSnapshot::from_play_state(&visual.state),
-        ui.settings.tier,
-    );
-    if ui.last_model.as_ref() != Some(&model) {
-        ui.take_model(model);
+    match ui.tab().clue_tab() {
+        None => {
+            let model = derive(
+                &QuestSnapshot::from_play_state(&visual.state),
+                ui.settings.tier,
+            );
+            if ui.last_model.as_ref() != Some(&model) {
+                ui.take_model(model);
+            }
+        }
+        Some(tab) => {
+            let empty = ClueLog::new();
+            let log = log.as_ref().map_or(&empty, |log| log.log());
+            if let Some(cache) = cache.as_mut() {
+                cache.load_log(&visual.game_dir, log);
+            }
+            let source: &dyn DialogSource = match cache.as_deref() {
+                Some(cache) => cache,
+                None => &NoDialogs,
+            };
+            let pins_at_top = !toggles
+                .as_ref()
+                .is_some_and(|toggles| toggles.0.on(Toggle::JournalSidePanel));
+            let ctx = ClueContext::from_play_state(&visual.state, ui.settings.tier, pins_at_top);
+            let view = derive_clues(log, source, &ctx, &ui.clue.query(tab));
+            if ui.clue.last.as_ref() != Some(&view) {
+                ui.clue.take_view(view);
+                ui.dirty = true;
+            }
+        }
     }
     if !ui.dirty {
         return;
@@ -737,9 +892,16 @@ pub struct PageView<'a> {
     /// The rows whose answer is revealed.
     pub revealed: &'a [RowKey],
     pub mantras: MantraDisplay,
-    /// Chapter 8's strip, drawn only with more than one tab. M5 never sets
-    /// it.
+    /// Chapter 8's strip, drawn only with more than one tab.
     pub tab_strip: bool,
+    /// The tabs in strip order and the one showing.
+    pub tabs: &'a [JournalTab],
+    pub tab: JournalTab,
+    /// The clue tabs' state, for a clue tab.
+    pub clues: Option<&'a clues::ClueUi>,
+    /// The strip's `SPOILERS` label: a spoiler tier or a spoiler-risk
+    /// clue option.
+    pub strip_spoilers: bool,
 }
 
 impl<'a> PageView<'a> {
@@ -753,6 +915,10 @@ impl<'a> PageView<'a> {
             revealed: &[],
             mantras: MantraDisplay::Reveal,
             tab_strip: false,
+            tabs: &[JournalTab::Quests],
+            tab: JournalTab::Quests,
+            clues: None,
+            strip_spoilers: false,
         }
     }
 
@@ -1130,16 +1296,29 @@ pub fn paint_page(rgba: &mut [u8], font: &FixedCellFont, view: &PageView<'_>) {
     fill(rgba, 0, 0, PAGE_WIDTH - 1, PAGE_HEIGHT - 1, BLACK);
     paint_frame(rgba);
 
-    let spoilers = view.model.is_some_and(|model| model.spoilers);
-    let mut title = vec![(text::TITLE, WHITE)];
-    if spoilers {
-        title.push((" ", WHITE));
-        title.push((text::SPOILERS, BROWN));
+    let clue_tab = view.tab.clue_tab().zip(view.clues);
+    if view.tab_strip {
+        paint_band_tab(rgba, font, TITLE_ROW, &strip_parts(view));
+    } else {
+        let spoilers = view.model.is_some_and(|model| model.spoilers);
+        let mut title = vec![(text::TITLE, WHITE)];
+        if spoilers {
+            title.push((" ", WHITE));
+            title.push((text::SPOILERS, BROWN));
+        }
+        paint_band_tab(rgba, font, TITLE_ROW, &title);
     }
-    paint_band_tab(rgba, font, TITLE_ROW, &title);
-    paint_band_tab(rgba, font, KEY_HELP_ROW, &[(key_help(view), WHITE)]);
+    let help = match clue_tab {
+        Some((tab, ui)) => clues::clue_key_help(ui, tab),
+        None => key_help(view),
+    };
+    paint_band_tab(rgba, font, KEY_HELP_ROW, &[(help, WHITE)]);
 
-    for cell in page_cells(view) {
+    let cells = match clue_tab {
+        Some((tab, ui)) => clues::clue_cells(ui, tab),
+        None => page_cells(view),
+    };
+    for cell in cells {
         let x0 = cell.column as usize * CH_CELL_SIDE;
         let y0 = cell.row as usize * CH_CELL_SIDE;
         let x1 = (cell.last_column() + 1) * CH_CELL_SIDE - 1;
@@ -1158,6 +1337,26 @@ pub fn paint_page(rgba: &mut [u8], font: &FixedCellFont, view: &PageView<'_>) {
         }
         put_text(rgba, font, &cell.text, cell.column, cell.row, cell.ink);
     }
+}
+
+/// The tab strip in the title band (8.2.3): every tab's name in one band
+/// tab, two cells apart, the one showing in white and the others in dark
+/// grey, then `SPOILERS` in brown when it applies.
+pub fn strip_parts(view: &PageView<'_>) -> Vec<(&'static str, Rgb)> {
+    let mut parts = Vec::new();
+    for (index, tab) in view.tabs.iter().enumerate() {
+        if index > 0 {
+            parts.push(("  ", WHITE));
+        }
+        let ink = if *tab == view.tab { WHITE } else { DARK_GREY };
+        parts.push((tab.label(), ink));
+    }
+    let spoilers = view.strip_spoilers || view.model.is_some_and(|model| model.spoilers);
+    if spoilers {
+        parts.push(("  ", WHITE));
+        parts.push((text::SPOILERS, BROWN));
+    }
+    parts
 }
 
 /// The blue bands, the rounded outer corners and the white rules. A
@@ -1316,12 +1515,15 @@ fn fill(rgba: &mut [u8], x0: usize, y0: usize, x1: usize, y1: usize, ink: Rgb) {
     }
 }
 
+pub mod clues;
 mod panel;
 pub use panel::{
-    JournalPanelPageOpen, JournalPanelProvider, PANEL_SEALS_OPEN, PANEL_TITLE, PANEL_VANQUISHED,
-    SidePanelModel, panel_side,
+    JournalPanelClues, JournalPanelPageOpen, JournalPanelProvider, PANEL_SEALS_OPEN, PANEL_TITLE,
+    PANEL_VANQUISHED, SidePanelModel, panel_side,
 };
 
+#[cfg(test)]
+mod clues_tests;
 #[cfg(test)]
 mod content_tests;
 #[cfg(test)]

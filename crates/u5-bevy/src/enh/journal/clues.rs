@@ -48,6 +48,7 @@ use u5_runtime::enhancements::{
     ClueText, FeatureToggles, Freshness, SaveStamp, SidecarStore, TAG_JOURNAL, Toggle,
     TranscriptCursor, TranscriptDiff,
 };
+use u5_runtime::quest_journal::clues::DialogSource;
 
 use crate::VisualState;
 use crate::enh::sidecar_io::{SaveStamped, SaveWatch};
@@ -63,6 +64,8 @@ pub const HIGHLIGHT: Toggle = Toggle::JournalClueHighlight;
 /// Shown once when the log could not be written. The save is on disk and
 /// is never touched.
 pub const CLUE_WRITE_ERROR: &str = "Clue log: the clues could not be saved.";
+/// Shown once per log when the 4096-entry cap first evicts (8.2.9).
+pub const CLUE_LOG_FULL: &str = "Clue log full: the oldest unmarked clues make room.";
 /// Logged when a new character's old log could not be removed.
 const CLUE_RESET_ERROR: &str = "clue log: the old log could not be removed";
 
@@ -201,6 +204,51 @@ impl TlkLiveCache {
     pub fn families_read(&self) -> usize {
         self.families.len()
     }
+
+    /// The blob of `dialog` if its family was already read; never reads.
+    pub fn loaded(&self, dialog: DialogKey) -> Option<&[Vec<u8>]> {
+        self.families
+            .get(&dialog.family)?
+            .as_ref()?
+            .get(&u16::from(dialog.dialog_id))
+            .map(Vec::as_slice)
+    }
+
+    /// Reads the family of every dialog in `log` not read yet, so the
+    /// pages can then borrow the cache read-only.
+    pub fn load_log(&mut self, game_dir: &Path, log: &ClueLog) {
+        for entry in log.entries() {
+            if !self.families.contains_key(&entry.dialog.family) {
+                let _ = self.blob(game_dir, entry.dialog);
+            }
+        }
+    }
+}
+
+impl DialogSource for TlkLiveCache {
+    fn fields(&self, dialog: DialogKey) -> Option<&[Vec<u8>]> {
+        self.loaded(dialog)
+    }
+}
+
+/// A test-only cache filled with synthetic blobs.
+#[cfg(test)]
+impl TlkLiveCache {
+    pub(crate) fn with_blobs(blobs: impl IntoIterator<Item = (DialogKey, Vec<Vec<u8>>)>) -> Self {
+        let mut families: HashMap<u8, HashMap<u16, Vec<Vec<u8>>>> = HashMap::new();
+        for (dialog, fields) in blobs {
+            families
+                .entry(dialog.family)
+                .or_default()
+                .insert(u16::from(dialog.dialog_id), fields);
+        }
+        Self {
+            families: families
+                .into_iter()
+                .map(|(family, table)| (family, Some(Arc::new(table))))
+                .collect(),
+        }
+    }
 }
 
 /// `formats/tlk.md §2`: a family's file is the one its first scene uses.
@@ -264,6 +312,13 @@ impl Plugin for ClueLogPlugin {
                 .in_set(EnhSet::Observe)
                 .run_if(resource_exists::<VisualState>)
                 .run_if(resource_exists::<ClueObserver>),
+        );
+        app.add_systems(
+            Update,
+            clue_eviction_toast
+                .in_set(EnhSet::Observe)
+                .after(clue_observe_post)
+                .run_if(resource_exists::<ClueLogResource>),
         );
         // The save watcher exists only when the host gave a save folder; it
         // owns the `SaveStamped` event.
@@ -495,6 +550,15 @@ fn clue_observe_post(
             attributor: TurnAttributor::new(),
             open_pre: now.inputs,
         });
+    }
+}
+
+/// The one-time toast when the log first evicts an entry (8.2.9).
+fn clue_eviction_toast(mut log: ResMut<ClueLogResource>, toasts: Option<ResMut<Toasts>>) {
+    if log.bypass_change_detection().log.take_eviction_toast()
+        && let Some(mut toasts) = toasts
+    {
+        toasts.note(CLUE_LOG_FULL);
     }
 }
 
