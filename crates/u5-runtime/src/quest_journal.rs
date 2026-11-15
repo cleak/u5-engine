@@ -685,10 +685,14 @@ fn dungeon_rows(snap: &QuestSnapshot, tier: SpoilerTier) -> Vec<JournalRow> {
                 lines.at(SpoilerTier::Hints, text::DUNGEON_WORD_GOAL);
                 lines.at(SpoilerTier::Hints, text::dungeon_word_hint(record));
             }
+            // "Sealed" only for the dungeon the party is inside (5.2.8, 2);
+            // a tier 3-4 row for an unopened dungeon elsewhere has no state.
             let (value, mark) = if opened {
                 (text::OPENED, StatusMark::DONE)
-            } else {
+            } else if inside {
                 (text::SEALED, StatusMark::NONE)
+            } else {
+                ("", StatusMark::NONE)
             };
             let mut row = JournalRow::new(RowKey::Dungeon(record as u8), name, value).mark(mark);
             row.detail = lines.upto(tier);

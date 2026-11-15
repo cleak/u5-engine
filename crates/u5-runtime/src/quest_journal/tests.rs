@@ -305,6 +305,33 @@ fn a_secret_appears_only_with_its_evidence() {
     }
 }
 
+/// "Sealed" reads only on the row of the dungeon the party is inside, at
+/// every tier (5.2.8, 2); an unopened dungeon elsewhere has no state.
+#[test]
+fn sealed_reads_only_for_the_dungeon_the_party_is_inside() {
+    let mut rng = XorShift(0x5EED_0005_0009);
+    for _ in 0..500 {
+        let snap = random_snapshot(&mut rng);
+        for tier in SpoilerTier::ALL {
+            for row in rows(&derive(&snap, tier), SectionId::Dungeons) {
+                let RowKey::Dungeon(record) = row.key else {
+                    panic!()
+                };
+                let opened = snap.seal_open(usize::from(record));
+                let inside = snap.current_scene == 33 + record;
+                let expected = if opened {
+                    text::OPENED
+                } else if inside {
+                    text::SEALED
+                } else {
+                    ""
+                };
+                assert_eq!(row.value.as_str(), expected, "{record} at {tier:?}");
+            }
+        }
+    }
+}
+
 #[test]
 fn tiers_one_and_two_show_only_discovered_rows() {
     let mut rng = XorShift(0x5EED_0005_0003);
@@ -875,25 +902,25 @@ Dungeons
   *  Deceit    Opened
        Its entrance has been opened.
        Word of Power: FALLAX
-  -  Despise   Sealed
+  -  Despise
        Learn its Word of Power.
        Annon knows the word.
-  -  Destard   Sealed
+  -  Destard
        Learn its Word of Power.
        Trian and Goeth in Jhelom lead to the word.
-  -  Wrong     Sealed
+  -  Wrong
        Learn its Word of Power.
        Felespar knows the word.
-  -  Covetous  Sealed
+  -  Covetous
        Learn its Word of Power.
        Fiona knows the word.
-  -  Shame     Sealed
+  -  Shame
        Learn its Word of Power.
        Sindar knows the word.
-  -  Hythloth  Sealed
+  -  Hythloth
        Learn its Word of Power.
        Hassad knows the word.
-  -  Doom      Sealed
+  -  Doom
        Learn its Word of Power.
        No one is known to teach this word.
 Shadowlords
