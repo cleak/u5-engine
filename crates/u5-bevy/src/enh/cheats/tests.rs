@@ -48,7 +48,7 @@ fn launch_with(toggles: FeatureToggles) -> VisualLaunchConfig {
     launch
 }
 
-fn only(list: &[Toggle]) -> FeatureToggles {
+pub(super) fn only(list: &[Toggle]) -> FeatureToggles {
     let mut toggles = FeatureToggles::CLASSIC;
     for toggle in list {
         toggles.set(*toggle, true);
@@ -58,7 +58,7 @@ fn only(list: &[Toggle]) -> FeatureToggles {
 
 /// The synthetic town at its idle prompt with the enhancements of
 /// `toggles`, as the real builders add them.
-fn game(toggles: FeatureToggles, save_dir: Option<&Path>) -> Game {
+pub(super) fn game(toggles: FeatureToggles, save_dir: Option<&Path>) -> Game {
     let mut game = Game::new(false);
     let mut launch = launch_with(toggles);
     if let Some(dir) = save_dir {
@@ -71,7 +71,7 @@ fn game(toggles: FeatureToggles, save_dir: Option<&Path>) -> Game {
     game
 }
 
-fn ctrl_f12(game: &mut Game) {
+pub(super) fn ctrl_f12(game: &mut Game) {
     game.press(KeyCode::ControlLeft);
     game.press(KeyCode::F12);
     game.frame();
@@ -80,7 +80,7 @@ fn ctrl_f12(game: &mut Game) {
     game.frame();
 }
 
-fn tap(game: &mut Game, key: KeyCode) {
+pub(super) fn tap(game: &mut Game, key: KeyCode) {
     game.press(key);
     game.frame();
     game.release(key);
@@ -96,11 +96,11 @@ fn session(game: &Game) -> &CheatSession {
     game.app.world().resource::<CheatSession>()
 }
 
-fn page(game: &Game) -> &CheatPage {
+pub(super) fn page(game: &Game) -> &CheatPage {
     game.app.world().resource::<CheatPage>()
 }
 
-fn has_system(app: &mut App, name: &str) -> bool {
+pub(super) fn has_system(app: &mut App, name: &str) -> bool {
     app.world_mut()
         .resource_mut::<Schedules>()
         .iter()
@@ -625,7 +625,7 @@ fn allow_cheats_asks_and_y_turns_the_switch_on() {
 // The marker.
 
 /// A save folder with a seed save from well in the past.
-fn save_dir() -> PathBuf {
+pub(super) fn save_dir() -> PathBuf {
     let dir = debug_game_dir();
     fs::write(
         dir.join(SAVED_GAM_FILENAME),
@@ -650,7 +650,7 @@ fn shifted_tap(game: &mut Game, key: KeyCode) {
     game.frame();
 }
 
-fn q_y_save(game: &mut Game) {
+pub(super) fn q_y_save(game: &mut Game) {
     shifted_tap(game, KeyCode::KeyQ);
     shifted_tap(game, KeyCode::KeyY);
     for _ in 0..5 {
@@ -658,7 +658,7 @@ fn q_y_save(game: &mut Game) {
     }
 }
 
-fn meta_path(dir: &Path) -> PathBuf {
+pub(super) fn meta_path(dir: &Path) -> PathBuf {
     SidecarStore::open(dir)
         .unwrap()
         .path(TAG_SAVE_META)

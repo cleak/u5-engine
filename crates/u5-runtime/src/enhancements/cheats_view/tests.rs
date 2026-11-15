@@ -78,7 +78,7 @@ fn the_rows_match_the_design() {
     );
     for (spec, (_, phase)) in rows.iter().zip(DESIGN_KEYS) {
         assert_eq!(spec.ships, *phase, "{}", spec.key);
-        assert!(!spec.is_shipped(), "{} is hidden until M8-06", spec.key);
+        assert!(spec.is_shipped(), "{} ships with M8-06", spec.key);
         assert!(spec.cli_aliases.is_empty(), "{} has no alias", spec.key);
         assert!(!spec.driven && spec.needs.is_empty(), "{}", spec.key);
         assert!(
@@ -106,8 +106,8 @@ fn the_rows_match_the_design() {
         }
     }
     assert!(CHEATS_P0.is_shipped(), "the runtime rules have shipped");
-    for phase in &ALL_CHEATS[1..] {
-        assert!(!phase.is_shipped(), "{phase:?}");
+    for phase in ALL_CHEATS {
+        assert!(phase.is_shipped(), "{phase:?} ships with M8-06");
     }
 }
 
@@ -151,12 +151,15 @@ fn no_preset_names_a_cheat() {
     assert!(Preset::Classic.entries().is_empty());
 }
 
+/// M8-06 shipped every phase: the plain resolver, as a host calls it,
+/// gives what the shipped-phase fixture gives.
 #[test]
-fn hidden_rows_resolve_off() {
+fn shipped_rows_resolve_as_the_host_resolves_them() {
     let cli: Vec<CliSetting> = every_key().into_iter().map(enable).collect();
     let resolved = resolve(input(&cli, LockState::Off));
-    assert_eq!(resolved.cheats(), CheatToggles::default());
-    assert!(!resolved.cheats().any_on());
+    assert!(resolved.notes.is_empty(), "{:?}", resolved.notes);
+    assert_eq!(resolved.cheats(), shipped(&every_key()).cheats());
+    assert!(resolved.cheats().any_on());
 }
 
 #[test]

@@ -324,6 +324,76 @@ numbers, timing and save files are exactly those of the same play with the
 map off. What the map remembers of your discoveries is kept beside the save
 (see [sidecars.md](sidecars.md#player-sidecars)).
 
+## Cheats
+
+Cheats change your game, so they take two deliberate steps and are never in
+a preset. First `cheats.enabled` ("Allow cheats"), then each cheat's own
+key. A cheat key without `cheats.enabled` does nothing, and so do
+`cheats.refill_quarrels` and `cheats.remember_locks` on their own: they
+only change another cheat. The change watch, `cheats.state_watch`, only
+reads the game and needs no switch.
+
+```toml
+[cheats]
+enabled = true
+heal_all = true
+lock_hp = true
+```
+
+or, for one launch, `--enable cheats.enabled,cheats.heal_all,cheats.lock_hp`.
+`--disable cheats.enabled` turns every cheat off for that launch whatever
+the file says; the watch keeps its own key.
+
+- **The Cheats page.** Ctrl+F12 (`[keys] cheats`) opens it at the command
+  prompt, in exploration or at a combat member's prompt, and only while a
+  cheat or the watch is on. Anywhere else a short note says when it can
+  open. Esc or Ctrl+F12 closes it. The game keeps running while it is open,
+  exactly as if you had stopped typing; no turn passes. A cheat whose key is
+  off is not drawn, and an action that cannot work now is grey and says
+  why. The strip at the bottom shows the help line until the first result.
+- **Quick actions** (`heal_all`, `cure_poison`, `resurrect_all`,
+  `max_gold`, `max_food`, `refill_arrows` with `refill_quarrels`,
+  `max_reagents`, `repair_hull`). Heal all fills HP and, outside combat,
+  cures poison and sleep, and repairs a frigate the party is aboard. Gold
+  and food go to 9,999; arrows, quarrels and reagents to 99; a frigate's
+  hull to 99. Nothing is ever lowered, Dead members stay dead except by
+  Resurrect all, Ashes are never raised, pirate ships are never repaired,
+  and no hull goes to 100 or more. No action draws a random number or
+  moves the clock.
+- **Locks** (`lock_hp`, `lock_mp`, `lock_food`, `lock_gold`, `lock_keys`,
+  `lock_gems`, `lock_torches`, `lock_arrows`, `lock_reagents`). A checked
+  lock tops its value up to the same caps once a turn, and once a combat
+  round, at the command prompt; it never lowers anything and never brings
+  a member back to life. Mana goes to the class's camp target (Avatar and
+  Mage: Intelligence; Bard: half of it). Locks start unchecked at every
+  launch. (`remember_locks` is in the catalogue but does not keep them
+  yet in this build.)
+- **Edit party and stores** (`stat_edit`). Strength, Dexterity and
+  Intelligence 1..30, current HP up to the maximum, MP up to the class
+  target, experience 0..9,999, status Good, Poisoned, Sleeping or Dead
+  (outside combat), and the shared stores within their caps. `[L]` sets
+  the level from experience the way camping does. Nothing is written
+  until `[A]` Apply; `[U]` undoes the draft. A value already out of range
+  in a save is marked `!` and kept unless you edit it.
+- **Teleport** (`teleport`). **Spoiler: it lists every place in the
+  game**, including ones you have not found, so its title says
+  `SPOILERS` and the line under it warns. Britannia and the Underworld,
+  every floor of every town, castle, keep and dwelling your game files
+  have, and every level of the eight dungeons. Only at the prompt, never
+  in combat or aboard a ship or skiff. No time passes and nothing is
+  printed. "This may skip story steps." warns before places that can.
+- **The change watch** (`state_watch`). A log of named fields as they
+  change (the party, the stores, the place, the time), the newest first,
+  4,096 entries. `[S]` saves it as plain text in the engine's data folder,
+  under `watch/`. It never writes to the game and never lists quest
+  flags, seals, the Shadowlords or their hideouts.
+- **The "modified" mark.** Once a cheat has changed the game, the page's
+  header reads "This game: MODIFIED", and each save you make is marked
+  beside it in `save-meta.u5e`, never in `SAVED.GAM`
+  ([sidecars.md](sidecars.md#save-metau5e-the-modified-mark)). Turning
+  cheats off does not unmark a save. A save made while cheats are off is
+  not marked and shows "unknown" later.
+
 ## The parity lock
 
 `--parity-lock`, or `U5_PARITY_LOCK=1` in the environment, turns every
@@ -332,7 +402,9 @@ settings file is not read. The test settings `U5_FIXED_HOST_CLOCK` and
 `U5_EMULATOR_LOAD_LATENCY_MS` lock it too, and the route smoke and the frame
 suites never read settings at all. A locked launch prints one line,
 `enhancements: parity-locked (all off)`, which the paired DOSBox harness
-requires in every run.
+requires in every run. Cheats asked for under the lock are ignored with the
+rest (the one note lists the ignored flags), no cheat code is loaded, and
+the "modified" mark is neither read nor written.
 
 ## Hotkeys and files
 
@@ -363,9 +435,11 @@ one that types keys must change it exactly as typing those keys would:
   brightness on, to draw under each sprite exactly the ground its cell
   shows when empty and never to light a pixel the original leaves black.
 - `qa/enhancements/matrix.tsv` is the toggle matrix: every key alone, a
-  pairwise covering of the toggles and classed values, and everything on
-  except the cheats. It is generated from the catalogue, and a test keeps
-  the two equal (`U5_BLESS_TOGGLE_MATRIX=1` rewrites it).
+  pairwise covering of the toggles and classed values, everything on
+  except the cheats, and the cheats block (the watch alone, every cheat on
+  but unused, and each with the wider view and with the gem map). It is
+  generated from the catalogue, and a test keeps the two equal
+  (`U5_BLESS_TOGGLE_MATRIX=1` rewrites it).
 - `python3 qa/tools/toggle_matrix.py` runs `u5-engine --equivalence-suite`
   over the matrix on real game files (a fresh `game-dev-u5 prepare-profile`
   copy). Every configuration must equal the all-off run, Classic must match
@@ -396,29 +470,29 @@ one that types keys must change it exactly as typing those keys would:
 | display.grow_left | Wider world view (shows more than the original) | bool = false | a, F | deviation, wider view | --grow-left | - | yes |
 | display.sprite_composite | Sprites over terrain (no black boxes) | bool = false | a, F | feature | --sprite-composite | - | yes |
 | gem_map.enhanced | Enhanced gem map | bool = false | a, P | feature | --gem-map | - | yes |
-| cheats.enabled | Allow cheats | bool = false | c, P | cheat | - | - | later (chapter 7 Phase 1) |
-| cheats.heal_all | Heal all | bool = false | c, P | cheat | - | - | later (chapter 7 Phase 2) |
-| cheats.cure_poison | Cure poison | bool = false | c, P | cheat | - | - | later (chapter 7 Phase 2) |
-| cheats.resurrect_all | Resurrect all | bool = false | c, P | cheat | - | - | later (chapter 7 Phase 2) |
-| cheats.max_gold | Max gold | bool = false | c, P | cheat | - | - | later (chapter 7 Phase 2) |
-| cheats.max_food | Max food | bool = false | c, P | cheat | - | - | later (chapter 7 Phase 2) |
-| cheats.refill_arrows | Refill arrows | bool = false | c, P | cheat | - | - | later (chapter 7 Phase 2) |
-| cheats.refill_quarrels | Refill quarrels too | bool = false | c, P | cheat | - | - | later (chapter 7 Phase 2) |
-| cheats.max_reagents | Max reagents | bool = false | c, P | cheat | - | - | later (chapter 7 Phase 2) |
-| cheats.repair_hull | Repair hull | bool = false | c, P | cheat | - | - | later (chapter 7 Phase 2) |
-| cheats.lock_hp | Lock health | bool = false | c, P | cheat | - | - | later (chapter 7 Phase 2) |
-| cheats.lock_mp | Lock mana | bool = false | c, P | cheat | - | - | later (chapter 7 Phase 2) |
-| cheats.lock_food | Lock food | bool = false | c, P | cheat | - | - | later (chapter 7 Phase 2) |
-| cheats.lock_gold | Lock gold | bool = false | c, P | cheat | - | - | later (chapter 7 Phase 2) |
-| cheats.lock_keys | Lock keys | bool = false | c, P | cheat | - | - | later (chapter 7 Phase 2) |
-| cheats.lock_gems | Lock gems | bool = false | c, P | cheat | - | - | later (chapter 7 Phase 2) |
-| cheats.lock_torches | Lock torches | bool = false | c, P | cheat | - | - | later (chapter 7 Phase 2) |
-| cheats.lock_arrows | Lock arrows | bool = false | c, P | cheat | - | - | later (chapter 7 Phase 2) |
-| cheats.lock_reagents | Lock reagents | bool = false | c, P | cheat | - | - | later (chapter 7 Phase 2) |
-| cheats.remember_locks | Remember which locks are checked | bool = false | c, L | cheat | - | - | later (chapter 7 Phase 2) |
-| cheats.stat_edit | Edit party and stores | bool = false | c, P | cheat | - | - | later (chapter 7 Phase 3) |
-| cheats.teleport | Teleport (Spoiler: lists every place in the game) | bool = false | c, P | cheat, spoiler risk | - | - | later (chapter 7 Phase 4) |
-| cheats.state_watch | Watch game state | bool = false | a, F | deviation | - | - | later (chapter 7 Phase 5) |
+| cheats.enabled | Allow cheats | bool = false | c, P | cheat | - | - | yes |
+| cheats.heal_all | Heal all | bool = false | c, P | cheat | - | - | yes |
+| cheats.cure_poison | Cure poison | bool = false | c, P | cheat | - | - | yes |
+| cheats.resurrect_all | Resurrect all | bool = false | c, P | cheat | - | - | yes |
+| cheats.max_gold | Max gold | bool = false | c, P | cheat | - | - | yes |
+| cheats.max_food | Max food | bool = false | c, P | cheat | - | - | yes |
+| cheats.refill_arrows | Refill arrows | bool = false | c, P | cheat | - | - | yes |
+| cheats.refill_quarrels | Refill quarrels too | bool = false | c, P | cheat | - | - | yes |
+| cheats.max_reagents | Max reagents | bool = false | c, P | cheat | - | - | yes |
+| cheats.repair_hull | Repair hull | bool = false | c, P | cheat | - | - | yes |
+| cheats.lock_hp | Lock health | bool = false | c, P | cheat | - | - | yes |
+| cheats.lock_mp | Lock mana | bool = false | c, P | cheat | - | - | yes |
+| cheats.lock_food | Lock food | bool = false | c, P | cheat | - | - | yes |
+| cheats.lock_gold | Lock gold | bool = false | c, P | cheat | - | - | yes |
+| cheats.lock_keys | Lock keys | bool = false | c, P | cheat | - | - | yes |
+| cheats.lock_gems | Lock gems | bool = false | c, P | cheat | - | - | yes |
+| cheats.lock_torches | Lock torches | bool = false | c, P | cheat | - | - | yes |
+| cheats.lock_arrows | Lock arrows | bool = false | c, P | cheat | - | - | yes |
+| cheats.lock_reagents | Lock reagents | bool = false | c, P | cheat | - | - | yes |
+| cheats.remember_locks | Remember which locks are checked | bool = false | c, L | cheat | - | - | yes |
+| cheats.stat_edit | Edit party and stores | bool = false | c, P | cheat | - | - | yes |
+| cheats.teleport | Teleport (Spoiler: lists every place in the game) | bool = false | c, P | cheat, spoiler risk | - | - | yes |
+| cheats.state_watch | Watch game state | bool = false | a, F | deviation | - | - | yes |
 | enhancements.schema | Settings file format version | int 1..1 = 1 | -, L | feature | - | - | yes |
 | enhancements.preset | Preset | enum classic\|recommended\|everything = classic | -, P | feature | --preset | - | yes |
 | keys.menu | Open the menu | chord = F12 | -, F | feature | - | a keyboard | later (chapter 1 P5) |

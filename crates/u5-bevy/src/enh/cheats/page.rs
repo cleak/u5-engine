@@ -76,6 +76,9 @@ pub const HEADER_CLEAN: &str = "unmodified";
 pub const HEADER_UNKNOWN: &str = "unknown";
 pub const QUICK_HEADING: &str = "Quick actions";
 pub const LOCKS_HEADING: &str = "Locks (held once a turn)";
+/// The main page's help line, in the result strip until the first result
+/// (7.5 Phase 6).
+pub const HELP_LINE: &str = "Press a key shown in brackets.";
 /// The dialog's title tab.
 pub const CONFIRM_TITLE: &str = "Allow cheats?";
 /// The dialog's text, our own wording (7.2.1), one line a row.
@@ -766,12 +769,16 @@ fn page_view(
             col += entry.len() as u32 + 2;
         }
     }
-    if let Some(result) = result {
-        let width = (rect.w - 4) as usize;
-        let first = rect.row + DIVIDERS[1] + 1;
-        for (line_row, line) in (first..rect.bottom()).zip(wrap(result, width)) {
-            put(left, line_row, &line, INK);
+    let first = rect.row + DIVIDERS[1] + 1;
+    match result {
+        Some(result) => {
+            let width = (rect.w - 4) as usize;
+            for (line_row, line) in (first..rect.bottom()).zip(wrap(result, width)) {
+                put(left, line_row, &line, INK);
+            }
         }
+        // The help line holds the result strip until the first result.
+        None => put(left, first, HELP_LINE, HELP),
     }
     PageView {
         picture,

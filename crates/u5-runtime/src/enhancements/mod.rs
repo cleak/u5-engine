@@ -96,8 +96,9 @@ pub use light::{
     srgb_to_linear,
 };
 pub use matrix::{
-    ALL_ON_EXCEPT_CHEATS, CHEATS_SECTION, MATRIX_FILE, MatrixRow, PairwiseFactor, alternate_values,
-    covering_array, matrix_tsv, pairwise_factors, toggle_matrix,
+    ALL_ON_EXCEPT_CHEATS, CHEATS_BLOCK_HEADER, CHEATS_BLOCK_PREFIX, CHEATS_SECTION, MATRIX_FILE,
+    MatrixRow, PairwiseFactor, alternate_values, cheats_block, covering_array, matrix_tsv,
+    pairwise_factors, toggle_matrix,
 };
 pub use resolve::{
     CHEATS_SWITCH, KeyBindings, PRESET_KEY, PresetLabel, ResolveInput, ResolvedEnhancements,

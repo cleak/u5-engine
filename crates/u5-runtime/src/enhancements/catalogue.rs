@@ -181,9 +181,14 @@ pub const SHIPPED_PHASES: &[Phase] = &[
     GEM_G3,
     GEM_G4,
     GEM_G5,
-    // M8-01: the runtime rules have shipped; every cheat row stays hidden
-    // until M8-06 adds the phases that ship it.
+    // Chapter 7 (build plan M8): the runtime rules (M8-01), then every
+    // phase with rows, shipped together by M8-06.
     CHEATS_P0,
+    CHEATS_P1,
+    CHEATS_P2,
+    CHEATS_P3,
+    CHEATS_P4,
+    CHEATS_P5,
 ];
 
 /// A soft dependency (design 1.4.5): what a feature prefers to have, and
@@ -430,8 +435,7 @@ toggles! {
     // is class (c), cheat tier, behind `cheats.enabled`, and in no preset
     // (D7.1). `remember_locks` applies at the next launch. `state_watch`
     // is class (a), not gated, and deviation tier, so no preset sets it
-    // (U7) and the wizard keeps it ungreyed. Hidden until M8-06 ships the
-    // phases (U13).
+    // (U7) and the wizard keeps it ungreyed. Shipped by M8-06 (U13).
     CheatsEnabled = "cheats.enabled" {
         label: "Allow cheats",
         class: EffectClass::StateAltering,
