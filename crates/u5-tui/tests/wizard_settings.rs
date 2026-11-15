@@ -98,7 +98,9 @@ fn rows_and_presets_come_from_the_catalogue_and_the_file() {
         TOGGLES
             .iter()
             .filter(|spec| spec.is_shipped() && !spec.driven)
-            .all(|spec| spec.key.starts_with("display.") || spec.key.starts_with("gem_map."))
+            .all(|spec| spec.key.starts_with("display.")
+                || spec.key.starts_with("gem_map.")
+                || spec.key.starts_with("journal."))
     );
     let keys: Vec<&str> = settings.rows.iter().map(|row| row.key.as_str()).collect();
     assert_eq!(
@@ -134,6 +136,13 @@ fn rows_and_presets_come_from_the_catalogue_and_the_file() {
             "gem_map.wrap_rows",
             "gem_map.level_paging",
             "gem_map.glyphs",
+            // Chapter 5 (M5-06): the Journal group, the page with its tier
+            // and mantra rows under it, then the panel with its side.
+            "journal.page",
+            "journal.spoiler_tier",
+            "journal.mantras",
+            "journal.side_panel",
+            "journal.side_panel_side",
         ]
     );
     assert!(
@@ -141,6 +150,12 @@ fn rows_and_presets_come_from_the_catalogue_and_the_file() {
             .rows
             .iter()
             .all(|row| (row.group == "Maps") == row.key.starts_with("gem_map."))
+    );
+    assert!(
+        settings
+            .rows
+            .iter()
+            .all(|row| (row.group == "Journal") == row.key.starts_with("journal."))
     );
     // The wider view's row carries its plain label and tag; its six
     // sub-options, and only they, are indented under it.
@@ -164,7 +179,17 @@ fn rows_and_presets_come_from_the_catalogue_and_the_file() {
         ["display.composite_halo", "display.brightness_scope"]
     );
     // Chapter 10: every gem map sub-option sits under "Enhanced gem map".
-    assert_eq!(indented[8..], keys[19..]);
+    assert_eq!(indented[8..17], keys[19..28]);
+    // Chapter 5: the tier and mantra rows under the page, the side under
+    // the panel.
+    assert_eq!(
+        indented[17..],
+        [
+            "journal.spoiler_tier",
+            "journal.mantras",
+            "journal.side_panel_side"
+        ]
+    );
     // Recommended turns compositing on (P5); Everything also sets sharp
     // scaling and the F11 key (2.2.1).
     let values = |key: &str| {
@@ -189,6 +214,8 @@ fn rows_and_presets_come_from_the_catalogue_and_the_file() {
             "(\"display.scale_mode\", Choice(\"fit\"))",
             "(\"display.sprite_composite\", Switch(false))",
             "(\"gem_map.enhanced\", Switch(false))",
+            "(\"journal.page\", Switch(false))",
+            "(\"journal.side_panel\", Switch(false))",
         ]
     );
     assert_eq!(
@@ -198,6 +225,9 @@ fn rows_and_presets_come_from_the_catalogue_and_the_file() {
             "(\"display.scale_mode\", Choice(\"fit\"))",
             "(\"display.sprite_composite\", Switch(true))",
             "(\"gem_map.enhanced\", Switch(false))",
+            // Chapter 5: Recommended holds no journal key (U2).
+            "(\"journal.page\", Switch(false))",
+            "(\"journal.side_panel\", Switch(false))",
         ]
     );
     assert_eq!(
@@ -208,6 +238,8 @@ fn rows_and_presets_come_from_the_catalogue_and_the_file() {
             "(\"display.sprite_composite\", Switch(true))",
             // Chapter 10: the catalogue puts the gem map in Everything only.
             "(\"gem_map.enhanced\", Switch(true))",
+            "(\"journal.page\", Switch(true))",
+            "(\"journal.side_panel\", Switch(true))",
         ]
     );
 
