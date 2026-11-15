@@ -28,25 +28,50 @@
 //! - `auto_combat_focus` (`Apply`): `WindowFocused` sets
 //!   [`AutoCombatShell::focus_paused`] while `pause_on_focus_loss` is on.
 //!
+//! - `auto_combat_interrupt` (`Input`, after the router): the first key
+//!   the player presses that yields a game byte while auto runs stops it
+//!   (6.2.4). Swallow resets that key; while an auto attempt is open the
+//!   frame's byte keys are reset and kept in [`AutoCombatShell::held_keys`];
+//! - `auto_combat_feed` (`Feed`): at most one planned key per frame, only
+//!   when every feed condition holds (6.3.4); on a hand-back it re-feeds the
+//!   held keys one per frame, then releases the token and posts the toast;
+//! - `auto_combat_observe` (`Observe`): the key's progress print in the
+//!   same frame it was fed, victory and the action cap, and the reset when
+//!   the fight is over.
+//!
 //! All but the detach run only while `combat.auto` is on. Nothing here
-//! reads the keyboard, writes the game state or draws: the chords reach
-//! the plugin only as router actions, the badge and toasts are the
-//! foundation's, and every reader takes `&PlayState`. The feed, the
-//! interrupt and the observer arrive with M7-06.
+//! writes the game state or draws: a planned key reaches the game only
+//! through `typed_keys`, the badge and toasts are the foundation's, and
+//! every reader takes `&PlayState`. The keyboard is read only by the
+//! interrupt, which resets keys on `ButtonInput` as the router does.
 
+use std::collections::{HashMap, VecDeque};
+use std::time::Duration;
+
+use bevy::ecs::event::EventCursor;
+use bevy::input::keyboard::KeyboardInput;
 use bevy::prelude::*;
 use bevy::window::WindowFocused;
 use u5_runtime::InputDirection;
 use u5_runtime::PlayState;
 use u5_runtime::auto_combat::{
-    AutoEngagement, AutoFightRuntime, AutoKey, AutoPrompt, CombatSettings, auto_prompt,
+    AutoEngagement, AutoFightRuntime, AutoKey, AutoPlan, AutoPrompt, CombatSettings, HandBack,
+    InterruptMode, auto_prompt, observe_after_auto_key, plan_next_auto_key,
+    record_print_before_auto_key,
 };
+use u5_runtime::combat_actor::combat_side_census;
 use u5_runtime::enhancements::Toggle;
 
-use super::input::{EnhAction, EnhActionEvent};
+use super::idle::{load_holding, shell_quiescent, speaker_playing};
+use super::input::{EnhAction, EnhActionEvent, enh_input_router, is_modifier};
+use super::overlay::OverlayState;
+use super::synthetic::{SyntheticInputOwner, SyntheticOwner, install_synthetic_input};
 use super::toast::{ShellBadges, Toasts, install_shell_services};
 use super::{EnhLaunch, EnhSet, VisualLaunchConfig, feature_wanted, toggle_on};
-use crate::{TypedKey, VisualState};
+use crate::{
+    EmulatorLoadLatency, SpeakerQueue, SpeakerVoice, TypedKey, VisualState, key_code_to_input_byte,
+    key_code_to_line_input_byte, keys_pressed_in_typed_order, visual_line_prompt_active,
+};
 
 /// The toggle this module belongs to.
 const AUTO: Toggle = Toggle::CombatAuto;
@@ -83,6 +108,18 @@ pub const AUTO_NO_PROMPT: &str = "Auto-combat: no member's prompt is open";
 pub const AUTO_READY: &str =
     "Auto-combat ready: Ctrl+A member, Ctrl+Shift+A party, Ctrl+F until done";
 
+/// The hand-back toasts (6.2.5), 2 s each. [`HandBack::Hurt`] names the
+/// member and is built from the roster name.
+pub const AUTO_OFF_KEY: &str = "Auto off: key pressed";
+pub const AUTO_OFF_VICTORY: &str = "Victory - auto off";
+pub const AUTO_OFF_NO_TARGET: &str = "Auto off: no target in sight";
+pub const AUTO_OFF_STUCK: &str = "Auto off: stuck";
+pub const AUTO_OFF_CAP: &str = "Auto off: action limit";
+pub const AUTO_OFF_UNEXPECTED: &str = "Auto off: unexpected prompt";
+
+/// The token owner this module feeds as.
+const ME: SyntheticOwner = SyntheticOwner::AutoCombat;
+
 /// The shell's auto-combat state (6.3.4). Exists only while `combat.auto`
 /// is on, and never under the parity lock. The planner's engagement and
 /// per-fight counters are shell-owned and never in `PlayState`.
@@ -93,6 +130,20 @@ pub struct AutoCombatShell {
     pub fight: AutoFightRuntime,
     /// The window lost focus while `pause_on_focus_loss` is on.
     pub focus_paused: bool,
+    /// Keys the player typed while auto finished an open attempt, or while
+    /// the held keys go back; re-fed in order after the hand-back.
+    pub(crate) held_keys: VecDeque<TypedKey>,
+    /// The key fed this frame, awaiting its observation.
+    pub fed: Option<AutoKey>,
+    /// When the last auto key was fed (real time).
+    pub last_auto_key: Option<Duration>,
+    /// A hand-back in progress: the held keys go back, then the token is
+    /// released and this reason's toast is posted.
+    pub handing_back: Option<HandBack>,
+    /// Whether a live hostile remained at the last frame of combat, for
+    /// the victory toast at a fight's end (the actor rows are cleared by
+    /// then).
+    pub foes_remained: bool,
 }
 
 impl AutoCombatShell {
@@ -102,6 +153,11 @@ impl AutoCombatShell {
             engaged: AutoEngagement::default(),
             fight: AutoFightRuntime::default(),
             focus_paused: false,
+            held_keys: VecDeque::new(),
+            fed: None,
+            last_auto_key: None,
+            handing_back: None,
+            foes_remained: true,
         }
     }
 
@@ -109,6 +165,37 @@ impl AutoCombatShell {
     fn disengage(&mut self) {
         self.engaged = AutoEngagement::default();
         self.fight = AutoFightRuntime::default();
+        self.fed = None;
+    }
+
+    /// Auto gives the prompt back for `reason`: nothing stays engaged, and
+    /// the held keys go back before the toast.
+    fn hand_back(&mut self, reason: HandBack) {
+        self.disengage();
+        self.handing_back = Some(reason);
+    }
+
+    /// Whether an attempt auto opened is still open.
+    fn attempt_open(&self, state: &PlayState) -> bool {
+        self.fight.owns_open_attempt && matches!(auto_prompt(state), AutoPrompt::Cursor { .. })
+    }
+
+    /// Whether auto is running, so a key the player presses stops it: it
+    /// owns the prompt open now, its attempt is open, or the fight is
+    /// between prompts. A prompt or cursor of a member not handed over is
+    /// the player's.
+    fn running(&self, state: &PlayState) -> bool {
+        if !self.engaged.any() || !state.combat_active {
+            return false;
+        }
+        match auto_prompt(state) {
+            AutoPrompt::Cursor { .. } => self.fight.owns_open_attempt,
+            AutoPrompt::Command { .. } => !matches!(
+                plan_next_auto_key(state, &self.settings, &self.engaged, &self.fight),
+                AutoPlan::NotOurs
+            ),
+            AutoPrompt::None | AutoPrompt::Other => true,
+        }
     }
 
     /// Applies one hotkey to the engagement against `state`, and returns
@@ -193,9 +280,30 @@ pub struct AutoCombatPlugin {
 impl Plugin for AutoCombatPlugin {
     fn build(&self, app: &mut App) {
         install_shell_services(app);
+        install_synthetic_input(app);
         app.add_event::<WindowFocused>()
             .add_event::<EnhActionEvent>()
+            .add_event::<KeyboardInput>()
             .insert_resource(AutoCombatShell::new(self.settings.clone()))
+            .add_systems(
+                PreUpdate,
+                auto_combat_interrupt
+                    .run_if(toggle_on(AUTO))
+                    .after(enh_input_router)
+                    .in_set(EnhSet::Input),
+            )
+            .add_systems(
+                Update,
+                auto_combat_feed
+                    .run_if(toggle_on(AUTO))
+                    .in_set(EnhSet::Feed),
+            )
+            .add_systems(
+                Update,
+                auto_combat_observe
+                    .run_if(toggle_on(AUTO))
+                    .in_set(EnhSet::Observe),
+            )
             .add_systems(
                 Update,
                 (
@@ -222,10 +330,19 @@ fn auto_combat_attach(mut commands: Commands, launch: Res<EnhLaunch>) {
     commands.insert_resource(AutoCombatShell::new(launch.0.enhancements.combat()));
 }
 
-/// `combat.auto` turned off: the shell and the badge go in the same
-/// frame. The router's keys were released by the foundation's rebuild.
-fn auto_combat_detach(mut commands: Commands, badges: Option<ResMut<ShellBadges>>) {
+/// `combat.auto` turned off: the shell, the token and the badge go in the
+/// same frame. The router's keys were released by the foundation's rebuild.
+fn auto_combat_detach(
+    mut commands: Commands,
+    badges: Option<ResMut<ShellBadges>>,
+    token: Option<ResMut<SyntheticInputOwner>>,
+) {
     commands.remove_resource::<AutoCombatShell>();
+    if let Some(mut token) = token
+        && token.holder() == Some(ME)
+    {
+        token.release(ME);
+    }
     if let Some(mut badges) = badges
         && badges.auto
     {
@@ -283,6 +400,244 @@ fn auto_combat_focus(
     }
 }
 
+/// The byte `key` gives the game now, if any: the line editor's map while
+/// a line prompt is open, the command map otherwise. A modifier gives none.
+fn byte_of(key: KeyCode, shift: bool, control: bool, line: bool) -> Option<u8> {
+    if line {
+        key_code_to_line_input_byte(key, shift, control)
+    } else {
+        key_code_to_input_byte(key, shift, control)
+    }
+}
+
+/// Shift and Ctrl as the game's readers see them this frame.
+fn modifiers(keyboard: &ButtonInput<KeyCode>) -> (bool, bool) {
+    (
+        keyboard.any_pressed([KeyCode::ShiftLeft, KeyCode::ShiftRight]),
+        keyboard.any_pressed([KeyCode::ControlLeft, KeyCode::ControlRight]),
+    )
+}
+
+/// The interrupt (6.2.4, 6.3.4), after the router took the chords.
+fn auto_combat_interrupt(
+    mut keyboard: ResMut<ButtonInput<KeyCode>>,
+    key_events: Option<Res<Events<KeyboardInput>>>,
+    mut key_cursor: Local<EventCursor<KeyboardInput>>,
+    shell: Option<ResMut<AutoCombatShell>>,
+    visual: Option<Res<VisualState>>,
+) {
+    // Read every frame, so no event of an earlier frame is taken as fresh.
+    let typed = keys_pressed_in_typed_order(&keyboard, key_events.as_deref(), &mut key_cursor);
+    let (Some(mut shell), Some(visual)) = (shell, visual) else {
+        return;
+    };
+    let state = &visual.state;
+    let (shift, control) = modifiers(&keyboard);
+    let line = visual_line_prompt_active(state);
+    let bytes: Vec<KeyCode> = typed
+        .into_iter()
+        .filter(|key| !is_modifier(*key) && byte_of(*key, shift, control, line).is_some())
+        .collect();
+    if bytes.is_empty() {
+        return;
+    }
+    let hold = |shell: &mut AutoCombatShell, keyboard: &mut ButtonInput<KeyCode>, key| {
+        keyboard.reset(key);
+        shell.held_keys.push_back(TypedKey {
+            key,
+            shift,
+            control,
+        });
+    };
+    // The held keys are going back: what follows them waits behind them.
+    if shell.handing_back.is_some() {
+        for key in bytes {
+            hold(&mut shell, &mut keyboard, key);
+        }
+        return;
+    }
+    if !shell.running(state) {
+        return;
+    }
+    let attempt_open = shell.attempt_open(state);
+    for key in bytes {
+        if shell.fight.stopping.is_none() {
+            shell.fight.stopping = Some(HandBack::Interrupted);
+            if shell.settings.interrupt == InterruptMode::Swallow {
+                keyboard.reset(key);
+                continue;
+            }
+        }
+        if attempt_open {
+            hold(&mut shell, &mut keyboard, key);
+        }
+    }
+}
+
+/// The hand-back toast for `reason`. A hurt member's toast is built once
+/// per name and kept, so the toast service's `&'static str` holds it.
+fn hand_back_toast(
+    reason: HandBack,
+    state: &PlayState,
+    names: &mut HashMap<String, &'static str>,
+) -> &'static str {
+    match reason {
+        HandBack::Interrupted => AUTO_OFF_KEY,
+        HandBack::Victory => AUTO_OFF_VICTORY,
+        HandBack::Hurt(roster) => {
+            let name = state
+                .party_names
+                .get(roster)
+                .map(|name| {
+                    let end = name
+                        .iter()
+                        .position(|byte| *byte == 0)
+                        .unwrap_or(name.len());
+                    String::from_utf8_lossy(&name[..end]).into_owned()
+                })
+                .filter(|name| !name.is_empty())
+                .unwrap_or_else(|| format!("member {}", roster + 1));
+            names.entry(name).or_insert_with_key(|name| {
+                Box::leak(format!("Auto off: {name} is hurt").into_boxed_str())
+            })
+        }
+        HandBack::NoTarget => AUTO_OFF_NO_TARGET,
+        HandBack::Stuck => AUTO_OFF_STUCK,
+        HandBack::ActionCap => AUTO_OFF_CAP,
+        HandBack::UnexpectedPrompt => AUTO_OFF_UNEXPECTED,
+        HandBack::FightOver => AUTO_OFF,
+    }
+}
+
+/// Whether a key other than a lone modifier waits for the game's read.
+fn keys_waiting(visual: &VisualState) -> bool {
+    visual
+        .typed_keys
+        .iter()
+        .any(|typed| !is_modifier(typed.key))
+}
+
+/// The feed (6.3.4): one key per frame at most, only when every condition
+/// holds; the hand-back's held keys, one per frame, then the token and the
+/// toast.
+#[allow(clippy::too_many_arguments)]
+fn auto_combat_feed(
+    mut shell: ResMut<AutoCombatShell>,
+    visual: Option<ResMut<VisualState>>,
+    overlay: Option<Res<OverlayState>>,
+    mut token: ResMut<SyntheticInputOwner>,
+    keyboard: Res<ButtonInput<KeyCode>>,
+    time: Res<Time<Real>>,
+    speaker_queue: Option<Res<SpeakerQueue>>,
+    speaker_voices: Query<(), With<SpeakerVoice>>,
+    load_latency: Option<Res<EmulatorLoadLatency>>,
+    mut toasts: ResMut<Toasts>,
+    mut names: Local<HashMap<String, &'static str>>,
+) {
+    let Some(mut visual) = visual else {
+        return;
+    };
+    let overlay_open = overlay.is_some_and(|overlay| overlay.is_open());
+    if let Some(reason) = shell.handing_back {
+        if overlay_open || keys_waiting(&visual) {
+            return;
+        }
+        if let Some(key) = shell.held_keys.pop_front() {
+            visual.typed_keys.push_back(key);
+            return;
+        }
+        shell.handing_back = None;
+        token.release(ME);
+        toasts.short(hand_back_toast(reason, &visual.state, &mut names));
+        return;
+    }
+    if !shell.engaged.any() {
+        if token.holder() == Some(ME) {
+            token.release(ME);
+        }
+        return;
+    }
+    let now = time.elapsed();
+    let step = Duration::from_millis(u64::from(shell.settings.step_ms));
+    let (shift, control) = modifiers(&keyboard);
+    let line = visual_line_prompt_active(&visual.state);
+    let byte_pressed = keyboard
+        .get_just_pressed()
+        .any(|key| !is_modifier(*key) && byte_of(*key, shift, control, line).is_some());
+    let speaker_busy = speaker_playing(speaker_queue.as_deref(), &speaker_voices)
+        || visual.sound_effect_cursor != visual.state.sound_effect_serial;
+    let ready = !overlay_open
+        && token.free_or(ME)
+        && !shell.focus_paused
+        && shell
+            .last_auto_key
+            .is_none_or(|last| now.saturating_sub(last) >= step)
+        && !keys_waiting(&visual)
+        && !byte_pressed
+        && shell_quiescent(&visual, speaker_busy, load_holding(load_latency.as_deref()));
+    if !ready {
+        return;
+    }
+    let shell = &mut *shell;
+    match plan_next_auto_key(&visual.state, &shell.settings, &shell.engaged, &shell.fight) {
+        AutoPlan::Key(key) => {
+            if token.take(ME).is_err() {
+                return;
+            }
+            record_print_before_auto_key(&visual.state, &mut shell.fight);
+            visual.typed_keys.push_back(auto_typed_key(key));
+            shell.fed = Some(key);
+            shell.last_auto_key = Some(now);
+        }
+        AutoPlan::HandBack(reason) => shell.hand_back(reason),
+        AutoPlan::NotOurs => {}
+    }
+}
+
+/// The observer (6.3.4): the fed key's print in the frame the game read it,
+/// victory and the cap once no auto attempt is open, and the reset when the
+/// fight is over (engagement too, unless `keep_between_fights`; never for
+/// "until done").
+fn auto_combat_observe(mut shell: ResMut<AutoCombatShell>, visual: Option<Res<VisualState>>) {
+    let Some(visual) = visual else {
+        return;
+    };
+    let state = &visual.state;
+    if let Some(key) = shell.fed
+        && !keys_waiting(&visual)
+    {
+        shell.fed = None;
+        observe_after_auto_key(state, key, &mut shell.fight);
+    }
+    if state.combat_active {
+        let foes = combat_side_census(&state.combat_actors).foes_remain();
+        shell.foes_remained = foes;
+        if shell.engaged.any() && shell.fed.is_none() && !shell.attempt_open(state) {
+            if !foes {
+                shell.hand_back(HandBack::Victory);
+            } else if shell.fight.actions >= shell.settings.action_cap {
+                shell.hand_back(HandBack::ActionCap);
+            }
+        }
+        return;
+    }
+    // The fight is over.
+    let foes_remained = std::mem::replace(&mut shell.foes_remained, true);
+    shell.fight = AutoFightRuntime::default();
+    shell.fed = None;
+    if !shell.engaged.any() || shell.handing_back.is_some() {
+        return;
+    }
+    if shell.settings.keep_between_fights && !shell.engaged.until_done {
+        return;
+    }
+    shell.hand_back(if foes_remained {
+        HandBack::FightOver
+    } else {
+        HandBack::Victory
+    });
+}
+
 /// The physical key the shell types for `key` (6.3.4): no modifier, so
 /// the command prompt and the targeting cursor read it as the player's
 /// own keypress.
@@ -294,8 +649,6 @@ fn auto_combat_focus(
 /// | Step / Cursor | arrows, Home, PgUp, End, PgDn |
 /// | Confirm | Enter |
 /// | Cancel | Escape |
-// The feed (M7-06) is the first caller outside the tests.
-#[cfg_attr(not(test), allow(dead_code))]
 pub(crate) fn auto_typed_key(key: AutoKey) -> TypedKey {
     let code = match key {
         AutoKey::Attack => KeyCode::KeyA,
@@ -320,6 +673,8 @@ pub(crate) fn auto_typed_key(key: AutoKey) -> TypedKey {
     }
 }
 
+#[cfg(test)]
+mod engaged_tests;
 #[cfg(test)]
 mod feed_tests;
 #[cfg(test)]

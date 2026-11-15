@@ -84,6 +84,19 @@ fn no_token_unless_a_feature_installs_it() {
     for spec in TOGGLES {
         launch.enhancements.toggles.set(spec.toggle, true);
     }
+    // Automatic combat types keys for the player: it installs the token.
+    let mut auto_only = VisualLaunchConfig::classic();
+    auto_only
+        .enhancements
+        .toggles
+        .set(u5_runtime::enhancements::Toggle::CombatAuto, true);
+    let mut app = App::new();
+    add_enhancements(&mut app, &auto_only);
+    assert!(app.world().contains_resource::<SyntheticInputOwner>());
+    launch
+        .enhancements
+        .toggles
+        .set(u5_runtime::enhancements::Toggle::CombatAuto, false);
     for launch in [VisualLaunchConfig::classic(), launch] {
         let mut app = App::new();
         add_enhancements(&mut app, &launch);

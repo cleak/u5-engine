@@ -24,7 +24,7 @@ use crate::{
 /// Another toggle, so the foundation is in the app with auto off.
 const OTHER: Toggle = Toggle::EnhancementsFreezeOverlays;
 
-fn launch(auto: bool) -> VisualLaunchConfig {
+pub(super) fn launch(auto: bool) -> VisualLaunchConfig {
     let mut launch = VisualLaunchConfig::classic();
     launch.enhancements.toggles.set(OTHER, true);
     launch.enhancements.toggles.set(AUTO, auto);
@@ -32,20 +32,20 @@ fn launch(auto: bool) -> VisualLaunchConfig {
 }
 
 #[derive(Clone, Copy, Debug)]
-enum Chord {
+pub(super) enum Chord {
     Member,
     Party,
     UntilDone,
 }
 
 impl Chord {
-    const ALL: [Chord; 3] = [Chord::Member, Chord::Party, Chord::UntilDone];
+    pub(super) const ALL: [Chord; 3] = [Chord::Member, Chord::Party, Chord::UntilDone];
 
-    fn shift(self) -> bool {
+    pub(super) fn shift(self) -> bool {
         matches!(self, Chord::Party)
     }
 
-    fn key(self) -> KeyCode {
+    pub(super) fn key(self) -> KeyCode {
         match self {
             Chord::Member | Chord::Party => KeyCode::KeyA,
             Chord::UntilDone => KeyCode::KeyF,
@@ -53,7 +53,7 @@ impl Chord {
     }
 
     /// Ctrl (and Shift) down, the key down at `frame`; all up at the next.
-    fn tap(self, timeline: &mut Timeline, frame: usize, owner: Owner) {
+    pub(super) fn tap(self, timeline: &mut Timeline, frame: usize, owner: Owner) {
         let mut mods = vec![KeyCode::ControlLeft];
         if self.shift() {
             mods.push(KeyCode::ShiftLeft);
@@ -67,14 +67,14 @@ impl Chord {
     }
 }
 
-struct Game {
-    shell: Shell,
-    timeline: Timeline,
-    frame: usize,
+pub(super) struct Game {
+    pub(super) shell: Shell,
+    pub(super) timeline: Timeline,
+    pub(super) frame: usize,
 }
 
 impl Game {
-    fn new(state: PlayState, launch: &VisualLaunchConfig) -> Self {
+    pub(super) fn new(state: PlayState, launch: &VisualLaunchConfig) -> Self {
         Self {
             shell: Shell::new(state, &Scene::synthetic(), launch, |_| {}),
             timeline: Timeline::new(0),
@@ -82,7 +82,7 @@ impl Game {
         }
     }
 
-    fn frames(&mut self, count: usize) {
+    pub(super) fn frames(&mut self, count: usize) {
         for _ in 0..count {
             let events = if self.frame < self.timeline.len() {
                 self.timeline.frame(self.frame).to_vec()
@@ -95,32 +95,32 @@ impl Game {
     }
 
     /// Types `chord` now and runs until it is released.
-    fn chord(&mut self, chord: Chord) {
+    pub(super) fn chord(&mut self, chord: Chord) {
         chord.tap(&mut self.timeline, self.frame, Owner::Feature);
         self.frames(2);
     }
 
-    fn world(&self) -> &World {
+    pub(super) fn world(&self) -> &World {
         self.shell.app.world()
     }
 
-    fn auto(&self) -> Option<&AutoCombatShell> {
+    pub(super) fn auto(&self) -> Option<&AutoCombatShell> {
         self.world().get_resource::<AutoCombatShell>()
     }
 
-    fn engaged(&self) -> AutoEngagement {
+    pub(super) fn engaged(&self) -> AutoEngagement {
         self.auto().expect("the shell is in the app").engaged
     }
 
-    fn toast(&self) -> Option<&'static str> {
+    pub(super) fn toast(&self) -> Option<&'static str> {
         self.world().resource::<Toasts>().current()
     }
 
-    fn badge(&self) -> bool {
+    pub(super) fn badge(&self) -> bool {
         self.world().resource::<ShellBadges>().auto
     }
 
-    fn focus(&mut self, focused: bool) {
+    pub(super) fn focus(&mut self, focused: bool) {
         self.shell.app.world_mut().send_event(WindowFocused {
             window: Entity::PLACEHOLDER,
             focused,
@@ -272,8 +272,10 @@ fn the_first_combat_prompt_shows_the_ready_note_once() {
 
 #[test]
 fn hotkeys_and_engagement_leave_the_game_alone() {
-    // Not engaged-and-driving yet (the feed is M7-06): every chord the
-    // plugin takes is invisible to the game, frame by frame.
+    // Every chord the plugin takes is invisible to the game, frame by
+    // frame. The feed is held by a focus pause and the player's Space is
+    // delivered, so only the chords differ between the runs (the engaged
+    // feed has its own tests).
     let mut timeline = Timeline::new(60);
     for (index, chord) in Chord::ALL.into_iter().cycle().take(6).enumerate() {
         chord.tap(&mut timeline, 5 + index * 8, Owner::Feature);
@@ -284,7 +286,11 @@ fn hotkeys_and_engagement_leave_the_game_alone() {
         &Scene::synthetic(),
         &timeline,
         &launch(true),
-        |_| {},
+        |app| {
+            let mut shell = app.world_mut().resource_mut::<AutoCombatShell>();
+            shell.focus_paused = true;
+            shell.settings.interrupt = u5_runtime::auto_combat::InterruptMode::Deliver;
+        },
     );
     assert_eq!(mismatches, []);
 }

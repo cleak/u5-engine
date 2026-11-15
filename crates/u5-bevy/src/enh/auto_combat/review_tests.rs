@@ -1,4 +1,4 @@
-//! Review shots of the auto-combat toasts (plan M7-05). Review only:
+//! Review shots of the auto-combat toasts (plans M7-05 and M7-06). Review only:
 //! skipped unless `U5_MOCKUP_PROFILE` names a game copy and
 //! `U5_AUTO_SHOTS` a folder; nothing is committed.
 //!
@@ -129,13 +129,57 @@ fn auto_combat_review_shots() {
             "{name}: {:?}",
             shell.app.world().resource::<Toasts>().current()
         );
-        for (label, window) in [
-            ("169", Vec2::new(2560.0, 1440.0)),
-            ("43", Vec2::new(1600.0, 1200.0)),
-        ] {
-            shot(&shell, window)
-                .save(out.join(format!("auto-{name}-{label}.png")))
-                .unwrap();
+        save_shots(&shell, &out, name);
+    }
+
+    // The hand-backs (M7-06): Ctrl+F, then the fight runs until auto gives
+    // the prompt back.
+    let mut weak = arena();
+    weak.combat_actors[16].hp_or_wound = 1;
+    let hand_backs: [(&str, PlayState, u8, Option<KeyCode>); 3] = [
+        ("victory", weak, 0, None),
+        ("hurt", arena(), 25, None),
+        ("key-pressed", arena(), 0, Some(KeyCode::Escape)),
+    ];
+    for (name, state, hp_limit, key) in hand_backs {
+        let mut shell = Shell::new(state, &scene, &launch(), |_| {});
+        {
+            let mut auto = shell.app.world_mut().resource_mut::<AutoCombatShell>();
+            auto.settings.step_ms = 0;
+            auto.settings.pause_below_hp_percent = hp_limit;
         }
+        for _ in 0..30 {
+            shell.step(&[]);
+        }
+        chord(&mut shell, &ctrl_f);
+        if let Some(key) = key {
+            for _ in 0..40 {
+                shell.step(&[]);
+            }
+            chord(&mut shell, &[key]);
+        }
+        for _ in 0..2000 {
+            let auto = shell.app.world().resource::<AutoCombatShell>();
+            if !auto.engaged.any() && auto.handing_back.is_none() {
+                break;
+            }
+            shell.step(&[]);
+        }
+        eprintln!(
+            "{name}: {:?}",
+            shell.app.world().resource::<Toasts>().current()
+        );
+        save_shots(&shell, &out, name);
+    }
+}
+
+fn save_shots(shell: &Shell, out: &std::path::Path, name: &str) {
+    for (label, window) in [
+        ("169", Vec2::new(2560.0, 1440.0)),
+        ("43", Vec2::new(1600.0, 1200.0)),
+    ] {
+        shot(shell, window)
+            .save(out.join(format!("auto-{name}-{label}.png")))
+            .unwrap();
     }
 }
