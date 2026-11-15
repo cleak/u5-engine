@@ -6,13 +6,11 @@
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use u5_runtime::enhancements::{CliSetting, LockReason, LockState};
-use u5_tui::enhancement_settings::resolve_launch;
-
 fn workspace() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("../..")
 }
 
+#[cfg(feature = "visual")]
 fn scratch(label: &str) -> PathBuf {
     let dir = std::env::temp_dir().join(format!(
         "u5-auto-combat-gate-{label}-{}",
@@ -27,6 +25,8 @@ fn scratch(label: &str) -> PathBuf {
 #[test]
 fn off_or_locked_no_combat_section_is_written() {
     use u5_bevy_setup::{RowValue, SettingsChanges};
+    use u5_runtime::enhancements::{CliSetting, LockReason, LockState};
+    use u5_tui::enhancement_settings::resolve_launch;
     use u5_tui::save_wizard_settings;
 
     let dir = scratch("config");
