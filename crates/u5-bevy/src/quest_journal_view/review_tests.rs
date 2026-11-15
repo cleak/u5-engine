@@ -371,3 +371,102 @@ fn journal_page_content_review_shots() {
             .unwrap();
     }
 }
+
+/// The M5-05 review shots: the side panel beside the play frame, both
+/// drawn by the real shell (the journal provider's rows through the
+/// foundation's cell-panel renderer, in the game's IBM.CH), on the right
+/// (`auto`) and on the left, at 1x and 4x. Same skip rule as above.
+#[test]
+fn journal_side_panel_review_shots() {
+    use crate::enh::side::{
+        PanelContent, PanelKind, PanelRegistry, PanelSide, SidePanelProvider, render_cell_panel,
+    };
+    let (Some(profile), Some(out)) = (
+        configured_test_dir("U5_MOCKUP_PROFILE"),
+        configured_test_dir("U5_JOURNAL_SHOTS"),
+    ) else {
+        eprintln!("skipped: set U5_MOCKUP_PROFILE and U5_JOURNAL_SHOTS");
+        return;
+    };
+    let game = unique_scratch_dir("journal-panel-shots");
+    for entry in std::fs::read_dir(&profile).unwrap() {
+        let entry = entry.unwrap();
+        if entry.file_type().unwrap().is_file() {
+            copy_asset_writable(&entry.path(), &game.join(entry.file_name())).unwrap();
+        }
+    }
+    std::fs::create_dir_all(&out).unwrap();
+    let scene = Scene::from_game_dir(&game).unwrap();
+    let mut state = PlayState::load_scene(
+        &game,
+        PlayOptions {
+            target: PlayTarget::Town(GameScene::from_key("TOWNE:1").unwrap()),
+            floor: 0,
+            start: Some((15, 17)),
+            clock: GameClock::new(10, 0).unwrap(),
+            ..PlayOptions::default()
+        },
+    )
+    .unwrap();
+    let fresh_state = state.clone();
+    state.shrine_ordained_mask = 0b0000_0110;
+    state.shrine_codex_mask = 0b1001_0011;
+    state.shrine_ruin_flags[6] = 0x80;
+    state.shrine_ruin_flags[3] = 0x01;
+
+    let mut launch = VisualLaunchConfig::classic();
+    launch
+        .enhancements
+        .toggles
+        .set(Toggle::JournalSidePanel, true);
+    for (name, state) in [
+        ("12-panel-fresh", fresh_state),
+        ("13-panel-progress", state),
+    ] {
+        let mut shell = Shell::new(state, &scene, &launch, |_| {});
+        for _ in 0..30 {
+            shell.step(&[]);
+        }
+        let world = shell.app.world();
+        let play = world
+            .resource::<Assets<Image>>()
+            .get(&shell.visual().image_handle)
+            .unwrap()
+            .data
+            .clone()
+            .unwrap();
+        let registry = world.resource::<PanelRegistry>();
+        assert_eq!(registry.claims()[0].kind, PanelKind::Journal);
+        // What the registered provider hands the host.
+        let provider = JournalPanelProvider::new(Default::default(), Default::default());
+        let Some(PanelContent::Cells(rows)) = provider.snapshot(Some(&shell.visual().state)) else {
+            panic!("the journal panel shows rows");
+        };
+        let play = rgba_image(320, 200, play);
+        for side in [PanelSide::Right, PanelSide::Left] {
+            let panel = rgba_image(
+                crate::enh::side::PANEL_WIDTH,
+                crate::enh::side::PANEL_HEIGHT,
+                render_cell_panel(&scene.text_font, &rows, side),
+            );
+            let mut sheet = image::RgbaImage::new(320 + panel.width(), 200);
+            let (frame_x, panel_x) = match side {
+                PanelSide::Right => (0, 320),
+                PanelSide::Left => (panel.width(), 0),
+            };
+            image::imageops::overlay(&mut sheet, &play, i64::from(frame_x), 0);
+            image::imageops::overlay(&mut sheet, &panel, i64::from(panel_x), 0);
+            let side = match side {
+                PanelSide::Right => "right",
+                PanelSide::Left => "left",
+            };
+            sheet.save(out.join(format!("{name}-{side}.png"))).unwrap();
+            scaled(&sheet, 4)
+                .save(out.join(format!("{name}-{side}-4x.png")))
+                .unwrap();
+            display(&sheet, 3)
+                .save(out.join(format!("{name}-{side}-display-3x.png")))
+                .unwrap();
+        }
+    }
+}

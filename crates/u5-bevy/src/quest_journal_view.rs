@@ -36,6 +36,11 @@
 //! [`QuestJournalUi`] only, are cleared whenever the page closes and are
 //! never saved.
 //!
+//! **The side panel** (M5-05, [`panel`]): a [`JournalPanelProvider`] in the
+//! foundation's panel registry while `journal.side_panel` is on, drawn by
+//! the foundation's cell-panel host; empty while the page is open, never
+//! above tier 2 and never a mantra.
+//!
 //! **Tabs (the M6 seam).** Chapter 8 turns the page into several tabs.
 //! [`QuestJournalUi`] keeps a tab list that holds only [`JournalTab::Quests`]
 //! here; no tab strip is drawn while there is one tab.
@@ -56,7 +61,7 @@ use u5_runtime::{CH_CELL_SIDE, EGA_PALETTE_RGB, FixedCellFont, STOCK_EGA_BROWN};
 
 use crate::enh::input::{EnhAction, EnhActionEvent, OverlayKey, menu_overlay_on};
 use crate::enh::overlay::{OverlayId, OverlayRequest, OverlayState, apply_overlay_requests};
-use crate::enh::side::FrameImageSize;
+use crate::enh::side::{FrameImageSize, PanelRegistry, draw_side_panels};
 use crate::enh::{EnhLaunch, EnhSet, Toggles, VisualLaunchConfig};
 use crate::{VISUAL_PLAY_FRAME_HEIGHT, VISUAL_PLAY_FRAME_WIDTH, VisualState};
 
@@ -418,6 +423,27 @@ impl Plugin for QuestJournalPlugin {
     fn build(&self, app: &mut App) {
         if self.settings.page {
             app.insert_resource(QuestJournalUi::new(self.settings));
+        }
+        // The side panel (5.3.5): a provider in the foundation's registry
+        // only while `journal.side_panel` is on.
+        if self.settings.side_panel {
+            panel::register_journal_panel(app.world_mut(), self.settings.side);
+        }
+        app.add_systems(
+            Update,
+            panel::copy_journal_page_open
+                .in_set(EnhSet::Present)
+                .after(EnhSet::Observe)
+                .before(draw_side_panels)
+                .run_if(resource_exists::<JournalPanelPageOpen>),
+        );
+        if app.world().contains_resource::<PanelRegistry>() {
+            app.add_systems(
+                Update,
+                panel::follow_journal_panel_toggle
+                    .run_if(resource_exists_and_changed::<Toggles>)
+                    .in_set(EnhSet::Apply),
+            );
         }
         // The page opens and closes through the overlay model, which is in
         // the app whenever the page (or the menu overlay) is on.
@@ -1290,8 +1316,16 @@ fn fill(rgba: &mut [u8], x0: usize, y0: usize, x1: usize, y1: usize, ink: Rgb) {
     }
 }
 
+mod panel;
+pub use panel::{
+    JournalPanelPageOpen, JournalPanelProvider, PANEL_SEALS_OPEN, PANEL_TITLE, PANEL_VANQUISHED,
+    SidePanelModel, panel_side,
+};
+
 #[cfg(test)]
 mod content_tests;
+#[cfg(test)]
+mod panel_tests;
 #[cfg(test)]
 mod review_tests;
 #[cfg(test)]

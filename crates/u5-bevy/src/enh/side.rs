@@ -701,13 +701,24 @@ pub(crate) fn layout_side_space(
     let Ok(window) = windows.single() else {
         return;
     };
-    let solution = solve_frame(
+    // A presented canvas (chapter 2's grow-left world view) fills the
+    // window and leaves no bar: every cell panel is hidden while it shows
+    // (5.2.10 rule 4, D2.24), whatever the guard would allow.
+    let canvas = image.as_deref().is_some_and(|size| size.0.is_some());
+    let claims = registry.claims();
+    let (placed, covered): (Vec<PanelClaim>, Vec<PanelClaim>) = claims
+        .into_iter()
+        .partition(|claim| !canvas || !claim.kind.is_cell_panel());
+    let mut solution = solve_frame(
         WindowPixels::of(window),
         FrameImageSize::image(image.as_deref()),
-        &registry.claims(),
+        &placed,
         &settings,
         policy.as_deref().map(|policy| policy.0.as_ref()),
     );
+    solution
+        .hidden
+        .extend(covered.into_iter().map(|claim| claim.kind));
     if *layout != solution.layout {
         *layout = solution.layout;
     }
@@ -836,7 +847,7 @@ fn place(node: &mut Node, rect: Rect) {
 /// panel showing its provider's snapshot. A cell panel's image is rebuilt
 /// only when its cells or side change. A panel no longer granted, or whose
 /// provider shows nothing, has no node.
-fn draw_side_panels(
+pub(crate) fn draw_side_panels(
     mut commands: Commands,
     layout: Res<SideLayout>,
     registry: Res<PanelRegistry>,
