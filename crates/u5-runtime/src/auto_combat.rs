@@ -9,10 +9,21 @@
 //! planner's answers [`AutoPlan`], [`HandBack`] and [`AutoPrompt`].
 //!
 //! Nothing here is stored in [`PlayState`](crate::PlayState), and nothing
-//! here reads the transcript. The planner and the observer arrive with
-//! build plan M7-02 and M7-03.
+//! here reads the transcript. The command-prompt planner
+//! [`plan_next_auto_key`] and the observer [`observe_after_auto_key`] are
+//! build plan M7-02; the targeting cursor is M7-03.
 
+use crate::combat_actor::{
+    COMBAT_PARTY_ACTOR_SLOTS, CombatActorDescriptor, CombatArenaFieldKind,
+    CombatTargetCandidateView, build_combat_ai_legal_cell_mask, combat_ai_legal_cell_for_actor,
+    combat_arena_range, combat_side_census, combat_slot_prompted_by_player_command_handler,
+    combat_target_groups_are_hostile, find_combat_ai_target,
+};
+use crate::constants::OOL_SLOTS;
+use crate::enhancements::idle::IdlePromptKind;
 use crate::input_codes::{InputDirection, input_direction_code};
+use crate::play_state_struct::PlayState;
+use crate::predicates::is_combat_arena_tile_walkable;
 
 /// `combat.step_ms`'s default: the least time between two auto keys.
 pub const STEP_MS_DEFAULT: u16 = 150;
@@ -270,7 +281,8 @@ pub enum AutoPrompt {
     /// `roster`.
     Command {
         slot: usize,
-        roster: usize,
+        /// `None` for a monster-side slot (no roster mapping).
+        roster: Option<usize>,
     },
     /// An open targeting cursor for actor `slot`.
     Cursor {
@@ -280,5 +292,352 @@ pub enum AutoPrompt {
     Other,
 }
 
+/// The re-prompt budget (6.2.5): after this many no-progress keys in one
+/// member's turn the planner passes; a Pass that also makes no progress
+/// hands back with [`HandBack::Stuck`]. Fixed, not a setting.
+pub const NO_PROGRESS_BUDGET: u8 = 3;
+
+/// Which prompt is open, read from state only (6.3.3).
+///
+/// `Command` is exactly the foundation's idle combat prompt
+/// ([`PlayState::idle_command_prompt`]) with a pending actor slot, so the
+/// planner keeps no modal list of its own.
+pub fn auto_prompt(state: &PlayState) -> AutoPrompt {
+    if !state.combat_active {
+        return AutoPrompt::None;
+    }
+    if let Some(session) = state.active_combat_targeting.as_ref() {
+        return AutoPrompt::Cursor {
+            slot: session.actor_slot,
+        };
+    }
+    match (state.idle_command_prompt(), state.pending_combat_actor_slot) {
+        (Some(IdlePromptKind::Combat), Some(slot)) => AutoPrompt::Command {
+            slot,
+            roster: state.combat_roster_slot_for_actor_slot(slot),
+        },
+        _ => AutoPrompt::Other,
+    }
+}
+
+/// The engaged roster position that owns the command prompt of `slot`, or
+/// `None` when the prompt is the human's: a monster-side slot (allies are
+/// Phase 5), a member the automatic driver runs (Sword of Chaos, charm),
+/// an asleep, dragged-under or dead member, a member solo mode denies, or
+/// a roster position not handed over.
+fn owned_command_roster(state: &PlayState, slot: usize, engaged: &AutoEngagement) -> Option<usize> {
+    let actor = state.combat_actors.get(slot).copied()?;
+    let answerable = actor.is_party_side()
+        && !actor.is_controlled()
+        && !actor.is_status_disabled()
+        && !actor.is_dragged_under()
+        && combat_slot_prompted_by_player_command_handler(state.active_player, slot, actor);
+    if !answerable {
+        return None;
+    }
+    let roster = state.combat_roster_slot_for_actor_slot(slot)?;
+    engaged.members.get(roster).copied()?.then_some(roster)
+}
+
+/// Pure: reads live state, draws nothing, mutates nothing (6.3.2).
+pub fn plan_next_auto_key(
+    state: &PlayState,
+    settings: &CombatSettings,
+    engaged: &AutoEngagement,
+    fight: &AutoFightRuntime,
+) -> AutoPlan {
+    match auto_prompt(state) {
+        AutoPrompt::Command { slot, .. } => match owned_command_roster(state, slot, engaged) {
+            Some(_) => plan_command_prompt(state, settings, fight, slot),
+            None => AutoPlan::NotOurs,
+        },
+        // The targeting cursor is planned by build plan M7-03; until then
+        // an open cursor is left to the human.
+        AutoPrompt::Cursor { .. } | AutoPrompt::None | AutoPrompt::Other => AutoPlan::NotOurs,
+    }
+}
+
+/// The Fight tactic at an owned command prompt (6.2.3, 6.3.3).
+fn plan_command_prompt(
+    state: &PlayState,
+    settings: &CombatSettings,
+    fight: &AutoFightRuntime,
+    slot: usize,
+) -> AutoPlan {
+    // 1. Stop checks, in order: victory, cap, HP limit, budget.
+    if !combat_side_census(&state.combat_actors).foes_remain() {
+        return AutoPlan::HandBack(HandBack::Victory);
+    }
+    if fight.actions >= settings.action_cap {
+        return AutoPlan::HandBack(HandBack::ActionCap);
+    }
+    if let Some(roster) = hurt_member(state, settings.pause_below_hp_percent) {
+        return AutoPlan::HandBack(HandBack::Hurt(roster));
+    }
+    let (no_progress, blocked_dirs) = if fight.turn_slot == Some(slot) {
+        (fight.no_progress, fight.blocked_dirs)
+    } else {
+        (0, 0)
+    };
+    if no_progress > NO_PROGRESS_BUDGET {
+        return AutoPlan::HandBack(HandBack::Stuck);
+    }
+    if no_progress >= NO_PROGRESS_BUDGET {
+        return AutoPlan::Key(AutoKey::Pass);
+    }
+
+    // 2. The nearest visible hostile that is not a roster member.
+    let Some(target) = auto_target(state, slot) else {
+        return AutoPlan::HandBack(HandBack::NoTarget);
+    };
+    let (Some(from), Some(to)) = (
+        state.combat_actor_cell(slot),
+        state.combat_actor_cell(target),
+    ) else {
+        return AutoPlan::Key(AutoKey::Pass);
+    };
+
+    // 3. Attack when a readied attempt reaches and is not interfered.
+    let range = combat_arena_range(from.0, from.1, to.0, to.1);
+    let interfered = state
+        .combat_attack_interference_source_for_slot(slot)
+        .is_some();
+    let attempts = state.combat_attack_attempts_for_actor(slot);
+    let mut reaching = attempts
+        .iter()
+        .filter(|attempt| attempt.max_range >= range)
+        .peekable();
+    if reaching.peek().is_some() {
+        if reaching.any(|attempt| !(attempt.runs_interference && interfered)) {
+            return AutoPlan::Key(AutoKey::Attack);
+        }
+        // Every reaching attempt would be aborted: the same spent turn,
+        // and a cleaner transcript.
+        return AutoPlan::Key(AutoKey::Pass);
+    }
+
+    // 4. A cardinal step toward the target, 5. otherwise Pass.
+    match auto_step(state, from, to, blocked_dirs) {
+        Some(direction) => AutoPlan::Key(AutoKey::Step(direction)),
+        None => AutoPlan::Key(AutoKey::Pass),
+    }
+}
+
+/// The first roster position whose living member is below the HP limit.
+fn hurt_member(state: &PlayState, percent: u8) -> Option<usize> {
+    if percent == 0 {
+        return None;
+    }
+    state
+        .party
+        .iter()
+        .take(COMBAT_PARTY_ACTOR_SLOTS)
+        .position(|member| {
+            member.living()
+                && u32::from(member.hp) * 100 < u32::from(member.max_hp) * u32::from(percent)
+        })
+}
+
+/// Whether the arena draws this actor: the suppression filter (0x10) and
+/// the hidden-frame marker of its linked record (no spoilers, 6.2.3).
+fn actor_visible(state: &PlayState, actor: CombatActorDescriptor) -> bool {
+    !actor.is_phase_suppressed() && state.combat_actor_presentation_displayed(actor)
+}
+
+/// The planner's own 32-row copy of the candidate views, as the automatic
+/// driver builds them, with every row the planner must never pick marked
+/// suppressed rather than removed (`find_combat_ai_target` indexes the
+/// slice by slot): invisible actors, roster and party-side rows, and rows
+/// not hostile to the acting group.
+fn auto_candidate_views(state: &PlayState, acting_group: u8) -> Vec<CombatTargetCandidateView> {
+    state
+        .combat_actors
+        .iter()
+        .copied()
+        .enumerate()
+        .map(|(slot, descriptor)| {
+            let mut view = state.combat_target_candidate_view(
+                descriptor,
+                slot,
+                descriptor.is_phase_suppressed(),
+                descriptor.is_dragged_under(),
+            );
+            view.suppressed = view.suppressed
+                || !actor_visible(state, descriptor)
+                || descriptor.is_party_side()
+                || state.combat_roster_slot_for_actor_slot(slot).is_some()
+                || !combat_target_groups_are_hostile(acting_group, view.group);
+            view
+        })
+        .collect()
+}
+
+/// The target `slot` would attack: `find_combat_ai_target` over the
+/// planner's views, suppression filter on.
+fn auto_target(state: &PlayState, slot: usize) -> Option<usize> {
+    let acting_group = state.combat_target_group_for_slot(slot);
+    let views = auto_candidate_views(state, acting_group);
+    find_combat_ai_target(&views, slot, acting_group, false).slot
+}
+
+const CARDINALS: [InputDirection; 4] = [
+    InputDirection::West,
+    InputDirection::East,
+    InputDirection::North,
+    InputDirection::South,
+];
+
+/// The [`AutoFightRuntime::blocked_dirs`] bit of a cardinal direction.
+pub fn blocked_dir_bit(direction: InputDirection) -> u8 {
+    CARDINALS
+        .iter()
+        .position(|cardinal| *cardinal == direction)
+        .map_or(0, |index| 1 << index)
+}
+
+fn cardinal_delta(direction: InputDirection) -> (i16, i16) {
+    match direction {
+        InputDirection::West => (-1, 0),
+        InputDirection::East => (1, 0),
+        InputDirection::North => (0, -1),
+        _ => (0, 1),
+    }
+}
+
+/// Whether a live combat field marker lies on the cell.
+fn field_marker_at(state: &PlayState, x: usize, y: usize) -> bool {
+    let placed = state
+        .combat_magic_effects
+        .get(y)
+        .and_then(|row| row.get(x))
+        .is_some_and(|effect| *effect != 0);
+    placed
+        || state.active_objects.iter().take(OOL_SLOTS).any(|object| {
+            object.x == x
+                && object.y == y
+                && CombatArenaFieldKind::from_kind_byte(object.type_byte).is_some()
+        })
+}
+
+/// One cardinal step from `from` toward `to`: the larger-delta axis first,
+/// then the other. The legal-cell mask is only a hint, built with every
+/// invisible actor left out so the plan never avoids an unseen monster;
+/// out of bounds is never legal (`fleeing = false`). Field markers and
+/// this turn's refused directions are skipped.
+fn auto_step(
+    state: &PlayState,
+    from: (u8, u8),
+    to: (u8, u8),
+    blocked_dirs: u8,
+) -> Option<InputDirection> {
+    let seen_actors = state.combat_actors.map(|actor| {
+        if actor_visible(state, actor) {
+            actor
+        } else {
+            CombatActorDescriptor::empty()
+        }
+    });
+    let mask = build_combat_ai_legal_cell_mask(
+        &state.combat_terrain,
+        &seen_actors,
+        is_combat_arena_tile_walkable,
+    );
+    let dx = i16::from(to.0) - i16::from(from.0);
+    let dy = i16::from(to.1) - i16::from(from.1);
+    let horizontal = match dx.signum() {
+        1 => Some(InputDirection::East),
+        -1 => Some(InputDirection::West),
+        _ => None,
+    };
+    let vertical = match dy.signum() {
+        1 => Some(InputDirection::South),
+        -1 => Some(InputDirection::North),
+        _ => None,
+    };
+    let order = if dx.abs() >= dy.abs() {
+        [horizontal, vertical]
+    } else {
+        [vertical, horizontal]
+    };
+    order.into_iter().flatten().find(|direction| {
+        let (step_x, step_y) = cardinal_delta(*direction);
+        let (x, y) = (i16::from(from.0) + step_x, i16::from(from.1) + step_y);
+        blocked_dirs & blocked_dir_bit(*direction) == 0
+            && combat_ai_legal_cell_for_actor(&mask, x, y, false)
+            && !field_marker_at(state, x as usize, y as usize)
+    })
+}
+
+/// The read-only fingerprint of live state (6.3.2). Never reads the
+/// transcript.
+pub fn progress_print(state: &PlayState) -> ProgressPrint {
+    // FNV-1a over the 32 raw rows: stable across runs and platforms.
+    let mut hash: u64 = 0xcbf2_9ce4_8422_2325;
+    for actor in state.combat_actors.iter() {
+        for byte in actor.raw_row() {
+            hash ^= u64::from(byte);
+            hash = hash.wrapping_mul(0x0000_0100_0000_01b3);
+        }
+    }
+    let mut party = [(0, 0, 0); 6];
+    for (entry, member) in party.iter_mut().zip(state.party.iter()) {
+        *entry = (member.hp, member.mana, member.status);
+    }
+    ProgressPrint {
+        pending_slot: state.pending_combat_actor_slot,
+        next_slot: state.next_combat_actor_slot,
+        round_counter: state.combat_round_counter,
+        cursor: state
+            .active_combat_targeting
+            .as_ref()
+            .map(|session| session.cursor),
+        prng_state: state.prng_state,
+        actors_hash: hash,
+        party,
+    }
+}
+
+/// Called by the shell immediately before it applies an auto key, with no
+/// idle pass in between: takes the "before" print.
+pub fn record_print_before_auto_key(state: &PlayState, fight: &mut AutoFightRuntime) {
+    fight.last_print = Some(progress_print(state));
+}
+
+/// Called after the shell applied `key` (6.3.2): classifies it as progress
+/// or no progress against the print taken just before, updates the
+/// counters, and records whether an auto `A` owns the open cursor.
+pub fn observe_after_auto_key(state: &PlayState, key: AutoKey, fight: &mut AutoFightRuntime) {
+    let after = progress_print(state);
+    let progressed = fight.last_print.is_none_or(|before| before != after);
+    fight.actions = fight.actions.saturating_add(1);
+    if progressed {
+        fight.no_progress = 0;
+        fight.blocked_dirs = 0;
+    } else {
+        match key {
+            AutoKey::Step(direction) => {
+                fight.blocked_dirs |= blocked_dir_bit(direction);
+                fight.no_progress = fight.no_progress.saturating_add(1);
+            }
+            // The fallback itself changed nothing: next plan hands back.
+            AutoKey::Pass => fight.no_progress = NO_PROGRESS_BUDGET + 1,
+            _ => fight.no_progress = fight.no_progress.saturating_add(1),
+        }
+    }
+    let cursor_slot = state
+        .active_combat_targeting
+        .as_ref()
+        .map(|session| session.actor_slot);
+    fight.owns_open_attempt = cursor_slot.is_some()
+        && matches!(
+            key,
+            AutoKey::Attack | AutoKey::Cursor(_) | AutoKey::Confirm | AutoKey::Cancel
+        );
+    fight.turn_slot = cursor_slot.or(state.pending_combat_actor_slot);
+    fight.last_print = Some(after);
+}
+
+#[cfg(test)]
+mod planner_tests;
 #[cfg(test)]
 mod tests;
