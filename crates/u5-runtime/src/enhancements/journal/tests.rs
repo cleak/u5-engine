@@ -97,9 +97,10 @@ fn the_two_toggles_match_the_design() {
     }
     let journal_toggles: Vec<&str> = TOGGLES
         .iter()
-        .filter(|spec| spec.key.starts_with("journal."))
+        .filter(|spec| spec.key.starts_with("journal.") && !CLUE_KEYS.contains(&spec.key))
         .map(|spec| spec.key)
         .collect();
+    // Chapter 8's rows (`CLUE_KEYS`) have their own tests.
     assert_eq!(journal_toggles, [PAGE_KEY, SIDE_PANEL_KEY]);
 }
 
@@ -171,16 +172,19 @@ fn the_three_options_match_the_design() {
     // The settings row names the spoiler tiers as spoilers (1.4.7).
     assert!(tier.label().contains("3 Spoiler:") && tier.label().contains("4 Spoiler:"));
 
-    // Five rows, in 5.4.1's order, all of chapter 5.
+    // Five rows, in 5.4.1's order, all of chapter 5 (chapter 8's rows,
+    // `CLUE_KEYS`, are tested on their own).
+    let chapter_5 =
+        |row: &CatalogueRow| row.key().starts_with("journal.") && !CLUE_KEYS.contains(&row.key());
     let keys: Vec<&str> = CatalogueRow::all()
-        .filter(|row| row.key().starts_with("journal."))
+        .filter(chapter_5)
         .map(CatalogueRow::key)
         .collect();
     let mut sorted = keys.clone();
     sorted.sort_by_key(|key| JOURNAL_KEYS.iter().position(|k| k == key));
     assert_eq!(sorted, JOURNAL_KEYS);
     assert_eq!(keys.len(), 5);
-    for row in CatalogueRow::all().filter(|row| row.key().starts_with("journal.")) {
+    for row in CatalogueRow::all().filter(chapter_5) {
         assert_eq!(row.ships().chapter, 5, "{}", row.key());
     }
     // No reserved name became a row (U3, U1).
@@ -196,7 +200,9 @@ fn every_journal_row_ships_in_m5_06() {
         assert!(SHIPPED_PHASES.contains(phase), "{phase:?}");
         assert_eq!(phase.chapter, 5);
     }
-    for row in CatalogueRow::all().filter(|row| row.key().starts_with("journal.")) {
+    for row in CatalogueRow::all()
+        .filter(|row| row.key().starts_with("journal.") && !CLUE_KEYS.contains(&row.key()))
+    {
         assert!(row.is_shipped(), "{}", row.key());
     }
     // A shipped row takes the file and the flags, with no note.
@@ -229,6 +235,7 @@ fn the_defaults_match_the_design() {
         mantras: MantraDisplay::Reveal,
         side_panel: false,
         side: JournalPanelSide::Auto,
+        clues: ClueSettings::default(),
     };
     assert_eq!(JournalSettings::default(), expected);
     assert!(!expected.any_on());
@@ -257,6 +264,7 @@ fn the_view_reads_file_and_command_line_values() {
             mantras: MantraDisplay::Never,
             side_panel: true,
             side: JournalPanelSide::Left,
+            clues: ClueSettings::default(),
         }
     );
     // The command line wins over the file, and the two toggles are

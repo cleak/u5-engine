@@ -470,6 +470,12 @@ one that types keys must change it exactly as typing those keys would:
 | gem_map.enhanced | Enhanced gem map | bool = false | a, P | feature | --gem-map | - | yes |
 | journal.page | Quest journal page (Ctrl+J) | bool = false | a, F | feature | --quest-journal | - | yes |
 | journal.side_panel | Quest journal side panel | bool = false | a, F | feature | --journal-side-panel | - | yes |
+| journal.clues | Clue log (what people have told you) | bool = false | a, P | feature | --clue-log | - | later (chapter 8 Phase 1a) |
+| journal.clue_scrollback | Conversation scrollback panel | bool = false | a, F | feature | - | - | later (chapter 8 Phase 1b) |
+| journal.clue_toast | Say when the clue log was updated | bool = false | a, F | feature | - | - | later (chapter 8 Phase 1b) |
+| journal.notes | Your own notes in the journal | bool = false | a, F | feature | - | - | later (chapter 8 Phase 1b) |
+| journal.clue_misses | Keep the words nobody answered | bool = false | a, F | deviation, spoiler risk | - | - | later (chapter 8 Phase 1d) |
+| journal.quest_tracker | Quest tracker cards | bool = false | a, F | feature | --quest-tracker | - | later (chapter 8 Phase 2a) |
 | enhancements.schema | Settings file format version | int 1..1 = 1 | -, L | feature | - | - | yes |
 | enhancements.preset | Preset | enum classic\|recommended\|everything = classic | -, P | feature | --preset | - | yes |
 | keys.menu | Open the menu | chord = F12 | -, F | feature | - | a keyboard | later (chapter 1 P5) |
@@ -514,4 +520,8 @@ one that types keys must change it exactly as typing those keys would:
 | journal.spoiler_tier | Spoiler tier: 1 progress, 2 goals you have been given, 3 Spoiler: hints, 4 Spoiler: hints and answers you have used | int 1..4 = 2 | a, F | feature (deviation: 3, 4) | --spoilers | - | yes |
 | journal.mantras | Mantras at tier 4: masked until you select one, or never shown | enum reveal\|never = reveal | a, F | feature | - | - | yes |
 | journal.side_panel_side | Side of the journal panel | enum auto\|left\|right = auto | a, F | feature | - | - | yes |
+| journal.clue_text | Show what people said in the clue log | enum off\|live = off | a, F | feature | --clue-text | - | later (chapter 8 Phase 1b) |
+| journal.clue_highlight | Mark topics you have already asked about (new is a spoiler: marks topics you have not asked) | enum off\|asked\|asked_elsewhere\|new = off | a, F | feature (deviation: new) | --clue-highlight | - | later (chapter 8 Phase 1c) |
+| journal.clue_highlight_style | How asked topics are marked | enum dotted\|tint = dotted | a, F | feature | - | - | later (chapter 8 Phase 1c) |
+| journal.tracker_evidence | What counts as evidence on a tracker card (npc is a spoiler: shows which people matter) | enum record\|npc = record | a, F | feature (deviation: npc) | - | - | later (chapter 8 Phase 2b) |
 <!-- END GENERATED -->

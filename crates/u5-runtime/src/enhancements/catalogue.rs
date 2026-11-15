@@ -39,7 +39,10 @@ use super::display::{
     RASTER_WORDS, SCALE_MODE_WORDS,
 };
 use super::gem_map::GLYPH_WORDS;
-use super::journal::{MANTRA_WORDS, PANEL_SIDE_WORDS};
+use super::journal::{
+    CLUE_HIGHLIGHT_WORDS, CLUE_TEXT_WORDS, HIGHLIGHT_STYLE_WORDS, MANTRA_WORDS, PANEL_SIDE_WORDS,
+    TRACKER_EVIDENCE_WORDS,
+};
 use super::source::Capability;
 
 /// The three effect classes (user requirement, 2026-11-01).
@@ -158,6 +161,23 @@ pub const JOURNAL_P3: Phase = Phase::new(5, "Phase 3");
 /// Chapter 5, Phase 3b: the journal side panel (`journal.side_panel` and
 /// `side_panel_side`; build plan M5-01). Shipped in M5-06.
 pub const JOURNAL_P3B: Phase = Phase::new(5, "Phase 3b");
+// Chapter 8, the clue log and quest trackers (design 8.5; build plan M6).
+// Every row is added in M6-01 and stays hidden until M6-08 ships the phases.
+/// Chapter 8, Phase 1a: capture and the log (`journal.clues`).
+pub const CLUES_P1A: Phase = Phase::new(8, "Phase 1a");
+/// Chapter 8, Phase 1b: text, scrollback, toast and notes.
+pub const CLUES_P1B: Phase = Phase::new(8, "Phase 1b");
+/// Chapter 8, Phase 1c: highlighting (`journal.clue_highlight` and its
+/// style).
+pub const CLUES_P1C: Phase = Phase::new(8, "Phase 1c");
+/// Chapter 8, Phase 1d: the deviation extras (`journal.clue_misses`; held
+/// back until D8.14 is answered). `clue_map_links` moves to L1.
+pub const CLUES_P1D: Phase = Phase::new(8, "Phase 1d");
+/// Chapter 8, Phase 2a: tracker cards from save evidence
+/// (`journal.quest_tracker`).
+pub const CLUES_P2A: Phase = Phase::new(8, "Phase 2a");
+/// Chapter 8, Phase 2b: evidence links (`journal.tracker_evidence`).
+pub const CLUES_P2B: Phase = Phase::new(8, "Phase 2b");
 
 /// Every phase that has shipped in this build. Shipping a phase is adding
 /// it here, in the package that completes it; its rows then become
@@ -441,6 +461,95 @@ toggles! {
         ships: JOURNAL_P3B,
         tags: &[],
         cli_aliases: &["--journal-side-panel"],
+        soft_deps: &[],
+        needs: &[],
+        driven: false,
+    },
+    // `[journal]`, chapter 8 (design 8.4.1): the clue log and quest
+    // trackers. Every key is class (a); `clues` applies at the next idle
+    // prompt (it reads the sidecar), the rest at the next frame. The rows
+    // that need `clues` resolve off without it (`PREREQUISITES`).
+    // `clue_highlight` is a valued setting whose switch is driven.
+    JournalClues = "journal.clues" {
+        label: "Clue log (what people have told you)",
+        class: EffectClass::Presentation,
+        apply: ApplyAt::IdlePrompt,
+        tier: Tier::Feature,
+        ships: CLUES_P1A,
+        tags: &[],
+        cli_aliases: &["--clue-log"],
+        soft_deps: &[],
+        needs: &[],
+        driven: false,
+    },
+    JournalClueHighlight = "journal.clue_highlight" {
+        label: "Mark topics you have already asked about",
+        class: EffectClass::Presentation,
+        apply: ApplyAt::Frame,
+        tier: Tier::Feature,
+        ships: CLUES_P1C,
+        tags: &[],
+        cli_aliases: &[],
+        soft_deps: &[],
+        needs: &[],
+        driven: true,
+    },
+    JournalClueScrollback = "journal.clue_scrollback" {
+        label: "Conversation scrollback panel",
+        class: EffectClass::Presentation,
+        apply: ApplyAt::Frame,
+        tier: Tier::Feature,
+        ships: CLUES_P1B,
+        tags: &[],
+        cli_aliases: &[],
+        soft_deps: &[],
+        needs: &[],
+        driven: false,
+    },
+    JournalClueToast = "journal.clue_toast" {
+        label: "Say when the clue log was updated",
+        class: EffectClass::Presentation,
+        apply: ApplyAt::Frame,
+        tier: Tier::Feature,
+        ships: CLUES_P1B,
+        tags: &[],
+        cli_aliases: &[],
+        soft_deps: &[],
+        needs: &[],
+        driven: false,
+    },
+    JournalNotes = "journal.notes" {
+        label: "Your own notes in the journal",
+        class: EffectClass::Presentation,
+        apply: ApplyAt::Frame,
+        tier: Tier::Feature,
+        ships: CLUES_P1B,
+        tags: &[],
+        cli_aliases: &[],
+        soft_deps: &[],
+        needs: &[],
+        driven: false,
+    },
+    JournalClueMisses = "journal.clue_misses" {
+        label: "Keep the words nobody answered",
+        class: EffectClass::Presentation,
+        apply: ApplyAt::Frame,
+        tier: Tier::Deviation,
+        ships: CLUES_P1D,
+        tags: &[Tag::SpoilerRisk],
+        cli_aliases: &[],
+        soft_deps: &[],
+        needs: &[],
+        driven: false,
+    },
+    JournalQuestTracker = "journal.quest_tracker" {
+        label: "Quest tracker cards",
+        class: EffectClass::Presentation,
+        apply: ApplyAt::Frame,
+        tier: Tier::Feature,
+        ships: CLUES_P2A,
+        tags: &[],
+        cli_aliases: &["--quest-tracker"],
         soft_deps: &[],
         needs: &[],
         driven: false,
@@ -1125,7 +1234,83 @@ pub const OPTIONS: &[OptionSpec] = &[
         JOURNAL_P3B,
         Toggle::JournalSidePanel,
     ),
+    // `[journal]`, chapter 8 (design 8.4.1). `clue_text` needs `clues`
+    // (`PREREQUISITES`); its `kept` value waits for D8.1, so the word list
+    // has only `off` and `live` and the resolver rejects `kept` with a
+    // note. `clue_highlight = new` and `tracker_evidence = npc` are
+    // deviation values, in no preset. `clue_highlight_style` is a
+    // preference, so presets never set it.
+    OptionSpec {
+        cli_aliases: &["--clue-text"],
+        ..journal_option(
+            "journal.clue_text",
+            "Show what people said in the clue log",
+            OptionKind::Enum(CLUE_TEXT_WORDS),
+            OptionDefault::Str("off"),
+            CLUES_P1B,
+            Toggle::JournalClues,
+        )
+    },
+    OptionSpec {
+        deviation_values: &["new"],
+        cli_aliases: &["--clue-highlight"],
+        toggle: Some(Toggle::JournalClueHighlight),
+        parent: None,
+        ..journal_option(
+            "journal.clue_highlight",
+            "Mark topics you have already asked about (new is a spoiler: marks topics \
+             you have not asked)",
+            OptionKind::Enum(CLUE_HIGHLIGHT_WORDS),
+            OptionDefault::Str("off"),
+            CLUES_P1C,
+            Toggle::JournalClueHighlight,
+        )
+    },
+    journal_option(
+        "journal.clue_highlight_style",
+        "How asked topics are marked",
+        OptionKind::Enum(HIGHLIGHT_STYLE_WORDS),
+        OptionDefault::Str("dotted"),
+        CLUES_P1C,
+        Toggle::JournalClueHighlight,
+    ),
+    OptionSpec {
+        deviation_values: &["npc"],
+        ..journal_option(
+            "journal.tracker_evidence",
+            "What counts as evidence on a tracker card (npc is a spoiler: shows \
+             which people matter)",
+            OptionKind::Enum(TRACKER_EVIDENCE_WORDS),
+            OptionDefault::Str("record"),
+            CLUES_P2B,
+            Toggle::JournalQuestTracker,
+        )
+    },
 ];
+
+/// Keys that need another key on (design 8.4.1, "Dependencies"): while the
+/// prerequisite is off the key resolves to its default, the stored value is
+/// kept, and the settings line reads `needs: <prerequisite>` ([`needs_line`]).
+/// No key turns its prerequisite on.
+pub const PREREQUISITES: &[(&str, &str)] = &[
+    ("journal.clue_text", "journal.clues"),
+    ("journal.clue_toast", "journal.clues"),
+    ("journal.notes", "journal.clues"),
+    ("journal.clue_misses", "journal.clues"),
+];
+
+/// The key `key` needs on, if any ([`PREREQUISITES`]).
+pub fn prerequisite(key: &str) -> Option<&'static str> {
+    PREREQUISITES
+        .iter()
+        .find(|(dependent, _)| *dependent == key)
+        .map(|(_, needs)| *needs)
+}
+
+/// The settings line of a key whose prerequisite is off: `needs: <key>`.
+pub fn needs_line(key: &str) -> Option<String> {
+    prerequisite(key).map(|needs| format!("needs: {needs}"))
+}
 
 /// The named stops of a long `Int` row (build plan D-M2.4): the values a
 /// settings page with a short list of choices offers, such as the setup

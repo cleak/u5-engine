@@ -17,6 +17,9 @@
 //! - [`journal`]: chapter 5's `[journal]` typed view,
 //!   [`ResolvedEnhancements::journal`] and [`JournalSettings`] (design
 //!   5.3.2, 5.4.1).
+//! - [`clues`]: chapter 8's clue log model, its `QJRN` payload, the
+//!   sidecar reconcile and the answer-dependence scan (design 8.3.3,
+//!   8.3.7, 8.3.13).
 //! - [`catalogue`]: the toggle and option catalogue, effect classes, apply
 //!   points, preset tiers, shipping phases and the three presets
 //!   (design 1.3.2, 1.4.1 and 1.4.2).
@@ -52,6 +55,7 @@
 //! `u5_bevy::VisualLaunchConfig`.
 
 pub mod catalogue;
+pub mod clues;
 pub mod digest;
 pub mod display;
 pub mod gem_map;
@@ -72,6 +76,10 @@ pub use catalogue::{
     settings_table,
 };
 pub use catalogue::{
+    CLUES_P1A, CLUES_P1B, CLUES_P1C, CLUES_P1D, CLUES_P2A, CLUES_P2B, PREREQUISITES, needs_line,
+    prerequisite,
+};
+pub use catalogue::{
     DISPLAY_P1, DISPLAY_P2, DISPLAY_P8, GEM_G2, GEM_G3, GEM_G4, GEM_G5, LAUNCH_PARAMETER_KEYS,
     LIGHT_P1, LIGHT_P2, LIGHT_P3, LIGHT_P5, help_line, named_stops,
 };
@@ -90,6 +98,10 @@ pub use gem_map::{
     GLYPH_WORDS, GemMapOptions, GemMapToggles, GlyphPolicy,
 };
 pub use idle::{GUARDED_DRAINS, GuardedDrain, IdleBlocker, IdlePromptKind};
+pub use journal::{
+    CLUE_HIGHLIGHT_WORDS, CLUE_KEYS, CLUE_TEXT_KEPT, CLUE_TEXT_WORDS, ClueHighlight, ClueSettings,
+    ClueText, HIGHLIGHT_STYLE_WORDS, HighlightStyle, TRACKER_EVIDENCE_WORDS, TrackerEvidence,
+};
 pub use journal::{
     JOURNAL_KEYS, JournalPanelSide, JournalSettings, MANTRA_WORDS, MantraDisplay, PANEL_SIDE_WORDS,
     SpoilerTier,

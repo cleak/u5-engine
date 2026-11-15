@@ -22,8 +22,8 @@ use std::fmt;
 
 use super::catalogue::{EffectClass, FeatureToggles};
 use super::catalogue::{
-    OPTIONS, OptionDefault, OptionKind, OptionSpec, PRESETS, Phase, Preset, PresetEntry,
-    PresetValue, SHIPPED_PHASES, TOGGLES, Tier, ToggleSpec,
+    OPTIONS, OptionDefault, OptionKind, OptionSpec, PREREQUISITES, PRESETS, Phase, Preset,
+    PresetEntry, PresetValue, SHIPPED_PHASES, TOGGLES, Tier, ToggleSpec,
 };
 use super::source::{
     Capability, CliSetting, HostCapabilities, LockReason, LockState, SettingNote, SettingValue,
@@ -604,6 +604,40 @@ impl<'a> State<'a> {
                     key: spec.key,
                     value: Some(value.to_string()),
                     missing,
+                });
+            }
+        }
+        self.enforce_prerequisites();
+    }
+
+    /// Design 8.4.1: a key whose prerequisite toggle is off resolves to its
+    /// default with a `needs:` note. Runs after the host's forcing, so a
+    /// prerequisite the host turned off counts as off. It never turns the
+    /// prerequisite on; the stored value is the host's and is untouched.
+    fn enforce_prerequisites(&mut self) {
+        let cat = self.cat;
+        for (key, needs) in PREREQUISITES {
+            let (Some(row), Some(Row::Toggle(prerequisite))) = (cat.find(key), cat.find(needs))
+            else {
+                continue;
+            };
+            if self.toggles[prerequisite] {
+                continue;
+            }
+            let forced = match row {
+                Row::Toggle(index) => std::mem::replace(&mut self.toggles[index], false),
+                Row::Option(index) => {
+                    let default = default_value(&cat.options[index]);
+                    std::mem::replace(&mut self.options[index], default.clone()) != default
+                }
+            };
+            if forced {
+                self.notes.push(SettingNote::NeedsKey {
+                    key: match row {
+                        Row::Toggle(index) => cat.toggles[index].key,
+                        Row::Option(index) => cat.options[index].key,
+                    },
+                    needs: cat.toggles[prerequisite].key,
                 });
             }
         }
