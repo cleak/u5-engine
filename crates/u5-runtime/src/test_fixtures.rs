@@ -1290,6 +1290,39 @@ pub fn message_with_staged(state: &PlayState) -> String {
     text
 }
 
+// --- Chapter 5, the quest journal (build plan M5-06). -------------------
+
+/// Every name the quest journal may not show on a fresh save at tiers 1
+/// and 2 (foundation 1.4.7, design 5.6): the dungeons and their Words of
+/// Power, the Shadowlords and their shards, the towns, the regalia, the
+/// tools, the companions and the mantras. Shared by the runtime's and the
+/// shell's spoiler suites.
+pub fn journal_undiscovered_names() -> Vec<String> {
+    use crate::quest_journal::text;
+    let mut names: Vec<String> = Vec::new();
+    for scene in 33..=40 {
+        names.push(dungeon_resident_name(scene).unwrap().into());
+        names.push(dungeon_word_of_power(scene).unwrap().into());
+    }
+    for slot in 0..3 {
+        let keyword = shadowlord_name_for_slot(slot).unwrap();
+        names.push(text::shadowlord_display_name(keyword));
+        names.push(text::shard_label(slot).into());
+    }
+    for scene in 1..=32 {
+        if let Some(name) = town_resident_name(scene) {
+            names.push(name.into());
+        }
+    }
+    names.extend(text::REGALIA.iter().map(|(label, ..)| (*label).to_string()));
+    names.extend(text::TOOLS.iter().map(|(label, _)| (*label).to_string()));
+    for virtue in ShrineVirtue::ALL {
+        names.push(virtue.companion().0.into());
+        names.push(shrine_mantra_for(virtue).into());
+    }
+    names
+}
+
 #[cfg(test)]
 mod pristine_game_dir_guard_tests {
     use super::*;

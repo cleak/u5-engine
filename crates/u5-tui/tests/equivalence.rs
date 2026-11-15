@@ -506,3 +506,52 @@ fn every_compared_part_can_differ() {
             .any(|m| m.what == "saved SAVED.GAM")
     );
 }
+
+/// The quest journal (chapter 5, class (a); build plan M5-06) has no
+/// terminal feature: the terminal binds no chord, and the offline report
+/// reads the save on its own. With every journal key on, a script with
+/// `@journal` runs exactly as the all-off script, the save included.
+#[test]
+fn the_journal_keys_add_no_terminal_feature_and_leave_journal_tokens_alone() {
+    use u5_runtime::enhancements::{
+        HostCapabilities, JOURNAL_P3, JOURNAL_P3B, LockState, ResolveInput, resolve_as_shipped,
+    };
+    let cli = [
+        CliSetting::Enable("journal.page".into()),
+        CliSetting::Enable("journal.side_panel".into()),
+        CliSetting::Set {
+            key: "journal.spoiler_tier".into(),
+            value: "4".into(),
+        },
+        CliSetting::Set {
+            key: "journal.side_panel_side".into(),
+            value: "left".into(),
+        },
+    ];
+    let resolved = resolve_as_shipped(
+        ResolveInput {
+            stored: None,
+            cli: &cli,
+            lock: LockState::Off,
+            caps: HostCapabilities::ALL,
+        },
+        &[JOURNAL_P3, JOURNAL_P3B],
+    );
+    assert!(resolved.notes.is_empty(), "{:?}", resolved.notes);
+    assert!(resolved.toggles.on(Toggle::JournalPage));
+    assert!(resolved.toggles.on(Toggle::JournalSidePanel));
+    assert!(terminal_features(&resolved).is_empty());
+    let (off_dir, on_dir) = (
+        Scratch::with_save("journal-off"),
+        Scratch::with_save("journal-on"),
+    );
+    let commands = script(&["pass", "@journal", "idle:2", "@journal", "pass"]);
+    let mismatches = check_equivalence(
+        &town(),
+        Path::new(""),
+        &commands,
+        terminal_features(&resolved),
+        Some((off_dir.path(), on_dir.path())),
+    );
+    assert_eq!(mismatches, []);
+}

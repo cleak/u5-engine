@@ -1325,8 +1325,12 @@ pub use panel::{
 #[cfg(test)]
 mod content_tests;
 #[cfg(test)]
+mod equivalence_tests;
+#[cfg(test)]
 mod panel_tests;
 #[cfg(test)]
 mod review_tests;
+#[cfg(test)]
+mod spoiler_tests;
 #[cfg(test)]
 mod tests;

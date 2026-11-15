@@ -466,35 +466,9 @@ fn no_text_says_met_killed_or_interred() {
 
 // --- The fresh save and one event at a time (1.4.7, 5.6). ----------------
 
-/// Names no fresh-save line may hold at tiers 1 and 2.
-fn undiscovered_names() -> Vec<String> {
-    let mut names: Vec<String> = Vec::new();
-    for scene in 33..=40 {
-        names.push(dungeon_resident_name(scene).unwrap().into());
-        names.push(dungeon_word_of_power(scene).unwrap().into());
-    }
-    for slot in 0..3 {
-        let keyword = shadowlord_name_for_slot(slot).unwrap();
-        names.push(text::shadowlord_display_name(keyword));
-        names.push(text::shard_label(slot).into());
-    }
-    for scene in 1..=32 {
-        if let Some(name) = town_resident_name(scene) {
-            names.push(name.into());
-        }
-    }
-    names.extend(text::REGALIA.iter().map(|(label, ..)| (*label).to_string()));
-    names.extend(text::TOOLS.iter().map(|(label, _)| (*label).to_string()));
-    for virtue in ShrineVirtue::ALL {
-        names.push(virtue.companion().0.into());
-        names.push(shrine_mantra_for(virtue).into());
-    }
-    names
-}
-
 #[test]
 fn the_fresh_save_shows_nothing_undiscovered() {
-    let names = undiscovered_names();
+    let names = crate::test_fixtures::journal_undiscovered_names();
     for tier in [SpoilerTier::Progress, SpoilerTier::Goals] {
         let model = derive(&fresh(), tier);
         assert_eq!(model.header, "Nothing recorded yet");
