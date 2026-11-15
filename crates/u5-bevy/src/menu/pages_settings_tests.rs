@@ -878,7 +878,7 @@ fn the_footer_says_the_help_and_the_notes() {
 /// the menu's text checked against them: every label and help line a
 /// Settings row can show (the wording table's and the catalogue's, which
 /// is the footer's help), and the menu's own lines on these pages.
-fn shown_texts() -> Vec<&'static str> {
+pub(crate) fn shown_texts() -> Vec<&'static str> {
     let mut texts: Vec<&'static str> = vec![
         t::MENU_TITLE,
         t::RESUME,
@@ -926,7 +926,7 @@ fn shown_texts() -> Vec<&'static str> {
 }
 
 /// The words of `text`: its runs of letters, lowercased.
-fn words(text: &str) -> Vec<String> {
+pub(crate) fn words(text: &str) -> Vec<String> {
     text.split(|c: char| !c.is_ascii_alphabetic())
         .filter(|w| !w.is_empty())
         .map(str::to_ascii_lowercase)
@@ -935,7 +935,7 @@ fn words(text: &str) -> Vec<String> {
 
 /// Whether `phrase` (a name, perhaps of several words) is in `text` as
 /// whole words, ignoring case.
-fn says(text: &str, phrase: &str) -> bool {
+pub(crate) fn says(text: &str, phrase: &str) -> bool {
     let text = words(text);
     let phrase = words(phrase);
     !phrase.is_empty() && text.windows(phrase.len()).any(|w| w == phrase.as_slice())
@@ -944,7 +944,7 @@ fn says(text: &str, phrase: &str) -> bool {
 /// The names the engine itself knows (published in the clean
 /// specification): every place of the world's location table, the
 /// dungeons, and the special items, potions and equipment.
-fn engine_names() -> Vec<String> {
+pub(crate) fn engine_names() -> Vec<String> {
     let mut names: Vec<String> = Vec::new();
     for entry in u5_runtime::published_world_location_entries() {
         names.extend(entry.proper_name.map(str::to_string));
@@ -988,7 +988,7 @@ fn no_label_or_help_names_a_place_or_item() {
 }
 
 /// FNV-1a over a lowercased word: the only form game words are kept in.
-fn word_hash(word: &str) -> u64 {
+pub(crate) fn word_hash(word: &str) -> u64 {
     let mut hash: u64 = 0xcbf2_9ce4_8422_2325;
     for byte in word.bytes() {
         hash ^= u64::from(byte.to_ascii_lowercase());
@@ -997,23 +997,15 @@ fn word_hash(word: &str) -> u64 {
     hash
 }
 
-/// No label or help line says a proper name of the game's text: a word the
-/// game's talk, signs, looks and messages only ever write capitalised
-/// (the names of people, places and things). The game's words are hashed
-/// as they are read and only the hashes are kept. Runs when
-/// `U5_TEST_ASSET_DIR` (or `U5_MOCKUP_PROFILE`) names a copy of the game.
-#[test]
-fn no_label_or_help_says_a_name_of_the_game_s_text() {
-    let Some(dir) =
-        configured_original_asset_dir().or_else(|| configured_test_dir("U5_MOCKUP_PROFILE"))
-    else {
-        eprintln!("skipped: set U5_TEST_ASSET_DIR or U5_MOCKUP_PROFILE");
-        return;
-    };
+/// The hashes ([`word_hash`]) of the game's proper names in `dir`: the
+/// words of at least three letters its talk, signs, looks and messages
+/// only ever write capitalised (the names of people, places and things).
+/// The words are hashed as they are read; nothing else is kept.
+pub(crate) fn game_proper_names(dir: &std::path::Path) -> HashSet<u64> {
     let mut capital: HashSet<u64> = HashSet::new();
     let mut lower: HashSet<u64> = HashSet::new();
     let mut files = 0;
-    for entry in fs::read_dir(&dir).unwrap() {
+    for entry in fs::read_dir(dir).unwrap() {
         let path = entry.unwrap().path();
         let name = path
             .file_name()
@@ -1065,7 +1057,23 @@ fn no_label_or_help_says_a_name_of_the_game_s_text() {
         "the game's world text files in {}",
         dir.display()
     );
-    let names: HashSet<u64> = capital.difference(&lower).copied().collect();
+    capital.difference(&lower).copied().collect()
+}
+
+/// No label or help line says a proper name of the game's text: a word the
+/// game's talk, signs, looks and messages only ever write capitalised
+/// (the names of people, places and things). The game's words are hashed
+/// as they are read and only the hashes are kept. Runs when
+/// `U5_TEST_ASSET_DIR` (or `U5_MOCKUP_PROFILE`) names a copy of the game.
+#[test]
+fn no_label_or_help_says_a_name_of_the_game_s_text() {
+    let Some(dir) =
+        configured_original_asset_dir().or_else(|| configured_test_dir("U5_MOCKUP_PROFILE"))
+    else {
+        eprintln!("skipped: set U5_TEST_ASSET_DIR or U5_MOCKUP_PROFILE");
+        return;
+    };
+    let names = game_proper_names(&dir);
     assert!(names.len() > 100, "the game's proper names");
     let mut hits = BTreeSet::new();
     for text in shown_texts() {
@@ -1088,7 +1096,7 @@ fn no_label_or_help_says_a_name_of_the_game_s_text() {
 /// Words of the menu's text the game only ever writes capitalised but
 /// that name nothing of its world: key names and words of the menu's own
 /// that the game prints only at the start of a line.
-const NOT_NAMES: &[&str] = &[];
+pub(crate) const NOT_NAMES: &[&str] = &[];
 
 // ---------------------------------------------------------------------------
 // The lock and the Cheats group (3.2.7, D-M4.9).

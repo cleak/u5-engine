@@ -124,6 +124,28 @@ fn load_line(slot: &SlotEntry, w: u32) -> Line {
     }
 }
 
+/// The lines under a slot's thumbnail (3.2.3), each with its ink: the
+/// Avatar, the place in published words (D-M4.8), the game's date and time
+/// and the turn (not for an import), and the cheats mark; only "Damaged"
+/// for a damaged slot. Nothing else: no quest progress (1.4.7).
+pub fn detail_lines(slot: &SlotEntry) -> Vec<(String, Ink)> {
+    let mut lines: Vec<(String, Ink)> = Vec::new();
+    if slot.info.damaged.is_some() {
+        lines.push((t::DAMAGED.to_string(), Ink::Grey));
+        return lines;
+    }
+    lines.push((slot.info.avatar.clone(), Ink::Plain));
+    lines.push((slot.info.place.clone(), Ink::Help));
+    lines.push((t::slot_when(slot.info.clock), Ink::Help));
+    if !slot.info.imported {
+        lines.push((t::fill(t::TURN, &[&slot.info.turn.to_string()]), Ink::Help));
+    }
+    if slot.info.modified {
+        lines.push((t::SAVED_WITH_CHEATS.to_string(), Ink::Accent));
+    }
+    lines
+}
+
 /// The details of `slot` in the box `bx` (3.2.3): the thumbnail box
 /// centred under the box's margin row, then a blank row, then the lines.
 /// No quest progress is ever shown.
@@ -139,20 +161,7 @@ fn draw_details(img: &mut MenuImage, font: &FixedCellFont, bx: CellRect, slot: &
     draw_thumbnail_box(img, font, thumb_col, bx.row + 1, thumb);
     let first = bx.row + 1 + THUMB_CELLS.1 + 1;
     let room = (bx.w - 2) as usize;
-    let mut lines: Vec<(String, Ink)> = Vec::new();
-    if damaged {
-        lines.push((t::DAMAGED.to_string(), Ink::Grey));
-    } else {
-        lines.push((slot.info.avatar.clone(), Ink::Plain));
-        lines.push((slot.info.place.clone(), Ink::Help));
-        lines.push((t::slot_when(slot.info.clock), Ink::Help));
-        if !slot.info.imported {
-            lines.push((t::fill(t::TURN, &[&slot.info.turn.to_string()]), Ink::Help));
-        }
-        if slot.info.modified {
-            lines.push((t::SAVED_WITH_CHEATS.to_string(), Ink::Accent));
-        }
-    }
+    let lines = detail_lines(slot);
     for (i, (text, ink)) in lines.iter().enumerate() {
         let row = first + i as u32;
         if row > bx.bottom() {

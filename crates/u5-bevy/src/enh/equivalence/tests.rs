@@ -163,12 +163,41 @@ fn every_matrix_row_equals_the_off_run() {
     }
 }
 
+/// The walk, then, where the row has the menu's overlay, the menu used
+/// twice between more steps (design 3.4.3, build plan M4-14): opened with
+/// F12, moved about and closed (class (a), the feature's events), then
+/// opened again and Sound chosen on its Game tab (class (b): it types the
+/// game's Ctrl-S, which the off run gets as a typed key).
+fn walk_and_menu(overlay: bool) -> Timeline {
+    let mut timeline = walk(80);
+    if !overlay {
+        return timeline;
+    }
+    timeline
+        .feature_tap(90, KeyCode::F12)
+        .feature_tap(94, KeyCode::ArrowDown)
+        .feature_hold(97, 106, KeyCode::ArrowDown)
+        .feature_tap(110, KeyCode::Escape)
+        .game_tap(125, KeyCode::ArrowUp)
+        .feature_tap(145, KeyCode::F12)
+        .feature_tap(149, KeyCode::ArrowDown)
+        .feature_tap(152, KeyCode::Enter)
+        .feature_tap(155, KeyCode::ArrowDown)
+        .feature_tap(158, KeyCode::ArrowRight)
+        .feature_tap(161, KeyCode::ArrowRight)
+        .feature_tap(165, KeyCode::Enter)
+        .game_tap(185, KeyCode::ArrowLeft);
+    timeline.extend_to(220);
+    timeline
+}
+
 /// The committed `qa/enhancements/matrix.tsv` (build plan M2-08, design
 /// 1.3.12 and 9.4.3): it is the generator's current output, so it holds
 /// chapter 9's rows, and every row it lists, read from the file as a host
 /// reads `--set KEY=VALUE`, equals the off run through
 /// [`check_shell_equivalence`] in a 16:9 window, where the presentation
-/// steps (the wider view, compositing, brightness) really draw.
+/// steps (the wider view, compositing, brightness) really draw. A row with
+/// the menu's overlay uses the menu as [`walk_and_menu`] does (M4-14).
 #[test]
 fn every_row_of_the_committed_matrix_equals_the_off_run_in_a_window() {
     let path = u5_runtime::test_fixtures::workspace_file(MATRIX_FILE);
@@ -183,17 +212,23 @@ fn every_row_of_the_committed_matrix_equals_the_off_run_in_a_window() {
         "display.brightness_scope=",
         "display.sprite_composite=",
         "display.composite_halo=",
+        "menu.overlay=",
+        "menu.title_layer=",
+        "menu.named_slots=",
+        "menu.confirm_unsaved=",
+        "audio.volume=",
+        "audio.start_sound_off=",
+        "audio.start_buffer_on=",
     ] {
         assert!(text.contains(key), "{MATRIX_FILE} has no {key} row");
     }
-    let timeline = walk(80);
     let window = |app: &mut App| {
         app.world_mut().spawn(Window {
             resolution: bevy::window::WindowResolution::new(2560.0, 1440.0),
             ..default()
         });
     };
-    let (mut rows, mut lit, mut composited) = (0, 0, 0);
+    let (mut rows, mut lit, mut composited, mut menus) = (0, 0, 0, 0);
     for line in text.lines().filter(|line| !line.starts_with('#')) {
         let (name, settings) = line.split_once('\t').expect("NAME<TAB>SETTINGS");
         let settings: Vec<CliSetting> = settings
@@ -216,19 +251,35 @@ fn every_row_of_the_committed_matrix_equals_the_off_run_in_a_window() {
         let light = resolved.display().light;
         lit += usize::from(light.brightness != 100);
         composited += usize::from(light.composite);
+        let overlay = resolved.toggles.on(Toggle::MenuOverlay);
+        menus += usize::from(overlay);
         let launch = VisualLaunchConfig {
             enhancements: resolved,
             ..VisualLaunchConfig::classic()
         };
+        let timeline = walk_and_menu(overlay);
         let mismatches =
             check_shell_equivalence(&town(), &Scene::synthetic(), &timeline, &launch, window);
         assert_eq!(mismatches, [], "{name}");
+        if overlay {
+            // The menu was really used: Sound typed Ctrl-S.
+            let on = run_shell(
+                town(),
+                &Scene::synthetic(),
+                &launch,
+                window,
+                &timeline,
+                None,
+            );
+            let fed: Vec<KeyCode> = on.fed.iter().flatten().map(|key| key.key).collect();
+            assert!(fed.contains(&KeyCode::KeyS), "{name}: {fed:?}");
+        }
         rows += 1;
     }
     assert_eq!(rows, toggle_matrix().len());
     assert!(
-        lit > 0 && composited > 0,
-        "brightness {lit}, compositing {composited}"
+        lit > 0 && composited > 0 && menus > 2,
+        "brightness {lit}, compositing {composited}, menu {menus}"
     );
 }
 

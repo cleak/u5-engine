@@ -25,6 +25,18 @@
 //!
 //! The scripts run on synthetic states in every `cargo test`, and on the
 //! real game files when `U5_TEST_ASSET_DIR` names a writable copy.
+//!
+//! Chapter 3's keys join the matrix at the M4 release gate (design 3.4.3
+//! and 3.6, build plan M4-14): each `[menu]` and `[audio]` key alone, the
+//! pairwise matrix over them with one representative key of each other
+//! chapter, and one run with every shipped key on except the cheats. Where
+//! the menu is on, the player opens it with F12 at an idle prompt, moves
+//! about in it and closes it (class (a): the events are the feature's and
+//! the off run does not see them), or chooses Sound on its Game tab, which
+//! types the game's own Ctrl-S (class (b)); the start preferences type
+//! their keys at the first prompt. Every key the synthetic-key owner fed
+//! is replayed into the off run as an ordinary typed key, on the frame it
+//! was fed.
 
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -33,7 +45,7 @@ use bevy::input::ButtonState;
 use bevy::prelude::*;
 use bevy::window::WindowResolution;
 use u5_runtime::enhancements::{
-    CliSetting, HostCapabilities, LockState, ResolveInput, fnv1a64, resolve,
+    CliSetting, HostCapabilities, LockState, ResolveInput, TOGGLES, fnv1a64, resolve,
 };
 use u5_runtime::test_fixtures::{
     configured_original_asset_dir, copy_asset_writable, open_dungeon_record, open_grid,
@@ -48,11 +60,13 @@ use u5_runtime::{
 
 use super::composite::CompositeMasks;
 use super::grow::column::ColumnState;
+use crate::TypedKey;
 use crate::enh::VisualLaunchConfig;
 use crate::enh::equivalence::{
     FrameRecord, Owner, Scene, Shell, ShellRun, Timeline, compare_shell_runs,
 };
 use crate::enh::gem_map::{GemMap, GemMapNode};
+use crate::enh::overlay::{OverlayId, OverlayState};
 use crate::enh::present::{PresentHost, PresentSteps, StepOrder};
 
 /// The window most runs use: the named 16:9 layout (a 512x240 canvas).
@@ -92,6 +106,22 @@ struct Config {
     window: (f32, f32),
     /// Ctrl+P after every fifth game key.
     column_keys: bool,
+    /// What the player does in the menu (chapter 3), every fifth key.
+    menu: MenuKeys,
+}
+
+/// The menu's part of a script (design 3.4.3): after every fifth game key,
+/// at the next idle prompt, the menu is opened with F12 and used.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+enum MenuKeys {
+    /// The menu is not used.
+    None,
+    /// Opened, moved about in (a held arrow with repeat) and closed with
+    /// Escape: class (a), every event the feature's.
+    Browse,
+    /// Opened and Sound chosen on the Game tab, which closes it and types
+    /// Ctrl-S: class (b), the key replayed into the off run.
+    Sound,
 }
 
 impl Config {
@@ -101,7 +131,20 @@ impl Config {
             settings,
             window: W16,
             column_keys: false,
+            menu: MenuKeys::None,
         }
+    }
+
+    /// The same settings with the menu used as `menu` says.
+    fn with_menu(mut self, menu: MenuKeys) -> Self {
+        self.menu = menu;
+        self
+    }
+
+    fn enabled(&self, key: &str) -> bool {
+        self.settings
+            .iter()
+            .any(|s| matches!(s, CliSetting::Enable(k) if k == key))
     }
 
     fn grow_left(&self) -> bool {
@@ -211,6 +254,7 @@ fn alone() -> Vec<Config> {
     ];
     configs.extend(light_alone());
     configs.extend(gem_alone());
+    configs.extend(menu_alone());
     for (name, window) in [
         ("grow_left@3440x1440", (3440.0, 1440.0)),
         ("grow_left@1920x1080", (1920.0, 1080.0)),
@@ -332,6 +376,152 @@ fn gem_pair_values() -> Vec<(&'static str, Vec<CliSetting>)> {
             )
         })
         .collect()
+}
+
+/// Chapter 3's keys (design 3.4.1, build plan M4-14), each away from its
+/// default, with what the player does in the menu. The overlay is run both
+/// ways (class (a) and class (b)); a key that is inert without the overlay
+/// (`quicksave`, `confirm_unsaved`) brings it, browsing. `named_slots` and
+/// `title_layer` are also run alone: the harness shell has no slot store
+/// and no intro, so alone they must add nothing the game sees. The menu's
+/// key alone is `menu.quit_to_title = relaunch`, its default and only
+/// shipped value, so it has no run of its own.
+fn menu_values() -> Vec<(&'static str, Vec<CliSetting>, MenuKeys)> {
+    let menu = |more: Vec<CliSetting>| {
+        let mut settings = vec![on("menu.overlay")];
+        settings.extend(more);
+        settings
+    };
+    vec![
+        ("menu.overlay (browse)", menu(vec![]), MenuKeys::Browse),
+        ("menu.overlay (Sound)", menu(vec![]), MenuKeys::Sound),
+        (
+            "menu.title_layer",
+            vec![on("menu.title_layer")],
+            MenuKeys::None,
+        ),
+        (
+            "menu.named_slots",
+            vec![on("menu.named_slots")],
+            MenuKeys::None,
+        ),
+        (
+            "menu.named_slots + overlay",
+            menu(vec![on("menu.named_slots")]),
+            MenuKeys::Browse,
+        ),
+        (
+            "menu.quicksave=false",
+            menu(vec![on("menu.named_slots"), set("menu.quicksave", "false")]),
+            MenuKeys::Browse,
+        ),
+        (
+            "menu.confirm_unsaved=false",
+            menu(vec![set("menu.confirm_unsaved", "false")]),
+            MenuKeys::Browse,
+        ),
+        (
+            "audio.volume=0",
+            vec![set("audio.volume", "0")],
+            MenuKeys::None,
+        ),
+        (
+            "audio.volume=55",
+            vec![set("audio.volume", "55")],
+            MenuKeys::None,
+        ),
+        ("audio.muted", vec![on("audio.muted")], MenuKeys::None),
+        (
+            "audio.mute_on_focus_loss",
+            vec![on("audio.mute_on_focus_loss")],
+            MenuKeys::None,
+        ),
+        (
+            "audio.start_sound_off",
+            vec![on("audio.start_sound_off")],
+            MenuKeys::None,
+        ),
+        (
+            "audio.start_buffer_on",
+            vec![on("audio.start_buffer_on")],
+            MenuKeys::None,
+        ),
+    ]
+}
+
+fn menu_alone() -> Vec<Config> {
+    menu_values()
+        .into_iter()
+        .map(|(name, settings, menu)| Config::new(name, settings).with_menu(menu))
+        .collect()
+}
+
+/// The keys of chapter 3's pairwise matrix (3.6): one value of each of the
+/// chapter's keys, and one representative key of each other chapter that
+/// has shipped one (the wider view of chapter 2, compositing of chapter 9,
+/// the gem map of chapter 10). Chapter 1 has no feature key of its own yet
+/// (`freeze_overlays` is P6b), and chapter 7's cheats are left out.
+fn menu_pair_values() -> Vec<(&'static str, Vec<CliSetting>, MenuKeys)> {
+    let mut values: Vec<_> = menu_values()
+        .into_iter()
+        .filter(|(name, _, _)| !matches!(*name, "audio.volume=55" | "menu.named_slots + overlay"))
+        .collect();
+    values.extend([
+        ("grow_left", vec![on("display.grow_left")], MenuKeys::None),
+        (
+            "sprite_composite",
+            vec![on("display.sprite_composite")],
+            MenuKeys::None,
+        ),
+        (
+            "gem_map.enhanced",
+            vec![on("gem_map.enhanced")],
+            MenuKeys::None,
+        ),
+    ]);
+    values
+}
+
+/// Every pair of [`menu_pair_values`], with Ctrl+P typed as in
+/// [`column`]; a pair uses the menu as the more active of its two says.
+fn menu_pairs() -> Vec<Config> {
+    let values = menu_pair_values();
+    let mut configs = Vec::new();
+    for (i, (a, first, menu_a)) in values.iter().enumerate() {
+        for (b, second, menu_b) in &values[i + 1..] {
+            let mut settings = first.clone();
+            for setting in second {
+                if !settings.contains(setting) {
+                    settings.push(setting.clone());
+                }
+            }
+            configs.push(Config {
+                column_keys: true,
+                ..Config::new(&format!("{a} + {b}"), settings).with_menu(*menu_a.max(menu_b))
+            });
+        }
+    }
+    configs
+}
+
+/// "All on except cheats" (3.6): every shipped feature key of every
+/// chapter on, the valued keys at a non-default value, Ctrl+P typed and
+/// Sound chosen from the menu.
+fn all_on_except_cheats() -> Config {
+    let mut settings: Vec<CliSetting> = TOGGLES
+        .iter()
+        .filter(|spec| spec.is_shipped() && !spec.driven && spec.ships.chapter != 7)
+        .map(|spec| on(spec.key))
+        .collect();
+    settings.extend([
+        set("display.scale_mode", "sharp"),
+        set("display.brightness", "70"),
+        set("audio.volume", "55"),
+    ]);
+    Config {
+        column_keys: true,
+        ..Config::new("all on except cheats", settings).with_menu(MenuKeys::Sound)
+    }
 }
 
 /// Each of [`light_values`] with the wider world view and with sharp
@@ -470,25 +660,77 @@ struct Script {
     top_down: bool,
     /// The keys use a gem (V), so the enhanced gem map shows.
     gem: bool,
+    /// The game comes back to its idle exploration prompt between keys, so
+    /// the menu opens there (not in a conversation).
+    menu_ok: bool,
 }
 
 /// Frames between the player's keys, and after the last.
 const KEY_SPACING: usize = 15;
 const TAIL: usize = 40;
+/// Frames the menu takes, from F12 to the next game key.
+const MENU_GAP: usize = 45;
 
 impl Script {
     /// The player's keys, one tap every [`KEY_SPACING`] frames; with
-    /// `column_keys`, Ctrl+P after every fifth.
-    fn timeline(&self, column_keys: bool) -> Timeline {
-        let mut timeline = Timeline::new(5 + self.keys.len() * KEY_SPACING + TAIL);
+    /// `column_keys`, Ctrl+P after every fifth. With `menu`, the menu is
+    /// used after every fifth key, or the first key after it that leaves
+    /// the game at its prompt (a V opens the gem view, which the next key
+    /// closes), with [`MENU_GAP`] frames for it before the next key. It is
+    /// not used after the last key: a step can keep the game busy past the
+    /// gap (a key still queued), and then F12 is refused as the game's,
+    /// faithfully, and the menu's keys would be typed.
+    fn timeline(&self, column_keys: bool, menu: MenuKeys) -> Timeline {
+        let menu = if self.menu_ok { menu } else { MenuKeys::None };
+        let mut timeline = Timeline::new(5);
+        let mut frame = 5;
+        let mut due = false;
         for (index, key) in self.keys.iter().enumerate() {
-            let frame = 5 + index * KEY_SPACING;
             timeline.game_tap(frame, *key);
             if column_keys && index % 5 == 4 {
                 ctrl_p(&mut timeline, frame + 5);
             }
+            frame += KEY_SPACING;
+            due |= index % 5 == 4;
+            let more = index + 1 < self.keys.len();
+            if due && more && menu != MenuKeys::None && *key != KeyCode::KeyV {
+                menu_keys(&mut timeline, frame, menu);
+                frame += MENU_GAP;
+                due = false;
+            }
         }
+        timeline.extend_to(frame + TAIL);
         timeline
+    }
+}
+
+/// The menu used from `frame` (design 3.2.1, 3.2.7 "Game"), every event
+/// the feature's: F12 opens it at the idle prompt and the window's keys
+/// are the menu's until it closes.
+fn menu_keys(timeline: &mut Timeline, frame: usize, menu: MenuKeys) {
+    timeline.feature_tap(frame, KeyCode::F12);
+    match menu {
+        MenuKeys::None => {}
+        MenuKeys::Browse => {
+            timeline
+                .feature_tap(frame + 4, KeyCode::ArrowDown)
+                .feature_tap(frame + 7, KeyCode::ArrowDown)
+                .feature_hold(frame + 10, frame + 20, KeyCode::ArrowUp)
+                .feature_tap(frame + 23, KeyCode::ArrowDown)
+                .feature_tap(frame + 26, KeyCode::KeyN)
+                .feature_tap(frame + 30, KeyCode::Escape);
+        }
+        MenuKeys::Sound => {
+            // Settings..., then from the Audio tab's Mute row Right twice:
+            // the Display tab, then the Game tab, whose first row is Sound.
+            timeline
+                .feature_tap(frame + 4, KeyCode::ArrowDown)
+                .feature_tap(frame + 7, KeyCode::Enter)
+                .feature_tap(frame + 10, KeyCode::ArrowDown)
+                .feature_tap(frame + 13, KeyCode::ArrowRight)
+                .feature_tap(frame + 16, KeyCode::ArrowRight)
+                .feature_tap(frame + 20, KeyCode::Enter);
+        }
     }
 }
 
@@ -650,6 +892,7 @@ fn synthetic_scripts(scratch: &Scratch) -> Vec<Script> {
         keys: keys.to_vec(),
         top_down,
         gem: keys.contains(&KeyCode::KeyV),
+        menu_ok: keys != TALK,
     };
     let town = || test_state(open_grid(), 5, 5);
     let with_gems = |mut state: PlayState| {
@@ -729,6 +972,10 @@ struct Trace {
     gem_frames: usize,
     /// Whether the gem map's plugin was in the app.
     gem_plugin: bool,
+    /// The keys the synthetic-key owner fed, per frame (chapter 3).
+    fed: Vec<Vec<TypedKey>>,
+    /// Frames on which the menu was open.
+    menu_frames: usize,
 }
 
 fn copy_dir(from: &Path, to: &Path) {
@@ -763,11 +1010,28 @@ fn run(
     window: (f32, f32),
     timeline: &Timeline,
 ) -> Trace {
+    run_fed(script, launch, window, timeline, None)
+}
+
+/// [`run`], recording the keys a synthetic-key feature feeds or, with
+/// `replay`, typing those keys on the frames they were fed (class (b)).
+fn run_fed(
+    script: &Script,
+    launch: &VisualLaunchConfig,
+    window: (f32, f32),
+    timeline: &Timeline,
+    replay: Option<&[Vec<TypedKey>]>,
+) -> Trace {
     let mut shell = Shell::new(script.state.clone(), &script.scene, launch, |_| {});
     shell.app.world_mut().spawn(Window {
         resolution: WindowResolution::new(window.0, window.1),
         ..default()
     });
+    match replay {
+        Some(fed) => shell.replay_feed(fed),
+        None => shell.record_feed(),
+    }
+    let mut menu_frames = 0;
     let mut frames: Vec<FrameRecord> = Vec::with_capacity(timeline.len());
     let mut ticks = Vec::with_capacity(timeline.len());
     let mut count = 0;
@@ -794,7 +1058,16 @@ fn run(
         if gem_map_shown(&mut shell) {
             gem_frames += 1;
         }
+        if shell
+            .app
+            .world()
+            .get_resource::<OverlayState>()
+            .is_some_and(|overlay| overlay.open() == Some(OverlayId::Menu))
+        {
+            menu_frames += 1;
+        }
     }
+    let fed = shell.take_fed();
     let gem_plugin = shell.app.world().contains_resource::<GemMap>();
     let composes = shell
         .app
@@ -824,6 +1097,8 @@ fn run(
         masks_built,
         gem_frames,
         gem_plugin,
+        fed,
+        menu_frames,
     }
 }
 
@@ -861,13 +1136,13 @@ fn differences(off: &Trace, on: &Trace) -> Vec<String> {
 /// and checks each run is not vacuous.
 fn check(script: &Script, configs: &[Config]) -> Vec<String> {
     let mut mismatches = Vec::new();
-    let mut offs: Vec<((bool, (u32, u32)), Trace)> = Vec::new();
+    let mut offs: Vec<((bool, MenuKeys, (u32, u32)), Trace)> = Vec::new();
     for config in configs {
-        let timeline = script.timeline(config.column_keys);
+        let timeline = script.timeline(config.column_keys, config.menu);
         let window_key = (config.window.0 as u32, config.window.1 as u32);
         // The off run: Classic, the feature's keys removed, on the same
         // window (the 1.0.1 shell ignores it).
-        let off_key = (config.column_keys, window_key);
+        let off_key = (config.column_keys, config.menu, window_key);
         if !offs.iter().any(|(key, _)| *key == off_key) {
             let off = run(
                 script,
@@ -898,9 +1173,24 @@ fn check(script: &Script, configs: &[Config]) -> Vec<String> {
         }
         let off = &offs.iter().find(|(key, _)| *key == off_key).unwrap().1;
         let on = run(script, &config.launch(), config.window, &timeline);
+        // Class (b): the off run is the player who typed the fed keys.
+        let replayed;
+        let off = if on.fed.iter().all(Vec::is_empty) {
+            off
+        } else {
+            replayed = run_fed(
+                script,
+                &VisualLaunchConfig::classic(),
+                config.window,
+                &timeline.without_feature(),
+                Some(&on.fed),
+            );
+            &replayed
+        };
         for line in differences(off, &on) {
             mismatches.push(format!("{} / {}: {line}", script.name, config.name));
         }
+        check_menu(script, config, &on);
         if config.grow_left() && script.top_down {
             assert!(
                 on.composes > 0,
@@ -932,11 +1222,12 @@ fn check(script: &Script, configs: &[Config]) -> Vec<String> {
                 script.name, config.name
             );
         }
-        // Chapter 10: the gem map is in the app only when it is on, and it
-        // really showed wherever the script used a gem.
+        // Chapter 10: the gem map is in the app only when it is on, or
+        // installed dormant with the menu's overlay (D-M4.4), and it really
+        // showed wherever the script used a gem.
         assert_eq!(
             on.gem_plugin,
-            config.gem(),
+            config.gem() || config.enabled("menu.overlay"),
             "{} / {}: the gem map plugin",
             script.name,
             config.name
@@ -961,6 +1252,57 @@ fn check(script: &Script, configs: &[Config]) -> Vec<String> {
         }
     }
     mismatches
+}
+
+/// Chapter 3's runs were not vacuous: the menu opened wherever the script
+/// used it, a class (b) run fed its keys and only those, and nothing else
+/// fed any.
+fn check_menu(script: &Script, config: &Config, on: &Trace) {
+    let what = format!("{} / {}", script.name, config.name);
+    let fed: Vec<(KeyCode, bool, bool)> = on
+        .fed
+        .iter()
+        .flatten()
+        .map(|key| (key.key, key.shift, key.control))
+        .collect();
+    let used = config.menu != MenuKeys::None && script.menu_ok;
+    if used {
+        assert!(on.menu_frames > 0, "{what}: the menu never opened");
+    } else {
+        assert_eq!(on.menu_frames, 0, "{what}: the menu opened");
+    }
+    let sound = (KeyCode::KeyS, false, true);
+    let buffer = (KeyCode::KeyB, false, true);
+    assert!(
+        fed.iter().all(|key| *key == sound || *key == buffer),
+        "{what}: the fed keys {fed:?}"
+    );
+    let count = |which| fed.iter().filter(|key| **key == which).count();
+    // Buffer starts off, so its start key always types.
+    assert_eq!(
+        count(buffer),
+        usize::from(config.enabled("audio.start_buffer_on")),
+        "{what}: Ctrl-B"
+    );
+    // Sound once per time the menu was used for it; the start key types
+    // its Ctrl-S only while the game's sound is still on, so not when the
+    // menu turned it off first.
+    let times = if used && config.menu == MenuKeys::Sound {
+        (script.timeline(false, MenuKeys::Sound).len()
+            - script.timeline(false, MenuKeys::None).len())
+            / MENU_GAP
+    } else {
+        0
+    };
+    let start = usize::from(config.enabled("audio.start_sound_off"));
+    assert!(
+        (times..=times + start).contains(&count(sound)),
+        "{what}: Ctrl-S {} times, the menu used {times} times",
+        count(sound)
+    );
+    if start == 1 && times == 0 {
+        assert_eq!(count(sound), 1, "{what}: the start key");
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -1043,6 +1385,61 @@ fn every_pair_of_display_keys_leaves_the_shortest_script_alone() {
     assert!(mismatches.is_empty(), "{}", mismatches.join("\n"));
 }
 
+/// Chapter 3's pairwise matrix (design 3.6, build plan M4-14): every pair
+/// of the chapter's keys and the other chapters' representatives on the
+/// shortest script, with Ctrl+P and the menu used.
+#[test]
+fn every_pair_of_menu_keys_leaves_the_shortest_script_alone() {
+    let scratch = Scratch::new("menu-pairs");
+    let configs = menu_pairs();
+    let values = menu_pair_values().len();
+    assert_eq!(configs.len(), values * (values - 1) / 2);
+    assert!(
+        configs.iter().any(|c| c.menu == MenuKeys::Sound)
+            && configs.iter().any(|c| c.menu == MenuKeys::Browse)
+    );
+    let script = synthetic_scripts(&scratch)
+        .into_iter()
+        .find(|script| script.name == "town walk")
+        .unwrap();
+    let mismatches = check(&script, &configs);
+    assert!(mismatches.is_empty(), "{}", mismatches.join("\n"));
+}
+
+/// "All on except cheats" (3.6) on every synthetic script, at 16:9 and
+/// 4:3.
+#[test]
+fn all_on_except_cheats_leaves_every_script_alone() {
+    let scratch = Scratch::new("all-on");
+    let all = all_on_except_cheats();
+    for key in [
+        "menu.overlay",
+        "audio.start_sound_off",
+        "display.grow_left",
+        "gem_map.enhanced",
+    ] {
+        assert!(all.enabled(key), "{key}");
+    }
+    assert!(
+        !all.settings
+            .iter()
+            .any(|s| format!("{s:?}").contains("cheat"))
+    );
+    let configs = [
+        all.clone(),
+        Config {
+            window: (1600.0, 1200.0),
+            name: "all on except cheats at 4:3".into(),
+            ..all
+        },
+    ];
+    let mut mismatches = Vec::new();
+    for script in synthetic_scripts(&scratch) {
+        mismatches.extend(check(&script, &configs));
+    }
+    assert!(mismatches.is_empty(), "{}", mismatches.join("\n"));
+}
+
 /// Whether `config` pages a one-panel dungeon map in `window` (10.2.6,
 /// D10.12): the gem map on with `level_paging`, on a 4:3 canvas or with
 /// the stack off.
@@ -1082,6 +1479,7 @@ fn the_paging_equivalence_holds_in_the_matrix() {
         keys: Vec::new(),
         top_down: false,
         gem: true,
+        menu_ok: false,
     };
     let mut configs = gem_alone();
     for (name, settings) in pair_values() {
@@ -1146,7 +1544,7 @@ fn the_paging_equivalence_holds_in_the_matrix() {
 fn an_extra_tick_and_a_changed_save_are_caught() {
     let scratch = Scratch::new("caught");
     let script = synthetic_scripts(&scratch).remove(0);
-    let timeline = script.timeline(false);
+    let timeline = script.timeline(false, MenuKeys::None);
     let launch = VisualLaunchConfig::classic();
     let off = run(&script, &launch, W16, &timeline);
     let mut extra = run(&script, &launch, W16, &timeline);
@@ -1217,6 +1615,7 @@ fn the_matrix_leaves_the_real_game_alone() {
         keys: keys.to_vec(),
         top_down,
         gem: keys.contains(&KeyCode::KeyV),
+        menu_ok: keys != TALK && keys != COMBAT,
     };
     let with_gems = |mut state: PlayState| {
         state.gems = 3;
@@ -1272,6 +1671,7 @@ fn the_matrix_leaves_the_real_game_alone() {
     ];
     let mut configs = alone();
     configs.push(column());
+    configs.push(all_on_except_cheats());
     // One thread per script; the pairs on the first.
     let mismatches: Vec<String> = std::thread::scope(|scope| {
         let configs = &configs;
@@ -1281,6 +1681,7 @@ fn the_matrix_leaves_the_real_game_alone() {
             .chain(std::iter::once(scope.spawn(|| {
                 let mut pairs = pairs();
                 pairs.extend(light_pairs());
+                pairs.extend(menu_pairs());
                 check(&scripts[0], &pairs)
             })))
             .collect();

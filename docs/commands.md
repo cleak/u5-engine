@@ -48,14 +48,16 @@ uncertain, read the spec and the focused runtime tests before editing.
 The optional enhancements ([settings.md](settings.md)) add their own keys.
 Each key exists only while its feature is on, so with every enhancement off
 (Classic, the default) no key below does anything the 1.0.1 game does not.
-In this build F11 (`display.fullscreen_key`), Ctrl+P (`display.grow_left`,
-see [settings.md](settings.md#the-wider-world-view)) and PgUp and PgDn on the
-gem map (`gem_map.level_paging`, see [settings.md](settings.md#the-gem-map))
-are available; the others arrive with their features.
+In this build F12 (`menu.overlay` and `menu.title_layer`, see
+[settings.md](settings.md#the-menu)), F11 (`display.fullscreen_key`), Ctrl+P
+(`display.grow_left`, see [settings.md](settings.md#the-wider-world-view))
+and PgUp and PgDn on the gem map (`gem_map.level_paging`, see
+[settings.md](settings.md#the-gem-map)) are available; the others arrive
+with their features.
 
 | Default | `[keys]` setting | Action | Bound while |
 |---|---|---|---|
-| F12 | `keys.menu` | Open the menu | `menu.overlay` is on |
+| F12 | `keys.menu` | Open the menu | `menu.overlay` is on (at the command prompt), `menu.title_layer` is on (at the title menu) |
 | F11 | `keys.fullscreen` | Switch fullscreen | `display.fullscreen_key` is on |
 | Tab | `keys.map` | Open the map | `automap.fullscreen_map` is on |
 | Ctrl+M | `keys.minimap` | Show or hide the minimap | never: the minimap is set aside, so the key is kept free |
@@ -88,3 +90,44 @@ are available; the others arrive with their features.
 - The terminal frontend binds no chords. Play scripts reach a feature
   through `@` tokens (`@journal`, `@auto`, ...), which run as ordinary script
   text while the feature is off.
+
+### The menu's keys
+
+While the menu ([settings.md](settings.md#the-menu)) is open, every key is
+the menu's and none reaches the game:
+
+| Key | In the menu |
+|---|---|
+| Up, Down | Move the bar; headings are skipped. |
+| Enter | Choose the row: open a page, run a command, flip a check box. |
+| Left, Right | Change the row's value, or the preset; on a row without one, the Settings tab. |
+| Space | Flip a check box. |
+| Escape | Back one page; on the top page, close the menu. |
+| F12 | Close the menu from any page. |
+| F2, Del | On the Load page: rename the slot (not the quick one), or delete it (it asks first). |
+| Letters, digits, Backspace | In a name field: up to 24 printable ASCII characters. |
+
+- The menu opens with F12 only at the command prompt with nothing
+  pending, and the title layer only once the title menu takes keys. Pressed
+  anywhere else F12 is the game's, which ignores it, and a note says where
+  the menu opens.
+- **Escape at the bare command prompt** is still the game's own key (its
+  `What?`), with the menu on or off. No setting makes Escape open the menu.
+- The menu types keys for you in three places, each a key the game reads
+  as if you had typed it: Sound and Buffer on the Game tab (Ctrl-S,
+  Ctrl-B), and a save to a slot (`Q`, then `Y` at the game's question).
+  The start keys (`audio.start_sound_off`, `audio.start_buffer_on`) type
+  Ctrl-S and Ctrl-B once at the first prompt, without the menu.
+
+### Launch options for keys and slots
+
+| Option | What it does |
+|---|---|
+| `--boot-key C` | Type `C` as the window opens, as if it were held at boot: `J` goes straight into Journey Onward, any other key lets the title play. A player's key, so it is allowed under the parity lock. |
+| `--slots` | List the named save slots of the game's working save. |
+| `--slot-save NAME` | Copy the current working save into the slot `NAME`. |
+| `--slot-load NAME` | Make the working save the slot `NAME`, then start the game in it with `J` at boot. |
+
+The slot options need `menu.named_slots` and are refused under the parity
+lock; see [slots.md](slots.md). A load from the menu restarts the game the
+same way, with `--boot-key J`.

@@ -164,7 +164,9 @@ pub fn load_from_slot(store: &SlotStore, name: &str) -> Result<SlotInfo, String>
 /// first, or a note when there are none.
 pub fn slot_listing(slots: &[SlotInfo]) -> String {
     if slots.is_empty() {
-        return "No save slots yet.\n".to_string();
+        // The terminal's answer to `--slots`, never the game's message
+        // window.
+        return "No save slots yet.\n".to_string(); // audit: not a player-facing line
     }
     let mut out = String::new();
     for slot in slots {

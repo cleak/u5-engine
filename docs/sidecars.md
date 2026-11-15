@@ -124,6 +124,14 @@ writable save folder.
   from a newer engine is never overwritten.
 - Turning a feature off leaves its file alone; turning it on again checks the
   file against the current save.
+- **Save slots** ([slots.md](slots.md)) copy the whole `.u5-engine-enh/`
+  folder into a slot and a load puts it back whole, whichever features own
+  its files and whether or not they are on. The files are copied byte for
+  byte and never read; each feature checks its file against the save, by
+  its stamp, when it is next on. Loading a slot that has no such folder (a
+  DOS import) deletes the working one, so no file of another game is left
+  beside the loaded save. Slots themselves live outside the save folder,
+  under the data folder's `saves/`.
 
 ### `gemmap.u5e`: the gem map's discoveries
 

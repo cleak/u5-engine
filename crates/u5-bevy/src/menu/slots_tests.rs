@@ -1692,3 +1692,7 @@ fn slot_pages_review_shots() {
         let _ = fs::remove_dir_all(&game_dir);
     }
 }
+
+/// The menu's no-spoiler suite (M4-14), on this fake host.
+#[path = "spoiler_tests.rs"]
+mod spoiler;

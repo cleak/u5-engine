@@ -44,11 +44,11 @@ use u5_runtime::{SAVED_GAM_FILENAME, read_save_image_file, save_image_has_active
 
 use super::host::{MenuHost, SlotFailure, SlotInfo, SlotTarget, StoreSlot};
 use super::inject::{
-    SlotSaveFinished, SlotSaveHandshake, SlotSaveRequest, advance_slot_save, begin_slot_save,
-    install_slot_save,
+    SlotSaveFinished, SlotSaveHandshake, SlotSaveRequest, begin_slot_save, install_slot_save,
 };
 use super::pages::{MenuCommand, SaveChoice, SlotEntry, SlotList};
 use super::text as t;
+use super::thumb::frame_thumbnail;
 use super::title::{TitleJourney, title_commands};
 use super::unsaved::SaveTracker;
 use super::{MenuCommandEvent, MenuState, menu_input};
@@ -92,17 +92,17 @@ impl Plugin for SlotPlugin {
                 )
                     .in_set(EnhSet::Apply),
             )
+            // After every `Update` system has drawn the frame (the tile
+            // animation steps after the observers), so the thumbnail is the
+            // frame the player saw at the save moment (M4-14).
             .add_systems(
-                Update,
+                PostUpdate,
                 (
-                    slot_save_finished
-                        .run_if(on_event::<SlotSaveFinished>)
-                        .after(advance_slot_save),
+                    slot_save_finished.run_if(on_event::<SlotSaveFinished>),
                     poll_slot_store
                         .run_if(store_pending)
                         .after(slot_save_finished),
-                )
-                    .in_set(EnhSet::Observe),
+                ),
             );
     }
 }
@@ -421,8 +421,11 @@ fn run_pending_load(
 
 /// The handshake ended: hand a checked save to the host's worker, or say
 /// why there is nothing to copy.
+#[allow(clippy::too_many_arguments)]
 fn slot_save_finished(
     mut finished: EventReader<SlotSaveFinished>,
+    visual: Option<Res<VisualState>>,
+    images: Option<Res<Assets<Image>>>,
     host: Res<SlotHost>,
     mut job: ResMut<SlotJob>,
     mut tracker: Option<ResMut<SaveTracker>>,
@@ -454,7 +457,14 @@ fn slot_save_finished(
                     ],
                     turn: capture.turn,
                     cheats_used: Vec::new(),
-                    thumbnail_png: capture.thumbnail_png.clone(),
+                    // The game's frame as this frame presents it, which the
+                    // tile animation finished after the handshake looked.
+                    thumbnail_png: visual
+                        .as_deref()
+                        .zip(images.as_deref())
+                        .and_then(|(visual, images)| images.get(&visual.image_handle))
+                        .and_then(frame_thumbnail)
+                        .or_else(|| capture.thumbnail_png.clone()),
                 };
                 job.store = Some(PendingStore {
                     name: asked.name,

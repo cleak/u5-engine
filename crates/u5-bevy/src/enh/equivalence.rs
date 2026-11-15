@@ -127,6 +127,14 @@ impl Timeline {
         &self.frames[index]
     }
 
+    /// Grows the timeline to at least `frames` frames, the new ones empty.
+    pub(crate) fn extend_to(&mut self, frames: usize) -> &mut Self {
+        if self.frames.len() < frames {
+            self.frames.resize(frames, Vec::new());
+        }
+        self
+    }
+
     /// Adds one event at `frame`, growing the timeline to reach it.
     pub(crate) fn event(
         &mut self,
@@ -286,7 +294,7 @@ impl Shell {
     }
 
     /// Records the keys a synthetic-key feature feeds, if one is installed.
-    fn record_feed(&mut self) {
+    pub(crate) fn record_feed(&mut self) {
         if !self.app.world().contains_resource::<SyntheticInputOwner>() {
             return;
         }
@@ -302,13 +310,22 @@ impl Shell {
     }
 
     /// Replays `fed` into the game's key queue, one list per frame.
-    fn replay_feed(&mut self, fed: &[Vec<TypedKey>]) {
+    pub(crate) fn replay_feed(&mut self, fed: &[Vec<TypedKey>]) {
         if fed.iter().all(Vec::is_empty) {
             return;
         }
         self.app
             .insert_resource(ReplayKeys(fed.iter().cloned().collect()))
             .add_systems(Update, replay_fed_keys.before(drive_visual));
+    }
+
+    /// The keys the synthetic-key feature fed so far, per frame, once
+    /// [`Shell::record_feed`] is recording; empty otherwise.
+    pub(crate) fn take_fed(&mut self) -> Vec<Vec<TypedKey>> {
+        self.app
+            .world_mut()
+            .remove_resource::<FedKeys>()
+            .map_or_else(Vec::new, |fed| fed.frames)
     }
 
     /// Delivers `events` as the window would, then runs one frame.
@@ -381,11 +398,7 @@ fn run_shell(
     let frames = (0..timeline.len())
         .map(|index| shell.step(timeline.frame(index)))
         .collect();
-    let fed = shell
-        .app
-        .world_mut()
-        .remove_resource::<FedKeys>()
-        .map_or_else(Vec::new, |fed| fed.frames);
+    let fed = shell.take_fed();
     ShellRun { frames, fed }
 }
 

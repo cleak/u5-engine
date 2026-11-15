@@ -43,9 +43,13 @@ In this build Recommended turns on only sprites over terrain
 (`display.scale_mode = "sharp"`) and the F11 fullscreen key
 (`display.fullscreen_key`); none of them changes the game. The wider world
 view is a deviation, so no preset turns it on. Everything also turns on the
-enhanced gem map (`gem_map.enhanced`). No preset sets brightness, map
-brightness or the sprite outline (`display.composite_halo`): they are
-preferences.
+enhanced gem map (`gem_map.enhanced`), the menu (`menu.overlay`), named
+save slots (`menu.named_slots`), the title menu (`menu.title_layer`) and
+the mute while the window is in the background
+(`audio.mute_on_focus_loss`). No preset sets brightness, map brightness,
+the sprite outline (`display.composite_halo`), the volume or the unsaved
+warning: they are preferences. No preset sets the two start keys
+(`audio.start_sound_off`, `audio.start_buffer_on`), which are deviations.
 
 ## Changing settings
 
@@ -333,6 +337,59 @@ numbers, timing and save files are exactly those of the same play with the
 map off. What the map remembers of your discoveries is kept beside the save
 (see [sidecars.md](sidecars.md#player-sidecars)).
 
+## The menu
+
+Off unless you turn it on (`--menu-overlay`, or the Everything preset). The
+menu is optional: every setting it shows also has a line in `config.toml`,
+a command-line flag and a row on the setup window's Enhancements page, and
+every save it makes is the game's own save.
+
+- **F12 at the command prompt** opens it over the game, drawn in the game's
+  own font, frame and colours, on the 4:3 screen or the wider view. It opens
+  only when the game is waiting for a command with nothing pending; pressed
+  anywhere else, F12 does what it does in the original (nothing) and a note
+  says "The menu opens at the command prompt." It never opens in combat.
+  While it is open the world idles as if you had stopped typing: water
+  moves, no turn passes.
+- **In the menu** Up and Down move, Enter chooses, Left and Right change a
+  value or the tab, Space flips a check box, Escape goes back a page, and
+  F12 closes it. No key you press in the menu reaches the game. Escape at
+  the bare command prompt is still the game's own key.
+- **The top menu**: Return to the game, Save thy game... and Load a saved
+  game... (with named slots), Settings..., Return to the title (restarts the
+  game with the whole intro) and Leave the game (closes the window, as its
+  close button does; it does not save).
+- **Settings** has four tabs. Audio: the volume, a mute, and the mute while
+  the window is in the background; these change only what you hear, never
+  the game's own Sound On and Off. Display: the window, scaling, the wider
+  view, brightness and sprites. Game: the game's own Sound (Ctrl-S) and
+  Buffer (Ctrl-B) with their live values, which the menu changes by typing
+  the game's key, so the game prints its own line; the two start keys; the
+  unsaved warning. Extras: every enhancement, with the presets. A row says
+  "next prompt" or "next launch" when a change waits for one; every change
+  is written to `config.toml`.
+- **Named slots** (`--named-slots`) keep many saves under your own names,
+  with a quick slot (`menu.quicksave`). See [slots.md](slots.md) for the
+  folder, `slot.toml`, imports and what happens after a crash.
+- **The title menu** (`--title-layer`): F12 at the title menu opens Continue
+  (the newest slot, or the working save without slots), Load a saved
+  game..., Settings... and Leave the game. The original title and its menu
+  are unchanged.
+- **The unsaved warning** (`menu.confirm_unsaved`, on by default): Load,
+  Return to the title and Leave the game ask first when the turn has moved
+  since the last save or load; "No" or "Cancel" is chosen first.
+- **The start keys** (`--start-sound-off`, `--start-buffer-on`) type the
+  game's Ctrl-S or Ctrl-B once, at the first command prompt of each launch,
+  and only when the game's value is not already the one you want. They work
+  without the menu.
+
+Nothing here changes the game. Opening the menu is a pause in your typing;
+Sound, Buffer, the start keys and a slot save type keys the game reads, and
+the game does exactly what it does when you type them; a load restarts the
+game on the slot's files as if you had copied them and pressed `J` at the
+title. No thumbnail, slot detail, note or settings row names a place,
+person or thing of the game you have not seen.
+
 ## The parity lock
 
 `--parity-lock`, or `U5_PARITY_LOCK=1` in the environment, turns every
@@ -375,6 +432,20 @@ one that types keys must change it exactly as typing those keys would:
   map cell out of the party's sight, and with sprites over terrain and
   brightness on, to draw under each sprite exactly the ground its cell
   shows when empty and never to light a pixel the original leaves black.
+- The menu's keys have their own part of that matrix: each `[menu]` and
+  `[audio]` key alone, every pair of them and of one key of each other
+  chapter (the wider view, sprites over terrain, the gem map), and every
+  key on but the cheats, over the same walks with Ctrl+P. Where the menu is
+  on, it is opened with F12 every fifth key, moved about in and closed,
+  and in other runs Sound is chosen on its Game tab; the start keys type
+  theirs at the first prompt. The run without the menu is given the keys
+  the menu and the start keys typed, on the same frames, and must equal it
+  frame for frame, on the world ticks and on the saved files. A no-spoiler
+  suite saves through the menu from a fresh character, after walks, in a
+  dungeon and in the Underworld, and checks that each thumbnail is the
+  game's own screen, each place is where the party stood, and that no
+  slot detail, note, settings row or title line names the game's people,
+  places or things (compared with the game's own text, hashed).
 - `qa/enhancements/matrix.tsv` is the toggle matrix: every key alone, a
   pairwise covering of the toggles and classed values, and everything on
   except the cheats. It is generated from the catalogue, and a test keeps

@@ -131,3 +131,43 @@ original while gems are used; the route smoke is unchanged from 1.0.1; and a
 no-spoiler suite checks every map drawn over a fresh character, a walk,
 each dungeon, the Underworld and random discoveries, comparing every label
 with the game's sign and conversation text.
+
+### Optional enhancements: the menu and save slots
+
+All of it is off unless you turn it on (`--menu-overlay`, `--named-slots`,
+`--title-layer`, or the Everything preset), and none of it changes the game
+([the menu](settings.md#the-menu), [slots.md](slots.md)).
+
+- **The menu is optional.** F12 at the command prompt opens a menu drawn in
+  the game's own font, frame and colours: return to the game, save, load,
+  settings, return to the title, leave the game. Nothing in it is needed to
+  play: every setting it shows also has a line in `config.toml`, a
+  command-line flag and a row on the setup window's Enhancements page
+  (`u5-engine --settings`), and the game's own keys are unchanged. F12
+  anywhere else, and Escape at the bare prompt, do what they do in the
+  original.
+- **Settings in the game.** Audio (volume, mute, mute while the window is
+  in the background), Display, Game (the game's own Sound and Buffer, two
+  start keys, the unsaved warning) and Extras (every enhancement, with the
+  presets). Changes are saved to `config.toml`.
+- **Named save slots.** Keep as many saves as you like under your own
+  names, with a quick slot, a thumbnail of the screen and where and when
+  you saved. A slot save is a real save: the menu types the game's own
+  `Q` and `Y`, so the save Journey Onward loads is that moment too, and
+  then the files are copied. Without the menu, `--slots`, `--slot-save
+  NAME` and `--slot-load NAME` do the same from the command line.
+- **Loading restarts the game window.** A load puts the slot's files back as
+  the working save and starts the game again with `J` waiting, straight
+  into Journey Onward; the window reopens in about a second. Return to the
+  title restarts the same way and plays the whole intro.
+- **The title menu.** With `--title-layer`, F12 at the title menu offers
+  Continue (your newest slot), Load, Settings and Leave the game.
+- **No spoilers.** A slot shows only the Avatar, the place the party stood
+  in (by the name you have seen there), the game's date and the turn, and
+  its thumbnail is the game's own screen at that moment. No note, row or
+  title line names a person, place or thing of the game.
+- **Not tested on Windows or macOS.** The manual checks of this release
+  (the mute when the window loses the focus or is minimised, the restart
+  after a load from both `u5-engine` and `u5-engine-gui`, the slot folder,
+  typing a slot name on a non-US keyboard layout) were made on Linux only.
+
