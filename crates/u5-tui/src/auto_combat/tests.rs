@@ -89,9 +89,46 @@ fn off_or_locked_there_is_no_auto_and_no_log_file() {
 }
 
 #[test]
-fn until_it_ships_the_terminal_settings_leave_auto_off() {
+fn shipped_the_terminal_settings_arm_auto_and_the_lock_disarms_it() {
+    // Phase 3c shipped in M7-07.
     let cli = [CliSetting::Enable("combat.auto".to_string())];
-    assert!(!terminal_combat_settings(&cli, LockState::Off).auto);
+    assert!(terminal_combat_settings(&cli, LockState::Off).auto);
+    assert!(!terminal_combat_settings(&cli, LockState::Locked(LockReason::CliFlag)).auto);
+    assert!(!terminal_combat_settings(&[], LockState::Off).auto);
+}
+
+/// No spoiler (foundation 1.4.7): a note holds fixed words, or a party
+/// member's name for a hurt member, never a monster's.
+#[test]
+fn every_hand_back_note_is_fixed_words_or_a_party_name() {
+    let mut state = test_state(open_grid(), 1, 1);
+    state.party_names.resize(2, Default::default());
+    state.party_names[1] = Default::default();
+    state.party_names[1][..4].copy_from_slice(b"Iolo");
+    let fixed = [
+        "Auto off: key pressed",
+        "Victory - auto off",
+        "Auto off: no target in sight",
+        "Auto off: stuck",
+        "Auto off: action limit",
+        "Auto off: unexpected prompt",
+        "Auto off",
+    ];
+    for reason in [
+        HandBack::Interrupted,
+        HandBack::Victory,
+        HandBack::NoTarget,
+        HandBack::Stuck,
+        HandBack::ActionCap,
+        HandBack::UnexpectedPrompt,
+        HandBack::FightOver,
+    ] {
+        assert!(fixed.contains(&hand_back_note(reason, &state).as_str()));
+    }
+    assert_eq!(
+        hand_back_note(HandBack::Hurt(1), &state),
+        "Auto off: Iolo is hurt"
+    );
 }
 
 #[test]

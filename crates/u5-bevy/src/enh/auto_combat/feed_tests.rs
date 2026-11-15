@@ -49,9 +49,9 @@ fn every_auto_key() -> Vec<AutoKey> {
     keys
 }
 
-const SKELETON_CLASS: u8 = 33;
+pub(super) const SKELETON_CLASS: u8 = 33;
 
-fn place(state: &mut PlayState, slot: usize, tile: u8, row: [u8; 8]) {
+pub(super) fn place(state: &mut PlayState, slot: usize, tile: u8, row: [u8; 8]) {
     state.active_objects[slot] = ActiveObject {
         type_byte: tile,
         tile,

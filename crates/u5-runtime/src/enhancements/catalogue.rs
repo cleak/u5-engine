@@ -178,8 +178,10 @@ pub const SHIPPED_PHASES: &[Phase] = &[
     GEM_G3,
     GEM_G4,
     GEM_G5,
-    // M7 [combat]: COMBAT_P3C and COMBAT_P4D ship with their packages;
-    // COMBAT_P5 stays out of M7.
+    // M7 [combat] (M7-07): auto-combat and its options (3c) and
+    // fast-forward (4d). COMBAT_P5 (allies) stays out of M7.
+    COMBAT_P3C,
+    COMBAT_P4D,
 ];
 
 /// A soft dependency (design 1.4.5): what a feature prefers to have, and

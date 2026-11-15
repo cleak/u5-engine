@@ -1,6 +1,7 @@
 //! Chapter 6's `[combat]` rows and their typed view (design 6.2.8, 6.4.1;
-//! build plan M7-01). No row has shipped yet (U13), so the resolver tests
-//! use the catalogue's test override.
+//! build plan M7-01). Phases 3c and 4d ship in M7-07; allies (Phase 5)
+//! stays hidden (U13), so the tests that need it use the catalogue's test
+//! override.
 
 use super::*;
 use crate::auto_combat::{ACTION_CAP_DEFAULT, PAUSE_BELOW_HP_DEFAULT, STEP_MS_DEFAULT};
@@ -308,44 +309,50 @@ fn the_toggles_and_aliases_match_the_design() {
 }
 
 #[test]
-fn no_phase_of_chapter_6_has_shipped() {
-    for phase in ALL_COMBAT {
-        assert_eq!(phase.chapter, 6);
-        assert!(!SHIPPED_PHASES.contains(phase), "{phase:?}");
-    }
+fn phases_3c_and_4d_have_shipped_and_allies_has_not() {
+    // M7-07: auto-combat, its options and fast-forward are live; Phase 5
+    // (allies) is out of M7.
+    assert!(SHIPPED_PHASES.contains(&COMBAT_P3C));
+    assert!(SHIPPED_PHASES.contains(&COMBAT_P4D));
+    assert!(!SHIPPED_PHASES.contains(&COMBAT_P5));
     assert_eq!(
         ALL_COMBAT
             .iter()
-            .map(|phase| phase.name)
+            .map(|phase| (phase.chapter, phase.name))
             .collect::<Vec<_>>(),
-        ["3c", "4d", "5"]
+        [(6, "3c"), (6, "4d"), (6, "5")]
     );
     for key in COMBAT_KEYS {
-        assert!(!CatalogueRow::find(key).unwrap().is_shipped(), "{key}");
+        assert_eq!(
+            CatalogueRow::find(key).unwrap().is_shipped(),
+            *key != ALLIES_KEY,
+            "{key}"
+        );
     }
-    // The generated table lists each row as later.
+    // The generated table lists allies as later and the rest as shipped.
     let table = settings_table();
     for key in COMBAT_KEYS {
         let line = table
             .lines()
             .find(|line| line.starts_with(&format!("| {key} | ")))
             .unwrap_or_else(|| panic!("{key} is in the table"));
-        assert!(line.contains("| later (chapter 6 "), "{line}");
+        let later = line.contains("| later (chapter 6 ");
+        assert_eq!(later, *key == ALLIES_KEY, "{line}");
     }
     assert!(table.contains(
-        "| combat.auto | Auto-combat | bool = false | b, F | feature | --auto-combat | - \
-         | later (chapter 6 3c) |"
+        "| combat.auto | Auto-combat | bool = false | b, F | feature | --auto-combat | - | yes |"
     ));
-    assert!(table.contains("| combat.step_ms | "));
-    assert!(
-        table.contains("| int 0..2000 = 150 | b, P | feature | - | - | later (chapter 6 3c) |")
-    );
+    assert!(table.contains(
+        "| combat.fast_forward | Faster fights: changes timing, so fights differ from normal \
+         pace | bool = false | b, P | deviation | --auto-combat-fast-forward | - | yes |"
+    ));
+    assert!(table.contains("| int 0..2000 = 150 | b, P | feature | - | - | yes |"));
 }
 
-// --- Resolution while hidden. --------------------------------------------
+// --- Resolution of the hidden row. ----------------------------------------
 
 #[test]
-fn unshipped_rows_resolve_to_the_default_with_a_note() {
+fn allies_resolves_to_the_default_with_a_note_and_the_rest_resolve() {
     let cli = [
         enable(AUTO_KEY),
         enable(ALLIES_KEY),
@@ -354,49 +361,48 @@ fn unshipped_rows_resolve_to_the_default_with_a_note() {
         set(TACTIC_KEY, "magic"),
     ];
     let resolved = resolve(input(None, &cli));
-    assert_eq!(resolved.combat(), CombatSettings::default());
-    assert!(resolved.toggles.is_classic());
+    let combat = resolved.combat();
+    assert!(combat.auto && combat.fast_forward && !combat.allies);
+    assert_eq!(combat.step_ms, 0);
     assert_eq!(
         note_lines(&resolved),
-        [
-            "combat.auto: not available in this build",
-            "combat.allies: not available in this build",
-            "combat.fast_forward: not available in this build",
-            "combat.step_ms: not available in this build",
-            "combat.tactic: not available in this build",
-        ]
+        ["combat.allies: not available in this build"]
     );
-    // A stored value is kept by the host and reported the same way.
+    // A stored allies value is kept by the host and reported the same way.
     let stored = Stored::default()
-        .with(AUTO_KEY, SettingValue::Bool(true))
+        .with(ALLIES_KEY, SettingValue::Bool(true))
         .with(ACTION_CAP_KEY, SettingValue::Int(50));
     let resolved = resolve(input(Some(&stored), &[]));
-    assert_eq!(resolved.combat(), CombatSettings::default());
-    assert!(
-        resolved
-            .notes
-            .iter()
-            .all(|note| matches!(note, SettingNote::NotAvailable { .. })),
-        "{:?}",
-        note_lines(&resolved)
+    assert!(!resolved.combat().allies);
+    assert_eq!(resolved.combat().action_cap, 50);
+    assert_eq!(
+        note_lines(&resolved),
+        ["combat.allies: not available in this build"]
     );
-    assert_eq!(resolved.notes.len(), 2);
 }
 
 #[test]
-fn presets_skip_the_hidden_rows() {
+fn presets_set_auto_and_the_fast_forward_exception_and_skip_allies() {
+    use crate::enhancements::catalogue::Preset;
     for preset in PRESETS {
-        let toggles = preset.toggles();
-        for toggle in [
-            Toggle::CombatAuto,
-            Toggle::CombatAllies,
-            Toggle::CombatFastForward,
-        ] {
-            assert!(!toggles.on(toggle), "{preset:?} turns on {}", toggle.key());
-        }
         let resolved = resolve(input(None, &[CliSetting::Preset(*preset)]));
-        assert_eq!(resolved.combat(), CombatSettings::default(), "{preset:?}");
-        // Skipping a hidden row is silent (U13).
+        let combat = resolved.combat();
+        let on = matches!(preset, Preset::Recommended | Preset::Everything);
+        assert_eq!(combat.auto, on, "{preset:?}");
+        // The one deviation-tier key in a preset (U6).
+        assert_eq!(combat.fast_forward, on, "{preset:?}");
+        assert!(!combat.allies, "{preset:?}");
+        // Options stay at their defaults.
+        assert_eq!(
+            CombatSettings {
+                auto: false,
+                fast_forward: false,
+                ..combat
+            },
+            CombatSettings::default(),
+            "{preset:?}"
+        );
+        // Skipping the hidden row is silent (U13).
         assert!(
             !note_lines(&resolved)
                 .iter()

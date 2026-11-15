@@ -90,11 +90,11 @@ fn new_game(settings: impl FnOnce(&mut CombatSettings)) -> Game {
 }
 
 impl Game {
-    fn fed(&self) -> &[Vec<TypedKey>] {
+    pub(super) fn fed(&self) -> &[Vec<TypedKey>] {
         &self.world().resource::<Fed>().frames
     }
 
-    fn fed_now(&self) -> &[TypedKey] {
+    pub(super) fn fed_now(&self) -> &[TypedKey] {
         self.fed().last().map_or(&[], Vec::as_slice)
     }
 

@@ -49,9 +49,11 @@ The optional enhancements ([settings.md](settings.md)) add their own keys.
 Each key exists only while its feature is on, so with every enhancement off
 (Classic, the default) no key below does anything the 1.0.1 game does not.
 In this build F11 (`display.fullscreen_key`), Ctrl+P (`display.grow_left`,
-see [settings.md](settings.md#the-wider-world-view)) and PgUp and PgDn on the
+see [settings.md](settings.md#the-wider-world-view)), PgUp and PgDn on the
 gem map (`gem_map.level_paging`, see [settings.md](settings.md#the-gem-map))
-are available; the others arrive with their features.
+and the three auto-combat keys (`combat.auto`, see
+[auto-combat](#auto-combat-keys)) are available; the others arrive with
+their features.
 
 | Default | `[keys]` setting | Action | Bound while |
 |---|---|---|---|
@@ -88,3 +90,38 @@ are available; the others arrive with their features.
 - The terminal frontend binds no chords. Play scripts reach a feature
   through `@` tokens (`@journal`, `@auto`, ...), which run as ordinary script
   text while the feature is off.
+
+### Auto-combat keys
+
+With `combat.auto` on ([settings.md](settings.md#auto-combat)), in a fight:
+
+- **Ctrl+A** hands the member whose command prompt is open to auto-combat,
+  or gives that member back.
+- **Ctrl+Shift+A** hands over the whole party, or gives it back.
+- **Ctrl+F** hands over the whole party until the fight is over.
+
+Outside a fight the keys only say so in a short note. Auto-combat types
+the same keys a player would (A, the arrows and diagonals, Enter, Escape
+and Space), one at a time, and never a key you could not have typed. The
+first key you press while it runs gives the prompt back: by default the key
+is dropped (`combat.interrupt = "swallow"`), or it goes to the game
+(`"deliver"`). If an attack's target cursor is open, auto finishes that
+attack first and the keys you typed follow in order. A badge in the margin
+shows while anyone is handed over.
+
+In the terminal frontend there are no chords. A line in a play script, or
+typed at the interactive prompt, does the same:
+
+| Line | Hands over |
+|---|---|
+| `@auto` | the member whose prompt is open |
+| `@auto party` | every member |
+| `@auto 1,3` | members 1 and 3, as the party panel numbers them |
+| `@auto until` | every member, until the fight is over |
+| `@auto off` | nobody |
+
+`--auto-combat-log FILE` writes the keys auto typed as a plain play script
+that replays the same fight with the feature off. With `combat.auto` off, or
+under the parity lock, `@auto` is the `@` key followed by text, as in
+1.0.1, and no log file is created. No paired scenario, route-smoke script or
+QA scenario uses `@auto`; a test keeps it so.

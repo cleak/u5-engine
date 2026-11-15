@@ -656,22 +656,17 @@ fn a_malformed_combat_key_falls_back_and_keeps_game_dir() {
     assert!(notes[0].starts_with("combat.auto = "), "{notes:?}");
     assert_eq!(doc.get("game_dir").unwrap().as_str(), Some("/g"));
 
+    // Shipped (M7-07), the real launch resolves the same way.
     let settings = resolve_launch(Some(&path), &[], LockState::Off);
-    assert_eq!(settings.resolved.combat(), Default::default());
+    assert_eq!(settings.resolved.combat(), combat);
     let notes: Vec<String> = settings
         .resolved
         .notes
         .iter()
         .map(ToString::to_string)
         .collect();
-    assert_eq!(
-        notes,
-        [
-            "combat.auto: not available in this build",
-            "combat.step_ms: not available in this build",
-            "combat.spells: not available in this build",
-        ]
-    );
+    assert_eq!(notes.len(), 1, "{notes:?}");
+    assert!(notes[0].starts_with("combat.auto = "), "{notes:?}");
     // Reading never rewrites the file.
     assert_eq!(fs::read_to_string(&path).unwrap(), text);
 }

@@ -911,11 +911,16 @@ mod tests {
         let settings = resolve_launch(Some(&path), &[], LockState::Off);
         assert_eq!(settings.config.as_deref(), Some(path.as_path()));
         assert!(settings.warnings.is_empty());
-        // Of Recommended's rows only `display.sprite_composite` (chapter 9
-        // P5) has shipped, so it is the one toggle the preset turns on.
+        // Of Recommended's rows `display.sprite_composite` (chapter 9 P5),
+        // `combat.auto` and `combat.fast_forward` (chapter 6 3c, 4d) have
+        // shipped, so they are the toggles the preset turns on.
         assert_eq!(
             settings.resolved.toggles.iter_on().collect::<Vec<_>>(),
-            [Toggle::DisplaySpriteComposite]
+            [
+                Toggle::DisplaySpriteComposite,
+                Toggle::CombatAuto,
+                Toggle::CombatFastForward
+            ]
         );
         assert_eq!(
             settings.resolved.preset,
@@ -1060,8 +1065,9 @@ mod tests {
     fn aliases_come_from_shipped_rows_only() {
         // `--preset` is parsed by `cli.rs` itself; the display rows of
         // chapter 2 P1, P2 and P8, chapter 9 P1's `--brightness`, P5's
-        // `--sprite-composite` and chapter 10 G2's `--gem-map` are the only
-        // shipped rows with aliases so far.
+        // `--sprite-composite`, chapter 10 G2's `--gem-map` and chapter 6's
+        // `--auto-combat` (3c) and `--auto-combat-fast-forward` (4d) are the
+        // only shipped rows with aliases so far.
         assert_eq!(find_cli_alias("--preset"), None);
         assert_eq!(find_cli_alias("--no-preset"), None);
         assert_eq!(find_cli_alias("--quest-journal"), None);
@@ -1084,6 +1090,8 @@ mod tests {
                 "--grow-left,",
                 "--sprite-composite,",
                 "--gem-map,",
+                "--auto-combat,",
+                "--auto-combat-fast-forward,",
                 "--scale-mode",
                 "--pixel-aspect",
                 "--pillar-fill",
