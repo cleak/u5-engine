@@ -131,3 +131,37 @@ original while gems are used; the route smoke is unchanged from 1.0.1; and a
 no-spoiler suite checks every map drawn over a fresh character, a walk,
 each dungeon, the Underworld and random discoveries, comparing every label
 with the game's sign and conversation text.
+
+### Optional enhancements: the quest journal
+
+Off unless you turn it on (`--quest-journal`, `--journal-side-panel`, or
+the Everything preset), and it never changes the game
+([the quest journal](settings.md#the-quest-journal)).
+
+- **Ctrl+J opens the quest journal** at the command prompt: a page over the
+  game picture, in the game's own font and frame, with what you have done
+  so far for each virtue, the dungeons, the Shadowlords, the regalia, the
+  items and the people you travel with or have met. Esc or Ctrl+J closes
+  it; the arrow keys, Tab and the digits move through it. The world keeps
+  its idle time underneath, as if you had stopped typing, and the page
+  closes itself if the game stops waiting at its prompt.
+- **A side panel** can show a short summary beside the picture: the virtues
+  done and in progress, a mark for each, and what you have found.
+- **No spoilers by default.** At tiers 1 and 2 (2 is the default) the
+  journal names only what the game has already shown you or your save shows
+  you did, and never counts what is left. A new game shows only the eight
+  virtues and your party.
+- **Spoiler tiers 3 and 4** (`--spoilers 3`, `--spoilers 4`) add hints, the
+  Endgame section and, at tier 4, the mantras and Words of Power you have
+  already used, each masked until you reveal it. They are marked
+  `SPOILERS`, count as deviations, and no preset sets them.
+- **`u5-engine --quest-journal-report`** prints the journal of a save as
+  text and changes nothing.
+
+Checks behind it: opening, using and closing the page (on a tick boundary
+and between two), combat starting under it, the side panel alone, and
+Ctrl+J typed where the game is busy all play exactly as the original with
+the same idle frames (the game state, the random numbers, the clock, the
+messages, the picture, the keys and the save files); a no-spoiler suite
+checks the page, the panel and the report on a new game and one discovery
+at a time.

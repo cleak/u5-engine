@@ -153,10 +153,10 @@ pub const GEM_G4: Phase = Phase::new(10, "G4");
 /// Chapter 10, G5: marks and labels (`gem_map.labels`).
 pub const GEM_G5: Phase = Phase::new(10, "G5");
 /// Chapter 5, Phase 3: the Ctrl+J journal page (`journal.page`,
-/// `spoiler_tier` and `mantras`; build plan M5-01). Hidden until M5-06.
+/// `spoiler_tier` and `mantras`; build plan M5-01). Shipped in M5-06.
 pub const JOURNAL_P3: Phase = Phase::new(5, "Phase 3");
 /// Chapter 5, Phase 3b: the journal side panel (`journal.side_panel` and
-/// `side_panel_side`; build plan M5-01). Hidden until M5-06.
+/// `side_panel_side`; build plan M5-01). Shipped in M5-06.
 pub const JOURNAL_P3B: Phase = Phase::new(5, "Phase 3b");
 
 /// Every phase that has shipped in this build. Shipping a phase is adding
@@ -174,6 +174,8 @@ pub const SHIPPED_PHASES: &[Phase] = &[
     GEM_G3,
     GEM_G4,
     GEM_G5,
+    JOURNAL_P3,
+    JOURNAL_P3B,
 ];
 
 /// A soft dependency (design 1.4.5): what a feature prefers to have, and

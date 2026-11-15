@@ -49,9 +49,11 @@ The optional enhancements ([settings.md](settings.md)) add their own keys.
 Each key exists only while its feature is on, so with every enhancement off
 (Classic, the default) no key below does anything the 1.0.1 game does not.
 In this build F11 (`display.fullscreen_key`), Ctrl+P (`display.grow_left`,
-see [settings.md](settings.md#the-wider-world-view)) and PgUp and PgDn on the
+see [settings.md](settings.md#the-wider-world-view)), PgUp and PgDn on the
 gem map (`gem_map.level_paging`, see [settings.md](settings.md#the-gem-map))
-are available; the others arrive with their features.
+and Ctrl+J (`journal.page`, see
+[settings.md](settings.md#the-quest-journal)) are available; the others
+arrive with their features.
 
 | Default | `[keys]` setting | Action | Bound while |
 |---|---|---|---|
@@ -84,6 +86,14 @@ are available; the others arrive with their features.
 - Change a key with `--set keys.NAME=CHORD` or in `config.toml`'s `[keys]`
   section: modifiers `Ctrl`, `Shift`, `Alt`, then one key, joined by `+`. A
   chord the game reads is refused with a note.
+- The quest journal page's own keys, while it is open: Left and Right, Tab
+  and Shift+Tab (section), 1 to 7 (jump to a section), Up and Down (row),
+  PgUp, PgDn, Home and End, Enter or Space (reveal a masked answer at
+  spoiler tier 4), Esc or Ctrl+J (close). None of them reaches the game.
+  F1 is not a journal key: it stays the game's "What?".
+- `u5-engine --quest-journal-report [--spoilers N] [GAME_DIR]` prints the
+  quest journal of a save as text and exits without changing anything
+  ([settings.md](settings.md#the-quest-journal)).
 - On macOS the chords use Control, not Command.
 - The terminal frontend binds no chords. Play scripts reach a feature
   through `@` tokens (`@journal`, `@auto`, ...), which run as ordinary script

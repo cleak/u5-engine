@@ -1119,12 +1119,15 @@ mod tests {
                 "--grow-left,",
                 "--sprite-composite,",
                 "--gem-map,",
+                "--quest-journal,",
+                "--journal-side-panel,",
                 "--scale-mode",
                 "--pixel-aspect",
                 "--pillar-fill",
                 "--bezel-image",
                 "--vsync,",
-                "--brightness"
+                "--brightness",
+                "--spoilers"
             ]
         );
         for row in CatalogueRow::all().filter(|row| row.is_shipped()) {

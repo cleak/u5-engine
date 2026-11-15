@@ -54,6 +54,7 @@ use crate::enh::equivalence::{
 };
 use crate::enh::gem_map::{GemMap, GemMapNode};
 use crate::enh::present::{PresentHost, PresentSteps, StepOrder};
+use crate::quest_journal_view::{JournalPanelPageOpen, QuestJournalUi};
 
 /// The window most runs use: the named 16:9 layout (a 512x240 canvas).
 const W16: (f32, f32) = (2560.0, 1440.0);
@@ -122,6 +123,17 @@ impl Config {
         self.settings
             .iter()
             .any(|s| matches!(s, CliSetting::Enable(key) if key == "gem_map.enhanced"))
+    }
+
+    /// Whether the settings turn on the journal page or its side panel
+    /// (chapter 5).
+    fn journal(&self) -> (bool, bool) {
+        let on = |name: &str| {
+            self.settings
+                .iter()
+                .any(|s| matches!(s, CliSetting::Enable(key) if key == name))
+        };
+        (on("journal.page"), on("journal.side_panel"))
     }
 
     /// Whether the settings composite sprites over terrain (chapter 9).
@@ -211,6 +223,7 @@ fn alone() -> Vec<Config> {
     ];
     configs.extend(light_alone());
     configs.extend(gem_alone());
+    configs.extend(journal_alone());
     for (name, window) in [
         ("grow_left@3440x1440", (3440.0, 1440.0)),
         ("grow_left@1920x1080", (1920.0, 1080.0)),
@@ -334,6 +347,63 @@ fn gem_pair_values() -> Vec<(&'static str, Vec<CliSetting>)> {
         .collect()
 }
 
+// --- Chapter 5, the quest journal (build plan M5-06). ---------------------
+
+/// Chapter 5's keys (design 5.4.1, 5.6), each away from its default. A
+/// sub-key brings its toggle with it, since it is inert without it.
+fn journal_values() -> Vec<(&'static str, Vec<CliSetting>)> {
+    let page = |extra: Vec<CliSetting>| {
+        let mut settings = vec![on("journal.page")];
+        settings.extend(extra);
+        settings
+    };
+    let panel = |extra: Vec<CliSetting>| {
+        let mut settings = vec![on("journal.side_panel")];
+        settings.extend(extra);
+        settings
+    };
+    vec![
+        ("journal.page", page(vec![])),
+        (
+            "journal.spoiler_tier=1",
+            page(vec![set("journal.spoiler_tier", "1")]),
+        ),
+        (
+            "journal.spoiler_tier=4",
+            page(vec![set("journal.spoiler_tier", "4")]),
+        ),
+        (
+            "journal.mantras=never",
+            page(vec![set("journal.mantras", "never")]),
+        ),
+        ("journal.side_panel", panel(vec![])),
+        (
+            "journal.side_panel_side=left",
+            panel(vec![set("journal.side_panel_side", "left")]),
+        ),
+        (
+            "journal.side_panel_side=right",
+            panel(vec![set("journal.side_panel_side", "right")]),
+        ),
+    ]
+}
+
+fn journal_alone() -> Vec<Config> {
+    journal_values()
+        .into_iter()
+        .map(|(name, settings)| Config::new(name, settings))
+        .collect()
+}
+
+/// The journal keys of the pairwise matrix: the page and the side panel,
+/// so every display key (the wider world view among them) meets each.
+fn journal_pair_values() -> Vec<(&'static str, Vec<CliSetting>)> {
+    journal_values()
+        .into_iter()
+        .filter(|(name, _)| matches!(*name, "journal.page" | "journal.side_panel"))
+        .collect()
+}
+
 /// Each of [`light_values`] with the wider world view and with sharp
 /// scaling (build plan M2-08), Ctrl+P typed as in [`column`]. The pairs
 /// among the chapter's own keys and with every other display key come
@@ -431,6 +501,7 @@ fn pair_values() -> Vec<(&'static str, Vec<CliSetting>)> {
     ]
     .into_iter()
     .chain(gem_pair_values())
+    .chain(journal_pair_values())
     .collect()
 }
 
@@ -729,6 +800,8 @@ struct Trace {
     gem_frames: usize,
     /// Whether the gem map's plugin was in the app.
     gem_plugin: bool,
+    /// Whether the journal page and the journal panel were in the app.
+    journal: (bool, bool),
 }
 
 fn copy_dir(from: &Path, to: &Path) {
@@ -796,6 +869,13 @@ fn run(
         }
     }
     let gem_plugin = shell.app.world().contains_resource::<GemMap>();
+    let journal = (
+        shell.app.world().contains_resource::<QuestJournalUi>(),
+        shell
+            .app
+            .world()
+            .contains_resource::<JournalPanelPageOpen>(),
+    );
     let composes = shell
         .app
         .world()
@@ -824,6 +904,7 @@ fn run(
         masks_built,
         gem_frames,
         gem_plugin,
+        journal,
     }
 }
 
@@ -894,6 +975,7 @@ fn check(script: &Script, configs: &[Config]) -> Vec<String> {
             assert_eq!(off.composes, 0);
             assert!(off.steps.is_empty() && !off.masks_built);
             assert!(!off.gem_plugin && off.gem_frames == 0);
+            assert_eq!(off.journal, (false, false));
             offs.push((off_key, off));
         }
         let off = &offs.iter().find(|(key, _)| *key == off_key).unwrap().1;
@@ -951,6 +1033,14 @@ fn check(script: &Script, configs: &[Config]) -> Vec<String> {
         } else {
             assert_eq!(on.gem_frames, 0, "{} / {}", script.name, config.name);
         }
+        // Chapter 5: the page and the panel are in the app exactly when on.
+        assert_eq!(
+            on.journal,
+            config.journal(),
+            "{} / {}: the journal",
+            script.name,
+            config.name
+        );
         if config.column_keys && config.grow_left() && script.top_down {
             assert!(
                 on.open_frames > 0,
@@ -1033,7 +1123,7 @@ fn a_gem_used_in_a_dungeon_is_left_alone() {
 fn every_pair_of_display_keys_leaves_the_shortest_script_alone() {
     let scratch = Scratch::new("pairs");
     let mut configs = pairs();
-    assert_eq!(configs.len(), 21 * 20 / 2);
+    assert_eq!(configs.len(), 23 * 22 / 2);
     configs.extend(light_pairs());
     let script = synthetic_scripts(&scratch)
         .into_iter()

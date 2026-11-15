@@ -1,6 +1,6 @@
 //! Chapter 5's `[journal]` rows and their typed view (design 5.3.6, 5.4.1;
-//! build plan M5-01). Every row is hidden in this build (U13), so most
-//! resolver tests use the catalogue's test override.
+//! build plan M5-01). The rows ship in M5-06; the resolver tests that
+//! predate it still resolve through the catalogue's test override.
 
 use super::*;
 use crate::enhancements::catalogue::{
@@ -191,28 +191,32 @@ fn the_three_options_match_the_design() {
 }
 
 #[test]
-fn every_journal_row_is_hidden_until_m5_06() {
+fn every_journal_row_ships_in_m5_06() {
     for phase in ALL_JOURNAL {
-        assert!(!SHIPPED_PHASES.contains(phase), "{phase:?}");
+        assert!(SHIPPED_PHASES.contains(phase), "{phase:?}");
         assert_eq!(phase.chapter, 5);
     }
     for row in CatalogueRow::all().filter(|row| row.key().starts_with("journal.")) {
-        assert!(!row.is_shipped(), "{} (U13)", row.key());
+        assert!(row.is_shipped(), "{}", row.key());
     }
-    // A hidden row keeps its default whatever the file or the flags say.
+    // A shipped row takes the file and the flags, with no note.
     let stored = Stored::default()
         .with(PAGE_KEY, SettingValue::Bool(true))
         .with(SPOILER_TIER_KEY, SettingValue::Int(4));
     let cli = [enable(SIDE_PANEL_KEY), set(MANTRAS_KEY, "never")];
     let resolved = resolve(input(Some(&stored), &cli));
-    assert_eq!(resolved.journal(), JournalSettings::default());
-    assert!(resolved.toggles.is_classic());
-    assert!(!resolved.notes.is_empty());
-    // And presets skip them.
-    for preset in PRESETS {
-        assert!(!preset.toggles().on(Toggle::JournalPage), "{preset:?}");
-        assert!(!preset.toggles().on(Toggle::JournalSidePanel), "{preset:?}");
-    }
+    assert!(resolved.notes.is_empty(), "{:?}", resolved.notes);
+    assert_eq!(resolved.journal(), shipped(Some(&stored), &cli).journal());
+    let journal = resolved.journal();
+    assert!(journal.page && journal.side_panel);
+    assert_eq!(journal.tier, SpoilerTier::Full);
+    assert_eq!(journal.mantras, MantraDisplay::Never);
+    // Everything sets the page and the panel; Recommended neither (U2).
+    let everything = resolve(input(None, &[CliSetting::Preset(Preset::Everything)])).journal();
+    assert!(everything.page && everything.side_panel);
+    assert_eq!(everything.tier, SpoilerTier::Goals);
+    let recommended = resolve(input(None, &[CliSetting::Preset(Preset::Recommended)])).journal();
+    assert_eq!(recommended, JournalSettings::default());
 }
 
 // --- The typed view. -----------------------------------------------------

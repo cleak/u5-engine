@@ -43,7 +43,9 @@ In this build Recommended turns on only sprites over terrain
 (`display.scale_mode = "sharp"`) and the F11 fullscreen key
 (`display.fullscreen_key`); none of them changes the game. The wider world
 view is a deviation, so no preset turns it on. Everything also turns on the
-enhanced gem map (`gem_map.enhanced`). No preset sets brightness, map
+enhanced gem map (`gem_map.enhanced`) and the quest journal's page and side
+panel (`journal.page`, `journal.side_panel`) at spoiler tier 2; no preset
+sets a higher tier. No preset sets brightness, map
 brightness or the sprite outline (`display.composite_halo`): they are
 preferences.
 
@@ -75,6 +77,9 @@ preferences.
 | `--sprite-composite`, `--no-sprite-composite` | `--enable` / `--disable display.sprite_composite`: draw people, monsters, ships and items over the terrain instead of in black boxes. `display.composite_halo` (on by default) keeps a thin black outline round each sprite. |
 | `--brightness PERCENT` | `--set display.brightness=PERCENT`: dim the map view, 25 to 100 (100 is the original colours; `--enable display.brightness` sets the suggested 70). `display.brightness_scope` chooses the map view (`map`) or the whole screen (`frame`). |
 | `--gem-map`, `--no-gem-map` | `--enable` / `--disable gem_map.enhanced`: using a gem shows a full-screen map with real tiles, wider than the original gem's. |
+| `--quest-journal`, `--no-quest-journal` | `--enable` / `--disable journal.page`: Ctrl+J opens the quest journal page. |
+| `--journal-side-panel`, `--no-journal-side-panel` | `--enable` / `--disable journal.side_panel`: a short quest summary in a bar beside the picture. |
+| `--spoilers N` | `--set journal.spoiler_tier=N`: what the journal tells, 1 to 4 (2 is the default; 3 and 4 are spoilers). With `--quest-journal-report` it picks the report's tier instead. |
 
 `config.toml` applies to the default launch (no game folder or mode on the
 command line); other launches use the command line alone. An unknown key on
@@ -324,6 +329,73 @@ numbers, timing and save files are exactly those of the same play with the
 map off. What the map remembers of your discoveries is kept beside the save
 (see [sidecars.md](sidecars.md#player-sidecars)).
 
+## The quest journal
+
+A record of what you have already done and been told, never of what is
+still ahead. Two settings, each off by default and both part of the
+Everything preset; either works without the other:
+
+- `journal.page`, **"Quest journal page (Ctrl+J)"** (`--quest-journal`):
+  Ctrl+J at the command prompt opens a page over the game picture, drawn
+  with your game's own font and frame. Esc or Ctrl+J closes it. Left and
+  Right (or Tab and Shift+Tab) change the section, the digits 1 to 7 jump
+  to one, Up and Down choose a row, PgUp, PgDn, Home and End move further,
+  and the two lines at the bottom tell more about the chosen row. The
+  sections are Virtues, Dungeons, Shadowlords, Regalia, Items, People and,
+  at the spoiler tiers, Endgame; a section with nothing in it yet is
+  skipped, so a new game shows only Virtues and People.
+- `journal.side_panel`, **"Quest journal side panel"**
+  (`--journal-side-panel`): a 16-column summary in a bar beside the
+  picture: how many virtues are done or in progress, a mark for each
+  virtue, and counts and names of what you have found (Shadowlords
+  vanquished, seals open, the regalia you carry). It never has a total,
+  never a mantra and never anything above tier 2. `journal.side_panel_side`
+  (`auto`, `left` or `right`) picks the bar; `auto` takes the side the
+  conversation scrollback does not use, and `display.panel_priority`
+  decides when both want one. The panel is hidden while the page is open,
+  while the wider world view fills the window (it shows again on combat,
+  dungeon and other fixed screens), and on a window without room, with a
+  one-time note.
+
+**Spoiler tiers.** `journal.spoiler_tier` (`--spoilers N`) sets what the
+page tells:
+
+1. **Progress**: what you have done, in a word or a mark.
+2. **Goals you have been given** (the default): also the next step the game
+   has already told you, such as reading the Codex after an ordination.
+3. **Spoiler: hints**: also hints for the steps ahead, and the Endgame
+   section. The title says `SPOILERS`.
+4. **Spoiler: hints and answers you have used**: also the mantras and Words
+   of Power you have already used. Each answer is masked as `[hidden]`
+   until you choose its row and press Enter or Space; the reveal lasts
+   until the page closes and is never saved. `journal.mantras = "never"`
+   keeps every answer hidden.
+
+Tiers 3 and 4 are deviations: no preset sets them.
+
+**What the journal never tells** at tiers 1 and 2: no dungeon, Shadowlord,
+shard, regalia piece, tool, companion, town, mantra or Word of Power is
+named before the game has shown it to you or your save shows you did it,
+and no line counts what is left ("3 of 8", "/8"). A Shadowlord that is
+merely at large adds nothing, and nor does a companion you have not met.
+The one number on a new game is the Avatar's standing, as Ctrl+K prints
+it. The eight virtues are named from the start, because character
+creation asks about every one of them.
+
+**The offline report.** `u5-engine --quest-journal-report [--spoilers N]
+[GAME_DIR]` prints the same journal as plain text and exits (tier 2 when
+`--spoilers` is not given). It reads `SAVED.GAM` only (the runtime copy of
+that folder when one exists), changes nothing and reads no enhancement
+setting. It shows every row's details, and at tier 4 it prints the answers
+unmasked. An unreadable save prints `cannot read SAVED.GAM: ...` and exits
+with status 2.
+
+Nothing here changes the game: the page and the panel only read the game's
+state, keys typed into the page never reach the game, and the world keeps
+its idle time under the open page exactly as if you had stopped typing (if
+the game stops waiting at its prompt, for example because combat starts,
+the page closes). The journal keeps no file of its own.
+
 ## The parity lock
 
 `--parity-lock`, or `U5_PARITY_LOCK=1` in the environment, turns every
@@ -396,8 +468,8 @@ one that types keys must change it exactly as typing those keys would:
 | display.grow_left | Wider world view (shows more than the original) | bool = false | a, F | deviation, wider view | --grow-left | - | yes |
 | display.sprite_composite | Sprites over terrain (no black boxes) | bool = false | a, F | feature | --sprite-composite | - | yes |
 | gem_map.enhanced | Enhanced gem map | bool = false | a, P | feature | --gem-map | - | yes |
-| journal.page | Quest journal page (Ctrl+J) | bool = false | a, F | feature | --quest-journal | - | later (chapter 5 Phase 3) |
-| journal.side_panel | Quest journal side panel | bool = false | a, F | feature | --journal-side-panel | - | later (chapter 5 Phase 3b) |
+| journal.page | Quest journal page (Ctrl+J) | bool = false | a, F | feature | --quest-journal | - | yes |
+| journal.side_panel | Quest journal side panel | bool = false | a, F | feature | --journal-side-panel | - | yes |
 | enhancements.schema | Settings file format version | int 1..1 = 1 | -, L | feature | - | - | yes |
 | enhancements.preset | Preset | enum classic\|recommended\|everything = classic | -, P | feature | --preset | - | yes |
 | keys.menu | Open the menu | chord = F12 | -, F | feature | - | a keyboard | later (chapter 1 P5) |
@@ -439,7 +511,7 @@ one that types keys must change it exactly as typing those keys would:
 | gem_map.wrap_rows | Show the dungeon's wrapped edge | bool = true | a, F | feature | - | - | yes |
 | gem_map.level_paging | Page through dungeon levels (PgUp, PgDn) | bool = true | a, F | feature | - | - | yes |
 | gem_map.glyphs | Dungeon symbols (gem-faithful is a spoiler: shows secret doors and hidden pits on sight) | enum perceived\|gem-faithful = perceived | a, F | feature (deviation: gem-faithful) | - | - | yes |
-| journal.spoiler_tier | Spoiler tier: 1 progress, 2 goals you have been given, 3 Spoiler: hints, 4 Spoiler: hints and answers you have used | int 1..4 = 2 | a, F | feature (deviation: 3, 4) | --spoilers | - | later (chapter 5 Phase 3) |
-| journal.mantras | Mantras at tier 4: masked until you select one, or never shown | enum reveal\|never = reveal | a, F | feature | - | - | later (chapter 5 Phase 3) |
-| journal.side_panel_side | Side of the journal panel | enum auto\|left\|right = auto | a, F | feature | - | - | later (chapter 5 Phase 3b) |
+| journal.spoiler_tier | Spoiler tier: 1 progress, 2 goals you have been given, 3 Spoiler: hints, 4 Spoiler: hints and answers you have used | int 1..4 = 2 | a, F | feature (deviation: 3, 4) | --spoilers | - | yes |
+| journal.mantras | Mantras at tier 4: masked until you select one, or never shown | enum reveal\|never = reveal | a, F | feature | - | - | yes |
+| journal.side_panel_side | Side of the journal panel | enum auto\|left\|right = auto | a, F | feature | - | - | yes |
 <!-- END GENERATED -->
