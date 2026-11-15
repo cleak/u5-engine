@@ -151,6 +151,20 @@ pub const GEM_G3: Phase = Phase::new(10, "G3");
 pub const GEM_G4: Phase = Phase::new(10, "G4");
 /// Chapter 10, G5: marks and labels (`gem_map.labels`).
 pub const GEM_G5: Phase = Phase::new(10, "G5");
+// Chapter 7, cheats and debug tools (design 7.5; build plan M8).
+/// Chapter 7, Phase 0: the runtime rules module (`u5_runtime::cheats`). It
+/// has no rows of its own.
+pub const CHEATS_P0: Phase = Phase::new(7, "Phase 0");
+/// Chapter 7, Phase 1: the section switch `cheats.enabled` and the marker.
+pub const CHEATS_P1: Phase = Phase::new(7, "Phase 1");
+/// Chapter 7, Phase 2: the Cheats page, the quick actions and the locks.
+pub const CHEATS_P2: Phase = Phase::new(7, "Phase 2");
+/// Chapter 7, Phase 3: Edit party and stores (`cheats.stat_edit`).
+pub const CHEATS_P3: Phase = Phase::new(7, "Phase 3");
+/// Chapter 7, Phase 4: Teleport (`cheats.teleport`).
+pub const CHEATS_P4: Phase = Phase::new(7, "Phase 4");
+/// Chapter 7, Phase 5: the change watch (`cheats.state_watch`).
+pub const CHEATS_P5: Phase = Phase::new(7, "Phase 5");
 
 /// Every phase that has shipped in this build. Shipping a phase is adding
 /// it here, in the package that completes it; its rows then become
@@ -167,6 +181,9 @@ pub const SHIPPED_PHASES: &[Phase] = &[
     GEM_G3,
     GEM_G4,
     GEM_G5,
+    // M8-01: the runtime rules have shipped; every cheat row stays hidden
+    // until M8-06 adds the phases that ship it.
+    CHEATS_P0,
 ];
 
 /// A soft dependency (design 1.4.5): what a feature prefers to have, and
@@ -405,6 +422,288 @@ toggles! {
         ships: GEM_G2,
         tags: &[],
         cli_aliases: &["--gem-map"],
+        soft_deps: &[],
+        needs: &[],
+        driven: false,
+    },
+    // `[cheats]`, chapter 7 (design 7.2.9, 7.4.1). Every row but the watch
+    // is class (c), cheat tier, behind `cheats.enabled`, and in no preset
+    // (D7.1). `remember_locks` applies at the next launch. `state_watch`
+    // is class (a), not gated, and deviation tier, so no preset sets it
+    // (U7) and the wizard keeps it ungreyed. Hidden until M8-06 ships the
+    // phases (U13).
+    CheatsEnabled = "cheats.enabled" {
+        label: "Allow cheats",
+        class: EffectClass::StateAltering,
+        apply: ApplyAt::IdlePrompt,
+        tier: Tier::Cheat,
+        ships: CHEATS_P1,
+        tags: &[],
+        cli_aliases: &[],
+        soft_deps: &[],
+        needs: &[],
+        driven: false,
+    },
+    CheatsHealAll = "cheats.heal_all" {
+        label: "Heal all",
+        class: EffectClass::StateAltering,
+        apply: ApplyAt::IdlePrompt,
+        tier: Tier::Cheat,
+        ships: CHEATS_P2,
+        tags: &[],
+        cli_aliases: &[],
+        soft_deps: &[],
+        needs: &[],
+        driven: false,
+    },
+    CheatsCurePoison = "cheats.cure_poison" {
+        label: "Cure poison",
+        class: EffectClass::StateAltering,
+        apply: ApplyAt::IdlePrompt,
+        tier: Tier::Cheat,
+        ships: CHEATS_P2,
+        tags: &[],
+        cli_aliases: &[],
+        soft_deps: &[],
+        needs: &[],
+        driven: false,
+    },
+    CheatsResurrectAll = "cheats.resurrect_all" {
+        label: "Resurrect all",
+        class: EffectClass::StateAltering,
+        apply: ApplyAt::IdlePrompt,
+        tier: Tier::Cheat,
+        ships: CHEATS_P2,
+        tags: &[],
+        cli_aliases: &[],
+        soft_deps: &[],
+        needs: &[],
+        driven: false,
+    },
+    CheatsMaxGold = "cheats.max_gold" {
+        label: "Max gold",
+        class: EffectClass::StateAltering,
+        apply: ApplyAt::IdlePrompt,
+        tier: Tier::Cheat,
+        ships: CHEATS_P2,
+        tags: &[],
+        cli_aliases: &[],
+        soft_deps: &[],
+        needs: &[],
+        driven: false,
+    },
+    CheatsMaxFood = "cheats.max_food" {
+        label: "Max food",
+        class: EffectClass::StateAltering,
+        apply: ApplyAt::IdlePrompt,
+        tier: Tier::Cheat,
+        ships: CHEATS_P2,
+        tags: &[],
+        cli_aliases: &[],
+        soft_deps: &[],
+        needs: &[],
+        driven: false,
+    },
+    CheatsRefillArrows = "cheats.refill_arrows" {
+        label: "Refill arrows",
+        class: EffectClass::StateAltering,
+        apply: ApplyAt::IdlePrompt,
+        tier: Tier::Cheat,
+        ships: CHEATS_P2,
+        tags: &[],
+        cli_aliases: &[],
+        soft_deps: &[],
+        needs: &[],
+        driven: false,
+    },
+    CheatsRefillQuarrels = "cheats.refill_quarrels" {
+        label: "Refill quarrels too",
+        class: EffectClass::StateAltering,
+        apply: ApplyAt::IdlePrompt,
+        tier: Tier::Cheat,
+        ships: CHEATS_P2,
+        tags: &[],
+        cli_aliases: &[],
+        soft_deps: &[],
+        needs: &[],
+        driven: false,
+    },
+    CheatsMaxReagents = "cheats.max_reagents" {
+        label: "Max reagents",
+        class: EffectClass::StateAltering,
+        apply: ApplyAt::IdlePrompt,
+        tier: Tier::Cheat,
+        ships: CHEATS_P2,
+        tags: &[],
+        cli_aliases: &[],
+        soft_deps: &[],
+        needs: &[],
+        driven: false,
+    },
+    CheatsRepairHull = "cheats.repair_hull" {
+        label: "Repair hull",
+        class: EffectClass::StateAltering,
+        apply: ApplyAt::IdlePrompt,
+        tier: Tier::Cheat,
+        ships: CHEATS_P2,
+        tags: &[],
+        cli_aliases: &[],
+        soft_deps: &[],
+        needs: &[],
+        driven: false,
+    },
+    CheatsLockHp = "cheats.lock_hp" {
+        label: "Lock health",
+        class: EffectClass::StateAltering,
+        apply: ApplyAt::IdlePrompt,
+        tier: Tier::Cheat,
+        ships: CHEATS_P2,
+        tags: &[],
+        cli_aliases: &[],
+        soft_deps: &[],
+        needs: &[],
+        driven: false,
+    },
+    CheatsLockMp = "cheats.lock_mp" {
+        label: "Lock mana",
+        class: EffectClass::StateAltering,
+        apply: ApplyAt::IdlePrompt,
+        tier: Tier::Cheat,
+        ships: CHEATS_P2,
+        tags: &[],
+        cli_aliases: &[],
+        soft_deps: &[],
+        needs: &[],
+        driven: false,
+    },
+    CheatsLockFood = "cheats.lock_food" {
+        label: "Lock food",
+        class: EffectClass::StateAltering,
+        apply: ApplyAt::IdlePrompt,
+        tier: Tier::Cheat,
+        ships: CHEATS_P2,
+        tags: &[],
+        cli_aliases: &[],
+        soft_deps: &[],
+        needs: &[],
+        driven: false,
+    },
+    CheatsLockGold = "cheats.lock_gold" {
+        label: "Lock gold",
+        class: EffectClass::StateAltering,
+        apply: ApplyAt::IdlePrompt,
+        tier: Tier::Cheat,
+        ships: CHEATS_P2,
+        tags: &[],
+        cli_aliases: &[],
+        soft_deps: &[],
+        needs: &[],
+        driven: false,
+    },
+    CheatsLockKeys = "cheats.lock_keys" {
+        label: "Lock keys",
+        class: EffectClass::StateAltering,
+        apply: ApplyAt::IdlePrompt,
+        tier: Tier::Cheat,
+        ships: CHEATS_P2,
+        tags: &[],
+        cli_aliases: &[],
+        soft_deps: &[],
+        needs: &[],
+        driven: false,
+    },
+    CheatsLockGems = "cheats.lock_gems" {
+        label: "Lock gems",
+        class: EffectClass::StateAltering,
+        apply: ApplyAt::IdlePrompt,
+        tier: Tier::Cheat,
+        ships: CHEATS_P2,
+        tags: &[],
+        cli_aliases: &[],
+        soft_deps: &[],
+        needs: &[],
+        driven: false,
+    },
+    CheatsLockTorches = "cheats.lock_torches" {
+        label: "Lock torches",
+        class: EffectClass::StateAltering,
+        apply: ApplyAt::IdlePrompt,
+        tier: Tier::Cheat,
+        ships: CHEATS_P2,
+        tags: &[],
+        cli_aliases: &[],
+        soft_deps: &[],
+        needs: &[],
+        driven: false,
+    },
+    CheatsLockArrows = "cheats.lock_arrows" {
+        label: "Lock arrows",
+        class: EffectClass::StateAltering,
+        apply: ApplyAt::IdlePrompt,
+        tier: Tier::Cheat,
+        ships: CHEATS_P2,
+        tags: &[],
+        cli_aliases: &[],
+        soft_deps: &[],
+        needs: &[],
+        driven: false,
+    },
+    CheatsLockReagents = "cheats.lock_reagents" {
+        label: "Lock reagents",
+        class: EffectClass::StateAltering,
+        apply: ApplyAt::IdlePrompt,
+        tier: Tier::Cheat,
+        ships: CHEATS_P2,
+        tags: &[],
+        cli_aliases: &[],
+        soft_deps: &[],
+        needs: &[],
+        driven: false,
+    },
+    CheatsRememberLocks = "cheats.remember_locks" {
+        label: "Remember which locks are checked",
+        class: EffectClass::StateAltering,
+        apply: ApplyAt::NextLaunch,
+        tier: Tier::Cheat,
+        ships: CHEATS_P2,
+        tags: &[],
+        cli_aliases: &[],
+        soft_deps: &[],
+        needs: &[],
+        driven: false,
+    },
+    CheatsStatEdit = "cheats.stat_edit" {
+        label: "Edit party and stores",
+        class: EffectClass::StateAltering,
+        apply: ApplyAt::IdlePrompt,
+        tier: Tier::Cheat,
+        ships: CHEATS_P3,
+        tags: &[],
+        cli_aliases: &[],
+        soft_deps: &[],
+        needs: &[],
+        driven: false,
+    },
+    CheatsTeleport = "cheats.teleport" {
+        label: "Teleport (Spoiler: lists every place in the game)",
+        class: EffectClass::StateAltering,
+        apply: ApplyAt::IdlePrompt,
+        tier: Tier::Cheat,
+        ships: CHEATS_P4,
+        tags: &[Tag::SpoilerRisk],
+        cli_aliases: &[],
+        soft_deps: &[],
+        needs: &[],
+        driven: false,
+    },
+    CheatsStateWatch = "cheats.state_watch" {
+        label: "Watch game state",
+        class: EffectClass::Presentation,
+        apply: ApplyAt::Frame,
+        tier: Tier::Deviation,
+        ships: CHEATS_P5,
+        tags: &[],
+        cli_aliases: &[],
         soft_deps: &[],
         needs: &[],
         driven: false,
@@ -1062,6 +1361,48 @@ pub fn help_line(key: &str) -> Option<&'static str> {
         ),
         "gem_map.map_brightness" => Some("How dark the map is drawn. Names stay bright."),
         "gem_map.brightness_link" => Some("Use the same darkness as the other maps."),
+        // Chapter 7 (7.2.1-7.2.9). Engine text, no game text.
+        "cheats.enabled" => Some(
+            "Lets the cheats below change your game. A game a cheat has changed is marked modified.",
+        ),
+        "cheats.heal_all" => Some(
+            "Restores every living member's health. Outside combat it also cures poison and sleep.",
+        ),
+        "cheats.cure_poison" => Some("Cures every poisoned member. Not during combat."),
+        "cheats.resurrect_all" => Some(
+            "Brings every dead member back at full health. Ashes stay as they are. Not during combat.",
+        ),
+        "cheats.max_gold" => Some("Raises gold to 9999."),
+        "cheats.max_food" => Some("Raises food to 9999."),
+        "cheats.refill_arrows" => Some("Raises arrows to 99."),
+        "cheats.refill_quarrels" => {
+            Some("Refill arrows and the arrow lock also raise quarrels to 99.")
+        }
+        "cheats.max_reagents" => Some("Raises all eight reagents to 99."),
+        "cheats.repair_hull" => {
+            Some("Raises the party's frigate hull to 99. Pirate ships are never repaired.")
+        }
+        "cheats.lock_hp" => Some("Tops up every living member's health once each turn."),
+        "cheats.lock_mp" => Some("Tops up mana once each turn for the classes that have it."),
+        "cheats.lock_food" => Some("Keeps food at 9999, topped up once each turn."),
+        "cheats.lock_gold" => Some("Keeps gold at 9999, topped up once each turn."),
+        "cheats.lock_keys" => Some("Keeps keys at 99, topped up once each turn."),
+        "cheats.lock_gems" => Some("Keeps gems at 99, topped up once each turn."),
+        "cheats.lock_torches" => Some("Keeps torches at 99, topped up once each turn."),
+        "cheats.lock_arrows" => Some("Keeps arrows at 99, topped up once each turn."),
+        "cheats.lock_reagents" => {
+            Some("Keeps the checked reagents at 99, topped up once each turn.")
+        }
+        "cheats.remember_locks" => Some("Keeps the checked locks from one launch to the next."),
+        "cheats.stat_edit" => {
+            Some("Edit each member's stats, health and experience, and the party's stores.")
+        }
+        "cheats.teleport" => {
+            Some("Moves the party to any place, including ones you have not found yet.")
+        }
+        "cheats.state_watch" => Some(
+            "Lists what changed in play, turn by turn. It only reads the game and never changes it.",
+        ),
         _ => None,
     }
 }

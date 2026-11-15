@@ -22,6 +22,9 @@
 //!   [`SettingNote`]s resolution reports (design 1.3.3, 1.3.11, 1.3.14).
 //! - [`mod@resolve`]: the pure, total [`resolve()`] that turns those into
 //!   [`ResolvedEnhancements`] (design 1.3.2, 1.3.3).
+//! - [`cheats_view`]: chapter 7's `[cheats]` typed view,
+//!   [`ResolvedEnhancements::cheats`], [`CheatToggles`] and
+//!   [`LockPermissions`] (design 7.3.2).
 //! - [`digest`]: the [`trajectory_digest`] of a [`PlayState`](crate::PlayState)
 //!   that the equivalence harness compares runs with (design 1.3.12).
 //! - [`matrix`]: the toggle matrix the equivalence harness runs, derived
@@ -49,6 +52,7 @@
 //! `u5_bevy::VisualLaunchConfig`.
 
 pub mod catalogue;
+pub mod cheats_view;
 pub mod digest;
 pub mod display;
 pub mod gem_map;
@@ -67,10 +71,12 @@ pub use catalogue::{
     SIDE_CLAIM_KEYS, SIDE_SPACE_KEYS, SoftDep, TOGGLE_KEYS, TOGGLES, Tag, Tier, Toggle, ToggleSpec,
     settings_table,
 };
+pub use catalogue::{CHEATS_P0, CHEATS_P1, CHEATS_P2, CHEATS_P3, CHEATS_P4, CHEATS_P5};
 pub use catalogue::{
     DISPLAY_P1, DISPLAY_P2, DISPLAY_P8, GEM_G2, GEM_G3, GEM_G4, GEM_G5, LAUNCH_PARAMETER_KEYS,
     LIGHT_P1, LIGHT_P2, LIGHT_P3, LIGHT_P5, help_line, named_stops,
 };
+pub use cheats_view::{CheatToggles, LockPermissions};
 pub use digest::{
     DIGEST_GROUPS, SKIPPED_FIELDS, TrajectoryDigest, digest_groups, trajectory_digest,
 };
