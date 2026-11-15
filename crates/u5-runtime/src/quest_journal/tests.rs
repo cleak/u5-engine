@@ -57,6 +57,7 @@ fn fresh() -> QuestSnapshot {
         shadowlords: [ShadowlordState::NotPlaced; 3],
         special_items: [0; SPECIAL_ITEM_COUNT],
         climbing_gear: 0,
+        glass_sword: 0,
         moral_standing: 0,
         companions: vec![CompanionFact {
             name: "Avatar".into(),
@@ -739,6 +740,7 @@ fn golden() -> QuestSnapshot {
             items
         },
         climbing_gear: 1,
+        glass_sword: 0,
         moral_standing: 42,
         companions: vec![
             CompanionFact {

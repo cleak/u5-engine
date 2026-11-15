@@ -299,7 +299,7 @@ fn auto_left_and_right_beside_the_scrollback_panel() {
                 ..SideSpaceSettings::default()
             });
         }
-        register_journal_panel(game.app.world_mut(), journal);
+        register_journal_panel(game.app.world_mut(), journal, false);
         registry(&mut game).register(StubConversation(scrollback));
         frames(&mut game, 2);
         let mut sides = granted(&game);

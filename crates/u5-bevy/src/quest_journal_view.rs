@@ -62,6 +62,7 @@ use u5_runtime::gameplay_chrome::{
 use u5_runtime::quest_journal::clues::{
     ClueContext, CluesTab, DialogSource, NoDialogs, derive_clues,
 };
+use u5_runtime::quest_journal::trackers::{EdgeTable, derive_trackers};
 use u5_runtime::quest_journal::{
     JournalModel, JournalRow, JournalSection, QuestSnapshot, RowKey, SectionId, ShrinePhase,
     StatusMark, derive, text,
@@ -223,13 +224,19 @@ pub struct QuestJournalUi {
     dirty: bool,
     /// The clue tabs' state (session only).
     clue: clues::ClueUi,
+    /// Chapter 8's tracker cards: present exactly while
+    /// `journal.quest_tracker` is on (M6-06).
+    tracker: Option<trackers::TrackerUi>,
 }
 
 impl QuestJournalUi {
     pub fn new(settings: JournalSettings) -> Self {
         Self {
             settings,
-            tabs: tabs_for(settings.page, settings.clues.clues),
+            tabs: tabs_for(
+                settings.page || settings.clues.quest_tracker,
+                settings.clues.clues,
+            ),
             tab: 0,
             section: SectionId::Virtues,
             cursor: 0,
@@ -241,7 +248,24 @@ impl QuestJournalUi {
             shown: false,
             dirty: true,
             clue: clues::ClueUi::default(),
+            tracker: settings
+                .clues
+                .quest_tracker
+                .then(|| trackers::TrackerUi::new(settings.page)),
         }
+    }
+
+    /// The tracker cards' state, while `journal.quest_tracker` is on.
+    pub fn tracker_ui(&self) -> Option<&trackers::TrackerUi> {
+        self.tracker.as_ref()
+    }
+
+    /// Whether the cards are showing: the Quests tab, and the Virtues
+    /// section's place while chapter 5's page is on (8.4.4).
+    pub fn tracker_mode(&self) -> bool {
+        self.tracker.is_some()
+            && self.tab() == JournalTab::Quests
+            && (!self.settings.page || self.section == SectionId::Virtues)
     }
 
     /// The clue tabs' state.
@@ -470,6 +494,7 @@ impl QuestJournalUi {
             tab: self.tab(),
             clues: Some(&self.clue),
             strip_spoilers: self.settings.tier.is_spoiler() || self.settings.clues.spoiler_risk(),
+            tracker: self.tracker.as_ref().filter(|_| self.tracker_mode()),
         }
     }
 }
@@ -488,7 +513,10 @@ pub struct JournalPageSprite;
 /// page, the side panel, the clue log's tabs or the menu overlay.
 pub fn journal_wanted(launch: &VisualLaunchConfig) -> bool {
     let journal = launch.enhancements.journal();
-    journal.any_on() || journal.clues.clues || menu_overlay_on(launch.enhancements.toggles)
+    journal.any_on()
+        || journal.clues.clues
+        || journal.clues.quest_tracker
+        || menu_overlay_on(launch.enhancements.toggles)
 }
 
 /// Adds [`QuestJournalPlugin`] when [`journal_wanted`]. Called from the
@@ -508,13 +536,17 @@ pub struct QuestJournalPlugin {
 
 impl Plugin for QuestJournalPlugin {
     fn build(&self, app: &mut App) {
-        if self.settings.page || self.settings.clues.clues {
+        if self.settings.page || self.settings.clues.clues || self.settings.clues.quest_tracker {
             app.insert_resource(QuestJournalUi::new(self.settings));
         }
         // The side panel (5.3.5): a provider in the foundation's registry
         // only while `journal.side_panel` is on.
         if self.settings.side_panel {
-            panel::register_journal_panel(app.world_mut(), self.settings.side);
+            panel::register_journal_panel(
+                app.world_mut(),
+                self.settings.side,
+                self.settings.clues.quest_tracker,
+            );
         }
         app.add_systems(
             Update,
@@ -583,21 +615,31 @@ fn follow_journal_toggle(
 ) {
     let page = toggles.0.on(Toggle::JournalPage);
     let clues = toggles.0.on(Toggle::JournalClues);
-    match (page || clues, ui) {
+    let tracker = toggles.0.on(Toggle::JournalQuestTracker);
+    match (page || clues || tracker, ui) {
         (true, None) => {
             let mut settings = launch
                 .map(|launch| launch.0.enhancements.journal())
                 .unwrap_or_default();
             settings.page = page;
             settings.clues.clues = clues;
+            settings.clues.quest_tracker = tracker;
             commands.insert_resource(QuestJournalUi::new(settings));
         }
         (true, Some(mut ui)) => {
-            let tabs = tabs_for(page, clues);
-            if ui.tabs != tabs {
+            let tabs = tabs_for(page || tracker, clues);
+            if ui.tabs != tabs || ui.settings.page != page {
                 ui.settings.page = page;
                 ui.settings.clues.clues = clues;
                 ui.set_tabs(tabs);
+            }
+            if ui.tracker.is_some() != tracker {
+                ui.settings.clues.quest_tracker = tracker;
+                ui.tracker = tracker.then(|| trackers::TrackerUi::new(page));
+                ui.dirty = true;
+            }
+            if let Some(cards) = ui.tracker.as_mut() {
+                cards.with_page = page;
             }
         }
         (false, Some(ui)) => {
@@ -646,10 +688,13 @@ pub(crate) fn journal_page_input(
             continue;
         }
         let clue_tab = ui.tab().clue_tab();
-        let searching = clue_tab.is_some() && ui.clue.searching;
+        let searching = (clue_tab.is_some() && ui.clue.searching)
+            || (ui.tracker_mode() && ui.tracker.as_ref().is_some_and(|t| t.takes_escape()));
+        let mantras = ui.settings.mantras;
+        let tracker_mode = ui.tracker_mode();
         match key {
             KeyCode::KeyJ if ctrl => close = true,
-            KeyCode::Escape if !searching => close = true,
+            KeyCode::Escape if !searching && !tracker_mode => close = true,
             KeyCode::Tab if ui.tabs.len() > 1 => ui.step_tab(if shift { -1 } else { 1 }),
             key if clue_tab.is_some() => {
                 let tab = clue_tab.unwrap_or_default();
@@ -664,6 +709,15 @@ pub(crate) fn journal_page_input(
                     }
                 }
             }
+            // The tracker cards (M6-06); its section keys fall through to
+            // chapter 5's while the page is on.
+            // Esc on the list closes the page; on a card it goes back.
+            key if tracker_mode
+                && (*key != KeyCode::Escape || searching)
+                && ui.tracker.as_mut().is_some_and(|tracker| {
+                    tracker.key(*key, mantras) == trackers::TrackerKey::Used
+                }) => {}
+            KeyCode::Escape if tracker_mode => close = true,
             KeyCode::ArrowUp => ui.move_cursor(-1),
             KeyCode::ArrowDown => ui.move_cursor(1),
             KeyCode::PageUp => ui.page(-1),
@@ -685,6 +739,9 @@ pub(crate) fn journal_page_input(
         requests.write(OverlayRequest::Close(OverlayId::Journal));
         ui.revealed.clear();
         ui.clue.close();
+        if let Some(tracker) = ui.tracker.as_mut() {
+            tracker.close();
+        }
         ui.dirty = true;
     }
 }
@@ -787,12 +844,31 @@ pub(crate) fn paint_quest_journal_page(
     };
     match ui.tab().clue_tab() {
         None => {
-            let model = derive(
-                &QuestSnapshot::from_play_state(&visual.state),
-                ui.settings.tier,
-            );
+            let snap = QuestSnapshot::from_play_state(&visual.state);
+            let model = derive(&snap, ui.settings.tier);
             if ui.last_model.as_ref() != Some(&model) {
                 ui.take_model(model);
+            }
+            // The tracker cards (8.3.9), from the save and, with the clue
+            // log on, the player's own pins and marks.
+            let settings = ui.settings;
+            if let Some(tracker) = ui.tracker.as_mut() {
+                tracker.activity.note(
+                    &snap,
+                    u5_runtime::enhancements::clues::game_minute(&visual.state),
+                );
+                let view = derive_trackers(
+                    &snap,
+                    log.as_deref().map(|log| log.log()),
+                    &EdgeTable::EMPTY,
+                    settings.tier,
+                    settings.clues.tracker_evidence,
+                    &tracker.activity,
+                );
+                if tracker.view.as_ref() != Some(&view) {
+                    tracker.take_view(view);
+                    ui.dirty = true;
+                }
             }
         }
         Some(tab) => {
@@ -902,6 +978,8 @@ pub struct PageView<'a> {
     /// The strip's `SPOILERS` label: a spoiler tier or a spoiler-risk
     /// clue option.
     pub strip_spoilers: bool,
+    /// The tracker cards, when they take the Virtues section's place.
+    pub tracker: Option<&'a trackers::TrackerUi>,
 }
 
 impl<'a> PageView<'a> {
@@ -919,6 +997,7 @@ impl<'a> PageView<'a> {
             tab: JournalTab::Quests,
             clues: None,
             strip_spoilers: false,
+            tracker: None,
         }
     }
 
@@ -1187,6 +1266,9 @@ pub fn wrap(text: &str, width: usize, lines: usize) -> Vec<String> {
 /// band: the header, the section switcher, the headings, the visible rows
 /// and the selected row's details.
 pub fn page_cells(view: &PageView<'_>) -> Vec<Cell> {
+    if let Some(tracker) = view.tracker {
+        return trackers::tracker_cells(view, tracker);
+    }
     let mut cells = Vec::new();
     let Some(model) = view.model else {
         return cells;
@@ -1278,6 +1360,9 @@ pub fn page_cells(view: &PageView<'_>) -> Vec<Cell> {
 
 /// The key help: Enter while the selected row has an answer still masked.
 pub fn key_help(view: &PageView<'_>) -> &'static str {
+    if let Some(tracker) = view.tracker {
+        return trackers::tracker_key_help(tracker, view.mantras);
+    }
     let maskable = view
         .section
         .zip(view.selected())
@@ -1517,6 +1602,7 @@ fn fill(rgba: &mut [u8], x0: usize, y0: usize, x1: usize, y1: usize, ink: Rgb) {
 
 pub mod clues;
 mod panel;
+pub mod trackers;
 pub use panel::{
     JournalPanelClues, JournalPanelPageOpen, JournalPanelProvider, PANEL_SEALS_OPEN, PANEL_TITLE,
     PANEL_VANQUISHED, SidePanelModel, panel_side,
@@ -1536,3 +1622,7 @@ mod review_tests;
 mod spoiler_tests;
 #[cfg(test)]
 mod tests;
+#[cfg(test)]
+mod tracker_review_tests;
+#[cfg(test)]
+mod tracker_tests;

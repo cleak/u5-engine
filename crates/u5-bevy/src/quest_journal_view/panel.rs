@@ -26,6 +26,12 @@
 //! (at most five), after the virtues. [`copy_journal_panel_clues`] derives
 //! those lines in `EnhSet::Present`; with the log off they are empty and
 //! the panel is chapter 5's.
+//!
+//! **Tracker cards (M6-06, 8.2.7).** While `journal.quest_tracker` is on,
+//! the panel adds the tracker's card lines after the virtues: the shrines
+//! whose next step the game gave, under it, then the shards held and the
+//! Glass Sword, at tier 2 whatever the page uses. The provider derives them
+//! from the state it is handed; [`JournalPanelTracker`] carries the key.
 
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
@@ -33,6 +39,7 @@ use std::sync::{Arc, Mutex};
 use bevy::prelude::*;
 use u5_runtime::enhancements::{JournalPanelSide, Toggle};
 use u5_runtime::quest_journal::clues::{ClueContext, DialogSource, NoDialogs, panel_clue_lines};
+use u5_runtime::quest_journal::trackers::panel_card_lines;
 use u5_runtime::quest_journal::{
     QuestSnapshot, ShrineCondition, ShrinePhase, StatusMark, VirtueSummary, text,
 };
@@ -70,6 +77,8 @@ pub struct SidePanelModel {
     /// Crown, the Sceptre and the Amulet).
     pub regalia: u8,
     pub box_carried: bool,
+    /// The tracker's card lines (empty while `quest_tracker` is off).
+    pub cards: Vec<String>,
 }
 
 impl SidePanelModel {
@@ -96,7 +105,14 @@ impl SidePanelModel {
             seals_open,
             regalia,
             box_carried: snap.special_items[SPECIAL_ITEM_WOODEN_BOX_INDEX] != 0,
+            cards: Vec::new(),
         }
+    }
+
+    /// With the tracker's card lines for `snap` (8.2.7).
+    pub fn with_cards(mut self, snap: &QuestSnapshot) -> Self {
+        self.cards = panel_card_lines(snap, PANEL_COLUMNS);
+        self
     }
 
     pub fn from_play_state(state: &PlayState) -> Self {
@@ -136,6 +152,10 @@ impl SidePanelModel {
                 mark.glyph,
                 width = MARK_COLUMN
             ));
+        }
+        if !self.cards.is_empty() {
+            lines.push(String::new());
+            lines.extend(self.cards.iter().cloned());
         }
         if !clues.is_empty() {
             lines.push(String::new());
@@ -209,6 +229,11 @@ pub struct JournalPanelPageOpen(pub Arc<AtomicBool>);
 #[derive(Resource, Clone, Debug, Default)]
 pub struct JournalPanelClues(pub Arc<Mutex<Vec<String>>>);
 
+/// Whether `journal.quest_tracker` is on, shared by the provider and
+/// [`follow_journal_panel_toggle`]. Present exactly while the provider is.
+#[derive(Resource, Clone, Debug, Default)]
+pub struct JournalPanelTracker(pub Arc<AtomicBool>);
+
 /// The journal's [`SidePanelProvider`] (`PanelKind::Journal`).
 pub struct JournalPanelProvider {
     side: SidePreference,
@@ -216,6 +241,8 @@ pub struct JournalPanelProvider {
     page_open: Arc<AtomicBool>,
     /// The clue lines, written in `EnhSet::Present` before the host runs.
     clues: Arc<Mutex<Vec<String>>>,
+    /// `journal.quest_tracker`: the card lines are added.
+    tracker: Arc<AtomicBool>,
     /// The last model, clue lines and rows, so the rows are rebuilt only
     /// when they change.
     last: Mutex<Option<(SidePanelModel, Vec<String>, PanelRows)>>,
@@ -235,8 +262,15 @@ impl JournalPanelProvider {
             side: panel_side(side),
             page_open,
             clues,
+            tracker: Arc::default(),
             last: Mutex::new(None),
         }
+    }
+
+    /// With the tracker's key flag.
+    pub fn with_tracker(mut self, tracker: Arc<AtomicBool>) -> Self {
+        self.tracker = tracker;
+        self
     }
 }
 
@@ -256,7 +290,11 @@ impl SidePanelProvider for JournalPanelProvider {
         if self.page_open.load(Ordering::Relaxed) {
             return None;
         }
-        let model = SidePanelModel::from_play_state(state);
+        let snap = QuestSnapshot::from_play_state(state);
+        let mut model = SidePanelModel::from_snapshot(&snap);
+        if self.tracker.load(Ordering::Relaxed) {
+            model = model.with_cards(&snap);
+        }
         let clues = self
             .clues
             .lock()
@@ -281,19 +319,20 @@ impl SidePanelProvider for JournalPanelProvider {
 
 /// Registers the provider and its page flag, when the foundation's arbiter
 /// is in the app (it is whenever `journal.side_panel` was on at launch).
-pub(crate) fn register_journal_panel(world: &mut World, side: JournalPanelSide) {
+pub(crate) fn register_journal_panel(world: &mut World, side: JournalPanelSide, tracker: bool) {
     let Some(mut registry) = world.get_resource_mut::<PanelRegistry>() else {
         return;
     };
     let flag = JournalPanelPageOpen::default();
     let clues = JournalPanelClues::default();
-    registry.register(JournalPanelProvider::with_clues(
-        side,
-        flag.0.clone(),
-        clues.0.clone(),
-    ));
+    let cards = JournalPanelTracker(Arc::new(AtomicBool::new(tracker)));
+    registry.register(
+        JournalPanelProvider::with_clues(side, flag.0.clone(), clues.0.clone())
+            .with_tracker(cards.0.clone()),
+    );
     world.insert_resource(flag);
     world.insert_resource(clues);
+    world.insert_resource(cards);
 }
 
 /// The panel's clue lines from the log, in `EnhSet::Present` before the
@@ -347,10 +386,15 @@ pub(crate) fn follow_journal_panel_toggle(
     launch: Option<Res<EnhLaunch>>,
     flag: Option<Res<JournalPanelPageOpen>>,
     registry: Option<ResMut<PanelRegistry>>,
+    cards: Option<Res<JournalPanelTracker>>,
 ) {
     let Some(mut registry) = registry else {
         return;
     };
+    let tracker = toggles.0.on(Toggle::JournalQuestTracker);
+    if let Some(cards) = cards {
+        cards.0.store(tracker, Ordering::Relaxed);
+    }
     match (toggles.0.on(Toggle::JournalSidePanel), flag.is_some()) {
         (true, false) => {
             let side = launch
@@ -358,18 +402,20 @@ pub(crate) fn follow_journal_panel_toggle(
                 .unwrap_or_default();
             let flag = JournalPanelPageOpen::default();
             let clues = JournalPanelClues::default();
-            registry.register(JournalPanelProvider::with_clues(
-                side,
-                flag.0.clone(),
-                clues.0.clone(),
-            ));
+            let cards = JournalPanelTracker(Arc::new(AtomicBool::new(tracker)));
+            registry.register(
+                JournalPanelProvider::with_clues(side, flag.0.clone(), clues.0.clone())
+                    .with_tracker(cards.0.clone()),
+            );
             commands.insert_resource(flag);
             commands.insert_resource(clues);
+            commands.insert_resource(cards);
         }
         (false, true) => {
             registry.remove(PanelKind::Journal);
             commands.remove_resource::<JournalPanelPageOpen>();
             commands.remove_resource::<JournalPanelClues>();
+            commands.remove_resource::<JournalPanelTracker>();
         }
         _ => {}
     }

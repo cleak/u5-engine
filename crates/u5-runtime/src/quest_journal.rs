@@ -31,6 +31,8 @@ pub mod report;
 pub mod text;
 // Chapter 8 (M6-03): the Clues and Topics tabs.
 pub mod clues;
+// Chapter 8 (M6-06): the quest tracker cards.
+pub mod trackers;
 
 use std::collections::HashMap;
 use std::io;
@@ -46,6 +48,7 @@ use crate::{
     town_resident_name,
 };
 
+use crate::equipment::EQUIPMENT_GLASS_SWORD;
 use text::ToolSource;
 
 /// A virtue's shrine quest phase (`systems/karma.md` §10). The engine's
@@ -162,6 +165,9 @@ pub struct QuestSnapshot {
     pub shadowlords: [ShadowlordState; SHADOWLORD_COUNT],
     pub special_items: [u8; SPECIAL_ITEM_COUNT],
     pub climbing_gear: u8,
+    /// The Glass Sword's equipment counter (item id 39 at `0x0241`,
+    /// `formats/saved-gam.md` §7). Chapter 8's tracker reads it (8.3.9).
+    pub glass_sword: u8,
     pub moral_standing: u8,
     /// Party members first, in party order, then the records outside the
     /// party whose inn marker is set, in roster order.
@@ -182,6 +188,7 @@ struct Source<'a> {
     hideouts: [u8; SHADOWLORD_COUNT],
     special_items: [u8; SPECIAL_ITEM_COUNT],
     climbing_gear: u8,
+    glass_sword: u8,
     moral_standing: u8,
     party_len: usize,
     party_names: &'a [[u8; SAVE_CHARACTER_NAME_LEN]],
@@ -201,6 +208,7 @@ impl QuestSnapshot {
             hideouts: state.shadowlord_hideouts,
             special_items: state.special_items,
             climbing_gear: state.climbing_gear,
+            glass_sword: state.equipment_stock[EQUIPMENT_GLASS_SWORD],
             moral_standing: state.moral_standing,
             party_len: state.party.len(),
             party_names: &state.party_names,
@@ -224,6 +232,7 @@ impl QuestSnapshot {
             hideouts: options.shadowlord_hideouts,
             special_items: options.special_items,
             climbing_gear: options.climbing_gear,
+            glass_sword: options.equipment_stock[EQUIPMENT_GLASS_SWORD],
             moral_standing: options.moral_standing,
             party_len: options.party.len(),
             party_names: &options.party_names,
@@ -286,6 +295,7 @@ impl QuestSnapshot {
             shadowlords: source.hideouts.map(ShadowlordState::from_slot),
             special_items: source.special_items,
             climbing_gear: source.climbing_gear,
+            glass_sword: source.glass_sword,
             moral_standing: source.moral_standing,
             companions,
             introduced,

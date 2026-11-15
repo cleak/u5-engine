@@ -376,3 +376,110 @@ pub const fn secret_label(section: SectionId) -> &'static str {
 pub fn cannot_read_save(reason: &str) -> String {
     format!("cannot read SAVED.GAM: {reason}")
 }
+
+// --- Chapter 8's quest tracker cards (8.2.7, 8.3.9; build plan M6-06). --
+//
+// Our own words, as above. A card's state box is 10 cells wide inside its
+// brackets; the short next-step cell is 10 cells, as `phase_cell`'s.
+
+/// The tracker's section title on the Quests tab, in place of Virtues.
+pub const TRACKER_SECTION: &str = "Quests";
+/// The column headings of the tracker section.
+pub const HEAD_CARD: &str = "Quest";
+pub const HEAD_NEXT: &str = "Next";
+/// The state box of a step or card not known yet (8.2.7).
+pub const UNKNOWN_STATE: &str = "?";
+/// A seal's current state (S8.7: never "completed").
+pub const UNSEALED: &str = "Unsealed";
+pub const SEALED_STATE: &str = "Sealed";
+pub const DOOM_LABEL: &str = "Doom";
+pub const DOOM_READY: &str = "Ready";
+pub const DOOM_NOT_READY: &str = "Not ready";
+pub const SHARDS_LABEL: &str = "Shards held";
+pub const REGALIA_LABEL: &str = "Regalia";
+pub const TOOLS_LABEL: &str = "Tools";
+pub const COMPANIONS_LABEL: &str = "Companions";
+pub const GLASS_SWORD: &str = "Glass Sword";
+/// The line a card shows for its clue links while the clue log is off.
+pub const CLUE_LOG_OFF: &str = "Clue log off";
+/// The tracker section with no card yet.
+pub const NO_CARDS: &str = "No quest is tracked yet";
+
+/// The two passwords of `catalogs/quest-graph.md` §3, by role only (the
+/// words themselves are answers).
+pub const fn password_label(index: usize) -> &'static str {
+    match index {
+        0 => "Resistance",
+        _ => "Oppression",
+    }
+}
+
+/// A password card's tier 3 line: its role, in our words.
+pub const fn password_hint(index: usize) -> &'static str {
+    match index {
+        0 => "A password the Resistance trusts.",
+        _ => "A password Blackthorn's side uses.",
+    }
+}
+
+// The steps of each chain (8.3.9), in order.
+pub const STEP_LEARN_MANTRA: &str = "Learn the mantra";
+pub const STEP_CHANT: &str = "Chant at the shrine";
+pub const STEP_READ_CODEX: &str = "Read the Codex";
+pub const STEP_RETURN: &str = "Return to the shrine";
+pub const STEP_LEARN_WORD: &str = "Learn its Word of Power";
+pub const STEP_SPEAK_WORD: &str = "Speak it at the entrance";
+pub const STEP_LEARN_NAME: &str = "Learn its name";
+pub const STEP_DESTROY_SHARD: &str = "Destroy its shard";
+pub const STEP_CARRY: &str = "Carry it";
+pub const STEP_TRAVEL: &str = "Travel together";
+pub const STEP_LEARN_PASSWORD: &str = "Learn the password";
+
+/// A shrine card's short next-step cell at `tier`: tier 2 only the goal
+/// the altar gave (5.2.5), tier 3 a hint word. Empty at tier 1.
+pub const fn shrine_next_cell(
+    phase: ShrineQuestState,
+    ruined: bool,
+    spirituality: bool,
+    tier: SpoilerTier,
+) -> &'static str {
+    match (phase, tier) {
+        (_, SpoilerTier::Progress) => "",
+        (ShrineQuestState::Ordained, _) => "Read Codex",
+        (_, SpoilerTier::Goals) => "",
+        (ShrineQuestState::Complete, _) => "",
+        _ if ruined && !spirituality => "Restore",
+        _ if ruined => "",
+        (ShrineQuestState::CodexRead, _) => "Return",
+        (ShrineQuestState::NotStarted, _) => "Begin",
+    }
+}
+
+/// A Word of Power card's next cell: a tier 3 hint while it is sealed.
+pub const fn word_next_cell(open: bool, tier: SpoilerTier) -> &'static str {
+    if !open && matches!(tier, SpoilerTier::Hints | SpoilerTier::Full) {
+        "Learn word"
+    } else {
+        ""
+    }
+}
+
+/// The label of a tracker answer cell.
+pub const ANSWER_MANTRA: &str = "Mantra";
+pub const ANSWER_WORD: &str = "Word";
+pub const ANSWER_FLAME: &str = "Flame";
+
+/// "pinned by you: N" (8.2.7). Never a denominator.
+pub fn pinned_by_you(count: u16) -> String {
+    format!("Pinned by you: {count}")
+}
+
+/// "N heard" from the spec's edge table, at tier 3 and above.
+pub fn heard_count(count: u16) -> String {
+    format!("{count} heard")
+}
+
+/// A total, at tier 4 only (foundation 1.4.7).
+pub fn of_total(count: usize, total: usize) -> String {
+    format!("{count} of {total}")
+}
