@@ -302,3 +302,33 @@ pub const ENDGAME_SHADOWLORDS_LINE: &str =
 pub const ENDGAME_DOOM_LINE: &str = "The final room lies at the bottom of Doom.";
 pub const ENDGAME_AMULET_LINE: &str = "The Amulet helps the party through unholy darkness.";
 pub const ENDGAME_BOX_LINE: &str = "The last scene asks for it.";
+
+// --- The offline report (5.2.11). --------------------------------------
+
+/// The report's first words; the tier and its name follow.
+pub const REPORT_TITLE: &str = "Quest journal";
+
+/// A tier's short name in the report's first line.
+pub const fn tier_name(tier: SpoilerTier) -> &'static str {
+    match tier {
+        SpoilerTier::Progress => "progress only",
+        SpoilerTier::Goals => "named goals",
+        SpoilerTier::Hints => "hints",
+        SpoilerTier::Full => "full checklist",
+    }
+}
+
+/// The label of a tier 4 answer, by the section it belongs to.
+pub const fn secret_label(section: SectionId) -> &'static str {
+    match section {
+        SectionId::Virtues => "Mantra",
+        SectionId::Dungeons => "Word of Power",
+        SectionId::Shadowlords => "Flame",
+        _ => "Answer",
+    }
+}
+
+/// The report's line when SAVED.GAM cannot be decoded (5.2.12).
+pub fn cannot_read_save(reason: &str) -> String {
+    format!("cannot read SAVED.GAM: {reason}")
+}

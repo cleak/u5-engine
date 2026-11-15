@@ -800,6 +800,171 @@ fn from_save_bytes_equals_the_golden_snapshot_and_needs_no_file() {
     assert!(QuestSnapshot::from_save_bytes(&no_game).is_err());
 }
 
+// --- The offline report (5.2.11; R2). ------------------------------------
+
+/// R2: the synthetic save's report as golden text at the default tier and
+/// at tier 4; at every tier the first line carries SPOILERS exactly at the
+/// spoiler tiers, and a tier's report holds every line of the tier below.
+#[test]
+fn the_report_of_the_synthetic_save_matches_the_golden_text() {
+    let snap = QuestSnapshot::from_save_bytes(&synthetic_save()).unwrap();
+    let text = |tier| report::format_text(&derive(&snap, tier));
+    assert_eq!(text(SpoilerTier::Goals), REPORT_GOLDEN_TIER_2);
+    assert_eq!(text(SpoilerTier::Full), REPORT_GOLDEN_TIER_4);
+    let mut below: Option<String> = None;
+    for tier in SpoilerTier::ALL {
+        let report = text(tier);
+        let first = report.lines().next().unwrap();
+        assert_eq!(first.contains("SPOILERS"), tier.is_spoiler(), "{first}");
+        assert!(report.ends_with('\n'));
+        if let Some(below) = below {
+            // Labels and markers are stable; values may sharpen (tier 2
+            // turns "Ordained" into "Read the Codex"), so compare the
+            // detail lines, which only grow.
+            for line in below.lines().filter(|line| line.starts_with(DETAIL)) {
+                assert!(report.contains(line), "tier {}: {line}", tier.number());
+            }
+        }
+        below = Some(report);
+    }
+}
+
+const DETAIL: &str = "       ";
+
+const REPORT_GOLDEN_TIER_2: &str = "\
+Quest journal - tier 2 (named goals)
+Virtues: 1 complete, 1 in progress, 1 ruined
+  *  Honesty       Complete
+       This virtue's quest is complete.
+  >  Compassion    Read the Codex
+       You were ordained at its shrine.
+       The shrine sent you to read the Codex.
+  -  Valor
+  -  Justice
+  -  Sacrifice
+  -  Honor
+  -  Spirituality                  ! Ruined
+       The shrine lies in ruin.
+  -  Humility
+Dungeons
+  *  Deceit  Opened
+       Its entrance has been opened.
+Shadowlords
+  *  Faulinei      Vanquished    Shard destroyed
+       Its shard has been destroyed.
+  -  Hatred shard                Shard carried
+       Its shard is carried.
+Regalia
+  *  Crown  Carried
+Items
+  *  Grapple  Carried
+People
+     Avatar                  In the party
+     Iolo                    In the party
+     Shamino                 Lodged
+       Waiting at the inn in Britain.
+  !  Dupre                   Executed by Blackthorn
+     Introduced yourself to  2 people
+     Moonglow                2
+     Karma                   42
+";
+
+const REPORT_GOLDEN_TIER_4: &str = "\
+Quest journal - tier 4 (full checklist) - SPOILERS
+Virtues: 1 complete, 1 in progress, 1 ruined
+  *  Honesty       Complete
+       This virtue's quest is complete.
+       Mantra: Ahm
+  >  Compassion    Read the Codex
+       You were ordained at its shrine.
+       The shrine sent you to read the Codex.
+       Mantra: Mu
+  -  Valor
+       Meditate at its shrine and give its mantra to begin.
+       Thorne knows its mantra.
+  -  Justice
+       Meditate at its shrine and give its mantra to begin.
+       Chamfort knows its mantra.
+  -  Sacrifice
+       Meditate at its shrine and give its mantra to begin.
+  -  Honor
+       Meditate at its shrine and give its mantra to begin.
+       Gruman knows its mantra.
+  -  Spirituality                  ! Ruined
+       The shrine lies in ruin.
+       No way to restore this shrine is known.
+       Mantra: Om
+  -  Humility
+       Meditate at its shrine and give its mantra to begin.
+       Wartow knows its mantra.
+Dungeons
+  *  Deceit    Opened
+       Its entrance has been opened.
+       Word of Power: FALLAX
+  -  Despise   Sealed
+       Learn its Word of Power.
+       Annon knows the word.
+  -  Destard   Sealed
+       Learn its Word of Power.
+       Trian and Goeth in Jhelom lead to the word.
+  -  Wrong     Sealed
+       Learn its Word of Power.
+       Felespar knows the word.
+  -  Covetous  Sealed
+       Learn its Word of Power.
+       Fiona knows the word.
+  -  Shame     Sealed
+       Learn its Word of Power.
+       Sindar knows the word.
+  -  Hythloth  Sealed
+       Learn its Word of Power.
+       Hassad knows the word.
+  -  Doom      Sealed
+       Learn its Word of Power.
+       No one is known to teach this word.
+Shadowlords
+  *  Faulinei   Vanquished    Shard destroyed
+       Its shard has been destroyed.
+       Flame: Flame of Truth
+  -  Astaroth                 Shard carried
+       Its shard is carried.
+       Its name summons it.
+       A shard is destroyed in an Eternal Flame while its Shadowlord stands there.
+  -  Nosfentor
+       Its name summons it.
+       A shard is destroyed in an Eternal Flame while its Shadowlord stands there.
+Regalia
+  *  Crown           Carried
+  -  Sceptre
+       Sir Simon asks for the Crown, the Sceptre and the Amulet.
+       Froed starts the trail to it.
+  -  Amulet
+       Sir Simon asks for the Crown, the Sceptre and the Amulet.
+       Lady Tessa knows where it lies.
+       It lets the party pass through unholy darkness.
+  -  Sandalwood Box
+       Saduj speaks of a hidden box in Lord British's chamber.
+Items
+  *  Grapple  Carried
+People
+     Avatar                  In the party
+     Iolo                    In the party
+     Shamino                 Lodged
+       Waiting at the inn in Britain.
+  !  Dupre                   Executed by Blackthorn
+     Introduced yourself to  2 people
+     Moonglow                2
+     Karma                   42
+Endgame
+  -  All three Shadowlords vanquished
+       Doom admits the party only once all three are vanquished.
+  -  The Doom entrance opened
+       The final room lies at the bottom of Doom.
+       The Amulet helps the party through unholy darkness.
+  -  The Sandalwood Box carried
+       The last scene asks for it.
+";
+
 #[test]
 fn from_play_options_equals_from_play_state_after_load_scene() {
     let bytes = synthetic_save();

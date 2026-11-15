@@ -27,6 +27,7 @@
 //! and nothing writes the state it reads. Nothing in the game calls it; the
 //! shell, the offline report and the tests do.
 
+pub mod report;
 pub mod text;
 
 use std::collections::HashMap;
