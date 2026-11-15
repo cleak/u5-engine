@@ -881,6 +881,12 @@ fn title_layer_review_shots() {
             grow: true,
             slots: false,
         },
+        Case {
+            label: "219-3440x1440-slots",
+            window: (3440, 1440),
+            grow: true,
+            slots: true,
+        },
     ];
 
     /// The picture the frame sprite shows: the presented one, or the

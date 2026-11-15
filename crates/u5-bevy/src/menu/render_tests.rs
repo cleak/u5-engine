@@ -330,7 +330,7 @@ fn kit_top_menu(
 }
 
 /// A Settings tab as the kit draws it, from its primitives: the wide
-/// panel with a four-row footer box, the tab's rows for `launch` (the
+/// panel with a five-row footer box (four lines and a blank row), the tab's rows for `launch` (the
 /// shared generator's, as a fresh run shows them) from the list's second
 /// row with the bar on the first, the first row's help in the footer, the
 /// tab strip and "Esc: back". Tabs without a preset row only.
@@ -349,7 +349,7 @@ fn kit_settings(
     );
     let rows = settings_tabs(&view, None)[tab].clone();
     let rect = panel_rect(PageShape::Wide, picture, column);
-    let panel = Panel::new(rect).divider(rect.bottom() - 5);
+    let panel = Panel::new(rect).divider(rect.bottom() - SETTINGS_FOOTER_ROWS - 1);
     let mut img = MenuImage::for_picture(picture);
     draw_panel(&mut img, &panel);
     let boxes = panel.boxes();
@@ -373,7 +373,7 @@ fn kit_settings(
             &mut img,
             &font,
             list.right() - 1,
-            rect.bottom() - 5,
+            rect.bottom() - SETTINGS_FOOTER_ROWS - 1,
             Scroll::Down,
         );
     }

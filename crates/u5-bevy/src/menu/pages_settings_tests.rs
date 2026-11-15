@@ -1241,13 +1241,17 @@ fn the_plugin_lists_this_build_s_rows() {
 /// canvas, with the cursor on every row: the list box's first and last
 /// cell rows, and the preset box's, are margin rows of black paper only,
 /// so neither the selection bar nor a glyph ever touches the rule above or
-/// below its box; every opaque pixel is an EGA colour; the presets fit
-/// their two lines.
+/// below its box; the footer box's last row is blank, so its help never
+/// sits on the rule above "Esc: back", even with both notes (every row
+/// also drawn as set by the command line); every opaque pixel is an EGA
+/// colour; the presets fit their two lines.
 #[test]
 fn the_bar_never_meets_a_rule() {
     use super::frame::{PAPER, ega, ega_index};
     use super::geometry::{MenuPicture, PageShape, menu_picture, panel_rect};
-    use super::render::{PRESET_LINES, PRESET_ROWS, preset_places, render_page};
+    use super::render::{
+        PRESET_LINES, PRESET_ROWS, SETTINGS_FOOTER_ROWS, preset_places, render_page,
+    };
     use crate::display::grow::Canvas;
     use crate::display::grow::column::ColumnView;
 
@@ -1284,7 +1288,16 @@ fn the_bar_never_meets_a_rule() {
         ),
         ..ShellSnapshot::default()
     };
-    for picture in [MenuPicture::FRAME, menu_picture(Some(&canvas))] {
+    let mut by_cli = snap.clone();
+    for row in by_cli.settings.iter_mut().flatten() {
+        row.by_cli = true;
+    }
+    for (snap, picture) in [&snap, &by_cli].into_iter().flat_map(|snap| {
+        [
+            (snap, MenuPicture::FRAME),
+            (snap, menu_picture(Some(&canvas))),
+        ]
+    }) {
         let rect = panel_rect(PageShape::Wide, &picture, ColumnView::default());
         for tab in SettingsTab::ALL {
             let rows = snap.settings[tab.index()].len();
@@ -1293,7 +1306,7 @@ fn the_bar_never_meets_a_rule() {
                     page: Page::Settings(tab),
                     cursor,
                 };
-                let drawn = render_page(&font, &picture, ColumnView::default(), state, &snap);
+                let drawn = render_page(&font, &picture, ColumnView::default(), state, snap);
                 let img = &drawn.image;
                 let black_row = |row: u32| {
                     (rect.col + 1..rect.right()).all(|col| {
@@ -1302,7 +1315,11 @@ fn the_bar_never_meets_a_rule() {
                         })
                     })
                 };
-                let lower = rect.bottom() - 5;
+                let lower = rect.bottom() - SETTINGS_FOOTER_ROWS - 1;
+                assert!(
+                    black_row(rect.bottom() - 1),
+                    "{tab:?} {cursor}: footer blank row above the tab"
+                );
                 let (list_top, list_bottom) = match tab {
                     SettingsTab::Enhancements => {
                         let upper = rect.row + 1 + PRESET_ROWS;

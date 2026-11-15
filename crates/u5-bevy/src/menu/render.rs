@@ -87,8 +87,13 @@ pub fn backdrop_colour() -> Color {
 
 /// Rows of the top menu's footer box.
 const TOP_FOOTER_ROWS: u32 = 3;
-/// Rows of a Settings page's footer box.
-const SETTINGS_FOOTER_ROWS: u32 = 4;
+/// Rows of a Settings page's footer box: four lines of help and notes,
+/// and a blank row above the footer tab, as every footer box keeps (the
+/// M4-01 sheet). A full footer would otherwise sit its last line on the
+/// rule under "Esc: back".
+pub const SETTINGS_FOOTER_ROWS: u32 = 5;
+/// The footer lines a Settings page shows: all but the blank row.
+pub const SETTINGS_HELP_LINES: u32 = SETTINGS_FOOTER_ROWS - 1;
 /// The cell a Settings row's value starts at: after the margin, the label
 /// column and one blank.
 pub const VALUE_COL: u32 = 1 + t::SETTINGS_LABEL as u32 + 1;
@@ -547,7 +552,7 @@ fn settings_page(
         rows.get(cursor),
         fallback,
         (footer.w - 2) as usize,
-        footer.h as usize,
+        SETTINGS_HELP_LINES as usize,
     );
     draw_help_lines(&mut img, font, footer, &help);
     draw_tab_strip(&mut img, font, rect, &t::SETTINGS_TABS, tab);

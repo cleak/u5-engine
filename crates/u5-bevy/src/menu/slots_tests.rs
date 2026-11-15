@@ -1364,7 +1364,7 @@ fn slot_pages_review_shots() {
         return;
     };
     fs::create_dir_all(&out).unwrap();
-    for case in [&CASES[0], &CASES[1], &CASES[2]] {
+    for case in [&CASES[0], &CASES[1], &CASES[2], &CASES[3]] {
         let game_dir = unique_scratch_dir("menu-slot-shots");
         for entry in fs::read_dir(&profile).unwrap() {
             let entry = entry.unwrap();

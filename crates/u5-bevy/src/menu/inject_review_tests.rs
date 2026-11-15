@@ -96,7 +96,7 @@ fn slot_save_review_shots() {
         }
     }
     let scene = Scene::from_game_dir(&game).unwrap();
-    for case in [&CASES[0], &CASES[1]] {
+    for case in [&CASES[0], &CASES[1], &CASES[3]] {
         let mut options = load_play_options_from_save(&game).unwrap();
         options.target = PlayTarget::from_key("BRITANNIA").unwrap();
         options.saved_active_objects = None;
