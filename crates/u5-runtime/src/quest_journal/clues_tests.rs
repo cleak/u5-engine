@@ -540,3 +540,20 @@ fn the_quest_filter_keeps_only_its_entries() {
     let view = derive_open(&log, &ctx, query);
     assert_eq!(labels(&view), [(0, NO_MATCHES.to_string())]);
 }
+
+#[test]
+fn a_name_keeps_its_dictionary_words() {
+    // A Name field whose middle word is the dictionary's first token, as
+    // the window prints it ("Vorpelin the Grey"), never with it dropped.
+    let mut fields = blob(&[("glimmer", text("It glows."))], &[]);
+    fields[0] = record(&[&text("Vorpelin"), &[0x01], &text(" Grey")]);
+    let dictionary = crate::PUBLISHED_COMMON_WORD_DICTIONARY;
+    assert_eq!(dictionary[0], "the");
+    let source = HashMap::from([(dialog(1), fields)]);
+    let mut log = ClueLog::new();
+    let who = npc(YEW, 3);
+    log.fold(entry(who, 1, RecordAddr::Leading(0), at(0, 60)));
+    log.fold(entry(who, 1, RecordAddr::Pair(0), at(0, 61)));
+    let view = derive_clues(&log, &source, &ctx(), &ClueQuery::default());
+    assert_eq!(view.rows[0].label, "Vorpelin the Grey (Yew)");
+}

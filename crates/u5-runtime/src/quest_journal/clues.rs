@@ -20,7 +20,10 @@ use crate::enhancements::clues::{
     RecordAddr, TestInputs, asked_state, game_minute, note_owner, record_dependence,
 };
 use crate::enhancements::journal::SpoilerTier;
-use crate::{Area, PlayState, decode_tlk_field, town_resident_name};
+use crate::tlk_runner::{TlkRunInputs, run_tlk_stream};
+use crate::{
+    Area, PUBLISHED_COMMON_WORD_DICTIONARY, PlayState, decode_tlk_field, town_resident_name,
+};
 
 /// The most clues pinned to the side panel (8.2.5).
 pub const MAX_PANEL_PINS: usize = 5;
@@ -417,6 +420,36 @@ fn decoded(fields: &[Vec<u8>], index: usize) -> Option<String> {
     (!text.is_empty()).then_some(text)
 }
 
+/// A Name or Description field as the window prints it: run through the
+/// byte runner with the common-word dictionary (`formats/tlk.md §10`), so
+/// a word stored as a dictionary token ("the") is kept. Rows are joined
+/// with single spaces; `None` when empty.
+fn rendered(fields: &[Vec<u8>], index: usize) -> Option<String> {
+    let field = fields.get(index)?;
+    let dictionary = PUBLISHED_COMMON_WORD_DICTIONARY;
+    let inputs = TlkRunInputs {
+        avatar_name: "",
+        branch_flags: 0,
+        moral_standing: 0,
+        dictionary: Some(&dictionary),
+        gold_available: None,
+        npc_slot: None,
+        ask_who_response: 0,
+        yield_on_pause: false,
+        mark_holds: false,
+        yield_on_ask: false,
+    };
+    let output = run_tlk_stream(field, &inputs);
+    let bytes: Vec<u8> = output
+        .rendered_glyphs
+        .iter()
+        .map(|glyph| glyph.byte)
+        .collect();
+    let text = String::from_utf8_lossy(&bytes);
+    let text = text.split_whitespace().collect::<Vec<_>>().join(" ");
+    (!text.is_empty()).then_some(text)
+}
+
 /// The topic label of a record: the answering NPC's own keyword record,
 /// upper-cased (8.2.3).
 pub fn topic_label(fields: Option<&[Vec<u8>]>, record: RecordAddr) -> String {
@@ -476,14 +509,14 @@ impl<'a> Facts<'a> {
         self.named
             .get(&npc)
             .and_then(|dialog| self.source.fields(*dialog))
-            .and_then(|fields| decoded(fields, 0))
+            .and_then(|fields| rendered(fields, 0))
             .unwrap_or_else(|| format!("a person in {}", town_label(npc.scene)))
     }
 
     /// The slot's description, read live, when a dialog is known.
     fn description(&self, npc: NpcKey) -> Option<String> {
         let dialog = self.dialogs.get(&npc)?;
-        let text = decoded(self.source.fields(*dialog)?, 1)?;
+        let text = rendered(self.source.fields(*dialog)?, 1)?;
         let text = text.trim_end_matches(['.', ',', ' ']).to_string();
         (!text.is_empty()).then_some(text)
     }
