@@ -99,11 +99,11 @@ fn rows_and_presets_come_from_the_catalogue_and_the_file() {
         TOGGLES
             .iter()
             .filter(|spec| spec.is_shipped() && !spec.driven)
-            .all(
-                |spec| ["display.", "gem_map.", "menu.", "audio.", "combat.", "cheats."]
-                    .iter()
-                    .any(|section| spec.key.starts_with(section))
-            )
+            .all(|spec| [
+                "display.", "gem_map.", "menu.", "audio.", "combat.", "cheats."
+            ]
+            .iter()
+            .any(|section| spec.key.starts_with(section)))
     );
     let keys: Vec<&str> = settings.rows.iter().map(|row| row.key.as_str()).collect();
     assert_eq!(
