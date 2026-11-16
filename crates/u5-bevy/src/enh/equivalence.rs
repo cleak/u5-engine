@@ -382,7 +382,7 @@ pub(crate) struct ShellRun {
 }
 
 /// Runs `timeline` on a fresh app; `replay` feeds the on run's fed keys.
-fn run_shell(
+pub(crate) fn run_shell(
     state: PlayState,
     scene: &Scene,
     launch: &VisualLaunchConfig,

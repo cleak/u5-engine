@@ -343,6 +343,23 @@ pub fn setting_label(key: &str) -> Option<&'static str> {
         "input.gamepad" => "Gamepad",
         "input.mouse" => "Mouse",
         "input.extra_bindings" => "Extra key bindings",
+        // [combat], chapter 6 (M7). Sub-options sit under "Auto-combat":
+        // at most 17 cells.
+        "combat.auto" => "Auto-combat",
+        "combat.allies" => "Auto for allies",
+        "combat.fast_forward" => "Faster fights",
+        "combat.tactic" => "Tactic",
+        "combat.targeting" => "Target",
+        "combat.interrupt" => "A key during auto",
+        "combat.step_ms" => "Key pause (ms)",
+        "combat.pause_below_hp" => "Stop below HP %",
+        "combat.action_cap" => "Most actions",
+        "combat.victory" => "On victory",
+        "combat.keep_between_fights" => "Keep next fight",
+        "combat.pause_on_focus_loss" => "Pause if inactive",
+        "combat.potions" => "Drink potions",
+        "combat.mp_reserve" => "Keep magic",
+        "combat.spells" => "Spells",
         _ => return None,
     })
 }

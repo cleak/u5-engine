@@ -47,6 +47,8 @@
 //!   only by their own conditions (design 3.4.2): the overlay, a volume
 //!   below 100 or the player's mute for the gain; focus mute or the
 //!   overlay for focus mute.
+//! - Automatic combat's plugin ([`auto_combat`]) is added only while
+//!   `combat.auto` is on at launch.
 //!
 //! The Bevy half of the trajectory-equivalence harness (`equivalence`,
 //! test-only) runs the real `--visual` app headless, feature on against
@@ -58,6 +60,7 @@
 //! and never name a faithful system. The faithful systems themselves are
 //! not edited.
 
+pub mod auto_combat;
 #[cfg(test)]
 pub(crate) mod equivalence;
 pub mod gem_map;
@@ -384,6 +387,7 @@ impl Plugin for EnhancementsPlugin {
         crate::menu::audio::add_audio(app, &self.launch);
         crate::menu::start_keys::add_start_keys(app, &self.launch);
         gem_map::add_gem_map(app, &self.launch);
+        auto_combat::add_auto_combat(app, &self.launch);
         crate::display::add_display(app, &self.launch);
     }
 }

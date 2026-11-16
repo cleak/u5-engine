@@ -77,10 +77,12 @@ fn no_toast_or_badge_unless_a_feature_installs_them() {
     let mut launch = VisualLaunchConfig::classic();
     // ...except the grow-left layout, whose `[grow-left compose]` step,
     // frame fit and canvas size are its own (M1-09, display/grow tests),
-    // and the two menu toggles, whose overlay brings the shell services
-    // (overlay tests).
+    // the two menu toggles, whose overlay brings the shell services
+    // (overlay tests), and auto-combat, which posts toasts and sets the
+    // badge (below).
     for spec in TOGGLES.iter().filter(|spec| {
         spec.toggle != Toggle::DisplayGrowLeft
+            && spec.toggle != Toggle::CombatAuto
             && !crate::enh::overlay::tests::MENU_OPENERS.contains(&spec.toggle)
     }) {
         launch.enhancements.toggles.set(spec.toggle, true);
@@ -91,6 +93,13 @@ fn no_toast_or_badge_unless_a_feature_installs_them() {
         assert!(!app.world().contains_resource::<Toasts>());
         assert!(!app.world().contains_resource::<ShellBadges>());
     }
+    // Auto-combat installs them (M7-05).
+    let mut auto = VisualLaunchConfig::classic();
+    auto.enhancements.toggles.set(Toggle::CombatAuto, true);
+    let mut app = App::new();
+    add_enhancements(&mut app, &auto);
+    assert!(app.world().contains_resource::<Toasts>());
+    assert!(app.world().contains_resource::<ShellBadges>());
 }
 
 #[test]

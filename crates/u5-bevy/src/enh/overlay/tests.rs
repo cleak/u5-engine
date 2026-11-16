@@ -263,9 +263,11 @@ fn no_overlay_model_while_no_overlay_feature_is_on() {
     // overlay (checked below).
     let mut launch = VisualLaunchConfig::classic();
     // ...and except the grow-left layout, whose `[grow-left compose]` step,
-    // frame fit and canvas size are its own (M1-09, display/grow tests).
+    // frame fit and canvas size are its own (M1-09, display/grow tests), and
+    // auto-combat, which brings the toasts and badges itself (M7-05).
     for spec in TOGGLES.iter().filter(|spec| {
-        spec.toggle != Toggle::DisplayGrowLeft && !MENU_OPENERS.contains(&spec.toggle)
+        ![Toggle::DisplayGrowLeft, Toggle::CombatAuto].contains(&spec.toggle)
+            && !MENU_OPENERS.contains(&spec.toggle)
     }) {
         launch.enhancements.toggles.set(spec.toggle, true);
     }

@@ -360,7 +360,19 @@ fn the_rows_are_chapter_3s_in_the_designs_order() {
     // The new toggles follow every earlier bit, so none moved.
     let first = Toggle::MenuOverlay as usize;
     assert_eq!(first, Toggle::GemMapEnhanced as usize + 1);
-    assert!(TOGGLES[first..].iter().all(|spec| is_chapter_3(spec.key)));
+    // Chapter 3's toggles are one run; later chapters' rows (M7's
+    // `[combat]`, M8's `[cheats]`) append after it.
+    let last = Toggle::InputExtraBindings as usize;
+    assert!(
+        TOGGLES[first..=last]
+            .iter()
+            .all(|spec| is_chapter_3(spec.key))
+    );
+    assert!(
+        !TOGGLES[last + 1..]
+            .iter()
+            .any(|spec| is_chapter_3(spec.key))
+    );
     // Reserved, not in the catalogue (U3).
     assert!(CatalogueRow::find("menu.escape_opens_menu").is_none());
 }

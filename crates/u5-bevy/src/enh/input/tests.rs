@@ -275,7 +275,8 @@ fn chords_parse_without_regard_to_case_or_modifier_order() {
 /// far, four bind a chord: F12 for chapter 3's `menu.overlay` and
 /// `menu.title_layer` (rows from M4-02, hidden until chapter 3 Phases 1 and
 /// 3 ship), F11 for `display.fullscreen_key` and Ctrl+P for
-/// `display.grow_left`. The parked minimap and the contextual pair never
+/// `display.grow_left`, plus chapter 6's three auto-combat chords for
+/// `combat.auto` (M7). The parked minimap and the contextual pair never
 /// bind through `[keys]`.
 #[test]
 fn bindings_follow_their_features() {
@@ -292,7 +293,11 @@ fn bindings_follow_their_features() {
         [
             EnhAction::OpenMenu,
             EnhAction::ToggleFullscreen,
-            EnhAction::ToggleColumn
+            EnhAction::ToggleColumn,
+            // M7: `combat.auto`.
+            EnhAction::AutoMember,
+            EnhAction::AutoParty,
+            EnhAction::AutoUntilDone,
         ]
     );
     let (map, notes) = KeyMap::for_toggles(&default_keys(), every);

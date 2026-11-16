@@ -80,6 +80,9 @@ pub fn default_text(spec: &OptionSpec) -> String {
     }
 }
 
+/// The most single-word values a list row contributes to the matrix.
+const LIST_ALTERNATES_MAX: usize = 2;
+
 /// The non-default values the matrix sets a valued setting to, in a fixed
 /// order. None of them contains a comma or a tab, so a matrix line holds
 /// them as they are; a list therefore takes one word at a time.
@@ -88,7 +91,8 @@ pub fn default_text(spec: &OptionSpec) -> String {
 /// - int: the minimum and the maximum, where they differ from the default;
 /// - enum: every other word, deviation values included;
 /// - colour: white, or black when the default is white;
-/// - list: each single word, where it differs from the default;
+/// - list: each single word, at most `LIST_ALTERNATES_MAX` of them,
+///   where it differs from the default;
 /// - chord: an F-key no default uses, from F13 on, one per `[keys]` row;
 /// - path: none (the suite has no file to point it at).
 pub fn alternate_values(spec: &OptionSpec) -> Vec<String> {
@@ -102,7 +106,14 @@ pub fn alternate_values(spec: &OptionSpec) -> Vec<String> {
         } else {
             "#ffffff".to_string()
         }],
-        OptionKind::List(words) => words.iter().map(|w| w.to_string()).collect(),
+        // A long word list, such as `combat.spells`' 48 spell codes, varies
+        // by its first words only: the pairwise array needs another value,
+        // not one level per word (build plan M7-01).
+        OptionKind::List(words) => words
+            .iter()
+            .take(LIST_ALTERNATES_MAX)
+            .map(|w| w.to_string())
+            .collect(),
         OptionKind::Chord => vec![spare_chord(spec.key)],
         OptionKind::Path => Vec::new(),
     };

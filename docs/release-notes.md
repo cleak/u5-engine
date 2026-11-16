@@ -20,8 +20,9 @@ the display settings below, arrive in this release too.
   what a launch would use. Unknown keys and bad values never stop the game:
   the setting keeps its default and the log says why.
 - **Presets.** Classic (the default, the original game), Recommended and
-  Everything. In this release Recommended turns on only sprites over terrain
-  (below), and Everything adds sharp scaling and the F11 fullscreen key.
+  Everything. In this release Recommended turns on sprites over terrain and
+  auto-combat with its fast-forward (below), and Everything adds sharp
+  scaling and the F11 fullscreen key.
 - **Parity lock.** `--parity-lock` or `U5_PARITY_LOCK=1` turns every
   enhancement off whatever the settings say.
 - **Hotkeys** for future features are listed in
@@ -185,4 +186,51 @@ from 1.0.1; two full paired DOSBox sweeps found no difference from the
 original that was not a random draw the original makes too; and a paired
 run with every one of these settings on in the configuration file ran
 under the parity lock, with no menu, and matched the original.
+
+### Optional enhancements: auto-combat
+
+Off unless you turn it on (`--auto-combat`, or the Recommended and
+Everything presets), and turning it on changes nothing until you press one
+of its keys in a fight ([auto-combat](settings.md#auto-combat),
+[keys](commands.md#auto-combat-keys)).
+
+- **Hand a fight over.** Ctrl+A hands the member whose turn it is to
+  auto-combat, Ctrl+Shift+A the whole party, and Ctrl+F the whole party
+  until the fight is over. A short note confirms each change, and any key
+  you press gives the prompt back. It never stops in the middle of
+  an attack.
+- **It plays by your keys.** Auto-combat types the keys you would type, one
+  at a time: attack the nearest foe it can see, step towards one, or pass.
+  It uses only legal keys; it is not a strong player. It stops at victory,
+  when a member is badly hurt (and names that member), when no foe is in
+  sight, when it is stuck, and after an action limit, and a short note says
+  why. Notes name only your party, never a monster, and it never aims at
+  anything you cannot see.
+- **Fast-forward** (`--auto-combat-fast-forward`, also in Recommended and
+  Everything). In a fight handed over with Ctrl+F every sound plays only its
+  first 40 ms, in the same order, so the fight goes by quicker. This is the
+  one deviation a preset turns on, and it is labelled "Faster fights:
+  changes timing, so fights differ from normal pace": the game's clock keeps
+  running while a sound plays, so a fast-forwarded fight can take a
+  different course from the same fight at normal pace. Without Ctrl+F, or
+  with fast-forward off, the sounds are the original's.
+- **In the terminal** an `@auto` line (`@auto`, `@auto party`, `@auto 1,3`,
+  `@auto until`, `@auto off`) does the same, and `--auto-combat-log FILE`
+  writes the keys it typed as a play script that replays the fight with the
+  feature off.
+- **Determinism.** In the terminal an auto fight is exactly repeatable: the
+  same keys after the same waits give the same fight, and the log replays it
+  byte for byte. In the window the keys are the same kind, but when each one
+  arrives depends on the frame clock, so two windowed fights from the same
+  save can differ, as two fights a person plays can.
+- **Where the tactics come from.** They are this engine's own behaviour,
+  written for this frontend from the Phase B design; they only choose among
+  keys the game already accepts and read only what the screen shows.
+
+Checks behind it: with auto-combat off or under the parity lock there is no
+auto-combat state, no key is bound, no log is written and no `[combat]`
+section is added to `config.toml`; the keys an engaged fight typed, replayed
+with the feature off at the same frames, give the same game and the same
+`SAVED.GAM`, beside every other shipped enhancement; and the same keys and notes come with or
+without a monster the party cannot see.
 

@@ -350,6 +350,7 @@ fn scripted_records(state: &mut PlayState, dir: &Path, commands: &[&str]) -> Vec
     let mut session = TerminalSession {
         save_watch: None,
         gem_map: Some(TerminalGemMap::in_memory()),
+        ..TerminalSession::default()
     };
     session.start(state);
     records.push(Counts::of(
@@ -725,6 +726,7 @@ fn png_session(png: GemPng) -> TerminalSession {
     TerminalSession {
         save_watch: None,
         gem_map: Some(TerminalGemMap::in_memory().with_png(png)),
+        ..TerminalSession::default()
     }
 }
 

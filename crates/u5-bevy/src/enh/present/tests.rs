@@ -168,12 +168,14 @@ fn no_host_exists_while_no_step_is_registered() {
     // The two menu toggles are left out too: their overlay brings the shell
     // services (overlay tests). So are the start preferences, which type
     // the game's Ctrl-S and Ctrl-B at the first prompt (M4-13), so the
-    // game itself answers.
+    // game itself answers. Auto-combat brings the toast line, whose
+    // real-time tick this bare app has no clock for (M7-05).
     for spec in TOGGLES.iter().filter(|spec| {
         spec.toggle != Toggle::DisplayGrowLeft
             && spec.toggle != Toggle::DisplaySpriteComposite
             && spec.toggle != Toggle::AudioStartSoundOff
             && spec.toggle != Toggle::AudioStartBufferOn
+            && spec.toggle != Toggle::CombatAuto
             && !crate::enh::overlay::tests::MENU_OPENERS.contains(&spec.toggle)
     }) {
         every.enhancements.toggles.set(spec.toggle, true);

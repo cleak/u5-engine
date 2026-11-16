@@ -106,6 +106,12 @@ pub struct CliArgs {
     /// `--gem-map-canvas WxH`: the canvas of those PNGs; the classic
     /// 320x200 when not given.
     pub gem_map_canvas: Option<(u32, u32)>,
+    /// `--auto-combat-log <path>`: with `--play` or `--play-script`, write
+    /// the keys auto-combat typed as ordinary script tokens (or stdin
+    /// lines), so the run replays with the feature off (design 6.3.5). A
+    /// TUI-only utility flag, not a setting; nothing is written while
+    /// `combat.auto` is off or locked.
+    pub auto_combat_log: Option<PathBuf>,
     /// `--show-settings`: print the resolved settings and exit.
     pub show_settings: bool,
     /// `--settings`: open the setup window's Enhancements page, then start
@@ -268,6 +274,7 @@ where
     let mut gem_map = false;
     let mut gem_map_png: Option<PathBuf> = None;
     let mut gem_map_canvas: Option<(u32, u32)> = None;
+    let mut auto_combat_log: Option<PathBuf> = None;
     let mut show_settings = false;
     let mut settings = false;
     let mut boot_key: Option<u8> = None;
@@ -719,6 +726,20 @@ where
                     ));
                 }
             }
+            "--auto-combat-log" => {
+                let value = args.next().ok_or_else(|| {
+                    io::Error::new(
+                        io::ErrorKind::InvalidInput,
+                        "--auto-combat-log requires a file for the logged keys",
+                    )
+                })?;
+                if auto_combat_log.replace(PathBuf::from(value)).is_some() {
+                    return Err(io::Error::new(
+                        io::ErrorKind::InvalidInput,
+                        "--auto-combat-log may only be supplied once",
+                    ));
+                }
+            }
             "--show-settings" => show_settings = true,
             "--settings" => settings = true,
             "--boot-key" => {
@@ -816,6 +837,7 @@ where
             gem_map: false,
             gem_map_png: None,
             gem_map_canvas: None,
+            auto_combat_log: None,
             show_settings: false,
             settings: false,
             settings_file: false,
@@ -1150,6 +1172,7 @@ where
         gem_map,
         gem_map_png,
         gem_map_canvas,
+        auto_combat_log,
         show_settings,
         settings,
         settings_file: false,
@@ -1168,6 +1191,12 @@ where
         return Err(io::Error::new(
             io::ErrorKind::InvalidInput,
             "--gem-map-png writes the enhanced gem map of a --gem-map run; it needs --gem-map with --play or --play-script",
+        ));
+    }
+    if args.auto_combat_log.is_some() && (!args.play || args.visual || args.is_qa_mode()) {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "--auto-combat-log writes the keys of a terminal auto-combat run; it needs --play or --play-script",
         ));
     }
     if args.gem_map {
@@ -1402,6 +1431,10 @@ OPTIONS:
         --gem-map-canvas <WxH>
                               The canvas of those PNGs, from 320x200 (the
                               default) up, e.g. 512x240 for 16:9.
+        --auto-combat-log <PATH>
+                              With --play and auto-combat on, write the keys
+                              it typed as script tokens (stdin lines in the
+                              interactive loop), to replay with it off.
         --equivalence-suite <OUT>
                               Run every route smoke case with every
                               enhancement off, then under Classic and each

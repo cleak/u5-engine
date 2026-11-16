@@ -38,10 +38,12 @@ settings page, a stored value is kept but not used, and presets skip it.
 
 No preset turns on a cheat, and the only deviation a preset sets is
 `combat.fast_forward`. A preset sets only what is available in this build.
-In this build Recommended turns on only sprites over terrain
-(`display.sprite_composite`), and Everything adds sharp scaling
+In this build Recommended turns on sprites over terrain
+(`display.sprite_composite`), auto-combat (`combat.auto`) and its
+fast-forward (`combat.fast_forward`), and Everything adds sharp scaling
 (`display.scale_mode = "sharp"`) and the F11 fullscreen key
-(`display.fullscreen_key`); none of them changes the game. The wider world
+(`display.fullscreen_key`). Only fast-forward changes the game, and only
+its pace in fights you hand to auto-combat with Ctrl+F. The wider world
 view is a deviation, so no preset turns it on. Everything also turns on the
 enhanced gem map (`gem_map.enhanced`), the menu (`menu.overlay`), named
 save slots (`menu.named_slots`), the title menu (`menu.title_layer`) and
@@ -88,6 +90,8 @@ warning: they are preferences. No preset sets the two start keys
 | `--mute-on-focus-loss`, `--no-mute-on-focus-loss` | `--enable` / `--disable audio.mute_on_focus_loss`: silent while another window has the focus. |
 | `--start-sound-off`, `--no-start-sound-off` | `--enable` / `--disable audio.start_sound_off`: type the game's Ctrl-S once, at the first command prompt of each launch, if the game's sound is still on. Works without the menu. |
 | `--start-buffer-on`, `--no-start-buffer-on` | `--enable` / `--disable audio.start_buffer_on`: type the game's Ctrl-B once, at the first command prompt of each launch, if the key buffer is still off. Works without the menu. |
+| `--auto-combat`, `--no-auto-combat` | `--enable` / `--disable combat.auto`: auto-combat's keys (Ctrl+A, Ctrl+Shift+A, Ctrl+F; `@auto` in the terminal). |
+| `--auto-combat-fast-forward`, `--no-auto-combat-fast-forward` | `--enable` / `--disable combat.fast_forward`: shorter sounds in fights handed over with Ctrl+F (changes timing). |
 
 `config.toml` applies to the default launch (no game folder or mode on the
 command line); other launches use the command line alone. An unknown key on
@@ -390,6 +394,51 @@ game on the slot's files as if you had copied them and pressed `J` at the
 title. No thumbnail, slot detail, note or settings row names a place,
 person or thing of the game you have not seen.
 
+## Auto-combat
+
+`combat.auto`, **"Auto-combat"** (`--auto-combat`), off by default and part
+of the Recommended and Everything presets. It adds three keys for fights
+([commands.md](commands.md#auto-combat-keys)): Ctrl+A hands the member
+whose turn it is to auto-combat, Ctrl+Shift+A the whole party, and Ctrl+F
+the whole party until the fight is over. Turning it on changes nothing
+until you press one of them.
+
+- **What it does.** At each handed-over member's prompt it attacks the
+  nearest foe it can see in reach (`combat.targeting = "weakest"` picks the
+  weakest), otherwise steps towards one, otherwise passes. It types the
+  same keys you would, one at a time, `combat.step_ms` apart (150 ms by
+  default), so the game does exactly what it does for those keys. It uses
+  only legal keys; it is not a strong player.
+- **When it stops.** At any key you press (`combat.interrupt`), at victory,
+  when a member falls below `combat.pause_below_hp` percent of health (25 by
+  default; that member is named), when no foe is in sight, when it is stuck,
+  after `combat.action_cap` actions, and when the fight ends unless
+  `combat.keep_between_fights` is on (never for Ctrl+F). It never stops in
+  the middle of an attack. A short note says why it stopped; notes name
+  only your party members, never a monster, and it never aims at anything
+  you cannot see. `combat.pause_on_focus_loss` (on by default) pauses it
+  while the window is in the background.
+- **Fast-forward.** `combat.fast_forward`, **"Faster fights: changes timing,
+  so fights differ from normal pace"** (`--auto-combat-fast-forward`), off
+  by default but set by Recommended and Everything, the one deviation a
+  preset sets. In a fight handed over with Ctrl+F, each sound plays only
+  its first 40 ms, in the same order. The game keeps its own clock running
+  while a sound plays, so shorter sounds give a fight a different course
+  from the same fight at normal pace. It does nothing without
+  `combat.auto`, or with Ctrl+A or Ctrl+Shift+A.
+- `combat.tactic`, `combat.potions`, `combat.mp_reserve`, `combat.spells`,
+  `combat.victory = "exit"` and `combat.allies` are for later phases: in
+  this build auto-combat always fights with the Fight tactic and stops at
+  victory, and `combat.allies` is not available.
+- Under the parity lock auto-combat is off, its keys are free, and the
+  terminal treats `@auto` as in 1.0.1. With it off, no `[combat]` section is
+  written to `config.toml`.
+
+The tactics are this engine's own frontend behaviour, not the original
+game's: they come from the Phase B design (chapter 6), choose only among
+keys the published specification already defines, and read only what the
+screen shows a player.
+
 ## The parity lock
 
 `--parity-lock`, or `U5_PARITY_LOCK=1` in the environment, turns every
@@ -493,6 +542,9 @@ one that types keys must change it exactly as typing those keys would:
 | input.gamepad | Play with a gamepad | bool = false | b, F | feature | - | a gamepad | later (chapter 3 Phase 5) |
 | input.mouse | Use the mouse in menus and to step | bool = false | b, F | feature | - | a mouse or pointer | later (chapter 3 Phase 5) |
 | input.extra_bindings | Extra key bindings | bool = false | b, F | feature | - | a keyboard | later (chapter 3 Phase 5) |
+| combat.auto | Auto-combat | bool = false | b, F | feature | --auto-combat | - | yes |
+| combat.allies | Auto-combat for allied creatures | bool = false | b, P | feature | --auto-combat-allies | - | later (chapter 6 5) |
+| combat.fast_forward | Faster fights: changes timing, so fights differ from normal pace | bool = false | b, P | deviation | --auto-combat-fast-forward | - | yes |
 | enhancements.schema | Settings file format version | int 1..1 = 1 | -, L | feature | - | - | yes |
 | enhancements.preset | Preset | enum classic\|recommended\|everything = classic | -, P | feature | --preset | - | yes |
 | keys.menu | Open the menu | chord = F12 | -, F | feature | - | a keyboard | later (chapter 1 P5) |
@@ -538,4 +590,16 @@ one that types keys must change it exactly as typing those keys would:
 | menu.confirm_unsaved | Ask before leaving with unsaved play | bool = true | a, F | feature | --confirm-unsaved | - | yes |
 | menu.quit_to_title | Return to the title by restarting, or in the window (later) | enum relaunch\|in-app = relaunch (in-app later, chapter 3 Phase 7) | b, L | feature | - | - | yes |
 | audio.volume | Volume in percent (output only; 100 is the original) | int 0..100 by 5 = 100 | a, F | feature | --volume | - | yes |
+| combat.tactic | Auto-combat tactic | enum fight\|support\|magic = fight | b, P | feature | - | - | yes |
+| combat.targeting | Which foe auto-combat attacks | enum nearest\|weakest = nearest | b, P | feature | - | - | yes |
+| combat.interrupt | A key pressed during auto-combat: drop it, or pass it to the game | enum swallow\|deliver = swallow | b, F | feature | - | - | yes |
+| combat.step_ms | Pause between auto-combat keys, in milliseconds | int 0..2000 = 150 | b, P | feature | - | - | yes |
+| combat.pause_below_hp | Hand a member back below this health, in percent (0 = never) | int 0..100 = 25 | b, P | feature | - | - | yes |
+| combat.action_cap | Most auto-combat actions in one fight | int 20..1000 = 200 | b, P | feature | - | - | yes |
+| combat.victory | When the fight is won: stop, or leave the battle | enum stop\|exit = stop | b, P | feature | - | - | yes |
+| combat.keep_between_fights | Keep auto-combat on for the next fight | bool = false | b, P | feature | - | - | yes |
+| combat.pause_on_focus_loss | Pause auto-combat while the window is in the background | bool = true | b, P | feature | - | - | yes |
+| combat.potions | Let auto-combat drink potions | bool = false | b, P | feature | - | - | yes |
+| combat.mp_reserve | Magic auto-combat keeps back: none, or one healing spell | enum none\|heal = heal | b, P | feature | - | - | yes |
+| combat.spells | Spells auto-combat may cast | list of IL\|GP\|AZ\|AN\|M\|AY\|AS\|ACX\|HR\|IW\|KX\|IMX\|LV\|FV\|FGI\|GIN\|GIZ\|IP\|AG\|IS\|GIS\|PU\|DP\|QW\|BIX\|AEP\|EIP\|MV\|IZ\|RT\|IPVY\|AQW\|AI\|AWY\|AEX\|BRX\|LS\|CX\|IQX\|IQW\|HIN\|CIQ\|CIM\|CKX\|CGIV\|FHI\|PRV\|AT = [] | b, P | feature | - | - | yes |
 <!-- END GENERATED -->

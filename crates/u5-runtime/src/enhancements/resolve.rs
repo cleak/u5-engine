@@ -1312,14 +1312,19 @@ mod tests {
 
     #[test]
     fn a_stored_preset_sets_only_its_shipped_rows() {
-        // Of Recommended's rows only `display.sprite_composite` has shipped
-        // (chapter 9 P5), so it is the one toggle on; the stored name is
-        // kept as the label.
+        // Of Recommended's rows `display.sprite_composite` (chapter 9 P5),
+        // `combat.auto` and `combat.fast_forward` (chapter 6 3c, 4d) have
+        // shipped, so they are the toggles on; the stored name is kept as
+        // the label.
         let stored = Stored::default().with(PRESET_KEY, text("recommended"));
         let resolved = resolve(input(Some(&stored), &[]));
         assert_eq!(
             resolved.toggles.iter_on().collect::<Vec<_>>(),
-            [Toggle::DisplaySpriteComposite]
+            [
+                Toggle::DisplaySpriteComposite,
+                Toggle::CombatAuto,
+                Toggle::CombatFastForward
+            ]
         );
         assert_eq!(resolved.preset, PresetLabel::Preset(Preset::Recommended));
         assert_eq!(resolved.values.str(PRESET_KEY), Some("recommended"));

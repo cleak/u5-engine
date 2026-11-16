@@ -99,9 +99,11 @@ fn rows_and_presets_come_from_the_catalogue_and_the_file() {
         TOGGLES
             .iter()
             .filter(|spec| spec.is_shipped() && !spec.driven)
-            .all(|spec| ["display.", "gem_map.", "menu.", "audio."]
-                .iter()
-                .any(|section| spec.key.starts_with(section)))
+            .all(
+                |spec| ["display.", "gem_map.", "menu.", "audio.", "combat."]
+                    .iter()
+                    .any(|section| spec.key.starts_with(section))
+            )
     );
     let keys: Vec<&str> = settings.rows.iter().map(|row| row.key.as_str()).collect();
     assert_eq!(
@@ -150,6 +152,19 @@ fn rows_and_presets_come_from_the_catalogue_and_the_file() {
             "audio.start_sound_off",
             "audio.start_buffer_on",
             "audio.volume",
+            // Chapter 6 (3c, 4d; M7-07): the Combat group, auto-combat with
+            // its options under it, then fast-forward. The number and list
+            // options have no page row; allies (Phase 5) is hidden.
+            "combat.auto",
+            "combat.tactic",
+            "combat.targeting",
+            "combat.interrupt",
+            "combat.victory",
+            "combat.keep_between_fights",
+            "combat.pause_on_focus_loss",
+            "combat.potions",
+            "combat.mp_reserve",
+            "combat.fast_forward",
         ]
     );
     assert!(
@@ -157,6 +172,12 @@ fn rows_and_presets_come_from_the_catalogue_and_the_file() {
             .rows
             .iter()
             .all(|row| (row.group == "Maps") == row.key.starts_with("gem_map."))
+    );
+    assert!(
+        settings
+            .rows
+            .iter()
+            .all(|row| (row.group == "Combat") == row.key.starts_with("combat."))
     );
     // The wider view's row carries its plain label and tag; its six
     // sub-options, and only they, are indented under it.
@@ -184,15 +205,18 @@ fn rows_and_presets_come_from_the_catalogue_and_the_file() {
     // Chapter 3: the overlay's warning and Return to the title, and the
     // slots' quick slot.
     assert_eq!(
-        indented[17..],
+        indented[17..20],
         [
             "menu.confirm_unsaved",
             "menu.quit_to_title",
             "menu.quicksave"
         ]
     );
-    // Recommended turns compositing on (P5); Everything also sets sharp
-    // scaling and the F11 key (2.2.1).
+    // Chapter 6: the options sit under "Auto-combat"; fast-forward is a
+    // row of its own.
+    assert_eq!(indented[20..], keys[40..48]);
+    // Recommended turns compositing (P5), auto-combat and fast-forward on
+    // (U2, U6); Everything also sets sharp scaling and the F11 key (2.2.1).
     let values = |key: &str| {
         let choice = settings
             .presets
@@ -212,6 +236,8 @@ fn rows_and_presets_come_from_the_catalogue_and_the_file() {
         values("classic"),
         [
             "(\"audio.mute_on_focus_loss\", Switch(false))",
+            "(\"combat.auto\", Switch(false))",
+            "(\"combat.fast_forward\", Switch(false))",
             "(\"display.fullscreen_key\", Switch(false))",
             "(\"display.scale_mode\", Choice(\"fit\"))",
             "(\"display.sprite_composite\", Switch(false))",
@@ -225,6 +251,8 @@ fn rows_and_presets_come_from_the_catalogue_and_the_file() {
         values("recommended"),
         [
             "(\"audio.mute_on_focus_loss\", Switch(false))",
+            "(\"combat.auto\", Switch(true))",
+            "(\"combat.fast_forward\", Switch(true))",
             "(\"display.fullscreen_key\", Switch(false))",
             "(\"display.scale_mode\", Choice(\"fit\"))",
             "(\"display.sprite_composite\", Switch(true))",
@@ -238,6 +266,8 @@ fn rows_and_presets_come_from_the_catalogue_and_the_file() {
         values("everything"),
         [
             "(\"audio.mute_on_focus_loss\", Switch(true))",
+            "(\"combat.auto\", Switch(true))",
+            "(\"combat.fast_forward\", Switch(true))",
             "(\"display.fullscreen_key\", Switch(true))",
             "(\"display.scale_mode\", Choice(\"sharp\"))",
             "(\"display.sprite_composite\", Switch(true))",
@@ -518,7 +548,8 @@ fn desktop_host_feeds_the_settings_only_wizard() {
     let mut model = WizardModel::settings_only(&host);
     assert!(model.outcome.is_none());
     // Choose Recommended and save: the preset and the rows it changed
-    // (sprite compositing, which Recommended turns on) are written.
+    // (sprite compositing, auto-combat and fast-forward, which Recommended
+    // turns on) are written.
     assert!(model.apply(u5_bevy_setup::Action::SelectPreset(1), &host));
     assert!(model.apply(u5_bevy_setup::Action::SaveSettings, &host));
     assert_eq!(
@@ -528,7 +559,8 @@ fn desktop_host_feeds_the_settings_only_wizard() {
     let text = fs::read_to_string(scratch.config()).unwrap();
     assert_eq!(
         text,
-        "[enhancements]\npreset = \"recommended\"\n\n[display]\nsprite_composite = true\n"
+        "[enhancements]\npreset = \"recommended\"\n\n[display]\nsprite_composite = true\n\n\
+         [combat]\nauto = true\nfast_forward = true\n"
     );
     assert_eq!(host.settings_rows().unwrap().preset, 1);
 }
