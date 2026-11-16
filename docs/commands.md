@@ -148,7 +148,9 @@ first key you press while it runs gives the prompt back: by default the key
 is dropped (`combat.interrupt = "swallow"`), or it goes to the game
 (`"deliver"`). If an attack's target cursor is open, auto finishes that
 attack first and the keys you typed follow in order. A short note confirms
-each change of who is handed over.
+each change of who is handed over, and an `AUTO` badge shows while anyone
+is handed over: beside the picture when the window has room, otherwise in
+the map's top corner.
 
 In the terminal frontend there are no chords. A line in a play script, or
 typed at the interactive prompt, does the same:

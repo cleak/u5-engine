@@ -255,70 +255,150 @@ fn assert_near(actual: Vec2, expected: Vec2, what: &str) {
     );
 }
 
-#[test]
-fn the_strip_sits_over_the_frames_top_row_without_a_margin() {
-    // 4:3: the frame fills the window; a row is a 25th of its height.
-    let rect = toast_strip_rect(Vec2::new(960.0, 720.0), None, 40);
-    assert_near(rect.min, Vec2::ZERO, "4:3 corner");
-    assert_near(rect.size(), Vec2::new(960.0, 28.8), "4:3 size");
+/// Both badges' strip: a band cell, `>AUTO<`, a band cell, `>MOD<`, a
+/// band cell.
+const BOTH: u32 = 14;
 
-    // 16:9: the 4:3 frame is centred; its 240-pixel bars are narrower than
-    // the line, so the strip is centred on the frame.
-    let rect = toast_strip_rect(Vec2::new(1920.0, 1080.0), None, 20);
-    assert_near(rect.min, Vec2::new(600.0, 0.0), "16:9 corner");
-    assert_near(rect.size(), Vec2::new(720.0, 43.2), "16:9 size");
-
-    // Wider than the frame: shrunk to fit it, still one row's place.
-    let rect = toast_strip_rect(Vec2::new(960.0, 720.0), None, 48);
-    assert_near(rect.min, Vec2::ZERO, "long corner");
-    assert_near(rect.size(), Vec2::new(960.0, 24.0), "long size");
+fn rect_near(actual: Rect, min: Vec2, max: Vec2, what: &str) {
+    assert_near(actual.min, min, what);
+    assert_near(actual.max, max, what);
 }
 
 #[test]
-fn the_strip_moves_into_the_window_margin_when_one_exists() {
-    // Taller than 4:3: the letterbox band above the frame holds a row.
-    let rect = toast_strip_rect(Vec2::new(800.0, 800.0), None, 40);
-    assert_near(rect.min, Vec2::new(0.0, 76.0), "band corner");
-    assert_near(rect.size(), Vec2::new(800.0, 24.0), "band size");
+fn words_wrap_at_spaces_and_a_long_word_refuses() {
+    assert_eq!(
+        wrap_words("Auto off: Avatar is hurt", 11).unwrap(),
+        ["Auto off:", "Avatar is", "hurt"]
+    );
+    assert_eq!(
+        wrap_words("A test refusal.", 40).unwrap(),
+        ["A test refusal."]
+    );
+    assert_eq!(wrap_words("Ctrl+Shift+A", 11), None);
+    assert_eq!(badge_cells(&[BADGE_AUTO, BADGE_MODIFIED]), BOTH);
+    assert_eq!(badge_cells(&[]), 0);
+}
 
-    // A band thinner than a row is no margin.
-    let rect = toast_strip_rect(Vec2::new(800.0, 620.0), None, 40);
-    assert_near(rect.min, Vec2::new(0.0, 10.0), "thin band corner");
+/// 4:3: the frame fills the window, so there is no margin. The toast and
+/// the badges sit over the map, a cell in from its rules (cells 1-22):
+/// the toast at the bottom right, the badges at the top right, in the
+/// frame's own cells (3 by 3.6 pixels here). Nothing covers the border.
+#[test]
+fn without_a_margin_they_sit_over_the_map_inside_its_rules() {
+    let window = Vec2::new(960.0, 720.0);
+    let placed = shell_placement(window, None, None, Some(REFUSED), BOTH);
+    assert_near(placed.glyph, Vec2::new(3.0, 3.6), "the frame's pixel");
+    let (lines, toast) = placed.toast.unwrap();
+    assert_eq!(lines, [REFUSED]);
+    rect_near(
+        toast,
+        Vec2::new(7.0 * 24.0, 21.0 * 28.8),
+        Vec2::new(22.0 * 24.0, 22.0 * 28.8),
+        "toast",
+    );
+    rect_near(
+        placed.badges.unwrap(),
+        Vec2::new(8.0 * 24.0, 2.0 * 28.8),
+        Vec2::new(22.0 * 24.0, 3.0 * 28.8),
+        "badges",
+    );
+    // Inside the map's rules (x and y 7 and 184 of the frame) with a
+    // cell to spare.
+    let inner = Rect::new(16.0 * 3.0, 16.0 * 3.6, 176.0 * 3.0, 176.0 * 3.6);
+    for rect in [toast, placed.badges.unwrap()] {
+        assert!(
+            inner.contains(rect.min) && inner.contains(rect.max),
+            "{rect:?}"
+        );
+    }
 
-    // 32:9: a 1200-pixel bar holds a 20-cell line (720 pixels) whole, at
-    // the frame's cell size, level with the frame's top.
-    let rect = toast_strip_rect(Vec2::new(3840.0, 1080.0), None, 20);
-    assert_near(rect.min, Vec2::new(240.0, 0.0), "bar corner");
-    assert_near(rect.size(), Vec2::new(720.0, 43.2), "bar size");
+    // A long line wraps at spaces into the map's 20 cells.
+    let placed = shell_placement(
+        window,
+        None,
+        None,
+        Some(crate::enh::auto_combat::AUTO_READY),
+        0,
+    );
+    let (lines, toast) = placed.toast.unwrap();
+    assert!(
+        lines.len() > 1 && lines.iter().all(|line| line.len() <= 20),
+        "{lines:?}"
+    );
+    assert!(
+        inner.contains(toast.min) && inner.contains(toast.max),
+        "{toast:?}"
+    );
+}
+
+/// Taller than 4:3: the badges in the band above, the toast in the band
+/// below, right-aligned a cell in from the frame, at a whole multiple of
+/// the font (2 here, the frame being 2.5 across).
+#[test]
+fn a_band_holds_them_above_and_below_the_frame() {
+    let placed = shell_placement(Vec2::new(800.0, 800.0), None, None, Some(REFUSED), BOTH);
+    assert_near(placed.glyph, Vec2::new(2.0, 2.4), "whole pixels across");
+    let (lines, toast) = placed.toast.unwrap();
+    assert_eq!(lines, [REFUSED]);
+    rect_near(
+        toast,
+        Vec2::new(784.0 - 15.0 * 16.0, 700.0 + (100.0 - 19.2) / 2.0),
+        Vec2::new(784.0, 700.0 + (100.0 + 19.2) / 2.0),
+        "toast",
+    );
+    rect_near(
+        placed.badges.unwrap(),
+        Vec2::new(784.0 - 14.0 * 16.0, (100.0 - 19.2) / 2.0),
+        Vec2::new(784.0, (100.0 + 19.2) / 2.0),
+        "badges",
+    );
+}
+
+/// 16:9: the 240-pixel bar right of the frame takes the toast, a cell
+/// from the frame and a line up from its bottom, at the largest whole
+/// scale at which it wraps into three lines or fewer (3 here; the frame is
+/// 4.5 across).
+#[test]
+fn a_free_side_bar_holds_the_toast_wrapped() {
+    let placed = shell_placement(Vec2::new(1920.0, 1080.0), None, None, Some(REFUSED), 0);
+    assert_near(placed.glyph, Vec2::new(3.0, 3.6), "whole pixels across");
+    let (lines, toast) = placed.toast.unwrap();
+    assert_eq!(lines, ["A test", "refusal."]);
+    rect_near(
+        toast,
+        Vec2::new(1704.0, 1080.0 - 28.8 * 3.0),
+        Vec2::new(1704.0 + 8.0 * 24.0, 1080.0 - 28.8),
+        "toast",
+    );
+    assert!(toast.min.x >= 1680.0, "clear of the frame");
 }
 
 #[test]
-fn the_strip_follows_the_side_layout_and_keeps_out_of_panels() {
+fn the_toast_keeps_out_of_side_panels() {
     use crate::enh::side::{
         PanelClaim, PanelKind, SidePreference, SideSpaceSettings, solve_side_space,
     };
     let window = Vec2::new(3840.0, 1080.0);
     let claim = |kind, side| PanelClaim { kind, side };
+    let frame_size = UVec2::new(VISUAL_PLAY_FRAME_WIDTH, VISUAL_PLAY_FRAME_HEIGHT);
+    // The right bar holds a panel; the left bar takes the toast.
     let solution = solve_side_space(
         window,
-        UVec2::new(VISUAL_PLAY_FRAME_WIDTH, VISUAL_PLAY_FRAME_HEIGHT),
-        &[claim(PanelKind::Journal, SidePreference::Left)],
+        frame_size,
+        &[claim(PanelKind::Journal, SidePreference::Right)],
         &SideSpaceSettings::default(),
     );
     let layout = solution.layout;
     let frame = layout.frame.expect("the journal fits at 32:9");
-    // The left bar holds the panel; the right bar takes the toast.
-    let rect = toast_strip_rect(window, Some(&layout), 20);
-    assert_near(
-        rect.min,
-        Vec2::new((frame.max.x + window.x - 720.0) / 2.0, frame.min.y),
-        "right bar",
-    );
+    let (_, toast) = shell_placement(window, Some(&layout), None, Some(REFUSED), 0)
+        .toast
+        .unwrap();
+    assert!(toast.max.x <= frame.min.x, "{toast:?} left of {frame:?}");
 
-    // Both bars hold panels and there is no band: over the frame.
+    // Both bars hold panels and there is no band: over the map.
     let solution = solve_side_space(
         window,
-        UVec2::new(VISUAL_PLAY_FRAME_WIDTH, VISUAL_PLAY_FRAME_HEIGHT),
+        frame_size,
         &[
             claim(PanelKind::Journal, SidePreference::Left),
             claim(PanelKind::Conversation, SidePreference::Right),
@@ -327,11 +407,99 @@ fn the_strip_follows_the_side_layout_and_keeps_out_of_panels() {
     );
     let layout = solution.layout;
     let frame = layout.frame.expect("both fit at 32:9");
-    let rect = toast_strip_rect(window, Some(&layout), 20);
-    assert_near(
-        rect.min,
-        Vec2::new(frame.center().x - 360.0, frame.min.y),
-        "over the frame",
+    let (_, toast) = shell_placement(window, Some(&layout), None, Some(REFUSED), 0)
+        .toast
+        .unwrap();
+    assert!(frame.contains(toast.min) && frame.contains(toast.max));
+    assert!(toast.min.y > frame.min.y + 8.0 * frame.height() / 200.0);
+}
+
+/// A grow-left canvas that fills the window (512x240 at 5 by 6): over the
+/// map window, a cell in from its rules and right of the column's rule and
+/// the crawl (cell 19), clear of the ribbon's top band and the wind tab's
+/// bottom one, on the canvas's own cells.
+#[test]
+fn on_a_canvas_they_keep_clear_of_the_column_crawl_ribbon_and_tabs() {
+    let window = Vec2::new(2560.0, 1440.0);
+    let canvas = Rect::from_corners(Vec2::ZERO, window);
+    let placed = shell_placement(
+        window,
+        None,
+        Some((canvas, UVec2::new(512, 240))),
+        Some(REFUSED),
+        BOTH,
+    );
+    let (_, toast) = placed.toast.unwrap();
+    rect_near(
+        toast,
+        Vec2::new(47.0 * 40.0, 27.0 * 48.0),
+        Vec2::new(62.0 * 40.0, 28.0 * 48.0),
+        "toast",
+    );
+    rect_near(
+        placed.badges.unwrap(),
+        Vec2::new(48.0 * 40.0, 3.0 * 48.0),
+        Vec2::new(62.0 * 40.0, 4.0 * 48.0),
+        "badges",
+    );
+    // The longest line still clears the column and crawl.
+    let (_, toast) = shell_placement(
+        window,
+        None,
+        Some((canvas, UVec2::new(384, 240))),
+        Some(crate::enh::auto_combat::AUTO_READY),
+        0,
+    )
+    .toast
+    .unwrap();
+    assert!(
+        toast.min.x >= 20.0 * 8.0 * (2560.0 / 384.0) - 1e-3,
+        "{toast:?}"
+    );
+}
+
+/// The badges are their own node, in the chrome's blue with the words in
+/// the frame's font; with no badge set there is no node.
+#[test]
+fn the_badges_draw_as_their_own_node() {
+    let mut app = app(Some(Vec2::new(1920.0, 1080.0)));
+    frame(&mut app);
+    let badges = |app: &mut App| {
+        let mut query = app.world_mut().query::<(&BadgeStrip, &Node)>();
+        query.iter(app.world()).count()
+    };
+    assert_eq!(badges(&mut app), 0);
+    app.world_mut().resource_mut::<ShellBadges>().auto = true;
+    frame(&mut app);
+    assert_eq!(badges(&mut app), 1);
+    app.world_mut().resource_mut::<ShellBadges>().modified = true;
+    frame(&mut app);
+    assert_eq!(badges(&mut app), 1, "one strip, rebuilt");
+    *app.world_mut().resource_mut::<ShellBadges>() = ShellBadges::default();
+    frame(&mut app);
+    assert_eq!(badges(&mut app), 0);
+
+    let mut bytes = vec![0x00; CH_FONT_LEN];
+    bytes[usize::from(b'A') * CH_CELL_SIDE] = 0x80;
+    let font = parse_ch_font(&bytes, IBM_CH_FILE).unwrap();
+    let (w, h, rgba) = badge_rgba(&font, &[BADGE_AUTO]);
+    assert_eq!((w, h), (8 * 8, 8));
+    let pixel = |x: u32, y: u32| {
+        let i = ((y * w + x) * 4) as usize;
+        <[u8; 4]>::try_from(&rgba[i..i + 4]).unwrap()
+    };
+    assert_eq!(
+        pixel(0, 4),
+        crate::menu::frame::ega(crate::menu::frame::BAND)
+    );
+    assert_eq!(
+        pixel(16, 0),
+        crate::menu::frame::ega(crate::menu::frame::INK),
+        "the A's dot"
+    );
+    assert_eq!(
+        pixel(17, 0),
+        crate::menu::frame::ega(crate::menu::frame::PAPER)
     );
 }
 
@@ -374,7 +542,9 @@ fn the_toast_draws_as_a_node_and_never_writes_the_frame() {
     let drawn = strips(&mut app);
     assert_eq!(drawn.len(), 1);
     assert_eq!(drawn[0].0, REFUSED);
-    let rect = toast_strip_rect(Vec2::new(1920.0, 1080.0), None, REFUSED.len());
+    let (_, rect) = shell_placement(Vec2::new(1920.0, 1080.0), None, None, Some(REFUSED), 0)
+        .toast
+        .unwrap();
     assert_eq!(drawn[0].1.left, Val::Px(rect.min.x));
     assert_eq!(drawn[0].1.top, Val::Px(rect.min.y));
     assert_eq!(drawn[0].1.width, Val::Px(rect.width()));
@@ -411,48 +581,18 @@ fn nothing_draws_without_a_window() {
     assert_eq!(showing(&app).as_deref(), Some(REFUSED));
 }
 
+/// Each finds its own place: at 16:9 the bar holds the toast but not both
+/// badges side by side, so the badges go over the map while the toast
+/// stays in the bar.
 #[test]
-fn the_strip_takes_the_pictures_cells_and_sits_on_its_grid() {
-    // 4:3, 1600x1200: a 9-cell line over the frame starts on cell 15, not
-    // at 15.5 cells.
-    let window = Vec2::new(1600.0, 1200.0);
-    let frame = Rect::from_corners(Vec2::ZERO, window);
-    let rect = toast_strip_rect_on(window, None, Some((frame, UVec2::new(320, 200))), 9);
-    assert_near(
-        rect.min,
-        Vec2::new(15.0 * 40.0, 0.0),
-        "4:3 corner on the grid",
-    );
-    assert_near(rect.size(), Vec2::new(9.0 * 40.0, 48.0), "4:3 size");
-
-    // A grow-left canvas, 512x240 at 5x in a 2560x1440 window: the strip
-    // takes the canvas's cell (the 320x200 frame's would be larger), sits
-    // in the band above it and starts on a whole canvas cell.
-    let canvas = Rect::from_center_size(window_centre(2560.0, 1440.0), Vec2::new(2560.0, 1200.0));
-    let rect = toast_strip_rect_on(
-        Vec2::new(2560.0, 1440.0),
-        None,
-        Some((canvas, UVec2::new(512, 240))),
-        9,
-    );
-    let cell = 2560.0 / 64.0;
-    assert_near(
-        rect.size(),
-        Vec2::new(9.0 * cell, 1200.0 / 30.0),
-        "canvas size",
-    );
-    let offset = (rect.min.x - canvas.min.x) / cell;
+fn the_toast_and_the_badges_each_take_the_best_place() {
+    let placed = shell_placements(Vec2::new(1706.0, 960.0), None, None, Some(REFUSED), BOTH);
+    let (_, toast) = placed.toast.unwrap();
+    let badges = placed.badges.unwrap();
+    assert!(toast.min.x >= 1493.0, "the toast in the bar: {toast:?}");
     assert!(
-        (offset - offset.round()).abs() < 1e-3,
-        "on the canvas grid: {offset}"
+        badges.max.x <= 213.0 + 184.0 * 4.0,
+        "the badges over the map: {badges:?}"
     );
-    assert_near(
-        rect.min,
-        Vec2::new(canvas.min.x + 27.0 * cell, canvas.min.y - cell),
-        "canvas corner, in the band",
-    );
-}
-
-fn window_centre(w: f32, h: f32) -> Vec2 {
-    Vec2::new(w, h) / 2.0
+    assert!(toast.intersect(badges).is_empty());
 }

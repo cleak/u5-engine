@@ -196,8 +196,9 @@ of its keys in a fight ([auto-combat](settings.md#auto-combat),
 
 - **Hand a fight over.** Ctrl+A hands the member whose turn it is to
   auto-combat, Ctrl+Shift+A the whole party, and Ctrl+F the whole party
-  until the fight is over. A short note confirms each change, and any key
-  you press gives the prompt back. It never stops in the middle of
+  until the fight is over. A short note confirms each change, an `AUTO`
+  badge shows while anyone is handed over, and any key you press gives the
+  prompt back. It never stops in the middle of
   an attack.
 - **It plays by your keys.** Auto-combat types the keys you would type, one
   at a time: attack the nearest foe it can see, step towards one, or pass.
@@ -231,8 +232,9 @@ Checks behind it: with auto-combat off or under the parity lock there is no
 auto-combat state, no key is bound, no log is written and no `[combat]`
 section is added to `config.toml`; the keys an engaged fight typed, replayed
 with the feature off at the same frames, give the same game and the same
-`SAVED.GAM`, beside every other shipped enhancement; and the same keys and notes come with or
-without a monster the party cannot see.
+`SAVED.GAM`, beside every other shipped enhancement; the game's picture is
+the same with the badge shown and hidden; and the same keys and notes come
+with or without a monster the party cannot see.
 
 ### Optional enhancements: cheats and the change watch
 
@@ -273,7 +275,8 @@ is loaded, no key is taken and no file is read or written: the game is the
   game, needs no "Allow cheats", and never lists quest flags, seals, the
   Shadowlords or their hideouts.
 - **The "modified" mark.** Once a cheat has changed your game, the page
-  says "This game: MODIFIED" and every save you make is marked beside it
+  says "This game: MODIFIED", a brown `MOD` badge shows by the picture,
+  and every save you make is marked beside it
   (`save-meta.u5e`; [sidecars.md](sidecars.md#save-metau5e-the-modified-mark)).
   `SAVED.GAM` is never marked, so the original game still loads the save.
   Turning cheats off does not unmark a save. Limits: a save made while

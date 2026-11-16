@@ -41,7 +41,7 @@ use crate::enh::equivalence::{Owner, Scene, Shell, Timeline};
 use crate::enh::present::PresentHost;
 use bevy::prelude::*;
 
-pub(super) fn save_png(path: &Path, w: u32, h: u32, rgba: &[u8]) {
+pub(crate) fn save_png(path: &Path, w: u32, h: u32, rgba: &[u8]) {
     image::RgbaImage::from_raw(w, h, rgba.to_vec())
         .unwrap()
         .save(path)
@@ -137,7 +137,7 @@ pub(super) fn launch(grow: bool) -> VisualLaunchConfig {
 
 /// The picture the window shows under the menu: the presented image, or
 /// the faithful frame without a pipeline.
-pub(super) fn game_picture(shell: &Shell) -> (UVec2, Vec<u8>) {
+pub(crate) fn game_picture(shell: &Shell) -> (UVec2, Vec<u8>) {
     let world = shell.app.world();
     let handle = world
         .get_resource::<PresentHost>()

@@ -15,7 +15,7 @@ use u5_runtime::{PlayOptions, PlayState};
 use super::feed_tests::arena;
 use super::*;
 use crate::enh::equivalence::{Owner, Scene, Shell, Timeline};
-use crate::enh::toast::{toast_strip_rect, toast_strip_rgba};
+use crate::enh::toast::{shell_placement, toast_rgba};
 use crate::{VISUAL_PLAY_FRAME_HEIGHT, VISUAL_PLAY_FRAME_WIDTH, fitted_display_size};
 
 fn launch() -> VisualLaunchConfig {
@@ -63,15 +63,10 @@ fn shot(shell: &Shell, window: Vec2) -> image::RgbaImage {
         VISUAL_PLAY_FRAME_HEIGHT,
         Rect::from_center_size(window / 2.0, size),
     );
-    if let Some(text) = world.resource::<Toasts>().current() {
-        let (w, h, rgba) = toast_strip_rgba(&visual.text_font, text);
-        blit(
-            &mut canvas,
-            &rgba,
-            w,
-            h,
-            toast_strip_rect(window, None, text.len()),
-        );
+    let text = world.resource::<Toasts>().current();
+    if let Some((lines, rect)) = shell_placement(window, None, None, text, 0).toast {
+        let (w, h, rgba) = toast_rgba(&visual.text_font, &lines);
+        blit(&mut canvas, &rgba, w, h, rect);
     }
     canvas
 }

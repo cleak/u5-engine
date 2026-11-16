@@ -114,8 +114,9 @@ pub const AUTO_NOT_IN_COMBAT: &str = "Auto-combat: not in combat";
 /// terminal's `@auto` says the same).
 pub const AUTO_NO_PROMPT: &str = "Auto-combat: no member's prompt is open";
 /// The once-per-session note at the first combat prompt (6.2.1), 5 s.
-pub const AUTO_READY: &str =
-    "Auto-combat ready: Ctrl+A member, Ctrl+Shift+A party, Ctrl+F until done";
+/// Shorter than chapter 6's wording (73 cells), so it wraps whole at the
+/// font's own scale and is never squeezed to fit (integration polish).
+pub const AUTO_READY: &str = "Auto: Ctrl+A one, Ctrl+Shift+A all, Ctrl+F to end";
 
 /// The hand-back toasts (6.2.5), 2 s each. [`HandBack::Hurt`] names the
 /// member and is built from the roster name.

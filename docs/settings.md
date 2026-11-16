@@ -505,7 +505,9 @@ the file says; the watch keeps its own key.
 - **The "modified" mark.** Once a cheat has changed the game, the page's
   header reads "This game: MODIFIED", and each save you make is marked
   beside it in `save-meta.u5e`, never in `SAVED.GAM`
-  ([sidecars.md](sidecars.md#save-metau5e-the-modified-mark)). Turning
+  ([sidecars.md](sidecars.md#save-metau5e-the-modified-mark)), and a
+  brown `MOD` badge shows beside the picture (or in the map's top corner
+  when the window has no room) for the rest of the session. Turning
   cheats off does not unmark a save. A save made while cheats are off is
   not marked and shows "unknown" later.
 

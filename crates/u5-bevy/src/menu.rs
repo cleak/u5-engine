@@ -621,7 +621,7 @@ mod sheet_tests;
 mod plugin_tests;
 
 #[cfg(test)]
-mod review_tests;
+pub(crate) mod review_tests;
 
 #[cfg(test)]
 mod pages_settings_tests;
