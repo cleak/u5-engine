@@ -11,3 +11,7 @@
 pub mod clues;
 pub mod highlight;
 pub mod scrollback;
+
+// T1, the trajectory test of 8.6 (M6-08).
+#[cfg(test)]
+mod trajectory_tests;

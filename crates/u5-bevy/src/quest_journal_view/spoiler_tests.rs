@@ -508,3 +508,58 @@ fn the_live_page_and_panel_spoil_nothing_on_a_fresh_game() {
         audit_fresh(&format!("tier {tier} report"), &report_texts(&model));
     }
 }
+
+// ---------------------------------------------------------------------------
+// Chapter 8's T13b label (design 8.2.8, 8.6; build plan M6-08).
+
+/// With `clues`, `quest_tracker` and highlighting on at tier 2 the strip
+/// carries no `SPOILERS`; `clue_highlight = new` or `clue_misses` puts it
+/// there, as does `tracker_evidence = npc`.
+#[test]
+fn t13b_new_or_clue_misses_puts_spoilers_on_the_strip() {
+    use u5_runtime::enhancements::{ClueHighlight, ClueSettings, TrackerEvidence};
+    let clues = ClueSettings {
+        clues: true,
+        highlight: ClueHighlight::Asked,
+        quest_tracker: true,
+        ..ClueSettings::default()
+    };
+    let strip = |clues: ClueSettings| {
+        let ui = QuestJournalUi::new(JournalSettings {
+            clues,
+            ..JournalSettings::default()
+        });
+        let view = ui.view();
+        assert!(view.tab_strip, "the clue tabs and Quests");
+        strip_parts(&view)
+            .iter()
+            .any(|(part, ink)| *part == text::SPOILERS && *ink == BROWN)
+    };
+    assert_eq!(JournalSettings::default().tier, SpoilerTier::Goals);
+    assert!(!strip(clues), "tier 2, no spoiler value");
+    for (label, risky) in [
+        (
+            "new",
+            ClueSettings {
+                highlight: ClueHighlight::New,
+                ..clues
+            },
+        ),
+        (
+            "clue_misses",
+            ClueSettings {
+                misses: true,
+                ..clues
+            },
+        ),
+        (
+            "tracker_evidence = npc",
+            ClueSettings {
+                tracker_evidence: TrackerEvidence::Npc,
+                ..clues
+            },
+        ),
+    ] {
+        assert!(strip(risky), "{label}");
+    }
+}

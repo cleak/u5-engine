@@ -60,6 +60,13 @@ jobs:
       - name: Check formatting
         run: cargo fmt --all -- --check
 
+      - name: No player sidecar committed or exported
+        # Chapter 8's clean-room guard (design 8.6 T9b): no player sidecar
+        # file is tracked, and no exporter carries the clue log.
+        run: |
+          python3 -m unittest qa/tools/test_check_u5e_hygiene.py
+          python3 qa/tools/check_u5e_hygiene.py
+
   warnings:
     name: Build warnings
     needs: fmt

@@ -911,11 +911,19 @@ mod tests {
         let settings = resolve_launch(Some(&path), &[], LockState::Off);
         assert_eq!(settings.config.as_deref(), Some(path.as_path()));
         assert!(settings.warnings.is_empty());
-        // Of Recommended's rows only `display.sprite_composite` (chapter 9
-        // P5) has shipped, so it is the one toggle the preset turns on.
+        // Of Recommended's rows `display.sprite_composite` (chapter 9 P5)
+        // and chapter 8's three (M6-08) have shipped, so they are the
+        // toggles the preset turns on.
+        let mut on: Vec<Toggle> = settings.resolved.toggles.iter_on().collect();
+        on.sort_by_key(|toggle| toggle.key());
         assert_eq!(
-            settings.resolved.toggles.iter_on().collect::<Vec<_>>(),
-            [Toggle::DisplaySpriteComposite]
+            on,
+            [
+                Toggle::DisplaySpriteComposite,
+                Toggle::JournalClueHighlight,
+                Toggle::JournalClues,
+                Toggle::JournalQuestTracker,
+            ]
         );
         assert_eq!(
             settings.resolved.preset,
@@ -1121,13 +1129,17 @@ mod tests {
                 "--gem-map,",
                 "--quest-journal,",
                 "--journal-side-panel,",
+                "--clue-log,",
+                "--quest-tracker,",
                 "--scale-mode",
                 "--pixel-aspect",
                 "--pillar-fill",
                 "--bezel-image",
                 "--vsync,",
                 "--brightness",
-                "--spoilers"
+                "--spoilers",
+                "--clue-text",
+                "--clue-highlight"
             ]
         );
         for row in CatalogueRow::all().filter(|row| row.is_shipped()) {

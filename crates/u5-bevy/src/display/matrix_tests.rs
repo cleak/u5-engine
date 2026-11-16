@@ -53,6 +53,7 @@ use crate::enh::equivalence::{
     FrameRecord, Owner, Scene, Shell, ShellRun, Timeline, compare_shell_runs,
 };
 use crate::enh::gem_map::{GemMap, GemMapNode};
+use crate::enh::journal::clues::ClueObserver;
 use crate::enh::present::{PresentHost, PresentSteps, StepOrder};
 use crate::quest_journal_view::{JournalPanelPageOpen, QuestJournalUi};
 
@@ -133,7 +134,22 @@ impl Config {
                 .iter()
                 .any(|s| matches!(s, CliSetting::Enable(key) if key == name))
         };
-        (on("journal.page"), on("journal.side_panel"))
+        // Chapter 8 (M6-08): the clue log and the tracker bring the page's
+        // state too (Ctrl+J opens their tabs).
+        (
+            on("journal.page") || on("journal.clues") || on("journal.quest_tracker"),
+            on("journal.side_panel"),
+        )
+    }
+
+    /// Whether the settings run the clue observer (chapter 8): the log, or
+    /// highlighting in any mode.
+    fn clue_observer(&self) -> bool {
+        self.settings.iter().any(|s| match s {
+            CliSetting::Enable(key) => key == "journal.clues",
+            CliSetting::Set { key, value } => key == "journal.clue_highlight" && value != "off",
+            _ => false,
+        })
     }
 
     /// Whether the settings composite sprites over terrain (chapter 9).
@@ -224,6 +240,7 @@ fn alone() -> Vec<Config> {
     configs.extend(light_alone());
     configs.extend(gem_alone());
     configs.extend(journal_alone());
+    configs.extend(clue_alone());
     for (name, window) in [
         ("grow_left@3440x1440", (3440.0, 1440.0)),
         ("grow_left@1920x1080", (1920.0, 1080.0)),
@@ -402,6 +419,109 @@ fn journal_pair_values() -> Vec<(&'static str, Vec<CliSetting>)> {
         .into_iter()
         .filter(|(name, _)| matches!(*name, "journal.page" | "journal.side_panel"))
         .collect()
+}
+
+// --- Chapter 8, the clue log and the trackers (build plan M6-08). --------
+
+/// Chapter 8's shipped keys (design 8.4.1), each away from its default. A
+/// key that needs `journal.clues`, and a style or evidence value, brings
+/// its switch with it. `journal.clue_misses` waits for D8.14.
+fn clue_values() -> Vec<(&'static str, Vec<CliSetting>)> {
+    let clues = |extra: Vec<CliSetting>| {
+        let mut settings = vec![on("journal.clues")];
+        settings.extend(extra);
+        settings
+    };
+    vec![
+        ("journal.clues", clues(vec![])),
+        (
+            "journal.clue_text=live",
+            clues(vec![set("journal.clue_text", "live")]),
+        ),
+        ("journal.clue_toast", clues(vec![on("journal.clue_toast")])),
+        ("journal.notes", clues(vec![on("journal.notes")])),
+        (
+            "journal.clue_highlight=asked",
+            vec![set("journal.clue_highlight", "asked")],
+        ),
+        (
+            "journal.clue_highlight=asked_elsewhere",
+            vec![set("journal.clue_highlight", "asked_elsewhere")],
+        ),
+        (
+            "journal.clue_highlight=new",
+            vec![set("journal.clue_highlight", "new")],
+        ),
+        (
+            "journal.clue_highlight_style=tint",
+            vec![
+                set("journal.clue_highlight", "asked"),
+                set("journal.clue_highlight_style", "tint"),
+            ],
+        ),
+        (
+            "journal.clue_scrollback",
+            vec![on("journal.clue_scrollback")],
+        ),
+        ("journal.quest_tracker", vec![on("journal.quest_tracker")]),
+        (
+            "journal.tracker_evidence=npc",
+            vec![
+                on("journal.quest_tracker"),
+                set("journal.tracker_evidence", "npc"),
+            ],
+        ),
+    ]
+}
+
+/// Each key alone, then the pairs the design names (8.4.4): highlighting
+/// with the wider world view (Ctrl+P typed), the scrollback beside the
+/// journal panel and under grow-left, and Recommended's three with the
+/// panel.
+fn clue_alone() -> Vec<Config> {
+    let mut configs: Vec<Config> = clue_values()
+        .into_iter()
+        .map(|(name, settings)| Config::new(name, settings))
+        .collect();
+    for (name, settings) in [
+        (
+            "clue_highlight=asked + grow_left",
+            vec![
+                set("journal.clue_highlight", "asked"),
+                on("display.grow_left"),
+            ],
+        ),
+        (
+            "clue_highlight=new + grow_left",
+            vec![
+                set("journal.clue_highlight", "new"),
+                on("display.grow_left"),
+            ],
+        ),
+        (
+            "clue_scrollback + grow_left",
+            vec![on("journal.clue_scrollback"), on("display.grow_left")],
+        ),
+    ] {
+        configs.push(Config {
+            column_keys: true,
+            ..Config::new(name, settings)
+        });
+    }
+    configs.push(Config::new(
+        "clue_scrollback + side_panel",
+        vec![on("journal.clue_scrollback"), on("journal.side_panel")],
+    ));
+    configs.push(Config::new(
+        "clues, clue_highlight=asked, quest_tracker + side_panel",
+        vec![
+            on("journal.clues"),
+            set("journal.clue_highlight", "asked"),
+            on("journal.quest_tracker"),
+            on("journal.side_panel"),
+        ],
+    ));
+    configs
 }
 
 /// Each of [`light_values`] with the wider world view and with sharp
@@ -802,6 +922,8 @@ struct Trace {
     gem_plugin: bool,
     /// Whether the journal page and the journal panel were in the app.
     journal: (bool, bool),
+    /// Whether the clue observer was in the app (chapter 8).
+    clue_observer: bool,
 }
 
 fn copy_dir(from: &Path, to: &Path) {
@@ -876,6 +998,7 @@ fn run(
             .world()
             .contains_resource::<JournalPanelPageOpen>(),
     );
+    let clue_observer = shell.app.world().contains_resource::<ClueObserver>();
     let composes = shell
         .app
         .world()
@@ -905,6 +1028,7 @@ fn run(
         gem_frames,
         gem_plugin,
         journal,
+        clue_observer,
     }
 }
 
@@ -976,6 +1100,7 @@ fn check(script: &Script, configs: &[Config]) -> Vec<String> {
             assert!(off.steps.is_empty() && !off.masks_built);
             assert!(!off.gem_plugin && off.gem_frames == 0);
             assert_eq!(off.journal, (false, false));
+            assert!(!off.clue_observer);
             offs.push((off_key, off));
         }
         let off = &offs.iter().find(|(key, _)| *key == off_key).unwrap().1;
@@ -1038,6 +1163,14 @@ fn check(script: &Script, configs: &[Config]) -> Vec<String> {
             on.journal,
             config.journal(),
             "{} / {}: the journal",
+            script.name,
+            config.name
+        );
+        // Chapter 8: the observer is in the app exactly when it runs.
+        assert_eq!(
+            on.clue_observer,
+            config.clue_observer(),
+            "{} / {}: the clue observer",
             script.name,
             config.name
         );

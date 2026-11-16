@@ -1045,6 +1045,21 @@ pub fn unique_scratch_dir(label: &str) -> PathBuf {
     dir
 }
 
+/// Pins the QA seed control ([`crate::prng::FIXED_HOST_CLOCK_ENV`]) to one
+/// time of day for the whole test process, so a host-clock seed event (the
+/// stranger opener of `conversation.md §9` step 3, `prng.md §3`) reads the
+/// same time in every run, as the paired harness does. Shell equivalence
+/// tests that open a conversation call it first; no test depends on the
+/// variable being unset.
+pub fn fix_host_clock_for_tests() {
+    static FIXED: std::sync::Once = std::sync::Once::new();
+    FIXED.call_once(|| {
+        // SAFETY: set once, before any run that needs it reads it; every
+        // other use in the process only reads the variable.
+        unsafe { std::env::set_var(crate::prng::FIXED_HOST_CLOCK_ENV, "12:34:56.78") };
+    });
+}
+
 pub fn debug_game_dir() -> PathBuf {
     let unique = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)

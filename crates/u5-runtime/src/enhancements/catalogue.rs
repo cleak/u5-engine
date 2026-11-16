@@ -162,7 +162,8 @@ pub const JOURNAL_P3: Phase = Phase::new(5, "Phase 3");
 /// `side_panel_side`; build plan M5-01). Shipped in M5-06.
 pub const JOURNAL_P3B: Phase = Phase::new(5, "Phase 3b");
 // Chapter 8, the clue log and quest trackers (design 8.5; build plan M6).
-// Every row is added in M6-01 and stays hidden until M6-08 ships the phases.
+// Every row is added in M6-01; M6-08 ships every phase but 1d, which waits
+// for D8.14.
 /// Chapter 8, Phase 1a: capture and the log (`journal.clues`).
 pub const CLUES_P1A: Phase = Phase::new(8, "Phase 1a");
 /// Chapter 8, Phase 1b: text, scrollback, toast and notes.
@@ -196,6 +197,12 @@ pub const SHIPPED_PHASES: &[Phase] = &[
     GEM_G5,
     JOURNAL_P3,
     JOURNAL_P3B,
+    // Chapter 8 (M6-08). `CLUES_P1D` (`journal.clue_misses`) waits for D8.14.
+    CLUES_P1A,
+    CLUES_P1B,
+    CLUES_P1C,
+    CLUES_P2A,
+    CLUES_P2B,
 ];
 
 /// A soft dependency (design 1.4.5): what a feature prefers to have, and

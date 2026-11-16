@@ -1,12 +1,13 @@
 //! Chapter 8's `[journal]` rows and their typed view (design 8.4.1,
-//! 8.4.5; build plan M6-01, T3c). The rows ship in M6-08; until then the
-//! tests resolve through the catalogue's test override.
+//! 8.4.5; build plan M6-01, T3c). The rows ship in M6-08 (all but
+//! `clue_misses`, which waits for D8.14), so the tests that need every
+//! row resolve through the catalogue's test override.
 
 use super::*;
 use crate::enhancements::catalogue::{
     ApplyAt, CLUES_P1A, CLUES_P1B, CLUES_P1C, CLUES_P1D, CLUES_P2A, CLUES_P2B, CatalogueRow,
-    EffectClass, OptionDefault, OptionKind, PRESETS, Phase, Preset, Tag, Tier, needs_line,
-    prerequisite,
+    EffectClass, OptionDefault, OptionKind, PRESETS, Phase, Preset, SHIPPED_PHASES, Tag, Tier,
+    needs_line, prerequisite,
 };
 use crate::enhancements::resolve::{ResolveInput, resolve, resolve_as_shipped};
 use crate::enhancements::source::{
@@ -232,34 +233,54 @@ fn chapter_8_has_ten_rows_and_no_map_links_yet() {
 }
 
 #[test]
-fn every_chapter_8_row_is_hidden_in_this_build() {
+fn chapter_8_ships_in_m6_08_but_clue_misses_waits_for_d8_14() {
+    for phase in [CLUES_P1A, CLUES_P1B, CLUES_P1C, CLUES_P2A, CLUES_P2B] {
+        assert!(SHIPPED_PHASES.contains(&phase), "{phase:?}");
+    }
+    assert!(!SHIPPED_PHASES.contains(&CLUES_P1D), "D8.14");
     for key in CLUE_KEYS {
         let row = CatalogueRow::find(key).unwrap();
-        assert!(!row.is_shipped(), "{key} ships in M6-08");
+        assert_eq!(row.is_shipped(), *key != CLUE_MISSES_KEY, "{key}");
     }
-    // A stored value is not applied, with a note, and the view is default.
+    // The shipped rows take the file with no note; `clue_misses` is the
+    // one row still hidden, kept at its default with a note.
     let stored = Stored::default()
         .with(CLUES_KEY, SettingValue::Bool(true))
         .with(CLUE_HIGHLIGHT_KEY, SettingValue::Str("asked".into()))
-        .with(QUEST_TRACKER_KEY, SettingValue::Bool(true));
+        .with(QUEST_TRACKER_KEY, SettingValue::Bool(true))
+        .with(CLUE_MISSES_KEY, SettingValue::Bool(true));
     let resolved = resolve(input(Some(&stored), &[]));
-    assert_eq!(resolved.journal().clues, ClueSettings::default());
-    assert!(resolved.is_classic());
-    assert_eq!(resolved.notes.len(), 3, "{:?}", note_lines(&resolved));
-    assert!(
-        resolved
-            .notes
-            .iter()
-            .all(|note| matches!(note, SettingNote::NotAvailable { .. }))
-    );
-    // Presets skip the hidden rows.
-    for preset in PRESETS {
-        let toggles = preset.toggles();
-        for key in CLUE_KEYS {
-            if let Some(toggle) = Toggle::from_key(key) {
-                assert!(!toggles.on(toggle), "{preset:?} sets hidden {key}");
-            }
+    let view = resolved.journal().clues;
+    assert_eq!(
+        view,
+        ClueSettings {
+            clues: true,
+            highlight: ClueHighlight::Asked,
+            quest_tracker: true,
+            ..ClueSettings::default()
         }
+    );
+    assert!(!view.misses && !view.spoiler_risk());
+    assert!(
+        matches!(
+            resolved.notes.as_slice(),
+            [SettingNote::NotAvailable {
+                key: "journal.clue_misses"
+            }]
+        ),
+        "{:?}",
+        note_lines(&resolved)
+    );
+    // Recommended and Everything set the three design keys (D8.3);
+    // Classic none, and no preset sets a spoiler value.
+    for preset in PRESETS {
+        let view = resolve(input(None, &[CliSetting::Preset(*preset)]))
+            .journal()
+            .clues;
+        let on = *preset != Preset::Classic;
+        assert_eq!(view.clues && view.quest_tracker, on, "{preset:?}");
+        assert_eq!(view.highlight == ClueHighlight::Asked, on, "{preset:?}");
+        assert!(!view.spoiler_risk(), "{preset:?}");
     }
 }
 

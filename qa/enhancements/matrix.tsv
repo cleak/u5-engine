@@ -14,9 +14,9 @@ alone:journal.page	journal.page=true
 alone:journal.side_panel	journal.side_panel=true
 alone:journal.clues	journal.clues=true
 alone:journal.clue_scrollback	journal.clue_scrollback=true
-alone:journal.clue_toast	journal.clue_toast=true
-alone:journal.notes	journal.notes=true
-alone:journal.clue_misses	journal.clue_misses=true
+alone:journal.clue_toast	journal.clues=true,journal.clue_toast=true
+alone:journal.notes	journal.clues=true,journal.notes=true
+alone:journal.clue_misses	journal.clues=true,journal.clue_misses=true
 alone:journal.quest_tracker	journal.quest_tracker=true
 alone:enhancements.schema=1	enhancements.schema=1
 alone:enhancements.preset=recommended	enhancements.preset=recommended
@@ -73,7 +73,7 @@ alone:journal.spoiler_tier=4	journal.spoiler_tier=4
 alone:journal.mantras=never	journal.mantras=never
 alone:journal.side_panel_side=left	journal.side_panel_side=left
 alone:journal.side_panel_side=right	journal.side_panel_side=right
-alone:journal.clue_text=live	journal.clue_text=live
+alone:journal.clue_text=live	journal.clues=true,journal.clue_text=live
 alone:journal.clue_highlight=asked	journal.clue_highlight=asked
 alone:journal.clue_highlight=asked_elsewhere	journal.clue_highlight=asked_elsewhere
 alone:journal.clue_highlight=new	journal.clue_highlight=new

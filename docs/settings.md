@@ -38,8 +38,10 @@ settings page, a stored value is kept but not used, and presets skip it.
 
 No preset turns on a cheat, and the only deviation a preset sets is
 `combat.fast_forward`. A preset sets only what is available in this build.
-In this build Recommended turns on only sprites over terrain
-(`display.sprite_composite`), and Everything adds sharp scaling
+In this build Recommended turns on sprites over terrain
+(`display.sprite_composite`) and the clue log with its two helpers
+(`journal.clues`, `journal.clue_highlight = "asked"` and
+`journal.quest_tracker`), and Everything adds sharp scaling
 (`display.scale_mode = "sharp"`) and the F11 fullscreen key
 (`display.fullscreen_key`); none of them changes the game. The wider world
 view is a deviation, so no preset turns it on. Everything also turns on the
@@ -80,6 +82,10 @@ preferences.
 | `--quest-journal`, `--no-quest-journal` | `--enable` / `--disable journal.page`: Ctrl+J opens the quest journal page. |
 | `--journal-side-panel`, `--no-journal-side-panel` | `--enable` / `--disable journal.side_panel`: a short quest summary in a bar beside the picture. |
 | `--spoilers N` | `--set journal.spoiler_tier=N`: what the journal tells, 1 to 4 (2 is the default; 3 and 4 are spoilers). With `--quest-journal-report` it picks the report's tier instead. |
+| `--clue-log`, `--no-clue-log` | `--enable` / `--disable journal.clues`: keep a log, per save, of what people have told you. |
+| `--clue-text MODE` | `--set journal.clue_text=MODE`: `off` or `live` (show what was said, for this session only). |
+| `--clue-highlight MODE` | `--set journal.clue_highlight=MODE`: `off`, `asked`, `asked_elsewhere` or `new` (a spoiler). |
+| `--quest-tracker`, `--no-quest-tracker` | `--enable` / `--disable journal.quest_tracker`: quest cards from what your save shows you did. |
 
 `config.toml` applies to the default launch (no game folder or mode on the
 command line); other launches use the command line alone. An unknown key on
@@ -396,6 +402,76 @@ its idle time under the open page exactly as if you had stopped typing (if
 the game stops waiting at its prompt, for example because combat starts,
 the page closes). The journal keeps no file of its own.
 
+## The clue log and quest trackers
+
+What people have told you, kept per save, and a card for each quest your
+save shows you have begun. Every setting is off by default; Recommended and
+Everything turn on the log, `asked` highlighting and the tracker. Ctrl+J
+opens the journal page whenever `journal.page`, `journal.clues` or
+`journal.quest_tracker` is on; without `journal.page` it shows only these
+tabs. Tab and Shift+Tab move between the tabs at the top of the page.
+
+- `journal.clues`, **"Clue log (what people have told you)"**
+  (`--clue-log`): every topic you ask and the answer's place, under the
+  **Clues** tab (by person, or by place with `V`) and the **Topics** tab (by
+  the word you asked). A person is named only once they told you their
+  name; until then they are listed by town. Up, Down, PgUp, PgDn, Home and
+  End move, Enter opens a group or a clue, `/` searches, `F` and Shift+F
+  change the filter, `S` stars, `H` hides and `P` pins a clue to the side
+  panel (to the top of the Clues tab without it). It starts or stops at
+  the next command prompt, never during a conversation. The game's save
+  holds no record of what you asked, so a log turned on mid-game starts
+  empty, apart from the people your save says you were introduced to.
+- `journal.clue_text` (`--clue-text`): `off` (the default) shows where a
+  clue was heard; `live` also shows what was said, for this session only,
+  and never writes it to a file. A third value, `kept`, waits for a
+  decision and is not in this build.
+- `journal.clue_highlight` (`--clue-highlight`): marks under the words of
+  window 2 while a person talks. `asked` marks topics you already asked
+  this person: dotted when the answer cannot have changed, dashed when it
+  may differ now (it never says what changed). `asked_elsewhere` adds a
+  sparse mark for words you asked someone else. **`new` is a spoiler**: it
+  marks words you have not asked yet, and the journal's title then says
+  `SPOILERS`; no preset sets it. `journal.clue_highlight_style` picks
+  `dotted` underlines or a `tint`. Highlighting alone (without the log)
+  remembers this conversation only and touches no file. Only the picture
+  you see is marked; the game's own frame, text and wrapping never change.
+- `journal.clue_scrollback`: a panel in a bar beside the picture with the
+  current conversation's lines, so the ones that scrolled away stay
+  readable. It is hidden, with one note, while the wider world view fills
+  the window; `display.panel_priority` decides when it and the journal's
+  side panel want the same bar.
+- `journal.clue_toast`: one "Clue log updated" note after a conversation
+  that logged something. `journal.notes`: your own notes, on a clue or a
+  person, under a **Notes** tab (`N` writes one).
+- `journal.quest_tracker`, **"Quest tracker cards"** (`--quest-tracker`): a
+  **Quests** tab with a card for each quest your save shows you have begun
+  (an ordination, an open seal, an item carried), and the steps the game has
+  already given you. With the page on, the cards take the Virtues section's
+  place. With the log on, Enter on a step lists the clues you pinned to it,
+  and `Q` on a clue pins it to a quest. `journal.tracker_evidence = "npc"`
+  is a spoiler (it shows which people matter) and marks the title
+  `SPOILERS`.
+- `journal.clue_misses` (words nobody answered) is a spoiler and waits for
+  a decision; it is not in this build.
+
+**What it never tells** at spoiler tiers 1 and 2: a new game shows no
+person, town, keyword, dungeon, Shadowlord, item or tool and no card, and
+each thing you do adds only its own line. No count of what is left ("2/8"),
+no clue starred for you, and no answer you have not found. Tiers 3 and 4
+(`journal.spoiler_tier`) add the hints of chapter 5 and the links the
+specification gives, and say `SPOILERS`.
+
+**The file.** With the log on, the clues are saved with the game in
+`journal.u5e` beside the save ([sidecars.md](sidecars.md#player-sidecars)),
+only when the game saves; a reload drops what was heard since. It never
+holds what anyone said, nor any of the game's own text. Nothing copies
+it out of the save folder.
+
+Nothing here changes the game: the log only reads what the game already
+printed, never runs a conversation itself, and takes no key the game would
+read.
+
 ## The parity lock
 
 `--parity-lock`, or `U5_PARITY_LOCK=1` in the environment, turns every
@@ -434,6 +510,14 @@ one that types keys must change it exactly as typing those keys would:
   map cell out of the party's sight, and with sprites over terrain and
   brightness on, to draw under each sprite exactly the ground its cell
   shows when empty and never to light a pixel the original leaves black.
+  The clue log has a scripted conversation (a stranger's greeting, keywords,
+  a held page, a gold demand, the party's name asked, a branch and a
+  prompt inside it, an unknown word, a runic answer) run with the chapter
+  off, with every key on at its spoiler values, and with Recommended,
+  compared frame by frame on the random numbers, the clock, the messages,
+  the conversation flags and the saved files; its keys are in the display
+  matrix too, highlighting with the wider view and the scrollback beside
+  the journal panel among them.
 - `qa/enhancements/matrix.tsv` is the toggle matrix: every key alone, a
   pairwise covering of the toggles and classed values, and everything on
   except the cheats. It is generated from the catalogue, and a test keeps
@@ -470,12 +554,12 @@ one that types keys must change it exactly as typing those keys would:
 | gem_map.enhanced | Enhanced gem map | bool = false | a, P | feature | --gem-map | - | yes |
 | journal.page | Quest journal page (Ctrl+J) | bool = false | a, F | feature | --quest-journal | - | yes |
 | journal.side_panel | Quest journal side panel | bool = false | a, F | feature | --journal-side-panel | - | yes |
-| journal.clues | Clue log (what people have told you) | bool = false | a, P | feature | --clue-log | - | later (chapter 8 Phase 1a) |
-| journal.clue_scrollback | Conversation scrollback panel | bool = false | a, F | feature | - | - | later (chapter 8 Phase 1b) |
-| journal.clue_toast | Say when the clue log was updated | bool = false | a, F | feature | - | - | later (chapter 8 Phase 1b) |
-| journal.notes | Your own notes in the journal | bool = false | a, F | feature | - | - | later (chapter 8 Phase 1b) |
+| journal.clues | Clue log (what people have told you) | bool = false | a, P | feature | --clue-log | - | yes |
+| journal.clue_scrollback | Conversation scrollback panel | bool = false | a, F | feature | - | - | yes |
+| journal.clue_toast | Say when the clue log was updated | bool = false | a, F | feature | - | - | yes |
+| journal.notes | Your own notes in the journal | bool = false | a, F | feature | - | - | yes |
 | journal.clue_misses | Keep the words nobody answered | bool = false | a, F | deviation, spoiler risk | - | - | later (chapter 8 Phase 1d) |
-| journal.quest_tracker | Quest tracker cards | bool = false | a, F | feature | --quest-tracker | - | later (chapter 8 Phase 2a) |
+| journal.quest_tracker | Quest tracker cards | bool = false | a, F | feature | --quest-tracker | - | yes |
 | enhancements.schema | Settings file format version | int 1..1 = 1 | -, L | feature | - | - | yes |
 | enhancements.preset | Preset | enum classic\|recommended\|everything = classic | -, P | feature | --preset | - | yes |
 | keys.menu | Open the menu | chord = F12 | -, F | feature | - | a keyboard | later (chapter 1 P5) |
@@ -520,8 +604,8 @@ one that types keys must change it exactly as typing those keys would:
 | journal.spoiler_tier | Spoiler tier: 1 progress, 2 goals you have been given, 3 Spoiler: hints, 4 Spoiler: hints and answers you have used | int 1..4 = 2 | a, F | feature (deviation: 3, 4) | --spoilers | - | yes |
 | journal.mantras | Mantras at tier 4: masked until you select one, or never shown | enum reveal\|never = reveal | a, F | feature | - | - | yes |
 | journal.side_panel_side | Side of the journal panel | enum auto\|left\|right = auto | a, F | feature | - | - | yes |
-| journal.clue_text | Show what people said in the clue log | enum off\|live = off | a, F | feature | --clue-text | - | later (chapter 8 Phase 1b) |
-| journal.clue_highlight | Mark topics you have already asked about (new is a spoiler: marks topics you have not asked) | enum off\|asked\|asked_elsewhere\|new = off | a, F | feature (deviation: new) | --clue-highlight | - | later (chapter 8 Phase 1c) |
-| journal.clue_highlight_style | How asked topics are marked | enum dotted\|tint = dotted | a, F | feature | - | - | later (chapter 8 Phase 1c) |
-| journal.tracker_evidence | What counts as evidence on a tracker card (npc is a spoiler: shows which people matter) | enum record\|npc = record | a, F | feature (deviation: npc) | - | - | later (chapter 8 Phase 2b) |
+| journal.clue_text | Show what people said in the clue log | enum off\|live = off | a, F | feature | --clue-text | - | yes |
+| journal.clue_highlight | Mark topics you have already asked about (new is a spoiler: marks topics you have not asked) | enum off\|asked\|asked_elsewhere\|new = off | a, F | feature (deviation: new) | --clue-highlight | - | yes |
+| journal.clue_highlight_style | How asked topics are marked | enum dotted\|tint = dotted | a, F | feature | - | - | yes |
+| journal.tracker_evidence | What counts as evidence on a tracker card (npc is a spoiler: shows which people matter) | enum record\|npc = record | a, F | feature (deviation: npc) | - | - | yes |
 <!-- END GENERATED -->

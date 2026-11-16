@@ -901,3 +901,6 @@ fn endgame_rows(snap: &QuestSnapshot, tier: SpoilerTier) -> Vec<JournalRow> {
 
 #[cfg(test)]
 mod tests;
+// Chapter 8's T13b (M6-08).
+#[cfg(test)]
+mod fresh_spoiler_tests;

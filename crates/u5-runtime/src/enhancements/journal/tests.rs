@@ -222,7 +222,14 @@ fn every_journal_row_ships_in_m5_06() {
     assert!(everything.page && everything.side_panel);
     assert_eq!(everything.tier, SpoilerTier::Goals);
     let recommended = resolve(input(None, &[CliSetting::Preset(Preset::Recommended)])).journal();
-    assert_eq!(recommended, JournalSettings::default());
+    // Chapter 8's keys it does set (M6-08) are tested with their rows.
+    assert_eq!(
+        recommended,
+        JournalSettings {
+            clues: recommended.clues,
+            ..JournalSettings::default()
+        }
+    );
 }
 
 // --- The typed view. -----------------------------------------------------
@@ -329,7 +336,13 @@ fn no_preset_sets_a_tier_above_two() {
     assert!(everything.page && everything.side_panel);
     assert_eq!(everything.tier, SpoilerTier::Goals);
     let recommended = shipped(None, &[CliSetting::Preset(Preset::Recommended)]).journal();
-    assert_eq!(recommended, JournalSettings::default());
+    assert_eq!(
+        recommended,
+        JournalSettings {
+            clues: recommended.clues,
+            ..JournalSettings::default()
+        }
+    );
 }
 
 #[test]

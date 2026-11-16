@@ -304,6 +304,8 @@ mod tests {
         let sidecars = source.join(ENHANCEMENT_SIDECAR_DIR);
         fs::create_dir_all(&sidecars).unwrap();
         fs::write(sidecars.join("automap.u5e"), b"source-memory").unwrap();
+        // Chapter 8's clue log never leaves its save folder (8.3.7, T9b).
+        fs::write(sidecars.join("journal.u5e"), b"source-clues").unwrap();
         let mut permissions = fs::metadata(&save_path).unwrap().permissions();
         permissions.set_readonly(true);
         fs::set_permissions(&save_path, permissions).unwrap();
@@ -311,6 +313,7 @@ mod tests {
         let runtime = prepare_writable_game_dir_in(&source, &root).unwrap();
         assert_eq!(fs::read(runtime.join("IBM.CH")).unwrap(), b"font");
         assert!(!runtime.join(ENHANCEMENT_SIDECAR_DIR).exists());
+        assert!(!runtime.join("journal.u5e").exists());
 
         // The runtime save's own folder is left alone by the next mirror.
         let own = runtime.join(ENHANCEMENT_SIDECAR_DIR);
