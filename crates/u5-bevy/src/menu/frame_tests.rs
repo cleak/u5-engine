@@ -247,9 +247,12 @@ fn faithful_index(rgba: &[u8], x: u32, y: u32) -> u8 {
 fn dividers_meet_the_ring_as_the_stats_panel_does() {
     let font = font();
     let faithful = faithful_chrome(&font, None);
+    // Tight, the kit's divider is the stats panel's pixel for pixel; by
+    // default each rule stands a pixel off its box (below).
     let panel = Panel::new(CellRect::new(23, 0, 17, 25))
         .divider(7)
-        .divider(10);
+        .divider(10)
+        .tight();
     let mut img = MenuImage::new(320, 200);
     draw_panel(&mut img, &panel);
     for y in 0..87u32 {
@@ -267,6 +270,44 @@ fn dividers_meet_the_ring_as_the_stats_panel_does() {
             );
         }
     }
+}
+
+/// By default a divider's rules stand a pixel off the boxes beside it
+/// (the footer's help never touches the rule over it): black, rule, four
+/// rows of blue, rule, black, and the junctions with the ring still merge
+/// with no rule pixel doubled. The ring's rules stay on the frame's own.
+#[test]
+fn a_divider_s_rules_stand_a_pixel_off_its_boxes() {
+    let panel = Panel::new(CellRect::new(0, 0, 40, 24)).divider(10);
+    let mut img = MenuImage::new(320, 200);
+    draw_panel(&mut img, &panel);
+    let column: Vec<Option<u8>> = (80..88).map(|y| index(&img, 100, y)).collect();
+    assert_eq!(
+        column,
+        [
+            Some(PAPER),
+            Some(RULE),
+            Some(BAND),
+            Some(BAND),
+            Some(BAND),
+            Some(BAND),
+            Some(RULE),
+            Some(PAPER)
+        ]
+    );
+    // At the side ring the band runs into the ring's blue and the side
+    // rule turns the corner at the divider's rule.
+    assert_eq!(index(&img, 7, 80), Some(RULE));
+    assert_eq!(index(&img, 7, 81), Some(RULE));
+    assert_eq!(index(&img, 7, 83), Some(BAND));
+    assert_eq!(index(&img, 7, 86), Some(RULE));
+    assert_eq!(index(&img, 7, 87), Some(RULE));
+    assert_eq!(index(&img, 8, 80), Some(PAPER));
+    assert_eq!(index(&img, 8, 81), Some(RULE));
+    // The ring is the frame's: rules at y 7 and 184.
+    assert_eq!(index(&img, 100, 7), Some(RULE));
+    assert_eq!(index(&img, 100, 8), Some(PAPER));
+    assert_eq!(index(&img, 100, 184), Some(RULE));
 }
 
 /// The middle band between the map view and the stats panel is a split:
@@ -292,7 +333,8 @@ fn splits_meet_the_ring_as_the_middle_band_does() {
 
 /// No rule pixel is doubled or missing: a band pixel is white exactly when
 /// it touches a box (diagonals included), every rule is on a cell's first
-/// or last pixel, and two rules are never adjacent.
+/// or last pixel (a divider's a pixel in, by default), and two rules are
+/// never adjacent. Each panel is checked tight and by default.
 #[test]
 fn no_rule_pixel_is_doubled_or_missing() {
     let panels = [
@@ -309,17 +351,23 @@ fn no_rule_pixel_is_doubled_or_missing() {
             .split(12, 0, 10)
             .split(30, 10, 19),
     ];
-    for panel in &panels {
+    let panels = panels.iter().flat_map(|p| [p.clone(), p.clone().tight()]);
+    for panel in &panels.collect::<Vec<_>>() {
         let mut img = MenuImage::new(320, 200);
         draw_panel(&mut img, panel);
         let (x0, y0, x1, y1) = panel.rect.pixels();
         let boxes = panel.boxes();
+        let cell_box = |col: u32, row: u32| boxes.iter().any(|b| b.contains(col, row));
         let is_box = |x: i64, y: i64| {
-            x >= 0
-                && y >= 0
-                && boxes
-                    .iter()
-                    .any(|b| b.contains(x as u32 / CELL, y as u32 / CELL))
+            if x < 0 || y < 0 {
+                return false;
+            }
+            let (col, row, line) = (x as u32 / CELL, y as u32 / CELL, y as u32 % CELL);
+            cell_box(col, row)
+                || (panel.breathe
+                    && panel.dividers.contains(&row)
+                    && ((line == CELL - 1 && cell_box(col, row + 1))
+                        || (line == 0 && cell_box(col, row - 1))))
         };
         for y in y0..=y1 {
             for x in x0..=x1 {
@@ -336,8 +384,14 @@ fn no_rule_pixel_is_doubled_or_missing() {
                 let want = if touches { RULE } else { BAND };
                 assert_eq!(ega_index(pixel), Some(want), "({x}, {y}) of {panel:?}");
                 if want == RULE {
+                    let divider = panel.dividers.contains(&(y / 8));
+                    let edge = if panel.breathe && divider {
+                        matches!(y % 8, 1 | 6)
+                    } else {
+                        matches!(y % 8, 0 | 7)
+                    };
                     assert!(
-                        matches!(x % 8, 0 | 7) || matches!(y % 8, 0 | 7),
+                        matches!(x % 8, 0 | 7) || edge,
                         "rule off the cell edge at ({x}, {y})"
                     );
                 }

@@ -14,8 +14,10 @@
 //!   [`CHROME_CORNER_PROFILE`], the staircase both of the original's blue
 //!   frames use.
 //! - **Dividers** ([`Panel::divider`], [`Panel::split`]) are one-cell bands
-//!   across the panel, as the stats panel's divider rows 7 and 10 are: a
-//!   rule, six rows of blue, a rule. Where one meets the ring the rules turn
+//!   across the panel, as the stats panel's divider rows 7 and 10 are,
+//!   except that each box's black reaches a pixel into the band, so the
+//!   rules stand a pixel off the text: black, a rule, four rows of blue, a
+//!   rule, black. Where one meets the ring the rules turn
 //!   the corner and the blues merge, which is the faithful junction pixel
 //!   for pixel; nothing is doubled and nothing is missing.
 //! - **Tabs** ([`draw_label_tab`]) punch a black gap through a ring or
@@ -173,6 +175,10 @@ pub struct Panel {
     pub rect: CellRect,
     pub dividers: Vec<u32>,
     pub splits: Vec<Split>,
+    /// Whether a box's black reaches a pixel into a divider's row above or
+    /// below it (the default), so the divider's rules stand off the text.
+    /// [`Panel::tight`] turns it off.
+    pub breathe: bool,
 }
 
 impl Panel {
@@ -182,7 +188,16 @@ impl Panel {
             rect,
             dividers: Vec::new(),
             splits: Vec::new(),
+            breathe: true,
         }
+    }
+
+    /// Every rule on its band cell's edge pixel, dividers too, as the
+    /// gameplay frame's stats panel has them; text beside a band then keeps
+    /// blank margin rows instead.
+    pub fn tight(mut self) -> Self {
+        self.breathe = false;
+        self
     }
 
     /// A divider band across the panel at cell row `row`.
@@ -263,13 +278,28 @@ pub fn draw_panel(img: &mut MenuImage, panel: &Panel) {
             }
         }
     }
+    let box_cell = |col: u32, row: u32| -> bool {
+        row < rect.h && cell_is_box[row as usize * cols + col as usize]
+    };
+    // Beside a divider, a box's black reaches one pixel into the divider's
+    // row, so the divider's rules stand a pixel off the text: a capital in
+    // the footer's first help line and a descender in the row above never
+    // touch them, as on the cheats page. The ring keeps its rules on the
+    // gameplay frame's own (the pages lie on the frame's rings), and
+    // across, the text already keeps a margin cell. No row moves.
+    let divider = |row: u32| panel.dividers.contains(&(rect.row + row));
     let is_box = |x: i64, y: i64| -> bool {
         if x < i64::from(x0) || y < i64::from(y0) || x > i64::from(x1) || y > i64::from(y1) {
             return false;
         }
         let col = (x as u32 - x0) / CELL;
         let row = (y as u32 - y0) / CELL;
-        cell_is_box[row as usize * cols + col as usize]
+        let line = (y as u32 - y0) % CELL;
+        box_cell(col, row)
+            || (panel.breathe
+                && divider(row)
+                && ((line == CELL - 1 && box_cell(col, row + 1))
+                    || (line == 0 && box_cell(col, row - 1))))
     };
     for y in y0..=y1 {
         for x in x0..=x1 {
@@ -345,6 +375,19 @@ pub fn draw_text(
     for (i, byte) in text.bytes().enumerate() {
         draw_mask(img, glyph(font, byte), col + i as u32, row, fg, bg);
     }
+}
+
+/// Draw the glyph `code` at cell `(col, row)` in `fg` on `bg`, for cells
+/// that hold raw IBM.CH codes rather than text.
+pub fn draw_code(
+    img: &mut MenuImage,
+    font: &FixedCellFont,
+    (col, row): (u32, u32),
+    code: u8,
+    fg: u8,
+    bg: Option<u8>,
+) {
+    draw_mask(img, glyph(font, code), col, row, fg, bg);
 }
 
 /// Draw a ribbon end cap at cell `(col, row)` over black: the triangle in
