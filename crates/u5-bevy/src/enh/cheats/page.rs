@@ -860,11 +860,19 @@ fn draw_panel(img: &mut PageImage, rect: CellRect, dividers: &[u32]) {
             && row < rect.bottom()
             && !dividers.contains(&(row - rect.row))
     };
+    // A box's black reaches one pixel past its cells above and below, so
+    // the rule stands a pixel off the text: a capital in a box's first row
+    // and a descender in its last never touch it (the breathing room the
+    // original's windows give their text). Across, the text already keeps
+    // a cell from the rule.
     let is_box = |x: i64, y: i64| -> bool {
         if x < i64::from(x0) || y < i64::from(y0) || x > i64::from(x1) || y > i64::from(y1) {
             return false;
         }
-        is_box_cell(x as u32 / CELL, y as u32 / CELL)
+        let (col, row, line) = (x as u32 / CELL, y as u32 / CELL, y as u32 % CELL);
+        is_box_cell(col, row)
+            || (line == CELL - 1 && is_box_cell(col, row + 1))
+            || (line == 0 && row > 0 && is_box_cell(col, row - 1))
     };
     for y in y0..=y1 {
         for x in x0..=x1 {

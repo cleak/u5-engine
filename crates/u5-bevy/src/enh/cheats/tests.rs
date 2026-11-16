@@ -796,16 +796,23 @@ fn the_page_is_drawn_in_the_kit_s_colours_on_the_cell_grid() {
         let [r, g, b] = EGA_PALETTE_RGB[i];
         [r, g, b, 0xff]
     };
-    // The rules are the game's: x 7 and 312, y 7 and 184.
+    // The side rules are the game's, x 7 and 312. Above and below, each
+    // box's black reaches a pixel past its cells, so the rules stand a
+    // pixel off the text: y 6 and 185 on the ring.
     assert_eq!(at(7, 100), ega(15));
     assert_eq!(at(312, 100), ega(15));
     assert_eq!(at(3, 100), ega(1));
-    assert_eq!(at(100, 184), ega(15));
-    // Divider bands at rows 2 and 19: rule, blue, rule.
-    assert_eq!(at(100, 16), ega(15));
+    assert_eq!(at(100, 6), ega(15));
+    assert_eq!(at(100, 7), ega(0));
+    assert_eq!(at(100, 184), ega(0));
+    assert_eq!(at(100, 185), ega(15));
+    // Divider bands at rows 2 and 19: black, rule, blue, rule, black.
+    assert_eq!(at(100, 16), ega(0));
+    assert_eq!(at(100, 17), ega(15));
     assert_eq!(at(100, 19), ega(1));
-    assert_eq!(at(100, 23), ega(15));
-    assert_eq!(at(100, 152), ega(15));
+    assert_eq!(at(100, 22), ega(15));
+    assert_eq!(at(100, 23), ega(0));
+    assert_eq!(at(100, 153), ega(15));
     // Carved corner, then the dimmed backdrop below the ring.
     assert_eq!(at(0, 0)[3], 153);
     assert_eq!(at(100, 196), [0, 0, 0, 153]);
