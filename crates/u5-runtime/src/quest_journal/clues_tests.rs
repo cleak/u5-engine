@@ -506,3 +506,37 @@ fn m6_04_notes_show_on_their_clue_and_are_searched() {
         .unwrap();
     assert!(matches!(person.note_owner(), Some((note_owner::PERSON, _))));
 }
+
+/// 8.2.7 "Enter on a step opens the Clues tab filtered to that step": the
+/// Quest filter keeps only the entries it is given, and the panel pins'
+/// group steps aside.
+#[test]
+fn the_quest_filter_keeps_only_its_entries() {
+    let mut log = log();
+    log.set_flag(1, EntryFlags::PANEL, true);
+    let only = [2];
+    let query = ClueQuery {
+        only: Some(&only),
+        ..ClueQuery::default()
+    };
+    let mut ctx = ctx();
+    ctx.pins_at_top = true;
+    let view = derive_open(&log, &ctx, query);
+    assert_eq!(view.matches, 1);
+    let entries: Vec<usize> = view.rows.iter().filter_map(ClueRow::entry).collect();
+    assert_eq!(entries, [2]);
+    assert!(view.rows.iter().all(|row| !matches!(
+        row.kind,
+        RowKind::Group {
+            key: GroupKey::Pinned,
+            ..
+        }
+    )));
+    let none: [usize; 0] = [];
+    let query = ClueQuery {
+        only: Some(&none),
+        ..ClueQuery::default()
+    };
+    let view = derive_open(&log, &ctx, query);
+    assert_eq!(labels(&view), [(0, NO_MATCHES.to_string())]);
+}

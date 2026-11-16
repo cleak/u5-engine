@@ -23,7 +23,7 @@
 //! Pure: no file, no RNG, nothing written. The order by recency reads a
 //! session-only [`TrackerActivity`] the shell keeps.
 
-use crate::enhancements::clues::{ClueLog, DialogKey, GameMinute, RecordAddr};
+use crate::enhancements::clues::{ClueEntry, ClueLog, DialogKey, GameMinute, Link, RecordAddr};
 use crate::enhancements::journal::{SpoilerTier, TrackerEvidence};
 use crate::shrine_virtue::ShrineVirtue;
 use crate::{
@@ -383,10 +383,14 @@ pub struct ClueEdge {
     pub record: Option<RecordAddr>,
     pub step: StepId,
     pub level: EdgeLevel,
+    /// The spec documents the edge comes from (T15).
     pub spec_ref: &'static str,
+    /// The spec names other sources for the same step elsewhere (S8.5):
+    /// both sides are linked, each with its own reference.
+    pub conflict: bool,
 }
 
-/// The edge table [`derive_trackers`] reads. Empty until M6-07 fills it.
+/// The edge table [`derive_trackers`] reads (`enhancements::clues::edges`).
 #[derive(Clone, Copy, Debug, Default)]
 pub struct EdgeTable<'a> {
     pub edges: &'a [ClueEdge],
@@ -394,6 +398,24 @@ pub struct EdgeTable<'a> {
 
 impl EdgeTable<'_> {
     pub const EMPTY: EdgeTable<'static> = EdgeTable { edges: &[] };
+}
+
+/// The chains shown as one summary card (index 0): an edge or a pin to
+/// any of their instances counts on that card.
+const fn summary(kind: QuestKind) -> bool {
+    matches!(
+        kind,
+        QuestKind::Shard | QuestKind::Regalia | QuestKind::Tools
+    )
+}
+
+/// The card a quest's edges and pins count on.
+pub const fn card_of(quest: QuestId) -> QuestId {
+    if summary(quest.kind) {
+        QuestId::new(quest.kind, 0)
+    } else {
+        quest
+    }
 }
 
 // --- The view. -----------------------------------------------------------
@@ -643,8 +665,13 @@ fn clue_facts(
             facts.hollow.push(step.step);
         }
     }
-    let mut sources = Vec::new();
-    for edge in edges.edges.iter().filter(|edge| edge.step.quest == quest) {
+    // Npc-level edges count sources (one dialog once), not records.
+    let mut sources: Vec<DialogKey> = Vec::new();
+    for edge in edges
+        .edges
+        .iter()
+        .filter(|edge| card_of(edge.step.quest) == quest)
+    {
         for entry in log
             .entries()
             .iter()
@@ -656,8 +683,8 @@ fn clue_facts(
                     facts.gated.push(edge.step.step);
                 }
                 EdgeLevel::Npc if evidence == TrackerEvidence::Npc => {
-                    if !sources.contains(&entry.npc) {
-                        sources.push(entry.npc);
+                    if !sources.contains(&entry.dialog) {
+                        sources.push(entry.dialog);
                         facts.heard += 1;
                     }
                     facts.gated.push(edge.step.step);
@@ -1023,6 +1050,230 @@ fn card(
     // A spec link is never shown or counted below tier 3 (8.2.7).
     card.heard = if hints(tier) { facts.heard } else { 0 };
     Some(card)
+}
+
+// --- Evidence links (M6-07). ---------------------------------------------
+
+/// LINKS kinds (8.3.7): a pin to a quest card, or to one of its steps.
+pub const LINK_QUEST: u8 = 0;
+pub const LINK_STEP: u8 = 1;
+
+/// What a pin or the Clues tab's Quest filter points at: a card, or one
+/// of its steps.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub struct LinkTarget {
+    pub quest: QuestId,
+    pub step: Option<u8>,
+}
+
+impl LinkTarget {
+    pub const fn quest(quest: QuestId) -> Self {
+        Self { quest, step: None }
+    }
+
+    pub const fn step(step: StepId) -> Self {
+        Self {
+            quest: step.quest,
+            step: Some(step.step),
+        }
+    }
+
+    /// The LINKS row pinning `entry` here.
+    pub fn link(self, entry: u16) -> Link {
+        match self.step {
+            None => Link {
+                entry,
+                kind: LINK_QUEST,
+                target: self.quest.code(),
+            },
+            Some(step) => Link {
+                entry,
+                kind: LINK_STEP,
+                target: StepId::new(self.quest, step).code(),
+            },
+        }
+    }
+
+    /// Whether `link` pins to this target: a step target takes its own
+    /// step's pins; a card target takes the card's and all its steps'.
+    pub fn covers(self, link: &Link) -> bool {
+        match (link.kind, self.step) {
+            (LINK_QUEST, None) => QuestId::from_code(link.target) == Some(self.quest),
+            (LINK_STEP, step) => StepId::from_code(link.target).is_some_and(|linked| {
+                linked.quest == self.quest && step.is_none_or(|step| step == linked.step)
+            }),
+            _ => false,
+        }
+    }
+
+    /// Whether `edge` links to this target.
+    fn has_edge(self, edge: &ClueEdge) -> bool {
+        card_of(edge.step.quest) == self.quest
+            && self.step.is_none_or(|step| step == edge.step.step)
+    }
+}
+
+/// Whether `entry` is a heard clue `edge` links (Record: the record;
+/// Npc: any topic of the source, and only under `npc`).
+fn edge_hears(edge: &ClueEdge, entry: &ClueEntry, evidence: TrackerEvidence) -> bool {
+    entry.dialog == edge.dialog
+        && match edge.level {
+            EdgeLevel::Record => Some(entry.record) == edge.record,
+            EdgeLevel::Npc => evidence == TrackerEvidence::Npc && entry.record.is_topic(),
+        }
+}
+
+/// The entries the Clues tab keeps under the Quest filter (8.2.7 "Enter
+/// on a step"): the player's pins at every tier, and from tier 3 the
+/// heard clues the spec's edges link (8.2.8: a clue is listed under a
+/// quest below tier 3 only by a player pin). In log order.
+pub fn linked_entries(
+    log: &ClueLog,
+    edges: &EdgeTable<'_>,
+    target: LinkTarget,
+    tier: SpoilerTier,
+    evidence: TrackerEvidence,
+) -> Vec<usize> {
+    (0..log.entries().len())
+        .filter(|index| {
+            let entry = &log.entries()[*index];
+            let pinned = log
+                .links()
+                .iter()
+                .any(|link| usize::from(link.entry) == *index && target.covers(link));
+            pinned
+                || (hints(tier)
+                    && edges
+                        .edges
+                        .iter()
+                        .any(|edge| target.has_edge(edge) && edge_hears(edge, entry, evidence)))
+        })
+        .collect()
+}
+
+/// One row of the pin picker.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct PinTarget {
+    pub target: LinkTarget,
+    pub label: JournalText,
+    /// 0 a card, 1 a step under it.
+    pub depth: u8,
+    /// The entry is pinned here already.
+    pub linked: bool,
+}
+
+/// The cards the pin picker offers at every tier, card or not (8.2.5
+/// "works at any tier"): the shrines, by virtue, and the two passwords by
+/// role. They name nothing the tier hides: a pin is how such a card comes
+/// to exist below tier 3.
+fn always_pinnable() -> impl Iterator<Item = (QuestId, JournalText)> {
+    let shrines = ShrineVirtue::ALL.iter().enumerate().map(|(at, virtue)| {
+        (
+            QuestId::new(QuestKind::Shrine, at as u8),
+            virtue.name().into(),
+        )
+    });
+    let passwords = (0..chain(QuestKind::Password).count).map(|at| {
+        (
+            QuestId::new(QuestKind::Password, at),
+            text::password_label(usize::from(at)).into(),
+        )
+    });
+    shrines.chain(passwords)
+}
+
+/// The pin picker for `entry` (8.2.5 point 2): the cards the view shows,
+/// plus [`always_pinnable`], in the table's order, each followed by the
+/// Knowledge steps it names at this tier. Nothing the view hides is
+/// offered.
+pub fn pin_targets(view: &TrackerView, log: &ClueLog, entry: u16) -> Vec<PinTarget> {
+    let mut cards: Vec<(QuestId, JournalText, Vec<&StepLine>)> = view
+        .cards
+        .iter()
+        .map(|card| (card.quest, card.title.clone(), card.steps.iter().collect()))
+        .collect();
+    for (quest, title) in always_pinnable() {
+        if !cards.iter().any(|(shown, _, _)| *shown == quest) {
+            cards.push((quest, title, Vec::new()));
+        }
+    }
+    cards.sort_by_key(|(quest, _, _)| *quest);
+    let linked = |target: LinkTarget| log.links().contains(&target.link(entry));
+    let mut rows = Vec::new();
+    for (quest, title, steps) in cards {
+        let target = LinkTarget::quest(quest);
+        rows.push(PinTarget {
+            target,
+            label: title,
+            depth: 0,
+            linked: linked(target),
+        });
+        let knowledge = |line: &&StepLine| {
+            chain(quest.kind).steps.iter().any(|spec| {
+                spec.step == line.step.step && matches!(spec.evidence, Evidence::Knowledge)
+            })
+        };
+        for line in steps.into_iter().filter(knowledge) {
+            let target = LinkTarget::step(line.step);
+            rows.push(PinTarget {
+                target,
+                label: line.label.clone(),
+                depth: 1,
+                linked: linked(target),
+            });
+        }
+    }
+    rows
+}
+
+/// The detail lines of a clue's links (8.2.3 detail pane): "Pinned to:"
+/// the cards the view shows that the player pinned it to, and from tier
+/// 3 the spec link's level. A card the view hides is never named.
+pub fn link_lines(
+    log: &ClueLog,
+    edges: &EdgeTable<'_>,
+    view: &TrackerView,
+    index: usize,
+    evidence: TrackerEvidence,
+) -> Vec<String> {
+    let mut lines = Vec::new();
+    let Some(entry) = log.entries().get(index) else {
+        return lines;
+    };
+    let mut titles: Vec<&str> = Vec::new();
+    for link in log
+        .links()
+        .iter()
+        .filter(|link| usize::from(link.entry) == index)
+    {
+        let quest = match link.kind {
+            LINK_QUEST => QuestId::from_code(link.target),
+            LINK_STEP => StepId::from_code(link.target).map(|step| step.quest),
+            _ => None,
+        };
+        if let Some(card) = quest.and_then(|quest| view.card(card_of(quest)))
+            && !titles.contains(&card.title.as_str())
+        {
+            titles.push(card.title.as_str());
+        }
+    }
+    if !titles.is_empty() {
+        lines.push(format!("{}{}", text::PINNED_TO, titles.join(", ")));
+    }
+    if hints(view.tier) {
+        let level = edges
+            .edges
+            .iter()
+            .filter(|edge| edge_hears(edge, entry, evidence))
+            .map(|edge| edge.level)
+            .min_by_key(|level| *level != EdgeLevel::Record);
+        match level {
+            Some(EdgeLevel::Record) => lines.push(text::LINK_RECORD.to_string()),
+            Some(EdgeLevel::Npc) => lines.push(text::LINK_NPC.to_string()),
+            None => {}
+        }
+    }
+    lines
 }
 
 fn regalia_label(piece: u8) -> &'static str {

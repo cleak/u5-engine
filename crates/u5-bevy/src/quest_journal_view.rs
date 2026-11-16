@@ -54,6 +54,7 @@ use bevy::image::ImageSampler;
 use bevy::prelude::*;
 use bevy::render::render_asset::RenderAssetUsages;
 use bevy::render::render_resource::{Extent3d, TextureDimension, TextureFormat};
+use u5_runtime::enhancements::clues::edges::edge_table;
 use u5_runtime::enhancements::clues::{ClueLog, text_body};
 use u5_runtime::enhancements::{JournalSettings, MantraDisplay, SpoilerTier, Toggle};
 use u5_runtime::gameplay_chrome::{
@@ -62,7 +63,9 @@ use u5_runtime::gameplay_chrome::{
 use u5_runtime::quest_journal::clues::{
     ClueContext, CluesTab, DialogSource, NoDialogs, derive_clues,
 };
-use u5_runtime::quest_journal::trackers::{EdgeTable, derive_trackers};
+use u5_runtime::quest_journal::trackers::{
+    LinkTarget, TrackerActivity, derive_trackers, link_lines, linked_entries, pin_targets,
+};
 use u5_runtime::quest_journal::{
     JournalModel, JournalRow, JournalSection, QuestSnapshot, RowKey, SectionId, ShrinePhase,
     StatusMark, derive, text,
@@ -262,6 +265,7 @@ impl QuestJournalUi {
             clue: clues::ClueUi {
                 text: settings.clues.text,
                 notes: settings.clues.notes,
+                quests: settings.clues.quest_tracker,
                 ..clues::ClueUi::default()
             },
             tracker: settings
@@ -298,6 +302,35 @@ impl QuestJournalUi {
             .unwrap_or(0);
         self.tabs = tabs;
         self.clue.reset_position();
+        self.dirty = true;
+    }
+
+    /// Enter on a card's step (8.2.7): the Clues tab, filtered to the
+    /// step (or the card). Nothing without the Clues tab.
+    fn open_clues(&mut self, target: LinkTarget) {
+        let Some(at) = self.tabs.iter().position(|tab| *tab == JournalTab::Clues) else {
+            return;
+        };
+        let label = self
+            .tracker
+            .as_ref()
+            .and_then(|tracker| tracker.selected())
+            .map(|card| {
+                let step = target.step.and_then(|step| {
+                    card.steps
+                        .iter()
+                        .find(|line| line.step.step == step)
+                        .map(|line| line.label.as_str())
+                });
+                match step {
+                    Some(step) => format!("{}, {}", card.title.as_str(), step),
+                    None => card.title.as_str().to_string(),
+                }
+            })
+            .unwrap_or_default();
+        self.tab = at;
+        self.clue.reset_position();
+        self.clue.quest = Some(clues::QuestFilter { target, label });
         self.dirty = true;
     }
 
@@ -655,6 +688,8 @@ fn follow_journal_toggle(
             }
             if ui.tracker.is_some() != tracker {
                 ui.settings.clues.quest_tracker = tracker;
+                ui.clue.quests = tracker;
+                ui.clue.picking = None;
                 ui.tracker = tracker.then(|| trackers::TrackerUi::new(page));
                 ui.dirty = true;
             }
@@ -712,6 +747,39 @@ pub(crate) fn journal_page_input(
             || (ui.tracker_mode() && ui.tracker.as_ref().is_some_and(|t| t.takes_escape()));
         let mantras = ui.settings.mantras;
         let tracker_mode = ui.tracker_mode();
+        // The tracker cards (M6-06) take what the strip and Ctrl+J leave;
+        // Esc on the list closes the page, on a card it goes back. Their
+        // section keys fall through to chapter 5's while the page is on.
+        let strip_tab = *key == KeyCode::Tab && ui.tabs.len() > 1 && !searching;
+        let ctrl_j = *key == KeyCode::KeyJ && ctrl;
+        if tracker_mode && !strip_tab && !ctrl_j && (*key != KeyCode::Escape || searching) {
+            match ui
+                .tracker
+                .as_mut()
+                .map(|tracker| tracker.key(*key, mantras))
+            {
+                Some(trackers::TrackerKey::Unused) | None => {}
+                Some(outcome) => {
+                    match outcome {
+                        trackers::TrackerKey::OpenClues(target) => ui.open_clues(target),
+                        // "I know this" (KNOWN): set, or cleared when set.
+                        trackers::TrackerKey::Known(step) => {
+                            if let Some(log) = log.as_mut() {
+                                let log = log.log_mut();
+                                if log.known().contains(&step.code()) {
+                                    log.unmark_known(step.code());
+                                } else {
+                                    log.mark_known(step.code());
+                                }
+                            }
+                        }
+                        trackers::TrackerKey::Used | trackers::TrackerKey::Unused => {}
+                    }
+                    ui.dirty = true;
+                    continue;
+                }
+            }
+        }
         match key {
             KeyCode::KeyJ if ctrl => close = true,
             KeyCode::Escape if !searching && !tracker_mode => close = true,
@@ -731,14 +799,6 @@ pub(crate) fn journal_page_input(
                     }
                 }
             }
-            // The tracker cards (M6-06); its section keys fall through to
-            // chapter 5's while the page is on.
-            // Esc on the list closes the page; on a card it goes back.
-            key if tracker_mode
-                && (*key != KeyCode::Escape || searching)
-                && ui.tracker.as_mut().is_some_and(|tracker| {
-                    tracker.key(*key, mantras) == trackers::TrackerKey::Used
-                }) => {}
             KeyCode::Escape if tracker_mode => close = true,
             KeyCode::ArrowUp => ui.move_cursor(-1),
             KeyCode::ArrowDown => ui.move_cursor(1),
@@ -882,7 +942,7 @@ pub(crate) fn paint_quest_journal_page(
                 let view = derive_trackers(
                     &snap,
                     log.as_deref().map(|log| log.log()),
-                    &EdgeTable::EMPTY,
+                    &edge_table(settings.clues.tracker_evidence),
                     settings.tier,
                     settings.clues.tracker_evidence,
                     &tracker.activity,
@@ -908,7 +968,60 @@ pub(crate) fn paint_quest_journal_page(
                 .as_ref()
                 .is_some_and(|toggles| toggles.0.on(Toggle::JournalSidePanel));
             let ctx = ClueContext::from_play_state(&visual.state, ui.settings.tier, pins_at_top);
-            let view = derive_clues(log, source, &ctx, &ui.clue.query(tab));
+            // Evidence links (M6-07): the Quest filter's entries, the pin
+            // picker's targets and the link lines, from the tracker view.
+            let settings = ui.settings;
+            let links = settings.clues.quest_tracker.then(|| {
+                let edges = edge_table(settings.clues.tracker_evidence);
+                let snap = QuestSnapshot::from_play_state(&visual.state);
+                let view = derive_trackers(
+                    &snap,
+                    Some(log),
+                    &edges,
+                    settings.tier,
+                    settings.clues.tracker_evidence,
+                    &TrackerActivity::default(),
+                );
+                (edges, view)
+            });
+            match (&ui.clue.quest, &links) {
+                (Some(quest), Some((edges, _))) => {
+                    ui.clue.only = linked_entries(
+                        log,
+                        edges,
+                        quest.target,
+                        settings.tier,
+                        settings.clues.tracker_evidence,
+                    );
+                }
+                _ => ui.clue.only.clear(),
+            }
+            if let (Some(picker), Some((_, view))) = (ui.clue.picking.as_mut(), &links) {
+                let rows = pin_targets(view, log, u16::try_from(picker.entry).unwrap_or(u16::MAX));
+                if picker.rows != rows {
+                    picker.cursor = picker.cursor.min(rows.len().saturating_sub(1));
+                    picker.rows = rows;
+                    ui.dirty = true;
+                }
+            }
+            let mut view = derive_clues(log, source, &ctx, &ui.clue.query(tab));
+            if let Some((edges, trackers)) = &links {
+                for row in &mut view.rows {
+                    let Some(index) = row.entry() else { continue };
+                    let lines =
+                        link_lines(log, edges, trackers, index, settings.clues.tracker_evidence);
+                    // Before a note, which keeps the last detail row.
+                    let at = match row.detail.last() {
+                        Some(last)
+                            if last.starts_with(u5_runtime::quest_journal::clues::NOTE_PREFIX) =>
+                        {
+                            row.detail.len() - 1
+                        }
+                        _ => row.detail.len(),
+                    };
+                    row.detail.splice(at..at, lines);
+                }
+            }
             if ui.clue.last.as_ref() != Some(&view) {
                 ui.clue.take_view(view);
                 ui.dirty = true;
@@ -1684,6 +1797,10 @@ mod clues_tests;
 mod content_tests;
 #[cfg(test)]
 mod equivalence_tests;
+#[cfg(test)]
+mod links_review_tests;
+#[cfg(test)]
+mod links_tests;
 #[cfg(test)]
 mod panel_tests;
 #[cfg(test)]

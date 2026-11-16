@@ -479,6 +479,21 @@ pub fn heard_count(count: u16) -> String {
     format!("{count} heard")
 }
 
+/// Evidence links (8.2.3 detail pane, 8.3.8). Our own words.
+pub const PINNED_TO: &str = "Pinned to: ";
+/// A spec link, tier 3 and above only (8.2.8): a clue for the step
+/// (Record), or from a source the spec names (Npc). Short, to fit the
+/// detail row.
+pub const LINK_RECORD: &str = "Link: spec clue";
+pub const LINK_NPC: &str = "Link: spec source";
+/// The Clues tab's header while the Quest filter is on.
+pub const QUEST_FILTER: &str = "Quest:";
+/// The pin picker's title row and the mark of a target already linked.
+pub const PIN_TO_QUEST: &str = "Pin to quest";
+pub const PIN_LINKED: &str = "pinned";
+/// A step's "I know this" mark (KNOWN, 8.3.9).
+pub const KNOWN_MARK: &str = "I know this";
+
 /// A total, at tier 4 only (foundation 1.4.7).
 pub fn of_total(count: usize, total: usize) -> String {
     format!("{count} of {total}")

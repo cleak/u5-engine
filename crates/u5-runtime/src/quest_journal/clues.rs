@@ -240,6 +240,9 @@ pub struct ClueQuery<'a> {
     pub search: &'a str,
     /// The groups the player opened.
     pub open: &'a [GroupKey],
+    /// The Quest filter (8.2.7 "Enter on a step"): only these entries,
+    /// from `trackers::linked_entries`. `None` for no filter.
+    pub only: Option<&'a [usize]>,
 }
 
 impl Default for ClueQuery<'_> {
@@ -250,6 +253,7 @@ impl Default for ClueQuery<'_> {
             filter: ClueFilter::All,
             search: "",
             open: &[],
+            only: None,
         }
     }
 }
@@ -660,7 +664,9 @@ pub fn derive_clues(
         .copied()
         .filter(|index| {
             let entry = facts.entry(*index);
-            facts.passes(entry, query.filter) && facts.matches(*index, query.search)
+            facts.passes(entry, query.filter)
+                && facts.matches(*index, query.search)
+                && query.only.is_none_or(|only| only.contains(index))
         })
         .collect();
     let searching = !query.search.trim().is_empty();
@@ -674,7 +680,7 @@ pub fn derive_clues(
     let mut rows = Vec::new();
     match query.tab {
         CluesTab::Clues => {
-            if ctx.pins_at_top && !pinned.is_empty() {
+            if ctx.pins_at_top && !pinned.is_empty() && query.only.is_none() {
                 rows.push(group_row(
                     GroupKey::Pinned,
                     PINNED.to_string(),

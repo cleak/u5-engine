@@ -508,6 +508,7 @@ fn t13_no_spec_link_is_shown_or_counted_below_tier_3() {
         step: StepId::new(honesty, 0),
         level: EdgeLevel::Record,
         spec_ref: "catalogs/quest-graph.md §8",
+        conflict: false,
     }];
     let table = EdgeTable { edges: &edges };
     let mut bytes = blank_save();
@@ -700,6 +701,7 @@ fn t14_an_answer_needs_one_of_the_evidence_sources() {
             step: StepId::new(valor, 0),
             level,
             spec_ref: "catalogs/quest-graph.md §8",
+            conflict: false,
         }];
         let full = derive_trackers(
             &snap,

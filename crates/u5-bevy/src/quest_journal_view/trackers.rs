@@ -20,10 +20,15 @@
 //! with R, then R again to confirm (8.2.7). A reveal lasts for the session
 //! only: it is kept here, never saved. `journal.mantras = never` blanks
 //! the mantra cells.
+//!
+//! **Evidence links (M6-07).** With the clue log on, Up and Down pick a
+//! step on an open card; Enter opens the Clues tab with the Quest filter
+//! on that step (or on the card, when it names no step), and `K` sets or
+//! clears the step's "I know this" mark (KNOWN), a hollow tick.
 
 use u5_runtime::enhancements::{MantraDisplay, SpoilerTier};
 use u5_runtime::quest_journal::trackers::{
-    QuestKind, StepId, Tick, TrackerActivity, TrackerCard, TrackerView,
+    LinkTarget, QuestKind, StepId, StepLine, Tick, TrackerActivity, TrackerCard, TrackerView,
 };
 use u5_runtime::quest_journal::{StatusMark, text};
 
@@ -49,6 +54,10 @@ pub const KEY_HELP_EMPTY: &str = "Esc close";
 pub const KEY_HELP_CARD: &str = "Esc back";
 pub const KEY_HELP_REVEAL: &str = "R reveal  Esc back";
 pub const KEY_HELP_CONFIRM: &str = "R again to reveal  Esc back";
+/// On a card with the clue log on (M6-07).
+pub const KEY_HELP_CARD_CLUES: &str = "Enter clues  Esc back";
+pub const KEY_HELP_CARD_KNOWN: &str = "Enter clues  K I know  Esc back";
+pub const KEY_HELP_REVEAL_CLUES: &str = "R reveal  Enter clues  Esc back";
 
 /// The tracker's page state. Present exactly while `quest_tracker` is on.
 #[derive(Debug, Default)]
@@ -59,6 +68,8 @@ pub struct TrackerUi {
     pub scroll: usize,
     /// A card is open.
     pub detail: bool,
+    /// The step picked on the open card.
+    pub step_cursor: usize,
     /// R was pressed once on a masked answer.
     pub arming: bool,
     /// The answers revealed this session (8.2.7). Never saved.
@@ -76,6 +87,10 @@ pub enum TrackerKey {
     Used,
     /// Not the tracker's: chapter 5's page takes it (its section keys).
     Unused,
+    /// Enter on a card: the Clues tab with the Quest filter (8.2.7).
+    OpenClues(LinkTarget),
+    /// `K` on a Knowledge step: set or clear its "I know this" mark.
+    Known(StepId),
 }
 
 impl TrackerUi {
@@ -152,6 +167,34 @@ impl TrackerUi {
                 .is_some_and(|(step, _, _)| !self.revealed.contains(&step))
     }
 
+    /// The clue log is on: a card's Enter and `K` work.
+    pub fn links(&self) -> bool {
+        self.view.as_ref().is_some_and(|view| !view.clue_log_off)
+    }
+
+    /// The step picked on the open card.
+    pub fn selected_step(&self) -> Option<&StepLine> {
+        self.detail
+            .then(|| self.selected()?.steps.get(self.step_cursor))
+            .flatten()
+    }
+
+    /// The picked step, when it can take an "I know this" mark: a
+    /// Knowledge step (`?` or a hollow tick).
+    fn knowable(&self) -> Option<StepId> {
+        self.selected_step()
+            .filter(|line| matches!(line.tick, Tick::Unknown | Tick::Hollow))
+            .map(|line| line.step)
+    }
+
+    fn step_on_card(&mut self, step: isize) {
+        let steps = self.selected().map_or(0, |card| card.steps.len());
+        self.step_cursor = self
+            .step_cursor
+            .saturating_add_signed(step)
+            .min(steps.saturating_sub(1));
+    }
+
     /// Whether Esc goes back to the list rather than closing the page.
     pub fn takes_escape(&self) -> bool {
         self.detail
@@ -167,8 +210,30 @@ impl TrackerUi {
             KeyCode::PageDown if !self.detail => self.step(VISIBLE_ROWS as isize),
             KeyCode::Home if !self.detail => self.step(isize::MIN / 2),
             KeyCode::End if !self.detail => self.step(isize::MAX / 2),
+            KeyCode::ArrowUp if self.detail => self.step_on_card(-1),
+            KeyCode::ArrowDown if self.detail => self.step_on_card(1),
+            KeyCode::Enter | KeyCode::NumpadEnter | KeyCode::Space if self.detail => {
+                if self.links()
+                    && let Some(card) = self.selected()
+                {
+                    let target = self
+                        .selected_step()
+                        .map_or(LinkTarget::quest(card.quest), |line| {
+                            LinkTarget::step(line.step)
+                        });
+                    return TrackerKey::OpenClues(target);
+                }
+                // Without the clue log Enter closes the card, as before.
+                self.detail = false;
+            }
             KeyCode::Enter | KeyCode::NumpadEnter | KeyCode::Space => {
-                self.detail = !self.detail && self.selected().is_some();
+                self.detail = self.selected().is_some();
+                self.step_cursor = 0;
+            }
+            KeyCode::KeyK if self.links() => {
+                if let Some(step) = self.knowable() {
+                    return TrackerKey::Known(step);
+                }
             }
             KeyCode::Escape | KeyCode::Backspace if self.detail => self.detail = false,
             KeyCode::KeyR if self.maskable(mantras) => {
@@ -204,8 +269,14 @@ pub fn tracker_key_help(ui: &TrackerUi, mantras: MantraDisplay) -> &'static str 
     if ui.detail {
         if ui.arming {
             KEY_HELP_CONFIRM
+        } else if ui.maskable(mantras) && ui.links() {
+            KEY_HELP_REVEAL_CLUES
         } else if ui.maskable(mantras) {
             KEY_HELP_REVEAL
+        } else if ui.links() && ui.knowable().is_some() {
+            KEY_HELP_CARD_KNOWN
+        } else if ui.links() {
+            KEY_HELP_CARD_CLUES
         } else {
             KEY_HELP_CARD
         }
@@ -404,17 +475,29 @@ fn card_cells(view: &PageView<'_>, ui: &TrackerUi, card: &TrackerCard, cells: &m
             *y += 1;
         }
     };
-    for step in &card.steps {
+    // With the clue log on a step is picked: the bar, as on the list.
+    let picked = ui.links().then_some(ui.step_cursor);
+    for (at, step) in card.steps.iter().enumerate() {
         let label: String = step.label.as_str().chars().take(TEXT_CELLS - 4).collect();
         let row = y;
-        push(
-            cells,
-            &mut y,
-            vec![
-                Cell::new(TEXT_COLUMN, row, step.tick.glyph(), tick_ink(step.tick)),
-                Cell::new(TEXT_COLUMN + 4, row, label, BODY),
-            ],
-        );
+        let selected = picked == Some(at);
+        let mut new = Vec::new();
+        if selected {
+            new.push(Cell::new(TEXT_COLUMN, row, " ".repeat(TEXT_CELLS), WHITE).on(Paper::Bar));
+        }
+        new.push(Cell::new(
+            TEXT_COLUMN,
+            row,
+            step.tick.glyph(),
+            tick_ink(step.tick),
+        ));
+        new.push(Cell::new(
+            TEXT_COLUMN + 4,
+            row,
+            label,
+            if selected { WHITE } else { BODY },
+        ));
+        push(cells, &mut y, new);
     }
     for note in &card.notes {
         let row = y;

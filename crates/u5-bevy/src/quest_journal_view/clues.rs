@@ -24,6 +24,14 @@
 //! selected clue or person, and the Notes tab lists the save's own note and
 //! every other. The text is typed into the overlay's field from
 //! [`OverlayKey`](crate::enh::input::OverlayKey) events, never the game's.
+//!
+//! **Evidence links (M6-07).** With `journal.quest_tracker`, `Q` on a clue
+//! opens the pin picker: the cards the tier shows (and the shrines and
+//! passwords, which a pin is how a card comes to exist below tier 3), each
+//! with the Knowledge steps it names; Enter pins or unpins (LINKS kinds 0
+//! and 1). Enter on a card's step opens this tab with the Quest filter,
+//! which keeps the clues pinned there and, from tier 3, the ones the spec
+//! links; Esc clears it.
 
 use bevy::prelude::KeyCode;
 use u5_runtime::enhancements::ClueText;
@@ -34,6 +42,8 @@ use u5_runtime::quest_journal::clues::{
     ClueFilter, ClueQuery, ClueRow, ClueView, CluesTab, CluesView, GroupKey, MAX_PANEL_PINS,
     MAX_SEARCH_LEN, NOTE_PREFIX, RowKind, RowMark, unsaved_line,
 };
+use u5_runtime::quest_journal::text::{PIN_LINKED, PIN_TO_QUEST, QUEST_FILTER};
+use u5_runtime::quest_journal::trackers::{LinkTarget, PinTarget};
 
 use super::{
     BODY, BODY_LAST_ROW, BROWN, Cell, DARK_GREY, DETAIL_FIRST_ROW, GLYPH_DOWN, GLYPH_RIGHT,
@@ -64,6 +74,11 @@ pub const KEY_HELP_NOTES: &str = "N write  / find  Esc close";
 pub const KEY_HELP_NOTE: &str = "Enter keep  Esc cancel";
 pub const KEY_HELP_READING: &str = "\u{18}\u{19} scroll  Esc back";
 pub const KEY_HELP_READING_NOTES: &str = "\u{18}\u{19} scroll  N note  Esc back";
+/// With `journal.quest_tracker` (M6-07).
+pub const KEY_HELP_ENTRY_QUEST: &str = "S star  H hide  P pin  Q quest";
+pub const KEY_HELP_ENTRY_QUEST_NOTES: &str = "S star  P pin  Q quest  N note";
+pub const KEY_HELP_PICKER: &str = "Enter pin  Esc back";
+pub const KEY_HELP_QUEST_EMPTY: &str = "Esc all clues";
 
 /// The text pane: rows of the clue's text, 16 cells, centred in the body
 /// below the two summary rows.
@@ -77,6 +92,23 @@ pub struct NoteEdit {
     pub owner_kind: u8,
     pub owner: u16,
     pub text: String,
+}
+
+/// The Clues tab's Quest filter: the card or step, and its label.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct QuestFilter {
+    pub target: LinkTarget,
+    pub label: String,
+}
+
+/// The pin picker over one clue.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct Picker {
+    pub entry: usize,
+    pub cursor: usize,
+    pub scroll: usize,
+    /// The targets, derived by the page's system from the tracker view.
+    pub rows: Vec<PinTarget>,
 }
 
 /// The clue tabs' state. Session only; nothing here is saved.
@@ -104,6 +136,14 @@ pub struct ClueUi {
     pub body: Option<TextBody>,
     /// The note being written; keys go to it.
     pub note: Option<NoteEdit>,
+    /// `journal.quest_tracker` is on: `Q` pins a clue to a quest.
+    pub quests: bool,
+    /// The Quest filter (Enter on a card's step), and the entries it
+    /// keeps, derived by the page's system.
+    pub quest: Option<QuestFilter>,
+    pub only: Vec<usize>,
+    /// The pin picker; keys go to it.
+    pub picking: Option<Picker>,
 }
 
 impl ClueUi {
@@ -114,6 +154,7 @@ impl ClueUi {
             filter: self.filter,
             search: &self.search,
             open: &self.open,
+            only: self.quest.as_ref().map(|_| self.only.as_slice()),
         }
     }
 
@@ -160,6 +201,9 @@ impl ClueUi {
         self.reading_scroll = 0;
         self.body = None;
         self.note = None;
+        self.quest = None;
+        self.only.clear();
+        self.picking = None;
     }
 
     /// The page closed: the search goes (never saved), and so does an
@@ -170,12 +214,18 @@ impl ClueUi {
         self.reading = None;
         self.body = None;
         self.note = None;
+        self.quest = None;
+        self.picking = None;
     }
 
     /// Whether Esc belongs to the tab (a search, a note, an open text)
     /// rather than closing the page.
     pub fn takes_escape(&self) -> bool {
-        self.searching || self.note.is_some() || self.reading.is_some()
+        self.searching
+            || self.note.is_some()
+            || self.reading.is_some()
+            || self.quest.is_some()
+            || self.picking.is_some()
     }
 
     /// One key on a clue tab. Returns `false` for a key the tab does not
@@ -196,7 +246,23 @@ impl ClueUi {
         if self.reading.is_some() {
             return self.reading_key(key, log);
         }
+        if self.picking.is_some() {
+            return self.picker_key(key, log);
+        }
         match key {
+            KeyCode::Escape if self.quest.is_some() => {
+                self.quest = None;
+                self.cursor = 0;
+                self.scroll = 0;
+            }
+            KeyCode::KeyQ if self.quests && tab != CluesTab::Notes => {
+                if let Some(entry) = self.selected().and_then(ClueRow::entry) {
+                    self.picking = Some(Picker {
+                        entry,
+                        ..Picker::default()
+                    });
+                }
+            }
             KeyCode::ArrowUp => self.move_cursor(-1),
             KeyCode::ArrowDown => self.move_cursor(1),
             KeyCode::PageUp => self.move_cursor(-(CLUE_VISIBLE_ROWS as isize)),
@@ -219,6 +285,51 @@ impl ClueUi {
             KeyCode::KeyS => return self.flag_selected(log, EntryFlags::STAR),
             KeyCode::KeyH => return self.flag_selected(log, EntryFlags::HIDDEN),
             KeyCode::KeyP => return self.flag_selected(log, EntryFlags::PANEL),
+            _ => return KeyOutcome::Unused,
+        }
+        KeyOutcome::Used
+    }
+
+    /// The pin picker: Up and Down pick, Enter pins or unpins, Esc goes
+    /// back to the clues.
+    fn picker_key(&mut self, key: KeyCode, log: Option<&mut ClueLog>) -> KeyOutcome {
+        let Some(picker) = self.picking.as_mut() else {
+            return KeyOutcome::Unused;
+        };
+        let rows = picker.rows.len();
+        let mut step = |by: isize| {
+            picker.cursor = picker
+                .cursor
+                .saturating_add_signed(by)
+                .min(rows.saturating_sub(1));
+            if picker.cursor < picker.scroll {
+                picker.scroll = picker.cursor;
+            } else if picker.cursor >= picker.scroll + CLUE_VISIBLE_ROWS {
+                picker.scroll = picker.cursor + 1 - CLUE_VISIBLE_ROWS;
+            }
+        };
+        match key {
+            KeyCode::ArrowUp => step(-1),
+            KeyCode::ArrowDown => step(1),
+            KeyCode::PageUp => step(-(CLUE_VISIBLE_ROWS as isize)),
+            KeyCode::PageDown => step(CLUE_VISIBLE_ROWS as isize),
+            KeyCode::Home => step(isize::MIN / 2),
+            KeyCode::End => step(isize::MAX / 2),
+            KeyCode::Escape | KeyCode::Backspace => self.picking = None,
+            KeyCode::Enter | KeyCode::NumpadEnter | KeyCode::Space => {
+                if let (Some(row), Some(log), Ok(entry)) = (
+                    picker.rows.get(picker.cursor),
+                    log,
+                    u16::try_from(picker.entry),
+                ) {
+                    let link = row.target.link(entry);
+                    if row.linked {
+                        log.remove_link(link);
+                    } else {
+                        log.add_link(link);
+                    }
+                }
+            }
             _ => return KeyOutcome::Unused,
         }
         KeyOutcome::Used
@@ -447,16 +558,22 @@ pub fn clue_key_help(ui: &ClueUi, tab: CluesTab) -> &'static str {
             KEY_HELP_READING
         };
     }
+    if ui.picking.is_some() {
+        return KEY_HELP_PICKER;
+    }
     if tab == CluesTab::Notes {
         return KEY_HELP_NOTES;
     }
     match ui.selected().map(|row| &row.kind) {
+        Some(RowKind::Entry(_)) if ui.quests && ui.notes => KEY_HELP_ENTRY_QUEST_NOTES,
+        Some(RowKind::Entry(_)) if ui.quests => KEY_HELP_ENTRY_QUEST,
         Some(RowKind::Entry(_)) if ui.notes => KEY_HELP_ENTRY_NOTES,
         Some(RowKind::Entry(_)) => KEY_HELP_ENTRY,
         Some(RowKind::Group { .. }) | Some(RowKind::Person(_)) if tab == CluesTab::Clues => {
             KEY_HELP_GROUP
         }
         Some(RowKind::Group { .. }) | Some(RowKind::Person(_)) => KEY_HELP_TOPICS_GROUP,
+        _ if ui.quest.is_some() => KEY_HELP_QUEST_EMPTY,
         _ => KEY_HELP_EMPTY,
     }
 }
@@ -481,6 +598,9 @@ pub fn clue_cells(ui: &ClueUi, tab: CluesTab) -> Vec<Cell> {
     if ui.reading.is_some() {
         return reading_cells(ui);
     }
+    if let Some(picker) = &ui.picking {
+        return picker_cells(ui, picker);
+    }
     let mut cells = Vec::new();
     // Row 1: the search field, or the filter and the view.
     if ui.searching || !ui.search.is_empty() {
@@ -500,6 +620,16 @@ pub fn clue_cells(ui: &ClueUi, tab: CluesTab) -> Vec<Cell> {
         }
     } else if tab == CluesTab::Notes {
         // Notes have no filter or view: the row stays empty.
+    } else if let Some(quest) = ui.quest.as_ref().filter(|_| tab == CluesTab::Clues) {
+        // The Quest filter replaces the filter and the view.
+        cells.push(Cell::new(TEXT_COLUMN, HEADER_ROW, QUEST_FILTER, BODY));
+        let column = TEXT_COLUMN + QUEST_FILTER.len() as u8 + 1;
+        cells.push(Cell::new(
+            column,
+            HEADER_ROW,
+            cut(&quest.label, usize::from(LAST_TEXT_COLUMN + 1 - column)),
+            WHITE,
+        ));
     } else {
         cells.push(Cell::new(TEXT_COLUMN, HEADER_ROW, "Filter:", BODY));
         cells.push(Cell::new(
@@ -597,6 +727,58 @@ pub fn clue_cells(ui: &ClueUi, tab: CluesTab) -> Vec<Cell> {
                 line,
                 BODY,
             ));
+        }
+    }
+    cells
+}
+
+/// The pin picker: its title over the clue's topic, then the targets,
+/// a step indented under its card, `pinned` on the right of a target the
+/// clue is pinned to already.
+fn picker_cells(ui: &ClueUi, picker: &Picker) -> Vec<Cell> {
+    let mut cells = vec![Cell::new(TEXT_COLUMN, HEADER_ROW, PIN_TO_QUEST, WHITE)];
+    if let Some(row) = ui
+        .rows()
+        .iter()
+        .find(|row| row.entry() == Some(picker.entry))
+    {
+        cells.push(Cell::new(
+            TEXT_COLUMN,
+            SECTION_ROW,
+            cut(&row.label, TEXT_CELLS - 3),
+            BODY,
+        ));
+    }
+    if picker.rows.len() > CLUE_VISIBLE_ROWS {
+        let more_above = picker.scroll > 0;
+        let more_below = picker.scroll + CLUE_VISIBLE_ROWS < picker.rows.len();
+        for (column, glyph, more) in [
+            (LAST_TEXT_COLUMN - 1, GLYPH_UP, more_above),
+            (LAST_TEXT_COLUMN, GLYPH_DOWN, more_below),
+        ] {
+            let ink = if more { BROWN } else { DARK_GREY };
+            cells.push(Cell::new(column, SECTION_ROW, glyph, ink));
+        }
+    }
+    let mark_column = LAST_TEXT_COLUMN + 1 - PIN_LINKED.len() as u8;
+    for (offset, row) in picker
+        .rows
+        .iter()
+        .enumerate()
+        .skip(picker.scroll)
+        .take(CLUE_VISIBLE_ROWS)
+    {
+        let y = CLUE_ROWS_FIRST_ROW + (offset - picker.scroll) as u8;
+        let selected = offset == picker.cursor;
+        if selected {
+            cells.push(Cell::new(TEXT_COLUMN, y, " ".repeat(TEXT_CELLS), WHITE).on(Paper::Bar));
+        }
+        let column = TEXT_COLUMN + 2 * row.depth;
+        let room = usize::from(mark_column - 1 - column);
+        let ink = if selected { WHITE } else { BODY };
+        cells.push(Cell::new(column, y, cut(row.label.as_str(), room), ink));
+        if row.linked {
+            cells.push(Cell::new(mark_column, y, PIN_LINKED, BROWN));
         }
     }
     cells

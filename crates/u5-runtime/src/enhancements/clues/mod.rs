@@ -21,6 +21,7 @@
 pub mod attribute;
 pub mod codec;
 pub mod dependence;
+pub mod edges;
 pub mod highlight;
 pub mod reconcile;
 pub mod scrollback;
@@ -595,6 +596,15 @@ impl ClueLog {
         }
     }
 
+    /// Removes a link the player made (pin to quest toggled off).
+    pub fn remove_link(&mut self, link: Link) {
+        let before = self.links.len();
+        self.links.retain(|old| *old != link);
+        if self.links.len() != before {
+            self.dirty = true;
+        }
+    }
+
     /// Keeps a miss (only with `clue_misses`), cut to 15 bytes.
     pub fn add_miss(&mut self, mut miss: Miss) {
         miss.typed.truncate(MISS_MAX_LEN);
@@ -606,6 +616,15 @@ impl ClueLog {
     pub fn mark_known(&mut self, step: u16) {
         if !self.known.contains(&step) {
             self.known.push(step);
+            self.dirty = true;
+        }
+    }
+
+    /// Clears a step's "I know this" mark.
+    pub fn unmark_known(&mut self, step: u16) {
+        let before = self.known.len();
+        self.known.retain(|known| *known != step);
+        if self.known.len() != before {
             self.dirty = true;
         }
     }
