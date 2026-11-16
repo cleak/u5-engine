@@ -579,8 +579,14 @@ pub fn clue_key_help(ui: &ClueUi, tab: CluesTab) -> &'static str {
 }
 
 /// `text` cut to `cells`.
+/// `text` in at most `cells` cells; a cut ends in `..`, as the page's
+/// wrapped details do ([`super::wrap`]).
 fn cut(text: &str, cells: usize) -> String {
-    text.chars().take(cells).collect()
+    if text.chars().count() <= cells || cells < 3 {
+        return text.chars().take(cells).collect();
+    }
+    let kept: String = text.chars().take(cells - 2).collect();
+    format!("{}..", kept.trim_end())
 }
 
 /// `text` right-aligned to end at `last`.
@@ -994,4 +1000,16 @@ fn row_cells(row: &ClueRow, y: u8, selected: bool) -> Vec<Cell> {
         cells.push(right(&row.right, LAST_TEXT_COLUMN, y, ink(BODY)));
     }
     cells
+}
+
+#[cfg(test)]
+mod cut_tests {
+    use super::cut;
+
+    #[test]
+    fn a_cut_label_ends_in_two_dots() {
+        assert_eq!(cut("Vorpelin the Grey (Yew)", 17), "Vorpelin the Gr..");
+        assert_eq!(cut("Vorpelin the (Yew)", 15), "Vorpelin the..");
+        assert_eq!(cut("Vorpelin", 8), "Vorpelin");
+    }
 }
