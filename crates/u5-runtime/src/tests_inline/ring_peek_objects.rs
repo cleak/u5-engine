@@ -374,7 +374,7 @@ mod ring_peek_objects {
         let median = samples[samples.len() / 2];
         eprintln!("ring peek + raster at 43x15: median {median:?}");
         assert!(
-            median < std::time::Duration::from_millis(20),
+            median < crate::test_fixtures::wall_clock_bound(std::time::Duration::from_millis(20)),
             "the 21:9 ring peek took {median:?}"
         );
     }

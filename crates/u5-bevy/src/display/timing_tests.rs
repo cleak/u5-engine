@@ -203,5 +203,8 @@ fn every_feature_on_at_4k_keeps_each_frame_under_a_tick() {
     if cfg!(debug_assertions) {
         return;
     }
-    assert!(on_max < tick, "{on_max:?} at 4K");
+    assert!(
+        on_max < u5_runtime::test_fixtures::wall_clock_bound(tick),
+        "{on_max:?} at 4K"
+    );
 }

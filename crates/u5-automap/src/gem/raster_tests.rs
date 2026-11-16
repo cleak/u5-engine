@@ -463,5 +463,8 @@ fn a_render_at_688_by_240_takes_under_8_ms() {
     if cfg!(debug_assertions) {
         return;
     }
-    assert!(worst < Duration::from_millis(8), "{worst:?}");
+    assert!(
+        worst < u5_runtime::test_fixtures::wall_clock_bound(Duration::from_millis(8)),
+        "{worst:?}"
+    );
 }

@@ -724,6 +724,7 @@ fn the_step_costs_under_a_millisecond_at_688x240() {
     if cfg!(debug_assertions) {
         return;
     }
-    assert!(map_cost < Duration::from_millis(1), "{map_cost:?}");
-    assert!(whole_cost < Duration::from_millis(1), "{whole_cost:?}");
+    let bound = u5_runtime::test_fixtures::wall_clock_bound(Duration::from_millis(1));
+    assert!(map_cost < bound, "{map_cost:?}");
+    assert!(whole_cost < bound, "{whole_cost:?}");
 }

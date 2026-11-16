@@ -755,5 +755,8 @@ fn real_assets_open_and_render_under_8_ms() {
         assert!(sampled > 100, "{plane:?}: {sampled}");
         slowest = slowest.max(worst);
     }
-    assert!(slowest < Duration::from_millis(8), "{slowest:?}");
+    assert!(
+        slowest < u5_runtime::test_fixtures::wall_clock_bound(Duration::from_millis(8)),
+        "{slowest:?}"
+    );
 }

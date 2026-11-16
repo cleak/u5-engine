@@ -239,7 +239,10 @@ fn probe_and_observe_take_under_20_us_per_command() {
     if cfg!(debug_assertions) {
         return;
     }
-    assert!(slowest < PROBE_LIMIT, "{slowest:?}");
+    assert!(
+        slowest < u5_runtime::test_fixtures::wall_clock_bound(PROBE_LIMIT),
+        "{slowest:?}"
+    );
 }
 
 /// The full 16:9 render of each kind of view, from the shown set to the
@@ -301,7 +304,10 @@ fn a_full_render_takes_under_8_ms() {
     if cfg!(debug_assertions) {
         return;
     }
-    assert!(slowest < RENDER_LIMIT, "{slowest:?}");
+    assert!(
+        slowest < u5_runtime::test_fixtures::wall_clock_bound(RENDER_LIMIT),
+        "{slowest:?}"
+    );
 }
 
 /// A page turn on a one-panel dungeon map renders again from the same
@@ -337,7 +343,10 @@ fn a_page_turn_takes_under_8_ms() {
     if cfg!(debug_assertions) {
         return;
     }
-    assert!(took < RENDER_LIMIT, "{took:?}");
+    assert!(
+        took < u5_runtime::test_fixtures::wall_clock_bound(RENDER_LIMIT),
+        "{took:?}"
+    );
 }
 
 /// A crowded world, one feature in every 13 cells (hundreds of "?" in one

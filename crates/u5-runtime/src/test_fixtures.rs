@@ -1016,6 +1016,23 @@ pub fn configured_original_asset_dir() -> Option<PathBuf> {
 }
 
 /// The folder a test-only environment variable names, if it is set: the
+/// How much a wall-clock timing test's bound is stretched on a CI runner.
+pub const CI_TIMING_SLACK: u32 = 5;
+
+/// The bound a wall-clock timing test asserts: `local` as written when run
+/// on a developer machine, and `local` times [`CI_TIMING_SLACK`] when the
+/// `CI` environment variable is set (GitHub's shared runners stall for
+/// tens of milliseconds at random, which once failed the 4K frame check).
+/// The local bound stays strict; on CI the check still catches a gross
+/// regression.
+pub fn wall_clock_bound(local: std::time::Duration) -> std::time::Duration {
+    if std::env::var_os("CI").is_some_and(|value| !value.is_empty() && value != "false") {
+        local * CI_TIMING_SLACK
+    } else {
+        local
+    }
+}
+
 /// review-shot tests' `U5_MOCKUP_PROFILE`, `U5_GROW_MOCKUPS` and
 /// `U5_GROW_SHOTS`. Keeps the environment read out of the shell's own
 /// modules.
