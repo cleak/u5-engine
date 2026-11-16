@@ -447,7 +447,9 @@ fn rendered(fields: &[Vec<u8>], index: usize) -> Option<String> {
         .collect();
     let text = String::from_utf8_lossy(&bytes);
     let text = text.split_whitespace().collect::<Vec<_>>().join(" ");
-    (!text.is_empty()).then_some(text)
+    // The window's framing quotes belong to the reply, not the name.
+    let text = text.trim_matches(|c: char| c == '"' || c.is_whitespace());
+    (!text.is_empty()).then(|| text.to_string())
 }
 
 /// The topic label of a record: the answering NPC's own keyword record,

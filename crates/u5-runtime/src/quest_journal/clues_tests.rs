@@ -544,9 +544,10 @@ fn the_quest_filter_keeps_only_its_entries() {
 #[test]
 fn a_name_keeps_its_dictionary_words() {
     // A Name field whose middle word is the dictionary's first token, as
-    // the window prints it ("Vorpelin the Grey"), never with it dropped.
+    // the window prints it ("Vorpelin the Grey"), never with it dropped;
+    // a closing quote the field carries for the window is not the name's.
     let mut fields = blob(&[("glimmer", text("It glows."))], &[]);
-    fields[0] = record(&[&text("Vorpelin"), &[0x01], &text(" Grey")]);
+    fields[0] = record(&[&text("Vorpelin"), &[0x01], &text(" Grey\"")]);
     let dictionary = crate::PUBLISHED_COMMON_WORD_DICTIONARY;
     assert_eq!(dictionary[0], "the");
     let source = HashMap::from([(dialog(1), fields)]);
