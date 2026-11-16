@@ -239,3 +239,266 @@ fn toast_and_badge_review_shots() {
         }
     }
 }
+
+/// The window with the journal page sprite over the frame when it shows:
+/// [`window_shot`] samples the frame sprite only, and the page is a sprite
+/// of its own over it.
+fn window_shot_with_page(shell: &mut Shell) -> (u32, u32, Vec<u8>) {
+    use crate::quest_journal_view::JournalPageSprite;
+    let (w, h, mut out) = window_shot(shell);
+    let world = shell.app.world_mut();
+    let page = world
+        .query_filtered::<(&Sprite, &Transform, &Visibility), With<JournalPageSprite>>()
+        .iter(world)
+        .next()
+        .filter(|(_, _, visible)| **visible != Visibility::Hidden)
+        .map(|(sprite, transform, _)| (sprite.clone(), *transform));
+    let Some((sprite, transform)) = page else {
+        return (w, h, out);
+    };
+    let Some(image) = world.resource::<Assets<Image>>().get(&sprite.image) else {
+        return (w, h, out);
+    };
+    let size = image.size();
+    let rgba = image.data.clone().unwrap_or_default();
+    let rect = Rect::from_center_size(
+        Vec2::new(
+            w as f32 / 2.0 + transform.translation.x,
+            h as f32 / 2.0 - transform.translation.y,
+        ),
+        sprite.custom_size.unwrap() * transform.scale.truncate(),
+    );
+    for y in 0..h {
+        for x in 0..w {
+            let point = Vec2::new(x as f32 + 0.5, y as f32 + 0.5);
+            if !rect.contains(point) {
+                continue;
+            }
+            let u = (((point.x - rect.min.x) / rect.width()) * size.x as f32) as u32;
+            let v = (((point.y - rect.min.y) / rect.height()) * size.y as f32) as u32;
+            let i = ((v.min(size.y - 1) * size.x + u.min(size.x - 1)) * 4) as usize;
+            let a = u32::from(rgba[i + 3]);
+            let o = ((y * w + x) * 4) as usize;
+            for c in 0..3 {
+                out[o + c] =
+                    ((u32::from(rgba[i + c]) * a + u32::from(out[o + c]) * (255 - a) + 127) / 255)
+                        as u8;
+            }
+        }
+    }
+    (w, h, out)
+}
+
+/// The Phase B final review set (M5-M8): the journal page, the clue log,
+/// the cheats page, teleport and the change watch, each in a 4:3 window
+/// and a 16:9 window with the grow-left layout, and the journal side
+/// panel in a plain 16:9 window (grow-left hides the panels by design).
+/// Review output only: `U5_MOCKUP_PROFILE` names a game copy with a save
+/// and `U5_FINAL_SHOTS` a folder; nothing is committed.
+#[test]
+#[ignore = "review output: needs U5_MOCKUP_PROFILE and U5_FINAL_SHOTS"]
+fn phase_b_final_review_shots() {
+    use bevy::input::ButtonState;
+    use u5_runtime::enhancements::clues::{
+        ClueEntry, DialogKey, EntryFlags, GameMinute, NpcKey, RecordAddr, TestBits, game_minute,
+    };
+    use u5_runtime::{PlayOptions, Scene as GameScene};
+
+    use crate::enh::equivalence::Owner;
+    use crate::enh::journal::clues::ClueLogResource;
+
+    let (Some(profile), Some(out)) = (
+        configured_test_dir("U5_MOCKUP_PROFILE"),
+        configured_test_dir("U5_FINAL_SHOTS"),
+    ) else {
+        eprintln!("skipped: set U5_MOCKUP_PROFILE and U5_FINAL_SHOTS");
+        return;
+    };
+    fs::create_dir_all(&out).unwrap();
+    let game = unique_scratch_dir("phase-b-final-shots");
+    for entry in fs::read_dir(&profile).unwrap() {
+        let entry = entry.unwrap();
+        if entry.file_type().unwrap().is_file() {
+            copy_asset_writable(&entry.path(), &game.join(entry.file_name())).unwrap();
+        }
+    }
+    let scene = Scene::from_game_dir(&game).unwrap();
+    let town = || {
+        let mut state = PlayState::load_scene(
+            &game,
+            PlayOptions {
+                target: PlayTarget::Town(GameScene::from_key("TOWNE:1").unwrap()),
+                floor: 0,
+                start: Some((15, 17)),
+                clock: GameClock::new(10, 0).unwrap(),
+                ..PlayOptions::default()
+            },
+        )
+        .unwrap();
+        state.shrine_ordained_mask = 0b0000_0110;
+        state.shrine_codex_mask = 0b1001_0011;
+        state.shrine_ruin_flags[6] = 0x80;
+        for member in &mut state.party {
+            member.hp = member.max_hp / 3;
+        }
+        state
+    };
+    // Three people of the town family with topics, by dialog id.
+    let towne = u5_runtime::parse_tlk_raw(&game.join("TOWNE.TLK")).unwrap();
+    let mut ids: Vec<u16> = towne
+        .iter()
+        .filter(|(_, fields)| fields.len() >= 11)
+        .map(|(id, _)| *id)
+        .collect();
+    ids.sort_unstable();
+    let now = game_minute(&town()).0;
+    let mut entries = Vec::new();
+    for (person, id) in ids.iter().take(3).enumerate() {
+        let npc = NpcKey {
+            scene: 1,
+            slot: 2 + person as u8,
+        };
+        let dialog = DialogKey {
+            family: 0,
+            dialog_id: *id as u8,
+        };
+        for (k, minutes) in [(0, 1), (1, 3), (2, 7)] {
+            let mut entry = ClueEntry::heard(
+                npc,
+                dialog,
+                RecordAddr::Pair(k),
+                0,
+                TestBits::default(),
+                GameMinute(now - 2000 * (3 - person as u32) + minutes),
+            );
+            if person == 1 && k == 1 {
+                entry.count = 2;
+            }
+            entries.push(entry);
+        }
+    }
+    let launch_with = |grow: bool, toggles: &[Toggle]| {
+        let mut launch = launch(grow);
+        launch
+            .enhancements
+            .toggles
+            .set(Toggle::CheatsStateWatch, false);
+        for toggle in toggles {
+            launch.enhancements.toggles.set(*toggle, true);
+        }
+        launch
+    };
+    let ctrl = |timeline: &mut Timeline, frame: usize, key: KeyCode| {
+        timeline.event(
+            frame,
+            KeyCode::ControlLeft,
+            ButtonState::Pressed,
+            false,
+            Owner::Feature,
+        );
+        timeline.feature_tap(frame + 1, key);
+        timeline.event(
+            frame + 3,
+            KeyCode::ControlLeft,
+            ButtonState::Released,
+            false,
+            Owner::Feature,
+        );
+    };
+    let save = |name: &str, shot: (u32, u32, Vec<u8>)| {
+        save_png(&out.join(format!("{name}.png")), shot.0, shot.1, &shot.2);
+    };
+    let cases = [
+        ("43", (1280u32, 960u32), false),
+        ("169-grow", (2048, 960), true),
+    ];
+    for (label, (ww, wh), grow) in cases {
+        let new_shell = |toggles: &[Toggle]| {
+            let mut shell = Shell::new(town(), &scene, &launch_with(grow, toggles), |_| {});
+            shell.app.world_mut().spawn(Window {
+                resolution: WindowResolution::new(ww as f32, wh as f32),
+                ..default()
+            });
+            for _ in 0..30 {
+                shell.step(&[]);
+            }
+            shell
+        };
+        // The journal page and the clue log.
+        let mut shell = new_shell(&[
+            Toggle::JournalPage,
+            Toggle::JournalClues,
+            Toggle::JournalQuestTracker,
+        ]);
+        {
+            let mut log = shell.app.world_mut().resource_mut::<ClueLogResource>();
+            for entry in &entries {
+                log.log_mut().fold(*entry);
+            }
+            log.log_mut().set_flag(2, EntryFlags::STAR, true);
+        }
+        let mut timeline = Timeline::new(60);
+        ctrl(&mut timeline, 2, KeyCode::KeyJ);
+        for frame in 0..timeline.len() {
+            shell.step(timeline.frame(frame));
+        }
+        save(
+            &format!("journal-quests-{label}"),
+            window_shot_with_page(&mut shell),
+        );
+        let mut timeline = Timeline::new(40);
+        timeline.feature_tap(2, KeyCode::Tab);
+        timeline.feature_tap(6, KeyCode::Enter);
+        timeline.feature_tap(10, KeyCode::ArrowDown);
+        timeline.feature_tap(14, KeyCode::ArrowDown);
+        for frame in 0..timeline.len() {
+            shell.step(timeline.frame(frame));
+        }
+        save(
+            &format!("journal-clues-{label}"),
+            window_shot_with_page(&mut shell),
+        );
+
+        // The cheats page, teleport and the change watch.
+        let mut cheats: Vec<Toggle> = u5_runtime::enhancements::TOGGLES
+            .iter()
+            .filter(|spec| spec.toggle.key().starts_with("cheats."))
+            .map(|spec| spec.toggle)
+            .collect();
+        cheats.retain(|toggle| *toggle != Toggle::CheatsRememberLocks);
+        let mut shell = new_shell(&cheats);
+        let mut timeline = Timeline::new(90);
+        ctrl(&mut timeline, 2, KeyCode::F12);
+        timeline.feature_tap(10, KeyCode::KeyH);
+        timeline.feature_tap(16, KeyCode::KeyT);
+        timeline.feature_tap(22, KeyCode::ArrowRight);
+        timeline.feature_tap(28, KeyCode::Escape);
+        timeline.feature_tap(34, KeyCode::KeyW);
+        for frame in 0..timeline.len() {
+            shell.step(timeline.frame(frame));
+            match frame {
+                14 => save(&format!("cheats-main-{label}"), window_shot(&mut shell)),
+                26 => save(&format!("cheats-teleport-{label}"), window_shot(&mut shell)),
+                _ => {}
+            }
+        }
+        save(&format!("cheats-watch-{label}"), window_shot(&mut shell));
+    }
+
+    // The journal side panel in a plain 16:9 window.
+    let mut shell = Shell::new(
+        town(),
+        &scene,
+        &launch_with(false, &[Toggle::JournalSidePanel, Toggle::JournalClues]),
+        |_| {},
+    );
+    shell.app.world_mut().spawn(Window {
+        resolution: WindowResolution::new(1706.0, 960.0),
+        ..default()
+    });
+    for _ in 0..40 {
+        shell.step(&[]);
+    }
+    save("journal-side-panel-169", window_shot(&mut shell));
+    let _ = fs::remove_dir_all(game);
+}
