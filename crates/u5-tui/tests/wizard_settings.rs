@@ -100,7 +100,7 @@ fn rows_and_presets_come_from_the_catalogue_and_the_file() {
             .iter()
             .filter(|spec| spec.is_shipped() && !spec.driven)
             .all(
-                |spec| ["display.", "gem_map.", "menu.", "audio.", "combat."]
+                |spec| ["display.", "gem_map.", "menu.", "audio.", "combat.", "cheats."]
                     .iter()
                     .any(|section| spec.key.starts_with(section))
             )
@@ -165,6 +165,31 @@ fn rows_and_presets_come_from_the_catalogue_and_the_file() {
             "combat.potions",
             "combat.mp_reserve",
             "combat.fast_forward",
+            // Chapter 7 (M8): the Cheats group, Allow cheats first, the
+            // watch last (D-M8.3).
+            "cheats.enabled",
+            "cheats.heal_all",
+            "cheats.cure_poison",
+            "cheats.resurrect_all",
+            "cheats.max_gold",
+            "cheats.max_food",
+            "cheats.refill_arrows",
+            "cheats.refill_quarrels",
+            "cheats.max_reagents",
+            "cheats.repair_hull",
+            "cheats.lock_hp",
+            "cheats.lock_mp",
+            "cheats.lock_food",
+            "cheats.lock_gold",
+            "cheats.lock_keys",
+            "cheats.lock_gems",
+            "cheats.lock_torches",
+            "cheats.lock_arrows",
+            "cheats.lock_reagents",
+            "cheats.remember_locks",
+            "cheats.stat_edit",
+            "cheats.teleport",
+            "cheats.state_watch",
         ]
     );
     assert!(
