@@ -393,7 +393,7 @@ fn the_picker_offers_only_what_the_tier_shows() {
         rows.iter()
             .all(|row| matches!(row.target.quest.kind, Shrine | Password))
     );
-    // Below tier 3 a password's role is a hint (U17): numbered only.
+    // A password's role is a hint (U17): the cards are numbered only.
     let passwords: Vec<&str> = rows
         .iter()
         .filter(|row| row.target.quest.kind == Password)

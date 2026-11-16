@@ -405,26 +405,15 @@ pub const CLUE_LOG_OFF: &str = "Clue log off";
 /// The tracker section with no card yet.
 pub const NO_CARDS: &str = "No quest is tracked yet";
 
-/// The two passwords of `catalogs/quest-graph.md` §3, by role only (the
-/// words themselves are answers).
+/// The two passwords of `catalogs/quest-graph.md` §3, numbered only (the
+/// words themselves are answers). The role is itself a hint (U17,
+/// foundation 1.4.7), and the pin picker offers both cards at every tier,
+/// so it appears only in the tier 3 line ([`password_hint`]). The label
+/// is the same at every tier, so a higher tier only adds (T13).
 pub const fn password_label(index: usize) -> &'static str {
     match index {
-        0 => "Resistance",
-        _ => "Oppression",
-    }
-}
-
-/// A password card's label at `tier`. Below tier 3 the role is itself a
-/// hint (U17, foundation 1.4.7): the picker offers the cards so a player
-/// can pin to them, so there they are only numbered.
-pub const fn password_label_at(index: usize, tier: SpoilerTier) -> &'static str {
-    if (tier as u8) < (SpoilerTier::Hints as u8) {
-        match index {
-            0 => "Password 1",
-            _ => "Password 2",
-        }
-    } else {
-        password_label(index)
+        0 => "Password 1",
+        _ => "Password 2",
     }
 }
 

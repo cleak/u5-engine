@@ -1037,7 +1037,7 @@ fn card(
             if !pinned && !hints(tier) {
                 return None;
             }
-            let card = TrackerCard::new(quest, text::password_label_at(index, tier));
+            let card = TrackerCard::new(quest, text::password_label(index));
             lines.at(SpoilerTier::Hints, text::password_hint(index));
             // No save evidence: below tier 3 it names no step.
             (card, false)
@@ -1166,17 +1166,17 @@ pub struct PinTarget {
 /// "works at any tier"): the shrines, by virtue, and the two passwords by
 /// role. They name nothing the tier hides: a pin is how such a card comes
 /// to exist below tier 3.
-fn always_pinnable(tier: SpoilerTier) -> impl Iterator<Item = (QuestId, JournalText)> {
+fn always_pinnable() -> impl Iterator<Item = (QuestId, JournalText)> {
     let shrines = ShrineVirtue::ALL.iter().enumerate().map(|(at, virtue)| {
         (
             QuestId::new(QuestKind::Shrine, at as u8),
             virtue.name().into(),
         )
     });
-    let passwords = (0..chain(QuestKind::Password).count).map(move |at| {
+    let passwords = (0..chain(QuestKind::Password).count).map(|at| {
         (
             QuestId::new(QuestKind::Password, at),
-            text::password_label_at(usize::from(at), tier).into(),
+            text::password_label(usize::from(at)).into(),
         )
     });
     shrines.chain(passwords)
@@ -1192,7 +1192,7 @@ pub fn pin_targets(view: &TrackerView, log: &ClueLog, entry: u16) -> Vec<PinTarg
         .iter()
         .map(|card| (card.quest, card.title.clone(), card.steps.iter().collect()))
         .collect();
-    for (quest, title) in always_pinnable(view.tier) {
+    for (quest, title) in always_pinnable() {
         if !cards.iter().any(|(shown, _, _)| *shown == quest) {
             cards.push((quest, title, Vec::new()));
         }
