@@ -18,8 +18,11 @@
 //!   panel is granted or a [`FramePolicy`] other than the 1.0.1 Fit is in
 //!   force (chapter 2's scale modes, [`solve_frame`]).
 //! - The generic cell-panel renderer draws [`PanelContent::Cells`] into a
-//!   136x200 image (an 8-pixel gutter on the frame side, then 16 cells of
-//!   the frame's own font, a title and 24 rows), repainting only when the
+//!   144x200 image with the menu's frame kit: the game's blue ring with its
+//!   white rules and carved corners, the title on a tab in the top ring,
+//!   and 16 cells of the frame's own font by 21 rows inside, between blank
+//!   margin rows. The rules sit where the gameplay frame's do, so the
+//!   panel's bands line up with the frame's. It repaints only when the
 //!   cells change. Panels are `bevy_ui` nodes; the frame image is never
 //!   written.
 //!
@@ -47,17 +50,19 @@ use crate::{
 /// The one-time toast for a panel that finds no room (1.2.8, 5.2.10).
 pub const PANEL_HIDDEN: &str = "There is no room for a side panel in this window.";
 
-/// A cell panel's image: the gutter and 16 cells across, a title and 24
-/// rows down.
-pub const PANEL_WIDTH: u32 = PANEL_GUTTER + (PANEL_COLUMNS * CH_CELL_SIDE) as u32;
-pub const PANEL_HEIGHT: u32 = (PANEL_TEXT_ROWS * CH_CELL_SIDE) as u32;
-/// The blank strip on the frame side of a cell panel.
-pub const PANEL_GUTTER: u32 = 8;
-/// Cells per panel row.
+/// A cell panel's image: the ring and 16 cells across, the ring, a margin
+/// row, 21 rows, a margin row and the ring down (the frame's 25 rows).
+pub const PANEL_WIDTH: u32 = ((PANEL_COLUMNS + 2) * CH_CELL_SIDE) as u32;
+pub const PANEL_HEIGHT: u32 = (PANEL_CELL_ROWS * CH_CELL_SIDE) as u32;
+/// Cells per panel row: the message window's 16.
 pub const PANEL_COLUMNS: usize = 16;
 /// Rows below the title.
-pub const PANEL_BODY_ROWS: usize = 24;
+pub const PANEL_BODY_ROWS: usize = 21;
 const PANEL_TEXT_ROWS: usize = PANEL_BODY_ROWS + 1;
+/// The panel's cell rows, the gameplay frame's 25.
+const PANEL_CELL_ROWS: usize = 25;
+/// The cell row of the first body row: under the ring and a margin row.
+const PANEL_FIRST_BODY_ROW: usize = 2;
 
 const PANEL_GUARD_KEY: &str = "display.panel_guard";
 const PANEL_PRIORITY_KEY: &str = "display.panel_priority";
@@ -65,10 +70,9 @@ const PANEL_PRIORITY_KEY: &str = "display.panel_priority";
 const DEFAULT_GUARD: u8 = 80;
 const GUARD_RANGE: std::ops::RangeInclusive<u8> = 50..=100;
 
-/// White title, light grey rows, on black: the text window's own pens.
-const TITLE_INK: [u8; 4] = [0xff, 0xff, 0xff, 0xff];
-const ROW_INK: [u8; 4] = [0xaa, 0xaa, 0xaa, 0xff];
-const PAPER: [u8; 4] = [0x00, 0x00, 0x00, 0xff];
+/// Light grey rows on black: the text window's own pen. The title is the
+/// kit's white, on its tab.
+const ROW_INK: u8 = crate::menu::frame::HELP_INK;
 
 /// A panel kind, in its default priority order. The minimap (chapter 4)
 /// is parked (U18); it never claims space from a cell panel.
@@ -186,7 +190,7 @@ impl PanelRows {
         &self.rows[0]
     }
 
-    /// Body row `index`, 0 to 23.
+    /// Body row `index`, 0 to 20.
     pub fn row(&self, index: usize) -> &[u8; PANEL_COLUMNS] {
         &self.rows[index + 1]
     }
@@ -805,9 +809,11 @@ pub struct SidePanelNode {
     drawn: PanelContent,
 }
 
-/// The cell panel's pixels: the gutter on the frame side, then the title
-/// and rows in `font`, one cell per byte. A byte the font has no glyph for
-/// draws blank.
+/// The cell panel's pixels, drawn with the menu's frame kit: the ring (its
+/// rules where the gameplay frame has its own, so the bands line up), the
+/// title on a tab in the top ring, and the rows in `font`, one cell per
+/// byte, between blank margin rows. A byte the font has no glyph for draws
+/// blank. Both sides draw alike: the ring stands on the frame side too.
 pub fn render_cell_panel(font: &FixedCellFont, rows: &PanelRows, side: PanelSide) -> Vec<u8> {
     render_cell_panel_with_runes(font, None, rows, side)
 }
@@ -818,36 +824,30 @@ pub fn render_cell_panel_with_runes(
     font: &FixedCellFont,
     runes: Option<&FixedCellFont>,
     rows: &PanelRows,
-    side: PanelSide,
+    _side: PanelSide,
 ) -> Vec<u8> {
-    let width = PANEL_WIDTH as usize;
-    let mut rgba = PAPER.repeat(width * PANEL_HEIGHT as usize);
-    let text_left = match side {
-        PanelSide::Left => 0,
-        PanelSide::Right => PANEL_GUTTER as usize,
-    };
-    for (row, cells) in rows.rows.iter().enumerate() {
-        let ink = if row == 0 { TITLE_INK } else { ROW_INK };
-        for (cell, byte) in cells.iter().enumerate() {
+    use crate::menu::frame::{MenuImage, PAPER, Panel, draw_code, draw_panel, draw_title_tab};
+    use crate::menu::geometry::CellRect;
+    let rect = CellRect::new(0, 0, PANEL_COLUMNS as u32 + 2, PANEL_CELL_ROWS as u32);
+    let mut img = MenuImage::new(PANEL_WIDTH, PANEL_HEIGHT);
+    draw_panel(&mut img, &Panel::new(rect).tight());
+    let title = String::from_utf8_lossy(rows.title()).trim_end().to_string();
+    if !title.is_empty() {
+        draw_title_tab(&mut img, font, rect, &title);
+    }
+    for index in 0..PANEL_BODY_ROWS {
+        let cell_row = (PANEL_FIRST_BODY_ROW + index) as u32;
+        let mask = rows.runic(index);
+        for (cell, byte) in rows.row(index).iter().enumerate() {
             let face = match runes {
-                Some(runes) if rows.runic[row] & (1 << cell) != 0 => runes,
+                Some(runes) if mask & (1 << cell) != 0 => runes,
                 _ => font,
             };
-            for line in 0..CH_CELL_SIDE {
-                let bits = face.glyph_row(*byte, line).unwrap_or(0);
-                for column in 0..CH_CELL_SIDE {
-                    if bits & (0x80 >> column) == 0 {
-                        continue;
-                    }
-                    let x = text_left + cell * CH_CELL_SIDE + column;
-                    let y = row * CH_CELL_SIDE + line;
-                    let offset = (y * width + x) * 4;
-                    rgba[offset..offset + 4].copy_from_slice(&ink);
-                }
-            }
+            let at = (1 + cell as u32, cell_row);
+            draw_code(&mut img, face, at, *byte, ROW_INK, Some(PAPER));
         }
     }
-    rgba
+    img.rgba
 }
 
 fn panel_image(rgba: Vec<u8>) -> Image {

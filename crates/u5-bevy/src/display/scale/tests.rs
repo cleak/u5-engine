@@ -277,7 +277,7 @@ fn integer_panels_keep_whole_factors() {
             &SideSpaceSettings::default(),
             Some(&policy),
         );
-        // 320 + 136 = 456 across: 7x fits 3440x1440 (3192x1400).
+        // 320 + 144 = 464 across: 7x fits 3440x1440 (3248x1400).
         let frame = solved.layout.frame.unwrap();
         let (kind, panel) = solved.layout.granted[0];
         assert_eq!(kind, PanelKind::Journal);
@@ -287,7 +287,7 @@ fn integer_panels_keep_whole_factors() {
             Vec2::new(PANEL_WIDTH as f32 * 7.0, 1400.0)
         ));
         assert!(close(panel.max, Vec2::new(frame.min.x, frame.max.y)));
-        assert!(close(panel.min * sf, Vec2::new(124.0, 20.0)), "@{sf}");
+        assert!(close(panel.min * sf, Vec2::new(96.0, 20.0)), "@{sf}");
     }
 }
 

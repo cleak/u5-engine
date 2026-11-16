@@ -71,7 +71,7 @@ fn assert_near(actual: Vec2, expected: Vec2, what: &str) {
 
 /// The frame scale with `panels` cell panels beside it.
 fn scale(window: Vec2, panels: u32) -> f32 {
-    (window.x / (320 + 136 * panels) as f32).min(window.y / 240.0)
+    (window.x / (320 + 144 * panels) as f32).min(window.y / 240.0)
 }
 
 /// Checks the layout's frame and panels against scale `u` with the frame's
@@ -83,7 +83,7 @@ fn assert_geometry(solution: &SideSolution, window: Vec2, u: f32, left: f32, wha
     assert_near(frame.min, Vec2::new(left, top), what);
     assert_near(frame.size(), Vec2::new(320.0 * u, 240.0 * u), what);
     for (kind, rect) in &layout.granted {
-        assert_near(rect.size(), Vec2::new(136.0 * u, 240.0 * u), what);
+        assert_near(rect.size(), Vec2::new(144.0 * u, 240.0 * u), what);
         assert_eq!(rect.min.y, frame.min.y, "{what}: {kind:?} level with frame");
         let (edge, against) = match layout.side_of(*kind).unwrap() {
             PanelSide::Left => (rect.max.x, frame.min.x),
@@ -254,7 +254,7 @@ fn arbiter_geometry_at_five_aspects() {
         let u = scale(window, 1);
         assert!(u >= 0.8 * scale(window, 0) && u < scale(window, 0));
         assert!(scale(window, 2) < 0.8 * scale(window, 0));
-        assert_geometry(&solution, window, u, (window.x - 456.0 * u) / 2.0, "16:x");
+        assert_geometry(&solution, window, u, (window.x - 464.0 * u) / 2.0, "16:x");
     }
 
     // 21:9: both fit within the guard, shrunk, packed and centred.
@@ -269,7 +269,7 @@ fn arbiter_geometry_at_five_aspects() {
     assert!(solution.hidden.is_empty());
     let u = scale(ASPECT_21_9, 2);
     assert!(u < scale(ASPECT_21_9, 0));
-    let left = (ASPECT_21_9.x - 592.0 * u) / 2.0 + 136.0 * u;
+    let left = (ASPECT_21_9.x - 608.0 * u) / 2.0 + 144.0 * u;
     assert_geometry(&solution, ASPECT_21_9, u, left, "21:9");
 
     // 32:9: both fit in the bars at full size; the frame does not move.
@@ -282,7 +282,7 @@ fn arbiter_geometry_at_five_aspects() {
 
 #[test]
 fn the_guard_drops_panels_below_its_percent() {
-    // 16:9 with one panel keeps 93.6 % of the frame; two keep 72 %.
+    // 16:9 with one panel keeps 91.9 % of the frame; two keep 70.2 %.
     let solution = solve_side_space(ASPECT_16_9, FRAME, &both_auto(), &with_guard(100));
     assert!(
         !solution.layout.owns_frame(),
@@ -292,14 +292,14 @@ fn the_guard_drops_panels_below_its_percent() {
         solution.hidden,
         [PanelKind::Journal, PanelKind::Conversation]
     );
-    let solution = solve_side_space(ASPECT_16_9, FRAME, &both_auto(), &with_guard(94));
+    let solution = solve_side_space(ASPECT_16_9, FRAME, &both_auto(), &with_guard(92));
     assert!(solution.layout.granted.is_empty());
-    let solution = solve_side_space(ASPECT_16_9, FRAME, &both_auto(), &with_guard(93));
+    let solution = solve_side_space(ASPECT_16_9, FRAME, &both_auto(), &with_guard(91));
     assert_eq!(solution.layout.granted.len(), 1);
-    let solution = solve_side_space(ASPECT_16_9, FRAME, &both_auto(), &with_guard(72));
+    let solution = solve_side_space(ASPECT_16_9, FRAME, &both_auto(), &with_guard(70));
     assert_eq!(solution.layout.granted.len(), 2);
     assert!(solution.hidden.is_empty());
-    let solution = solve_side_space(ASPECT_16_9, FRAME, &both_auto(), &with_guard(73));
+    let solution = solve_side_space(ASPECT_16_9, FRAME, &both_auto(), &with_guard(71));
     assert_eq!(solution.layout.granted.len(), 1);
     // 100 % still grants a panel that fits in a free bar.
     let solution = solve_side_space(ASPECT_32_9, FRAME, &both_auto(), &with_guard(100));
@@ -367,10 +367,10 @@ fn two_panels_on_one_side_go_by_priority() {
 
 #[test]
 fn a_panel_that_fits_unshrunk_but_not_centred_moves_the_frame() {
-    // 2052x1080: the full-size frame leaves 306-pixel bars, too narrow for
-    // a 612-pixel panel, but frame and panel fit side by side at u0 = 4.5
+    // 2088x1080: the full-size frame leaves 324-pixel bars, too narrow for
+    // a 648-pixel panel, but frame and panel fit side by side at u0 = 4.5
     // once the frame moves over.
-    let window = Vec2::new(2052.0, 1080.0);
+    let window = Vec2::new(2088.0, 1080.0);
     let solution = solve(window, &[claim(PanelKind::Journal, SidePreference::Auto)]);
     assert_eq!(scale(window, 1), 4.5);
     assert_geometry(&solution, window, 4.5, 0.0, "shifted");
@@ -444,31 +444,36 @@ fn pixel(rgba: &[u8], x: usize, y: usize) -> [u8; 4] {
 }
 
 #[test]
-fn the_cell_panel_is_136_by_200() {
-    assert_eq!((PANEL_WIDTH, PANEL_HEIGHT), (136, 200));
+fn the_cell_panel_is_144_by_200() {
+    assert_eq!((PANEL_WIDTH, PANEL_HEIGHT), (144, 200));
     let rows = PanelRows::new("T", &[" A"]);
     let rgba = render_cell_panel(&test_font(), &rows, PanelSide::Right);
-    assert_eq!(rgba.len(), 136 * 200 * 4);
+    assert_eq!(rgba.len(), 144 * 200 * 4);
 }
 
+/// The panel is the menu kit's: the blue ring with its white rules where
+/// the gameplay frame has its own (x 7, y 7, y 192), carved corners, the
+/// title on a tab in the top ring, and the rows in light grey between
+/// blank margin rows. Both sides draw alike.
 #[test]
-fn the_renderer_draws_title_and_rows_beside_the_gutter() {
+fn the_renderer_draws_the_frame_kit_ring_title_and_rows() {
+    use crate::menu::frame::{BAND, HELP_INK, INK, PAPER, RULE, ega};
     let font = test_font();
     let rows = PanelRows::new("T", &[" A"]);
-    // A right panel: the gutter is on its left, next to the frame.
-    let rgba = render_cell_panel(&font, &rows, PanelSide::Right);
-    assert_eq!(pixel(&rgba, 8, 0), TITLE_INK, "the T, after the gutter");
-    assert_eq!(pixel(&rgba, 8 + 8, 8), ROW_INK, "the A, row one, cell one");
-    assert_eq!(pixel(&rgba, 0, 0), PAPER, "the gutter");
-    assert_eq!(pixel(&rgba, 9, 0), PAPER);
-    // A left panel: the gutter is on its right.
-    let rgba = render_cell_panel(&font, &rows, PanelSide::Left);
-    assert_eq!(pixel(&rgba, 0, 0), TITLE_INK);
-    assert_eq!(pixel(&rgba, 8, 8), ROW_INK);
-    for x in 128..136 {
-        for y in 0..200 {
-            assert_eq!(pixel(&rgba, x, y), PAPER, "gutter at {x},{y}");
-        }
+    for side in [PanelSide::Right, PanelSide::Left] {
+        let rgba = render_cell_panel(&font, &rows, side);
+        assert_eq!(pixel(&rgba, 0, 0)[3], 0, "the carved corner");
+        assert_eq!(pixel(&rgba, 3, 100), ega(BAND), "the left band");
+        assert_eq!(pixel(&rgba, 7, 100), ega(RULE), "the left rule");
+        assert_eq!(pixel(&rgba, 136, 100), ega(RULE), "the right rule");
+        assert_eq!(pixel(&rgba, 140, 100), ega(BAND), "the right band");
+        assert_eq!(pixel(&rgba, 30, 7), ega(RULE), "the top rule");
+        assert_eq!(pixel(&rgba, 30, 192), ega(RULE), "the bottom rule");
+        // The title tab, centred: caps at cells 7 and 9, the T at 8.
+        assert_eq!(pixel(&rgba, 64, 0), ega(INK), "the T");
+        // The margin row, then the A in body row one, cell one.
+        assert_eq!(pixel(&rgba, 16, 8), ega(PAPER), "the margin row");
+        assert_eq!(pixel(&rgba, 16, 16), ega(HELP_INK), "the A");
     }
 }
 
@@ -479,10 +484,10 @@ fn panel_rows_pad_and_cut() {
     let rows = PanelRows::new(long, &many);
     assert_eq!(rows.title(), b"ABCDEFGHIJKLMNOP");
     assert_eq!(rows.row(0), b"A               ");
-    assert_eq!(rows.row(23), b"A               ");
+    assert_eq!(rows.row(PANEL_BODY_ROWS - 1), b"A               ");
     let rows = PanelRows::new("", &[]);
     assert_eq!(rows.title(), &[b' '; 16]);
-    assert_eq!(rows.row(23), &[b' '; 16]);
+    assert_eq!(rows.row(PANEL_BODY_ROWS - 1), &[b' '; 16]);
 }
 
 // ---------------------------------------------------------------------------
