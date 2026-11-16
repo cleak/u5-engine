@@ -7,7 +7,8 @@ use std::collections::HashMap;
 use bevy::input::ButtonState;
 use u5_runtime::enhancements::{Toggle, fnv1a64};
 use u5_runtime::test_fixtures::{
-    configured_test_dir, copy_asset_writable, open_grid, test_state, unique_scratch_dir,
+    configured_test_dir, copy_asset_writable, fix_host_clock_for_tests, open_grid, test_state,
+    unique_scratch_dir,
 };
 use u5_runtime::{
     CH_FONT_LEN, Direction, IBM_CH_FILE, MESSAGE_WINDOW_BOTTOM, MESSAGE_WINDOW_LEFT,
@@ -217,6 +218,9 @@ fn differing(a: &[u8], b: &[u8]) -> Vec<(usize, usize)> {
 
 #[test]
 fn t2_faithful_frames_are_equal_and_marks_stay_in_window_two() {
+    // Two shells are compared frame by frame: a host-clock reseed in the
+    // conversation must read the same time in both (as T1 does).
+    fix_host_clock_for_tests();
     let mut off = Shell::new(
         talking_state(),
         &scene(),

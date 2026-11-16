@@ -414,6 +414,20 @@ pub const fn password_label(index: usize) -> &'static str {
     }
 }
 
+/// A password card's label at `tier`. Below tier 3 the role is itself a
+/// hint (U17, foundation 1.4.7): the picker offers the cards so a player
+/// can pin to them, so there they are only numbered.
+pub const fn password_label_at(index: usize, tier: SpoilerTier) -> &'static str {
+    if (tier as u8) < (SpoilerTier::Hints as u8) {
+        match index {
+            0 => "Password 1",
+            _ => "Password 2",
+        }
+    } else {
+        password_label(index)
+    }
+}
+
 /// A password card's tier 3 line: its role, in our words.
 pub const fn password_hint(index: usize) -> &'static str {
     match index {

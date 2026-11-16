@@ -393,6 +393,13 @@ fn the_picker_offers_only_what_the_tier_shows() {
         rows.iter()
             .all(|row| matches!(row.target.quest.kind, Shrine | Password))
     );
+    // Below tier 3 a password's role is a hint (U17): numbered only.
+    let passwords: Vec<&str> = rows
+        .iter()
+        .filter(|row| row.target.quest.kind == Password)
+        .map(|row| row.label.as_str())
+        .collect();
+    assert_eq!(passwords, ["Password 1", "Password 2"]);
     // At tier 4 every card, with its Knowledge steps only.
     let view = derive_trackers(
         &snap(),
