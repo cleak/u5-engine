@@ -139,6 +139,23 @@ fn rows_and_presets_come_from_the_catalogue_and_the_file() {
             "gem_map.wrap_rows",
             "gem_map.level_paging",
             "gem_map.glyphs",
+            // Chapters 5 and 8 (M5-06, M6-08): the Journal group, the page
+            // with its tier and mantra rows under it, the panel with its
+            // side, then the clue log's rows.
+            "journal.page",
+            "journal.spoiler_tier",
+            "journal.mantras",
+            "journal.side_panel",
+            "journal.side_panel_side",
+            "journal.clues",
+            "journal.clue_text",
+            "journal.clue_scrollback",
+            "journal.clue_toast",
+            "journal.notes",
+            "journal.quest_tracker",
+            "journal.tracker_evidence",
+            "journal.clue_highlight",
+            "journal.clue_highlight_style",
             // Chapter 3 Phases 1-4 (M4-13): the menu and its sub-options,
             // the title layer, the slots, then the audio rows.
             "menu.overlay",
@@ -190,13 +207,6 @@ fn rows_and_presets_come_from_the_catalogue_and_the_file() {
             "cheats.stat_edit",
             "cheats.teleport",
             "cheats.state_watch",
-            // Chapter 5 (M5-06): the Journal group, the page with its tier
-            // and mantra rows under it, then the panel with its side.
-            "journal.page",
-            "journal.spoiler_tier",
-            "journal.mantras",
-            "journal.side_panel",
-            "journal.side_panel_side",
         ]
     );
     assert!(
@@ -242,8 +252,24 @@ fn rows_and_presets_come_from_the_catalogue_and_the_file() {
     assert_eq!(indented[8..17], keys[19..28]);
     // Chapter 3: the overlay's warning and Return to the title, and the
     // slots' quick slot.
+    // Chapters 5 and 8: the tier and mantra rows under the page, the side
+    // under the panel, the clue text under the log, the evidence under the
+    // trackers and the style under highlighting.
     assert_eq!(
-        indented[17..20],
+        indented[17..23],
+        [
+            "journal.spoiler_tier",
+            "journal.mantras",
+            "journal.side_panel_side",
+            "journal.clue_text",
+            "journal.tracker_evidence",
+            "journal.clue_highlight_style"
+        ]
+    );
+    // Chapter 3: the overlay's warning and Return to the title, and the
+    // slots' quick slot.
+    assert_eq!(
+        indented[23..26],
         [
             "menu.confirm_unsaved",
             "menu.quit_to_title",
@@ -252,19 +278,10 @@ fn rows_and_presets_come_from_the_catalogue_and_the_file() {
     );
     // Chapter 6: the options sit under "Auto-combat"; fast-forward is a
     // row of its own.
-    assert_eq!(indented[20..28], keys[40..48]);
-    // Chapter 5: the tier and mantra rows under the page, the side under
-    // the panel.
-    assert_eq!(
-        indented[28..],
-        [
-            "journal.spoiler_tier",
-            "journal.mantras",
-            "journal.side_panel_side"
-        ]
-    );
-    // Recommended turns compositing (P5), auto-combat and fast-forward on
-    // (U2, U6); Everything also sets sharp scaling and the F11 key (2.2.1).
+    assert_eq!(indented[26..], keys[54..62]);
+    // Recommended turns compositing (P5), auto-combat and fast-forward
+    // (U2, U6) and the clue log's three (M6-08) on; Everything also sets
+    // sharp scaling and the F11 key (2.2.1).
     let values = |key: &str| {
         let choice = settings
             .presets
@@ -290,7 +307,10 @@ fn rows_and_presets_come_from_the_catalogue_and_the_file() {
             "(\"display.scale_mode\", Choice(\"fit\"))",
             "(\"display.sprite_composite\", Switch(false))",
             "(\"gem_map.enhanced\", Switch(false))",
+            "(\"journal.clue_highlight\", Choice(\"off\"))",
+            "(\"journal.clues\", Switch(false))",
             "(\"journal.page\", Switch(false))",
+            "(\"journal.quest_tracker\", Switch(false))",
             "(\"journal.side_panel\", Switch(false))",
             "(\"menu.named_slots\", Switch(false))",
             "(\"menu.overlay\", Switch(false))",
@@ -307,8 +327,12 @@ fn rows_and_presets_come_from_the_catalogue_and_the_file() {
             "(\"display.scale_mode\", Choice(\"fit\"))",
             "(\"display.sprite_composite\", Switch(true))",
             "(\"gem_map.enhanced\", Switch(false))",
-            // Chapter 5: Recommended holds no journal key (U2).
+            // Chapter 8: Recommended turns the clue log, highlighting and
+            // the trackers on; chapter 5's page and panel stay off (U2).
+            "(\"journal.clue_highlight\", Choice(\"asked\"))",
+            "(\"journal.clues\", Switch(true))",
             "(\"journal.page\", Switch(false))",
+            "(\"journal.quest_tracker\", Switch(true))",
             "(\"journal.side_panel\", Switch(false))",
             "(\"menu.named_slots\", Switch(false))",
             "(\"menu.overlay\", Switch(false))",
@@ -326,7 +350,10 @@ fn rows_and_presets_come_from_the_catalogue_and_the_file() {
             "(\"display.sprite_composite\", Switch(true))",
             // Chapter 10: the catalogue puts the gem map in Everything only.
             "(\"gem_map.enhanced\", Switch(true))",
+            "(\"journal.clue_highlight\", Choice(\"asked\"))",
+            "(\"journal.clues\", Switch(true))",
             "(\"journal.page\", Switch(true))",
+            "(\"journal.quest_tracker\", Switch(true))",
             "(\"journal.side_panel\", Switch(true))",
             // Chapter 3 (3.4.1): the menu, the slots, the title layer and
             // focus mute are in Everything only.
@@ -603,8 +630,9 @@ fn desktop_host_feeds_the_settings_only_wizard() {
     let mut model = WizardModel::settings_only(&host);
     assert!(model.outcome.is_none());
     // Choose Recommended and save: the preset and the rows it changed
-    // (sprite compositing, auto-combat and fast-forward, which Recommended
-    // turns on) are written.
+    // (sprite compositing, the clue log with highlighting and the
+    // trackers, auto-combat and fast-forward, which Recommended turns on)
+    // are written.
     assert!(model.apply(u5_bevy_setup::Action::SelectPreset(1), &host));
     assert!(model.apply(u5_bevy_setup::Action::SaveSettings, &host));
     assert_eq!(
@@ -615,6 +643,7 @@ fn desktop_host_feeds_the_settings_only_wizard() {
     assert_eq!(
         text,
         "[enhancements]\npreset = \"recommended\"\n\n[display]\nsprite_composite = true\n\n\
+         [journal]\nclues = true\nquest_tracker = true\nclue_highlight = \"asked\"\n\n\
          [combat]\nauto = true\nfast_forward = true\n"
     );
     assert_eq!(host.settings_rows().unwrap().preset, 1);
