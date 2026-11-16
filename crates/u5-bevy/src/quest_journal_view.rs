@@ -126,13 +126,15 @@ const GLYPH_DOWN: char = '\u{19}';
 const GLYPH_RIGHT: char = '\u{1a}';
 const GLYPH_LEFT: char = '\u{1b}';
 
-/// The frame's rules: the left and right rule columns and the top and
-/// bottom rule rows, as the gameplay frame draws its own at x = 7 and
-/// x = 312.
+/// The frame's rules: the left and right rule columns, as the gameplay
+/// frame draws its own at x = 7 and x = 312, and the top and bottom rule
+/// rows, which stand a pixel off the text (y = 6 and 193): a capital in
+/// the first body row and a descender in the last never touch them, as on
+/// the cheats page and in the menu kit. No row moves.
 const RULE_LEFT_X: usize = 7;
 const RULE_RIGHT_X: usize = PAGE_WIDTH - 8;
-const RULE_TOP_Y: usize = 7;
-const RULE_BOTTOM_Y: usize = KEY_HELP_ROW as usize * CH_CELL_SIDE;
+const RULE_TOP_Y: usize = 6;
+const RULE_BOTTOM_Y: usize = KEY_HELP_ROW as usize * CH_CELL_SIDE + 1;
 
 /// An RGB colour.
 pub type Rgb = [u8; 3];
@@ -1647,15 +1649,17 @@ pub fn paint_page_with_runes(
 }
 
 /// The tab strip in the title band (8.2.3): every tab's name in one band
-/// tab, two cells apart, the one showing in white and the others in dark
-/// grey, then `SPOILERS` in brown when it applies.
+/// tab, two cells apart, the one showing in white and the others in the
+/// text window's light grey (EGA 7), the original's own pair for a chosen
+/// and an unchosen item; dark grey on black was too faint to read. Then
+/// `SPOILERS` in brown when it applies.
 pub fn strip_parts(view: &PageView<'_>) -> Vec<(&'static str, Rgb)> {
     let mut parts = Vec::new();
     for (index, tab) in view.tabs.iter().enumerate() {
         if index > 0 {
             parts.push(("  ", WHITE));
         }
-        let ink = if *tab == view.tab { WHITE } else { DARK_GREY };
+        let ink = if *tab == view.tab { WHITE } else { BODY };
         parts.push((tab.label(), ink));
     }
     let spoilers = view.strip_spoilers || view.model.is_some_and(|model| model.spoilers);
@@ -1726,11 +1730,13 @@ fn paint_frame(rgba: &mut [u8]) {
     }
 }
 
-/// A divider band's two rules: the first and last pixel rows of its cell
-/// row, as the stats panel's band at row 7 has them (y = 56 and 63).
+/// A divider band's two rules: a pixel in from the first and last pixel
+/// rows of its cell row, so each stands a pixel off the text beside it:
+/// black, rule, four rows of blue, rule, black (the stats panel's band at
+/// row 7 has its rules at y = 56 and 63; this band's are at 57 and 62).
 pub const fn divider_rules(row: u8) -> (usize, usize) {
     let top = row as usize * CH_CELL_SIDE;
-    (top, top + CH_CELL_SIDE - 1)
+    (top + 1, top + CH_CELL_SIDE - 2)
 }
 
 /// The cells a band tab takes: the left cap's column, the first text

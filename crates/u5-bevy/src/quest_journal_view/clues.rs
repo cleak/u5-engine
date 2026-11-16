@@ -702,7 +702,7 @@ pub fn clue_cells(ui: &ClueUi, tab: CluesTab) -> Vec<Cell> {
         };
         let lines: Vec<String> = match (detail, note) {
             (_, Some(note)) => {
-                let mut lines = wrap(&detail.join("  "), TEXT_CELLS, 1);
+                let mut lines = wrap(&run_on(detail), TEXT_CELLS, 1);
                 lines.truncate(1);
                 lines.push(cut(note, TEXT_CELLS));
                 lines
@@ -714,16 +714,10 @@ pub fn clue_cells(ui: &ClueUi, tab: CluesTab) -> Vec<Cell> {
                 // run on over both rows.
                 [first, rest @ ..] if first.chars().count() <= TEXT_CELLS => {
                     let mut lines = vec![first.clone()];
-                    lines.extend(wrap(&rest.join("  "), TEXT_CELLS, 1));
+                    lines.extend(wrap(&run_on(rest), TEXT_CELLS, 1));
                     lines
                 }
-                [first, rest @ ..] => {
-                    let all = std::iter::once(first.as_str())
-                        .chain(rest.iter().map(String::as_str))
-                        .collect::<Vec<_>>()
-                        .join("  ");
-                    wrap(&all, TEXT_CELLS, 2)
-                }
+                all => wrap(&run_on(all), TEXT_CELLS, 2),
             },
         };
         for (index, line) in lines.into_iter().enumerate() {
@@ -788,6 +782,24 @@ fn picker_cells(ui: &ClueUi, picker: &Picker) -> Vec<Cell> {
         }
     }
     cells
+}
+
+/// Detail parts run on as sentences: each part that does not end a
+/// sentence gets a full stop before the next ("..., a young child. 3
+/// topics, 0 unread"; "You asked ... about JOB. Heard at 00:43; may
+/// differ now").
+fn run_on(parts: &[String]) -> String {
+    let mut out = String::new();
+    for part in parts {
+        if !out.is_empty() {
+            if !out.ends_with(['.', '!', '?']) {
+                out.push('.');
+            }
+            out.push(' ');
+        }
+        out.push_str(part);
+    }
+    out
 }
 
 /// The note being written, over the two detail rows: `Note: ` in brown,

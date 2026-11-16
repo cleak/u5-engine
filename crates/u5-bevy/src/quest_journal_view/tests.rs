@@ -574,8 +574,14 @@ fn the_frame_bands_rules_and_corners_are_the_game_s() {
     for (x, y) in [(3, 100), (316, 100), (40, 3), (20, 196)] {
         assert_eq!(pixel(&rgba, x, y), BLUE, "band at ({x}, {y})");
     }
-    for (x, y) in [(7, 100), (312, 100), (50, 7), (20, 192), (300, 192)] {
+    // The side rules are the gameplay frame's (x 7 and 312); the top and
+    // bottom rules stand a pixel off the text (y 6 and 193), as the cheats
+    // page's do.
+    for (x, y) in [(7, 100), (312, 100), (50, 6), (20, 193), (300, 193)] {
         assert_eq!(pixel(&rgba, x, y), WHITE, "rule at ({x}, {y})");
+    }
+    for (x, y) in [(50, 7), (20, 192), (300, 192)] {
+        assert_eq!(pixel(&rgba, x, y), BLACK, "breathing row at ({x}, {y})");
     }
     assert_eq!(pixel(&rgba, 100, 100), BLACK, "interior");
     // The rounded corners carry the gameplay frame's profile.
@@ -601,7 +607,7 @@ fn the_frame_bands_rules_and_corners_are_the_game_s() {
         }
     }
     // The rules close the corners with no gap.
-    for (x, y) in [(7, 7), (312, 7), (7, 192), (312, 192)] {
+    for (x, y) in [(7, 6), (312, 6), (7, 193), (312, 193)] {
         assert_eq!(pixel(&rgba, x, y), WHITE, "rule corner ({x}, {y})");
     }
 }

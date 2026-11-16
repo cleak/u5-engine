@@ -573,11 +573,18 @@ impl<'a> Facts<'a> {
             self.person(entry.npc),
             self.topic(entry)
         );
-        // The row shows the date; the details add the time.
-        let mut facts = vec![format!("at {}", time_label(entry.last))];
-        if entry.count > 1 {
-            facts.push(format!("x{}", entry.count));
-        }
+        // The row shows the date; the details add the time, as a sentence:
+        // "Heard at 00:43; may differ now".
+        let heard = if entry.count > 1 {
+            format!(
+                "Heard {} times, last at {}",
+                entry.count,
+                time_label(entry.last)
+            )
+        } else {
+            format!("Heard at {}", time_label(entry.last))
+        };
+        let mut facts = vec![heard];
         if self.may_differ(entry) {
             facts.push(MAY_DIFFER.to_string());
         }
@@ -593,7 +600,7 @@ impl<'a> Facts<'a> {
                 facts.push(word.to_string());
             }
         }
-        let mut detail = vec![body, facts.join("  ")];
+        let mut detail = vec![body, facts.join("; ")];
         if let Some(note) = self.clue_note(index) {
             detail.push(format!("{NOTE_PREFIX}{note}"));
         }
