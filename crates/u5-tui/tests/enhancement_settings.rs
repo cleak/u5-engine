@@ -226,7 +226,28 @@ fn menu_and_audio_keys_parse_and_the_aliases_wait_for_their_phases() {
 fn unknown_options_and_keys_are_rejected() {
     // The rejection of unknown options stays.
     assert!(parse_error(&["--bogus"]).contains("unknown option `--bogus`"));
-    assert!(parse_error(&["--quest-journal"]).contains("unknown option"));
+    // The journal's aliases exist as catalogue rows from M5-01 and parse once
+    // their phase ships (U13); a typo of one is always rejected.
+    let journal_shipped = u5_runtime::enhancements::CatalogueRow::find("journal.page")
+        .unwrap()
+        .is_shipped();
+    if journal_shipped {
+        let args = parse_cli_args(["--quest-journal", "--spoilers", "3"]).unwrap();
+        assert_eq!(
+            args.enhancements,
+            [
+                CliSetting::Enable("journal.page".into()),
+                CliSetting::Set {
+                    key: "journal.spoiler_tier".into(),
+                    value: "3".into()
+                },
+            ]
+        );
+    } else {
+        assert!(parse_error(&["--quest-journal"]).contains("unknown option"));
+        assert!(parse_error(&["--journal-side-panel"]).contains("unknown option"));
+    }
+    assert!(parse_error(&["--quest-journa"]).contains("unknown option"));
     assert!(parse_error(&["--no-preset"]).contains("unknown option"));
     assert!(
         parse_error(&["--enable", "display.growleft"])

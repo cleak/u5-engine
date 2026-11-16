@@ -786,6 +786,10 @@ fn each_chapter_3_toggle_alone_adds_only_its_own_plugin() {
                 // The feed the Game tab's Sound and Buffer type through
                 // (M4-13).
                 "u5_bevy::enh::synthetic::",
+                // The quest journal and the clue log, installed dormant so
+                // the menu can switch them on in play (5.3.4, M5, M6).
+                "u5_bevy::quest_journal_view",
+                "u5_bevy::enh::journal",
             ],
             TITLE_LAYER => &[
                 "u5_bevy::enh::input::",

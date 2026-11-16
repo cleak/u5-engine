@@ -243,6 +243,12 @@ pub enum SettingNote {
     },
     /// Command-line settings ignored because the parity lock holds.
     LockIgnored { settings: Vec<String> },
+    /// A key whose prerequisite is off (design 8.4.1): it resolves to its
+    /// default, and the stored value is kept.
+    NeedsKey {
+        key: &'static str,
+        needs: &'static str,
+    },
 }
 
 impl SettingNote {
@@ -254,7 +260,8 @@ impl SettingNote {
             | SettingNote::BadValue { key, .. }
             | SettingNote::NotASwitch { key }
             | SettingNote::CheatsNotAllowed { key }
-            | SettingNote::Unsupported { key, .. } => Some(key),
+            | SettingNote::Unsupported { key, .. }
+            | SettingNote::NeedsKey { key, .. } => Some(key),
             SettingNote::LockIgnored { .. } => None,
         }
     }
@@ -296,6 +303,9 @@ impl fmt::Display for SettingNote {
             }
             SettingNote::LockIgnored { settings } => {
                 write!(f, "{LOCK_IGNORED} {}", settings.join(" "))
+            }
+            SettingNote::NeedsKey { key, needs } => {
+                write!(f, "{key}: needs: {needs}; off until it is on")
             }
         }
     }

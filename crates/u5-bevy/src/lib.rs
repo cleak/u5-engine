@@ -230,6 +230,10 @@ pub mod enh;
 /// under Classic.
 pub mod menu;
 
+/// The quest journal page (Phase B design chapter 5): its plugin, inside the
+/// foundation's plugin, and absent unless a journal toggle is on.
+pub mod quest_journal_view;
+
 pub use enh::{EnhSet, EnhancementsPlugin, Relaunch, ShellExit, ShellExitSlot, VisualLaunchConfig};
 pub use menu::host::MenuHost;
 

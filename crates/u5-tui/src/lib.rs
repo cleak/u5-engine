@@ -14,6 +14,7 @@ pub mod intro_loop;
 #[cfg(feature = "visual")]
 pub mod menu_host;
 pub mod play_loop;
+pub mod quest_journal_report;
 pub mod relaunch;
 pub mod route_smoke;
 pub mod runtime_game_dir;
@@ -69,13 +70,16 @@ pub use play_loop::{
     run_play_script_commands_watched, run_play_script_step, run_terminal_input_wait_pass,
     settle_auto_planning_point, unclassified_escape_sequence,
 };
+pub use quest_journal_report::{
+    quest_journal_report_text, report_save_dir, run_quest_journal_report,
+};
 pub use relaunch::{SpawnFailed, relaunch, relaunch_args, relaunch_program};
 pub use route_smoke::{
     NoRouteTrace, RouteSmokeCase, RouteSmokeExpectation, RouteSmokeFrameReport, RouteSmokeReport,
     RouteTraceObserver, route_smoke_cases, run_route_smoke, run_route_smoke_case,
     run_route_smoke_case_traced, run_route_smoke_with, write_route_smoke_manifest,
 };
-pub use runtime_game_dir::{RUNTIME_DIR_ENV, prepare_writable_game_dir};
+pub use runtime_game_dir::{RUNTIME_DIR_ENV, prepare_writable_game_dir, runtime_mirror_path};
 pub use save_frame::{
     SavedFrameReport, compose_gameplay_screen, run_save_frame, run_save_frame_suite,
     run_save_screen, save_frame_suite,

@@ -22,8 +22,8 @@ use std::fmt;
 
 use super::catalogue::{EffectClass, FeatureToggles};
 use super::catalogue::{
-    OPTIONS, OptionDefault, OptionKind, OptionSpec, PRESETS, Phase, Preset, PresetEntry,
-    PresetValue, SHIPPED_PHASES, TOGGLES, Tier, ToggleSpec,
+    OPTIONS, OptionDefault, OptionKind, OptionSpec, PREREQUISITES, PRESETS, Phase, Preset,
+    PresetEntry, PresetValue, SHIPPED_PHASES, TOGGLES, Tier, ToggleSpec,
 };
 use super::source::{
     Capability, CliSetting, HostCapabilities, LockReason, LockState, SettingNote, SettingValue,
@@ -722,6 +722,40 @@ impl<'a> State<'a> {
                 });
             }
         }
+        self.enforce_prerequisites();
+    }
+
+    /// Design 8.4.1: a key whose prerequisite toggle is off resolves to its
+    /// default with a `needs:` note. Runs after the host's forcing, so a
+    /// prerequisite the host turned off counts as off. It never turns the
+    /// prerequisite on; the stored value is the host's and is untouched.
+    fn enforce_prerequisites(&mut self) {
+        let cat = self.cat;
+        for (key, needs) in PREREQUISITES {
+            let (Some(row), Some(Row::Toggle(prerequisite))) = (cat.find(key), cat.find(needs))
+            else {
+                continue;
+            };
+            if self.toggles[prerequisite] {
+                continue;
+            }
+            let forced = match row {
+                Row::Toggle(index) => std::mem::replace(&mut self.toggles[index], false),
+                Row::Option(index) => {
+                    let default = default_value(&cat.options[index]);
+                    std::mem::replace(&mut self.options[index], default.clone()) != default
+                }
+            };
+            if forced {
+                self.notes.push(SettingNote::NeedsKey {
+                    key: match row {
+                        Row::Toggle(index) => cat.toggles[index].key,
+                        Row::Option(index) => cat.options[index].key,
+                    },
+                    needs: cat.toggles[prerequisite].key,
+                });
+            }
+        }
     }
 
     /// One bit per toggle that is on, plus the toggle of every shipped
@@ -1313,17 +1347,22 @@ mod tests {
     #[test]
     fn a_stored_preset_sets_only_its_shipped_rows() {
         // Of Recommended's rows `display.sprite_composite` (chapter 9 P5),
-        // `combat.auto` and `combat.fast_forward` (chapter 6 3c, 4d) have
-        // shipped, so they are the toggles on; the stored name is kept as
-        // the label.
+        // `combat.auto` and `combat.fast_forward` (chapter 6 3c, 4d) and
+        // chapter 8's three (M6-08) have shipped, so they are the toggles
+        // on; the stored name is kept as the label.
         let stored = Stored::default().with(PRESET_KEY, text("recommended"));
         let resolved = resolve(input(Some(&stored), &[]));
+        let mut on: Vec<Toggle> = resolved.toggles.iter_on().collect();
+        on.sort_by_key(|toggle| toggle.key());
         assert_eq!(
-            resolved.toggles.iter_on().collect::<Vec<_>>(),
+            on,
             [
-                Toggle::DisplaySpriteComposite,
                 Toggle::CombatAuto,
-                Toggle::CombatFastForward
+                Toggle::CombatFastForward,
+                Toggle::DisplaySpriteComposite,
+                Toggle::JournalClueHighlight,
+                Toggle::JournalClues,
+                Toggle::JournalQuestTracker,
             ]
         );
         assert_eq!(resolved.preset, PresetLabel::Preset(Preset::Recommended));

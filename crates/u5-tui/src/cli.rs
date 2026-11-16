@@ -17,7 +17,8 @@ use u5_runtime::{
     question_record_display_text, run_chargen_tournament,
 };
 
-use u5_runtime::enhancements::{CliSetting, Preset, Toggle};
+use u5_runtime::enhancements::journal::SpoilerTier;
+use u5_runtime::enhancements::{CatalogueRow, CliSetting, Preset, Toggle};
 
 use crate::enhancement_settings::{check_cli_key, cli_alias_usage, find_cli_alias};
 use crate::runtime_game_dir::prepare_writable_game_dir;
@@ -130,6 +131,10 @@ pub struct CliArgs {
     /// the slot commands without the overlay. Each needs
     /// `menu.named_slots` and is refused under the parity lock.
     pub slot_command: Option<SlotCommand>,
+    /// `--quest-journal-report [--spoilers N]`: print the quest journal of
+    /// the folder's save at this tier and exit (Phase B design 5.2.11). A
+    /// command, not a toggle: it reads no enhancement setting.
+    pub quest_journal_report: Option<SpoilerTier>,
 }
 
 impl CliArgs {
@@ -154,6 +159,7 @@ impl CliArgs {
             || self.write_seed
             || self.show_settings
             || self.slot_command.is_some()
+            || self.quest_journal_report.is_some()
     }
 
     /// Whether this is a QA mode: route smoke, the equivalence suite, the
@@ -279,6 +285,8 @@ where
     let mut settings = false;
     let mut boot_key: Option<u8> = None;
     let mut slot_command: Option<SlotCommand> = None;
+    let mut quest_journal_report = false;
+    let mut spoilers: Option<String> = None;
     let mut args = args.into_iter().map(Into::into);
     while let Some(arg) = args.next() {
         match arg.as_str() {
@@ -783,6 +791,24 @@ where
                     ));
                 }
             }
+            "--quest-journal-report" => quest_journal_report = true,
+            // `journal.spoiler_tier`'s alias, taken here because the report
+            // reads it before the journal's rows ship (design 5.2.11). Any
+            // other launch sees it as the catalogue alias once it ships.
+            "--spoilers" => {
+                let value = args.next().ok_or_else(|| {
+                    io::Error::new(
+                        io::ErrorKind::InvalidInput,
+                        "--spoilers requires a tier, 1 to 4",
+                    )
+                })?;
+                if spoilers.replace(value).is_some() {
+                    return Err(io::Error::new(
+                        io::ErrorKind::InvalidInput,
+                        "--spoilers may only be supplied once",
+                    ));
+                }
+            }
             _ if arg.starts_with("--") => {
                 let Some(alias) = find_cli_alias(&arg) else {
                     return Err(io::Error::new(
@@ -804,6 +830,26 @@ where
     }
     let explicit_game_dir = game_dir;
     let game_dir = explicit_game_dir.clone().unwrap_or_default();
+    let quest_journal_report = if quest_journal_report {
+        Some(match spoilers.take() {
+            None => SpoilerTier::default(),
+            Some(value) => parse_spoiler_tier(&value)?,
+        })
+    } else {
+        None
+    };
+    if let Some(value) = spoilers {
+        if !CatalogueRow::find(SPOILER_TIER_KEY).is_some_and(|row| row.is_shipped()) {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "unknown option `--spoilers`",
+            ));
+        }
+        enhancements.push(CliSetting::Set {
+            key: SPOILER_TIER_KEY.to_string(),
+            value,
+        });
+    }
     if help {
         let args = CliArgs {
             play: false,
@@ -843,6 +889,7 @@ where
             settings_file: false,
             boot_key: None,
             slot_command: None,
+            quest_journal_report: None,
         };
         return Ok(CliCommand {
             args,
@@ -1178,7 +1225,23 @@ where
         settings_file: false,
         boot_key,
         slot_command,
+        quest_journal_report,
     };
+    if args.quest_journal_report.is_some() {
+        let mut mode = args.clone();
+        mode.quest_journal_report = None;
+        if mode.has_mode()
+            || mode.setup
+            || mode.settings
+            || mode.parity_lock
+            || !mode.enhancements.is_empty()
+        {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "--quest-journal-report prints the journal and exits; it takes only --spoilers <N> and the game folder",
+            ));
+        }
+    }
     if args.gem_map_canvas.is_some() && args.gem_map_png.is_none() {
         return Err(io::Error::new(
             io::ErrorKind::InvalidInput,
@@ -1372,6 +1435,24 @@ pub fn parse_gem_canvas(value: &str) -> io::Result<(u32, u32)> {
     Ok((w, h))
 }
 
+/// `--spoilers`' catalogue key.
+const SPOILER_TIER_KEY: &str = "journal.spoiler_tier";
+
+/// `--spoilers N` for the report: a tier from 1 to 4.
+fn parse_spoiler_tier(value: &str) -> io::Result<SpoilerTier> {
+    value
+        .trim()
+        .parse::<i64>()
+        .ok()
+        .and_then(SpoilerTier::from_number)
+        .ok_or_else(|| {
+            io::Error::new(
+                io::ErrorKind::InvalidInput,
+                format!("--spoilers takes a tier from 1 to 4, got `{value}`"),
+            )
+        })
+}
+
 pub const CLI_USAGE: &str = "\
 Ultima V clean-room verification and playable harness.
 
@@ -1435,6 +1516,13 @@ OPTIONS:
                               With --play and auto-combat on, write the keys
                               it typed as script tokens (stdin lines in the
                               interactive loop), to replay with it off.
+        --quest-journal-report
+                              Print the quest journal of the folder's save
+                              (the runtime copy when one exists) and exit.
+                              It reads SAVED.GAM only and changes nothing.
+        --spoilers <N>        The report's tier: 1 progress only, 2 named
+                              goals (the default), 3 hints, 4 full checklist.
+                              Tiers 3 and 4 are spoilers.
         --equivalence-suite <OUT>
                               Run every route smoke case with every
                               enhancement off, then under Classic and each

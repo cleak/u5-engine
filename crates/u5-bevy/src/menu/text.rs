@@ -330,6 +330,23 @@ pub fn setting_label(key: &str) -> Option<&'static str> {
         "gem_map.wrap_rows" => "Wrapped edge",
         "gem_map.level_paging" => "Level paging",
         "gem_map.glyphs" => "Spoiler: symbols",
+        // [journal], chapters 5 and 8 (M5, M6). Sub-options sit under
+        // their switch: at most 17 cells.
+        "journal.page" => "Quest journal",
+        "journal.spoiler_tier" => "How much it tells",
+        "journal.mantras" => "Mantras",
+        "journal.side_panel" => "Journal panel",
+        "journal.side_panel_side" => "Panel side",
+        "journal.clues" => "Clue log",
+        "journal.clue_text" => "What was said",
+        "journal.clue_highlight" => "Mark asked topics",
+        "journal.clue_highlight_style" => "Mark style",
+        "journal.clue_scrollback" => "Talk scrollback",
+        "journal.clue_toast" => "Clue log notice",
+        "journal.notes" => "Own notes",
+        "journal.clue_misses" => "Spoiler: Misses",
+        "journal.quest_tracker" => "Quest trackers",
+        "journal.tracker_evidence" => "Evidence",
         // [menu] and [audio], chapter 3.
         "menu.overlay" => "Menu overlay (F12)",
         "menu.title_layer" => "Title menu (F12)",
@@ -399,6 +416,9 @@ pub fn setting_help(key: &str) -> Option<&'static str> {
         "gem_map.glyphs" => Some(
             "Spoiler: gem-faithful draws secret doors and hidden pits as soon as they are in sight.",
         ),
+        "journal.clue_misses" => {
+            Some("Spoiler: keeps the words nobody answered, which shows what is not a topic.")
+        }
         "cheats.teleport" => {
             Some("Spoiler: lists every place in the game, including ones not found yet.")
         }

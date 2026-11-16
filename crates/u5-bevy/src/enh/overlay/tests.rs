@@ -263,13 +263,16 @@ fn no_overlay_model_while_no_overlay_feature_is_on() {
     // overlay (checked below).
     let mut launch = VisualLaunchConfig::classic();
     // ...and except the grow-left layout, whose `[grow-left compose]` step,
-    // frame fit and canvas size are its own (M1-09, display/grow tests), and
-    // auto-combat, which brings the toasts and badges itself (M7-05). The
-    // cheats page is an overlay feature (M8-02), checked below.
+    // frame fit and canvas size are its own (M1-09, display/grow tests),
+    // auto-combat, which brings the toasts and badges itself (M7-05), and
+    // the quest journal, whose page is an overlay and whose panel claims
+    // side space (M5, quest_journal_view tests). The cheats page is an
+    // overlay feature (M8-02), checked below.
     for spec in TOGGLES.iter().filter(|spec| {
         ![Toggle::DisplayGrowLeft, Toggle::CombatAuto].contains(&spec.toggle)
             && !MENU_OPENERS.contains(&spec.toggle)
             && !spec.toggle.key().starts_with("cheats.")
+            && !is_journal(spec.toggle)
     }) {
         launch.enhancements.toggles.set(spec.toggle, true);
     }
@@ -690,4 +693,11 @@ fn the_last_frame_copy_reads_the_presented_frame_only() {
         ),
         None
     );
+}
+
+/// The quest journal's two toggles (M5).
+/// Chapters 5 and 8's `[journal]` keys: their page, panel and clue log
+/// are tested in their own suites.
+fn is_journal(toggle: Toggle) -> bool {
+    toggle.key().starts_with("journal.")
 }

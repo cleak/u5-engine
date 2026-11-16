@@ -170,6 +170,8 @@ fn no_host_exists_while_no_step_is_registered() {
     // the game's Ctrl-S and Ctrl-B at the first prompt (M4-13), so the
     // game itself answers. Auto-combat brings the toast line, whose
     // real-time tick this bare app has no clock for (M7-05).
+    // ...and the `[journal]` keys, whose page is an overlay and whose panel
+    // claims side space (M5, quest_journal_view tests; M6, enh/journal).
     for spec in TOGGLES.iter().filter(|spec| {
         spec.toggle != Toggle::DisplayGrowLeft
             && spec.toggle != Toggle::DisplaySpriteComposite
@@ -180,6 +182,7 @@ fn no_host_exists_while_no_step_is_registered() {
             // The cheats page brings the toasts (M8-02), which need a
             // real-time clock this app does not have.
             && !spec.toggle.key().starts_with("cheats.")
+            && !spec.toggle.key().starts_with("journal.")
     }) {
         every.enhancements.toggles.set(spec.toggle, true);
     }

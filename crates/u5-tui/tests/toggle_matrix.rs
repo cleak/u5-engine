@@ -125,15 +125,19 @@ fn the_all_on_row_turns_on_every_toggle_but_the_cheats() {
 }
 
 /// A row may name a key that has not shipped (it then resolves to the
-/// default until it does), but never a key or value the resolver refuses.
+/// default until it does), or, in a pairwise row, a key whose prerequisite
+/// is off (design 8.4.1: it resolves off), but never a key or value the
+/// resolver refuses. A key alone brings its prerequisite.
 #[test]
 fn every_row_resolves_cleanly() {
     for row in committed_rows() {
         let resolved = resolve(&row);
         assert_eq!(resolved.lock, LockState::Off);
         for note in &resolved.notes {
+            let pairwise = row.name.starts_with("pairwise:");
             assert!(
-                matches!(note, SettingNote::NotAvailable { .. }),
+                matches!(note, SettingNote::NotAvailable { .. })
+                    || (pairwise && matches!(note, SettingNote::NeedsKey { .. })),
                 "{}: {note}",
                 row.name
             );

@@ -16,9 +16,10 @@ use u5_tui::{
     load_from_slot, lock_state_for_process, open_settings_page, open_slot_store, parse_cli_command,
     prepare_writable_game_dir, resolve_game_data, run_audio_suite, run_create_character_command,
     run_equivalence_suite, run_interactive_create_character, run_intro_menu_loop,
-    run_play_loop_with, run_route_smoke, run_route_smoke_with, run_save_frame,
-    run_save_frame_suite, run_save_screen, run_settings_window_child, run_setup_window_child,
-    run_show_settings, save_to_slot, slot_command_gate, slot_listing, terminal_combat_settings,
+    run_play_loop_with, run_quest_journal_report, run_route_smoke, run_route_smoke_with,
+    run_save_frame, run_save_frame_suite, run_save_screen, run_settings_window_child,
+    run_setup_window_child, run_show_settings, save_to_slot, slot_command_gate, slot_listing,
+    terminal_combat_settings,
 };
 
 fn main() -> ExitCode {
@@ -33,7 +34,7 @@ fn main() -> ExitCode {
     }
     let mut game_data = None;
     match run(argv, &mut game_data) {
-        Ok(()) => ExitCode::SUCCESS,
+        Ok(code) => code,
         Err(error) => {
             eprintln!("Error: {}", describe_failure(&error, game_data.as_ref()));
             ExitCode::FAILURE
@@ -41,27 +42,35 @@ fn main() -> ExitCode {
     }
 }
 
-fn run(argv: Vec<String>, game_data: &mut Option<ReadyGameData>) -> io::Result<()> {
+fn run(argv: Vec<String>, game_data: &mut Option<ReadyGameData>) -> io::Result<ExitCode> {
     let command = parse_cli_command(argv)?;
     if command.args.help {
         print!("{}", cli_usage());
-        return Ok(());
+        return Ok(ExitCode::SUCCESS);
+    }
+    // A read-only command: no setup, no writable folder (design 5.3.3).
+    if let Some(tier) = command.args.quest_journal_report {
+        return Ok(run_quest_journal_report(
+            command.explicit_game_dir.as_deref(),
+            tier,
+        ));
     }
     if command.args.show_settings {
-        return run_show_settings(&command.args.enhancements, command.args.parity_lock);
+        return run_show_settings(&command.args.enhancements, command.args.parity_lock)
+            .map(|()| ExitCode::SUCCESS);
     }
     // `--settings`: the Enhancements page first, then the default launch,
     // which reads what it saved. Closing its window starts nothing.
     if command.args.settings
         && !open_settings_page(command.args.parity_lock).map_err(io::Error::other)?
     {
-        return Ok(());
+        return Ok(ExitCode::SUCCESS);
     }
     if let Some(slot) = command.args.slot_command.clone() {
-        return run_slot_command(command, slot, game_data);
+        return run_slot_command(command, slot, game_data).map(|()| ExitCode::SUCCESS);
     }
     if !command.args.needs_game_data() {
-        return dispatch(command.finish(PathBuf::new())?, None);
+        return dispatch(command.finish(PathBuf::new())?, None).map(|()| ExitCode::SUCCESS);
     }
     // A bare `u5-engine` (or `u5-engine --setup [DIR]`) starts the game.
     // A folder with no mode flags keeps running the verification report.
@@ -96,7 +105,7 @@ fn run(argv: Vec<String>, game_data: &mut Option<ReadyGameData>) -> io::Result<(
         // config.toml (Phase B design 1.2.4).
         args.settings_file = true;
     }
-    dispatch(args, setup_dir.as_deref())
+    dispatch(args, setup_dir.as_deref()).map(|()| ExitCode::SUCCESS)
 }
 
 /// `--slots`, `--slot-save NAME` and `--slot-load NAME` (Phase B design

@@ -52,7 +52,7 @@ fn prepare_writable_game_dir_in(game_dir: &Path, root: &Path) -> io::Result<Path
         ));
     }
 
-    let target = root.join(u5_host_desktop::work_key(&source));
+    let target = runtime_mirror_path(root, &source);
     fs::create_dir_all(&target)?;
     mirror_directory(&source, &target)?;
     Ok(target)
@@ -100,6 +100,15 @@ fn same_path(left: &Path, right: &Path) -> bool {
             .to_ascii_lowercase()
     }
     normalized(left) == normalized(right)
+}
+
+/// The runtime mirror [`prepare_writable_game_dir`] uses for `game_dir`
+/// under `root`: the same naming rule and nothing else (Phase B design
+/// 5.3.3). It is pure: it touches no file, so it never creates the mirror
+/// or moves saves. Pass the canonical folder to name the mirror a launch
+/// would use.
+pub fn runtime_mirror_path(root: &Path, game_dir: &Path) -> PathBuf {
+    root.join(u5_host_desktop::work_key(game_dir))
 }
 
 fn mirror_directory(source: &Path, target: &Path) -> io::Result<()> {
@@ -272,7 +281,11 @@ mod tests {
         fs::set_permissions(&save_path, permissions).unwrap();
 
         assert!(requires_writable_mirror(&source).unwrap());
+        // The pure helper names the mirror without creating it (5.3.3).
+        let named = runtime_mirror_path(&root, &source.canonicalize().unwrap());
+        assert!(!named.exists());
         let runtime = prepare_writable_game_dir_in(&source, &root).unwrap();
+        assert_eq!(runtime, named);
         assert_eq!(fs::read(runtime.join("IBM.CH")).unwrap(), b"font-v1");
         assert_eq!(
             fs::read(runtime.join(SAVED_GAM_FILENAME)).unwrap(),
@@ -310,6 +323,8 @@ mod tests {
         let sidecars = source.join(ENHANCEMENT_SIDECAR_DIR);
         fs::create_dir_all(&sidecars).unwrap();
         fs::write(sidecars.join("automap.u5e"), b"source-memory").unwrap();
+        // Chapter 8's clue log never leaves its save folder (8.3.7, T9b).
+        fs::write(sidecars.join("journal.u5e"), b"source-clues").unwrap();
         let mut permissions = fs::metadata(&save_path).unwrap().permissions();
         permissions.set_readonly(true);
         fs::set_permissions(&save_path, permissions).unwrap();
@@ -317,6 +332,7 @@ mod tests {
         let runtime = prepare_writable_game_dir_in(&source, &root).unwrap();
         assert_eq!(fs::read(runtime.join("IBM.CH")).unwrap(), b"font");
         assert!(!runtime.join(ENHANCEMENT_SIDECAR_DIR).exists());
+        assert!(!runtime.join("journal.u5e").exists());
 
         // The runtime save's own folder is left alone by the next mirror.
         let own = runtime.join(ENHANCEMENT_SIDECAR_DIR);

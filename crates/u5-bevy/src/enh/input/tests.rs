@@ -272,12 +272,12 @@ fn chords_parse_without_regard_to_case_or_modifier_order() {
 }
 
 /// Bindings follow their feature. Of the feature rows in the catalogue so
-/// far, four bind a chord: F12 for chapter 3's `menu.overlay` and
+/// far, these bind a chord: F12 for chapter 3's `menu.overlay` and
 /// `menu.title_layer` (rows from M4-02, hidden until chapter 3 Phases 1 and
 /// 3 ship), F11 for `display.fullscreen_key` and Ctrl+P for
-/// `display.grow_left`, plus chapter 6's three auto-combat chords for
-/// `combat.auto` (M7). The parked minimap and the contextual pair never
-/// bind through `[keys]`.
+/// `display.grow_left`, Ctrl+J for `journal.page` (M5), chapter 6's three
+/// auto-combat chords for `combat.auto` (M7) and the cheats page (M8). The
+/// parked minimap and the contextual pair never bind through `[keys]`.
 #[test]
 fn bindings_follow_their_features() {
     let mut every = FeatureToggles::CLASSIC;
@@ -293,6 +293,8 @@ fn bindings_follow_their_features() {
         [
             EnhAction::OpenMenu,
             EnhAction::ToggleFullscreen,
+            // M5: `journal.page`.
+            EnhAction::OpenJournal,
             EnhAction::ToggleColumn,
             // M7: `combat.auto`.
             EnhAction::AutoMember,
@@ -337,6 +339,15 @@ fn bindings_follow_their_features() {
     assert!(EnhAction::ToggleColumn.enabled(one));
     assert!(!EnhAction::ToggleFullscreen.enabled(one));
     assert!(!map.is_empty());
+    let mut one = FeatureToggles::CLASSIC;
+    one.set(Toggle::JournalPage, true);
+    assert!(EnhAction::OpenJournal.enabled(one));
+    one = FeatureToggles::CLASSIC;
+    one.set(Toggle::JournalSidePanel, true);
+    assert!(
+        !EnhAction::OpenJournal.enabled(one),
+        "the panel binds no key"
+    );
     // Every other display toggle binds nothing.
     let mut rest = FeatureToggles::CLASSIC;
     for toggle in u5_runtime::enhancements::DISPLAY_TOGGLES {

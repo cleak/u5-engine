@@ -34,6 +34,7 @@
 
 use std::collections::BTreeSet;
 
+use super::catalogue::prerequisite;
 use super::catalogue::{
     CatalogueRow, OPTIONS, OptionDefault, OptionKind, OptionSpec, TOGGLES, Tier, ToggleSpec,
 };
@@ -248,15 +249,19 @@ fn set(key: &str, value: impl Into<String>) -> CliSetting {
     }
 }
 
-/// The settings a cheat-tier row needs before its own: the section switch
-/// (design 1.4.5, "each cheat | cheats.enabled | inert"). A cheat alone is
-/// the cheat with its gate open.
+/// The settings a row needs before its own: a cheat's section switch
+/// (design 1.4.5, "each cheat | cheats.enabled | inert"), and the key a
+/// dependent key needs (design 8.4.1; M6-08). A key alone is the key with
+/// its gate open, so its row really turns it on.
 fn gate(tier: Tier, key: &str) -> Vec<CliSetting> {
+    let mut settings = Vec::new();
     if tier == Tier::Cheat && key != CHEATS_SWITCH {
-        vec![set(CHEATS_SWITCH, "true")]
-    } else {
-        Vec::new()
+        settings.push(set(CHEATS_SWITCH, "true"));
     }
+    if let Some(needs) = prerequisite(key) {
+        settings.push(set(needs, "true"));
+    }
+    settings
 }
 
 /// Every configuration of the matrix, in a fixed order: the alone rows in

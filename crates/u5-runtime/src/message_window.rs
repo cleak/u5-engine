@@ -1320,6 +1320,16 @@ pub fn wrapped_final_row_columns(text: &str) -> usize {
         .map_or(0, |row| row.len())
 }
 
+/// The rows `glyphs` takes in the message window, wrapped as the window
+/// wraps a reply: [`MESSAGE_WINDOW_WIDTH`] cells, breaking at the last
+/// space. Pure; the clue log's static render (Phase B design 8.3.6) lays
+/// a record out with it.
+pub fn wrap_message_window_rows(
+    glyphs: &[crate::TlkRenderedGlyph],
+) -> Vec<Vec<crate::TlkRenderedGlyph>> {
+    wrap_rendered_to_width(glyphs, MESSAGE_WINDOW_WIDTH)
+}
+
 /// Wrap `glyphs` with a first row of `first_width` cells and `width` after it.
 ///
 /// A command echo's first row gives one cell to the end-cap marker; the rows

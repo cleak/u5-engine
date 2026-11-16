@@ -79,7 +79,8 @@ fn no_toast_or_badge_unless_a_feature_installs_them() {
     // frame fit and canvas size are its own (M1-09, display/grow tests),
     // the two menu toggles, whose overlay brings the shell services
     // (overlay tests), and auto-combat, which posts toasts and sets the
-    // badge (below).
+    // badge (below), and the quest journal, whose page is an overlay and
+    // whose panel claims side space (M5, quest_journal_view tests).
     for spec in TOGGLES.iter().filter(|spec| {
         spec.toggle != Toggle::DisplayGrowLeft
             && spec.toggle != Toggle::CombatAuto
@@ -87,6 +88,7 @@ fn no_toast_or_badge_unless_a_feature_installs_them() {
             // The cheats page, an overlay feature, whose refusals are
             // toasts (M8-02).
             && !spec.toggle.key().starts_with("cheats.")
+            && !is_journal(spec.toggle)
     }) {
         launch.enhancements.toggles.set(spec.toggle, true);
     }
@@ -595,4 +597,11 @@ fn the_toast_and_the_badges_each_take_the_best_place() {
         "the badges over the map: {badges:?}"
     );
     assert!(toast.intersect(badges).is_empty());
+}
+
+/// The quest journal's two toggles (M5).
+/// Chapters 5 and 8's `[journal]` keys: their page, panel and clue log
+/// are tested in their own suites.
+fn is_journal(toggle: Toggle) -> bool {
+    toggle.key().starts_with("journal.")
 }

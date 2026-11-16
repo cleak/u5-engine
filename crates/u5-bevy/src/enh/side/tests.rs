@@ -134,9 +134,11 @@ fn no_side_space_while_no_side_feature_is_on() {
     let mut launch = VisualLaunchConfig::classic();
     // ...except the grow-left layout, whose `[grow-left compose]` step,
     // frame fit and canvas size are its own (M1-09, display/grow tests).
+    // ...and the quest journal, whose page is an overlay and whose panel
+    // claims side space (M5, quest_journal_view tests).
     for spec in TOGGLES
         .iter()
-        .filter(|spec| spec.toggle != Toggle::DisplayGrowLeft)
+        .filter(|spec| spec.toggle != Toggle::DisplayGrowLeft && !is_journal(spec.toggle))
     {
         launch.enhancements.toggles.set(spec.toggle, true);
     }
@@ -155,9 +157,11 @@ fn no_side_space_while_no_side_feature_is_on() {
     ] {
         assert!(!has_system(&mut app, system), "{system}");
     }
-    // The claiming toggles arrive with chapters 5 and 8.
+    // The claiming toggles arrive with chapters 5 and 8; chapter 5's side
+    // panel is in the catalogue (M5-01).
     for key in SIDE_CLAIM_KEYS {
-        assert_eq!(Toggle::from_key(key), None, "{key}");
+        let arrived = Toggle::from_key(key).filter(|toggle| is_journal(*toggle));
+        assert_eq!(Toggle::from_key(key), arrived, "{key}");
     }
 }
 
@@ -749,4 +753,11 @@ fn a_panel_with_no_room_is_hidden_with_one_toast() {
 fn panel_text_is_plain() {
     assert!(PANEL_HIDDEN.is_ascii());
     assert!(PANEL_HIDDEN.ends_with('.'));
+}
+
+/// The quest journal's two toggles (M5).
+/// Chapters 5 and 8's `[journal]` keys: their page, panel and clue log
+/// are tested in their own suites.
+fn is_journal(toggle: Toggle) -> bool {
+    toggle.key().starts_with("journal.")
 }

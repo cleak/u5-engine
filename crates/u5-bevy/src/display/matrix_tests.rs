@@ -66,8 +66,10 @@ use crate::enh::equivalence::{
     FrameRecord, Owner, Scene, Shell, ShellRun, Timeline, compare_shell_runs,
 };
 use crate::enh::gem_map::{GemMap, GemMapNode};
+use crate::enh::journal::clues::ClueObserver;
 use crate::enh::overlay::{OverlayId, OverlayState};
 use crate::enh::present::{PresentHost, PresentSteps, StepOrder};
+use crate::quest_journal_view::{JournalPanelPageOpen, QuestJournalUi};
 
 /// The window most runs use: the named 16:9 layout (a 512x240 canvas).
 const W16: (f32, f32) = (2560.0, 1440.0);
@@ -167,6 +169,32 @@ impl Config {
             .any(|s| matches!(s, CliSetting::Enable(key) if key == "gem_map.enhanced"))
     }
 
+    /// Whether the settings turn on the journal page or its side panel
+    /// (chapter 5).
+    fn journal(&self) -> (bool, bool) {
+        let on = |name: &str| {
+            self.settings
+                .iter()
+                .any(|s| matches!(s, CliSetting::Enable(key) if key == name))
+        };
+        // Chapter 8 (M6-08): the clue log and the tracker bring the page's
+        // state too (Ctrl+J opens their tabs).
+        (
+            on("journal.page") || on("journal.clues") || on("journal.quest_tracker"),
+            on("journal.side_panel"),
+        )
+    }
+
+    /// Whether the settings run the clue observer (chapter 8): the log, or
+    /// highlighting in any mode.
+    fn clue_observer(&self) -> bool {
+        self.settings.iter().any(|s| match s {
+            CliSetting::Enable(key) => key == "journal.clues",
+            CliSetting::Set { key, value } => key == "journal.clue_highlight" && value != "off",
+            _ => false,
+        })
+    }
+
     /// Whether the settings composite sprites over terrain (chapter 9).
     fn composite(&self) -> bool {
         self.settings
@@ -255,6 +283,8 @@ fn alone() -> Vec<Config> {
     configs.extend(light_alone());
     configs.extend(gem_alone());
     configs.extend(menu_alone());
+    configs.extend(journal_alone());
+    configs.extend(clue_alone());
     for (name, window) in [
         ("grow_left@3440x1440", (3440.0, 1440.0)),
         ("grow_left@1920x1080", (1920.0, 1080.0)),
@@ -524,6 +554,166 @@ fn all_on_except_cheats() -> Config {
     }
 }
 
+// --- Chapter 5, the quest journal (build plan M5-06). ---------------------
+
+/// Chapter 5's keys (design 5.4.1, 5.6), each away from its default. A
+/// sub-key brings its toggle with it, since it is inert without it.
+fn journal_values() -> Vec<(&'static str, Vec<CliSetting>)> {
+    let page = |extra: Vec<CliSetting>| {
+        let mut settings = vec![on("journal.page")];
+        settings.extend(extra);
+        settings
+    };
+    let panel = |extra: Vec<CliSetting>| {
+        let mut settings = vec![on("journal.side_panel")];
+        settings.extend(extra);
+        settings
+    };
+    vec![
+        ("journal.page", page(vec![])),
+        (
+            "journal.spoiler_tier=1",
+            page(vec![set("journal.spoiler_tier", "1")]),
+        ),
+        (
+            "journal.spoiler_tier=4",
+            page(vec![set("journal.spoiler_tier", "4")]),
+        ),
+        (
+            "journal.mantras=never",
+            page(vec![set("journal.mantras", "never")]),
+        ),
+        ("journal.side_panel", panel(vec![])),
+        (
+            "journal.side_panel_side=left",
+            panel(vec![set("journal.side_panel_side", "left")]),
+        ),
+        (
+            "journal.side_panel_side=right",
+            panel(vec![set("journal.side_panel_side", "right")]),
+        ),
+    ]
+}
+
+fn journal_alone() -> Vec<Config> {
+    journal_values()
+        .into_iter()
+        .map(|(name, settings)| Config::new(name, settings))
+        .collect()
+}
+
+/// The journal keys of the pairwise matrix: the page and the side panel,
+/// so every display key (the wider world view among them) meets each.
+fn journal_pair_values() -> Vec<(&'static str, Vec<CliSetting>)> {
+    journal_values()
+        .into_iter()
+        .filter(|(name, _)| matches!(*name, "journal.page" | "journal.side_panel"))
+        .collect()
+}
+
+// --- Chapter 8, the clue log and the trackers (build plan M6-08). --------
+
+/// Chapter 8's shipped keys (design 8.4.1), each away from its default. A
+/// key that needs `journal.clues`, and a style or evidence value, brings
+/// its switch with it. `journal.clue_misses` waits for D8.14.
+fn clue_values() -> Vec<(&'static str, Vec<CliSetting>)> {
+    let clues = |extra: Vec<CliSetting>| {
+        let mut settings = vec![on("journal.clues")];
+        settings.extend(extra);
+        settings
+    };
+    vec![
+        ("journal.clues", clues(vec![])),
+        (
+            "journal.clue_text=live",
+            clues(vec![set("journal.clue_text", "live")]),
+        ),
+        ("journal.clue_toast", clues(vec![on("journal.clue_toast")])),
+        ("journal.notes", clues(vec![on("journal.notes")])),
+        (
+            "journal.clue_highlight=asked",
+            vec![set("journal.clue_highlight", "asked")],
+        ),
+        (
+            "journal.clue_highlight=asked_elsewhere",
+            vec![set("journal.clue_highlight", "asked_elsewhere")],
+        ),
+        (
+            "journal.clue_highlight=new",
+            vec![set("journal.clue_highlight", "new")],
+        ),
+        (
+            "journal.clue_highlight_style=tint",
+            vec![
+                set("journal.clue_highlight", "asked"),
+                set("journal.clue_highlight_style", "tint"),
+            ],
+        ),
+        (
+            "journal.clue_scrollback",
+            vec![on("journal.clue_scrollback")],
+        ),
+        ("journal.quest_tracker", vec![on("journal.quest_tracker")]),
+        (
+            "journal.tracker_evidence=npc",
+            vec![
+                on("journal.quest_tracker"),
+                set("journal.tracker_evidence", "npc"),
+            ],
+        ),
+    ]
+}
+
+/// Each key alone, then the pairs the design names (8.4.4): highlighting
+/// with the wider world view (Ctrl+P typed), the scrollback beside the
+/// journal panel and under grow-left, and Recommended's three with the
+/// panel.
+fn clue_alone() -> Vec<Config> {
+    let mut configs: Vec<Config> = clue_values()
+        .into_iter()
+        .map(|(name, settings)| Config::new(name, settings))
+        .collect();
+    for (name, settings) in [
+        (
+            "clue_highlight=asked + grow_left",
+            vec![
+                set("journal.clue_highlight", "asked"),
+                on("display.grow_left"),
+            ],
+        ),
+        (
+            "clue_highlight=new + grow_left",
+            vec![
+                set("journal.clue_highlight", "new"),
+                on("display.grow_left"),
+            ],
+        ),
+        (
+            "clue_scrollback + grow_left",
+            vec![on("journal.clue_scrollback"), on("display.grow_left")],
+        ),
+    ] {
+        configs.push(Config {
+            column_keys: true,
+            ..Config::new(name, settings)
+        });
+    }
+    configs.push(Config::new(
+        "clue_scrollback + side_panel",
+        vec![on("journal.clue_scrollback"), on("journal.side_panel")],
+    ));
+    configs.push(Config::new(
+        "clues, clue_highlight=asked, quest_tracker + side_panel",
+        vec![
+            on("journal.clues"),
+            set("journal.clue_highlight", "asked"),
+            on("journal.quest_tracker"),
+            on("journal.side_panel"),
+        ],
+    ));
+    configs
+}
+
 /// Each of [`light_values`] with the wider world view and with sharp
 /// scaling (build plan M2-08), Ctrl+P typed as in [`column`]. The pairs
 /// among the chapter's own keys and with every other display key come
@@ -621,6 +811,7 @@ fn pair_values() -> Vec<(&'static str, Vec<CliSetting>)> {
     ]
     .into_iter()
     .chain(gem_pair_values())
+    .chain(journal_pair_values())
     .collect()
 }
 
@@ -976,6 +1167,10 @@ struct Trace {
     fed: Vec<Vec<TypedKey>>,
     /// Frames on which the menu was open.
     menu_frames: usize,
+    /// Whether the journal page and the journal panel were in the app.
+    journal: (bool, bool),
+    /// Whether the clue observer was in the app (chapter 8).
+    clue_observer: bool,
 }
 
 fn copy_dir(from: &Path, to: &Path) {
@@ -1069,6 +1264,14 @@ fn run_fed(
     }
     let fed = shell.take_fed();
     let gem_plugin = shell.app.world().contains_resource::<GemMap>();
+    let journal = (
+        shell.app.world().contains_resource::<QuestJournalUi>(),
+        shell
+            .app
+            .world()
+            .contains_resource::<JournalPanelPageOpen>(),
+    );
+    let clue_observer = shell.app.world().contains_resource::<ClueObserver>();
     let composes = shell
         .app
         .world()
@@ -1099,6 +1302,8 @@ fn run_fed(
         gem_plugin,
         fed,
         menu_frames,
+        journal,
+        clue_observer,
     }
 }
 
@@ -1169,6 +1374,8 @@ fn check(script: &Script, configs: &[Config]) -> Vec<String> {
             assert_eq!(off.composes, 0);
             assert!(off.steps.is_empty() && !off.masks_built);
             assert!(!off.gem_plugin && off.gem_frames == 0);
+            assert_eq!(off.journal, (false, false));
+            assert!(!off.clue_observer);
             offs.push((off_key, off));
         }
         let off = &offs.iter().find(|(key, _)| *key == off_key).unwrap().1;
@@ -1242,6 +1449,22 @@ fn check(script: &Script, configs: &[Config]) -> Vec<String> {
         } else {
             assert_eq!(on.gem_frames, 0, "{} / {}", script.name, config.name);
         }
+        // Chapter 5: the page and the panel are in the app exactly when on.
+        assert_eq!(
+            on.journal,
+            config.journal(),
+            "{} / {}: the journal",
+            script.name,
+            config.name
+        );
+        // Chapter 8: the observer is in the app exactly when it runs.
+        assert_eq!(
+            on.clue_observer,
+            config.clue_observer(),
+            "{} / {}: the clue observer",
+            script.name,
+            config.name
+        );
         if config.column_keys && config.grow_left() && script.top_down {
             assert!(
                 on.open_frames > 0,
@@ -1379,7 +1602,7 @@ fn a_gem_used_in_a_dungeon_is_left_alone() {
 fn every_pair_of_display_keys_leaves_the_shortest_script_alone() {
     let scratch = Scratch::new("pairs");
     let mut configs = pairs();
-    assert_eq!(configs.len(), 21 * 20 / 2);
+    assert_eq!(configs.len(), 23 * 22 / 2);
     configs.extend(light_pairs());
     let script = synthetic_scripts(&scratch)
         .into_iter()

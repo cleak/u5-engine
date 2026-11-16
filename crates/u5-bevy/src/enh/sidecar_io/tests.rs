@@ -147,10 +147,15 @@ fn the_watcher_runs_only_while_a_requesting_toggle_is_on() {
     assert!(!watch.wanted(FeatureToggles::CLASSIC));
     // Chapter 10's `gem_map.enhanced` is the first sidecar toggle with a
     // catalogue row (M3-01), shipped with G2 (M3-11); chapter 7's
-    // `cheats.enabled` (the modified marker) is the second (M8-01).
+    // `cheats.enabled` (the modified marker) is the second (M8-01), and
+    // chapter 8's `journal.clues` the third (M6-01).
     assert_eq!(
         sidecar_toggles().iter_on().collect::<Vec<_>>(),
-        [Toggle::GemMapEnhanced, Toggle::CheatsEnabled]
+        [
+            Toggle::GemMapEnhanced,
+            Toggle::CheatsEnabled,
+            Toggle::JournalClues
+        ]
     );
     assert!(Toggle::GemMapEnhanced.spec().is_shipped());
     let _ = fs::remove_dir_all(dir);

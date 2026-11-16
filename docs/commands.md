@@ -52,9 +52,12 @@ In this build F12 (`menu.overlay` and `menu.title_layer`, see
 [settings.md](settings.md#the-menu)), F11 (`display.fullscreen_key`), Ctrl+P
 (`display.grow_left`, see [settings.md](settings.md#the-wider-world-view)),
 PgUp and PgDn on the gem map (`gem_map.level_paging`, see
-[settings.md](settings.md#the-gem-map)) and the three auto-combat keys
-(`combat.auto`, see [auto-combat](#auto-combat-keys)) are available; the
-others arrive with their features.
+[settings.md](settings.md#the-gem-map)), Ctrl+J (`journal.page`,
+`journal.clues` or `journal.quest_tracker`, see
+[settings.md](settings.md#the-quest-journal) and
+[the clue log](settings.md#the-clue-log-and-quest-trackers)) and the three
+auto-combat keys (`combat.auto`, see [auto-combat](#auto-combat-keys)) are
+available; the others arrive with their features.
 
 | Default | `[keys]` setting | Action | Bound while |
 |---|---|---|---|
@@ -87,6 +90,29 @@ others arrive with their features.
 - Change a key with `--set keys.NAME=CHORD` or in `config.toml`'s `[keys]`
   section: modifiers `Ctrl`, `Shift`, `Alt`, then one key, joined by `+`. A
   chord the game reads is refused with a note.
+- The quest journal page's own keys, while it is open: Left and Right, Tab
+  and Shift+Tab (section), 1 to 7 (jump to a section), Up and Down (row),
+  PgUp, PgDn, Home and End, Enter or Space (reveal a masked answer at
+  spoiler tier 4), Esc or Ctrl+J (close). None of them reaches the game.
+  F1 is not a journal key: it stays the game's "What?".
+- With the clue log or the tracker on, the page has tabs (Quests, Clues,
+  Topics, and Notes with `journal.notes`): Tab and Shift+Tab change the tab.
+  On the Clues and Topics tabs: Up, Down, PgUp, PgDn, Home and End move,
+  Enter or Space opens a group or a clue, `/` searches (Enter keeps the
+  search, Esc clears it), `F` and Shift+F change the filter, `V` switches
+  the Clues tab between people and places, `S` stars, `H` hides, `P` pins a
+  clue to the side panel, `Q` pins it to a quest (with the tracker on) and
+  `N` writes a note (with `journal.notes`). On the Quests tab: Up and Down
+  choose a card, Enter opens it, and Esc or Backspace goes back to the
+  list; with the log on, Enter on a step lists its clues and `K` marks a
+  step you already know. Esc on a list, or Ctrl+J, closes the page. None of
+  these keys reaches the game.
+- The flags `--clue-log`, `--clue-text MODE`, `--clue-highlight MODE` and
+  `--quest-tracker` turn the clue log's settings on for one launch
+  ([settings.md](settings.md#the-clue-log-and-quest-trackers)).
+- `u5-engine --quest-journal-report [--spoilers N] [GAME_DIR]` prints the
+  quest journal of a save as text and exits without changing anything
+  ([settings.md](settings.md#the-quest-journal)).
 - On macOS the chords use Control, not Command.
 - The terminal frontend binds no chords. Play scripts reach a feature
   through `@` tokens (`@journal`, `@auto`, ...), which run as ordinary script

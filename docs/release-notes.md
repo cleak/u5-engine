@@ -296,3 +296,84 @@ differs from the uncheated one only in the fields those cheats name; a
 fresh game with every cheat off has no Cheats page and no teleport list;
 and every cheat asked for under the parity lock loads nothing and writes
 nothing.
+
+### Optional enhancements: the quest journal
+
+Off unless you turn it on (`--quest-journal`, `--journal-side-panel`, or
+the Everything preset), and it never changes the game
+([the quest journal](settings.md#the-quest-journal)).
+
+- **Ctrl+J opens the quest journal** at the command prompt: a page over the
+  game picture, in the game's own font and frame, with what you have done
+  so far for each virtue, the dungeons, the Shadowlords, the regalia, the
+  items and the people you travel with or have met. Esc or Ctrl+J closes
+  it; the arrow keys, Tab and the digits move through it. The world keeps
+  its idle time underneath, as if you had stopped typing, and the page
+  closes itself if the game stops waiting at its prompt.
+- **A side panel** can show a short summary beside the picture: the virtues
+  done and in progress, a mark for each, and what you have found.
+- **No spoilers by default.** At tiers 1 and 2 (2 is the default) the
+  journal names only what the game has already shown you or your save shows
+  you did, and never counts what is left. A new game shows only the eight
+  virtues and your party.
+- **Spoiler tiers 3 and 4** (`--spoilers 3`, `--spoilers 4`) add hints, the
+  Endgame section and, at tier 4, the mantras and Words of Power you have
+  already used, each masked until you reveal it. They are marked
+  `SPOILERS`, count as deviations, and no preset sets them.
+- **`u5-engine --quest-journal-report`** prints the journal of a save as
+  text and changes nothing.
+
+Checks behind it: opening, using and closing the page (on a tick boundary
+and between two), combat starting under it, the side panel alone, and
+Ctrl+J typed where the game is busy all play exactly as the original with
+the same idle frames (the game state, the random numbers, the clock, the
+messages, the picture, the keys and the save files); a no-spoiler suite
+checks the page, the panel and the report on a new game and one discovery
+at a time.
+
+### Optional enhancements: the clue log and quest trackers
+
+Off unless you turn it on (`--clue-log`, `--clue-highlight asked`,
+`--quest-tracker`, or the Recommended or Everything preset, which turn on
+those three), and it never changes the game
+([the clue log](settings.md#the-clue-log-and-quest-trackers)).
+
+- **A clue log, per save.** Every topic you ask is logged with who told you
+  and where, under the journal's **Clues** tab (by person or by place) and
+  **Topics** tab (by word), with search, filters, stars, hidden clues, pins
+  to the side panel and your own notes. People are named only once they
+  told you their name. The log is saved with the game in its own file
+  beside the save and never holds what anyone said; `--clue-text live`
+  shows the words for this session only.
+- **Highlighting in conversation.** Topics you have already asked this
+  person are underlined in the message window (dashed when the answer may
+  differ now); `asked_elsewhere` also marks words asked of someone else.
+  Only the picture is marked: the game's text, wrapping and frame are
+  unchanged.
+- **Quest tracker cards** on a **Quests** tab, one for each quest your save
+  shows you have begun, with the steps the game has already given you; with
+  the log on you can pin clues to a quest or a step.
+- **A conversation scrollback** panel beside the picture and a short note
+  when the log was updated are there to turn on too.
+- **No spoilers by default.** On a new game the tabs and the panel name no
+  person, town, keyword, dungeon, Shadowlord, item or tool and show no
+  card, and each thing you do adds only its own line; nothing counts what
+  is left.
+- **Spoiler-risk options are deviation tier.** `clue_highlight = new` (marks
+  words you have not asked) and `tracker_evidence = npc` (shows which people
+  matter) count as deviations, put `SPOILERS` in the journal's title, and no
+  preset sets them. Keeping the words nobody answered (`clue_misses`) and
+  keeping what was said between sessions (`clue_text = kept`) wait for a
+  decision and are not in this build.
+
+Checks behind it: a scripted conversation (a stranger's greeting, keywords,
+a held page, a refused payment, the party's name, a branch and a prompt
+inside it, an unknown word, a runic answer, then a walk) plays exactly as
+the original with the whole chapter off, with every key on at its spoiler
+values and tier 4, and with Recommended: the random numbers, the clock, the
+messages, the conversation flags, the picture, the keys and the save files
+are equal on every frame. Every key alone, highlighting with the wider
+world view and the scrollback beside the journal panel are in the display
+matrix. A no-spoiler suite checks every tab and the panel on a new game and
+one event at a time, and CI fails on any committed player sidecar file or
+any exporter that would carry the clue log.

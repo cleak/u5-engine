@@ -945,14 +945,20 @@ mod tests {
         assert_eq!(settings.config.as_deref(), Some(path.as_path()));
         assert!(settings.warnings.is_empty());
         // Of Recommended's rows `display.sprite_composite` (chapter 9 P5),
-        // `combat.auto` and `combat.fast_forward` (chapter 6 3c, 4d) have
-        // shipped, so they are the toggles the preset turns on.
+        // `combat.auto` and `combat.fast_forward` (chapter 6 3c, 4d) and
+        // chapter 8's three (M6-08) have shipped, so they are the toggles
+        // the preset turns on.
+        let mut on: Vec<Toggle> = settings.resolved.toggles.iter_on().collect();
+        on.sort_by_key(|toggle| toggle.key());
         assert_eq!(
-            settings.resolved.toggles.iter_on().collect::<Vec<_>>(),
+            on,
             [
-                Toggle::DisplaySpriteComposite,
                 Toggle::CombatAuto,
-                Toggle::CombatFastForward
+                Toggle::CombatFastForward,
+                Toggle::DisplaySpriteComposite,
+                Toggle::JournalClueHighlight,
+                Toggle::JournalClues,
+                Toggle::JournalQuestTracker,
             ]
         );
         assert_eq!(
@@ -1104,7 +1110,42 @@ mod tests {
         // aliases so far.
         assert_eq!(find_cli_alias("--preset"), None);
         assert_eq!(find_cli_alias("--no-preset"), None);
-        assert_eq!(find_cli_alias("--quest-journal"), None);
+        // The journal's aliases (chapter 5, M5-01) are catalogue rows that
+        // stay hidden until their phases ship, so the parser knows them only
+        // then.
+        let journal_shipped = CatalogueRow::find("journal.page").unwrap().is_shipped();
+        for (flag, key, on) in [
+            ("--quest-journal", "journal.page", true),
+            ("--no-quest-journal", "journal.page", false),
+            ("--journal-side-panel", "journal.side_panel", true),
+            ("--no-journal-side-panel", "journal.side_panel", false),
+        ] {
+            let alias = CliAlias::Switch { key, on };
+            assert_eq!(
+                find_cli_alias_in(CatalogueRow::all(), flag),
+                Some(alias),
+                "{flag}"
+            );
+            assert_eq!(
+                find_cli_alias(flag),
+                journal_shipped.then_some(alias),
+                "{flag}"
+            );
+        }
+        assert_eq!(
+            find_cli_alias_in(CatalogueRow::all(), "--spoilers"),
+            Some(CliAlias::Valued {
+                key: "journal.spoiler_tier"
+            })
+        );
+        assert_eq!(
+            find_cli_alias_in(CatalogueRow::all(), "--no-spoilers"),
+            None
+        );
+        assert_eq!(
+            find_cli_alias_in(CatalogueRow::all(), "--quest-journa"),
+            None
+        );
         assert_eq!(
             find_cli_alias("--grow-left"),
             Some(CliAlias::Switch {
@@ -1133,6 +1174,10 @@ mod tests {
                 "--start-buffer-on,",
                 "--auto-combat,",
                 "--auto-combat-fast-forward,",
+                "--quest-journal,",
+                "--journal-side-panel,",
+                "--clue-log,",
+                "--quest-tracker,",
                 "--scale-mode",
                 "--pixel-aspect",
                 "--pillar-fill",
@@ -1140,7 +1185,10 @@ mod tests {
                 "--vsync,",
                 "--brightness",
                 "--confirm-unsaved,",
-                "--volume"
+                "--volume",
+                "--spoilers",
+                "--clue-text",
+                "--clue-highlight"
             ]
         );
         for row in CatalogueRow::all().filter(|row| row.is_shipped()) {

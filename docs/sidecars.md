@@ -106,10 +106,15 @@ writable save folder.
 | `journal.u5e` | `QJRN` | The journal's clue log. |
 | `gemmap.u5e` | `GEMK` | The enhanced gem map's discoveries. |
 
-- No other per-save file exists. In this build two features write one:
-  the enhanced gem map (`gemmap.u5e`) and the cheats (`save-meta.u5e`),
-  both below. With every enhancement off (Classic) the folder is never
-  created, read or touched.
+- No other per-save file exists. In this build three features write one:
+  the enhanced gem map (`gemmap.u5e`), the cheats (`save-meta.u5e`), both
+  below, and the clue log (`journal.u5e`, only while `journal.clues` is on,
+  and only when the game saves). With every enhancement off (Classic) the
+  folder is never created, read or touched.
+- `journal.u5e` holds where each clue was heard, your marks, pins and
+  notes, never what anyone said and none of the game's text. It is never
+  copied out of its save folder, and no player sidecar is ever committed to
+  the repository (a CI check).
 - `SAVED.GAM` never gains a byte, so the original game still loads every
   save.
 - Each file is one container: the magic `U5EH`, a container version, the
