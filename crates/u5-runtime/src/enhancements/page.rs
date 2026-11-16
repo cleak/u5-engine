@@ -809,6 +809,8 @@ pub fn catalogue_apply(key: &str) -> ApplyAt {
 ///   which brings it;
 /// - focus mute: `FocusMutePlugin`'s condition, itself or the overlay;
 /// - the grow-left layout: only with itself on;
+/// - a cheat or the watch: the cheats plugin's condition, a cheat or the
+///   watch effectively on, or the overlay;
 /// - every other feature: on at launch, or installed dormant
 ///   ([`dormant_install`]).
 pub fn installed_at_launch(feature: Toggle, launch: FeatureToggles) -> bool {
@@ -828,6 +830,12 @@ pub fn installed_at_launch(feature: Toggle, launch: FeatureToggles) -> bool {
             any(&[MenuOverlay, AudioVolume, AudioMuted, AudioMuteOnFocusLoss])
         }
         AudioMuteOnFocusLoss => any(&[MenuOverlay, AudioMuteOnFocusLoss]),
+        // The cheats plugin (chapter 7): installed when a cheat or the
+        // watch is effectively on at launch, or with the menu overlay, so
+        // one can be switched on in play (the Bevy shell's `cheats_wanted`).
+        cheat if cheat.key().starts_with("cheats.") => {
+            super::CheatToggles::from_toggles(launch).any_on() || launch.on(MenuOverlay)
+        }
         _ => launch.on(feature) || dormant_install(launch, feature),
     }
 }

@@ -413,8 +413,14 @@ fn help_lines_belong_to_catalogue_rows() {
         .map(|row| row.key())
         .filter(|key| help_line(key).is_some())
         .collect();
+    // Chapter 7's `[cheats]` rows all have one (`cheats_view` tests).
+    let gem_with_help: Vec<&str> = with_help
+        .iter()
+        .copied()
+        .filter(|key| !key.starts_with("cheats."))
+        .collect();
     assert_eq!(
-        with_help,
+        gem_with_help,
         [
             "gem_map.enhanced",
             "menu.overlay",

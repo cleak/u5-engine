@@ -264,10 +264,12 @@ fn no_overlay_model_while_no_overlay_feature_is_on() {
     let mut launch = VisualLaunchConfig::classic();
     // ...and except the grow-left layout, whose `[grow-left compose]` step,
     // frame fit and canvas size are its own (M1-09, display/grow tests), and
-    // auto-combat, which brings the toasts and badges itself (M7-05).
+    // auto-combat, which brings the toasts and badges itself (M7-05). The
+    // cheats page is an overlay feature (M8-02), checked below.
     for spec in TOGGLES.iter().filter(|spec| {
         ![Toggle::DisplayGrowLeft, Toggle::CombatAuto].contains(&spec.toggle)
             && !MENU_OPENERS.contains(&spec.toggle)
+            && !spec.toggle.key().starts_with("cheats.")
     }) {
         launch.enhancements.toggles.set(spec.toggle, true);
     }
@@ -300,6 +302,10 @@ fn no_overlay_model_while_no_overlay_feature_is_on() {
             "{toggle:?}"
         );
     }
+    let mut cheats = launch.enhancements.toggles;
+    cheats.set(Toggle::CheatsEnabled, true);
+    cheats.set(Toggle::CheatsMaxGold, true);
+    assert!(overlay_feature_on(cheats));
 }
 
 /// Chapter 3's toggles that open the menu overlay (M4-02 rows): each binds

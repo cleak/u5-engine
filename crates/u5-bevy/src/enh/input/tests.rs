@@ -298,6 +298,8 @@ fn bindings_follow_their_features() {
             EnhAction::AutoMember,
             EnhAction::AutoParty,
             EnhAction::AutoUntilDone,
+            // M8: a cheat on.
+            EnhAction::OpenCheats,
         ]
     );
     let (map, notes) = KeyMap::for_toggles(&default_keys(), every);

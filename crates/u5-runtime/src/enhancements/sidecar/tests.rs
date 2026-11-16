@@ -354,24 +354,31 @@ fn the_save_bytes_are_the_same_with_and_without_the_watcher() {
 }
 
 #[test]
-fn only_the_gem_map_toggle_keeps_a_sidecar_so_far() {
+fn only_the_gem_map_and_cheats_toggles_keep_a_sidecar_so_far() {
     assert!(!sidecar_feature_on(FeatureToggles::CLASSIC));
     // Chapter 10's `gem_map.enhanced` is the first sidecar feature with a
-    // catalogue row (M3-01); chapters 4, 7 and 8 bring the others.
+    // catalogue row (M3-01), and chapter 7's `cheats.enabled` (the save
+    // marker) the second (M8-01); chapters 4 and 8 bring the others.
     let mut others = FeatureToggles::CLASSIC;
-    for spec in TOGGLES.iter().filter(|spec| spec.key != "gem_map.enhanced") {
+    for spec in TOGGLES
+        .iter()
+        .filter(|spec| spec.key != "gem_map.enhanced" && spec.key != "cheats.enabled")
+    {
         others.set(spec.toggle, true);
     }
     assert!(!sidecar_feature_on(others));
     let mut gem = FeatureToggles::CLASSIC;
     gem.set(Toggle::GemMapEnhanced, true);
     assert!(sidecar_feature_on(gem));
+    let mut cheats = FeatureToggles::CLASSIC;
+    cheats.set(Toggle::CheatsEnabled, true);
+    assert!(sidecar_feature_on(cheats));
     let resolved: Vec<&str> = SIDECAR_KEYS
         .iter()
         .copied()
         .filter(|key| Toggle::from_key(key).is_some())
         .collect();
-    assert_eq!(resolved, ["gem_map.enhanced"]);
+    assert_eq!(resolved, ["cheats.enabled", "gem_map.enhanced"]);
     for key in SIDECAR_KEYS {
         let (section, name) = key.split_once('.').unwrap();
         assert!(!section.is_empty() && !name.is_empty() && !name.contains('.'));

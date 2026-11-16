@@ -16,6 +16,10 @@
 //!   deviation-tier toggles included. A driven toggle (the switch of a
 //!   valued setting) is reached through that setting, never by name.
 //!
+//! - **cheats (M8)**: the change watch alone, every cheat on but unused,
+//!   and each of the two with the grow-left layout and with the gem map
+//!   (design 7.4.3, 7.6; build plan M8-06). Each must equal all off.
+//!
 //! Classic itself is not a row: the suite always runs it (and compares it
 //! with the 1.0.1 route-smoke manifest).
 //!
@@ -42,6 +46,12 @@ pub const CHEATS_SECTION: &str = "cheats.";
 
 /// The name of the all-on row.
 pub const ALL_ON_EXCEPT_CHEATS: &str = "all-on-except-cheats";
+
+/// The name prefix of the cheats block's rows (build plan M8-06).
+pub const CHEATS_BLOCK_PREFIX: &str = "cheats:";
+
+/// The comment line [`matrix_tsv`] writes above the cheats block.
+pub const CHEATS_BLOCK_HEADER: &str = "# cheats (M8)";
 
 /// Where the matrix is committed, relative to the workspace root.
 pub const MATRIX_FILE: &str = "qa/enhancements/matrix.tsv";
@@ -300,6 +310,37 @@ pub fn toggle_matrix() -> Vec<MatrixRow> {
             .map(|spec| set(spec.key, "true"))
             .collect(),
     });
+    rows.extend(cheats_block());
+    rows
+}
+
+/// The cheats block (design 7.4.3, 7.6; build plan M8-06): the watch
+/// alone, every cheat on but unused, and each with the grow-left layout
+/// and with the gem map. "Every cheat" is the section switch and every
+/// class (c) key; the watch, class (a), is its own run.
+pub fn cheats_block() -> Vec<MatrixRow> {
+    let watch = vec![set("cheats.state_watch", "true")];
+    let every: Vec<CliSetting> = TOGGLES
+        .iter()
+        .filter(|spec| spec.key.starts_with(CHEATS_SECTION) && spec.key != "cheats.state_watch")
+        .map(|spec| set(spec.key, "true"))
+        .collect();
+    let mut rows = Vec::new();
+    for (name, base) in [("watch", watch), ("every-cheat-unused", every)] {
+        rows.push(MatrixRow {
+            name: format!("{CHEATS_BLOCK_PREFIX}{name}"),
+            settings: base.clone(),
+        });
+        for (with, key) in [
+            ("grow-left", "display.grow_left"),
+            ("gem-map", "gem_map.enhanced"),
+        ] {
+            rows.push(MatrixRow {
+                name: format!("{CHEATS_BLOCK_PREFIX}{name}+{with}"),
+                settings: [base.clone(), vec![set(key, "true")]].concat(),
+            });
+        }
+    }
     rows
 }
 
@@ -325,7 +366,14 @@ pub fn matrix_tsv(rows: &[MatrixRow]) -> String {
          # Rows whose feature has not shipped resolve to Classic until it does.\n\
          # name\tsettings\n",
     );
+    let mut in_cheats = false;
     for row in rows {
+        let cheats = row.name.starts_with(CHEATS_BLOCK_PREFIX);
+        if cheats && !in_cheats {
+            text.push_str(CHEATS_BLOCK_HEADER);
+            text.push('\n');
+        }
+        in_cheats = cheats;
         let settings: Vec<String> = row.settings.iter().map(setting_text).collect();
         text.push_str(&row.name);
         text.push('\t');
@@ -469,5 +517,50 @@ mod tests {
             assert!(!factor.key.starts_with(CHEATS_SECTION), "{}", factor.key);
             assert!(factor.values.len() >= 2, "{}", factor.key);
         }
+    }
+
+    /// Build plan M8-06: the cheats block has its six runs, under its own
+    /// header, and every cheat key is in the every-cheat run.
+    #[test]
+    fn the_cheats_block_has_the_watch_every_cheat_and_their_pairs() {
+        let block = cheats_block();
+        let names: Vec<&str> = block.iter().map(|row| row.name.as_str()).collect();
+        assert_eq!(
+            names,
+            [
+                "cheats:watch",
+                "cheats:watch+grow-left",
+                "cheats:watch+gem-map",
+                "cheats:every-cheat-unused",
+                "cheats:every-cheat-unused+grow-left",
+                "cheats:every-cheat-unused+gem-map",
+            ]
+        );
+        assert_eq!(block[0].settings, [set("cheats.state_watch", "true")]);
+        for spec in TOGGLES
+            .iter()
+            .filter(|spec| spec.key.starts_with(CHEATS_SECTION))
+        {
+            let listed = block[3].settings.contains(&set(spec.key, "true"));
+            assert_eq!(listed, spec.key != "cheats.state_watch", "{}", spec.key);
+        }
+        assert!(
+            block[4]
+                .settings
+                .contains(&set("display.grow_left", "true"))
+        );
+        assert!(block[5].settings.contains(&set("gem_map.enhanced", "true")));
+        let rows = toggle_matrix();
+        assert!(rows.ends_with(&block), "the block closes the matrix");
+        let text = matrix_tsv(&rows);
+        assert_eq!(text.matches(CHEATS_BLOCK_HEADER).count(), 1);
+        let header = text.find(CHEATS_BLOCK_HEADER).unwrap();
+        assert!(
+            text[header..]
+                .lines()
+                .nth(1)
+                .unwrap()
+                .starts_with("cheats:watch\t")
+        );
     }
 }

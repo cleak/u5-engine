@@ -177,6 +177,9 @@ fn no_host_exists_while_no_step_is_registered() {
             && spec.toggle != Toggle::AudioStartBufferOn
             && spec.toggle != Toggle::CombatAuto
             && !crate::enh::overlay::tests::MENU_OPENERS.contains(&spec.toggle)
+            // The cheats page brings the toasts (M8-02), which need a
+            // real-time clock this app does not have.
+            && !spec.toggle.key().starts_with("cheats.")
     }) {
         every.enhancements.toggles.set(spec.toggle, true);
     }

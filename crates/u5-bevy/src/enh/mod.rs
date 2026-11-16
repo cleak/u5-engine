@@ -49,6 +49,8 @@
 //!   overlay for focus mute.
 //! - Automatic combat's plugin ([`auto_combat`]) is added only while
 //!   `combat.auto` is on at launch.
+//! - The cheats plugin ([`cheats`]) is added only while a cheat or the
+//!   watch is effectively on at launch, or the menu overlay is on.
 //!
 //! The Bevy half of the trajectory-equivalence harness (`equivalence`,
 //! test-only) runs the real `--visual` app headless, feature on against
@@ -61,6 +63,7 @@
 //! not edited.
 
 pub mod auto_combat;
+pub mod cheats;
 #[cfg(test)]
 pub(crate) mod equivalence;
 pub mod gem_map;
@@ -110,6 +113,9 @@ pub struct VisualLaunchConfig {
     /// The folder the host chose for the save files. The engine never
     /// derives OS paths itself.
     pub save_dir: Option<PathBuf>,
+    /// The folder the host chose for saved change-watch logs,
+    /// `<data_base>/watch/` (design 7.2.8). `None`: the watch cannot save.
+    pub watch_dir: Option<PathBuf>,
     /// `display.bezel_image`, decoded by the host at launch (design 2.3.3).
     /// `None` when the fill is not a bezel or the file could not be used;
     /// the engine then shows black bars.
@@ -139,6 +145,7 @@ impl VisualLaunchConfig {
             enhancements: ResolvedEnhancements::classic(),
             settings_sink: None,
             save_dir: None,
+            watch_dir: None,
             bezel: None,
             bezel_updates: None,
             menu_host: None,
@@ -388,6 +395,7 @@ impl Plugin for EnhancementsPlugin {
         crate::menu::start_keys::add_start_keys(app, &self.launch);
         gem_map::add_gem_map(app, &self.launch);
         auto_combat::add_auto_combat(app, &self.launch);
+        cheats::add_cheats(app, &self.launch);
         crate::display::add_display(app, &self.launch);
     }
 }

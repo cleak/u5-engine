@@ -84,6 +84,9 @@ fn no_toast_or_badge_unless_a_feature_installs_them() {
         spec.toggle != Toggle::DisplayGrowLeft
             && spec.toggle != Toggle::CombatAuto
             && !crate::enh::overlay::tests::MENU_OPENERS.contains(&spec.toggle)
+            // The cheats page, an overlay feature, whose refusals are
+            // toasts (M8-02).
+            && !spec.toggle.key().starts_with("cheats.")
     }) {
         launch.enhancements.toggles.set(spec.toggle, true);
     }

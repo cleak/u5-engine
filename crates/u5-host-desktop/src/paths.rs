@@ -131,6 +131,12 @@ impl DesktopPaths {
     pub fn saves_root(&self) -> PathBuf {
         self.data_base.join(SAVES_DIR_NAME)
     }
+
+    /// Where the cheats' change watch saves its logs (Phase B design
+    /// 7.2.8). The shell is handed this folder and never resolves it.
+    pub fn watch_dir(&self) -> PathBuf {
+        self.data_base.join("watch")
+    }
 }
 
 /// The configuration file.
@@ -393,6 +399,7 @@ mod tests {
             PathBuf::from("/cfg/u5-engine/config.toml")
         );
         assert_eq!(paths.data_base, PathBuf::from("/data/u5-engine"));
+        assert_eq!(paths.watch_dir(), PathBuf::from("/data/u5-engine/watch"));
         assert_eq!(paths.runtime_root, PathBuf::from("/data/u5-engine/runtime"));
     }
 

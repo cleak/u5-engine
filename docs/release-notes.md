@@ -234,3 +234,62 @@ with the feature off at the same frames, give the same game and the same
 `SAVED.GAM`, beside every other shipped enhancement; and the same keys and notes come with or
 without a monster the party cannot see.
 
+### Optional enhancements: cheats and the change watch
+
+Off unless you turn them on, never in a preset, and labelled wherever they
+show ([cheats](settings.md#cheats)). With every cheat off nothing of them
+is loaded, no key is taken and no file is read or written: the game is the
+1.0.1 game.
+
+- **Two steps.** Allow cheats first (`cheats.enabled`), then turn on each
+  cheat you want by its own key, for example
+  `--enable cheats.enabled,cheats.heal_all,cheats.lock_hp`. Ctrl+F12 opens
+  the Cheats page at the command prompt; a cheat that is off is not on it.
+- **Quick actions.** Heal all, Cure poison, Resurrect all, Max gold, Max
+  food, Refill arrows (and quarrels), Max reagents and Repair hull. Values
+  go only to the game's own caps (9,999 gold and food, 99 for the rest, a
+  frigate's hull to 99), never down, never a hull of 100 or more, never a
+  pirate ship. Ashes stay ashes. No action uses a random number or passes
+  time.
+- **Locks.** Health, mana, food, gold, keys, gems, torches, arrows and the
+  reagents, each topped up once a turn (and once a combat round) at the
+  command prompt while checked. A lock never brings a member back to life.
+  Locks start unchecked at each launch; keeping them between launches
+  (`remember_locks`) is not in this build yet.
+- **Edit party and stores.** Strength, Dexterity, Intelligence, HP, MP,
+  experience, status and the shared stores, each within the range the
+  game itself uses, applied together with `[A]` and undone with `[U]`.
+  `[L]` sets a member's level from experience as camping does.
+- **Teleport. Spoiler: it lists every place in the game**, including ones
+  you have not found; its title says `SPOILERS`. Any cell of Britannia
+  or the Underworld, any floor your files have of every town, castle,
+  keep and dwelling, and any level of the eight dungeons. Only at the
+  prompt, not in combat or aboard a ship or skiff, with no time passing.
+  A blocked target is moved to the nearest open cell where there is one,
+  or refused.
+- **The change watch** (`cheats.state_watch`). A live log of named
+  fields (party, stores, place, time) as they change, kept to the last
+  4,096 changes and saved as plain text with `[S]`. It only reads the
+  game, needs no "Allow cheats", and never lists quest flags, seals, the
+  Shadowlords or their hideouts.
+- **The "modified" mark.** Once a cheat has changed your game, the page
+  says "This game: MODIFIED" and every save you make is marked beside it
+  (`save-meta.u5e`; [sidecars.md](sidecars.md#save-metau5e-the-modified-mark)).
+  `SAVED.GAM` is never marked, so the original game still loads the save.
+  Turning cheats off does not unmark a save. Limits: a save made while
+  cheats are off is not marked and later shows "unknown"; the mark records
+  that cheats were used, not which ones; and deleting the file removes it.
+- **The parity lock** turns every cheat off whatever the settings say.
+  It prints only its one line (and a note naming the flags it ignored),
+  loads no cheat code and never touches the mark.
+
+Checks behind it: the watch alone and every cheat on but unused, each also
+with the wider view and with the gem map, play exactly as all off in the
+terminal and in the windowed shell, where the page is also opened and
+closed (the game, its picture, its keys, the random numbers and the save
+files); the
+same cheats on the same turns reproduce exactly, and a cheated game
+differs from the uncheated one only in the fields those cheats name; a
+fresh game with every cheat off has no Cheats page and no teleport list;
+and every cheat asked for under the parity lock loads nothing and writes
+nothing.

@@ -406,8 +406,17 @@ fn the_enhancements_tab_is_the_wizard_s_rows_grouped() {
             "Classic"
         );
         assert_eq!(extras[0].action, RowAction::Preset);
-        let generated = settings_rows_in(&launch, phases);
-        assert!(generated.iter().all(|row| !row.role.is_cheat_group()));
+        // The cheat rows (M8) are not listed one by one: they sit in the
+        // collapsed Cheats group, the tab's last row.
+        let all = settings_rows_in(&launch, phases);
+        let generated: Vec<_> = all
+            .iter()
+            .filter(|row| !row.role.is_cheat_group())
+            .cloned()
+            .collect();
+        if all.iter().any(|row| row.role.is_cheat_group()) {
+            assert_eq!(extras.last().map(|row| row.label), Some(t::CHEATS_GROUP));
+        }
         assert_eq!(
             keys_of(extras),
             generated
@@ -446,7 +455,6 @@ fn the_enhancements_tab_is_the_wizard_s_rows_grouped() {
             let want = GROUP_INDENT + if source.indent { SUB_INDENT } else { 0 };
             assert_eq!(row.indent, want, "{}", source.key);
         }
-        assert!(!labels(extras).contains(&t::CHEATS_GROUP));
     }
     // With the menu's phases the menu's own rows are in "Menu and saves".
     let extras = &tabs(&ResolvedEnhancements::classic(), with_menu_phases())[3];
@@ -971,9 +979,15 @@ pub(crate) fn engine_names() -> Vec<String> {
     }
     names.sort();
     names.dedup();
-    names.retain(|name| !name.trim().is_empty());
+    names.retain(|name| !name.trim().is_empty() && !PARTY_STORES.contains(&name.as_str()));
     names
 }
+
+/// The party's ammunition stores, which the game's own stats show every
+/// party from the first turn (as it shows food, gold, keys, gems, torches
+/// and reagents, none of them in the equipment table): naming them gives
+/// nothing away. The cheats' rows (M8) name them, as chapter 7 does.
+const PARTY_STORES: &[&str] = &["Arrows", "Quarrels"];
 
 /// No label or help line names a place or item the engine knows.
 #[test]
@@ -1138,9 +1152,8 @@ fn rows_with_cheats(locked: bool) -> SettingsView {
 }
 
 /// Under the lock the Cheats group is absent; without it the group shows
-/// collapsed, greyed until chapter 7 fills it; no cheat row is ever listed
-/// on its own. The catalogue has no cheat rows, so in this build the group
-/// is absent either way.
+/// collapsed and greyed; no cheat row is ever listed on its own. With the
+/// catalogue's cheat rows (M8) the group shows, except under the lock.
 #[test]
 fn the_lock_hides_the_cheats_group() {
     let locked = &settings_tabs(&rows_with_cheats(true), None)[3];
@@ -1162,9 +1175,9 @@ fn the_lock_hides_the_cheats_group() {
 
     let mut lock = ResolvedEnhancements::classic();
     lock.lock = LockState::Locked(LockReason::CliFlag);
-    for resolved in [ResolvedEnhancements::classic(), lock] {
+    for (resolved, shown) in [(ResolvedEnhancements::classic(), true), (lock, false)] {
         let extras = &tabs(&resolved, every_phase())[3];
-        assert!(!labels(extras).contains(&t::CHEATS_GROUP));
+        assert_eq!(labels(extras).contains(&t::CHEATS_GROUP), shown);
         assert!(!keys_of(extras).iter().any(|key| key.starts_with("cheats.")));
     }
 }

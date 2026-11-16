@@ -779,6 +779,10 @@ fn each_chapter_3_toggle_alone_adds_only_its_own_plugin() {
                 // The gem map, installed dormant (D-M4.4).
                 "u5_bevy::enh::gem_map",
                 "u5_bevy::menu::",
+                // The cheats plugin, so a cheat can be switched on in play
+                // (chapter 7.3.1, M8); with every cheat off none of its
+                // systems runs.
+                "u5_bevy::enh::cheats::",
                 // The feed the Game tab's Sound and Buffer type through
                 // (M4-13).
                 "u5_bevy::enh::synthetic::",

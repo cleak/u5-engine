@@ -106,9 +106,10 @@ writable save folder.
 | `journal.u5e` | `QJRN` | The journal's clue log. |
 | `gemmap.u5e` | `GEMK` | The enhanced gem map's discoveries. |
 
-- No other per-save file exists. In this build only the enhanced gem map
-  writes one (`gemmap.u5e`, below); with every enhancement off (Classic) the
-  folder is never created, read or touched.
+- No other per-save file exists. In this build two features write one:
+  the enhanced gem map (`gemmap.u5e`) and the cheats (`save-meta.u5e`),
+  both below. With every enhancement off (Classic) the folder is never
+  created, read or touched.
 - `SAVED.GAM` never gains a byte, so the original game still loads every
   save.
 - Each file is one container: the magic `U5EH`, a container version, the
@@ -159,6 +160,36 @@ save's own file, so later discoveries are forgotten as the game forgets
 them, and a new character starts with none. The payload is a list of
 tagged sections (`GEMK` payload version 1); an unknown section is skipped,
 and a file from a newer engine is left alone.
+
+### `save-meta.u5e`: the "modified" mark
+
+The cheats' mark that a save was made after a cheat changed the game
+([settings.md](settings.md#cheats)). Payload version 1 is one flags byte;
+bit 0 is "cheats used". Unknown bits and later bytes are skipped, so a
+newer engine's file still reads.
+
+- **When it is written.** Only while a cheat that changes the game is on.
+  After each save the game makes (the game's own `Q`), if a cheat changed
+  anything in this session, or the loaded save was already marked, the
+  flag is written stamped with that save. A save with no cheat used in the
+  session writes nothing. Saving a new character's first game removes an
+  old mark, so the new game starts clean.
+- **When it is read.** When play starts with a cheat on. The Cheats page
+  header then says:
+  - **MODIFIED**: the file matches this save and has the flag;
+  - **unmodified**: no file, or a matching file without the flag;
+  - **unknown**: the file belongs to another save (the same character
+    saved elsewhere since, another character, or an older save), or is
+    damaged (renamed to `save-meta.u5e.bad`).
+- **With cheats off** the file is neither read nor written, and nothing
+  watches the save on its behalf. A save made with cheats off is therefore
+  not marked, and its stamp no longer matches the old file, so turning
+  cheats on later shows "unknown", never "unmodified". This is the price of
+  cheats leaving no trace while they are off.
+- **Under the parity lock** the folder is not even opened.
+- The mark never goes into `SAVED.GAM`, so the original game still loads
+  a cheated save (and does not see the mark). It is a label, not a lock:
+  deleting the file removes it.
 
 ## General Rules
 

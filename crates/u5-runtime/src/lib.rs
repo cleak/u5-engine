@@ -30,6 +30,7 @@ pub mod blackthorn_session;
 pub mod boot;
 pub mod character_record;
 pub mod chargen;
+pub mod cheats;
 pub mod clock;
 pub mod codex_challenge;
 pub mod combat_actor;

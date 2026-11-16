@@ -266,8 +266,11 @@ pub const NOTHING_HERE: &str = "Nothing to set here yet.";
 pub const NOTE_NEXT_PROMPT: &str = "Takes hold at the next prompt.";
 /// See [`NOTE_NEXT_PROMPT`].
 pub const NOTE_NEXT_LAUNCH: &str = "Takes hold at the next launch.";
-/// The collapsed Cheats group's help (chapter 7 fills the group).
-pub const CHEATS_GROUP_HELP: &str = "The cheats come in a later build.";
+/// The collapsed Cheats group's help. The cheats ship (M8), but the
+/// group's rows on this tab are not built yet: they are set in
+/// `config.toml` or on the command line, and their page is the door.
+pub const CHEATS_GROUP_HELP: &str =
+    "Cheats are set in config.toml or with --enable. Ctrl+F12 opens their page.";
 
 /// A row's apply point when it is not the next frame (3.4.1, D-M4.4).
 pub const NEXT_PROMPT: &str = "next prompt";
@@ -360,6 +363,30 @@ pub fn setting_label(key: &str) -> Option<&'static str> {
         "combat.potions" => "Drink potions",
         "combat.mp_reserve" => "Keep magic",
         "combat.spells" => "Spells",
+        // [cheats], chapter 7 (M8): the collapsed Cheats group's rows.
+        "cheats.enabled" => "Allow cheats",
+        "cheats.heal_all" => "Heal all",
+        "cheats.cure_poison" => "Cure poison",
+        "cheats.resurrect_all" => "Resurrect all",
+        "cheats.max_gold" => "Max gold",
+        "cheats.max_food" => "Max food",
+        "cheats.refill_arrows" => "Refill arrows",
+        "cheats.refill_quarrels" => "Quarrels too",
+        "cheats.max_reagents" => "Max reagents",
+        "cheats.repair_hull" => "Repair hull",
+        "cheats.lock_hp" => "Lock health",
+        "cheats.lock_mp" => "Lock mana",
+        "cheats.lock_food" => "Lock food",
+        "cheats.lock_gold" => "Lock gold",
+        "cheats.lock_keys" => "Lock keys",
+        "cheats.lock_gems" => "Lock gems",
+        "cheats.lock_torches" => "Lock torches",
+        "cheats.lock_arrows" => "Lock arrows",
+        "cheats.lock_reagents" => "Lock reagents",
+        "cheats.remember_locks" => "Remember locks",
+        "cheats.stat_edit" => "Edit party",
+        "cheats.teleport" => "Spoiler: Teleport",
+        "cheats.state_watch" => "Watch game state",
         _ => return None,
     })
 }
@@ -372,6 +399,9 @@ pub fn setting_help(key: &str) -> Option<&'static str> {
         "gem_map.glyphs" => Some(
             "Spoiler: gem-faithful draws secret doors and hidden pits as soon as they are in sight.",
         ),
+        "cheats.teleport" => {
+            Some("Spoiler: lists every place in the game, including ones not found yet.")
+        }
         _ => None,
     }
 }
